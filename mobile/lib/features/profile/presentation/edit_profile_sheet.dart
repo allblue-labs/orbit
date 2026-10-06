@@ -14,6 +14,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../core/media/media_type.dart';
+import 'avatar_crop_sheet.dart';
+
 import '../../../app/providers.dart';
 import '../../../core/design/orbit_operational.dart';
 import '../../../core/errors/orbit_exception.dart';
@@ -80,6 +83,24 @@ class _EditProfileSheetState extends ConsumerState<EditProfileSheet> {
     _reclamar('Não foi possível salvar seus dados.');
   }
 
+  /// Escolher, enquadrar, enviar.
+  ///
+  /// ## O enquadramento não é enfeite
+  ///
+  /// O avatar é um círculo pequeno e a foto é um retângulo grande. Sem esta
+  /// etapa o recorte saía pelo centro, sem ninguém olhar — retrato em pé virava
+  /// um close do pescoço.
+  ///
+  /// ## E conserta o envio
+  ///
+  /// O tipo era declarado **pela extensão do nome**. O `ImagePicker` com
+  /// `imageQuality` reencoda para JPEG, então um `.png` escolhido chegava como
+  /// bytes JPEG declarados como PNG — e o servidor compara o tipo detectado nos
+  /// bytes com o declarado e recusa com `FILE_INVALID`. A foto subia para o
+  /// storage e nunca virava avatar.
+  ///
+  /// Agora o PNG é produzido pelo enquadramento, e o tipo sai de
+  /// `detectMimeType` sobre os bytes que de fato vão subir. Nenhum palpite.
   Future<void> _trocarFoto(ImageSource origem) async {
     final arquivo = await ImagePicker().pickImage(
       source: origem,
@@ -92,16 +113,35 @@ class _EditProfileSheetState extends ConsumerState<EditProfileSheet> {
     );
     if (arquivo == null || !mounted) return;
 
-    final bytes = await arquivo.readAsBytes();
+    final original = await arquivo.readAsBytes();
+    if (!mounted) return;
+
+    final recortada = await showAvatarCropSheet(context, bytes: original);
+    /* Desistiu do enquadramento: nada sobe. */
+    if (recortada == null || !mounted) return;
+
+    final tipo = detectMimeType(recortada);
+    if (tipo == null) {
+      _avisar('Não foi possível preparar a imagem.');
+      return;
+    }
+
     final ok = await ref
         .read(profileEditControllerProvider.notifier)
         .changePhoto(
-          bytes: bytes,
-          fileName: arquivo.name,
-          mimeType: arquivo.mimeType ?? _tipoPeloNome(arquivo.name),
+          bytes: recortada,
+          fileName: 'avatar.png',
+          mimeType: tipo,
         );
     if (!mounted) return;
     if (!ok) _reclamar('Não foi possível atualizar sua foto.');
+  }
+
+  /// Um aviso que não vem de uma mutação, então não tem erro a consultar.
+  void _avisar(String mensagem) {
+    ScaffoldMessenger.maybeOf(
+      context,
+    )?.showSnackBar(SnackBar(content: Text(mensagem)));
   }
 
   Future<void> _removerFoto() async {
@@ -130,8 +170,7 @@ class _EditProfileSheetState extends ConsumerState<EditProfileSheet> {
     return valor.isEmpty ? null : valor;
   }
 
-  static String _tipoPeloNome(String nome) =>
-      nome.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
+
 
   @override
   Widget build(BuildContext context) {
