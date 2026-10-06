@@ -16,6 +16,7 @@ import '../errors/orbit_exception.dart';
 import '../errors/orbit_public_copy.dart';
 import '../observability/orbit_logger.dart';
 import '../storage/token_storage.dart';
+import 'backend_url.dart';
 import 'orbit_interceptors.dart';
 import 'session_authenticator.dart';
 
@@ -27,8 +28,12 @@ class OrbitRequestCancellation {
 }
 
 class OrbitApiClient {
-  OrbitApiClient._({required Dio dio, required this.authenticator})
-    : _dio = dio;
+  OrbitApiClient._({
+    required Dio dio,
+    required this.authenticator,
+    required Uri apiBase,
+  }) : _dio = dio,
+       _apiBase = apiBase;
 
   /// Monta o cliente com todos os interceptors na ordem correta.
   factory OrbitApiClient.create({
@@ -98,10 +103,21 @@ class OrbitApiClient {
       ErrorMappingInterceptor(destination: environment.diagnosticHost),
     ]);
 
-    return OrbitApiClient._(dio: client, authenticator: authenticator);
+    return OrbitApiClient._(
+      dio: client,
+      authenticator: authenticator,
+      apiBase: Uri.parse(environment.apiBaseUrl),
+    );
   }
 
   final Dio _dio;
+
+  /// A API que **este aparelho** alcança.
+  ///
+  /// Guardada à parte de `_dio.options.baseUrl` de propósito: quando o `Dio` é
+  /// injetado — em teste —, `create` não aplica as `BaseOptions`, e ler a base
+  /// dali daria vazio justamente onde a tradução precisa dela.
+  final Uri _apiBase;
   final SessionAuthenticator authenticator;
 
   Future<T> get<T>(
@@ -208,7 +224,7 @@ class OrbitApiClient {
   }) async {
     try {
       await _dio.putUri<dynamic>(
-        url,
+        resolveBackendUrl(url, _apiBase),
         data: Stream<List<int>>.value(bytes),
         cancelToken: cancelToken,
         onSendProgress: (sent, total) {
@@ -255,7 +271,7 @@ class OrbitApiClient {
     final boundedToken = cancellation?._token ?? cancelToken ?? CancelToken();
     try {
       final response = await _dio.getUri<List<int>>(
-        url,
+        resolveBackendUrl(url, _apiBase),
         cancelToken: boundedToken,
         onReceiveProgress: (received, total) {
           if (maxBytes != null && (received > maxBytes || total > maxBytes)) {
