@@ -78,13 +78,13 @@ void main() {
     expect(find.text('Cancelar o Atendimento'), findsNothing);
   });
 
-  testWidgets('retomar troca o rótulo, não o lugar', (tester) async {
+  testWidgets('continuar troca o rótulo, não o lugar', (tester) async {
     await tester.pumpWidget(
       _host(acoes: const ['VIEW', 'RESUME', 'REQUEST_CANCELLATION']),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Retomar o Atendimento'), findsOneWidget);
+    expect(find.text('Continuar o Atendimento'), findsOneWidget);
     expect(find.text('Iniciar o Atendimento'), findsNothing);
   });
 
@@ -120,8 +120,14 @@ void main() {
 
     expect(find.text('Bloco B, 4º andar'), findsOneWidget);
     expect(find.textContaining('Portão azul nos fundos'), findsOneWidget);
-    expect(find.text('+55 81 98888-0000'), findsOneWidget);
-    expect(find.text('Manutenção'), findsOneWidget);
+
+    /* Contato e telefone saem na mesma linha: são a mesma informação — para
+       quem ligar —, e duas linhas rotuladas separavam o nome do número. */
+    expect(find.textContaining('+55 81 98888-0000'), findsOneWidget);
+
+    /* O tipo subiu para a sobrancelha do cartão, junto da natureza do item:
+       é contexto do título, não um campo a consultar. */
+    expect(find.textContaining('MANUTENÇÃO'), findsOneWidget);
   });
 
   testWidgets('sem liberação, o valor não aparece', (tester) async {

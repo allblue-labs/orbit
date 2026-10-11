@@ -21,61 +21,12 @@ const _codes = <FieldOperationAllowedAction, String>{
   FieldOperationAllowedAction.registerMaterial: 'REGISTER_MATERIAL',
 };
 
-/// A ação principal, no alcance do polegar.
-class ExecutionPrimaryAction extends StatelessWidget {
-  const ExecutionPrimaryAction({
-    super.key,
-    required this.state,
-    required this.controller,
-  });
-
-  final ExecutionState state;
-  final ExecutionController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    final action = state.preparation?.primaryAction;
-
-    /// Sem ação principal publicada não há botão. A tela não elege uma.
-    if (action == null) return const SizedBox.shrink();
-
-    final label = executionActionLabel(_codes[action] ?? '');
-    if (label == null) return const SizedBox.shrink();
-
-    final isPending = state.isBusy && state.pendingAction == action;
-    final onPressed = switch (action) {
-      FieldOperationAllowedAction.start ||
-      FieldOperationAllowedAction.resume => () => controller.start(),
-      FieldOperationAllowedAction.complete => () => _confirmCompletion(
-        context,
-        controller,
-      ),
-      _ => null,
-    };
-
-    return Semantics(
-      button: true,
-      enabled: !state.isBusy && onPressed != null,
-      label: label.label,
-      child: FilledButton(
-        /// Enquanto o comando está em voo o botão não aceita outro toque —
-        /// é o que impede o toque duplo virar dois comandos.
-        onPressed: state.isBusy ? null : onPressed,
-        style: FilledButton.styleFrom(minimumSize: const Size(0, 52)),
-        child: isPending
-            ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : Text(label.label),
-      ),
-    );
-  }
-}
-
 /// Concluir pede confirmação — proporcional, sem alarme.
-Future<void> _confirmCompletion(
+///
+/// Pública porque quem a dispara agora é o controle de avanço da última etapa
+/// do roteiro, e não mais uma barra fixa. A barra saiu: ela competia com o
+/// "Avançar", e duas ações grandes lado a lado não dizem qual vem primeiro.
+Future<void> confirmExecutionCompletion(
   BuildContext context,
   ExecutionController controller,
 ) async {

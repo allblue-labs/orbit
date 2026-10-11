@@ -222,4 +222,137 @@ void main() {
       expect(layoutError, isNull);
     });
   }
+
+  /// **Um** controle para frente por etapa.
+  ///
+  /// A queixa era "vários botões de retorno e avançar num só lugar": a ação do
+  /// domínio vinha num botão próprio ao lado do avanço, e a tela mostrava dois
+  /// botões grandes dizendo coisas diferentes sem nada indicando a ordem.
+  group('o avanço carrega a ação da etapa', () {
+    testWidgets('a etapa com ação não mostra um segundo botão', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        host([
+          OrbitWizardStep(
+            title: 'Preparação',
+            child: const Text('conteúdo'),
+            forward: OrbitWizardForward(
+              label: 'Iniciar atendimento',
+              onPressed: () async {},
+            ),
+          ),
+          step('Execução'),
+        ]),
+      );
+
+      expect(find.text('Iniciar atendimento'), findsOneWidget);
+
+      /* O rótulo de navegação dá lugar ao da ação — não convive com ele. */
+      expect(find.textContaining('Avançar'), findsNothing);
+    });
+
+    testWidgets('executa a ação e segue, num toque só', (tester) async {
+      var chamou = 0;
+      await tester.pumpWidget(
+        host([
+          OrbitWizardStep(
+            title: 'Preparação',
+            child: const Text('conteúdo'),
+            forward: OrbitWizardForward(
+              label: 'Iniciar atendimento',
+              advanceOnSuccess: true,
+              onPressed: () async => chamou++,
+            ),
+          ),
+          step('Execução'),
+        ]),
+      );
+
+      await tester.tap(find.text('Iniciar atendimento'));
+      await tester.pumpAndSettle();
+
+      expect(chamou, 1);
+      /* Começar e seguir são o mesmo gesto para quem está em campo. */
+      expect(find.text('Etapa 2 de 2'), findsOneWidget);
+    });
+
+    testWidgets('sem avançar quando a etapa não pede', (tester) async {
+      await tester.pumpWidget(
+        host([
+          OrbitWizardStep(
+            title: 'Preparação',
+            child: const Text('conteúdo'),
+            forward: OrbitWizardForward(
+              label: 'Registrar',
+              onPressed: () async {},
+            ),
+          ),
+          step('Execução'),
+        ]),
+      );
+
+      await tester.tap(find.text('Registrar'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Etapa 1 de 2'), findsOneWidget);
+    });
+
+    testWidgets('em voo, o controle não aceita outro toque', (tester) async {
+      var chamou = 0;
+      await tester.pumpWidget(
+        host([
+          OrbitWizardStep(
+            title: 'Preparação',
+            child: const Text('conteúdo'),
+            forward: OrbitWizardForward(
+              label: 'Iniciar atendimento',
+              pending: true,
+              onPressed: () async => chamou++,
+            ),
+          ),
+          step('Execução'),
+        ]),
+      );
+
+      /* Dois toques num comando que grava seriam dois comandos.
+         `pump`, e não `pumpAndSettle`: o indicador de progresso gira para
+         sempre, e esperar a animação parar nunca retornaria. */
+      await tester.tap(find.byType(FilledButton));
+      await tester.pump();
+      expect(chamou, 0);
+    });
+
+    testWidgets('a última etapa sem ação não mostra avanço', (tester) async {
+      await tester.pumpWidget(host([step('Preparação'), step('Fim')]));
+
+      await tester.tap(find.text('Avançar · Fim'));
+      await tester.pumpAndSettle();
+
+      /* Nem navegação nem ação: um botão morto é pior que nenhum. */
+      expect(find.byType(FilledButton), findsNothing);
+      expect(find.text('Voltar'), findsOneWidget);
+    });
+
+    testWidgets('a última etapa com ação mostra a ação', (tester) async {
+      await tester.pumpWidget(
+        host([
+          step('Preparação'),
+          OrbitWizardStep(
+            title: 'Finalização',
+            child: const Text('conteúdo'),
+            forward: OrbitWizardForward(
+              label: 'Concluir atendimento',
+              onPressed: () async {},
+            ),
+          ),
+        ]),
+      );
+
+      await tester.tap(find.text('Avançar · Finalização'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Concluir atendimento'), findsOneWidget);
+    });
+  });
 }

@@ -48,7 +48,21 @@ class OperationExecutionScreen extends ConsumerWidget {
     );
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Atendimento')),
+      appBar: AppBar(
+        title: const Text('Atendimento'),
+        actions: [
+          /// A saída, nomeada.
+          ///
+          /// A seta do sistema já voltava, mas quem está de luva no meio de um
+          /// roteiro de seis etapas não lê seta como "posso sair daqui". Sair
+          /// não desfaz nada: cada registro já foi enviado quando foi feito, e
+          /// o atendimento continua onde está.
+          TextButton(
+            onPressed: () => Navigator.of(context).maybePop(),
+            child: const Text('Sair'),
+          ),
+        ],
+      ),
       body: switch (state.phase) {
         ExecutionPhase.loading => const Padding(
           padding: EdgeInsets.all(OrbitSpacing.gutter),
@@ -158,14 +172,27 @@ class _Body extends StatelessWidget {
             if (!preparation.eligible && preparation.blockers.isNotEmpty)
               _Blockers(blockers: preparation.blockers),
 
-            /// Iniciar mora aqui, e não numa barra fixa: é a ação **desta**
-            /// etapa, logo abaixo do que se confere antes de começar.
-            if (_comecando(state)) ...[
-              const SizedBox(height: OrbitSpacing.md),
-              ExecutionPrimaryAction(state: state, controller: controller),
-            ],
           ],
         ),
+
+        /// Iniciar **é** o avanço desta etapa.
+        ///
+        /// Era um botão próprio, e a tela mostrava "Iniciar atendimento" e
+        /// "Avançar · Execução" lado a lado, sem nada dizendo qual vinha
+        /// primeiro. Um controle por etapa, sempre no mesmo lugar.
+        forward: _comecando(state)
+            ? OrbitWizardForward(
+                label: state.allows(FieldOperationAllowedAction.resume)
+                    ? 'Retomar atendimento'
+                    : 'Iniciar atendimento',
+                enabled: preparation.eligible && !state.isBusy,
+                pending:
+                    state.isBusy &&
+                    state.pendingAction == preparation.primaryAction,
+                advanceOnSuccess: true,
+                onPressed: controller.start,
+              )
+            : null,
       ),
 
       OrbitWizardStep(
@@ -278,14 +305,24 @@ class _Body extends StatelessWidget {
               ].whereType<String>().join(' · '),
             ),
             _Timeline(operationId: operationId),
-
-            /// Concluir, no fim do roteiro — que é quando o atendimento acaba.
-            if (!_comecando(state)) ...[
-              const SizedBox(height: OrbitSpacing.md),
-              ExecutionPrimaryAction(state: state, controller: controller),
-            ],
           ],
         ),
+
+        /// Concluir é o avanço da última etapa — não há para onde ir depois.
+        forward: state.allows(FieldOperationAllowedAction.complete)
+            ? OrbitWizardForward(
+                label: 'Concluir atendimento',
+                enabled: !state.isBusy,
+                pending:
+                    state.isBusy &&
+                    state.pendingAction ==
+                        FieldOperationAllowedAction.complete,
+                onPressed: () => confirmExecutionCompletion(
+                  context,
+                  controller,
+                ),
+              )
+            : null,
       ),
     ];
 

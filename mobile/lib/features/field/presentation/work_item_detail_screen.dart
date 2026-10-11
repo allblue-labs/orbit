@@ -102,16 +102,16 @@ class _Detail extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(OrbitSpacing.gutter),
       children: [
-        _Header(item: item, assignment: assignment),
+        _Capa(item: item, assignment: assignment),
 
         if (item.pendingCancellation
             case final MobilePendingCancellationContract pedido)
           _PedidoEnviado(pedido: pedido),
 
-        _Agendamento(item: item),
+        _Onde(item: item),
 
         if (item.customer case final MobileCustomerSummaryContract cliente)
-          _Cliente(cliente: cliente, item: item),
+          _ClienteEContato(cliente: cliente),
 
         if (context$.financialSummary
             case final MobileFinancialSummaryContract financeiro)
@@ -119,95 +119,27 @@ class _Detail extends StatelessWidget {
 
         if (context$.requestDescription case final String descricao
             when descricao.trim().isNotEmpty)
-          SectionBlock(
-            inset: 0,
-            title: 'O que foi pedido',
-            child: Text(
-              descricao,
-              style: const TextStyle(
-                fontSize: 14,
-                color: OrbitColors.textPrimary,
-              ),
-            ),
+          _Bloco(
+            titulo: 'O que foi pedido',
+            child: Text(descricao, style: const TextStyle(fontSize: 14)),
           ),
 
-        if (item.equipmentSummary.isNotEmpty)
-          SectionBlock(
-            inset: 0,
-            title: 'Equipamento',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (final equipment in item.equipmentSummary)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          equipment.name,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            color: OrbitColors.textPrimary,
-                          ),
-                        ),
-                        Text(
-                          [equipment.code, equipment.type, equipment.sector]
-                              .whereType<String>()
-                              .where((v) => v.isNotEmpty)
-                              .join(' · '),
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: OrbitColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-          ),
+        if (item.equipmentSummary.isNotEmpty) _Equipamentos(item: item),
 
         _Team(item: item),
 
         if (context$.procedures.isNotEmpty)
-          SectionBlock(
-            inset: 0,
-            title: 'Procedimentos',
+          _Bloco(
+            titulo: 'Procedimentos',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                for (final procedure in context$.procedures)
+                for (final procedimento in context$.procedures)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 4),
                     child: Text(
-                      procedure.title,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: OrbitColors.textPrimary,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-
-        if (context$.documentContext.isNotEmpty)
-          SectionBlock(
-            inset: 0,
-            title: 'Documentos',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (final document in context$.documentContext)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: Text(
-                      document.type,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: OrbitColors.textSecondary,
-                      ),
+                      procedimento.title,
+                      style: const TextStyle(fontSize: 13),
                     ),
                   ),
               ],
@@ -220,163 +152,245 @@ class _Detail extends StatelessWidget {
   }
 }
 
-/// O relato já enviado, esperando decisão.
+/// O cartão que responde, de relance: o quê, de que tipo e quando.
 ///
-/// Ocupa o lugar do botão de cancelar. Sem isto o técnico pediria de novo a cada
-/// vez que abrisse o atendimento, sem sinal de que o primeiro chegou.
-class _PedidoEnviado extends StatelessWidget {
-  const _PedidoEnviado({required this.pedido});
+/// Era um cartão quase vazio — título e duas etiquetas — com a data perdida
+/// numa linha genérica mais abaixo, do mesmo peso que o resto. Quem abre esta
+/// tela está decidindo se vai agora; a hora é a informação que decide isso.
+class _Capa extends StatelessWidget {
+  const _Capa({required this.item, required this.assignment});
 
-  final MobilePendingCancellationContract pedido;
+  final MobileWorkItemContract item;
+  final FieldAssignment assignment;
 
   @override
   Widget build(BuildContext context) {
     final palette = context.orbit;
+    final status = operationalStatusLabel(item.operationalStatus);
 
-    return SectionBlock(
-      inset: 0,
-      title: 'Cancelamento pedido',
+    return _Cartao(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Enviado em ${OrbitFormat.dateHourOf(pedido.requestedAt)}. '
-            'O responsável decide se remarca, troca o técnico ou cancela.',
-            style: OrbitType.body.copyWith(color: palette.inkMuted),
+            [
+              item.navigationContext.sourceId.isEmpty
+                  ? workItemKindLabel(item.kind)
+                  : workItemKindLabel(item.kind),
+              item.serviceType,
+            ].whereType<String>().join(' · ').toUpperCase(),
+            style: OrbitType.eyebrow.copyWith(color: palette.inkSubtle),
           ),
-          if (pedido.reason.isNotEmpty) ...[
-            const SizedBox(height: OrbitSpacing.sm),
-            Text(
-              pedido.reason,
-              style: OrbitType.body.copyWith(color: palette.ink),
-            ),
-          ],
+          const SizedBox(height: 4),
+          Text(
+            item.title,
+            style: OrbitType.sectionTitle.copyWith(color: palette.ink),
+          ),
+          const SizedBox(height: OrbitSpacing.sm),
+          Wrap(
+            spacing: OrbitSpacing.xs,
+            runSpacing: 6,
+            children: [
+              _Tag(label: dueStateLabel(item.dueState)),
+              if (status != null) _Tag(label: status),
+              if (assignment != FieldAssignment.none)
+                _Tag(label: assignmentLabel(assignment)),
+            ],
+          ),
+
+          const Divider(height: OrbitSpacing.lg),
+
+          /// A hora, no tamanho que ela merece.
+          Row(
+            children: [
+              Icon(
+                Icons.event_outlined,
+                size: 18,
+                color: palette.accentStrong,
+              ),
+              const SizedBox(width: OrbitSpacing.sm),
+              Expanded(
+                child: Text(
+                  item.scheduledFor == null
+                      ? 'Sem data programada'
+                      : OrbitFormat.dateHourOf(item.scheduledFor),
+                  style: OrbitType.body.copyWith(
+                    color: palette.ink,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
 }
 
-/// Quando, e de que tipo.
-class _Agendamento extends StatelessWidget {
-  const _Agendamento({required this.item});
-
-  final MobileWorkItemContract item;
-
-  @override
-  Widget build(BuildContext context) => SectionBlock(
-    inset: 0,
-    title: 'Agendamento',
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _Linha(
-          icone: Icons.event_outlined,
-          rotulo: 'Data e hora',
-          valor: item.scheduledFor == null
-              ? 'Sem data programada'
-              : OrbitFormat.dateHourOf(item.scheduledFor),
-        ),
-        if (item.serviceType case final String tipo) ...[
-          const SizedBox(height: OrbitSpacing.sm),
-          _Linha(
-            icone: Icons.handyman_outlined,
-            rotulo: 'Tipo de atendimento',
-            valor: tipo,
-          ),
-        ],
-      ],
-    ),
-  );
-}
-
-/// Para quem, onde e por qual telefone.
+/// Para onde ir — escrito como endereço, não como formulário.
 ///
-/// O endereço sai em partes: logradouro numa linha, complemento e ponto de
-/// referência nas suas. Tudo junto, quem procura a portaria lê o CEP primeiro.
-class _Cliente extends StatelessWidget {
-  const _Cliente({required this.cliente, required this.item});
+/// Cada parte vinha numa linha própria com ícone e rótulo: cinco linhas para um
+/// endereço, e o logradouro com o mesmo peso do CEP. Quem está dirigindo lê um
+/// endereço em bloco, como no envelope.
+///
+/// Complemento, local interno e ponto de referência ficam **abaixo** e
+/// destacados: são eles que decidem se a pessoa acha a portaria, e some quando
+/// não foram cadastrados.
+class _Onde extends StatelessWidget {
+  const _Onde({required this.item});
 
-  final MobileCustomerSummaryContract cliente;
   final MobileWorkItemContract item;
 
   @override
   Widget build(BuildContext context) {
     final palette = context.orbit;
     final endereco = item.serviceAddress;
-    final telefone = cliente.contact?.phone;
+    final solto = endereco == null ? locationText(item) : null;
+    if (endereco == null && solto == null) return const SizedBox.shrink();
 
-    return SectionBlock(
-      inset: 0,
-      title: 'Cliente',
+    return _Bloco(
+      titulo: 'Onde',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (endereco != null) ...[
+            if (endereco.label case final String apelido)
+              Text(
+                apelido,
+                style: OrbitType.caption.copyWith(color: palette.inkMuted),
+              ),
+            Text(
+              [
+                endereco.street,
+                if (endereco.number case final String numero) numero,
+              ].join(', '),
+              style: OrbitType.body.copyWith(
+                color: palette.ink,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            Text(
+              [
+                endereco.district,
+                [
+                  endereco.city,
+                  endereco.stateCode,
+                ].whereType<String>().where((v) => v.isNotEmpty).join(' - '),
+                endereco.postalCode,
+              ].whereType<String>().where((v) => v.isNotEmpty).join(' · '),
+              style: OrbitType.body.copyWith(color: palette.inkMuted),
+            ),
+
+            if (endereco.complement != null ||
+                endereco.sector != null ||
+                endereco.reference != null) ...[
+              const SizedBox(height: OrbitSpacing.sm),
+              if (endereco.complement case final String complemento)
+                _Acesso(icone: Icons.meeting_room_outlined, texto: complemento),
+              if (endereco.sector case final String setor)
+                _Acesso(icone: Icons.pin_drop_outlined, texto: setor),
+              if (endereco.reference case final String referencia)
+                _Acesso(
+                  icone: Icons.info_outline,
+                  texto: referencia,
+                  destaque: true,
+                ),
+            ],
+          ] else
+            Text(solto!, style: OrbitType.body.copyWith(color: palette.ink)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Uma instrução de acesso: complemento, local interno, ponto de referência.
+///
+/// O ponto de referência vai destacado porque é o que evita a ligação para o
+/// escritório — e porque, numa lista de linhas iguais, ele se perde.
+class _Acesso extends StatelessWidget {
+  const _Acesso({
+    required this.icone,
+    required this.texto,
+    this.destaque = false,
+  });
+
+  final IconData icone;
+  final String texto;
+  final bool destaque;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.orbit;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Container(
+        padding: destaque
+            ? const EdgeInsets.all(OrbitSpacing.sm)
+            : EdgeInsets.zero,
+        decoration: destaque
+            ? BoxDecoration(
+                color: palette.accentSoft,
+                borderRadius: OrbitRadius.chip,
+              )
+            : null,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              icone,
+              size: 16,
+              color: destaque ? palette.accentStrong : palette.inkSubtle,
+            ),
+            const SizedBox(width: OrbitSpacing.sm),
+            Expanded(
+              child: Text(
+                texto,
+                style: OrbitType.body.copyWith(
+                  color: destaque ? palette.accentStrong : palette.inkMuted,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Quem contratou, e por qual número falar.
+class _ClienteEContato extends StatelessWidget {
+  const _ClienteEContato({required this.cliente});
+
+  final MobileCustomerSummaryContract cliente;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.orbit;
+    final contato = cliente.contact;
+
+    return _Bloco(
+      titulo: 'Cliente',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             cliente.name,
-            style: const TextStyle(
-              fontSize: 15,
+            style: OrbitType.body.copyWith(
+              color: palette.ink,
               fontWeight: FontWeight.w600,
-              color: OrbitColors.textPrimary,
             ),
           ),
-
-          if (cliente.contact?.name case final String contato) ...[
+          if (contato != null) ...[
             const SizedBox(height: 2),
             Text(
-              'Falar com $contato',
-              style: OrbitType.caption.copyWith(color: palette.inkMuted),
-            ),
-          ],
-
-          const SizedBox(height: OrbitSpacing.sm),
-
-          if (endereco != null) ...[
-            _Linha(
-              icone: Icons.place_outlined,
-              rotulo: endereco.label ?? 'Endereço',
-              valor: endereco.linha,
-            ),
-            /* Complemento e referência em linha própria — é o que decide se a
-               pessoa acha a portaria, e some no meio do logradouro. */
-            if (endereco.complement case final String complemento) ...[
-              const SizedBox(height: OrbitSpacing.xs),
-              _Linha(
-                icone: Icons.meeting_room_outlined,
-                rotulo: 'Complemento',
-                valor: complemento,
-              ),
-            ],
-            if (endereco.sector case final String setor) ...[
-              const SizedBox(height: OrbitSpacing.xs),
-              _Linha(
-                icone: Icons.door_front_door_outlined,
-                rotulo: 'Local no endereço',
-                valor: setor,
-              ),
-            ],
-            if (endereco.reference case final String referencia) ...[
-              const SizedBox(height: OrbitSpacing.xs),
-              _Linha(
-                icone: Icons.info_outline,
-                rotulo: 'Ponto de referência',
-                valor: referencia,
-              ),
-            ],
-          ] else if (locationText(item) case final String lugar) ...[
-            _Linha(
-              icone: Icons.place_outlined,
-              rotulo: 'Endereço',
-              valor: lugar,
-            ),
-          ],
-
-          if (telefone != null && telefone.isNotEmpty) ...[
-            const SizedBox(height: OrbitSpacing.xs),
-            _Linha(
-              icone: Icons.phone_outlined,
-              rotulo: 'Telefone',
-              valor: telefone,
+              [
+                contato.name,
+                contato.phone,
+              ].whereType<String>().where((v) => v.isNotEmpty).join(' · '),
+              style: OrbitType.body.copyWith(color: palette.inkMuted),
             ),
           ],
         ],
@@ -396,103 +410,147 @@ class _Valor extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.orbit;
     final valor = double.tryParse(financeiro.approvedAmount ?? '');
     if (valor == null) return const SizedBox.shrink();
 
-    return SectionBlock(
-      inset: 0,
-      title: 'Valor do atendimento',
-      child: _Linha(
-        icone: Icons.payments_outlined,
-        rotulo: 'Orçamento aprovado',
-        valor: OrbitFormat.currency(valor),
+    return _Bloco(
+      titulo: 'Valor do atendimento',
+      child: Text(
+        OrbitFormat.currency(valor),
+        style: OrbitType.sectionTitle.copyWith(color: palette.ink),
       ),
     );
   }
 }
 
-/// Uma linha rotulada: ícone, rótulo pequeno, valor legível.
-class _Linha extends StatelessWidget {
-  const _Linha({
-    required this.icone,
-    required this.rotulo,
-    required this.valor,
-  });
+class _Equipamentos extends StatelessWidget {
+  const _Equipamentos({required this.item});
 
-  final IconData icone;
-  final String rotulo;
-  final String valor;
+  final MobileWorkItemContract item;
 
   @override
   Widget build(BuildContext context) {
     final palette = context.orbit;
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 2),
-          child: Icon(icone, size: 16, color: palette.inkSubtle),
-        ),
-        const SizedBox(width: OrbitSpacing.sm),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                rotulo,
-                style: OrbitType.caption.copyWith(color: palette.inkMuted),
+    return _Bloco(
+      titulo: item.equipmentSummary.length == 1
+          ? 'Equipamento'
+          : 'Equipamentos',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final equipamento in item.equipmentSummary)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    equipamento.name,
+                    style: OrbitType.body.copyWith(color: palette.ink),
+                  ),
+                  Text(
+                    [equipamento.code, equipamento.type, equipamento.sector]
+                        .whereType<String>()
+                        .where((v) => v.isNotEmpty)
+                        .join(' · '),
+                    style: OrbitType.caption.copyWith(
+                      color: palette.inkMuted,
+                    ),
+                  ),
+                ],
               ),
-              Text(
-                valor,
-                style: OrbitType.body.copyWith(color: palette.ink),
-              ),
-            ],
-          ),
-        ),
-      ],
+            ),
+        ],
+      ),
     );
   }
 }
 
-class _Header extends StatelessWidget {
-  const _Header({required this.item, required this.assignment});
+/// Um bloco de conteúdo com título discreto.
+///
+/// Substitui o `SectionBlock` nesta tela: ele desenhava o título em maiúsculas
+/// **fora** do cartão, e com seis seções a tela virava uma escada de rótulos
+/// cinzentos com cartões brancos entre eles. Aqui o título mora dentro, e o
+/// cartão é a unidade visual.
+class _Bloco extends StatelessWidget {
+  const _Bloco({required this.titulo, required this.child});
 
-  final MobileWorkItemContract item;
-  final FieldAssignment assignment;
+  final String titulo;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    final status = operationalStatusLabel(item.operationalStatus);
+    final palette = context.orbit;
 
-    return SectionBlock(
-      inset: 0,
-      title: workItemKindLabel(item.kind),
+    return _Cartao(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            item.title,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: OrbitColors.textPrimary,
-            ),
+            titulo.toUpperCase(),
+            style: OrbitType.eyebrow.copyWith(color: palette.inkSubtle),
           ),
           const SizedBox(height: OrbitSpacing.sm),
-          Wrap(
-            spacing: OrbitSpacing.sm,
-            runSpacing: 6,
-            children: [
-              _Tag(label: dueStateLabel(item.dueState)),
-              if (status != null) _Tag(label: status),
-              if (assignment != FieldAssignment.none)
-                _Tag(label: assignmentLabel(assignment)),
-            ],
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class _Cartao extends StatelessWidget {
+  const _Cartao({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: OrbitSpacing.md),
+    child: Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(OrbitSpacing.md),
+      decoration: BoxDecoration(
+        color: context.orbit.surface,
+        borderRadius: OrbitRadius.card,
+        boxShadow: OrbitShadow.card,
+      ),
+      child: child,
+    ),
+  );
+}
+
+/// O relato já enviado, esperando decisão.
+///
+/// Ocupa o lugar do botão de cancelar. Sem isto o técnico pediria de novo a cada
+/// vez que abrisse o atendimento, sem sinal de que o primeiro chegou.
+class _PedidoEnviado extends StatelessWidget {
+  const _PedidoEnviado({required this.pedido});
+
+  final MobilePendingCancellationContract pedido;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.orbit;
+
+    return _Bloco(
+      titulo: 'Cancelamento pedido',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Enviado em ${OrbitFormat.dateHourOf(pedido.requestedAt)}. '
+            'O responsável decide se remarca, troca o técnico ou cancela.',
+            style: OrbitType.body.copyWith(color: palette.inkMuted),
           ),
-          /* A data saiu daqui: a seção Agendamento logo abaixo a mostra com
-             rótulo e ao lado do tipo do atendimento. Duas vezes na mesma tela
-             era ruído, e a de cima era a que dizia menos. */
+          if (pedido.reason.isNotEmpty) ...[
+            const SizedBox(height: OrbitSpacing.sm),
+            Text(
+              pedido.reason,
+              style: OrbitType.body.copyWith(color: palette.ink),
+            ),
+          ],
         ],
       ),
     );
@@ -593,7 +651,7 @@ class _Actions extends ConsumerWidget {
               onPressed: iniciar,
               style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
               child: Text(
-                retomando ? 'Retomar o Atendimento' : 'Iniciar o Atendimento',
+                retomando ? 'Continuar o Atendimento' : 'Iniciar o Atendimento',
               ),
             ),
 
