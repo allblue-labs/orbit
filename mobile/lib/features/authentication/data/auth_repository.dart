@@ -70,7 +70,7 @@ class AuthRepository {
 
   Future<OrbitUser> loadProfile() async {
     final data = await _client.get<Map<String, dynamic>>('/identity/me');
-    return OrbitUser.fromJson(data);
+    return OrbitUser.fromJson(data, resolverUrl: _client.resolveUrl);
   }
 
   /// Troca a própria senha.

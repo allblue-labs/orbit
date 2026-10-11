@@ -89,7 +89,16 @@ class OrbitUser {
     this.mustChangePassword = false,
   });
 
-  factory OrbitUser.fromJson(Map<String, dynamic> json) => OrbitUser(
+  /// [resolverUrl] traduz endereços que o servidor entrega.
+  ///
+  /// A foto vem como URL assinada apontando para onde o **servidor** acha que
+  /// vive — `localhost`, em desenvolvimento. Sem traduzir, o aparelho tenta
+  /// carregá-la de si mesmo e cai nas iniciais, em silêncio. Quem tem a base
+  /// alcançável é o cliente HTTP, e é ele que passa a função.
+  factory OrbitUser.fromJson(
+    Map<String, dynamic> json, {
+    Uri Function(Uri)? resolverUrl,
+  }) => OrbitUser(
     id: json['id'] as String? ?? '',
     email: json['email'] as String? ?? '',
     displayName:
@@ -97,7 +106,10 @@ class OrbitUser {
     firstName: json['firstName'] as String?,
     lastName: json['lastName'] as String?,
     phone: json['phone'] as String?,
-    avatarUrl: json['avatarUrl'] as String?,
+    avatarUrl: _enderecoResolvido(
+      json['avatarUrl'] as String?,
+      resolverUrl,
+    ),
     locale: json['locale'] as String?,
     timezone: json['timezone'] as String?,
     status: json['status'] as String? ?? 'ACTIVE',
@@ -265,3 +277,17 @@ class ProductAccess {
 List<String> _stringList(Object? value) => value is List
     ? value.whereType<String>().toList(growable: false)
     : const <String>[];
+
+
+/// O endereço da foto, traduzido quando há tradutor.
+///
+/// Devolve `null` para o que não é URL utilizável: string vazia ou texto que
+/// não parseia. Um endereço quebrado viraria um `Image.network` que falha, e a
+/// tela já tem as iniciais para esse caso.
+String? _enderecoResolvido(String? bruto, Uri Function(Uri)? resolverUrl) {
+  final texto = bruto?.trim();
+  if (texto == null || texto.isEmpty) return null;
+  final uri = Uri.tryParse(texto);
+  if (uri == null) return null;
+  return (resolverUrl?.call(uri) ?? uri).toString();
+}

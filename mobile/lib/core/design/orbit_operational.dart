@@ -125,6 +125,22 @@ class OrbitServiceRow extends StatelessWidget {
   }
 }
 
+/// O endereço dá para desenhar?
+///
+/// `http` **e** `https`, ambos com host. A condição era só `https`, e em
+/// desenvolvimento a API atende em `http`: a foto chegava gravada e o widget
+/// caía nas iniciais, sem dizer nada. Recusar a imagem enquanto o aplicativo
+/// conversa com a mesma API pelo mesmo transporte não protege de nada — só
+/// esconde o que foi salvo.
+///
+/// O que continua barrado é o que não é endereço de rede: relativo, `data:`,
+/// vazio. Para esses a inicial é a resposta certa, e um `Image.network` só
+/// produziria um erro silencioso.
+bool desenhavelComoImagemDeRede(Uri? uri) =>
+    uri != null &&
+    (uri.isScheme('http') || uri.isScheme('https')) &&
+    uri.host.isNotEmpty;
+
 class OrbitAvatar extends StatelessWidget {
   const OrbitAvatar({
     super.key,
@@ -148,9 +164,20 @@ class OrbitAvatar extends StatelessWidget {
           width: size,
           height: size,
           color: p.surfaceSunken,
-          child: uri?.scheme == 'https' && uri!.host.isNotEmpty
+          /// `http` também desenha.
+          ///
+          /// A condição era `scheme == 'https'`, e em desenvolvimento a API
+          /// atende em `http`: a foto chegava gravada e o widget caía nas
+          /// iniciais, sem dizer nada. Recusar a imagem enquanto o aplicativo
+          /// conversa com a mesma API pelo mesmo transporte não protege de
+          /// nada — só esconde o que foi salvo.
+          ///
+          /// O que continua barrado é o que não é endereço de rede: relativo,
+          /// `data:`, vazio. Para esses a inicial é a resposta certa, e um
+          /// `Image.network` só produziria um erro silencioso.
+          child: desenhavelComoImagemDeRede(uri)
               ? Image.network(
-                  uri.toString(),
+                  uri!.toString(),
                   fit: BoxFit.cover,
                   errorBuilder: (_, __, ___) => fallback,
                 )

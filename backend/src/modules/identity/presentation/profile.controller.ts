@@ -46,7 +46,10 @@ export class ProfileController {
   @Get()
   async get(@Req() request: IdentityRequest) {
     return this.readModels.profile(
-      await this.profiles.get(request.identity!.id),
+      await this.profiles.get(
+        request.identity!.id,
+        request.identity!.organizationId!,
+      ),
     );
   }
 
@@ -166,10 +169,8 @@ export class ProfileController {
   @Post('mfa/enrollment')
   beginMfa(@Req() request: IdentityRequest) {
     return this.profiles
-      .get(request.identity!.id)
-      .then((profile) =>
-        this.mfa.beginEnrollment(request.identity!.id, profile.email),
-      );
+      .email(request.identity!.id)
+      .then((email) => this.mfa.beginEnrollment(request.identity!.id, email));
   }
 
   @Post('mfa/enable')

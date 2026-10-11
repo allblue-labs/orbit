@@ -88,7 +88,7 @@ class ProfileRepository {
         if (phone != null) 'phone': phone,
       },
     );
-    return OrbitUser.fromJson(data);
+    return OrbitUser.fromJson(data, resolverUrl: _client.resolveUrl);
   }
 
   Future<AvatarUploadTicket> reserveAvatar({

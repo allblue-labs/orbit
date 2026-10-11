@@ -112,6 +112,14 @@ class OrbitApiClient {
 
   final Dio _dio;
 
+  /// Traduz um endereço entregue pelo servidor para um que este aparelho
+  /// alcança. Ver [resolveBackendUrl].
+  ///
+  /// Público porque nem tudo que o servidor endereça passa por este cliente: a
+  /// foto do perfil é carregada por `Image.network`, direto pelo Flutter, e
+  /// precisa da mesma tradução antes de chegar lá.
+  Uri resolveUrl(Uri url) => resolveBackendUrl(url, _apiBase);
+
   /// A API que **este aparelho** alcança.
   ///
   /// Guardada à parte de `_dio.options.baseUrl` de propósito: quando o `Dio` é
