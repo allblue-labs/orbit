@@ -515,7 +515,28 @@ export class MobileFieldService {
       actor.organizationId,
       operationId,
     );
-    if (!operation?.amountVisibleInField || !operation.quote) return {};
+    /* Não liberado: o campo não existe. É a única forma de dizer "não cabe a
+       você ver" sem afirmar nada sobre o valor. */
+    if (!operation?.amountVisibleInField) return {};
+
+    /**
+     * Liberado e sem orçamento: o campo **existe**, com valor nulo.
+     *
+     * Os dois casos vinham omitidos juntos, e o efeito era o dono ligar a
+     * chave, não ver nada e concluir que a liberação não funcionou. São
+     * situações diferentes e agora se distinguem: aqui a tela diz que falta
+     * vincular um orçamento, que é a ação que resolve.
+     */
+    if (!operation.quote) {
+      return {
+        financialSummary: {
+          currency: 'BRL',
+          approvedAmount: null,
+          paymentStatus: null,
+        },
+      };
+    }
+
     return {
       financialSummary: {
         currency: 'BRL',

@@ -247,7 +247,6 @@ class _Onde extends StatelessWidget {
     final palette = context.orbit;
     final endereco = item.serviceAddress;
     final solto = endereco == null ? locationText(item) : null;
-    if (endereco == null && solto == null) return const SizedBox.shrink();
 
     return _Bloco(
       titulo: 'Onde',
@@ -282,23 +281,34 @@ class _Onde extends StatelessWidget {
               style: OrbitType.body.copyWith(color: palette.inkMuted),
             ),
 
-            if (endereco.complement != null ||
-                endereco.sector != null ||
-                endereco.reference != null) ...[
-              const SizedBox(height: OrbitSpacing.sm),
-              if (endereco.complement case final String complemento)
-                _Acesso(icone: Icons.meeting_room_outlined, texto: complemento),
-              if (endereco.sector case final String setor)
-                _Acesso(icone: Icons.pin_drop_outlined, texto: setor),
-              if (endereco.reference case final String referencia)
-                _Acesso(
-                  icone: Icons.info_outline,
-                  texto: referencia,
-                  destaque: true,
-                ),
-            ],
-          ] else
-            Text(solto!, style: OrbitType.body.copyWith(color: palette.ink)),
+            const SizedBox(height: OrbitSpacing.sm),
+
+            /// As três instruções de acesso aparecem **sempre**.
+            ///
+            /// Escondê-las quando vazias dizia duas coisas diferentes com o
+            /// mesmo silêncio: "não há complemento" e "ninguém cadastrou" ficam
+            /// idênticos na tela. Quem chega na portaria precisa saber em qual
+            /// dos dois está — no primeiro procura a porta, no segundo liga.
+            _Acesso(
+              icone: Icons.meeting_room_outlined,
+              rotulo: 'Complemento',
+              texto: endereco.complement,
+            ),
+            _Acesso(
+              icone: Icons.pin_drop_outlined,
+              rotulo: 'Local no endereço',
+              texto: endereco.sector,
+            ),
+            _Acesso(
+              icone: Icons.info_outline,
+              rotulo: 'Ponto de referência',
+              texto: endereco.reference,
+              destaque: true,
+            ),
+          ] else if (solto != null)
+            Text(solto, style: OrbitType.body.copyWith(color: palette.ink))
+          else
+            const _NaoInformado(rotulo: 'Endereço'),
         ],
       ),
     );
@@ -312,25 +322,39 @@ class _Onde extends StatelessWidget {
 class _Acesso extends StatelessWidget {
   const _Acesso({
     required this.icone,
+    required this.rotulo,
     required this.texto,
     this.destaque = false,
   });
 
   final IconData icone;
-  final String texto;
+
+  /// O nome do campo. Só aparece quando não há valor — preenchido, o ícone já
+  /// diz o que é, e o rótulo roubaria a linha do conteúdo.
+  final String rotulo;
+
+  final String? texto;
+
+  /// O ponto de referência vai realçado quando existe: é o que evita a ligação
+  /// para o escritório, e numa lista de linhas iguais ele se perde. Vazio, não
+  /// há o que realçar — destacar uma ausência seria dar-lhe a ênfase que o
+  /// conteúdo teria.
   final bool destaque;
 
   @override
   Widget build(BuildContext context) {
     final palette = context.orbit;
+    final valor = texto?.trim();
+    final vazio = valor == null || valor.isEmpty;
+    final realcar = destaque && !vazio;
 
     return Padding(
       padding: const EdgeInsets.only(top: 4),
       child: Container(
-        padding: destaque
+        padding: realcar
             ? const EdgeInsets.all(OrbitSpacing.sm)
             : EdgeInsets.zero,
-        decoration: destaque
+        decoration: realcar
             ? BoxDecoration(
                 color: palette.accentSoft,
                 borderRadius: OrbitRadius.chip,
@@ -342,22 +366,49 @@ class _Acesso extends StatelessWidget {
             Icon(
               icone,
               size: 16,
-              color: destaque ? palette.accentStrong : palette.inkSubtle,
+              color: realcar
+                  ? palette.accentStrong
+                  : (vazio ? palette.inkDisabled : palette.inkSubtle),
             ),
             const SizedBox(width: OrbitSpacing.sm),
             Expanded(
-              child: Text(
-                texto,
-                style: OrbitType.body.copyWith(
-                  color: destaque ? palette.accentStrong : palette.inkMuted,
-                ),
-              ),
+              child: vazio
+                  ? Text(
+                      '$rotulo não informado',
+                      style: OrbitType.body.copyWith(
+                        color: palette.inkDisabled,
+                      ),
+                    )
+                  : Text(
+                      valor,
+                      style: OrbitType.body.copyWith(
+                        color: realcar
+                            ? palette.accentStrong
+                            : palette.inkMuted,
+                      ),
+                    ),
             ),
           ],
         ),
       ),
     );
   }
+}
+
+/// Um campo inteiro que ninguém cadastrou.
+///
+/// Dito, e não omitido: o silêncio não distingue "não se aplica" de "falta
+/// cadastrar", e quem está em campo precisa saber em qual dos dois está.
+class _NaoInformado extends StatelessWidget {
+  const _NaoInformado({required this.rotulo});
+
+  final String rotulo;
+
+  @override
+  Widget build(BuildContext context) => Text(
+    '$rotulo não informado',
+    style: OrbitType.body.copyWith(color: context.orbit.inkDisabled),
+  );
 }
 
 /// Quem contratou, e por qual número falar.
@@ -383,26 +434,49 @@ class _ClienteEContato extends StatelessWidget {
               fontWeight: FontWeight.w600,
             ),
           ),
-          if (contato != null) ...[
-            const SizedBox(height: 2),
-            Text(
-              [
-                contato.name,
-                contato.phone,
-              ].whereType<String>().where((v) => v.isNotEmpty).join(' · '),
-              style: OrbitType.body.copyWith(color: palette.inkMuted),
-            ),
-          ],
+          const SizedBox(height: 2),
+
+          /// O contato aparece mesmo quando não existe.
+          ///
+          /// É o caso mais caro de esconder: quem não sabe que não há telefone
+          /// planeja avisar que está chegando, e descobre na portaria que não
+          /// tem para quem ligar.
+          if (_contatoLegivel(contato) case final String linha)
+            Text(linha, style: OrbitType.body.copyWith(color: palette.inkMuted))
+          else
+            const _NaoInformado(rotulo: 'Contato'),
         ],
       ),
     );
   }
 }
 
+/// Nome e telefone de quem atende, numa linha — ou `null` quando não há nem um
+/// nem outro.
+///
+/// Um contato cadastrado só com nome ainda serve: diz por quem perguntar na
+/// portaria. Por isso a ausência é a dos **dois**, e não a do telefone.
+String? _contatoLegivel(MobileContactSummaryContract? contato) {
+  if (contato == null) return null;
+  final partes = [
+    contato.name,
+    contato.phone,
+  ].whereType<String>().map((v) => v.trim()).where((v) => v.isNotEmpty);
+  return partes.isEmpty ? null : partes.join(' · ');
+}
+
 /// Quanto vale — só quando o responsável liberou para o campo.
 ///
-/// A seção **não existe** quando não há liberação, em vez de mostrar traço ou
-/// zero: ausência é a única forma de não afirmar nada sobre o valor.
+/// ## Por que este campo não diz "não informado"
+///
+/// Porque a ausência dele não é falta de cadastro: é "não cabe a você ver". O
+/// servidor **omite** o bloco inteiro quando a liberação está desligada, e
+/// escrever "valor não informado" ali afirmaria que não há valor — quando
+/// normalmente há, e só não foi liberado para quem está em campo.
+///
+/// O que aparece é o terceiro estado: liberado e **sem orçamento vinculado**.
+/// Esse sim é falta de cadastro, e a frase diz qual — era o caso que fazia o
+/// dono ligar a chave, não ver nada e achar que a liberação não funcionava.
 class _Valor extends StatelessWidget {
   const _Valor({required this.financeiro});
 
@@ -412,14 +486,15 @@ class _Valor extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.orbit;
     final valor = double.tryParse(financeiro.approvedAmount ?? '');
-    if (valor == null) return const SizedBox.shrink();
 
     return _Bloco(
       titulo: 'Valor do atendimento',
-      child: Text(
-        OrbitFormat.currency(valor),
-        style: OrbitType.sectionTitle.copyWith(color: palette.ink),
-      ),
+      child: valor == null
+          ? const _NaoInformado(rotulo: 'Orçamento vinculado')
+          : Text(
+              OrbitFormat.currency(valor),
+              style: OrbitType.sectionTitle.copyWith(color: palette.ink),
+            ),
     );
   }
 }

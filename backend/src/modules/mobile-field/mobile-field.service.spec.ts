@@ -588,12 +588,21 @@ describe('o valor do atendimento em campo', () => {
     expect(contexto.financialSummary).toBeUndefined();
   });
 
-  it('liberado sem orçamento vinculado também omite', async () => {
+  it('liberado sem orçamento é um terceiro estado, não omissão', async () => {
+    /*
+     * Os dois casos vinham omitidos juntos, e o efeito era o dono ligar a chave,
+     * não ver nada e concluir que a liberação não funcionava. Presente com valor
+     * nulo diz o que de fato falta: vincular um orçamento.
+     */
     const service = servico({ amountVisibleInField: true, quote: null });
 
     const contexto = await service.fieldContext(actor, CANONICO);
 
-    expect(contexto.financialSummary).toBeUndefined();
+    expect(contexto.financialSummary).toEqual({
+      currency: 'BRL',
+      approvedAmount: null,
+      paymentStatus: null,
+    });
   });
 });
 

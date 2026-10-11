@@ -130,6 +130,44 @@ void main() {
     expect(find.textContaining('MANUTENÇÃO'), findsOneWidget);
   });
 
+  /// O que o cadastro incompleto mostra.
+  ///
+  /// Esconder campo vazio dizia duas coisas com o mesmo silêncio: "não há
+  /// complemento" e "ninguém cadastrou" ficavam idênticos. Quem chega na
+  /// portaria precisa saber em qual dos dois está — no primeiro procura a
+  /// porta, no segundo liga.
+  testWidgets('endereço sem complemento e sem referência diz que faltam', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_host(enderecoIncompleto: true));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Complemento não informado'), findsOneWidget);
+    expect(find.text('Ponto de referência não informado'), findsOneWidget);
+    expect(find.text('Local no endereço não informado'), findsOneWidget);
+
+    /* O que existe continua aparecendo como valor, não como ausência. */
+    expect(find.textContaining('Av. Agamenon Magalhães'), findsOneWidget);
+  });
+
+  testWidgets('cliente sem contato diz que falta', (tester) async {
+    /* O caso mais caro de esconder: quem não sabe que não há telefone planeja
+       avisar que está chegando, e descobre na portaria. */
+    await tester.pumpWidget(_host(semContato: true));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Contato não informado'), findsOneWidget);
+  });
+
+  testWidgets('com cadastro completo, nenhuma ausência é anunciada', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_host());
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('não informado'), findsNothing);
+  });
+
   testWidgets('sem liberação, o valor não aparece', (tester) async {
     /*
      * Ausência, e não "R$ 0,00": o servidor omite `financialSummary` quando o
@@ -147,6 +185,19 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('VALOR DO ATENDIMENTO'), findsOneWidget);
+    expect(find.textContaining('8.450'), findsOneWidget);
+  });
+
+  testWidgets('liberado e sem orçamento diz o que falta vincular', (
+    tester,
+  ) async {
+    /* O estado que fazia o dono ligar a chave, não ver nada e achar que a
+       liberação não funcionava. */
+    await tester.pumpWidget(_host(comValor: true, semOrcamento: true));
+    await tester.pumpAndSettle();
+
+    expect(find.text('VALOR DO ATENDIMENTO'), findsOneWidget);
+    expect(find.text('Orçamento vinculado não informado'), findsOneWidget);
   });
 }
 
@@ -154,6 +205,13 @@ Widget _host({
   List<String> acoes = const ['VIEW', 'START', 'REQUEST_CANCELLATION'],
   bool pedidoPendente = false,
   bool comValor = false,
+  /// Liberado para o campo, mas sem orçamento vinculado.
+  bool semOrcamento = false,
+  /// Endereço cadastrado sem complemento nem ponto de referência — o estado
+  /// real de um cliente recém-cadastrado.
+  bool enderecoIncompleto = false,
+  /// Cliente sem contato nenhum.
+  bool semContato = false,
 }) {
   Future<ResponseBody> handler(RequestOptions options) async {
     if (options.uri.path.contains('/work-items/')) {
@@ -169,23 +227,27 @@ Widget _host({
             'customer': {
               'id': 'c1',
               'name': 'Shopping Recife',
-              'contact': {
-                'name': 'Dona Rita',
-                'phone': '+55 81 98888-0000',
-                'email': null,
-              },
+              'contact': semContato
+                  ? null
+                  : {
+                      'name': 'Dona Rita',
+                      'phone': '+55 81 98888-0000',
+                      'email': null,
+                    },
             },
             'serviceAddress': {
               'label': 'Matriz',
               'street': 'Av. Agamenon Magalhães',
               'number': '1200',
-              'complement': 'Bloco B, 4º andar',
+              'complement': enderecoIncompleto ? null : 'Bloco B, 4º andar',
               'district': 'Boa Vista',
               'city': 'Recife',
               'stateCode': 'PE',
               'postalCode': '50050-000',
-              'reference': 'Portão azul nos fundos; falar com a portaria.',
-              'sector': 'Casa de máquinas',
+              'reference': enderecoIncompleto
+                  ? null
+                  : 'Portão azul nos fundos; falar com a portaria.',
+              'sector': enderecoIncompleto ? null : 'Casa de máquinas',
             },
             'serviceType': 'Manutenção',
             'pendingCancellation': pedidoPendente
@@ -214,8 +276,8 @@ Widget _host({
           if (comValor)
             'financialSummary': {
               'currency': 'BRL',
-              'approvedAmount': '8450.00',
-              'paymentStatus': 'APPROVED',
+              'approvedAmount': semOrcamento ? null : '8450.00',
+              'paymentStatus': semOrcamento ? null : 'APPROVED',
             },
           'snapshotVersion': 3,
         },
