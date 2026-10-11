@@ -26,7 +26,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/providers.dart';
-import '../../../core/design/orbit_operational.dart';
 import '../../../core/design/orbit_settings_list.dart';
 import '../../../core/routing/orbit_router.dart';
 import '../../../core/theme/orbit_theme.dart';
@@ -37,6 +36,7 @@ import '../../signature/application/signature_providers.dart';
 import '../../sync/application/sync_controller.dart';
 import '../../sync/application/sync_providers.dart';
 import 'edit_profile_sheet.dart';
+import 'my_avatar.dart';
 import 'unit_sheet.dart';
 
 class ProfileScreen extends ConsumerWidget {
@@ -218,11 +218,7 @@ class _Identidade extends StatelessWidget {
             customBorder: const CircleBorder(),
             child: Stack(
               children: [
-                OrbitAvatar(
-                  initials: session.user.initials,
-                  url: session.user.avatarUrl,
-                  size: 88,
-                ),
+                MyAvatar(initials: session.user.initials, size: 88),
 
                 /// O selo da câmera diz que a foto é tocável. Sem ele, um
                 /// avatar é decoração — ninguém tenta tocar numa.

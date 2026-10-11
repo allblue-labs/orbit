@@ -21,6 +21,36 @@ import 'dart:typed_data';
 import '../../../core/contracts/session_contracts.dart';
 import '../../../core/network/orbit_api_client.dart';
 
+/// A foto atual, com o endereço assinado e o prazo dele.
+///
+/// O prazo viaja porque ele é curto — cinco minutos no padrão do servidor — e
+/// quem exibe precisa saber quando buscar de novo. Guardar só o endereço, como
+/// a sessão fazia, produz uma foto que some sozinha depois de alguns minutos:
+/// o `GET` passa a responder 403 e a tela cai nas iniciais sem dizer nada.
+class AvatarView {
+  const AvatarView({required this.available, this.url, this.expiresAt});
+
+  factory AvatarView.fromJson(Map<String, dynamic> json) => AvatarView(
+    available: json['available'] as bool? ?? false,
+    url: json['url'] as String?,
+    expiresAt: DateTime.tryParse(json['expiresAt'] as String? ?? ''),
+  );
+
+  final bool available;
+  final String? url;
+  final DateTime? expiresAt;
+
+  /// Vencido, com dez segundos de folga.
+  ///
+  /// A folga existe porque buscar bytes com um endereço que vence no caminho
+  /// devolve 403, e antecipar custa menos que a repetição.
+  bool get isExpired =>
+      expiresAt == null ||
+      DateTime.now().toUtc().isAfter(
+        expiresAt!.toUtc().subtract(const Duration(seconds: 10)),
+      );
+}
+
 /// O espaço reservado para o arquivo, antes de ele existir.
 ///
 /// ## O formato é aninhado, e era lido como se fosse plano
@@ -89,6 +119,22 @@ class ProfileRepository {
       },
     );
     return OrbitUser.fromJson(data, resolverUrl: _client.resolveUrl);
+  }
+
+  /// O endereço assinado da foto atual, com o prazo dele.
+  Future<AvatarView> avatar() async =>
+      AvatarView.fromJson(
+        await _client.get<Map<String, dynamic>>('/identity/me/avatar'),
+      );
+
+  /// Os bytes da foto, pelo endereço que [avatar] devolveu.
+  ///
+  /// Passa pelo cliente, e não por `Image.network`, por dois motivos: é ele que
+  /// traduz o host que o servidor assina — `localhost`, em desenvolvimento — e
+  /// é aqui que dá para repetir quando o endereço vence no caminho.
+  Future<Uint8List> avatarBytes(Uri url) async {
+    final resposta = await _client.getBytes(url: url);
+    return Uint8List.fromList(resposta.bytes);
   }
 
   Future<AvatarUploadTicket> reserveAvatar({

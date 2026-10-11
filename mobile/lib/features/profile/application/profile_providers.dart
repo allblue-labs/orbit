@@ -79,8 +79,11 @@ class ProfileEditController extends StateNotifier<AsyncValue<void>> {
       );
       await repository.activateAvatar(ticket.storageObjectId);
 
-      /// O endereço da foto é assinado e temporário, e não vem no `PUT`.
-      /// Recompor a sessão é o caminho que já sabe buscá-lo.
+      /// A sessão é recomposta para o nome e o resto do perfil seguirem
+      /// atuais; a foto em si vem de `avatarBytesProvider`, que precisa ser
+      /// relido — sem isto a tela segue mostrando a imagem anterior, já em
+      /// memória, e a troca parece não ter acontecido.
+      _ref.invalidate(avatarBytesProvider);
       await _ref.read(authControllerProvider.notifier).refreshProfile();
 
       /// `mounted` antes de escrever: o provedor é `autoDispose`, e a folha
@@ -97,6 +100,7 @@ class ProfileEditController extends StateNotifier<AsyncValue<void>> {
     state = const AsyncValue.loading();
     try {
       await _ref.read(profileRepositoryProvider).removeAvatar();
+      _ref.invalidate(avatarBytesProvider);
       await _ref.read(authControllerProvider.notifier).refreshProfile();
 
       /// `mounted` antes de escrever: o provedor é `autoDispose`, e a folha
@@ -114,3 +118,37 @@ final profileEditControllerProvider =
     StateNotifierProvider.autoDispose<ProfileEditController, AsyncValue<void>>(
       ProfileEditController.new,
     );
+
+
+/// Os bytes da foto de perfil.
+///
+/// ## Por que bytes, e não a URL da sessão
+///
+/// O endereço da foto é **assinado e curto** — cinco minutos no padrão do
+/// servidor. A sessão guardava esse endereço e o entregava a `Image.network`
+/// pelo resto do uso: passados os cinco minutos o `GET` respondia 403 e a tela
+/// caía nas iniciais, sem erro e sem explicação. A foto aparecia por alguns
+/// minutos depois de trocada e sumia sozinha.
+///
+/// Buscar os bytes resolve isso na raiz: o endereço é pedido na hora, usado
+/// imediatamente e descartado. É o mesmo caminho da prévia da assinatura, que
+/// já tratava a expiração assim.
+///
+/// A repetição única cobre o endereço que vence **entre** pedir e usar — a
+/// corrida que a folga de dez segundos reduz mas não elimina.
+final avatarBytesProvider = FutureProvider<Uint8List?>((ref) async {
+  final repository = ref.watch(profileRepositoryProvider);
+
+  for (var tentativa = 0; tentativa < 2; tentativa += 1) {
+    final view = await repository.avatar();
+    if (!view.available || view.url == null) return null;
+    if (view.isExpired && tentativa == 0) continue;
+
+    try {
+      return await repository.avatarBytes(Uri.parse(view.url!));
+    } on Object {
+      if (tentativa == 1) rethrow;
+    }
+  }
+  return null;
+});

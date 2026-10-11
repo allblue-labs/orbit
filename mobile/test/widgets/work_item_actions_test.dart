@@ -15,6 +15,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:orbit_operator/app/providers.dart';
 import 'package:orbit_operator/core/config/environment.dart';
@@ -22,6 +23,12 @@ import 'package:orbit_operator/core/network/orbit_api_client.dart';
 import 'package:orbit_operator/core/observability/orbit_logger.dart';
 import 'package:orbit_operator/core/theme/orbit_theme.dart';
 import 'package:orbit_operator/features/field/presentation/work_item_detail_screen.dart';
+
+import 'package:orbit_operator/core/contracts/mobile_offline_sync_contracts.dart';
+import 'package:orbit_operator/features/sync/application/sync_providers.dart';
+import 'package:orbit_operator/features/sync/data/command_journal.dart';
+import 'package:orbit_operator/features/sync/data/journal_file.dart';
+import 'package:orbit_operator/features/sync/data/sync_projection.dart';
 
 import '../support/fakes.dart';
 import '../support/scripted_adapter.dart';
@@ -80,12 +87,60 @@ void main() {
 
   testWidgets('continuar troca o rótulo, não o lugar', (tester) async {
     await tester.pumpWidget(
-      _host(acoes: const ['VIEW', 'RESUME', 'REQUEST_CANCELLATION']),
+      _host(
+        acoes: const ['VIEW', 'RESUME', 'REQUEST_CANCELLATION'],
+        emAndamento: true,
+      ),
     );
     await tester.pumpAndSettle();
 
     expect(find.text('Continuar o Atendimento'), findsOneWidget);
     expect(find.text('Iniciar o Atendimento'), findsNothing);
+  });
+
+  testWidgets('iniciar registra o comando antes de abrir o roteiro', (
+    tester,
+  ) async {
+    /*
+     * A etapa Preparação trazia um "Iniciar atendimento" próprio: quem tocava
+     * aqui caía numa etapa pedindo a mesma coisa de novo. O comando passou a
+     * sair daqui, que é onde a decisão é tomada.
+     *
+     * A asserção é sobre o **diário**, e não sobre HTTP: o comando entra na
+     * fila offline e sai de lá quando houver rede. Cobrar a requisição
+     * testaria o sincronizador, não a tela.
+     */
+    final diario = CommandJournal(file: MemoryJournalFile());
+    await tester.pumpWidget(_host(diario: diario));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Iniciar o Atendimento'));
+    await tester.pumpAndSettle();
+
+    final registrados = (await diario.read()).commands;
+    expect(
+      registrados.map((c) => c.envelope.commandType.name),
+      contains(OfflineCommandType.operationStart.name),
+    );
+  });
+
+  testWidgets('atendimento em andamento não reenvia o início', (tester) async {
+    /* "Continuar" entra direto: reenviar o início de algo já começado seria um
+       comando sem efeito, e a tela prometeria uma transição que não há. */
+    final diario = CommandJournal(file: MemoryJournalFile());
+    await tester.pumpWidget(
+      _host(
+        acoes: const ['VIEW', 'RESUME', 'REQUEST_CANCELLATION'],
+        emAndamento: true,
+        diario: diario,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Continuar o Atendimento'));
+    await tester.pumpAndSettle();
+
+    expect((await diario.read()).commands, isEmpty);
   });
 
   testWidgets('pedido já enviado ocupa o lugar do botão', (tester) async {
@@ -105,6 +160,15 @@ void main() {
     expect(find.text('Cancelar o Atendimento'), findsNothing);
     expect(find.text('CANCELAMENTO PEDIDO'), findsOneWidget);
     expect(find.textContaining('Portão trancado'), findsOneWidget);
+
+    /*
+     * E a situação passa a dizê-lo.
+     *
+     * A do domínio não muda ao pedir — quem decide é o responsável, e o
+     * compromisso segue de pé. Mas a etiqueta dizendo só "Programado" fazia o
+     * pedido parecer que não tinha acontecido.
+     */
+    expect(find.text('Aguardando cancelamento'), findsOneWidget);
 
     /* Iniciar continua: o atendimento segue de pé até o responsável decidir. */
     expect(find.text('Iniciar o Atendimento'), findsOneWidget);
@@ -212,8 +276,39 @@ Widget _host({
   bool enderecoIncompleto = false,
   /// Cliente sem contato nenhum.
   bool semContato = false,
+  /// O atendimento já começou — o botão vira "Continuar" e não reenvia início.
+  bool emAndamento = false,
+  /// O diário de comandos, quando o teste quer inspecioná-lo.
+  CommandJournal? diario,
 }) {
   Future<ResponseBody> handler(RequestOptions options) async {
+    /// A preparação da execução.
+    ///
+    /// A tela de detalhe passou a observá-la: é dela que sai a versão do
+    /// atendimento, sem a qual o comando de início seria um no-op silencioso.
+    if (options.uri.path.endsWith('/execution-preparation')) {
+      return jsonResponse({
+        'success': true,
+        'data': {
+          'operation': {
+            'id': 'op-1',
+            'code': 'OS-1',
+            'status': emAndamento ? 'IN_PROGRESS' : 'SCHEDULED',
+          },
+          'executionEligibility': {'eligible': true, 'blockers': <String>[]},
+          'equipment': <Map<String, dynamic>>[],
+          'auxiliaryTechnicians': <Map<String, dynamic>>[],
+          'checklist': <Map<String, dynamic>>[],
+          'materialPolicy': {'enabled': false},
+          'allowedActions': emAndamento
+              ? ['COMPLETE', 'ADD_NOTE']
+              : ['START'],
+          'primaryAction': emAndamento ? 'COMPLETE' : 'START',
+          'version': 'v1',
+        },
+      });
+    }
+
     if (options.uri.path.contains('/work-items/')) {
       return jsonResponse({
         'success': true,
@@ -303,11 +398,35 @@ Widget _host({
       /* O repositório de campo guarda a leitura em disco; sem um cache de
          memória o teste tropeça no canal de plataforma, não na tela. */
       readCacheProvider.overrideWithValue(InMemoryReadCache()),
+      /* O controlador de execução grava intenções antes de enviá-las; sem um
+         diário em memória o teste tropeça no armazenamento do aparelho. */
+      commandJournalProvider.overrideWithValue(
+        diario ?? CommandJournal(file: MemoryJournalFile()),
+      ),
+      syncProjectionProvider.overrideWithValue(
+        SyncProjectionStore(file: MemoryJournalFile()),
+      ),
     ],
-    child: MaterialApp(
+    /// Com roteador de verdade: iniciar **navega** depois de enviar o
+    /// comando, e sem um `GoRouter` no contexto o `push` levanta antes de a
+    /// asserção acontecer.
+    child: MaterialApp.router(
       theme: OrbitTheme.light(),
-      home: const WorkItemDetailScreen(
-        workItemId: 'SERVICE_OPERATION:op-1',
+      routerConfig: GoRouter(
+        routes: [
+          GoRoute(
+            path: '/',
+            builder: (_, __) => const WorkItemDetailScreen(
+              workItemId: 'SERVICE_OPERATION:op-1',
+            ),
+            routes: [
+              GoRoute(
+                path: 'execucao/:id',
+                builder: (_, __) => const Scaffold(body: Text('roteiro')),
+              ),
+            ],
+          ),
+        ],
       ),
     ),
   );

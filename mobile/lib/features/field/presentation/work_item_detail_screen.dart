@@ -37,6 +37,8 @@ import '../../../core/presentation/orbit_format.dart';
 import '../../../core/routing/orbit_router.dart';
 import '../../../core/theme/orbit_theme.dart';
 import '../../../core/widgets/section_states.dart';
+import '../../../core/contracts/field_operation_contracts.dart';
+import '../application/execution_controller.dart';
 import '../application/field_providers.dart';
 import 'widgets/cancellation_sheet.dart';
 import 'widgets/work_item_row.dart';
@@ -191,6 +193,18 @@ class _Capa extends StatelessWidget {
             spacing: OrbitSpacing.xs,
             runSpacing: 6,
             children: [
+              /// O pedido de cancelamento vem primeiro e em destaque.
+              ///
+              /// A situação do atendimento **não** muda ao pedir — quem decide
+              /// é o responsável, e o compromisso segue de pé até lá. Mas
+              /// deixar a etiqueta dizendo só "Programado" fazia o pedido
+              /// parecer que não aconteceu. O estado real é este: programado,
+              /// e aguardando uma decisão sobre o cancelamento.
+              if (item.pendingCancellation != null)
+                const _Tag(
+                  label: 'Aguardando cancelamento',
+                  enfase: true,
+                ),
               _Tag(label: dueStateLabel(item.dueState)),
               if (status != null) _Tag(label: status),
               if (assignment != FieldAssignment.none)
@@ -704,7 +718,7 @@ class _Actions extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final iniciar = _iniciar(context, item);
+    final iniciar = _iniciar(context, ref, item);
     final podePedirCancelamento =
         item.allowedActions.contains(MobileFieldAction.requestCancellation) &&
         item.pendingCancellation == null;
@@ -776,26 +790,67 @@ class _Actions extends ConsumerWidget {
   }
 }
 
-/// Para onde este item começa, se começa.
+/// Começar o atendimento e entrar no roteiro.
 ///
-/// Atendimento avulso vai para a execução da operação; PMOC vai para o
-/// atendimento **do equipamento** naquele ciclo — rotas diferentes porque são
-/// domínios diferentes, com contagem, documento e autoridade próprios.
+/// ## O comando sai daqui, e não da primeira etapa
 ///
-/// Visita técnica continua em leitura: a PR dela ainda não existe, e devolver
-/// `null` tira o botão em vez de prometer o que não cumpre.
-VoidCallback? _iniciar(BuildContext context, MobileWorkItemContract item) {
-  final comecar =
-      item.allowedActions.contains(MobileFieldAction.start) ||
-      item.allowedActions.contains(MobileFieldAction.resume);
-  if (!comecar) return null;
+/// A etapa Preparação trazia um "Iniciar atendimento" próprio. Quem tocava em
+/// "Iniciar o Atendimento" nesta tela caía numa etapa pedindo a mesma coisa de
+/// novo — e, antes de tocar, a tela já mostrava tudo que aquela etapa repetia.
+/// A etapa saiu; o comando ficou onde a decisão é tomada.
+///
+/// Para enviá-lo é preciso a versão do atendimento, que vem da preparação.
+/// Observá-la aqui custa uma requisição a mais nesta tela — e paga por ela
+/// duas vezes: o botão passa a saber se o início está liberado, e o roteiro
+/// abre já começado.
+///
+/// Atendimento em andamento não reenvia nada: entra direto.
+///
+/// Visita técnica continua em leitura — devolver `null` tira o botão em vez de
+/// prometer o que não cumpre.
+VoidCallback? _iniciar(
+  BuildContext context,
+  WidgetRef ref,
+  MobileWorkItemContract item,
+) {
+  final comecar = item.allowedActions.contains(MobileFieldAction.start);
+  final retomar = item.allowedActions.contains(MobileFieldAction.resume);
+  if (!comecar && !retomar) return null;
 
   final navegacao = item.navigationContext;
 
   switch (item.kind) {
     case MobileWorkItemKind.serviceOperation:
-      return () =>
-          context.push(OrbitRoutes.operationExecution(navegacao.sourceId));
+      final id = navegacao.sourceId;
+      final estado = ref.watch(executionControllerProvider(id));
+
+      /* Sem a preparação em mãos não há versão para o comando, e enviá-lo
+         assim seria um no-op silencioso. O botão espera. */
+      if (estado.preparation == null) return null;
+      if (estado.isBusy) return null;
+
+      /* Explícito, embora o controlador também recuse iniciar o que não está
+         liberado: ler aqui que "Continuar" não envia nada é mais claro do que
+         depender do silêncio de um no-op lá dentro. */
+      final precisaIniciar = estado.allows(
+        FieldOperationAllowedAction.start,
+      );
+      if (precisaIniciar && !estado.preparation!.eligible) return null;
+
+      return () async {
+        if (precisaIniciar) {
+          await ref.read(executionControllerProvider(id).notifier).start();
+          /* Falhou: o erro já está no estado, e entrar no roteiro agora
+             mostraria um atendimento que não começou. */
+          if (!context.mounted ||
+              ref.read(executionControllerProvider(id)).error != null) {
+            return;
+          }
+        }
+        if (context.mounted) {
+          context.push(OrbitRoutes.operationExecution(id));
+        }
+      };
 
     case MobileWorkItemKind.pmoc:
       /* Os três identificadores ou nenhum: a rota de atendimento é escopada por
@@ -819,20 +874,29 @@ VoidCallback? _iniciar(BuildContext context, MobileWorkItemContract item) {
 }
 
 class _Tag extends StatelessWidget {
-  const _Tag({required this.label});
+  const _Tag({required this.label, this.enfase = false});
 
   final String label;
 
+  /// Etiqueta que precisa ser notada entre as demais.
+  final bool enfase;
+
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-    decoration: BoxDecoration(
-      color: OrbitColors.surface,
-      borderRadius: OrbitRadius.pill,
-    ),
-    child: Text(
-      label,
-      style: const TextStyle(fontSize: 11, color: OrbitColors.textSecondary),
-    ),
-  );
+  Widget build(BuildContext context) {
+    final palette = context.orbit;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: enfase ? palette.warningSoft : palette.surfaceMuted,
+        borderRadius: OrbitRadius.pill,
+      ),
+      child: Text(
+        label,
+        style: OrbitType.label.copyWith(
+          color: enfase ? palette.warning : palette.inkMuted,
+        ),
+      ),
+    );
+  }
 }

@@ -83,7 +83,18 @@ class WorkItemRow extends StatelessWidget {
         detail: _apoio(assignment, locationText(item)),
         emphasis: emphasis,
         tone: dueToneOf(item.dueState),
-        trailing: selo.isEmpty
+        /// Um pedido de cancelamento em aberto vence o prazo na etiqueta.
+        ///
+        /// A situação do atendimento não muda ao pedir — quem decide é o
+        /// responsável. Mas na fila ele continuava idêntico aos demais, e quem
+        /// pediu não via sinal nenhum de que o relato existia: abria de novo
+        /// para conferir, ou pedia outra vez.
+        trailing: item.pendingCancellation != null
+            ? const OrbitStatusBadge(
+                label: 'Cancelamento pedido',
+                tone: OrbitTone.warning,
+              )
+            : selo.isEmpty
             ? null
             : OrbitStatusBadge(label: selo, tone: dueToneOf(item.dueState)),
         onTap: onOpen,

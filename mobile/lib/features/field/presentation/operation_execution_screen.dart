@@ -115,17 +115,6 @@ class OperationExecutionScreen extends ConsumerWidget {
 ///
 /// Nenhuma etapa é marcada como cumprida por dedução da tela: "cumprida" vem
 /// de `eligible` e do `progress` que o servidor calcula.
-/// A ação publicada é a de começar?
-///
-/// Decide em que etapa o botão do domínio aparece: iniciar e retomar pertencem à
-/// Preparação; concluir, à Finalização. Quem elege a ação continua sendo o
-/// servidor — isto só escolhe o lugar dela na tela.
-bool _comecando(ExecutionState state) {
-  final acao = state.preparation?.primaryAction;
-  return acao == FieldOperationAllowedAction.start ||
-      acao == FieldOperationAllowedAction.resume;
-}
-
 class _Body extends StatelessWidget {
   const _Body({
     required this.state,
@@ -149,52 +138,6 @@ class _Body extends StatelessWidget {
         checklists.every((lista) => lista.progress >= 100);
 
     final etapas = <OrbitWizardStep>[
-      OrbitWizardStep(
-        title: 'Preparação',
-        hint: 'Confira para quem, onde e o quê antes de começar.',
-        complete: preparation.eligible,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _Summary(preparation: preparation),
-
-            /// O que foi registrado e ainda não chegou ao servidor.
-            ///
-            /// Fica **acima** das ações e separado do estado confirmado: um
-            /// atendimento com início pendente não é um atendimento em
-            /// andamento, e a tela não pode sugerir que é.
-            if (state.pendingCommands.isNotEmpty)
-              _PendingIntentions(
-                commands: state.pendingCommands,
-                onOpenSyncCenter: () => context.push(OrbitRoutes.syncCenter),
-              ),
-
-            if (!preparation.eligible && preparation.blockers.isNotEmpty)
-              _Blockers(blockers: preparation.blockers),
-
-          ],
-        ),
-
-        /// Iniciar **é** o avanço desta etapa.
-        ///
-        /// Era um botão próprio, e a tela mostrava "Iniciar atendimento" e
-        /// "Avançar · Execução" lado a lado, sem nada dizendo qual vinha
-        /// primeiro. Um controle por etapa, sempre no mesmo lugar.
-        forward: _comecando(state)
-            ? OrbitWizardForward(
-                label: state.allows(FieldOperationAllowedAction.resume)
-                    ? 'Retomar atendimento'
-                    : 'Iniciar atendimento',
-                enabled: preparation.eligible && !state.isBusy,
-                pending:
-                    state.isBusy &&
-                    state.pendingAction == preparation.primaryAction,
-                advanceOnSuccess: true,
-                onPressed: controller.start,
-              )
-            : null,
-      ),
-
       OrbitWizardStep(
         title: 'Execução',
         hint: 'Responda o checklist previsto para este atendimento.',
@@ -360,6 +303,40 @@ class _Body extends StatelessWidget {
               ),
             ),
 
+          /// O que a etapa Preparação carregava e ainda importa.
+          ///
+          /// A etapa saiu: a tela de detalhe **é** a preparação, e organizada.
+          /// Repeti-la aqui era mostrar duas vezes o mesmo resumo e, pior, um
+          /// segundo "Iniciar atendimento" depois de a pessoa já ter iniciado.
+          ///
+          /// O que não podia sumir junto são os impedimentos e o que ainda não
+          /// chegou ao servidor: os dois mudam o que a pessoa pode fazer agora,
+          /// e valem para o roteiro inteiro, não para uma etapa.
+          if (state.pendingCommands.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                OrbitSpacing.md,
+                OrbitSpacing.md,
+                OrbitSpacing.md,
+                0,
+              ),
+              child: _PendingIntentions(
+                commands: state.pendingCommands,
+                onOpenSyncCenter: () => context.push(OrbitRoutes.syncCenter),
+              ),
+            ),
+
+          if (!preparation.eligible && preparation.blockers.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                OrbitSpacing.md,
+                OrbitSpacing.md,
+                OrbitSpacing.md,
+                0,
+              ),
+              child: _Blockers(blockers: preparation.blockers),
+            ),
+
           OrbitWizard(steps: etapas),
         ],
       ),
@@ -368,125 +345,6 @@ class _Body extends StatelessWidget {
 }
 
 /// Contexto do atendimento: quem, onde, o quê, e quem executou.
-class _Summary extends StatelessWidget {
-  const _Summary({required this.preparation});
-
-  final FieldOperationExecutionPreparationContract preparation;
-
-  @override
-  Widget build(BuildContext context) {
-    final operation = preparation.operation;
-    final status = operationalStatusLabel(operation.status);
-
-    final palette = context.orbit;
-
-    /// Cartão, e não bloco solto: é a ficha do atendimento — código, título,
-    /// situação, cliente, equipamento e quem é responsável — e tudo isso se
-    /// lê junto ou não se lê.
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: OrbitSpacing.gutter),
-      child: OrbitCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              /* O número da ordem primeiro, quando existe: é o que o cliente
-                 anota e o que o documento imprime. O código continua sendo a
-                 identificação interna, e aparece quando não há número. */
-              operation.serviceOrderCode ?? operation.code,
-              style: OrbitType.eyebrow.copyWith(color: palette.inkSubtle),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              operation.title,
-              style: OrbitType.sectionTitle.copyWith(color: palette.ink),
-            ),
-            const SizedBox(height: OrbitSpacing.sm),
-
-            /// Situação em português. Código sem tradução simplesmente não
-            /// vira texto — decifrar o sistema não é tarefa de quem está em
-            /// campo.
-            if (status != null)
-              OrbitStatusBadge(label: status, tone: OrbitTone.info),
-
-            if (preparation.customer case final customer?) ...[
-              const SizedBox(height: OrbitSpacing.sm),
-              _Line(label: 'Cliente', value: customer.name),
-            ],
-
-            for (final equipment in preparation.equipment)
-              _Line(label: 'Equipamento', value: equipment.name),
-
-            if (operation.scheduledFor != null)
-              _Line(
-                label: 'Programado',
-                value: OrbitFormat.dateHourOf(operation.scheduledFor),
-              ),
-
-            if (preparation.responsibleFieldTechnician != null ||
-                preparation.auxiliaryTechnicians.isNotEmpty ||
-                operation.startedBy != null ||
-                operation.completedBy != null) ...[
-              const SizedBox(height: OrbitSpacing.ms),
-              Divider(height: 1, color: palette.border),
-              const SizedBox(height: OrbitSpacing.xs),
-            ],
-
-            if (preparation.responsibleFieldTechnician case final responsible?)
-              _Line(label: 'Técnico em Campo', value: responsible.name),
-            if (preparation.auxiliaryTechnicians.isNotEmpty)
-              _Line(
-                label: auxiliaryTechniciansLabel,
-                value: preparation.auxiliaryTechnicians
-                    .map((person) => person.name)
-                    .join(', '),
-              ),
-
-            /// Quem executou é **histórico** e nunca substitui a escala: pode
-            /// ser outra pessoa, e trocar um pelo outro apagaria o fato.
-            if (operation.startedBy case final startedBy?)
-              _Line(
-                label: 'Iniciado por',
-                value:
-                    '${startedBy.name}'
-                    '${operation.startedAt == null ? '' : ' · ${OrbitFormat.dateHourOf(operation.startedAt)}'}',
-              ),
-            if (operation.completedBy case final completedBy?)
-              _Line(
-                label: 'Concluído por',
-                value:
-                    '${completedBy.name}'
-                    '${operation.completedAt == null ? '' : ' · ${OrbitFormat.dateHourOf(operation.completedAt)}'}',
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _Line extends StatelessWidget {
-  const _Line({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: 4),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: OrbitType.caption.copyWith(color: context.orbit.inkSubtle),
-        ),
-        Text(value, style: OrbitType.body.copyWith(color: context.orbit.ink)),
-      ],
-    ),
-  );
-}
-
 /// O que impede executar, na frase do servidor.
 class _Blockers extends StatelessWidget {
   const _Blockers({required this.blockers});

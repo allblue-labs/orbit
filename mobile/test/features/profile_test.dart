@@ -19,6 +19,11 @@ import '../support/scripted_adapter.dart';
 
 /// Registra o que o aplicativo mandou, e responde o que o servidor mandaria.
 class Backend {
+  Backend({this.comFoto = true});
+
+  /// A organização tem foto cadastrada? Separa "não tem" de "não carregou".
+  final bool comFoto;
+
   final pedidos = <({String method, String path, Object? body})>[];
 
   Future<ResponseBody> call(RequestOptions options) async {
@@ -64,6 +69,28 @@ class Backend {
       });
     }
 
+    /// A foto atual: endereço assinado e o prazo dele.
+    if (options.uri.path.endsWith('/identity/me/avatar')) {
+      return jsonResponse({
+        'success': true,
+        'data': {
+          'available': comFoto,
+          /* O endereço vai mesmo quando `available` é falso: é o que torna a
+             checagem de disponibilidade observável. */
+          'url': 'http://localhost:6001/api/v1/storage/objects?key=k',
+          'expiresAt': DateTime.now()
+              .toUtc()
+              .add(const Duration(minutes: 5))
+              .toIso8601String(),
+          'updatedAt': '2026-10-04T12:00:00.000Z',
+        },
+      });
+    }
+
+    if (options.uri.path.endsWith('/storage/objects')) {
+      return ResponseBody.fromBytes(const [137, 80, 78, 71], 200);
+    }
+
     if (options.uri.path.endsWith('/identity/me')) {
       return jsonResponse({
         'success': true,
@@ -101,6 +128,7 @@ ProviderContainer containerCom(Backend backend) {
   /// Sem isto eles são descartados entre a leitura e a resposta, e o teste
   /// falha por um motivo que o produto não tem.
   container.listen(profileEditControllerProvider, (_, __) {});
+  container.listen(avatarBytesProvider, (_, __) {});
   container.listen(notificationSettingsControllerProvider, (_, __) {});
   container.listen(notificationPreferencesProvider, (_, __) {});
   return container;
@@ -209,6 +237,46 @@ void main() {
       expect(
         (ativacao.body as Map<String, dynamic>)['storageObjectId'],
         'storage-file-7',
+      );
+    });
+  });
+
+  /// A foto vem por bytes, e não por um endereço guardado.
+  ///
+  /// O endereço é assinado e vale cinco minutos. A sessão o guardava e o
+  /// entregava a `Image.network` pelo resto do uso: passados os cinco minutos
+  /// o `GET` respondia 403 e a tela caía nas iniciais, sem erro. A foto
+  /// aparecia logo depois de trocada e sumia sozinha.
+  group('foto exibida', () {
+    test('busca o endereço na hora e devolve os bytes', () async {
+      final backend = Backend();
+      final container = containerCom(backend);
+
+      final bytes = await container.read(avatarBytesProvider.future);
+
+      expect(bytes, isNotNull);
+      /* Pediu o endereço antes de buscar a imagem — não reusou um guardado. */
+      expect(
+        backend.pedidos.any(
+          (p) => p.path.endsWith('/identity/me/avatar') && p.method == 'GET',
+        ),
+        isTrue,
+      );
+    });
+
+    test('sem foto, devolve nulo sem buscar bytes', () async {
+      /*
+       * `available: false` manda, mesmo com endereço presente na resposta.
+       * Buscar assim mesmo gastaria uma requisição para receber 404 — e, pior,
+       * trataria "não tem foto" como "falhou ao carregar".
+       */
+      final backend = Backend(comFoto: false);
+      final container = containerCom(backend);
+
+      expect(await container.read(avatarBytesProvider.future), isNull);
+      expect(
+        backend.pedidos.any((p) => p.path.endsWith('/storage/objects')),
+        isFalse,
       );
     });
   });

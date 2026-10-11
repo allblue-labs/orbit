@@ -51,6 +51,7 @@ import '../../operations/data/operations_repository.dart' show CachedResult;
 import '../../equipment/presentation/equipment_scanner_screen.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../notifications/domain/deep_link.dart';
+import '../../profile/presentation/my_avatar.dart';
 import '../application/field_providers.dart';
 import 'widgets/work_item_row.dart';
 
@@ -845,7 +846,7 @@ class _Header extends StatelessWidget {
       ),
       child: Row(
         children: [
-          OrbitAvatar(initials: _iniciais(userName), url: avatarUrl, size: 46),
+          MyAvatar(initials: _iniciais(userName), size: 46),
           const SizedBox(width: OrbitSpacing.ms),
           Expanded(
             child: Column(

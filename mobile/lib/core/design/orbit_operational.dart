@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import '../theme/orbit_theme.dart';
 
@@ -146,10 +148,24 @@ class OrbitAvatar extends StatelessWidget {
     super.key,
     required this.initials,
     this.url,
+    this.bytes,
     this.size = 40,
   });
   final String initials;
+
+  /// O endereço da foto, quando ela vem de fora.
+  ///
+  /// Serve a imagens de terceiros, com endereço estável. **Não** serve à foto
+  /// do próprio perfil: aquela vem por URL assinada de cinco minutos, e um
+  /// endereço vencido guardado numa sessão devolve 403 — a foto some sozinha.
+  /// Para ela existe [bytes].
   final String? url;
+
+  /// Os bytes da foto, já em mãos.
+  ///
+  /// Preferido sobre [url]: quem já carregou não depende de prazo nenhum.
+  final Uint8List? bytes;
+
   final double size;
   @override
   Widget build(BuildContext context) {
@@ -175,7 +191,14 @@ class OrbitAvatar extends StatelessWidget {
           /// O que continua barrado é o que não é endereço de rede: relativo,
           /// `data:`, vazio. Para esses a inicial é a resposta certa, e um
           /// `Image.network` só produziria um erro silencioso.
-          child: desenhavelComoImagemDeRede(uri)
+          child: bytes != null
+              ? Image.memory(
+                  bytes!,
+                  fit: BoxFit.cover,
+                  gaplessPlayback: true,
+                  errorBuilder: (_, __, ___) => fallback,
+                )
+              : desenhavelComoImagemDeRede(uri)
               ? Image.network(
                   uri!.toString(),
                   fit: BoxFit.cover,

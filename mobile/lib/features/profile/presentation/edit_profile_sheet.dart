@@ -16,9 +16,9 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../core/media/media_type.dart';
 import 'avatar_crop_sheet.dart';
+import 'my_avatar.dart';
 
 import '../../../app/providers.dart';
-import '../../../core/design/orbit_operational.dart';
 import '../../../core/errors/orbit_exception.dart';
 import '../../../core/theme/orbit_theme.dart';
 import '../application/profile_providers.dart';
@@ -211,9 +211,8 @@ class _EditProfileSheetState extends ConsumerState<EditProfileSheet> {
                       Center(
                         child: Column(
                           children: [
-                            OrbitAvatar(
+                            MyAvatar(
                               initials: usuario?.initials ?? '?',
-                              url: usuario?.avatarUrl,
                               size: 72,
                             ),
                             const SizedBox(height: OrbitSpacing.sm),
