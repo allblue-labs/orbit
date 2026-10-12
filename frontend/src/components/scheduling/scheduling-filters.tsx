@@ -84,7 +84,7 @@ export function SchedulingFilters({
 
       <FilterSelect
         id="scheduling-unit"
-        label="Unidade"
+        label="Organização"
         value={value.businessUnitId}
         onChange={(businessUnitId) => onChange({ businessUnitId })}
         options={session.businessUnits.map((unit) => ({

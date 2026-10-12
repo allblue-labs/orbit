@@ -84,7 +84,7 @@ export function BusinessUnitLogoField({
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={previa}
-              alt="Marca da unidade"
+              alt="Marca da organização"
               className="max-h-full max-w-full object-contain"
             />
           ) : hasLogo ? (

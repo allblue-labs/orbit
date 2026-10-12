@@ -199,9 +199,9 @@ export function TechnicalResponsibleSelector({
 
 /** Frase padrão quando a unidade não tem ninguém elegível. */
 export const NO_FIELD_TECHNICIAN =
-  "Nenhum Técnico em Campo elegível foi encontrado para esta unidade.";
+  "Nenhum Técnico em Campo elegível foi encontrado para esta organização.";
 export const NO_TECHNICAL_RESPONSIBLE =
-  "Nenhum Responsável Técnico elegível foi encontrado para esta unidade.";
+  "Nenhum Responsável Técnico elegível foi encontrado para esta organização.";
 
 /** Um índice de barril para quem só quer os dois seletores. */
 export const PROFESSIONAL_SELECTOR_EMPTY = {

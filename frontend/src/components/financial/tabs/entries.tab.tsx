@@ -204,7 +204,7 @@ export function FinancialEntriesTab({
         {businessUnits.length > 1 ? (
           <FilterSelect
             id={`financial-${type ?? "all"}-unit`}
-            label="Unidade"
+            label="Organização"
             value={list.query.businessUnitId}
             onChange={(value) => list.setFilter("businessUnitId", value)}
             options={businessUnits.map((unit) => ({

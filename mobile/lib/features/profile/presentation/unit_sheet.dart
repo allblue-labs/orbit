@@ -48,7 +48,7 @@ class _FolhaDeUnidades extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Unidade ativa',
+              'Organização ativa',
               style: OrbitType.sectionTitle.copyWith(color: palette.ink),
             ),
             const SizedBox(height: 2),

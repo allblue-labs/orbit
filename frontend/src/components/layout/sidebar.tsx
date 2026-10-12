@@ -262,7 +262,7 @@ function unitLabel(
   unit: { tradeName: string | null; legalName: string } | null,
   organization: string,
 ): string {
-  if (!unit) return "Todas as unidades";
+  if (!unit) return "Todas as organizações";
   const trade = unit.tradeName ?? unit.legalName;
   return trade === organization ? unit.legalName : trade;
 }

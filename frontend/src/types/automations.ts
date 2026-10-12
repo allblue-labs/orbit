@@ -188,7 +188,7 @@ export const AUTOMATION_FIELD_LABELS: Readonly<Record<string, string>> = {
   status: "Situação",
   fromStatus: "Situação anterior",
   priority: "Prioridade",
-  businessUnitId: "Unidade",
+  businessUnitId: "Organização",
   customerId: "Cliente",
   assetId: "Equipamento",
   operationId: "Operação",

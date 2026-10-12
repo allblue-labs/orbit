@@ -168,6 +168,6 @@ export const ORGANIZATION_LIMITS = {
  */
 export const USAGE_RESOURCE_LABELS: Readonly<Record<string, string>> = {
   users: "Usuários",
-  businessUnits: "Unidades de negócio",
+  businessUnits: "Organizações",
   integrations: "Integrações",
 };

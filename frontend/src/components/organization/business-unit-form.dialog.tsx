@@ -144,10 +144,10 @@ function Body({
     <form onSubmit={submit} className="space-y-5">
       <DialogHeader>
         <DialogTitle>
-          {unit ? "Editar unidade" : "Nova unidade de negócio"}
+          {unit ? "Editar organização" : "Nova organização"}
         </DialogTitle>
         <DialogDescription>
-          Filiais, sedes e departamentos. A unidade entra como filtro de
+          Filiais, sedes e departamentos. A organização entra como filtro de
           contexto nas consultas que o aceitam.
         </DialogDescription>
       </DialogHeader>
@@ -296,7 +296,7 @@ function Body({
               id="unit-code"
               value={code}
               onChange={(event) => setCode(event.target.value)}
-              placeholder="Opcional — como a unidade é chamada nos seus relatórios"
+              placeholder="Opcional — como a organização é chamada nos seus relatórios"
             />
           </div>
         </div>
@@ -335,7 +335,7 @@ function Body({
             ? "Salvando…"
             : unit
               ? "Salvar"
-              : "Criar unidade"}
+              : "Criar organização"}
         </Button>
       </DialogFooter>
     </form>

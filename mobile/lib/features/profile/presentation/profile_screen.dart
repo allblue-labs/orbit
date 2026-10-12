@@ -126,7 +126,7 @@ class ProfileScreen extends ConsumerWidget {
               OrbitSettingsRow(
                 key: const Key('profile.unit'),
                 icon: Icons.apartment_outlined,
-                label: 'Unidade ativa',
+                label: 'Organização ativa',
                 value: session.businessUnit?.name ?? '—',
 
                 /// Com uma unidade só não há o que escolher, e uma seta que

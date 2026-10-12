@@ -124,7 +124,7 @@ export function FinancialOverviewTab() {
             Competência de {period.from.slice(0, 10)} a {period.to.slice(0, 10)}
             {unitName
               ? ` · ${unitName.tradeName ?? unitName.legalName}`
-              : " · todas as unidades acessíveis"}
+              : " · todas as organizações acessíveis"}
           </p>
           <p className="text-xs text-muted-foreground">
             Os totais vêm calculados. Nada nesta aba é somado no navegador.

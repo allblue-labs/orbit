@@ -105,7 +105,7 @@ export function ReportHistory({
           />
           <FilterSelect
             id="report-unit-filter"
-            label="Unidade"
+            label="Organização"
             value={list.query.businessUnitId}
             onChange={(value) => list.setFilter("businessUnitId", value)}
             options={scope.businessUnits.map((unit) => ({

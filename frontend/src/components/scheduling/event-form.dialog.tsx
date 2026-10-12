@@ -368,7 +368,7 @@ function EventForm({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="event-unit">Unidade</Label>
+          <Label htmlFor="event-unit">Organização</Label>
           <Select
             value={form.businessUnitId || "__none__"}
             onValueChange={(value) =>
@@ -376,10 +376,10 @@ function EventForm({
             }
           >
             <SelectTrigger id="event-unit">
-              <SelectValue placeholder="Sem unidade" />
+              <SelectValue placeholder="Sem organização" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="__none__">Sem unidade</SelectItem>
+              <SelectItem value="__none__">Sem organização</SelectItem>
               {session.businessUnits.map((unit) => (
                 <SelectItem key={unit.id} value={unit.id}>
                   {unit.tradeName ?? unit.legalName}

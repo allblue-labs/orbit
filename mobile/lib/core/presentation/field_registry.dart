@@ -271,7 +271,7 @@ const executionBlockerLabels = <String, String>{
   'PROFESSIONAL_PROFILE_INACTIVE': 'Seu perfil profissional não está ativo.',
   'PROFESSIONAL_ROLE_MISSING': 'Sua conta não tem o papel de Técnico em Campo.',
   'SIGNATURE_MISSING': 'Sua assinatura profissional ainda não foi registrada.',
-  'BUSINESS_UNIT_SCOPE_MISSING': 'Este atendimento pertence a outra unidade.',
+  'BUSINESS_UNIT_SCOPE_MISSING': 'Este atendimento pertence a outra organização.',
 
   /// Auxiliar acompanha; quem executa é o responsável.
   ///

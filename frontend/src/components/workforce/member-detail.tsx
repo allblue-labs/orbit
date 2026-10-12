@@ -174,7 +174,7 @@ function Body({ member }: { member: TeamMember }) {
         </section>
 
         <section className="space-y-3">
-          <h3 className="text-sm font-medium">Unidades</h3>
+          <h3 className="text-sm font-medium">Organizações</h3>
           {member.businessUnits.length > 0 ? (
             <ul className="flex flex-wrap gap-2">
               {member.businessUnits.map((unit) => (

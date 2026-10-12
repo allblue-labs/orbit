@@ -133,7 +133,7 @@ class _DetailsSection extends StatelessWidget {
             value: OperationPriority.label(operation.priority),
           ),
           if (operation.businessUnit != null)
-            _Field(label: 'Unidade', value: operation.businessUnit!.name),
+            _Field(label: 'Organização', value: operation.businessUnit!.name),
           if (operation.description != null &&
               operation.description!.isNotEmpty) ...[
             const Divider(height: OrbitSpacing.lg),

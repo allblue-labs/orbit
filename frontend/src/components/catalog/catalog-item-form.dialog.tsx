@@ -353,7 +353,7 @@ function Body({
           label="Disponível em"
           htmlFor="catalog-unit-scope"
           className="sm:col-span-2"
-          hint="Sem unidade, o item vale para a organização inteira."
+          hint="Sem organização, o item vale para a conta inteira."
         >
           <Select
             value={form.businessUnitId || NONE}

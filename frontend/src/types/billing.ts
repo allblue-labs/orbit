@@ -210,7 +210,7 @@ export const SUBSCRIPTION_STATUS_LABELS: Readonly<Record<string, string>> = {
 
 /** Rótulos dos recursos. O wording de campo é o aprovado pelo negócio. */
 export const ENTITLEMENT_RESOURCE_LABELS: Readonly<Record<string, string>> = {
-  BUSINESS_UNITS: "Unidades",
+  BUSINESS_UNITS: "Organizações",
   PLATFORM_USERS: "Usuários",
   FIELD_TECHNICIANS: "Técnicos operadores",
   AUXILIARY_TECHNICIANS: "auxiliares técnico",

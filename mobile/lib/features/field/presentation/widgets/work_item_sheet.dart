@@ -127,7 +127,7 @@ class _Folha extends StatelessWidget {
                 ),
               ],
               const OrbitRowDivider(),
-              _Dado(rotulo: 'Unidade', valor: item.businessUnit.name),
+              _Dado(rotulo: 'Organização', valor: item.businessUnit.name),
               if (item.responsibleFieldTechnician case final tecnico?) ...[
                 const OrbitRowDivider(),
                 _Dado(rotulo: 'Responsável', valor: tecnico.name),

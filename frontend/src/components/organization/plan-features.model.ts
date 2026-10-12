@@ -36,7 +36,7 @@ const MODULE_LABELS: Readonly<Record<string, string>> = {
   artifact_templates: "Modelos de documento",
   assets: "Equipamentos",
   automations: "Automações",
-  business_units: "Unidades de negócio",
+  business_units: "Organizações",
   catalog: "Catálogo",
   checklists: "Checklists",
   crm: "Clientes",

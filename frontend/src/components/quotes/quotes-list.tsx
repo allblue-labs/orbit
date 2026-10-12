@@ -219,7 +219,7 @@ export function QuotesList({
         {businessUnits.length > 1 ? (
           <FilterSelect
             id={`${prefix}-unit`}
-            label="Unidade"
+            label="Organização"
             value={list.query.businessUnitId}
             onChange={(value) => list.setFilter("businessUnitId", value)}
             options={businessUnits.map((unit) => ({

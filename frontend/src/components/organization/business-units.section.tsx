@@ -1,7 +1,18 @@
 "use client";
 
 /**
- * Unidades de negócio.
+ * Organizações.
+ *
+ * ## O nome no produto e o nome no código
+ *
+ * O produto chama isto de **organização**; o banco, o contrato da API e todo
+ * identificador deste arquivo continuam chamando de `BusinessUnit`. A troca foi
+ * de vocabulário, não de conceito: renomear a tabela e as rotas quebraria
+ * clientes publicados para resolver uma questão de palavra.
+ *
+ * Cuidado ao ler: "organização" tem dois donos agora. A conta (`Organization`,
+ * o inquilino) e isto aqui, que vive dentro dela. Onde os dois aparecem juntos
+ * — a barra lateral — o de cima é a conta.
  *
  * ## O que o contrato suporta, e o que não
  *
@@ -55,8 +66,8 @@ export function BusinessUnitsSection({ canManage }: { canManage: boolean }) {
   return (
     <PanelFrame
       panelId="organization-business-units"
-      title="Unidades de negócio"
-      description="Filiais, sedes e departamentos da organização"
+      title="Organizações"
+      description="Filiais, sedes e departamentos da sua conta"
       actions={
         canManage ? (
           <Button size="sm" onClick={() => setEditando("new")}>
@@ -71,7 +82,7 @@ export function BusinessUnitsSection({ canManage }: { canManage: boolean }) {
           query={toPanelQuery(units)}
           loadingRows={3}
           isEmpty={(data) => data.length === 0}
-          emptyMessage="Nenhuma unidade cadastrada."
+          emptyMessage="Nenhuma organização cadastrada."
         >
           {(data) => (
             <ul className="space-y-2">

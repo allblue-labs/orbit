@@ -87,7 +87,7 @@ const steps = [
     description: "Identidade do workspace",
     icon: Building2,
   },
-  { title: "Unidade principal", description: "Base da operação", icon: MapPin },
+  { title: "Organização principal", description: "Base da operação", icon: MapPin },
 ];
 
 const LAST_STEP = steps.length - 1;

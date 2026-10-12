@@ -339,9 +339,9 @@ function Body({
 
         {editing ? null : (
           <Field
-            label="Unidade"
+            label="Organização"
             htmlFor="financial-unit"
-            hint="Dinheiro é contado por unidade, e não muda depois."
+            hint="Dinheiro é contado por organização, e não muda depois."
           >
             <Select
               value={form.businessUnitId}

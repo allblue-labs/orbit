@@ -164,7 +164,7 @@ export const REPORT_DOMAIN_LABELS: Readonly<Record<string, string>> = {
 
 /** Rótulo dos parâmetros publicados pelo catálogo. */
 export const REPORT_PARAMETER_LABELS: Readonly<Record<string, string>> = {
-  businessUnitId: "Unidade",
+  businessUnitId: "Organização",
   customerId: "Cliente",
   operationKind: "Tipo de operação",
   operationStatus: "Situação da operação",

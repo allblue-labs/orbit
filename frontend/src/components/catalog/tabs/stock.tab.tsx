@@ -95,7 +95,7 @@ function StockContent() {
           <p className="text-sm text-muted-foreground">
             {unit
               ? `${unit.tradeName ?? unit.legalName}`
-              : "Todas as unidades acessíveis"}{" "}
+              : "Todas as organizações acessíveis"}{" "}
             · movimentos de {period.from} a {period.to}
           </p>
           <p className="text-xs text-muted-foreground">
