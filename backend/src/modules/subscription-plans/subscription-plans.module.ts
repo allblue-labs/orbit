@@ -6,6 +6,7 @@ import { EntitlementService } from './entitlements/entitlement.service';
 import { SubscriptionMapper } from './subscriptions/subscription.mapper';
 import { SubscriptionProvisioningService } from './subscriptions/subscription-provisioning.service';
 import { SubscriptionReconciliationService } from './subscriptions/subscription-reconciliation.service';
+import { SubscriptionLifecycleWorker } from './subscriptions/subscription-lifecycle.worker';
 import { SubscriptionRepository } from './subscriptions/subscription.repository';
 import { SubscriptionService } from './subscriptions/subscription.service';
 import { TrialEligibilityService } from './subscriptions/trial-eligibility.service';
@@ -33,6 +34,7 @@ import { ProductAccessService } from './product-access';
     SubscriptionService,
     SubscriptionMapper,
     SubscriptionReconciliationService,
+    SubscriptionLifecycleWorker,
     SubscriptionProvisioningService,
     TrialFingerprintService,
     TrialEligibilityService,

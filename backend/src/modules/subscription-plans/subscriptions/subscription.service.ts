@@ -243,6 +243,36 @@ export class SubscriptionService {
         destino.prices[BillingInterval.MONTHLY]!.amountMinor >
         origem.prices[BillingInterval.MONTHLY]!.amountMinor;
 
+      /**
+       * Durante a avaliação, **nenhuma** troca é imediata.
+       *
+       * Os trinta dias gratuitos existem para o Essencial e só concedem os
+       * limites dele — é essa a condição com que foram oferecidos. Como a
+       * subida aplicava o plano de destino na hora e a avaliação seguia
+       * correndo, dava para entrar no Essencial grátis, trocar para o
+       * Profissional no mesmo minuto e usar os limites maiores sem pagar nada
+       * até o trigésimo dia.
+       *
+       * Programar para o fim da avaliação resolve sem punir ninguém: quem
+       * escolheu outro plano o recebe quando o período gratuito acaba, que é
+       * exatamente quando a cobrança começa. Recusar a troca, ou exigir
+       * pagamento na hora e derrubar o acesso, trataria uma intenção legítima
+       * como abuso.
+       */
+      if (atual.effectiveStatus === SubscriptionStatus.TRIALING) {
+        return {
+          pendingPlanCode: destino.code,
+          pendingBillingInterval: intervalo,
+          pendingCatalogVersion: CATALOG_VERSION,
+          pendingEntitlementsSnapshot: snapshotOf(
+            destino,
+          ) as unknown as Prisma.InputJsonValue,
+          /* O fim da avaliação, não o do período de cobrança: é ele que marca
+             o instante em que o gratuito acaba. */
+          pendingEffectiveAt: atual.trialEndsAt ?? atual.currentPeriodEnd,
+        };
+      }
+
       if (subida) {
         /** Imediato: o cliente comprou mais e recebe agora. */
         const periodo = anchoredPeriod(

@@ -8,5 +8,6 @@ export * from './subscription.snapshot';
 export * from './subscription.types';
 export * from './subscription-provisioning.service';
 export * from './subscription-reconciliation.service';
+export * from './subscription-lifecycle.worker';
 export * from './trial-eligibility.service';
 export * from './trial-fingerprint';
