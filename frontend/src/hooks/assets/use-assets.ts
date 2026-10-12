@@ -168,7 +168,7 @@ export function useCreateAsset() {
   const options = useAssetWriteOptions();
   return useApiMutation(
     (input: CreateAssetInput) => assetsService.create(input),
-    options,
+    { ...options, notify: "Equipamento cadastrado" },
   );
 }
 
@@ -176,13 +176,14 @@ export function useUpdateAsset(id: string) {
   const options = useAssetWriteOptions(id);
   return useApiMutation(
     (input: UpdateAssetInput) => assetsService.update(id, input),
-    { ...options, scope: { id: `assets:${id}` } },
+    { ...options, scope: { id: `assets:${id}` }, notify: "Equipamento atualizado" },
   );
 }
 
 export function useRemoveAsset() {
   const queryClient = useQueryClient();
   return useApiMutation((id: string) => assetsService.remove(id), {
+    notify: "Equipamento removido",
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: assetsService.keys.module() }),
   });

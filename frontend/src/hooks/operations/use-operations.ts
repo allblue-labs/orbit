@@ -196,7 +196,10 @@ function assignmentKeys(id: string) {
 export function useCreateOperation() {
   return useApiMutation(
     (input: CreateOperationInput) => operationsService.create(input),
-    { invalidate: [queryKeys.module("operations")] },
+    {
+      invalidate: [queryKeys.module("operations")],
+      notify: "Atendimento criado",
+    },
   );
 }
 
@@ -207,6 +210,7 @@ export function useUpdateOperation(id: string) {
       /** Edições da mesma operação não disputam a última palavra. */
       scope: { id: `operations:${id}` },
       invalidate: affectedKeys(id),
+      notify: "Atendimento atualizado",
     },
   );
 }
@@ -214,6 +218,7 @@ export function useUpdateOperation(id: string) {
 export function useRemoveOperation() {
   return useApiMutation((id: string) => operationsService.remove(id), {
     invalidate: [queryKeys.module("operations")],
+    notify: "Atendimento removido",
   });
 }
 
@@ -221,14 +226,14 @@ export function useChangeOperationStatus(id: string) {
   return useApiMutation(
     (input: ChangeOperationStatusInput) =>
       operationsService.changeStatus(id, input),
-    { invalidate: affectedKeys(id) },
+    { invalidate: affectedKeys(id), notify: "Situação do atendimento atualizada" },
   );
 }
 
 export function useAssignOperationUser(id: string) {
   return useApiMutation(
     (input: AssignOperationUserInput) => operationsService.assign(id, input),
-    { invalidate: affectedKeys(id) },
+    { invalidate: affectedKeys(id), notify: "Pessoa atribuída ao atendimento" },
   );
 }
 
@@ -241,7 +246,11 @@ export function useAssignOperationUser(id: string) {
 export function useSetOperationAuthorization(id: string) {
   return useApiMutation(
     (autorizar: boolean) => operationsService.setAuthorization(id, autorizar),
-    { invalidate: affectedKeys(id) },
+    {
+      invalidate: affectedKeys(id),
+      notify: (_data, autorizar) =>
+        autorizar ? "Atribuição autorizada" : "Autorização retirada",
+    },
   );
 }
 
@@ -257,7 +266,15 @@ export function useAuthorizeOperations() {
   return useApiMutation(
     (operationIds: readonly string[]) =>
       operationsService.authorizeMany(operationIds),
-    { invalidate: [queryKeys.module("operations")] },
+    {
+      invalidate: [queryKeys.module("operations")],
+      /* O número vem da resposta: o servidor pode ter liberado menos do que a
+         tela mandou, e dizer "10 autorizadas" quando foram 8 seria mentira. */
+      notify: ({ authorized }) =>
+        authorized === 1
+          ? "1 atribuição autorizada"
+          : `${authorized} atribuições autorizadas`,
+    },
   );
 }
 
@@ -297,7 +314,18 @@ export function useResolveOperationCancellation() {
         resolution: input.resolution,
         notes: input.notes,
       }),
-    { invalidate: [queryKeys.module("operations")] },
+    {
+      invalidate: [queryKeys.module("operations")],
+      /* O desfecho entra no texto: "pedido resolvido" não diz o que o técnico
+         vai receber como resposta. */
+      notify: (_data, { resolution }) =>
+        ({
+          CANCELLED: "Atendimento marcado para cancelar",
+          RESCHEDULED: "Pedido resolvido como remarcação",
+          REASSIGNED: "Pedido resolvido como troca de técnico",
+          DISMISSED: "Pedido respondido: o atendimento continua",
+        })[resolution],
+    },
   );
 }
 

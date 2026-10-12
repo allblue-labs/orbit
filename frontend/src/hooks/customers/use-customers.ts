@@ -238,7 +238,7 @@ export function useCreateCustomer() {
   const options = useCustomerWriteOptions();
   return useApiMutation(
     (input: CreateCustomerInput) => customersService.create(input),
-    options,
+    { ...options, notify: "Cliente cadastrado" },
   );
 }
 
@@ -246,7 +246,7 @@ export function useUpdateCustomer(id: string) {
   const options = useCustomerWriteOptions(id);
   return useApiMutation(
     (input: UpdateCustomerInput) => customersService.update(id, input),
-    { ...options, scope: { id: `customers:${id}` } },
+    { ...options, scope: { id: `customers:${id}` }, notify: "Cliente atualizado" },
   );
 }
 
