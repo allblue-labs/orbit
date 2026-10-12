@@ -56,6 +56,7 @@ describe("toPostalAddress", () => {
       city: "Recife",
       state: "Pernambuco",
       stateCode: "PE",
+      country: "Brasil",
     });
   });
 
@@ -78,6 +79,26 @@ describe("toPostalAddress", () => {
       city: "São Paulo",
       state: "",
       stateCode: "SP",
+      country: "Brasil",
     });
+  });
+
+  it("o país vem preenchido, não em branco", () => {
+    /*
+     * O ViaCEP atende só CEP brasileiro: o país é consequência de a consulta
+     * ter dado certo, não um dado a buscar. Sem ele o formulário preenchia
+     * rua, bairro, cidade e estado e abandonava o campo logo abaixo —
+     * preenchido pela metade parece defeito, e é.
+     */
+    const endereco = toPostalAddress({
+      cep: "50030230",
+      logradouro: "Rua do Sol",
+      bairro: "Santo Antônio",
+      localidade: "Recife",
+      uf: "pe",
+      estado: "Pernambuco",
+    });
+
+    expect(endereco?.country).toBe("Brasil");
   });
 });

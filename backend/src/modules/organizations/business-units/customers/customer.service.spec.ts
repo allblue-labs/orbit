@@ -38,6 +38,36 @@ describe('CustomerService', () => {
         documentNumber: '11222333000181',
         email: 'cliente@orbit.com',
       }),
+      /* Sem endereço no cadastro, nada a semear como endereço de atendimento. */
+      undefined,
+    );
+  });
+
+  /**
+   * O endereço informado no cadastro vira também endereço de atendimento.
+   *
+   * `Customer.address` é o fiscal — JSON que sai em documento. A aba Endereços
+   * lista `CustomerAddress`, que é para onde o técnico vai. Eram coisas
+   * separadas no código e a mesma coisa para quem cadastra: o dono preenchia o
+   * endereço, abria a aba e a encontrava vazia.
+   */
+  it('semeia o endereço de atendimento junto do cliente', async () => {
+    repository.create.mockResolvedValue({ id: 'customer-id' });
+
+    await service.create('organization-id', {
+      type: CustomerType.COMPANY,
+      legalName: 'Orbit Cliente Ltda',
+      address: {
+        street: 'Rua do Sol',
+        number: '210',
+        city: 'Recife',
+        stateCode: 'PE',
+      },
+    });
+
+    expect(repository.create).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ street: 'Rua do Sol', city: 'Recife' }),
     );
   });
 

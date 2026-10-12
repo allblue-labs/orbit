@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { enderecoDeAtendimento } from './customer-address-seed';
 import { Prisma } from '@prisma/client';
 import {
   ConflictException,
@@ -44,18 +45,23 @@ export class CustomerService {
         organizationId,
         AllocationResource.ACTIVE_CUSTOMERS,
         () =>
-          this.repository.create({
-            organizationId,
-            type: input.type,
-            legalName: input.legalName,
-            tradeName: input.tradeName,
-            documentType: input.documentType,
-            documentNumber: this.document(input.documentNumber),
-            email: input.email?.toLowerCase(),
-            phone: input.phone,
-            notes: input.notes,
-            address: input.address as Prisma.InputJsonValue | undefined,
-          }),
+          this.repository.create(
+            {
+              organizationId,
+              type: input.type,
+              legalName: input.legalName,
+              tradeName: input.tradeName,
+              documentType: input.documentType,
+              documentNumber: this.document(input.documentNumber),
+              email: input.email?.toLowerCase(),
+              phone: input.phone,
+              notes: input.notes,
+              address: input.address as Prisma.InputJsonValue | undefined,
+            },
+            /* O mesmo endereço, agora também como destino do técnico. Ver
+               `customer-address-seed`. */
+            enderecoDeAtendimento(input.address),
+          ),
       );
     } catch (error) {
       this.mapConflict(error);

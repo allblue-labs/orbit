@@ -38,7 +38,20 @@ export interface PostalAddress {
   readonly city: string;
   readonly state: string;
   readonly stateCode: string;
+  /**
+   * Sempre "Brasil".
+   *
+   * Não vem do serviço: o ViaCEP atende **só** CEP brasileiro, então o país é
+   * uma consequência de a consulta ter dado certo, não um dado a buscar.
+   * Deixá-lo de fora fazia o formulário preencher rua, bairro, cidade e estado
+   * e abandonar o campo de país logo abaixo — preenchido pela metade parece
+   * defeito, e é.
+   */
+  readonly country: string;
 }
+
+/** O único país que este serviço conhece. */
+export const BRASIL = "Brasil";
 
 /** O que o serviço de consulta devolve, antes de virar vocabulário do produto. */
 export interface PostalLookupPayload {
@@ -70,5 +83,6 @@ export function toPostalAddress(
     city: payload.localidade?.trim() ?? "",
     state: payload.estado?.trim() ?? "",
     stateCode: payload.uf?.trim().toUpperCase() ?? "",
+    country: BRASIL,
   };
 }

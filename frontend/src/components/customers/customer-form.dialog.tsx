@@ -154,6 +154,7 @@ function Body({
         city: endereco.city,
         state: endereco.state,
         stateCode: endereco.stateCode,
+        country: endereco.country,
       },
     }));
 
