@@ -5,7 +5,7 @@ import { PaginationHelper } from '../../../../database/helpers/database.helpers'
 import type { AssetQueryDto } from './asset.dto';
 import {
   allocateInternalCode,
-  GENERATED_IDENTIFIER_TYPE,
+  isGeneratedIdentifierType,
 } from './asset-internal-code';
 
 const assetInclude = {
@@ -93,7 +93,7 @@ export class AssetRepository {
   create(data: Prisma.AssetUncheckedCreateInput) {
     return this.rls.run(async (transaction) => {
       const identifier =
-        data.identifierType === GENERATED_IDENTIFIER_TYPE && !data.identifier
+        isGeneratedIdentifierType(data.identifierType) && !data.identifier
           ? await allocateInternalCode(transaction, data.organizationId)
           : data.identifier;
 

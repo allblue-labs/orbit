@@ -83,15 +83,24 @@ describe('criação de equipamento', () => {
     expect(tx.$queryRaw).not.toHaveBeenCalled();
   });
 
-  it('nenhum outro tipo é gerado', async () => {
-    for (const tipo of [
-      'SERIAL_NUMBER',
-      'QR_CODE',
-      'NFC',
-      'BARCODE',
-      'RFID',
-      'CUSTOM',
-    ]) {
+  it('o QR também é gerado — a etiqueta é impressa pelo Orbit', async () => {
+    /*
+     * O QR entrou na lista do que o sistema atribui porque o papel sai daqui
+     * (`/assets/:id/qr/ensure`, resolvido em `/q/<token>`): exigir que alguém
+     * digitasse um QR antes de ele existir invertia a ordem dos fatos.
+     */
+    const { repository, tx } = bancada();
+
+    await criar(repository, { identifierType: 'QR_CODE' });
+
+    expect(tx.$queryRaw).toHaveBeenCalled();
+    expect(identificadorGravado(tx.asset.create)).toBeDefined();
+  });
+
+  it('o que é lido da máquina continua sem ser gerado', async () => {
+    /* Inventar um número de série é inventar um fato sobre o equipamento do
+       cliente. Vale igual para NFC, código de barras e RFID. */
+    for (const tipo of ['SERIAL_NUMBER', 'NFC', 'BARCODE', 'RFID', 'CUSTOM']) {
       const { repository, tx } = bancada();
 
       await criar(repository, { identifierType: tipo });

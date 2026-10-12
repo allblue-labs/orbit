@@ -35,6 +35,21 @@ describe('AssetService', () => {
    * QR nenhum — e a busca por etiqueta nunca o encontraria.
    */
   it('requires identifier type and value together', async () => {
+    /* Número de série é lido da máquina: sem o valor não há o que gravar, e
+       inventá-lo seria inventar um fato sobre o equipamento do cliente. */
+    await expect(
+      service.create('organization-id', {
+        businessUnitId: 'unit-id',
+        category: AssetCategory.EQUIPMENT,
+        name: 'Compressor',
+        identifierType: AssetIdentifierType.SERIAL_NUMBER,
+      }),
+    ).rejects.toBeInstanceOf(ValidationException);
+  });
+
+  it('QR sem valor é aceito — o sistema imprime a etiqueta', async () => {
+    repository.create.mockResolvedValue({ id: 'asset-id' });
+
     await expect(
       service.create('organization-id', {
         businessUnitId: 'unit-id',
@@ -42,7 +57,7 @@ describe('AssetService', () => {
         name: 'Compressor',
         identifierType: AssetIdentifierType.QR_CODE,
       }),
-    ).rejects.toBeInstanceOf(ValidationException);
+    ).resolves.toBeDefined();
   });
 
   /**

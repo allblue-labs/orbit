@@ -23,7 +23,7 @@
  * navegador — tem a saída: "usar outro endereço" devolve o campo livre. O convite,
  * que manda e-mail de verdade, continua exigindo endereço real por natureza.
  */
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Check, Copy, KeyRound, UserPlus } from "lucide-react";
 
 import { MutationError } from "@/components/artifact-studio/mutation-error";
@@ -57,6 +57,7 @@ import { useSession } from "@/providers/session-provider";
 import type { CreatedTeamMember } from "@/types/workforce";
 import {
   composeEmail,
+  localPartOf,
   looksLikeEmail,
   organizationDomain,
   suggestLocalPart,
@@ -256,32 +257,11 @@ function Body({ onOpenChange }: { onOpenChange: (open: boolean) => void }) {
 
             {useOrgDomain && domain ? (
               <>
-                {/*
-                  O domínio fica **fora** do campo, colado nele.
-
-                  Dentro do campo ele seria apagável — e apagado produz um login
-                  inválido que só falha no envio. Fora, ele é o que é: parte do
-                  endereço que a organização define, não o que a pessoa digita.
-                */}
-                <div className="flex items-stretch">
-                  <Input
-                    id="member-email"
-                    value={localPartValue}
-                    onChange={(event) => setLocalPart(event.target.value)}
-                    className="rounded-r-none font-mono"
-                    placeholder="joao.silva"
-                    required
-                  />
-                  <span
-                    /* Marcado porque o teste de navegador precisa compor o mesmo
-                       endereço que a tela compõe: o domínio vem da organização, e
-                       inventá-lo no teste provaria outra coisa. */
-                    data-testid="member-email-domain"
-                    className="text-muted-foreground inline-flex items-center rounded-r-md border border-l-0 border-input bg-muted px-3 font-mono text-sm"
-                  >
-                    @{domain}
-                  </span>
-                </div>
+                <OrgDomainInput
+                  localPart={localPartValue}
+                  domain={domain}
+                  onChange={setLocalPart}
+                />
                 {/*
                   O endereço final, quando o que foi digitado não é o que sai.
 
@@ -539,5 +519,68 @@ function GeneratedPassword({
         </Button>
       </DialogFooter>
     </div>
+  );
+}
+
+/**
+ * O campo de login com o domínio da organização **dentro** dele.
+ *
+ * ## Por que dentro
+ *
+ * O domínio ficava ao lado, numa caixa cinza colada à borda do campo. Lia-se
+ * como um rótulo desbotado grudado ali, e não como parte do endereço que está
+ * sendo escrito. Dentro, o campo mostra desde a primeira tecla o endereço
+ * inteiro — que é o que a pessoa vai usar para entrar.
+ *
+ * ## E continua não sendo editável
+ *
+ * Era essa a razão de deixá-lo fora: dentro ele seria apagável, e apagado
+ * produz um login inválido que só falha no envio. A proteção mudou de lugar —
+ * o que vier depois do primeiro `@` é descartado a cada tecla, e o cursor é
+ * devolvido para antes dele. Tentar editar o domínio simplesmente não pega.
+ */
+function OrgDomainInput({
+  localPart,
+  domain,
+  onChange,
+}: {
+  localPart: string;
+  domain: string;
+  onChange: (value: string) => void;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  const composto = `${localPart}@${domain}`;
+
+  /**
+   * O cursor volta para antes do `@` depois de cada tecla.
+   *
+   * Sem isto, digitar leva o cursor para o fim — depois do domínio — e a letra
+   * seguinte entraria no meio dele, só para ser descartada. O campo pareceria
+   * engolir o que se digita.
+   */
+  useEffect(() => {
+    const campo = ref.current;
+    if (!campo || document.activeElement !== campo) return;
+    campo.setSelectionRange(localPart.length, localPart.length);
+  }, [localPart]);
+
+  return (
+    <Input
+      id="member-email"
+      ref={ref}
+      value={composto}
+      onChange={(event) => onChange(localPartOf(event.target.value))}
+      /* O clique em qualquer ponto cai antes do `@`: o domínio não é um lugar
+         onde faça sentido deixar o cursor. */
+      onFocus={() =>
+        ref.current?.setSelectionRange(localPart.length, localPart.length)
+      }
+      className="font-mono"
+      /* Marcado porque o teste de navegador precisa compor o mesmo endereço
+         que a tela compõe: o domínio vem da organização. */
+      data-testid="member-email-domain"
+      data-domain={domain}
+      required
+    />
   );
 }

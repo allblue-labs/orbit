@@ -54,7 +54,7 @@ import {
   type CreateAssetInput,
   type UpdateAssetInput,
 } from "@/types/assets";
-import { ASSET_CATEGORY_LABELS, ASSET_IDENTIFIER_LABELS } from "@/entities";
+import { ASSET_CATEGORY_LABELS } from "@/entities";
 
 interface FormState {
   businessUnitId: string;
@@ -174,17 +174,17 @@ function Body({
     value: FormState[TKey],
   ) => setForm((current) => ({ ...current, [key]: value }));
 
-  const isInternalCode =
-    form.identifierType === AssetIdentifierType.INTERNAL_CODE;
-
   /**
-   * O código sai do formulário: é o servidor que o gera.
+   * O identificador sai do formulário na criação: é o servidor que o gera.
    *
-   * Só na criação e só com código interno. Na edição o campo volta — inclusive
-   * para código interno — porque quem etiquetou o parque antes precisa fazer o
-   * sistema bater com a etiqueta que já está colada.
+   * Todo equipamento novo nasce com QR — a etiqueta é impressa pelo próprio
+   * Orbit, e pedir que alguém a digitasse antes de ela existir invertia a ordem
+   * dos fatos.
+   *
+   * Na edição o campo volta: quem etiquetou o parque antes de usar o Orbit
+   * precisa fazer o sistema bater com a etiqueta que já está colada.
    */
-  const geraCodigo = !editing && isInternalCode && !form.identifier.trim();
+  const geraCodigo = !editing;
 
   const payload = (): CreateAssetInput => ({
     businessUnitId: form.businessUnitId,
@@ -195,18 +195,13 @@ function Body({
     model: optional(form.model),
     serialNumber: optional(form.serialNumber),
     /*
-      O tipo viaja sozinho quando é **código interno**: o servidor gera o código,
-      com contagem própria da organização. Antes o tipo só ia junto com o valor —
-      e como o campo ficava vazio, o equipamento nascia sem identificação nenhuma.
+      Sempre QR.
 
-      Nos outros tipos o par continua: o conteúdo é lido da etiqueta ou da
-      plaqueta, e um tipo sem valor seria um equipamento dizendo "sou identificado
-      por QR" sem QR nenhum.
+      O campo que perguntava o tipo saiu: ele oferecia seis respostas para uma
+      pergunta que o produto já tinha resolvido — a etiqueta é impressa aqui. O
+      valor viaja sozinho na criação, e o servidor o gera.
     */
-    identifierType:
-      optional(form.identifier) || geraCodigo
-        ? (form.identifierType as AssetIdentifierType)
-        : undefined,
+    identifierType: AssetIdentifierType.QR_CODE,
     identifier: optional(form.identifier),
     installationAt: optional(form.installationAt),
     warrantyUntil: optional(form.warrantyUntil),
@@ -362,49 +357,24 @@ function Body({
           />
         </Field>
 
-        <Field label="Tipo de identificador" htmlFor="asset-identifier-type">
-          <Select
-            value={form.identifierType}
-            onValueChange={(value) => set("identifierType", value)}
-          >
-            <SelectTrigger id="asset-identifier-type">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {Object.values(AssetIdentifierType).map((type) => (
-                <SelectItem key={type} value={type}>
-                  {ASSET_IDENTIFIER_LABELS[type] ?? type}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-
         {/*
-          Código interno é o único tipo que a organização **atribui** — os outros
-          são lidos da máquina. Por isso, e só nele, o campo sai da criação: o
-          servidor gera `EQP-000001`, contando por organização.
-
-          Na edição o campo volta, inclusive para código interno: quem etiquetou o
-          parque antes de usar o Orbit precisa fazer o sistema bater com a etiqueta
-          que já está colada.
+          Na criação o identificador não é pedido: o equipamento nasce com QR, e
+          a etiqueta é impressa pelo Orbit. Na edição o campo volta — quem
+          etiquetou o parque antes precisa fazer o sistema bater com o que já
+          está colado.
         */}
         {geraCodigo ? (
-          <Field label="Identificador">
+          <Field label="Identificador (QR Code)">
             <p className="text-muted-foreground text-sm">
-              Gerado pelo sistema quando o equipamento for cadastrado, na contagem
-              da sua organização.
+              Gerado ao cadastrar, na contagem da sua organização. A etiqueta
+              para impressão fica disponível na ficha do equipamento.
             </p>
           </Field>
         ) : (
           <Field
             label="Identificador"
             htmlFor="asset-identifier"
-            hint={
-              isInternalCode
-                ? "Deixe em branco para o sistema gerar, ou informe o código que já está na etiqueta."
-                : "Conteúdo do QR Code, etiqueta ou tag NFC. É por ele que o campo localiza o equipamento."
-            }
+            hint="Deixe em branco para o sistema gerar, ou informe o código que já está na etiqueta."
           >
             <Input
               id="asset-identifier"

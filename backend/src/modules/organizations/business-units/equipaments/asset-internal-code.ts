@@ -1,15 +1,21 @@
 /**
  * O código interno de um equipamento.
  *
- * ## Por que só o código interno é gerado
+ * ## O que o sistema gera, e o que ele lê
  *
- * `identifierType` diz **o que é** o conteúdo de `identifier`: número de série, QR,
- * NFC, código de barras, RFID. Todos esses são lidos da máquina física — inventar
- * um número de série é inventar um fato sobre o equipamento do cliente, e um QR
- * gerado que não existe em etiqueta nenhuma é uma busca que nunca encontra nada.
+ * `identifierType` diz **o que é** o conteúdo de `identifier`. Número de série, NFC,
+ * código de barras e RFID são lidos da máquina física: inventar um número de série é
+ * inventar um fato sobre o equipamento do cliente.
  *
- * `INTERNAL_CODE` é o único que a organização **atribui**: é a etiqueta dela, com a
- * convenção dela. Esse é gerado; os outros continuam exigindo o dado lido.
+ * `INTERNAL_CODE` e `QR_CODE` são diferentes — a organização os **atribui**. O QR
+ * entrou nessa lista porque a etiqueta é impressa pelo próprio Orbit
+ * (`POST /assets/:id/qr/ensure`, resolvida em `/q/<token>`): o papel segue o
+ * sistema, não o contrário. Exigir que alguém digitasse um QR antes de ele existir
+ * invertia a ordem dos fatos.
+ *
+ * O raciocínio antigo — "um QR gerado que não existe em etiqueta nenhuma é uma busca
+ * que nunca encontra nada" — valia enquanto o produto não imprimia etiqueta. Ele
+ * imprime.
  *
  * ## Por organização, porque o inquilino é a fronteira
  *
@@ -24,8 +30,20 @@ export function formatInternalCode(sequence: number): string {
   return `EQP-${String(sequence).padStart(6, '0')}`;
 }
 
-/** O tipo de identificador que o sistema atribui, em vez de ler. */
-export const GENERATED_IDENTIFIER_TYPE = 'INTERNAL_CODE';
+/** Os tipos de identificador que o sistema atribui, em vez de ler da máquina. */
+export const GENERATED_IDENTIFIER_TYPES: readonly string[] = [
+  'INTERNAL_CODE',
+  'QR_CODE',
+];
+
+/** O tipo padrão quando o cadastro não escolhe: a etiqueta que o Orbit imprime. */
+export const DEFAULT_IDENTIFIER_TYPE = 'QR_CODE';
+
+export function isGeneratedIdentifierType(
+  type: string | null | undefined,
+): boolean {
+  return type != null && GENERATED_IDENTIFIER_TYPES.includes(type);
+}
 
 /** O mínimo que a alocação precisa de um cliente Prisma. */
 export interface AssetInternalCodeClient {

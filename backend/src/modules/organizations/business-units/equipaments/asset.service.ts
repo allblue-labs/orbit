@@ -15,7 +15,7 @@ import {
   EntitlementService,
 } from '../../../subscription-plans/entitlements';
 import { AssetRepository } from './asset.repository';
-import { GENERATED_IDENTIFIER_TYPE } from './asset-internal-code';
+import { isGeneratedIdentifierType } from './asset-internal-code';
 
 @Injectable()
 export class AssetService {
@@ -162,9 +162,9 @@ export class AssetService {
         'Identifier type and identifier must be provided together',
       );
     }
-    if (type && !identifier && type !== GENERATED_IDENTIFIER_TYPE) {
+    if (type && !identifier && !isGeneratedIdentifierType(type)) {
       throw new ValidationException(
-        'Only an internal code can be generated; other identifier types require the value read from the equipment',
+        'Only labels the system prints can be generated; other identifier types require the value read from the equipment',
       );
     }
   }

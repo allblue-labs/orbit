@@ -61,20 +61,24 @@ test("cadastra o técnico, mostra a senha uma vez e força a troca", async ({
   await page.locator("#member-last-name").fill(`Campo ${carimbo}`);
 
   /**
-   * O campo pede o **nome de entrada**, não um endereço.
+   * O campo pede o **nome de entrada**, e o domínio já está dentro dele.
    *
    * Quem se cadastra aqui recebe senha temporária e não recebe mensagem nenhuma —
    * o endereço é o login. O domínio é da organização e entra sozinho, e o teste o
    * lê da tela em vez de inventar: inventá-lo provaria que o teste sabe montar um
    * e-mail, não que a tela monta o mesmo que o servidor aceita.
+   *
+   * O domínio ficava numa caixa ao lado do campo; passou para dentro. Ler o
+   * valor composto é melhor do que ler aquele sufixo: prova que a tela montou o
+   * endereço, e não só que ela sabe desenhar o domínio em algum canto.
    */
-  await page.locator("#member-email").fill(nomeDeEntrada);
+  const campoEmail = page.locator("#member-email");
+  await campoEmail.fill(nomeDeEntrada);
 
-  const sufixo = await page.getByTestId("member-email-domain").textContent();
-  expect(sufixo, "o domínio da organização precisa aparecer").toMatch(
-    /^@[a-z0-9-]+\.[a-z]+$/,
+  const emailTecnico = (await campoEmail.inputValue()).trim();
+  expect(emailTecnico, "o campo precisa compor o endereço inteiro").toMatch(
+    new RegExp(`^${nomeDeEntrada}@[a-z0-9-]+\\.[a-z]+$`),
   );
-  const emailTecnico = `${nomeDeEntrada}${sufixo!.trim()}`;
 
   /*
    * O cadastro tem quatro passos — dados, papel, acessos, revisão — e o teste

@@ -144,3 +144,29 @@ export function looksLikeEmail(value: string): boolean {
   const texto = value.trim();
   return /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/.test(texto);
 }
+
+/**
+ * A parte local de um endereço que o campo já mostra com o domínio dentro.
+ *
+ * ## Por que o domínio vive dentro do campo
+ *
+ * Ele ficava **ao lado**, numa caixa cinza colada ao `input`. Lia-se como um
+ * rótulo desbotado grudado na borda, e não como parte do endereço que está
+ * sendo escrito.
+ *
+ * Dentro, o campo mostra o endereço inteiro desde o primeiro caractere — que é
+ * o que a pessoa vai usar para entrar. O domínio continua não sendo editável:
+ * o que vier depois do primeiro `@` é descartado a cada tecla, e o cursor é
+ * mantido antes dele.
+ *
+ * ## Por que corta no primeiro `@`
+ *
+ * Porque é o que separa quem digita de onde ela entra. Colar um endereço
+ * inteiro — `joao@outraempresa.com` — aproveita o `joao` e mantém o domínio da
+ * organização, que é a regra desta forma do campo; quem precisa de outro
+ * domínio tem o botão ao lado.
+ */
+export function localPartOf(composto: string): string {
+  const corte = composto.indexOf("@");
+  return corte === -1 ? composto : composto.slice(0, corte);
+}

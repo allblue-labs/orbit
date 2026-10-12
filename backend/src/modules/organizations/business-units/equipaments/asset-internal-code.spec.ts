@@ -17,7 +17,8 @@
 import {
   allocateInternalCode,
   formatInternalCode,
-  GENERATED_IDENTIFIER_TYPE,
+  GENERATED_IDENTIFIER_TYPES,
+  isGeneratedIdentifierType,
 } from './asset-internal-code';
 
 const ORG = '01900000-0000-7000-8000-000000000001';
@@ -52,11 +53,34 @@ function cliente(options: { reservado: number; ocupados?: readonly string[] }) {
   return { client, consultas, escritas, buscas };
 }
 
-describe('o tipo que o sistema atribui', () => {
-  it('é o código interno, e só ele', () => {
-    /* A constante é lida pelo repositório e pela validação; se ela virasse outro
-       tipo, o sistema passaria a inventar número de série. */
-    expect(GENERATED_IDENTIFIER_TYPE).toBe('INTERNAL_CODE');
+describe('os tipos que o sistema atribui', () => {
+  it('são a etiqueta interna e o QR — e só eles', () => {
+    /*
+     * A lista é lida pelo repositório e pela validação. Um tipo a mais aqui faz
+     * o sistema inventar um dado da máquina: número de série, NFC, código de
+     * barras e RFID são **lidos** do equipamento do cliente.
+     *
+     * O QR pertence à lista porque a etiqueta é impressa pelo próprio Orbit — o
+     * papel segue o sistema, não o contrário.
+     */
+    expect([...GENERATED_IDENTIFIER_TYPES].sort()).toEqual([
+      'INTERNAL_CODE',
+      'QR_CODE',
+    ]);
+  });
+
+  it('número de série continua sendo lido, nunca gerado', () => {
+    expect(isGeneratedIdentifierType('SERIAL_NUMBER')).toBe(false);
+    expect(isGeneratedIdentifierType('NFC')).toBe(false);
+    expect(isGeneratedIdentifierType('BARCODE')).toBe(false);
+    expect(isGeneratedIdentifierType('RFID')).toBe(false);
+  });
+
+  it('sem tipo não é tipo gerado', () => {
+    /* `null` e `undefined` chegam do banco e do DTO; tratá-los como gerados
+       faria um equipamento sem identificador receber um código silenciosamente. */
+    expect(isGeneratedIdentifierType(null)).toBe(false);
+    expect(isGeneratedIdentifierType(undefined)).toBe(false);
   });
 
   it('seis dígitos, e cresce em vez de truncar', () => {

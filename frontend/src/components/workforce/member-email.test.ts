@@ -6,6 +6,7 @@ import {
   organizationDomain,
   sanitizeLocalPart,
   suggestLocalPart,
+  localPartOf,
 } from "./member-email";
 
 describe("o domínio da organização", () => {
@@ -117,5 +118,31 @@ describe("o endereço livre", () => {
     for (const valor of ["ana", "ana@", "@empresa.com", "ana@empresa", "a b@c.com"]) {
       expect(looksLikeEmail(valor), valor).toBe(false);
     }
+  });
+
+  describe("parte local de um campo com o domínio dentro", () => {
+    it("corta no primeiro @", () => {
+      expect(localPartOf("joao.silva@orbit.com")).toBe("joao.silva");
+    });
+
+    it("sem @, o texto inteiro é a parte local", () => {
+      /* É o estado de quem começou a digitar e o domínio ainda não foi
+         recomposto pelo campo. */
+      expect(localPartOf("joao.sil")).toBe("joao.sil");
+    });
+
+    it("colar um endereço de outro domínio aproveita só o nome", () => {
+      /*
+       * A forma do campo é "nome + domínio da organização". Colar
+       * `joao@outraempresa.com` e manter o outro domínio contrariaria a
+       * escolha que o botão ao lado existe para oferecer.
+       */
+      expect(localPartOf("joao@outraempresa.com")).toBe("joao");
+    });
+
+    it("vazio continua vazio", () => {
+      expect(localPartOf("")).toBe("");
+      expect(localPartOf("@orbit.com")).toBe("");
+    });
   });
 });
