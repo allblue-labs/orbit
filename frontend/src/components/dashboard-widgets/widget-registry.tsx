@@ -94,38 +94,39 @@ export const WIDGET_SPAN: Readonly<
 };
 
 /**
- * Widgets resolvidos pelo backend que ainda não têm Read Model real.
+ * Widgets que o painel resolve mas que ainda não têm dados reais.
  *
  * O motivo é exibido ao usuário — é informação honesta sobre o estado da
- * plataforma, não um erro.
+ * plataforma, não um erro. A frase fala do que falta no produto, não de como
+ * o dado seria buscado.
  */
 const WITHOUT_SOURCE: Readonly<Record<string, string>> = {
   "team-performance":
     "Produtividade por técnico ainda não é publicada pelo Analytics — apenas a contagem de técnicos alocados, no widget de técnicos.",
   "recent-activity":
-    "Não há endpoint de atividades da organização. O histórico existe apenas por operação.",
+    "O histórico de atividades existe por atendimento, ainda não consolidado para a organização.",
   "pharmacy-critical-stock":
-    "O Analytics não cobre estoque; o Read Model deste widget é fixo no backend.",
+    "Os indicadores ainda não cobrem estoque. Este quadro fica sem dados.",
   "pharmacy-expiring-products":
-    "O Analytics não cobre validade de produtos; o Read Model deste widget é fixo no backend.",
+    "Os indicadores ainda não cobrem validade de produtos. Este quadro fica sem dados.",
   "pharmacy-lots":
-    "O Analytics não cobre lotes; o Read Model deste widget é fixo no backend.",
+    "Os indicadores ainda não cobrem lotes. Este quadro fica sem dados.",
   "pharmacy-purchases":
-    "O Analytics não cobre compras; o Read Model deste widget é fixo no backend.",
+    "Os indicadores ainda não cobrem compras. Este quadro fica sem dados.",
   "pharmacy-dispensations":
-    "O Analytics não cobre dispensações; o Read Model deste widget é fixo no backend.",
+    "Os indicadores ainda não cobrem dispensações. Este quadro fica sem dados.",
   "pharmacy-abc-curve":
-    "O Analytics não cobre curva ABC; o Read Model deste widget é fixo no backend.",
+    "Os indicadores ainda não cobrem curva ABC. Este quadro fica sem dados.",
   "agro-fields-overview":
-    "O Analytics não cobre áreas produtivas; o Read Model deste widget é fixo no backend.",
+    "Os indicadores ainda não cobrem áreas produtivas. Este quadro fica sem dados.",
   "agro-crop-status":
-    "O Analytics não cobre culturas; o Read Model deste widget é fixo no backend.",
+    "Os indicadores ainda não cobrem culturas. Este quadro fica sem dados.",
   "agro-machinery":
-    "O Analytics não cobre maquinário; o Read Model deste widget é fixo no backend.",
+    "Os indicadores ainda não cobrem maquinário. Este quadro fica sem dados.",
   "agro-inputs":
-    "O Analytics não cobre insumos; o Read Model deste widget é fixo no backend.",
+    "Os indicadores ainda não cobrem insumos. Este quadro fica sem dados.",
   "agro-irrigation":
-    "O Analytics não cobre irrigação; o Read Model deste widget é fixo no backend.",
+    "Os indicadores ainda não cobrem irrigação. Este quadro fica sem dados.",
   "agro-production-forecast":
     "As projeções do Analytics cobrem operações e PMOC, não produção agrícola.",
 };

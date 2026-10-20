@@ -73,16 +73,45 @@ export interface CreateQuoteInput {
   businessUnitId?: string;
   title: string;
   notes?: string;
+  /** Parágrafo de abertura. Ausente imprime o padrão do documento. */
+  introText?: string;
   validUntil?: string;
   currency?: string;
+  /** Endereço de execução, entre os cadastrados do cliente. */
+  serviceAddressId?: string;
+  /** Quem assina. A sessão quando ausente. */
+  responsibleUserId?: string;
+  /** Equipamentos cobertos. Lista inteira, não incremental. */
+  assetIds?: readonly string[];
+}
+
+/**
+ * `POST /quotes/from-operation`.
+ *
+ * Copia cliente, endereço, equipamentos, título, descrição e os **materiais**
+ * dos movimentos de consumo. Serviço com valor não é copiado: `Operation` não
+ * guarda linha de serviço com preço, e inventá-la produziria valor numa proposta
+ * que ninguém combinou.
+ */
+export interface CreateQuoteFromOperationInput {
+  operationId: string;
+  title?: string;
+  validUntil?: string;
+  responsibleUserId?: string;
 }
 
 /** `PATCH /quotes/:id`. Sem `customerId`: trocar o destinatário é outra proposta. */
 export interface UpdateQuoteInput {
   title?: string;
   notes?: string;
+  introText?: string;
   validUntil?: string;
   discount?: number;
+  /** Por que houve desconto. Opcional: centavos para fechar a conta não pedem justificativa. */
+  discountReason?: string;
+  serviceAddressId?: string;
+  responsibleUserId?: string;
+  assetIds?: readonly string[];
 }
 
 /**

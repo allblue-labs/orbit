@@ -22,17 +22,29 @@
  */
 import { ContentContainer } from "@/components/layout/page-primitives";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useSectionFromUrl } from "@/hooks/use-section-from-url";
 import { TabBoundary } from "@/workspace";
 import { ContextTab } from "./context.tab";
 import { PersonalDataTab } from "./personal-data.tab";
 import { PreferencesTab } from "./preferences.tab";
 import { SecurityTab } from "./security.tab";
 
+/** Os apelidos das seções, na ordem em que aparecem. */
+const SECOES = ["dados", "seguranca", "preferencias", "contexto"] as const;
+
 export function ProfileWorkspace() {
+  const section = useSectionFromUrl(SECOES);
+
   return (
     <ContentContainer size="wide" className="space-y-6">
-      <Tabs defaultValue="dados" className="space-y-5">
-        <TabsList>
+      <Tabs value={section.current} onValueChange={section.go}>
+        {/*
+          Rotulada porque não é a única lista de abas da página: a seção de
+          assinatura tem a sua. Sem nome, quem navega por leitor de tela ouve
+          "lista de abas" duas vezes e precisa entrar em cada uma para saber
+          qual é qual.
+        */}
+        <TabsList aria-label="Seções da minha conta">
           <TabsTrigger value="dados">Dados pessoais</TabsTrigger>
           <TabsTrigger value="seguranca">Segurança</TabsTrigger>
           <TabsTrigger value="preferencias">Preferências</TabsTrigger>

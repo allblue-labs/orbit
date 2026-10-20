@@ -21,9 +21,9 @@ import type { ProvenanceMark } from "./metric-registry";
 
 const DESCRIPTIONS: Readonly<Record<DataQuality, string>> = {
   OBSERVED: "Contagem direta dos registros da organização.",
-  DERIVED: "Calculado pelo backend a partir de registros observados.",
+  DERIVED: "Calculado a partir dos registros da operação.",
   PROXY:
-    "Aproximação: o backend usa outra entidade como substituta enquanto a fonte definitiva não existe.",
+    "Aproximação: usa um dado equivalente enquanto a fonte definitiva não existe.",
   MOCK: "Valor não observado — não representa dados reais da sua operação.",
 };
 
@@ -96,7 +96,7 @@ export function SimulatedSourceNotice({
     >
       <FlaskConical className="size-3" aria-hidden />
       {source === "MOCK"
-        ? "Fonte simulada pelo backend"
+        ? "Fonte simulada"
         : "Derivado de fonte simulada"}
     </Badge>
   );

@@ -154,3 +154,93 @@ export class CreateContactDto {
 }
 
 export class UpdateContactDto extends PartialType(CreateContactDto) {}
+
+/* ------------------------------------------------------------------ */
+/* Endereços de atendimento                                            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Um endereço para onde o técnico vai.
+ *
+ * Separado de `Customer.address`, que é o endereço **fiscal** — o que vai na
+ * nota. Uma rede com três lojas é um cliente e três endereços de atendimento.
+ */
+export class CreateCustomerAddressDto {
+  @ApiProperty({ description: 'Como a equipe chama este lugar' })
+  @Transform(trim)
+  @IsString()
+  @MinLength(2)
+  @MaxLength(120)
+  label!: string;
+
+  @ApiProperty()
+  @Transform(trim)
+  @IsString()
+  @MinLength(2)
+  @MaxLength(255)
+  street!: string;
+
+  @ApiProperty()
+  @Transform(trim)
+  @IsString()
+  @MinLength(2)
+  @MaxLength(120)
+  city!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(30)
+  number?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(120)
+  complement?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(120)
+  district?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(2)
+  stateCode?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(16)
+  postalCode?: string;
+
+  /** Portaria, ponto de referência, instruções de acesso. */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(2000)
+  notes?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isPrimary?: boolean;
+}
+
+export class UpdateCustomerAddressDto extends PartialType(
+  CreateCustomerAddressDto,
+) {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+}

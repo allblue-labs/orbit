@@ -1,6 +1,11 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ArrayNotEmpty,
+  ArrayUnique,
+  IsArray,
+  IsBoolean,
   IsDate,
   IsIn,
   IsInt,
@@ -49,6 +54,20 @@ export class OperationQueryDto {
   @IsOptional()
   @IsUUIDv7()
   assignedUserId?: string;
+
+  /**
+   * Só o que está atribuído e esperando autorização.
+   *
+   * É a fila da aba Autorização. Vem como filtro do contrato, e não como recorte de
+   * página, para a contagem ser a da organização e não a dos vinte que couberam.
+   */
+  @ApiPropertyOptional({ type: Boolean })
+  @IsOptional()
+  @Transform(({ value }) =>
+    value === 'true' || value === true ? true : undefined,
+  )
+  @IsBoolean()
+  pendingAuthorization?: boolean;
 
   @ApiPropertyOptional({ enum: Object.values(OperationKind) })
   @IsOptional()
@@ -101,10 +120,50 @@ export class CreateOperationDto {
   @IsUUIDv7()
   customerId?: string;
 
+  /**
+   * Os equipamentos atendidos.
+   *
+   * Era `assetId`, um só. Um atendimento em campo raramente toca um
+   * equipamento: o técnico vai ao endereço e atende os aparelhos que estão lá,
+   * e uma ordem por aparelho multiplicava o trabalho administrativo sem
+   * descrever melhor o serviço.
+   */
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @ArrayUnique()
+  @IsUUIDv7({ each: true })
+  assetIds?: string[];
+
+  /** Para onde o técnico vai — um endereço cadastrado do cliente. */
   @ApiPropertyOptional()
   @IsOptional()
   @IsUUIDv7()
-  assetId?: string;
+  customerAddressId?: string;
+
+  /** O ponto exato dentro do endereço. Opcional: nem todo lugar tem setor. */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(120)
+  sector?: string;
+
+  /**
+   * O técnico em campo pode ver quanto este atendimento vale?
+   *
+   * `false` por omissão, e a omissão é deliberada: o valor combinado com o cliente
+   * não é informação que todo técnico precise ter na mão dentro da casa dele. Ligar
+   * é um ato consciente, por atendimento.
+   *
+   * O número não vem daqui: é o total do orçamento vinculado. Este campo governa a
+   * visibilidade, e sem orçamento não há o que mostrar mesmo ligado.
+   */
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  amountVisibleInField?: boolean;
 
   @ApiProperty()
   @Transform(trim)
@@ -155,9 +214,46 @@ export class CreateOperationDto {
   @IsOptional()
   @IsObject()
   data?: Record<string, unknown>;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUIDv7()
+  responsibleFieldTechnicianId?: string;
+
+  @ApiPropertyOptional({ type: [String], description: 'auxiliares técnico' })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ArrayUnique()
+  @IsUUIDv7({ each: true })
+  auxiliaryTechnicianIds?: string[];
 }
 
 export class UpdateOperationDto extends PartialType(CreateOperationDto) {}
+
+/**
+ * Autorizar várias atribuições de uma vez.
+ *
+ * ## Por que ids, e não "todas do técnico X"
+ *
+ * Porque o dono autoriza o que ele **viu**. Um comando que dissesse "todas do
+ * Eduardo" resolveria o conjunto no servidor, no instante da chamada — e uma
+ * operação criada entre a tela carregar e o botão ser clicado entraria na
+ * autorização sem ninguém ter olhado para ela. Autorização é liberação de trabalho
+ * para o campo; o conjunto precisa ser o da tela.
+ *
+ * Quem decide o agrupamento é o cliente: todas de um técnico, todas de um dia, ou
+ * uma só. Para o servidor é a mesma operação em lote.
+ */
+export class AuthorizeOperationsDto {
+  @ApiProperty({ type: [String] })
+  @IsArray()
+  @ArrayNotEmpty()
+  @ArrayMaxSize(200)
+  @ArrayUnique()
+  @IsUUIDv7({ each: true })
+  operationIds!: string[];
+}
 
 export class ChangeOperationStatusDto {
   @ApiProperty({ enum: Object.values(OperationStatus) })
@@ -177,3 +273,11 @@ export class AssignOperationUserDto {
   @IsUUIDv7()
   userId!: string;
 }
+
+export class ReplaceResponsibleFieldTechnicianDto {
+  @ApiProperty()
+  @IsUUIDv7()
+  userId!: string;
+}
+
+export class AddAuxiliaryTechnicianDto extends ReplaceResponsibleFieldTechnicianDto {}

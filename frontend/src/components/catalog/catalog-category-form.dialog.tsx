@@ -147,7 +147,7 @@ function Body({
           {editing ? (
             <p className="text-xs text-muted-foreground">
               O identificador (<span className="font-mono">{editing.slug}</span>
-              ) é gerado pelo servidor a partir do nome.
+              ) é gerado a partir do nome.
             </p>
           ) : null}
         </div>

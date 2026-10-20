@@ -74,12 +74,40 @@ export function buildMonthComparison(
   const previousStart = addZonedMonths(currentStart, -1, timeZone);
 
   /**
-   * Mesmo dia do mês anterior.
+   * Mesmo dia do mês anterior, **até o fim daquele dia**.
    *
-   * `addZonedMonths` já resolve o mês curto — 31 de março menos um mês cai no
-   * último dia de fevereiro, que é o recorte comparável possível.
+   * Dois cuidados que a aritmética ingênua não tem:
+   *
+   * `addZonedMonths` reconstrói o instante só com ano, mês e dia — a hora se
+   * perde. Usar o resultado direto descartava as 23h59 e, no dia 1º, fazia a
+   * janela anterior colapsar em `from === to`; o `/analytics` recusa período
+   * de duração zero com 400. O defeito só aparecia no primeiro dia do mês,
+   * porque em qualquer outro sobrava intervalo apesar da hora perdida.
+   *
+   * E o mês anterior pode ser mais curto. 31 de março menos um mês não existe
+   * em fevereiro: sem grampear, a data transbordava para 3 de março e a
+   * janela "anterior" invadia o mês corrente, ficando maior que ele — o
+   * oposto da comparação justa que estas duas janelas existem para dar.
    */
-  const previousEnd = addZonedMonths(endOfToday, -1, timeZone);
+  const previousMonth = parts.month - 1;
+  const previousYear = previousMonth === 0 ? parts.year - 1 : parts.year;
+  const normalizedMonth = previousMonth === 0 ? 12 : previousMonth;
+  /** Dia 0 do mês seguinte é o último dia do mês — e independe de fuso. */
+  const lastDay = new Date(
+    Date.UTC(previousYear, normalizedMonth, 0),
+  ).getUTCDate();
+
+  const previousEnd = instantFromZoned(
+    {
+      year: previousYear,
+      month: normalizedMonth,
+      day: Math.min(parts.day, lastDay),
+      hour: 23,
+      minute: 59,
+      second: 59,
+    },
+    timeZone,
+  );
 
   return {
     thisMonth: {

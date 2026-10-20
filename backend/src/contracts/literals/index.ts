@@ -64,6 +64,46 @@ export const OperationPriority = literal({
 export type OperationPriority =
   (typeof OperationPriority)[keyof typeof OperationPriority];
 
+export const RvtVisitType = literal({
+  WEEKLY: 'WEEKLY',
+  SEMIANNUAL: 'SEMIANNUAL',
+});
+export type RvtVisitType = (typeof RvtVisitType)[keyof typeof RvtVisitType];
+
+export const RvtScheduleMode = literal({
+  RECURRING: 'RECURRING',
+  ONE_TIME: 'ONE_TIME',
+});
+export type RvtScheduleMode =
+  (typeof RvtScheduleMode)[keyof typeof RvtScheduleMode];
+
+export const RvtConfigurationStatus = literal({
+  ACTIVE: 'ACTIVE',
+  INACTIVE: 'INACTIVE',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED',
+});
+export type RvtConfigurationStatus =
+  (typeof RvtConfigurationStatus)[keyof typeof RvtConfigurationStatus];
+
+export const RvtOccurrenceStatus = literal({
+  SCHEDULED: 'SCHEDULED',
+  IN_PROGRESS: 'IN_PROGRESS',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED',
+});
+export type RvtOccurrenceStatus =
+  (typeof RvtOccurrenceStatus)[keyof typeof RvtOccurrenceStatus];
+
+export const RvtExecutionStatus = literal({
+  IN_PROGRESS: 'IN_PROGRESS',
+  PAUSED: 'PAUSED',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED',
+});
+export type RvtExecutionStatus =
+  (typeof RvtExecutionStatus)[keyof typeof RvtExecutionStatus];
+
 export const OperationHistoryAction = literal({
   CREATED: 'CREATED',
   UPDATED: 'UPDATED',
@@ -473,3 +513,12 @@ export const PmocExecutionStatus = {
 } as const;
 export type PmocExecutionStatus =
   (typeof PmocExecutionStatus)[keyof typeof PmocExecutionStatus];
+
+/** Estado da manutenção física de um equipamento dentro do ciclo. */
+export const PmocEquipmentExecutionStatus = {
+  IN_PROGRESS: 'IN_PROGRESS',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED',
+} as const;
+export type PmocEquipmentExecutionStatus =
+  (typeof PmocEquipmentExecutionStatus)[keyof typeof PmocEquipmentExecutionStatus];

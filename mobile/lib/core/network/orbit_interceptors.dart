@@ -12,7 +12,10 @@ import 'dart:math';
 
 import 'package:dio/dio.dart';
 
+import 'dart:io' show HandshakeException, TlsException;
+
 import '../errors/orbit_exception.dart';
+import '../errors/orbit_public_copy.dart';
 import '../observability/orbit_logger.dart';
 import '../storage/token_storage.dart';
 import 'session_authenticator.dart';
@@ -136,36 +139,83 @@ class LoggingInterceptor extends Interceptor {
   }
 
   @override
-  void onResponse(Response<dynamic> response, ResponseInterceptorHandler handler) {
+  void onResponse(
+    Response<dynamic> response,
+    ResponseInterceptorHandler handler,
+  ) {
     _log(response.requestOptions, response.statusCode);
     handler.next(response);
   }
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
-    _log(err.requestOptions, err.response?.statusCode, error: err.type.name);
+    /// O endereço vai para o log, e é aqui que ele deve estar.
+    ///
+    /// Quando a conexão nem abre, "para onde tentei ir" é o que resolve o
+    /// chamado — e a tela deixou de ser o lugar de contar isso.
+    _log(
+      err.requestOptions,
+      err.response?.statusCode,
+      error: err.type.name,
+      host: err.requestOptions.uri.host.isEmpty
+          ? null
+          : '${err.requestOptions.uri.host}:${err.requestOptions.uri.port}',
+    );
     handler.next(err);
   }
 
-  void _log(RequestOptions options, int? status, {String? error}) {
+  void _log(
+    RequestOptions options,
+    int? status, {
+    String? error,
+    String? host,
+  }) {
     final startedAt = options.extra[_startKey];
     final duration = startedAt is DateTime
         ? DateTime.now().difference(startedAt).inMilliseconds
         : null;
     // Sem corpo, sem query com identificadores, sem cabeçalhos.
-    _logger.info('http', data: {
-      'method': options.method,
-      'path': options.path,
-      'status': status,
-      'durationMs': duration,
-      'requestId': options.headers[ContextHeaders.requestId],
-      if (error != null) 'error': error,
-    });
+    _logger.info(
+      'http',
+      data: {
+        'method': options.method,
+        'path': options.path,
+        'status': status,
+        'durationMs': duration,
+        'requestId': options.headers[ContextHeaders.requestId],
+        if (error != null) 'error': error,
+        if (host != null) 'host': host,
+      },
+    );
   }
 }
 
 /// Traduz qualquer falha do Dio para [OrbitException].
+///
+/// ## A fronteira
+///
+/// Daqui para cima ninguém mais conhece Dio. `DioException`, `SocketException`
+/// e `HandshakeException` morrem nesta classe, e o que sobe é a taxonomia do
+/// Orbit — pequena, estável e independente da biblioteca.
+///
+/// ## O host não entra na mensagem
+///
+/// Ele entra em [OrbitDiagnostics], que a apresentação não recebe. A versão
+/// anterior concatenava `'(tentei $destino)'` na mensagem pública, e foi assim
+/// que um técnico viu `10.0.2.2:6001` na tela ao abrir o aplicativo. A proteção
+/// não pode depender do ambiente: a mesma tela roda em desenvolvimento e em
+/// produção, e o `if` que separa os dois é exatamente o que falha quando o
+/// ambiente é lido errado.
 class ErrorMappingInterceptor extends Interceptor {
+  ErrorMappingInterceptor({this.destination});
+
+  /// Para onde o cliente foi configurado a falar, como `10.0.2.2:6001`.
+  ///
+  /// Vai para o **diagnóstico**, nunca para a tela. Quando a conexão nem abre,
+  /// é o dado que resolve o problema — e quem precisa dele lê o log, não a
+  /// mensagem de erro do técnico em campo.
+  final String? destination;
+
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
     handler.reject(
@@ -173,42 +223,105 @@ class ErrorMappingInterceptor extends Interceptor {
         requestOptions: err.requestOptions,
         response: err.response,
         type: err.type,
-        error: _map(err),
+        error: map(err),
       ),
     );
   }
 
-  OrbitException _map(DioException err) {
+  /// A tradução, isolada do encanamento do Dio.
+  ///
+  /// Pública porque é **o** comportamento desta classe, e é o que precisa ser
+  /// verificado caso a caso. Exercitá-la através de `onError` exigiria fabricar
+  /// um handler do Dio, e o teste passaria a medir o handler.
+  OrbitException map(DioException err) {
     final requestId =
         err.response?.headers.value(ContextHeaders.requestId) ??
         err.requestOptions.headers[ContextHeaders.requestId] as String?;
+
+    final diagnostics = OrbitDiagnostics(
+      transport: err.type.name,
+      host: destination,
+
+      /// Só o caminho. A query carrega identificadores e filtros, e nada disso
+      /// é necessário para correlacionar com o log do servidor.
+      path: err.requestOptions.path,
+      statusCode: err.response?.statusCode,
+      cause: err.error,
+    );
+
+    /// A conexão segura é olhada **antes** do tipo do Dio.
+    ///
+    /// Uma falha de handshake chega como `connectionError` ou `unknown`, e
+    /// tratá-la como "sem conexão" mandaria a pessoa conferir o wi-fi por um
+    /// problema que não é dela. O certificado é outra conversa.
+    if (_ehFalhaDeConexaoSegura(err.error)) {
+      return OrbitException(
+        kind: OrbitErrorKind.insecure,
+        publicMessage: OrbitPublicCopy.secureConnectionFailed,
+        code: 'SECURE_CONNECTION_FAILED',
+        requestId: requestId,
+        diagnostics: diagnostics,
+      );
+    }
 
     return switch (err.type) {
       DioExceptionType.connectionTimeout ||
       DioExceptionType.sendTimeout ||
       DioExceptionType.receiveTimeout => OrbitException(
         kind: OrbitErrorKind.timeout,
-        message: 'O servidor demorou a responder.',
+        publicMessage: OrbitPublicCopy.timeout,
         code: 'TIMEOUT',
         requestId: requestId,
+        diagnostics: diagnostics,
       ),
+
+      /// Cancelamento é decisão do próprio aplicativo — a tela saiu, o usuário
+      /// voltou. Continua sendo um erro para quem chamou, com texto neutro
+      /// caso alguém insista em mostrá-lo.
       DioExceptionType.cancel => OrbitException(
         kind: OrbitErrorKind.cancelled,
-        message: 'Requisição cancelada.',
-        code: 'CANCELLED',
+        publicMessage: OrbitPublicCopy.cancelled,
+        code: 'REQUEST_CANCELLED',
         requestId: requestId,
+        diagnostics: diagnostics,
       ),
+
+      DioExceptionType.badCertificate => OrbitException(
+        kind: OrbitErrorKind.insecure,
+        publicMessage: OrbitPublicCopy.secureConnectionFailed,
+        code: 'SECURE_CONNECTION_FAILED',
+        requestId: requestId,
+        diagnostics: diagnostics,
+      ),
+
       DioExceptionType.connectionError ||
-      DioExceptionType.unknown when err.response == null => const OrbitException(
+      DioExceptionType.unknown when err.response == null => OrbitException(
         kind: OrbitErrorKind.network,
-        message: 'Sem conexão com o servidor.',
+        publicMessage: OrbitPublicCopy.offline,
         code: 'NETWORK',
+        requestId: requestId,
+        diagnostics: diagnostics,
       ),
+
       _ => OrbitException.fromEnvelope(
         status: err.response?.statusCode ?? 0,
         body: err.response?.data,
         requestId: requestId,
+        diagnostics: diagnostics,
       ),
     };
+  }
+
+  /// O erro por baixo é de TLS?
+  ///
+  /// A checagem é pelo **tipo** e pelo nome da classe, não pelo texto: ler
+  /// `message.contains('CERTIFICATE')` é a mesma dependência frágil de string
+  /// que este arquivo existe para eliminar. `HandshakeException` é o tipo do
+  /// `dart:io`; o nome cobre implementações que não o usam diretamente.
+  static bool _ehFalhaDeConexaoSegura(Object? cause) {
+    if (cause is HandshakeException) return true;
+    if (cause is TlsException) return true;
+    final nome = cause?.runtimeType.toString() ?? '';
+    return nome == 'HandshakeException' || nome == 'CertificateException';
   }
 }

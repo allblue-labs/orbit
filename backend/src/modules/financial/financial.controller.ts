@@ -51,6 +51,8 @@ import {
 } from './financial.dto';
 import { FinancialMapper } from './financial.mapper';
 import { FinancialService } from './financial.service';
+import { CreateReceiptDto } from './receipt.dto';
+import { ReceiptService } from './receipt.service';
 
 @ApiTags('Financial')
 @Controller('financial')
@@ -59,6 +61,7 @@ export class FinancialController {
   constructor(
     private readonly financial: FinancialService,
     private readonly mapper: FinancialMapper,
+    private readonly receipts: ReceiptService,
   ) {}
 
   /* ---------------------------------------------------------------- */
@@ -261,6 +264,70 @@ export class FinancialController {
     @Query() query: FinancialAnalyticsQueryDto,
   ) {
     return this.financial.timeline(this.org(request), query);
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Recibos                                                           */
+  /* ---------------------------------------------------------------- */
+
+  /**
+   * Emite um recibo — do zero ou a partir de um atendimento concluído.
+   *
+   * ## Por que mora no Financeiro
+   *
+   * Recibo é dinheiro recebido: quando o manifesto dele é publicado, vira receita
+   * confirmada sozinho. A porta fica onde está a consequência.
+   *
+   * `financial.manage`, e não `artifact_executions.create`: quem emite recibo está
+   * registrando entrada de caixa. Dar essa porta a quem só preenche documentos
+   * deixaria qualquer um lançar receita por um caminho lateral.
+   *
+   * ## O que a resposta é
+   *
+   * A execução em **rascunho**, com os campos preenchidos. Emitir é o passo
+   * seguinte — renderizar e publicar o manifesto — e é ele que vira lançamento.
+   */
+  /*
+   * Só capability financeira, e isto é regra do módulo — há teste que percorre
+   * todas as rotas e reprova a primeira que escape dela. A emissão usa o motor de
+   * documentos, mas `artifact_executions.manage` viaja no mesmo conjunto de plano
+   * que `financial.manage`: exigi-la aqui não acrescentaria barreira e abriria
+   * precedente para uma rota financeira gateada por capability de outro módulo.
+   *
+   * Num plano hipotético com Financeiro e sem motor de documentos, a emissão falha
+   * na busca do modelo — com "modelo de recibo não encontrado", que é verdade.
+   */
+  @Post('receipts')
+  @Capabilities('financial.manage')
+  @Permissions('financial.manage')
+  createReceipt(
+    @Req() request: IdentityRequest,
+    @Body() input: CreateReceiptDto,
+  ) {
+    return this.receipts.create(
+      this.org(request),
+      request.identity?.businessUnitId ?? null,
+      this.actor(request),
+      input,
+    );
+  }
+
+  /**
+   * O atendimento que pode originar um recibo, com o que ele oferece de pronto.
+   *
+   * Leitura: a tela pergunta antes de abrir o formulário, para já vir com o
+   * pagador e o serviço preenchidos. O valor **não** vem — o sistema não sabe o que
+   * foi cobrado a menos que exista proposta ou lançamento, e adivinhar o número de
+   * um recibo é pior que pedir que alguém o digite.
+   */
+  @Get('receipts/sources/:operationId')
+  @Capabilities('financial.read')
+  @Permissions('financial.read')
+  receiptSource(
+    @Param('operationId', ParseUUIDv7Pipe) operationId: string,
+    @Req() request: IdentityRequest,
+  ) {
+    return this.receipts.eligibleOperation(this.org(request), operationId);
   }
 
   /* ---------------------------------------------------------------- */

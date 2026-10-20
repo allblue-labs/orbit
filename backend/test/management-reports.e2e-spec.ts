@@ -418,7 +418,7 @@ describe('Management reports (e2e)', () => {
     ).data;
 
     expect(catalog.types).toHaveLength(8);
-    expect(catalog.schemaVersion).toBe(1);
+    expect(catalog.schemaVersion).toBe(2);
     expect(catalog.formats).toContain('PDF');
 
     const financial = catalog.types.find(
@@ -469,7 +469,7 @@ describe('Management reports (e2e)', () => {
     expect(ready.generatedAt).not.toBeNull();
     expect(ready.hasFile).toBe(true);
     expect(ready.renderer).toContain('pdf.default');
-    expect(ready.snapshot?.schemaVersion).toBe(1);
+    expect(ready.snapshot?.schemaVersion).toBe(2);
 
     /** Compõe os seis domínios que o ator pode ver. */
     const ids = ready.snapshot!.sections.map((section) => section.id);

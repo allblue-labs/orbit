@@ -114,6 +114,25 @@ async function provision(): Promise<void> {
     await admin.query(
       `GRANT CONNECT ON DATABASE ${quoteIdentifier(database)} TO ${role}`,
     );
+
+    /**
+     * Fresh databases need the role before migration 20260826180000, whose
+     * GRANT statements intentionally name it. The migrator calls this narrow
+     * phase first and performs the full grant reconciliation after every
+     * migration has created its tables/functions.
+     */
+    if (process.env.DATABASE_ROLE_BOOTSTRAP_ONLY === 'true') {
+      console.log(
+        JSON.stringify({
+          stage: 'database-role-bootstrapped',
+          runtimeRole: appUser,
+          rolsuper: false,
+          rolbypassrls: false,
+        }),
+      );
+      return;
+    }
+
     await admin.query(`GRANT USAGE ON SCHEMA public TO ${role}`);
 
     /**
@@ -151,6 +170,54 @@ async function provision(): Promise<void> {
      * superfície a mais para quem chegasse com a credencial de runtime.
      */
     await admin.query(`REVOKE ALL ON TABLE _prisma_migrations FROM ${role}`);
+
+    /**
+     * Tabelas de memória: acrescidas, nunca apagadas.
+     *
+     * O `GRANT` amplo acima cobre estas como cobre todas as outras, e é por
+     * isso que a exceção mora **aqui**, depois dele. Cada uma existe para
+     * lembrar de algo que já aconteceu:
+     *
+     * - o razão de uso responde por que a cota foi consumida — corrigir um
+     *   engano é evento novo, não linha reescrita;
+     * - o registro de avaliação **é** o antifraude: apagá-lo devolveria um
+     *   segundo período de teste a quem já usou o seu.
+     *
+     * Sem `DELETE`, um defeito na aplicação não tem como reescrever história.
+     * `organization_subscriptions` também não aceita `DELETE`: o histórico de
+     * assinaturas é preservado encerrando a linha, e não removendo-a.
+     */
+    for (const table of [
+      'plan_usage_events',
+      'subscription_trial_grants',
+      'organization_subscriptions',
+      'billing_customers',
+      /**
+       * A caixa de entrada guarda que um evento já foi processado. Apagá-la
+       * devolveria o segundo efeito quando o provedor reentregar semanas
+       * depois — que é exatamente o que ela existe para impedir.
+       */
+      'billing_webhook_events',
+    ]) {
+      await admin.query(
+        `DO $$
+           BEGIN
+             IF to_regclass('public.${table}') IS NOT NULL THEN
+               EXECUTE 'REVOKE DELETE ON TABLE public.${table} FROM ${role}';
+             END IF;
+           END $$`,
+      );
+    }
+
+    /** O razão de uso não é corrigido nem por `UPDATE`: só acrescido. */
+    await admin.query(
+      `DO $$
+         BEGIN
+           IF to_regclass('public.plan_usage_events') IS NOT NULL THEN
+             EXECUTE 'REVOKE UPDATE ON TABLE public.plan_usage_events FROM ${role}';
+           END IF;
+         END $$`,
+    );
 
     const attributes = (
       await admin.query<RoleAttributes>(

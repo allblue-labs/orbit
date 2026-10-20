@@ -123,7 +123,7 @@ void main() {
         calls++;
         throw const OrbitException(
           kind: OrbitErrorKind.network,
-          message: 'Sem conexão com o servidor.',
+          publicMessage: 'Sem conexão com o servidor.',
           code: 'NETWORK',
         );
       },
@@ -153,7 +153,8 @@ void main() {
           kind: OrbitErrorKind.http,
           status: 413,
           code: 'PAYLOAD_TOO_LARGE',
-          message: 'Arquivo acima do limite de 20 MB aceito pelo servidor.',
+          publicMessage:
+              'Arquivo acima do limite de 20 MB aceito pelo servidor.',
         );
       },
     );
@@ -179,7 +180,7 @@ void main() {
           kind: OrbitErrorKind.http,
           status: 403,
           code: 'FORBIDDEN',
-          message: 'Missing required permission',
+          publicMessage: 'Missing required permission',
         );
       },
     );
@@ -201,7 +202,7 @@ void main() {
           kind: OrbitErrorKind.http,
           status: 429,
           code: 'TOO_MANY_REQUESTS',
-          message: 'Too many requests',
+          publicMessage: 'Too many requests',
         );
       },
     );
@@ -223,7 +224,7 @@ void main() {
       executor: (task, {required onProgress, required cancellation}) async {
         throw const OrbitException(
           kind: OrbitErrorKind.network,
-          message: 'Sem conexão.',
+          publicMessage: 'Sem conexão.',
           code: 'NETWORK',
         );
       },
@@ -276,7 +277,7 @@ void main() {
             kind: OrbitErrorKind.http,
             status: 400,
             code: 'BAD_REQUEST',
-            message: 'inválido',
+            publicMessage: 'inválido',
           );
         }
       },

@@ -58,7 +58,7 @@ export function AssetScheduleSection({ assetId }: { assetId: string }) {
       entity="scheduling-event"
       panelId="asset-schedule"
       title="Agenda futura"
-      description="Próximos 90 dias, com recorrências expandidas pelo backend"
+      description="Próximos 90 dias, incluindo compromissos recorrentes"
       query={query}
       emptyMessage="Nada agendado para este ativo nos próximos 90 dias."
       seeAllHref={ROUTES.scheduling}
@@ -86,7 +86,7 @@ export function AssetExecutionsSection({ assetId }: { assetId: string }) {
       description="PMOCs, relatórios e checklists preenchidos neste ativo"
       query={query}
       emptyMessage="Nenhum artefato executado neste ativo."
-      seeAllHref={ROUTES.executions}
+      /** O vínculo viaja na URL: "ver todos" abre a fila deste ativo, não a da organização. */
       toRows={(page) =>
         page.data.map((execution) => ({
           key: execution.id,

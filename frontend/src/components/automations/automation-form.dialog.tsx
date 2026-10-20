@@ -896,7 +896,7 @@ function MemberField({
           />
         </SelectTrigger>
         <SelectContent>
-          {(members.data ?? []).map((member) => (
+          {(members.data?.data ?? []).map((member) => (
             <SelectItem key={member.userId} value={member.userId}>
               {member.displayName}
             </SelectItem>
@@ -935,7 +935,7 @@ function DelayField({
         <div className="min-w-0">
           <p className="text-sm font-medium">Aguardar antes de executar</p>
           <p className="text-xs text-muted-foreground">
-            O prazo é contado pelo servidor a partir do acontecimento. Meses são
+            O prazo é contado a partir do acontecimento. Meses são
             meses de calendário.
           </p>
         </div>

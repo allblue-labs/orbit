@@ -783,6 +783,6 @@ describe('Row Level Security (e2e)', () => {
     });
 
     expect(settled.status).toBe('DEAD');
-    expect(settled.lastError).toMatch(/escopo/i);
+    expect(settled.lastError).toBe('JOB_SCOPE_INVALID');
   }, 120_000);
 });

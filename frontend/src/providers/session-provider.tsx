@@ -53,15 +53,24 @@ export interface SessionContextValue {
   entitlements: SessionEntitlements | null;
   /** Módulos habilitados pelo plano (capabilities do backend). */
   capabilities: readonly string[];
+  /** Structural organization ownership, separate from assignable roles. */
+  isOwner: boolean;
+  surfaceAccess: readonly string[];
+  productCapabilities: readonly string[];
   isAuthenticated: boolean;
   isLoading: boolean;
   isPlatformAdmin: boolean;
   subscriptionActive: boolean;
+  /** Fim do período vigente, em ISO — para dizer **quando** venceu. */
+  subscriptionEndsAt: string | null;
   requiresPasswordChange: boolean;
   hasPermission: (permission: string) => boolean;
   hasRole: (role: string) => boolean;
   /** Um módulo está habilitado quando o plano concede a capability. */
   hasCapability: (capability: string) => boolean;
+  hasProductCapability: (capability: string) => boolean;
+  hasFeature: (feature: string) => boolean;
+  canUseProductFeature: (capability: string, feature?: string) => boolean;
   /** Rebusca a sessão (após trocar unidade, aceitar convite etc.). */
   refresh: () => Promise<void>;
   /** Limpa o estado local — o logout de fato ocorre em `/api/auth/logout`. */
@@ -114,6 +123,24 @@ export function SessionProvider({
     const roles = authenticated?.roles ?? [];
     const capabilities = authenticated?.entitlements?.capabilities ?? [];
     const wildcard = permissions.includes(WILDCARD_PERMISSION);
+    /**
+     * `*` no plano concede todos os módulos — como no backend.
+     *
+     * `SubscriptionPlanService.assertCapabilitiesOn` libera com
+     * `granted.has('*')`, e `hasPermission` aqui já honrava o curinga. Só
+     * `hasCapability` comparava por igualdade exata: uma organização em plano
+     * `['*']` passava por toda rota do servidor e via **todo módulo** da
+     * interface como "indisponível no plano".
+     *
+     * Encontrado no gate de navegador: com o acesso de teste, `/operacoes` e
+     * as demais telas de módulo renderizavam a tela de plano insuficiente.
+     */
+    const capabilityWildcard = capabilities.includes(WILDCARD_PERMISSION);
+    const productCapabilities =
+      authenticated?.productAccess?.capabilities ?? [];
+    const featureAvailability =
+      authenticated?.productAccess?.featureAvailability ?? {};
+    const isOwner = authenticated?.isOwner ?? false;
     return {
       session,
       user: authenticated?.user ?? null,
@@ -125,15 +152,27 @@ export function SessionProvider({
       organizations: authenticated?.organizations ?? [],
       entitlements: authenticated?.entitlements ?? null,
       capabilities,
+      isOwner,
+      surfaceAccess: authenticated?.surfaceAccess ?? [],
+      productCapabilities,
       isAuthenticated: Boolean(authenticated),
       isLoading: query.isPending,
       isPlatformAdmin: authenticated?.isPlatformAdmin ?? false,
       subscriptionActive: authenticated?.subscriptionActive ?? false,
+      subscriptionEndsAt: authenticated?.subscriptionEndsAt ?? null,
       requiresPasswordChange: authenticated?.requiresPasswordChange ?? false,
       hasPermission: (permission: string) =>
-        wildcard || permissions.includes(permission),
-      hasRole: (role: string) => roles.includes(role),
-      hasCapability: (capability: string) => capabilities.includes(capability),
+        isOwner || wildcard || permissions.includes(permission),
+      hasRole: (role: string) =>
+        (isOwner && role !== "PLATFORM_ADMIN") || roles.includes(role),
+      hasCapability: (capability: string) =>
+        capabilityWildcard || capabilities.includes(capability),
+      hasProductCapability: (capability: string) =>
+        productCapabilities.includes(capability),
+      hasFeature: (feature: string) => featureAvailability[feature] === true,
+      canUseProductFeature: (capability: string, feature = capability) =>
+        productCapabilities.includes(capability) &&
+        featureAvailability[feature] === true,
       refresh,
       clear,
     };

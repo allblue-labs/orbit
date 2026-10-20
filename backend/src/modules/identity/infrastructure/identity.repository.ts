@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../database';
+import type { PrismaTransactionClient } from '../../../database/prisma.types';
 
 const identityInclude = {
   credential: true,
@@ -21,7 +22,10 @@ const identityInclude = {
 
 export type IdentityUser = Prisma.UserGetPayload<{
   include: typeof identityInclude;
-}>;
+}> & {
+  readonly isOrganizationOwner: boolean;
+  readonly effectiveBusinessUnitIds: readonly string[];
+};
 
 @Injectable()
 export class IdentityRepository {
@@ -73,24 +77,47 @@ export class IdentityRepository {
         'app.organization_id',
         organization?.organizationId ?? '',
       );
-      const units = await transaction.businessUnitMembership.findMany({
-        where: {
-          userId: id,
-          organizationId: organization?.organizationId,
-          status: 'ACTIVE',
-          deletedAt: null,
-        },
-        select: { businessUnitId: true },
-      });
+      const organizationRow = organization
+        ? await transaction.organization.findUnique({
+            where: { id: organization.organizationId },
+            select: { ownerUserId: true },
+          })
+        : null;
+      const isOrganizationOwner = organizationRow?.ownerUserId === id;
+      const units = isOrganizationOwner
+        ? await transaction.businessUnit.findMany({
+            where: {
+              organizationId: organization?.organizationId,
+              status: 'ACTIVE',
+              deletedAt: null,
+            },
+            select: { id: true },
+            orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+          })
+        : await transaction.businessUnitMembership.findMany({
+            where: {
+              userId: id,
+              organizationId: organization?.organizationId,
+              status: 'ACTIVE',
+              deletedAt: null,
+            },
+            select: { businessUnitId: true },
+          });
+      const unitIds = units.map((unit) =>
+        'businessUnitId' in unit ? unit.businessUnitId : unit.id,
+      );
       await this.setLocal(
         transaction,
         'app.business_unit_ids',
-        units.map((unit) => unit.businessUnitId).join(','),
+        unitIds.join(','),
       );
-      return transaction.user.findUnique({
+      const user = await transaction.user.findUnique({
         where: { id },
         include: identityInclude,
       });
+      return user
+        ? { ...user, isOrganizationOwner, effectiveBusinessUnitIds: unitIds }
+        : null;
     });
   }
 
@@ -206,10 +233,34 @@ export class IdentityRepository {
       .then(() => undefined);
   }
 
+  findDelegatedRole(
+    organizationId: string,
+    roleId: string,
+    actorId: string,
+    businessUnitIds: readonly string[],
+  ) {
+    return this.prisma.$transaction(async (transaction) => {
+      await this.setLocal(transaction, 'app.user_id', actorId);
+      await this.setLocal(transaction, 'app.organization_id', organizationId);
+      await this.setLocal(
+        transaction,
+        'app.business_unit_ids',
+        businessUnitIds.join(','),
+      );
+      return transaction.role.findFirst({
+        where: { id: roleId, organizationId, deletedAt: null },
+      });
+    });
+  }
+
   listSessions(userId: string) {
     return this.prisma.session.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
+      // The profile UI is a security overview, not an audit export. A bounded
+      // latest-first window prevents an account with years of rotated or
+      // revoked sessions from creating an unbounded response.
+      take: 100,
       select: {
         id: true,
         client: true,
@@ -433,6 +484,14 @@ export class IdentityRepository {
       businessUnitId: string | null;
       roleId: string;
     },
+    /**
+     * A cota de usuários da plataforma, conferida **aqui dentro**.
+     *
+     * O aceite é anônimo: fora desta transação a organização nem existe para
+     * a política de RLS, e uma contagem feita lá fora voltaria zero. O
+     * chamador entrega a verificação; a transação empresta o contexto.
+     */
+    assertQuota?: (transaction: PrismaTransactionClient) => Promise<void>,
   ): Promise<void> {
     return this.prisma
       .$transaction(async (transaction) => {
@@ -468,6 +527,21 @@ export class IdentityRepository {
           create: { userId: user.id, passwordHash: input.passwordHash },
           update: {},
         });
+        /**
+         * Só cobra vaga quem ainda não ocupa uma: reaceitar um convite de
+         * quem já é membro ativo não consome uma segunda unidade (§60).
+         */
+        const jaAtivo = await transaction.organizationMembership.findFirst({
+          where: {
+            organizationId: input.organizationId,
+            userId: user.id,
+            status: 'ACTIVE',
+            deletedAt: null,
+          },
+          select: { id: true },
+        });
+        if (!jaAtivo) await assertQuota?.(transaction);
+
         await transaction.organizationMembership.upsert({
           where: {
             organizationId_userId: {

@@ -190,8 +190,7 @@ export function LocationsTab() {
 
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
         <Badge variant="outline">origem</Badge>
-        Cada posição traz de onde veio (aplicativo, web ou registro manual), e o
-        backend recusa data futura — um dispositivo com relógio adiantado não
+        Cada posição traz de onde veio (aplicativo, web ou registro manual), e uma data no futuro não é aceita — um dispositivo com relógio adiantado não
         envenena a ordenação.
       </div>
     </div>

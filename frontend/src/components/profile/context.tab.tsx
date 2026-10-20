@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Contexto ativo — organização, unidade, papéis, permissões e capabilities.
+ * Contexto ativo — organização, unidade e o que esta conta alcança.
  *
  * Tudo vem da **sessão da aplicação** (`GET /session`), que o BFF monta a
  * partir das claims do token. Nada é consultado de novo: é exatamente o que o
@@ -17,8 +17,9 @@
  * (`RequestContextProvider`), viaja como parâmetro nas consultas, e por isso é
  * oferecida.
  */
-import { Building2, Check, Layers, ShieldCheck } from "lucide-react";
+import { Building2, Layers, ShieldCheck } from "lucide-react";
 
+import { AccessSummary } from "@/components/access/access-summary";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -41,15 +42,13 @@ export function ContextTab() {
   return (
     <div className="max-w-3xl space-y-6">
       <section className="glass-panel space-y-4 rounded-xl p-5">
-        <h3 className="flex items-center gap-2 text-sm font-medium">
+        <h2 className="flex items-center gap-2 text-sm font-medium">
           <Building2 className="size-4 text-muted-foreground" aria-hidden />
           Organização
-        </h3>
+        </h2>
 
         <dl className="grid gap-4 sm:grid-cols-2">
-          <Entry label="Nome">
-            {session.organization?.displayName ?? "—"}
-          </Entry>
+          <Entry label="Nome">{session.organization?.displayName ?? "—"}</Entry>
           <Entry label="Plano">
             {session.entitlements ? (
               <Badge variant="outline">{session.entitlements.planKey}</Badge>
@@ -71,17 +70,17 @@ export function ContextTab() {
 
         {!scope.canSwitchOrganization ? (
           <p className="text-xs text-muted-foreground">
-            O backend deriva uma organização das claims do token e não aceita
-            outra por requisição — por isso a troca não é oferecida.
+            A organização vem da sua sessão e não pode ser trocada sem entrar de
+            novo — por isso a troca não é oferecida.
           </p>
         ) : null}
       </section>
 
       <section className="glass-panel space-y-4 rounded-xl p-5">
-        <h3 className="flex items-center gap-2 text-sm font-medium">
+        <h2 className="flex items-center gap-2 text-sm font-medium">
           <Layers className="size-4 text-muted-foreground" aria-hidden />
           Unidade ativa
-        </h3>
+        </h2>
 
         {scope.canSwitchBusinessUnit ? (
           <div className="max-w-sm space-y-2">
@@ -119,70 +118,24 @@ export function ContextTab() {
       </section>
 
       <section className="glass-panel space-y-4 rounded-xl p-5">
-        <h3 className="flex items-center gap-2 text-sm font-medium">
-          <ShieldCheck className="size-4 text-muted-foreground" aria-hidden />
-          Papéis e permissões efetivas
-        </h3>
+        <h2 className="flex items-center gap-2 text-sm font-medium">
+          <ShieldCheck className="size-4 text-muted-foreground" aria-hidden />O
+          que você pode fazer
+        </h2>
 
-        <div className="space-y-3">
-          <div>
-            <p className="text-xs text-muted-foreground">Papéis</p>
-            <ul className="mt-1 flex flex-wrap gap-1.5">
-              {session.roles.length > 0 ? (
-                session.roles.map((role) => (
-                  <li key={role}>
-                    <Badge variant="outline">{role}</Badge>
-                  </li>
-                ))
-              ) : (
-                <li className="text-sm text-muted-foreground">Nenhum</li>
-              )}
-            </ul>
-          </div>
-
-          <div>
-            <p className="text-xs text-muted-foreground">
-              Permissões ({session.permissions.length})
-            </p>
-            <ul className="mt-1 flex flex-wrap gap-1">
-              {session.permissions.map((permission) => (
-                <li key={permission}>
-                  <span className="rounded-md bg-surface-strong px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
-                    {permission}
-                  </span>
-                </li>
-              ))}
-            </ul>
-            {session.permissions.includes("*") ? (
-              <p className="mt-1 text-xs text-muted-foreground">
-                <span className="font-mono">*</span> concede tudo — é o papel de
-                dono da organização.
-              </p>
-            ) : null}
-          </div>
-
-          <div>
-            <p className="text-xs text-muted-foreground">
-              Capabilities do plano ({session.capabilities.length})
-            </p>
-            <ul className="mt-1 flex flex-wrap gap-1">
-              {session.capabilities.map((capability) => (
-                <li key={capability}>
-                  <span className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-1.5 py-0.5 font-mono text-[11px] text-primary">
-                    <Check className="size-2.5" />
-                    {capability}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-
-        <p className="text-xs text-muted-foreground">
-          O backend exige permissão <em>e</em> capability: a primeira vem do
-          papel, a segunda do plano. É por isso que um recurso pode faltar mesmo
-          para quem tem todas as permissões.
-        </p>
+        {/*
+         * Aqui havia `session.roles`, `session.permissions` e
+         * `session.capabilities` — três listas em monoespaçada com as chaves
+         * cruas que o backend usa para autorizar. Era o modelo de dados
+         * exposto como se fosse informação: quem abre o próprio perfil quer
+         * saber se consegue lançar um atendimento, não que existe uma string
+         * `operations.create`.
+         *
+         * `AccessSummary` responde a mesma pergunta pelos registries, em
+         * frases, e separa o que falta por plano do que falta por papel — que
+         * se resolvem com pessoas diferentes.
+         */}
+        <AccessSummary />
       </section>
     </div>
   );

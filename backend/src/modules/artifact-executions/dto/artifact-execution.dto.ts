@@ -19,6 +19,10 @@ import {
   ValidateNested,
 } from 'class-validator';
 
+/* A lista dos estados de emissão vive nos read models do módulo — o DTO a
+   reusa em vez de repetir cinco strings que sairiam de sincronia. */
+import { ARTIFACT_RENDER_STATUSES } from '../artifact-execution.read-models';
+
 const upper = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim().toUpperCase() : value;
 const idPattern = /^[a-zA-Z][a-zA-Z0-9_.-]*$/;
@@ -185,6 +189,12 @@ export class CollectArtifactSignatureDto {
   @MaxLength(32)
   signerDocument?: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() userId?: string;
+  @ApiPropertyOptional({
+    enum: ['FIELD_TECHNICIAN', 'TECHNICAL_RESPONSIBLE', 'CUSTOMER'],
+  })
+  @IsOptional()
+  @IsIn(['FIELD_TECHNICIAN', 'TECHNICAL_RESPONSIBLE', 'CUSTOMER'])
+  signedAs?: 'FIELD_TECHNICIAN' | 'TECHNICAL_RESPONSIBLE' | 'CUSTOMER';
   @ApiProperty({ type: Object }) @IsObject() signatureData!: Record<
     string,
     unknown
@@ -210,6 +220,41 @@ export class ArtifactExecutionQueryDto {
   @IsOptional()
   @IsIn(ARTIFACT_EXECUTION_STATUSES)
   status?: string;
+  /**
+   * Estado da emissão, que não é o status da execução.
+   *
+   * Uma execução aprovada pode não ter documento, e uma em revisão pode ter uma
+   * emissão falhada. A central documental pergunta pelo documento; sem este
+   * filtro ela só podia agrupar a página carregada, e a contagem de cada fila
+   * era a da página, não da organização.
+   */
+  @ApiPropertyOptional({ enum: ARTIFACT_RENDER_STATUSES })
+  @IsOptional()
+  @IsIn(ARTIFACT_RENDER_STATUSES)
+  renderStatus?: string;
+  /**
+   * Tipo do artefato, como o snapshot congelou.
+   *
+   * O filtro é pelo snapshot e não pelo template: o tipo do documento emitido é
+   * o que valia quando a execução nasceu. Trocar o `artifactType` do template
+   * depois não deve reescrever o passado da listagem.
+   */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  @Transform(upper)
+  artifactType?: string;
+  /** Início do período, pela criação da execução. Inclusivo. */
+  @ApiPropertyOptional({ format: 'date-time' })
+  @IsOptional()
+  @IsDateString()
+  createdFrom?: string;
+  /** Fim do período. Inclusivo — ver `endOfDay` no repositório. */
+  @ApiPropertyOptional({ format: 'date-time' })
+  @IsOptional()
+  @IsDateString()
+  createdTo?: string;
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

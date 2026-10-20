@@ -10,8 +10,10 @@ import {
   Post,
   Query,
   Req,
+  Res,
 } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiProduces, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { Permissions } from '../../../../decorators';
 import { ForbiddenException } from '../../../../exceptions';
 import { ParseUUIDv7Pipe } from '../../../../pipes';
@@ -22,12 +24,17 @@ import {
 } from '../../../subscription-plans/plan-access';
 import { AssetQueryDto, CreateAssetDto, UpdateAssetDto } from './asset.dto';
 import { AssetService } from './asset.service';
+import { EquipmentQrRenderQueryDto } from './equipment-qr.dto';
+import { EquipmentQrService } from './equipment-qr.service';
 
 @ApiTags('Assets')
 @Controller('assets')
 @RequiresActivePlan()
 export class AssetController {
-  constructor(private readonly assets: AssetService) {}
+  constructor(
+    private readonly assets: AssetService,
+    private readonly equipmentQr: EquipmentQrService,
+  ) {}
 
   @Get()
   @Capabilities('assets.read')
@@ -44,6 +51,93 @@ export class AssetController {
     @Req() request: IdentityRequest,
   ) {
     return this.assets.resolve(identifier, this.organizationId(request));
+  }
+
+  @Get('qr/:token')
+  @Capabilities('assets.read')
+  @Permissions('assets.read')
+  @ApiOperation({
+    summary: 'Resolve authenticated Equipment QR identity for field use',
+  })
+  resolveQr(@Param('token') token: string, @Req() request: IdentityRequest) {
+    return this.equipmentQr.resolve(token, this.actor(request));
+  }
+
+  @Get(':id/qr')
+  @Capabilities('assets.read')
+  @Permissions('assets.read')
+  qrSummary(
+    @Param('id', ParseUUIDv7Pipe) id: string,
+    @Req() request: IdentityRequest,
+  ) {
+    return this.equipmentQr.summary(id, this.actor(request));
+  }
+
+  @Post(':id/qr/ensure')
+  @Capabilities('assets.manage', 'assets.qr.manage')
+  @Permissions('assets.qr.manage')
+  ensureQr(
+    @Param('id', ParseUUIDv7Pipe) id: string,
+    @Req() request: IdentityRequest,
+  ) {
+    return this.equipmentQr.ensure(id, this.actor(request));
+  }
+
+  @Post(':id/qr/rotate')
+  @Capabilities('assets.manage', 'assets.qr.manage')
+  @Permissions('assets.qr.manage')
+  rotateQr(
+    @Param('id', ParseUUIDv7Pipe) id: string,
+    @Req() request: IdentityRequest,
+  ) {
+    return this.equipmentQr.rotate(id, this.actor(request));
+  }
+
+  @Post(':id/qr/revoke')
+  @Capabilities('assets.manage', 'assets.qr.manage')
+  @Permissions('assets.qr.manage')
+  revokeQr(
+    @Param('id', ParseUUIDv7Pipe) id: string,
+    @Req() request: IdentityRequest,
+  ) {
+    return this.equipmentQr.revoke(id, this.actor(request));
+  }
+
+  @Get(':id/qr/render')
+  @Capabilities('assets.read')
+  @Permissions('assets.read')
+  @ApiProduces('image/svg+xml', 'image/png', 'application/pdf')
+  async renderQr(
+    @Param('id', ParseUUIDv7Pipe) id: string,
+    @Req() request: IdentityRequest,
+    @Query() query: EquipmentQrRenderQueryDto,
+    @Res() response: Response,
+  ) {
+    const rendered = await this.equipmentQr.render(
+      id,
+      this.actor(request),
+      query,
+    );
+    response.setHeader('Content-Type', rendered.contentType);
+    response.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${rendered.fileName}"`,
+    );
+    response.setHeader('Cache-Control', 'private, no-store');
+    response.send(rendered.bytes);
+  }
+
+  @Get(':id/service-order-preparation')
+  @Capabilities('assets.read', 'operations.manage')
+  @Permissions('operations.create')
+  @ApiOperation({
+    summary: 'Prepare a service order without creating an Operation',
+  })
+  serviceOrderPreparation(
+    @Param('id', ParseUUIDv7Pipe) id: string,
+    @Req() request: IdentityRequest,
+  ) {
+    return this.equipmentQr.serviceOrderPreparation(id, this.actor(request));
   }
 
   @Get(':id')
@@ -89,5 +183,17 @@ export class AssetController {
     const id = request.identity?.organizationId;
     if (!id) throw new ForbiddenException('Organization context is required');
     return id;
+  }
+
+  private actor(request: IdentityRequest) {
+    const identity = request.identity;
+    if (!identity?.organizationId)
+      throw new ForbiddenException('Organization context is required');
+    return {
+      organizationId: identity.organizationId,
+      actorId: identity.id,
+      businessUnitIds: identity.businessUnitIds,
+      permissions: identity.permissions,
+    };
   }
 }

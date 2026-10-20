@@ -37,18 +37,24 @@ export function SchedulingTabs() {
   const [tab, setTab] = useState<SchedulingTab>(TABS.overview);
 
   return (
-    <Tabs
-      value={tab}
-      onValueChange={(value) => setTab(value as SchedulingTab)}
-      className="space-y-6"
-    >
-      <ContentContainer size="wide">
+    /**
+     * Um contêiner para a página inteira.
+     *
+     * Havia três — um à volta da lista de abas e um dentro de cada painel — e
+     * cada um trazia o seu `py-6`. Somados ao espaçamento das abas, a Agenda
+     * abria com 72px entre a aba e o primeiro conteúdo, contra 28px das
+     * restantes páginas. A gutter da página é uma decisão só, e é esta.
+     */
+    <ContentContainer size="wide">
+      <Tabs
+        value={tab}
+        onValueChange={(value) => setTab(value as SchedulingTab)}
+      >
         <TabsList>
           <TabsTrigger value={TABS.overview}>Visão geral</TabsTrigger>
           <TabsTrigger value={TABS.reminders}>Lembretes</TabsTrigger>
           <TabsTrigger value={TABS.calendar}>Calendário</TabsTrigger>
         </TabsList>
-      </ContentContainer>
 
       {/*
        * Cada aba monta e desmonta o seu conteúdo.
@@ -56,23 +62,20 @@ export function SchedulingTabs() {
        * Manter as três montadas deixaria três conjuntos de consultas em
        * polling ao mesmo tempo — a agenda recarrega a cada dois minutos.
        */}
-      <TabsContent value={TABS.overview}>
-        {tab === TABS.overview ? <SchedulingWorkspace /> : null}
-      </TabsContent>
+        <TabsContent value={TABS.overview}>
+          {tab === TABS.overview ? <SchedulingWorkspace /> : null}
+        </TabsContent>
 
-      <TabsContent value={TABS.reminders}>
-        {tab === TABS.reminders ? (
-          <ContentContainer size="wide" className="space-y-6">
-            <ReminderCenter />
-          </ContentContainer>
-        ) : null}
-      </TabsContent>
+        <TabsContent value={TABS.reminders}>
+          {tab === TABS.reminders ? <ReminderCenter /> : null}
+        </TabsContent>
 
-      <TabsContent value={TABS.calendar}>
-        {tab === TABS.calendar ? (
-          <SchedulingWorkspace layout="calendar" initialView="MONTH" />
-        ) : null}
-      </TabsContent>
-    </Tabs>
+        <TabsContent value={TABS.calendar}>
+          {tab === TABS.calendar ? (
+            <SchedulingWorkspace layout="calendar" initialView="MONTH" />
+          ) : null}
+        </TabsContent>
+      </Tabs>
+    </ContentContainer>
   );
 }

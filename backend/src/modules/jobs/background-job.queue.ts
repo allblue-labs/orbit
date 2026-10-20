@@ -268,11 +268,14 @@ export class BackgroundJobQueue {
    */
   async fail(
     job: BackgroundJobRecord,
-    reason: string,
+    failureCode: string,
     permanent = false,
   ): Promise<'RETRY' | 'DEAD'> {
     const exhausted = permanent || job.attempts >= job.maxAttempts;
     const delay = backoffFor(job.attempts);
+    const safeFailureCode = /^[A-Z0-9_.:-]{1,160}$/.test(failureCode)
+      ? failureCode
+      : 'UNCLASSIFIED_FAILURE';
 
     await this.asWorker((tx) =>
       tx.backgroundJob.update({
@@ -283,7 +286,10 @@ export class BackgroundJobQueue {
           lockedAt: null,
           lockedBy: null,
           finishedAt: exhausted ? new Date() : null,
-          lastError: reason.slice(0, 1000),
+          // A fila nunca persiste mensagem de exceção arbitrária: provider
+          // errors can carry URLs, tokens or customer data. Diagnostics use a
+          // bounded server-owned category instead.
+          lastError: safeFailureCode,
         },
       }),
     );
@@ -297,7 +303,7 @@ export class BackgroundJobQueue {
         maxAttempts: job.maxAttempts,
         outcome: exhausted ? 'DEAD' : 'RETRY',
         retryInMs: exhausted ? null : delay,
-        reason,
+        failureCode: safeFailureCode,
       }),
     );
 

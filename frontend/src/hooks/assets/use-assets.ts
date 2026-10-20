@@ -55,7 +55,11 @@ const SCHEDULE_HORIZON_DAYS = 90;
 /** Quantos registros relacionados cada painel mostra. */
 export const RELATED_PAGE_SIZE = 5;
 
-export function useAssetsList(query: AssetQuery) {
+export function useAssetsList(
+  query: AssetQuery,
+  /** `enabled` para quem só pergunta depois de escolher o cliente. */
+  options?: { enabled?: boolean },
+) {
   return useApiQuery(
     assetsService.keys.list(query),
     ({ signal }) => assetsService.list(query, { signal }),
@@ -63,6 +67,7 @@ export function useAssetsList(query: AssetQuery) {
       ...ASSETS_REFRESH.list,
       /** Mantém a página anterior visível durante a troca de página. */
       placeholderData: (previous) => previous,
+      ...(options ?? {}),
     },
   );
 }
@@ -163,7 +168,7 @@ export function useCreateAsset() {
   const options = useAssetWriteOptions();
   return useApiMutation(
     (input: CreateAssetInput) => assetsService.create(input),
-    options,
+    { ...options, notify: "Equipamento cadastrado" },
   );
 }
 
@@ -171,13 +176,14 @@ export function useUpdateAsset(id: string) {
   const options = useAssetWriteOptions(id);
   return useApiMutation(
     (input: UpdateAssetInput) => assetsService.update(id, input),
-    { ...options, scope: { id: `assets:${id}` } },
+    { ...options, scope: { id: `assets:${id}` }, notify: "Equipamento atualizado" },
   );
 }
 
 export function useRemoveAsset() {
   const queryClient = useQueryClient();
   return useApiMutation((id: string) => assetsService.remove(id), {
+    notify: "Equipamento removido",
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: assetsService.keys.module() }),
   });

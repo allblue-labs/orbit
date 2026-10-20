@@ -3,19 +3,31 @@
 /**
  * Linhas da central.
  *
- * Cada linha é uma **execução** e o documento que ela produziu. Os vínculos —
- * operação, cliente, equipamento, artefato — são resolvidos pelo **Entity
- * Registry**: nenhuma rota é montada à mão, e uma entidade sem tela registrada
- * simplesmente não vira link.
+ * ## Duas origens, duas formas de linha
  *
- * A listagem publica identificadores, não nomes. Resolver cada um viraria N+1
- * por página; os nomes aparecem no Workspace da execução, onde é uma leitura
- * por vínculo. É a mesma decisão da listagem de execuções.
+ * A central lista o que a organização emitiu, e isso vem de dois motores. Uma
+ * **execução** tem código, título, cliente e atendimento. Um **relatório
+ * gerencial** retrata a operação inteira num intervalo: não tem código nem
+ * cliente, e se identifica pelo tipo e pelo período. Cada linha mostra o que ela
+ * tem — inventar um código para quem não tem seria pior que a coluna vazia.
+ *
+ * Quem decide o que cada linha diz e para onde ela leva é `issued-document-row`,
+ * e não este arquivo: a concordância do texto e o destino do link precisam ser
+ * prováveis, e dentro do `map` da tabela não são.
+ *
+ * ## Os vínculos continuam vindo do Entity Registry
+ *
+ * Operação e cliente viram link por ele: nenhuma rota é montada à mão, e uma
+ * entidade sem tela registrada simplesmente não vira link.
+ *
+ * A listagem publica identificadores, não nomes. Resolver cada um viraria N+1 por
+ * página; os nomes aparecem na tela do item, onde é uma leitura por vínculo.
  */
 import { ArrowRight, FileStack } from "lucide-react";
 import Link from "next/link";
 
 import { EmptyState } from "@/components/feedback/states";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -28,22 +40,35 @@ import {
 import { RenderStatusBadge } from "@/documents";
 import { EntityLink } from "@/entities/entity-components";
 import { formatDateTime } from "@/lib/formatters";
-import { ROUTES } from "@/lib/routes";
-import type { ArtifactExecutionListItem } from "@/types/artifact-executions";
+import { cn } from "@/lib/utils";
+import {
+  ISSUED_DOCUMENT_SOURCE_LABELS,
+  type IssuedDocument,
+} from "@/types/issued-documents";
+import {
+  hasRevisionHistory,
+  issuedDocumentHref,
+  issuedDocumentIdentity,
+  issuedDocumentTypeLabel,
+  type ReportTypeLabels,
+} from "./issued-document-row";
 
 export function DocumentList({
-  executions,
+  documents,
+  reportTypes,
   onOpen,
 }: {
-  executions: readonly ArtifactExecutionListItem[];
+  documents: readonly IssuedDocument[];
+  /** Rótulos de tipo de relatório, como o catálogo do servidor os publica. */
+  reportTypes: ReportTypeLabels;
   onOpen: (executionId: string) => void;
 }) {
-  if (executions.length === 0) {
+  if (documents.length === 0) {
     return (
       <EmptyState
         icon={<FileStack className="size-5" />}
         title="Nada nesta fila"
-        description="As execuções desta página não estão neste estado de renderização."
+        description="Nenhum documento desta página está nesta situação."
       />
     );
   }
@@ -53,76 +78,120 @@ export function DocumentList({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Execução</TableHead>
             <TableHead>Documento</TableHead>
+            {/*
+              O tipo aparece.
+
+              Dava para **filtrar** por tipo e não dava para vê-lo: quem escolhia
+              "PMOC" no filtro não tinha como conferir na lista que era isso que
+              estava vendo — um filtro cujo efeito não se verifica.
+            */}
+            <TableHead>Tipo</TableHead>
+            <TableHead>Origem</TableHead>
+            <TableHead>Arquivo</TableHead>
             <TableHead>Vínculos</TableHead>
-            <TableHead>Atualizado</TableHead>
+            <TableHead>Emitido</TableHead>
             <TableHead className="w-20" />
           </TableRow>
         </TableHeader>
         <TableBody>
-          {executions.map((execution) => (
-            <TableRow key={execution.id}>
-              <TableCell>
-                <Link
-                  href={`${ROUTES.executions}/${execution.id}`}
-                  className="block min-w-0 space-y-0.5 hover:underline"
-                >
-                  <span className="block truncate font-medium">
-                    {execution.title}
-                  </span>
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {execution.code}
-                  </span>
-                </Link>
-              </TableCell>
-
-              <TableCell>
-                <RenderStatusBadge status={execution.renderStatus} />
-              </TableCell>
-
-              <TableCell>
-                <div className="flex flex-wrap gap-1.5 text-xs">
-                  {execution.operationId ? (
-                    <EntityLink entity="operation" id={execution.operationId}>
-                      Operação
-                    </EntityLink>
-                  ) : null}
-                  {execution.customerId ? (
-                    <EntityLink entity="customer" id={execution.customerId}>
-                      Cliente
-                    </EntityLink>
-                  ) : null}
-                  {execution.assetId ? (
-                    <EntityLink entity="asset" id={execution.assetId}>
-                      Equipamento
-                    </EntityLink>
-                  ) : null}
-                  <EntityLink
-                    entity="artifact-template"
-                    id={execution.templateId}
+          {documents.map((document) => {
+            const identidade = issuedDocumentIdentity(document, reportTypes);
+            return (
+              <TableRow key={`${document.source}-${document.id}`}>
+                <TableCell>
+                  <Link
+                    href={issuedDocumentHref(document)}
+                    className="block min-w-0 space-y-0.5 hover:underline"
                   >
-                    Artefato
-                  </EntityLink>
-                </div>
-              </TableCell>
+                    <span className="block truncate font-medium">
+                      {identidade.primary}
+                    </span>
+                    {identidade.secondary ? (
+                      <span
+                        className={cn(
+                          "text-xs text-muted-foreground",
+                          identidade.secondaryIsCode && "font-mono",
+                        )}
+                      >
+                        {identidade.secondary}
+                      </span>
+                    ) : null}
+                  </Link>
+                </TableCell>
 
-              <TableCell className="text-sm text-muted-foreground">
-                {formatDateTime(execution.updatedAt)}
-              </TableCell>
+                <TableCell className="text-sm">
+                  {issuedDocumentTypeLabel(document, reportTypes)}
+                </TableCell>
 
-              <TableCell>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => onOpen(execution.id)}
-                >
-                  Abrir
-                  <ArrowRight className="size-4" />
-                </Button>
-              </TableCell>
-            </TableRow>
-          ))}
+                <TableCell>
+                  <Badge variant="outline" className="text-xs font-normal">
+                    {ISSUED_DOCUMENT_SOURCE_LABELS[document.source]}
+                  </Badge>
+                </TableCell>
+
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <RenderStatusBadge status={document.renderStatus} />
+                    {/*
+                      Quantas vezes saiu, quando saiu mais de uma.
+
+                      Reemitir não substitui em silêncio — a revisão anterior fica
+                      no histórico —, e quem procura "o documento que mandei" precisa
+                      saber que existe mais de uma versão dele.
+                    */}
+                    {document.revisions > 1 ? (
+                      <span className="text-xs text-muted-foreground">
+                        {document.revisions} revisões
+                      </span>
+                    ) : null}
+                  </div>
+                </TableCell>
+
+                <TableCell>
+                  <div className="flex flex-wrap gap-1.5 text-xs">
+                    {document.operationId ? (
+                      <EntityLink entity="operation" id={document.operationId}>
+                        Operação
+                      </EntityLink>
+                    ) : null}
+                    {document.customerId ? (
+                      <EntityLink entity="customer" id={document.customerId}>
+                        Cliente
+                      </EntityLink>
+                    ) : null}
+                  </div>
+                </TableCell>
+
+                {/*
+                  A data da emissão, e não a da última alteração.
+                  "Atualizado" respondia quando a execução mexeu por último, que
+                  numa aba chamada Documentos emitidos é a pergunta errada.
+                */}
+                <TableCell className="text-sm text-muted-foreground">
+                  {document.issuedAt ? formatDateTime(document.issuedAt) : "—"}
+                </TableCell>
+
+                <TableCell>
+                  {/*
+                    O visualizador folheia manifestos, e relatório gerencial não
+                    tem manifesto — tem um arquivo, que a página dele entrega.
+                    Oferecer "abrir" aqui abriria um visualizador vazio.
+                  */}
+                  {hasRevisionHistory(document) ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onOpen(document.id)}
+                    >
+                      Abrir
+                      <ArrowRight className="size-4" />
+                    </Button>
+                  ) : null}
+                </TableCell>
+              </TableRow>
+            );
+          })}
         </TableBody>
       </Table>
     </div>

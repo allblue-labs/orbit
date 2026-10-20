@@ -69,6 +69,11 @@ export class SubscriptionPlanRepository {
             externalCustomerId: true,
             externalSubscriptionId: true,
             plan: true,
+            subscriptions: {
+              where: { endedAt: null },
+              orderBy: { startedAt: 'desc' },
+              take: 1,
+            },
           },
         });
 
@@ -115,6 +120,11 @@ export class SubscriptionPlanRepository {
           externalCustomerId: true,
           externalSubscriptionId: true,
           plan: true,
+          subscriptions: {
+            where: { endedAt: null },
+            orderBy: { startedAt: 'desc' },
+            take: 1,
+          },
         },
       }),
     );
@@ -167,34 +177,6 @@ export class SubscriptionPlanRepository {
         category: 'TRANSACTION_FAILURE',
       });
     }
-  }
-
-  changeSubscription(
-    organizationId: string,
-    planId: string,
-    data: {
-      status: string;
-      periodStart: Date;
-      periodEnd: Date;
-      externalCustomerId?: string;
-      externalSubscriptionId?: string;
-    },
-  ) {
-    return this.rls.run((transaction) =>
-      transaction.organization.update({
-        where: { id: organizationId },
-        data: {
-          planId,
-          subscriptionStatus: data.status,
-          subscriptionStartedAt: data.periodStart,
-          currentPeriodStart: data.periodStart,
-          currentPeriodEnd: data.periodEnd,
-          externalCustomerId: data.externalCustomerId,
-          externalSubscriptionId: data.externalSubscriptionId,
-        },
-        include: { plan: true },
-      }),
-    );
   }
 
   updateSubscriptionState(

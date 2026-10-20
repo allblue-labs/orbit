@@ -62,6 +62,8 @@ String fakeAccessToken({
   String? businessUnitId = 'unit-1',
   List<String> roles = const ['OWNER'],
   List<String> permissions = const ['*'],
+  List<String> allowedSurfaces = const ['WEB', 'MOBILE', 'API'],
+  bool isOrganizationOwner = false,
   DateTime? expiresAt,
 }) {
   String segment(Map<String, dynamic> value) =>
@@ -76,6 +78,8 @@ String fakeAccessToken({
         'businessUnitIds': [if (businessUnitId != null) businessUnitId],
         'roles': roles,
         'permissions': permissions,
+        'allowedSurfaces': allowedSurfaces,
+        'isOrganizationOwner': isOrganizationOwner,
         'type': 'access',
         if (expiresAt != null) 'exp': expiresAt.millisecondsSinceEpoch ~/ 1000,
       })}.assinatura';
@@ -109,6 +113,7 @@ OrbitSession sessionFrom({
   List<String> roles = const ['OWNER'],
   String? organizationId = 'org-1',
   String? businessUnitId = 'unit-1',
+  bool isOrganizationOwner = false,
 }) {
   final claims = AccessTokenClaims.fromJson({
     'sub': 'user-1',
@@ -118,6 +123,8 @@ OrbitSession sessionFrom({
     'businessUnitIds': [if (businessUnitId != null) businessUnitId],
     'roles': roles,
     'permissions': permissions,
+    'allowedSurfaces': const ['WEB', 'MOBILE', 'API'],
+    'isOrganizationOwner': isOrganizationOwner,
     'type': 'access',
   });
 

@@ -128,7 +128,7 @@ export async function httpRequest(request: HttpRequest): Promise<Response> {
         request.signal,
       );
     } catch (error) {
-      const apiError = toApiError(error, "Falha de conexão com o servidor.");
+      const apiError = toApiError(error, "Não foi possível conectar. Verifique sua conexão.");
       if (attempt >= maxRetries || !isRetryableError(apiError)) throw apiError;
       await wait(retryDelay(attempt), request.signal);
     } finally {

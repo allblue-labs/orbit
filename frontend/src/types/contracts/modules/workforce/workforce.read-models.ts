@@ -101,3 +101,55 @@ export interface MemberLocationReadModel {
   recordedAt: string;
   ageMinutes: number;
 }
+
+export type PublicProfessionalRole =
+  'FIELD_TECHNICIAN' | 'TECHNICAL_RESPONSIBLE';
+
+export interface ProfessionalCredentialReadModel {
+  id: string;
+  type: 'CREA' | 'CFT' | 'CRT' | 'OTHER';
+  registrationNumber: string;
+  region: string | null;
+  issuingAuthority: string | null;
+  displayLabel: string | null;
+  active: boolean;
+  createdAt: string;
+  revokedAt: string | null;
+}
+
+export interface ProfessionalProfileReadModel {
+  id: string;
+  userId: string;
+  displayName: string;
+  professionalRoles: readonly PublicProfessionalRole[];
+  active: boolean;
+  signatureAvailable: boolean;
+  professionalCredentials: readonly ProfessionalCredentialReadModel[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Contrato mínimo para seletores. Nunca publica asset, e-mail ou RBAC. */
+export interface EligibleProfessionalReadModel {
+  id: string;
+  name: string;
+  signatureAvailable: boolean;
+  professionalCredential: ProfessionalCredentialReadModel | null;
+  active: boolean;
+}
+
+export type ProfessionalEligibilityBlockedReason =
+  | 'PROFESSIONAL_PROFILE_INACTIVE'
+  | 'PROFESSIONAL_ROLE_MISSING'
+  | 'SIGNATURE_MISSING'
+  | 'BUSINESS_UNIT_SCOPE_MISSING'
+  | 'DOCUMENT_POLICY_DENIED';
+
+export interface ProfessionalEligibilityReadModel {
+  userId: string;
+  documentType: string;
+  signedAs: PublicProfessionalRole;
+  eligible: boolean;
+  blockedReason: ProfessionalEligibilityBlockedReason | null;
+  signatureAvailable: boolean;
+}

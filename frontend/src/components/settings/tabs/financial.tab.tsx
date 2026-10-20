@@ -102,8 +102,7 @@ export function FinancialSettingsTab() {
                 <p className="text-xs text-muted-foreground">
                   Quando um recibo é <strong>oficialmente emitido</strong>, o
                   valor do documento vira uma receita já confirmada, vinculada
-                  ao cliente e à operação. O gatilho é a emissão — renderizar um
-                  PDF não lança nada.
+                  ao cliente e à operação. O gatilho é a emissão oficial — gerar um PDF não lança nada.
                 </p>
               </div>
               <Switch

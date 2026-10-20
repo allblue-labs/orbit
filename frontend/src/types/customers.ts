@@ -23,6 +23,7 @@ import type {
   CustomerContactReadModel,
   CustomerCountsReadModel,
   CustomerReadModel,
+  CustomerAddressReadModel,
 } from "./contracts/modules/organizations/business-units/customers/customer.read-models";
 
 export type { CustomerStatus, CustomerType };
@@ -124,3 +125,27 @@ export const ADDRESS_KEYS = [
   "postalCode",
   "country",
 ] as const;
+
+/* ------------------------------------------------------------------ */
+/* Endereços de atendimento                                            */
+/* ------------------------------------------------------------------ */
+
+export type CustomerAddress = CustomerAddressReadModel;
+
+/** `POST /customers/:id/addresses`. */
+export interface CreateCustomerAddressInput {
+  label: string;
+  street: string;
+  city: string;
+  number?: string;
+  complement?: string;
+  district?: string;
+  stateCode?: string;
+  postalCode?: string;
+  notes?: string;
+  isPrimary?: boolean;
+}
+
+export type UpdateCustomerAddressInput = Partial<CreateCustomerAddressInput> & {
+  isActive?: boolean;
+};

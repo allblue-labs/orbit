@@ -11,11 +11,14 @@
  * remendar o estado local.
  */
 import { apiClient } from "@/api/client";
+import { downloadAndSave, type DownloadResult } from "@/api/transfer";
 import { queryKeys, type QueryKey } from "@/api/query-keys";
 import type { PaginatedResult, QueryParams, RequestOptions } from "@/types/api";
+import type { ArtifactExecution } from "@/types/artifact-executions";
 import type {
   AddQuoteItemInput,
   ConvertQuoteInput,
+  CreateQuoteFromOperationInput,
   CreateQuoteInput,
   Quote,
   QuoteQuery,
@@ -59,6 +62,15 @@ export const quotesService = {
   create: (input: CreateQuoteInput): Promise<Quote> =>
     apiClient.post<Quote>(PATH, input),
 
+  /**
+   * A proposta copiada de um atendimento concluído.
+   *
+   * Rota própria porque são duas operações diferentes com a mesma aparência:
+   * criar recebe os dados, copiar **lê** um registro que já existe.
+   */
+  createFromOperation: (input: CreateQuoteFromOperationInput): Promise<Quote> =>
+    apiClient.post<Quote>(`${PATH}/from-operation`, input),
+
   update: (id: string, input: UpdateQuoteInput): Promise<Quote> =>
     apiClient.patch<Quote>(quote(id), input),
 
@@ -101,4 +113,31 @@ export const quotesService = {
   /** Idempotente no servidor: repetir devolve a mesma operação. */
   convert: (id: string, input: ConvertQuoteInput = {}): Promise<Quote> =>
     apiClient.post<Quote>(`${quote(id)}/convert-to-operation`, input),
+
+  /* ---------------------------------------------------------------- */
+  /* Documento                                                         */
+  /* ---------------------------------------------------------------- */
+
+  /**
+   * Baixa a proposta impressa.
+   *
+   * Desenhada na hora, do estado atual — não passa pela fila nem abre revisão,
+   * porque um orçamento é editado enquanto é rascunho e cada reimpressão viraria
+   * versão de um documento que ninguém executou.
+   *
+   * O nome do arquivo vem do `Content-Disposition`: é o servidor que decide como
+   * o arquivo se chama, e montar `ORC-000042.pdf` aqui duplicaria essa regra.
+   */
+  document: (id: string): Promise<DownloadResult> =>
+    downloadAndSave(`${quote(id)}/document`),
+
+  /**
+   * Emitir o documento oficial da proposta.
+   *
+   * Devolve a **execução de artefato** criada, não um arquivo: emitir cria o
+   * documento com código e revisão, e a assinatura do proponente acontece na tela
+   * da execução. É o mesmo desenho do recibo — a chamada cria, a tela conclui.
+   */
+  issueDocument: (id: string): Promise<ArtifactExecution> =>
+    apiClient.post<ArtifactExecution>(`${quote(id)}/document/issue`, {}),
 };

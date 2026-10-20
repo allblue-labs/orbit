@@ -55,6 +55,58 @@ describe('SubscriptionPlanService', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
+  it('uses the canonical subscription instead of stale organization fields', async () => {
+    const start = new Date('2026-07-01T00:00:00.000Z');
+    const end = new Date('2099-08-01T00:00:00.000Z');
+    repository.getOrganizationEntitlements.mockResolvedValue({
+      subscriptionStatus: 'TRIALING',
+      currentPeriodStart: start,
+      currentPeriodEnd: end,
+      plan: {
+        key: 'PROFESSIONAL',
+        capabilities: ['operations.read'],
+        limits: {},
+      },
+      subscriptions: [
+        {
+          status: 'PENDING_PAYMENT',
+          planCode: 'PROFESSIONAL',
+          billingInterval: 'MONTHLY',
+          billingAnchorAt: start,
+          currentPeriodStart: start,
+          currentPeriodEnd: end,
+          trialEndsAt: null,
+          graceStartsAt: null,
+          graceEndsAt: null,
+          providerSubscriptionId: null,
+          cancelAtPeriodEnd: false,
+          pendingEffectiveAt: null,
+          pendingPlanCode: null,
+        },
+      ],
+    });
+
+    await expect(
+      service.getEntitlements('organization-id'),
+    ).resolves.toMatchObject({
+      planKey: 'PROFESSIONAL',
+      subscriptionStatus: 'PENDING_PAYMENT',
+    });
+  });
+
+  it('keeps access during the bounded payment grace period', () => {
+    expect(
+      service.grantsAccess({
+        planKey: 'PROFESSIONAL',
+        subscriptionStatus: 'GRACE_PERIOD',
+        capabilities: [],
+        limits: {},
+        currentPeriodStart: new Date('2026-07-01T00:00:00.000Z'),
+        currentPeriodEnd: new Date('2026-08-01T00:00:00.000Z'),
+      }),
+    ).toBe(true);
+  });
+
   it('keeps a successful null lookup as not found', async () => {
     repository.getOrganizationEntitlements.mockResolvedValue(null);
     await expect(service.getEntitlements('missing')).rejects.toBeInstanceOf(

@@ -202,6 +202,21 @@ describe('Quotes (e2e)', () => {
     for (let round = 0; round < rounds; round += 1) await worker.tick();
   }
 
+  async function drainUntil<T>(
+    probe: () => Promise<T>,
+    ready: (value: T) => boolean,
+    rounds = 40,
+  ): Promise<T> {
+    for (let round = 0; round < rounds; round += 1) {
+      const value = await probe();
+      if (ready(value)) return value;
+      await worker.tick();
+    }
+    const value = await probe();
+    if (ready(value)) return value;
+    throw new Error('target job effect was not observed while draining queues');
+  }
+
   /* ---------------------------------------------------------------- */
   /* 1 · 2 · 4 — criação, itens e cálculo                              */
   /* ---------------------------------------------------------------- */
@@ -452,7 +467,7 @@ describe('Quotes (e2e)', () => {
       );
     };
 
-    const list = await mine();
+    const list = await drainUntil(mine, (rows) => rows.length === 1);
     expect(list).toHaveLength(1);
     const entry = list[0]!;
     expect(entry.type).toBe('INCOME');
@@ -477,9 +492,10 @@ describe('Quotes (e2e)', () => {
     await auth(http().post(`/api/v1/quotes/${quote.id}/cancel`), tenant.token)
       .send({ reason: 'Cliente desistiu da contratação' })
       .expect(201);
-    await drain();
-
-    const cancelled = await mine();
+    const cancelled = await drainUntil(
+      mine,
+      (rows) => rows.length === 1 && rows[0]!.status === 'CANCELLED',
+    );
     expect(cancelled).toHaveLength(1);
     expect(cancelled[0]!.status).toBe('CANCELLED');
     expect(cancelled[0]!.amount).toBe(approved.total);

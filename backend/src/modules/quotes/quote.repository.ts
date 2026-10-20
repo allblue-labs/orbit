@@ -30,6 +30,7 @@ import { DomainEventEmitter } from '../automations/domain-event.emitter';
 import { BackgroundJobQueue } from '../jobs/background-job.queue';
 import { JOB_QUEUES } from '../jobs/background-job.types';
 import type { QuoteQueryDto } from './quote.dto';
+import { allocateServiceOrderNumber } from '../operations/service-order-number';
 
 const actor = { select: { id: true, displayName: true } } as const;
 
@@ -55,10 +56,12 @@ const quoteView = {
   status: true,
   title: true,
   notes: true,
+  introText: true,
   validUntil: true,
   currency: true,
   subtotal: true,
   discount: true,
+  discountReason: true,
   total: true,
   sentAt: true,
   decidedAt: true,
@@ -76,6 +79,34 @@ const quoteView = {
   createdBy: actor,
   sentBy: actor,
   decidedBy: actor,
+  responsible: actor,
+  serviceAddress: {
+    select: {
+      id: true,
+      label: true,
+      street: true,
+      number: true,
+      complement: true,
+      district: true,
+      city: true,
+      stateCode: true,
+    },
+  },
+  /*
+   * Os equipamentos vêm na **listagem**, ao contrário dos itens.
+   *
+   * São poucos por proposta e são coluna da tabela — a pergunta que o cliente
+   * faz primeiro numa proposta de manutenção é *quais aparelhos*. Deixá-los
+   * fora obrigaria uma consulta por linha para desenhar a lista.
+   */
+  assets: {
+    select: {
+      asset: {
+        select: { id: true, name: true, identifier: true, location: true },
+      },
+    },
+    orderBy: { createdAt: 'asc' },
+  },
   _count: { select: { items: true } },
 } satisfies Prisma.QuoteSelect;
 
@@ -95,9 +126,14 @@ export interface CreateQuoteData {
   customerId: string;
   title: string;
   notes?: string | null;
+  introText?: string | null;
   validUntil?: Date | null;
   currency: string;
   createdById: string;
+  serviceAddressId?: string | null;
+  responsibleUserId?: string | null;
+  /** Equipamentos cobertos, já validados como do mesmo inquilino. */
+  assetIds?: readonly string[];
 }
 
 export interface ItemSnapshot {
@@ -138,6 +174,229 @@ export class QuoteRepository {
       });
       const total = await tx.quote.count({ where });
       return PaginationHelper.result(data, total, pagination);
+    });
+  }
+
+  /**
+   * Tudo o que a proposta impressa mostra, numa leitura.
+   *
+   * Projeção própria porque o documento precisa do que a tela não mostra: o
+   * CNPJ do cliente para a proposta ter valor comercial, o endereço do
+   * atendimento, e a identidade completa de quem emite — timbre, endereço e
+   * contato. Alargar `detailView` faria toda listagem carregar isso.
+   */
+  /**
+   * A proposta como o documento emitido precisa dela.
+   *
+   * Parecido com `documentSource`, e separado dele de propósito: aquele alimenta
+   * um PDF e por isso carrega logo, assinatura e endereço do emissor; este
+   * alimenta uma **execução de artefato** e precisa das chaves que o PDF ignora —
+   * unidade, cliente e atendimento são colunas da execução, não linhas do papel.
+   * Juntar os dois faria cada emissão carregar bytes de imagem sem uso.
+   */
+  emissionSource(id: string, organizationId: string) {
+    return this.rls.run((tx) =>
+      tx.quote.findFirst({
+        where: { id, organizationId, deletedAt: null },
+        select: {
+          id: true,
+          businessUnitId: true,
+          customerId: true,
+          operationId: true,
+          responsibleUserId: true,
+          code: true,
+          status: true,
+          title: true,
+          notes: true,
+          introText: true,
+          discountReason: true,
+          validUntil: true,
+          total: true,
+          sentAt: true,
+          createdAt: true,
+          responsible: { select: { displayName: true } },
+          serviceAddress: {
+            select: {
+              street: true,
+              number: true,
+              complement: true,
+              district: true,
+              city: true,
+              stateCode: true,
+            },
+          },
+          items: {
+            orderBy: { position: 'asc' as const },
+            select: {
+              description: true,
+              unit: true,
+              quantity: true,
+              unitPrice: true,
+              total: true,
+              notes: true,
+            },
+          },
+          customer: {
+            select: {
+              legalName: true,
+              tradeName: true,
+              documentType: true,
+              documentNumber: true,
+              addresses: {
+                where: { isPrimary: true, isActive: true },
+                take: 1,
+                select: {
+                  street: true,
+                  number: true,
+                  complement: true,
+                  district: true,
+                  city: true,
+                  stateCode: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
+  }
+
+  documentSource(id: string, organizationId: string) {
+    return this.rls.run(async (tx) => {
+      const quote = await tx.quote.findFirst({
+        where: { id, organizationId, deletedAt: null },
+        select: {
+          code: true,
+          status: true,
+          title: true,
+          notes: true,
+          validUntil: true,
+          subtotal: true,
+          discount: true,
+          discountReason: true,
+          total: true,
+          sentAt: true,
+          decidedAt: true,
+          createdAt: true,
+          introText: true,
+          createdBy: { select: { displayName: true } },
+          operation: { select: { code: true, title: true } },
+          /*
+           * O endereço **escolhido**, além do principal do cliente.
+           *
+           * Os dois vêm porque a proposta pode não ter escolhido nenhum — as
+           * que nasceram antes deste campo não escolheram — e aí o principal
+           * segue valendo. Com escolha, ela vence: era o defeito de imprimir
+           * `addresses[0]` para quem tem duas filiais.
+           */
+          serviceAddress: {
+            select: {
+              label: true,
+              street: true,
+              number: true,
+              complement: true,
+              district: true,
+              city: true,
+              stateCode: true,
+              postalCode: true,
+            },
+          },
+          /*
+           * A assinatura ativa de quem responde.
+           *
+           * `active` e `revokedAt: null` no `where`: uma assinatura revogada é
+           * exatamente a que não pode sair impressa. `take: 1` porque o índice
+           * único garante uma ativa por pessoa.
+           */
+          responsible: {
+            select: {
+              displayName: true,
+              professionalSignatures: {
+                where: { active: true, revokedAt: null },
+                orderBy: { version: 'desc' as const },
+                take: 1,
+                select: {
+                  storageObject: {
+                    select: {
+                      bucket: true,
+                      objectKey: true,
+                      mimeType: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+          assets: {
+            orderBy: { createdAt: 'asc' as const },
+            select: {
+              asset: {
+                select: { name: true, identifier: true, location: true },
+              },
+            },
+          },
+          items: {
+            orderBy: { position: 'asc' as const },
+            select: {
+              kind: true,
+              description: true,
+              sku: true,
+              unit: true,
+              quantity: true,
+              unitPrice: true,
+              discount: true,
+              total: true,
+              notes: true,
+            },
+          },
+          customer: {
+            select: {
+              legalName: true,
+              tradeName: true,
+              documentType: true,
+              documentNumber: true,
+              email: true,
+              phone: true,
+              addresses: {
+                where: { isPrimary: true, isActive: true },
+                take: 1,
+                select: {
+                  label: true,
+                  street: true,
+                  number: true,
+                  complement: true,
+                  district: true,
+                  city: true,
+                  stateCode: true,
+                  postalCode: true,
+                },
+              },
+            },
+          },
+          businessUnit: {
+            select: {
+              legalName: true,
+              tradeName: true,
+              documentType: true,
+              documentNumber: true,
+              email: true,
+              phone: true,
+              website: true,
+              logoUrl: true,
+              /* A marca da empresa, para quando a unidade não tiver a sua.
+                 `issuerLogo` decide; aqui só se garante que o dado chegue. */
+              organization: { select: { logoUrl: true } },
+              street: true,
+              number: true,
+              district: true,
+              city: true,
+              stateCode: true,
+              timezone: true,
+            },
+          },
+        },
+      });
+      return quote;
     });
   }
 
@@ -184,9 +443,23 @@ export class QuoteRepository {
           code: `ORC-${`${number}`.padStart(6, '0')}`,
           title: data.title,
           notes: data.notes ?? null,
+          introText: data.introText ?? null,
           validUntil: data.validUntil ?? null,
           currency: data.currency,
           createdById: data.createdById,
+          serviceAddressId: data.serviceAddressId ?? null,
+          /* Quem digita responde, a não ser que digam outro. Nulo aqui faria o
+             documento sair sem assinatura — e o serviço já resolveu o padrão. */
+          responsibleUserId: data.responsibleUserId ?? data.createdById,
+          assets:
+            data.assetIds && data.assetIds.length > 0
+              ? {
+                  create: data.assetIds.map((assetId) => ({
+                    id: generateUuidV7(),
+                    assetId,
+                  })),
+                }
+              : undefined,
         },
         select: detailView,
       });
@@ -220,12 +493,35 @@ export class QuoteRepository {
     organizationId: string,
     businessUnitId: string,
     actorId: string,
-    data: Prisma.QuoteUpdateInput,
+    /* `Unchecked` e não `QuoteUpdateInput`: quem chama trabalha com ids —
+       `serviceAddressId`, `responsibleUserId` — e a forma de relação obrigaria
+       o serviço a montar `connect` para dados que ele já validou como ids. */
+    data: Prisma.QuoteUncheckedUpdateInput,
     before: Record<string, unknown>,
     discount?: string,
+    /**
+     * O conjunto inteiro de equipamentos, quando informado.
+     *
+     * Substitui, não acrescenta: `undefined` deixa como está, e uma lista vazia
+     * limpa. Sem essa distinção não haveria como remover o último equipamento —
+     * "vazio" e "não mencionado" chegariam iguais.
+     */
+    assetIds?: readonly string[],
   ) {
     return this.rls.run(async (tx) => {
       await tx.quote.update({ where: { id }, data });
+      if (assetIds) {
+        await tx.quoteAsset.deleteMany({ where: { quoteId: id } });
+        if (assetIds.length > 0) {
+          await tx.quoteAsset.createMany({
+            data: assetIds.map((assetId) => ({
+              id: generateUuidV7(),
+              quoteId: id,
+              assetId,
+            })),
+          });
+        }
+      }
       await this.recalculate(tx, id, discount);
       const quote = await this.reload(tx, id);
 
@@ -608,10 +904,18 @@ export class QuoteRepository {
       if (!current) return null;
       if (current.operationId) return this.reload(tx, input.quoteId);
 
+      /* Orçamento aprovado vira ordem de serviço, e ordem de serviço tem número
+         próprio — a mesma contagem da criação direta, e não uma paralela. */
+      const serviceOrderNumber = await allocateServiceOrderNumber(
+        tx,
+        input.organizationId,
+      );
+
       const operation = await tx.operation.create({
         data: {
           id: generateUuidV7(),
           organizationId: input.organizationId,
+          serviceOrderNumber,
           businessUnitId: input.businessUnitId,
           customerId: input.customerId,
           code: input.code,
@@ -677,6 +981,113 @@ export class QuoteRepository {
       tx.customer.findFirst({
         where: { id, organizationId, deletedAt: null },
         select: { id: true },
+      }),
+    );
+  }
+
+  /**
+   * O atendimento de onde a proposta vai copiar.
+   *
+   * Traz o que o orçamento sabe aproveitar: cliente, endereço, equipamentos,
+   * título e descrição. `status` vem para que o serviço recuse o que não está
+   * concluído — copiar escopo de um atendimento em andamento copiaria algo que
+   * ainda vai mudar.
+   */
+  findOperationSource(id: string, organizationId: string) {
+    return this.rls.run((tx) =>
+      tx.operation.findFirst({
+        where: { id, organizationId, deletedAt: null },
+        select: {
+          id: true,
+          code: true,
+          title: true,
+          description: true,
+          status: true,
+          businessUnitId: true,
+          customerId: true,
+          customerAddressId: true,
+          completedAt: true,
+          assets: { select: { assetId: true } },
+        },
+      }),
+    );
+  }
+
+  /**
+   * O material que o atendimento consumiu, somado por item de catálogo.
+   *
+   * É a única origem de itens que a operação oferece: ela não guarda linha de
+   * serviço com preço — `kind` é categoria, não item de catálogo. Um serviço
+   * inventado aqui viraria linha com valor numa proposta que ninguém combinou.
+   *
+   * Agrupado porque o mesmo material pode sair do estoque em vários movimentos,
+   * e a proposta quer uma linha por material, não uma por movimento.
+   *
+   * Preço **não** vem daqui: o movimento registra custo de estoque, e uma
+   * proposta cobra preço de venda. Quem monta o item busca o preço no Catálogo,
+   * como faria para um item escolhido à mão.
+   */
+  findOperationConsumption(operationId: string, organizationId: string) {
+    return this.rls.run(async (tx) => {
+      const grupos = await tx.inventoryMovement.groupBy({
+        by: ['catalogItemId'],
+        where: { operationId, organizationId, type: 'CONSUMPTION' },
+        _sum: { quantity: true },
+      });
+      return grupos
+        .map((grupo) => ({
+          catalogItemId: grupo.catalogItemId,
+          quantity: grupo._sum.quantity?.toString() ?? '0',
+        }))
+        .filter((linha) => Number(linha.quantity) > 0);
+    });
+  }
+
+  /**
+   * Endereço do cliente, confirmado como **daquele** cliente.
+   *
+   * O `customerId` está no `where`, e não conferido depois: um endereço de
+   * outro cliente do mesmo inquilino passaria por uma checagem só de
+   * organização, e a proposta sairia com o endereço de terceiro.
+   */
+  findCustomerAddress(id: string, organizationId: string, customerId: string) {
+    return this.rls.run((tx) =>
+      tx.customerAddress.findFirst({
+        where: { id, organizationId, customerId, deletedAt: null },
+        select: { id: true },
+      }),
+    );
+  }
+
+  /**
+   * Quais dos equipamentos pedidos existem no inquilino.
+   *
+   * Devolve os encontrados em vez de um booleano: quem chama precisa dizer
+   * *qual* id não existe, e uma resposta "algum é inválido" mandaria a pessoa
+   * conferir cinquenta equipamentos.
+   */
+  findAssetIds(ids: readonly string[], organizationId: string) {
+    return this.rls.run(async (tx) => {
+      const found = await tx.asset.findMany({
+        where: { id: { in: [...ids] }, organizationId, deletedAt: null },
+        select: { id: true },
+      });
+      return found.map((asset) => asset.id);
+    });
+  }
+
+  /**
+   * Membro ativo da organização, para assinar a proposta.
+   *
+   * Pela associação, e não pelo `User`: um usuário existe na plataforma inteira,
+   * e aceitar qualquer id deixaria uma proposta ser assinada por alguém de outro
+   * inquilino.
+   */
+  findMember(userId: string, organizationId: string) {
+    return this.rls.run((tx) =>
+      tx.organizationMembership.findFirst({
+        where: { userId, organizationId, deletedAt: null },
+        select: { userId: true },
       }),
     );
   }

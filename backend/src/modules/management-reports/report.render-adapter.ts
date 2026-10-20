@@ -20,6 +20,12 @@
  * Artifact Engine e serve a outro dono. O documento sai legível e o formato
  * tabular fica declarado como limitação.
  *
+ * ## O timbre é o da unidade
+ *
+ * O premium imprime cabeçalho com logo, e ele vem de `metadata.documentContext`
+ * — o mesmo caminho que os documentos de campo usam. Sem isso o relatório sairia
+ * com a moldura da marca e sem marca nenhuma: o pior dos dois mundos.
+ *
  * ## Sem assinatura
  *
  * `signatures: []`, sempre. Um relatório gerencial não é assinado: ele não é
@@ -33,6 +39,7 @@ import type {
   RenderInput,
   RenderSectionInput,
 } from '../artifact-rendering/renderers/artifact-renderer';
+import type { DocumentEmitter } from '../artifact-rendering/renderers/pdf/kit/document-context';
 import type {
   ReportSectionReadModel,
   ReportSnapshotReadModel,
@@ -46,6 +53,8 @@ export class ReportRenderAdapter {
     organizationName: string;
     correlationId: string;
     sourceHash: string;
+    /** Timbre da unidade do recorte; ausente quando não há unidade cadastrada. */
+    emitter?: DocumentEmitter;
   }): RenderInput {
     const { snapshot } = input;
 
@@ -91,6 +100,7 @@ export class ReportRenderAdapter {
         reportType: snapshot.type,
         schemaVersion: snapshot.schemaVersion,
         sourceHash: input.sourceHash,
+        documentContext: { emitter: input.emitter },
       },
       correlationId: input.correlationId,
       generatedAt: new Date(snapshot.generatedAt),

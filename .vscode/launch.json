@@ -1,0 +1,13 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Orbit Operator (mobile, API local)",
+      "request": "launch",
+      "type": "dart",
+      "program": "mobile/lib/main.dart",
+      "cwd": "mobile",
+      "toolArgs": ["--dart-define-from-file=config/local.json"]
+    }
+  ]
+}

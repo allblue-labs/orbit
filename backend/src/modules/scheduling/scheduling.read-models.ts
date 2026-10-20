@@ -30,6 +30,12 @@ export type SchedulingOccurrenceReadModel = {
     role: string | null;
     status: string;
   }>;
+  assignmentAuthority: 'OPERATION' | 'SCHEDULING';
+  responsibleFieldTechnician: {
+    userId: string;
+    role: 'RESPONSIBLE_FIELD_TECHNICIAN';
+  } | null;
+  auxiliaryTechnicians: Array<{ userId: string; role: 'AUXILIARY_TECHNICIAN' }>;
   recurring: boolean;
 };
 

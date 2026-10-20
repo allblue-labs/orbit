@@ -9,11 +9,13 @@
 import { apiClient } from "@/api/client";
 import { queryKeys, type QueryKey } from "@/api/query-keys";
 import type { PaginatedResult, QueryParams, RequestOptions } from "@/types/api";
+import type { ArtifactExecution } from "@/types/artifact-executions";
 import type {
   CancelFinancialEntryInput,
   ConfirmFinancialEntryInput,
   CreateFinancialCategoryInput,
   CreateFinancialEntryInput,
+  CreateReceiptInput,
   FinancialAnalyticsQuery,
   FinancialCategory,
   FinancialCategoryBreakdown,
@@ -23,6 +25,7 @@ import type {
   FinancialSettings,
   FinancialSummary,
   FinancialTimelinePoint,
+  ReceiptSource,
   UpdateFinancialCategoryInput,
   UpdateFinancialEntryInput,
   UpdateFinancialSettingsInput,
@@ -53,7 +56,33 @@ export const financialService = {
       queryKeys.list(`${FINANCIAL}-timeline`, asParams(query)),
     /** Raiz de tudo que uma escrita de lançamento pode ter mudado. */
     all: (): QueryKey => queryKeys.module(FINANCIAL),
+    receiptSource: (operationId: string): QueryKey =>
+      queryKeys.nested(`${FINANCIAL}-receipts`, operationId, "source"),
   },
+
+  /* ---------------------------------------------------------------- */
+  /* Recibos                                                           */
+  /* ---------------------------------------------------------------- */
+
+  /**
+   * Emite um recibo — do zero ou a partir de um atendimento concluído.
+   *
+   * Devolve a execução de artefato em **rascunho**, com os campos preenchidos.
+   * Renderizar é o passo seguinte, e é a publicação do manifesto que vira receita
+   * confirmada no Financeiro.
+   */
+  createReceipt: (input: CreateReceiptInput): Promise<ArtifactExecution> =>
+    apiClient.post<ArtifactExecution>(`${PATH}/receipts`, input),
+
+  /** O atendimento de origem, com o que ele oferece preenchido. */
+  receiptSource: (
+    operationId: string,
+    options?: RequestOptions,
+  ): Promise<ReceiptSource> =>
+    apiClient.get<ReceiptSource>(
+      `${PATH}/receipts/sources/${encodeURIComponent(operationId)}`,
+      options,
+    ),
 
   /* ---------------------------------------------------------------- */
   /* Lançamentos                                                       */

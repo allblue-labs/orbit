@@ -43,7 +43,6 @@ import { useMemo, useState } from "react";
 import { CalendarClock } from "lucide-react";
 
 import { EmptyState } from "@/components/feedback/states";
-import { ContentContainer } from "@/components/layout/page-primitives";
 import { PanelError, PanelLoading } from "@/components/panels";
 import {
   useSchedulingCalendars,
@@ -79,6 +78,7 @@ import { EventFormDialog } from "./event-form.dialog";
 import { AvailabilityPanel } from "./panels/availability.panel";
 import { ConflictsPanel } from "./panels/conflicts.panel";
 import { IntelligencePanel } from "./panels/intelligence.panel";
+import { PRODUCT_CAPABILITY, PRODUCT_FEATURE } from "@/registry/product-access";
 import {
   SchedulingFilters,
   type SchedulingFiltersValue,
@@ -119,7 +119,13 @@ export function SchedulingWorkspace({
   /** Exigências declaradas no Action Registry, não repetidas aqui. */
   const canManage = useAction("scheduling-event.create").allowed;
   const canSeeIntelligence =
-    showAnalysisPanels && session.hasCapability("scheduling.intelligence");
+    showAnalysisPanels &&
+    session.hasPermission("scheduling.intelligence.read") &&
+    session.hasCapability("scheduling.intelligence") &&
+    session.canUseProductFeature(
+      PRODUCT_CAPABILITY.ORBIT_INTELLIGENCE,
+      PRODUCT_FEATURE.SCHEDULING_INTELLIGENCE,
+    );
 
   const window = useMemo(
     () => buildViewWindow(view, reference, timeZone),
@@ -198,7 +204,8 @@ export function SchedulingWorkspace({
   };
 
   return (
-    <ContentContainer size="wide" className="space-y-6">
+    /** A gutter da página é do `SchedulingTabs`; aqui, só o ritmo interno. */
+    <div className="space-y-6">
       <SchedulingToolbar
         view={view}
         periodLabel={describeWindow(view, window)}
@@ -351,7 +358,7 @@ export function SchedulingWorkspace({
           if (!open) setEditing(null);
         }}
       />
-    </ContentContainer>
+    </div>
   );
 }
 

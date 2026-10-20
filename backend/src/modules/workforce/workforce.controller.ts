@@ -32,6 +32,11 @@ import {
   UpdateCertificationDto,
   UpdateSpecialtyDto,
   UpdateTeamDto,
+  UpdateProfessionalProfileDto,
+  ProfessionalSelectorQueryDto,
+  CreateProfessionalCredentialDto,
+  RegisterProfessionalSignatureDto,
+  ProfessionalEligibilityQueryDto,
 } from './workforce.dto';
 import { WorkforceMapper } from './workforce.mapper';
 import { WorkforceService } from './workforce.service';
@@ -50,6 +55,142 @@ export class WorkforceController {
     private readonly workforce: WorkforceService,
     private readonly mapper: WorkforceMapper,
   ) {}
+
+  @Get('field-technicians')
+  @Capabilities('workforce.read')
+  @Permissions('organization.read')
+  fieldTechnicians(
+    @Req() request: IdentityRequest,
+    @Query() query: ProfessionalSelectorQueryDto,
+  ) {
+    return this.workforce.listProfessionals(
+      this.org(request),
+      'FIELD_TECHNICIAN',
+      query.businessUnitId,
+    );
+  }
+
+  /**
+   * Quem pode acompanhar um atendimento como auxiliar.
+   *
+   * Porta separada da de técnicos porque a pergunta é outra: ali é quem executa
+   * e assina, aqui é quem lê. O papel "Auxiliar técnico" não aparecia em porta
+   * nenhuma, e o campo de auxiliares do formulário de operação ficava vazio
+   * mesmo com auxiliares cadastrados.
+   */
+  @Get('field-assistants')
+  @Capabilities('workforce.read')
+  @Permissions('organization.read')
+  fieldAssistants(
+    @Req() request: IdentityRequest,
+    @Query() query: ProfessionalSelectorQueryDto,
+  ) {
+    return this.workforce.listFieldAssistantCandidates(
+      this.org(request),
+      query.businessUnitId,
+    );
+  }
+
+  @Get('eligible-technical-responsibles')
+  @Capabilities('workforce.read')
+  @Permissions('organization.read')
+  technicalResponsibles(
+    @Req() request: IdentityRequest,
+    @Query() query: ProfessionalSelectorQueryDto,
+  ) {
+    return this.workforce.listProfessionals(
+      this.org(request),
+      'TECHNICAL_RESPONSIBLE',
+      query.businessUnitId,
+    );
+  }
+
+  @Get('members/:userId/professional-profile')
+  @Capabilities('workforce.read')
+  @Permissions('organization.read')
+  professionalProfile(
+    @Param('userId', ParseUUIDv7Pipe) userId: string,
+    @Req() request: IdentityRequest,
+  ) {
+    return this.workforce.professionalProfile(this.org(request), userId);
+  }
+
+  @Patch('members/:userId/professional-profile')
+  @Capabilities('workforce.manage')
+  @Permissions('organization.members.update')
+  updateProfessionalProfile(
+    @Param('userId', ParseUUIDv7Pipe) userId: string,
+    @Req() request: IdentityRequest,
+    @Body() input: UpdateProfessionalProfileDto,
+  ) {
+    return this.workforce.updateProfessionalProfile(
+      this.org(request),
+      userId,
+      this.actor(request),
+      input,
+    );
+  }
+
+  @Post('members/:userId/professional-credentials')
+  @Capabilities('workforce.manage')
+  @Permissions('organization.members.update')
+  createProfessionalCredential(
+    @Param('userId', ParseUUIDv7Pipe) userId: string,
+    @Req() request: IdentityRequest,
+    @Body() input: CreateProfessionalCredentialDto,
+  ) {
+    return this.workforce.addProfessionalCredential(
+      this.org(request),
+      userId,
+      this.actor(request),
+      input,
+    );
+  }
+
+  @Delete('professional-credentials/:id')
+  @Capabilities('workforce.manage')
+  @Permissions('organization.members.update')
+  revokeProfessionalCredential(
+    @Param('id', ParseUUIDv7Pipe) id: string,
+    @Req() request: IdentityRequest,
+  ) {
+    return this.workforce.revokeProfessionalCredential(
+      this.org(request),
+      id,
+      this.actor(request),
+    );
+  }
+
+  @Post('members/:userId/signature')
+  @Capabilities('workforce.manage')
+  @Permissions('organization.members.update')
+  registerProfessionalSignature(
+    @Param('userId', ParseUUIDv7Pipe) userId: string,
+    @Req() request: IdentityRequest,
+    @Body() input: RegisterProfessionalSignatureDto,
+  ) {
+    return this.workforce.registerProfessionalSignature(
+      this.org(request),
+      userId,
+      this.actor(request),
+      input.storageObjectId,
+    );
+  }
+
+  @Get('members/:userId/document-eligibility')
+  @Capabilities('workforce.read')
+  @Permissions('organization.read')
+  professionalEligibility(
+    @Param('userId', ParseUUIDv7Pipe) userId: string,
+    @Req() request: IdentityRequest,
+    @Query() query: ProfessionalEligibilityQueryDto,
+  ) {
+    return this.workforce.professionalEligibility(
+      this.org(request),
+      userId,
+      query,
+    );
+  }
 
   /* ---------------------------------------------------------------- */
   /* Especialidades                                                    */

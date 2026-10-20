@@ -15,12 +15,19 @@
  * consulta: um `useQuery` a dispararia ao montar e trocaria o segredo debaixo
  * de quem estava no meio do cadastro.
  *
- * ## Sem gerar o QR aqui
+ * ## O QR vem desenhado do servidor
  *
- * A URI `otpauth://` é o conteúdo do código. Desenhá-la como QR exigiria uma
- * biblioteca de renderização que o Design System não tem — e o segredo em
- * base32, que a tela mostra, é o que qualquer aplicativo autenticador aceita
- * digitado.
+ * A tela mostrava só o segredo em base32 e pedia que a pessoa o digitasse:
+ * trinta e dois caracteres sem sentido, num celular, e um erro basta para o
+ * código nunca bater. Apontar a câmera é o caminho que todo aplicativo
+ * autenticador espera.
+ *
+ * Quem desenha é o servidor, que já tem a biblioteca por causa do QR de
+ * equipamento. Nada é exposto a mais: o código **é** a mesma URI `otpauth://`
+ * que sempre foi enviada na resposta.
+ *
+ * O segredo digitável continua disponível, recolhido, para quem não consegue
+ * usar a câmera.
  */
 import { useState } from "react";
 import { ShieldCheck, ShieldPlus } from "lucide-react";
@@ -37,6 +44,15 @@ import {
 } from "@/hooks/profile/use-profile";
 import type { MfaEnrollment } from "@/types/settings";
 
+/** O número do passo, num disco — a lista fica legível sem depender da ordem. */
+function Passo({ numero }: { numero: number }) {
+  return (
+    <span className="bg-primary text-primary-foreground flex size-5 shrink-0 items-center justify-center rounded-full text-xs font-medium">
+      {numero}
+    </span>
+  );
+}
+
 export function MfaSection({ enabled }: { enabled: boolean }) {
   const begin = useBeginMfaEnrollment();
   const enable = useEnableMfa();
@@ -48,11 +64,11 @@ export function MfaSection({ enabled }: { enabled: boolean }) {
   if (enabled) {
     return (
       <section className="glass-panel space-y-3 rounded-xl p-5">
-        <h3 className="flex flex-wrap items-center gap-2 text-sm font-medium">
+        <h2 className="flex flex-wrap items-center gap-2 text-sm font-medium">
           <ShieldCheck className="size-4 text-emerald-400" aria-hidden />
           Autenticação em dois fatores
           <Badge variant="secondary">ativa</Badge>
-        </h3>
+        </h2>
         <p className="text-sm text-muted-foreground">
           Sua conta pede um código do aplicativo autenticador a cada novo
           acesso.
@@ -75,10 +91,10 @@ export function MfaSection({ enabled }: { enabled: boolean }) {
   return (
     <section className="glass-panel space-y-4 rounded-xl p-5">
       <div className="space-y-1">
-        <h3 className="flex items-center gap-2 text-sm font-medium">
+        <h2 className="flex items-center gap-2 text-sm font-medium">
           <ShieldPlus className="size-4 text-muted-foreground" aria-hidden />
           Autenticação em dois fatores
-        </h3>
+        </h2>
         <p className="text-xs text-muted-foreground">
           Um código do aplicativo autenticador passa a ser exigido junto da
           senha.
@@ -87,16 +103,59 @@ export function MfaSection({ enabled }: { enabled: boolean }) {
 
       {enrollment ? (
         <div className="space-y-4">
-          <div className="space-y-2 rounded-lg border border-border p-4">
-            <p className="text-sm">
-              Cadastre este segredo no seu aplicativo autenticador:
-            </p>
-            <p className="font-mono text-sm break-all select-all">
-              {enrollment.secret}
-            </p>
-            <p className="text-xs break-all text-muted-foreground select-all">
-              {enrollment.uri}
-            </p>
+          <div className="space-y-4 rounded-lg border border-border p-4">
+            <ol className="space-y-3 text-sm">
+              <li className="flex gap-3">
+                <Passo numero={1} />
+                <span>
+                  Instale um aplicativo autenticador no celular, se ainda não
+                  tiver: <strong>Google Authenticator</strong>,{" "}
+                  <strong>Microsoft Authenticator</strong> ou{" "}
+                  <strong>Authy</strong> servem.
+                </span>
+              </li>
+              <li className="flex gap-3">
+                <Passo numero={2} />
+                <span>
+                  No aplicativo, toque em adicionar conta e escolha ler código
+                  QR. Aponte a câmera para o código abaixo.
+                </span>
+              </li>
+              <li className="flex gap-3">
+                <Passo numero={3} />
+                <span>
+                  O aplicativo passa a mostrar um código de seis dígitos que
+                  troca a cada 30 segundos. Digite o código atual no campo
+                  abaixo para concluir.
+                </span>
+              </li>
+            </ol>
+
+            {/* Sobre branco: leitor de QR espera módulos escuros sobre fundo
+                claro, e num tema escuro o código sai invertido e não é lido. */}
+            <div className="flex justify-center rounded-lg bg-white p-4">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={enrollment.qrCode}
+                alt="Código QR para o aplicativo autenticador"
+                className="size-44"
+              />
+            </div>
+
+            <details className="text-xs">
+              <summary className="text-muted-foreground cursor-pointer">
+                Não consigo usar a câmera
+              </summary>
+              <div className="mt-2 space-y-2">
+                <p className="text-muted-foreground">
+                  Escolha a opção de digitar uma chave no aplicativo e informe
+                  este segredo:
+                </p>
+                <p className="font-mono text-sm break-all select-all">
+                  {enrollment.secret}
+                </p>
+              </div>
+            </details>
           </div>
 
           <form

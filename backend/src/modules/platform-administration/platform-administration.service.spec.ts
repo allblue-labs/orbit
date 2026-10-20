@@ -13,7 +13,10 @@ describe('PlatformAdministrationService', () => {
     plansAndModules: jest.fn(),
   };
   const registration = { register: jest.fn() };
-  const hashes = { hash: jest.fn().mockResolvedValue('hash') };
+  const hashes = {
+    hash: jest.fn().mockResolvedValue('hash'),
+    verify: jest.fn().mockResolvedValue(true),
+  };
   const service = new PlatformAdministrationService(
     repository as never,
     registration as never,

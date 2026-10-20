@@ -60,8 +60,7 @@ export function TeamSection({ execution }: { execution: ArtifactExecution }) {
       )}
 
       <p className="mt-4 border-t border-border pt-3 text-xs text-muted-foreground">
-        Os nomes dependem de um endpoint de membros da organização, que o
-        backend ainda não expõe.
+        Os nomes dos membros da organização ainda não estão disponíveis nesta tela.
       </p>
     </PanelFrame>
   );

@@ -62,7 +62,10 @@ Widget wrap(Future<ResponseBody> Function(RequestOptions) handler) {
         OperationsRepository(client: client, cache: InMemoryReadCache()),
       ),
     ],
-    child: MaterialApp(theme: OrbitTheme.dark(), home: const OperationsScreen()),
+    child: MaterialApp(
+      theme: OrbitTheme.light(),
+      home: const OperationsScreen(),
+    ),
   );
 }
 
@@ -110,7 +113,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Sem conexão com o servidor.'), findsOneWidget);
+    /// Fora de produção a mensagem também nomeia o destino — é o que revela
+    /// uma URL mal configurada, que é a causa quase sempre.
+    expect(find.textContaining('Sem conexão'), findsOneWidget);
     expect(find.text('Tentar novamente'), findsOneWidget);
   });
 
@@ -131,7 +136,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.text('Sua conta não tem acesso a esta informação.'),
+      find.text('Você não possui permissão para realizar esta ação.'),
       findsOneWidget,
     );
     expect(find.text('Tentar novamente'), findsNothing);
@@ -149,6 +154,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    /// A fileira de filtros rola na horizontal e os chips ficaram maiores:
+    /// "Concluída" pode estar fora da viewport, e tocar no que não está
+    /// visível não é o que um dedo faz.
+    await tester.ensureVisible(find.text('Concluída'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Concluída'));
     await tester.pumpAndSettle();
 

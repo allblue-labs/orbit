@@ -5,6 +5,8 @@ import type {
   MemberSpecialtyReadModel,
   SpecialtyReadModel,
   TeamReadModel,
+  ProfessionalProfileReadModel,
+  ProfessionalCredentialReadModel,
 } from './workforce.read-models';
 
 const DAY_MS = 24 * 60 * 60_000;
@@ -17,6 +19,65 @@ type DecimalValue = { toString(): string } | number | string;
 
 @Injectable()
 export class WorkforceMapper {
+  professionalCredential(source: {
+    id: string;
+    type: string;
+    registrationNumber: string;
+    region: string | null;
+    issuingAuthority: string | null;
+    displayLabel: string | null;
+    active: boolean;
+    createdAt: DateValue;
+    revokedAt: DateValue | null;
+  }): ProfessionalCredentialReadModel {
+    return {
+      id: source.id,
+      type: source.type as ProfessionalCredentialReadModel['type'],
+      registrationNumber: source.registrationNumber,
+      region: source.region,
+      issuingAuthority: source.issuingAuthority,
+      displayLabel: source.displayLabel,
+      active: source.active,
+      createdAt: this.date(source.createdAt),
+      revokedAt: source.revokedAt ? this.date(source.revokedAt) : null,
+    };
+  }
+
+  professionalProfile(
+    source: {
+      id: string;
+      userId: string;
+      fieldTechnicianEnabled: boolean;
+      technicalResponsibleEnabled: boolean;
+      active: boolean;
+      createdAt: DateValue;
+      updatedAt: DateValue;
+      user: { displayName: string };
+      credentials: readonly Parameters<
+        WorkforceMapper['professionalCredential']
+      >[0][];
+    },
+    signatureAvailable: boolean,
+  ): ProfessionalProfileReadModel {
+    return {
+      id: source.id,
+      userId: source.userId,
+      displayName: source.user.displayName,
+      professionalRoles: [
+        ...(source.fieldTechnicianEnabled ? ['FIELD_TECHNICIAN' as const] : []),
+        ...(source.technicalResponsibleEnabled
+          ? ['TECHNICAL_RESPONSIBLE' as const]
+          : []),
+      ],
+      active: source.active,
+      signatureAvailable,
+      professionalCredentials: source.credentials.map((item) =>
+        this.professionalCredential(item),
+      ),
+      createdAt: this.date(source.createdAt),
+      updatedAt: this.date(source.updatedAt),
+    };
+  }
   specialty(source: {
     id: string;
     name: string;

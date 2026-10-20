@@ -7,13 +7,47 @@
  */
 export const ROUTES = {
   home: "/",
+  /**
+   * Planos — a página comercial pública.
+   *
+   * Canônica e única: `/precos` não existe, e não deve passar a existir. Duas
+   * rotas para a mesma pergunta dividem link, SEO e manutenção, e uma delas
+   * envelhece.
+   */
+  plans: "/planos",
   login: "/login",
   register: "/cadastro",
   forgotPassword: "/recuperar-senha",
   resetPassword: "/redefinir-senha",
   invitation: "/convite",
+  /**
+   * O contrato do PMOC aberto por link temporário.
+   *
+   * **Deliberadamente fora de `PROTECTED_PREFIXES` e do `matcher` do middleware.**
+   * Quem abre é o contratante, que não tem conta: proteger a rota mandaria o cliente
+   * para uma tela de login que ele nunca vai conseguir passar.
+   *
+   * E deliberadamente **fora de `/pmoc`**, que é protegido por prefixo. Pendurar o
+   * contrato em `/pmoc/contrato/:token` o colocaria atrás do portão por herança, e a
+   * causa — um `:path*` no matcher — não apareceria em nenhum lugar desta linha.
+   *
+   * A credencial é o token no caminho, conferido pelo backend a cada chamada. Não há
+   * sessão a validar aqui, e é por isso que também não está em `GUEST_PREFIXES`: um
+   * dono autenticado precisa poder abrir o link que acabou de gerar para conferi-lo.
+   */
+  contract: "/contrato",
   dashboard: "/dashboard",
   operations: "/operacoes",
+  pmoc: "/pmoc",
+  /** RVT — visitas técnicas: configuração, ocorrências e execução. */
+  rvt: "/rvt",
+  /**
+   * Resolução de etiqueta QR.
+   *
+   * O caminho é ditado pelo backend: o payload gravado no código é
+   * `<origem>/q/<token>`. Mudá-lo aqui invalidaria toda etiqueta já impressa.
+   */
+  qr: "/q",
   /** Artifact Studio — configuração dos Artifact Templates. */
   artifacts: "/artefatos",
   /** Artifact Execution Workspace — execução e acompanhamento. */
@@ -26,6 +60,8 @@ export const ROUTES = {
   assets: "/ativos",
   /** Catalog Workspace — produtos, serviços e peças. */
   catalog: "/catalogo",
+  /** Central de Catálogos: roteiros de atendimento e unidades de PMOC. */
+  catalogs: "/catalogos",
   /** Workforce Management — equipe, convites e papéis. */
   team: "/equipe",
   /** Financial Workspace — lançamentos, categorias e relatórios. */
@@ -68,6 +104,7 @@ export const PROTECTED_PREFIXES: readonly string[] = [
   ROUTES.scheduling,
   ROUTES.assets,
   ROUTES.catalog,
+  ROUTES.catalogs,
   ROUTES.team,
   ROUTES.financial,
   ROUTES.quotes,
@@ -77,6 +114,16 @@ export const PROTECTED_PREFIXES: readonly string[] = [
   ROUTES.organization,
   ROUTES.customers,
   ROUTES.notifications,
+  ROUTES.pmoc,
+  ROUTES.rvt,
+  /**
+   * Ler a etiqueta não dispensa a sessão.
+   *
+   * `GET /assets/qr/:token` exige `assets.read`, então a rota que a consome é
+   * protegida como qualquer outra — deixá-la aberta "para facilitar o scan"
+   * criaria uma porta pública para o contexto de um equipamento.
+   */
+  ROUTES.qr,
 ];
 
 /** Áreas exclusivas do Platform Administrator. */
@@ -110,6 +157,17 @@ const startsWith = (pathname: string, prefixes: readonly string[]): boolean =>
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
 
+/**
+ * A página de um membro da equipe.
+ *
+ * Três telas apontam para cá — a lista de usuários, a tabela de técnicos e a de
+ * comissão —, e o caminho montado à mão nas três divergiria na primeira
+ * renomeação.
+ */
+export function teamMemberRoute(userId: string): string {
+  return `${ROUTES.team}/membros/${encodeURIComponent(userId)}`;
+}
+
 export function isProtectedPath(pathname: string): boolean {
   return startsWith(pathname, PROTECTED_PREFIXES);
 }
@@ -140,6 +198,16 @@ export const LoginReason = {
 } as const;
 
 export type LoginReason = (typeof LoginReason)[keyof typeof LoginReason];
+
+/**
+ * A URL que o contratante recebe para assinar.
+ *
+ * `origin` é passado por quem chama, e não lido de `window`: o link é montado logo
+ * depois da mutação, e esta função também é usada em teste — onde não há `window`.
+ */
+export function pmocContractUrl(origin: string, token: string): string {
+  return `${origin}${ROUTES.contract}/${encodeURIComponent(token)}`;
+}
 
 export function loginUrl(reason?: LoginReason, redirectTo?: string): string {
   const params = new URLSearchParams();

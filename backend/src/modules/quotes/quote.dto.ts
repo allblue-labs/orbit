@@ -1,6 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsDate,
   IsIn,
   IsInt,
@@ -61,6 +63,45 @@ export class CreateQuoteDto {
   @MaxLength(4000)
   notes?: string;
 
+  /**
+   * Parágrafo de abertura.
+   *
+   * Ausente imprime o padrão do documento. String vazia **não** é o mesmo que
+   * ausente: quem apaga o texto está dizendo que não quer abertura nenhuma.
+   */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(2000)
+  introText?: string;
+
+  /** Endereço de execução, entre os cadastrados do cliente. */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUIDv7()
+  serviceAddressId?: string;
+
+  /** Quem assina. A sessão quando ausente. */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUIDv7()
+  responsibleUserId?: string;
+
+  /**
+   * Equipamentos cobertos.
+   *
+   * Lista inteira, não incremental: o conjunto é pequeno e substituí-lo de uma
+   * vez evita a rota de "remover um equipamento", que só existiria para
+   * desfazer um clique.
+   */
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsUUIDv7({ each: true })
+  assetIds?: string[];
+
   /** Último dia em que a proposta vale. */
   @ApiPropertyOptional()
   @IsOptional()
@@ -74,6 +115,52 @@ export class CreateQuoteDto {
   @IsString()
   @Length(3, 3)
   currency?: string;
+}
+
+/**
+ * Criação a partir de uma operação concluída.
+ *
+ * ## Por que rota separada, e não um campo de `CreateQuoteDto`
+ *
+ * São duas operações diferentes com a mesma aparência. Criar do zero recebe os
+ * dados; copiar de um atendimento **lê** cliente, endereço, equipamentos e
+ * serviços de um registro que já existe, e cada um desses pode não estar lá.
+ * Um `operationId` opcional no mesmo DTO tornaria metade dos outros campos
+ * condicionalmente obrigatórios — e a mensagem de recusa deixaria de dizer o
+ * que fazer.
+ *
+ * ## Só de atendimento concluído
+ *
+ * Orçar a partir do que ainda está em execução copiaria um escopo que ainda vai
+ * mudar. O serviço recusa qualquer outra situação.
+ *
+ * Tudo o que é copiado nasce **editável**: o orçamento entra em `DRAFT`, e o
+ * wizard existe justamente para revisar antes de enviar.
+ */
+export class CreateQuoteFromOperationDto {
+  @ApiProperty()
+  @IsUUIDv7()
+  operationId!: string;
+
+  /** Sobrepõe o título derivado do atendimento. */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MinLength(3)
+  @MaxLength(220)
+  title?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  validUntil?: Date;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUIDv7()
+  responsibleUserId?: string;
 }
 
 /**
@@ -105,6 +192,30 @@ export class UpdateQuoteDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(2000)
+  introText?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUIDv7()
+  serviceAddressId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUIDv7()
+  responsibleUserId?: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsUUIDv7({ each: true })
+  assetIds?: string[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @Type(() => Date)
   @IsDate()
   validUntil?: Date;
@@ -122,6 +233,20 @@ export class UpdateQuoteDto {
   @Min(0)
   @Max(999_999_999.99)
   discount?: number;
+
+  /**
+   * Por que houve desconto.
+   *
+   * Não é obrigatório: um abatimento de centavos para fechar a conta não precisa
+   * de justificativa. Exigi-lo faria alguém digitar "desconto" só para passar
+   * pela validação — pior que o campo vazio, porque parece explicação.
+   */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(500)
+  discountReason?: string;
 }
 
 /* -------------------------------------------------------------------- */

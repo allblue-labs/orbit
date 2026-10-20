@@ -12,6 +12,7 @@ import '../../../app/providers.dart';
 import '../../../core/errors/orbit_exception.dart';
 import '../../../core/theme/orbit_theme.dart';
 import '../../../core/widgets/orbit_brand.dart';
+import '../domain/session.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -56,14 +57,50 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           );
       // A navegação reage à mudança de sessão; nada a fazer aqui.
     } on OrbitException catch (error) {
-      final needsMfa = error.message.toLowerCase().contains('mfa');
+      final needsMfa = error.code == 'MFA_REQUIRED';
       if (!mounted) return;
       setState(() {
         _requiresMfa = _requiresMfa || needsMfa;
         _error = needsMfa
             ? 'Informe o código do seu autenticador.'
-            : error.message;
+            : error.publicMessage;
       });
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  /// Pede o link de redefinição para o e-mail digitado.
+  ///
+  /// A confirmação é a mesma exista a conta ou não — o servidor responde 202
+  /// nos dois casos, e a tela não pode contar o que ele esconde. Falha de rede
+  /// também não vira "não existe": ela vira uma mensagem de rede.
+  Future<void> _pedirRecuperacao() async {
+    final email = _email.text.trim();
+    if (!email.contains('@')) {
+      setState(() => _error = 'Escreva seu e-mail acima para receber o link.');
+      return;
+    }
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      await ref
+          .read(authControllerProvider.notifier)
+          .requestPasswordReset(email);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Se houver conta com esse e-mail, o link de redefinição foi '
+            'enviado.',
+          ),
+        ),
+      );
+    } on OrbitException catch (error) {
+      if (!mounted) return;
+      setState(() => _error = error.publicMessage);
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -71,6 +108,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final auth = ref.watch(authControllerProvider);
+    final motivo = auth is AuthUnauthenticated ? auth.reason : null;
     return Scaffold(
       body: OrbitBackground(
         child: SafeArea(
@@ -140,10 +179,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   ? Icons.visibility_outlined
                                   : Icons.visibility_off_outlined,
                             ),
-                            tooltip: _obscure ? 'Mostrar senha' : 'Ocultar senha',
+                            tooltip: _obscure
+                                ? 'Mostrar senha'
+                                : 'Ocultar senha',
                           ),
                         ),
-                        validator: (value) => (value == null || value.length < 8)
+                        validator: (value) =>
+                            (value == null || value.length < 8)
                             ? 'A senha tem no mínimo 8 caracteres'
                             : null,
                       ),
@@ -162,6 +204,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         ),
                       ],
 
+                      // O motivo de ter caído aqui — sessão expirada, servidor
+                      // inalcançável — só aparece enquanto ninguém digitou nada.
+                      // Depois de uma tentativa, quem manda é o erro dela.
+                      if (_error == null && motivo != null) ...[
+                        const SizedBox(height: OrbitSpacing.md),
+                        _ErrorBanner(message: motivo),
+                      ],
                       if (_error != null) ...[
                         const SizedBox(height: OrbitSpacing.md),
                         _ErrorBanner(message: _error!),
@@ -181,6 +230,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 ),
                               )
                             : const Text('Entrar'),
+                      ),
+                      const SizedBox(height: OrbitSpacing.sm),
+
+                      /// Recuperação por e-mail.
+                      ///
+                      /// Existe aqui porque é onde a pessoa descobre que não
+                      /// lembra a senha. Quem não usa e-mail no trabalho — boa
+                      /// parte de uma equipe de campo — pede ao dono da
+                      /// organização, que gera um link e repassa por mensagem.
+                      TextButton(
+                        key: const Key('login.forgot'),
+                        onPressed: _submitting ? null : _pedirRecuperacao,
+                        child: const Text('Esqueci minha senha'),
                       ),
                     ],
                   ),
@@ -202,7 +264,7 @@ class _ErrorBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(OrbitSpacing.md),
+      padding: const EdgeInsets.all(OrbitSpacing.gutter),
       decoration: BoxDecoration(
         color: OrbitColors.danger.withValues(alpha: 0.12),
         borderRadius: OrbitRadius.field,

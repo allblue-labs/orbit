@@ -32,12 +32,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useApiMutation } from "@/hooks/api/use-api-mutation";
 import { useApiQuery } from "@/hooks/api/use-api-query";
 import { CACHE } from "@/hooks/api/cache-policy";
+import { artifactExecutionsService } from "@/services/artifact-executions.service";
 import { financialService } from "@/services/financial.service";
 import type {
   CancelFinancialEntryInput,
   ConfirmFinancialEntryInput,
   CreateFinancialCategoryInput,
   CreateFinancialEntryInput,
+  CreateReceiptInput,
   FinancialAnalyticsQuery,
   FinancialCategoryQuery,
   FinancialEntryQuery,
@@ -112,6 +114,34 @@ export function useFinancialSettings() {
     financialService.keys.settings(),
     ({ signal }) => financialService.settings({ signal }),
     FINANCIAL_REFRESH.settings,
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Recibos                                                             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Emite o recibo.
+ *
+ * Invalida o Financeiro inteiro: o recibo emitido vira receita confirmada quando o
+ * manifesto é publicado, e a lista de lançamentos ao lado precisa acompanhar. Também
+ * invalida as execuções de artefato, que é onde a lista de recibos mora.
+ */
+export function useCreateReceipt() {
+  const invalidate = useFinancialInvalidation();
+  const queryClient = useQueryClient();
+
+  return useApiMutation(
+    (input: CreateReceiptInput) => financialService.createReceipt(input),
+    {
+      onSuccess: async () => {
+        await invalidate();
+        await queryClient.invalidateQueries({
+          queryKey: artifactExecutionsService.keys.module(),
+        });
+      },
+    },
   );
 }
 

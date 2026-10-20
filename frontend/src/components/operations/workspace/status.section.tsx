@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { errorCopy } from "@/lib/error-copy";
 import { useChangeOperationStatus } from "@/hooks/operations/use-operations";
 import { useSession } from "@/providers/session-provider";
 import { OPERATION_STATUS_LABELS, type Operation } from "@/types/operations";
@@ -85,13 +86,10 @@ function StatusForm({
         reason: reason.trim() || undefined,
       });
       setReason("");
-      toast.success("Status atualizado");
+      toast.success("Situação atualizada");
     } catch (error) {
-      toast.error("Não foi possível alterar o status", {
-        description:
-          error instanceof Error
-            ? error.message
-            : "A transição pode não ser permitida a partir do estado atual.",
+      toast.error("Não foi possível alterar a situação", {
+        description: errorCopy(error),
       });
     }
   }

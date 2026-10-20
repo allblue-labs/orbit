@@ -30,7 +30,12 @@
  * O efeito colateral honesto de uma reexecução é uma revisão a mais, com o
  * mesmo conteúdo — visível no histórico, que é onde deve estar.
  */
-import { Injectable, type OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  Optional,
+  type OnModuleInit,
+} from '@nestjs/common';
 import { ArtifactManifestService } from '../artifact-manifests/artifact-manifest.service';
 import { JobProcessorRegistry } from '../jobs/job-processor.registry';
 import {
@@ -40,11 +45,12 @@ import {
   type JobProcessor,
   type JobQueue,
 } from '../jobs/background-job.types';
-import { ArtifactRenderAssembler } from './artifact-render.assembler';
+import { RenderInputFactory } from './render-input.factory';
 import { ArtifactRenderMetrics } from './artifact-render.metrics';
 import { ArtifactRenderRepository } from './artifact-render.repository';
 import { ArtifactRendererRegistry } from './renderers/renderer.registry';
 import type { RenderJobPayload } from './artifact-render.service';
+import { MobileNotificationService } from '../notifications/mobile-notification.service';
 
 /** Nome do arquivo emitido — o código da execução é o que identifica. */
 const fileNameFor = (code: string, format: string): string =>
@@ -53,14 +59,17 @@ const fileNameFor = (code: string, format: string): string =>
 @Injectable()
 export class ArtifactRenderProcessor implements JobProcessor, OnModuleInit {
   readonly queue: JobQueue = JOB_QUEUES.artifactRender;
+  private readonly logger = new Logger(ArtifactRenderProcessor.name);
 
   constructor(
     private readonly repository: ArtifactRenderRepository,
-    private readonly assembler: ArtifactRenderAssembler,
+    private readonly inputs: RenderInputFactory,
     private readonly renderers: ArtifactRendererRegistry,
     private readonly manifests: ArtifactManifestService,
     private readonly metrics: ArtifactRenderMetrics,
     private readonly registry: JobProcessorRegistry,
+    @Optional()
+    private readonly mobileNotifications?: MobileNotificationService,
   ) {}
 
   onModuleInit(): void {
@@ -92,6 +101,37 @@ export class ArtifactRenderProcessor implements JobProcessor, OnModuleInit {
       throw new PermanentJobError('Artifact execution no longer exists');
     }
 
+    /**
+     * Crash/retry depois da emissão, mas antes de marcar READY: o manifest já
+     * é a autoridade. Reconciliar o estado evita uma segunda revisão/PDF.
+     */
+    if (source.fieldArtifact && source.manifests.length > 0) {
+      await this.repository.markReady(payload.executionId);
+      if (source.fieldArtifact && this.mobileNotifications) {
+        try {
+          await this.mobileNotifications.materialize({
+            organizationId: job.organizationId,
+            businessUnitId: source.businessUnitId,
+            recipientUserId: source.responsibleUserId ?? source.createdById,
+            type: 'ARTIFACT_AVAILABLE',
+            factId: source.manifests[0]!.id,
+            resourceId: source.fieldArtifact.id,
+            correlationId: job.correlationId,
+          });
+        } catch (error) {
+          this.logger.warn(
+            JSON.stringify({
+              event: 'mobile_notification_materialization_failed',
+              type: 'ARTIFACT_AVAILABLE',
+              errorClass:
+                error instanceof Error ? error.constructor.name : 'Unknown',
+            }),
+          );
+        }
+      }
+      return;
+    }
+
     if (job.attempts > 1) {
       this.metrics.recordRetry(
         payload.renderer,
@@ -105,14 +145,15 @@ export class ArtifactRenderProcessor implements JobProcessor, OnModuleInit {
     try {
       const renderer = this.renderers.get(payload.renderer);
 
-      const input = this.assembler.assemble({
-        execution: source,
-        snapshot: source.snapshot,
-        responses: source.responses,
-        signatures: source.signatures,
-        organizationName: source.organization.displayName,
-        correlationId: job.correlationId,
-      });
+      /**
+       * A montagem é do fabricante, e não daqui.
+       *
+       * O preview parte exatamente do mesmo input e do mesmo renderer — a
+       * diferença entre os dois caminhos é só o que acontece com os bytes.
+       * Montar aqui de novo faria o que o owner vê divergir do que ele recebe
+       * na primeira mudança, e em silêncio.
+       */
+      const input = await this.inputs.build(source, job.correlationId);
 
       const output = await renderer.render(input);
 
@@ -151,6 +192,28 @@ export class ArtifactRenderProcessor implements JobProcessor, OnModuleInit {
       });
 
       await this.repository.markReady(payload.executionId);
+      if (source.fieldArtifact && this.mobileNotifications) {
+        try {
+          await this.mobileNotifications.materialize({
+            organizationId: job.organizationId,
+            businessUnitId: source.businessUnitId,
+            recipientUserId: source.responsibleUserId ?? source.createdById,
+            type: 'ARTIFACT_AVAILABLE',
+            factId: issued.id,
+            resourceId: source.fieldArtifact.id,
+            correlationId: job.correlationId,
+          });
+        } catch (error) {
+          this.logger.warn(
+            JSON.stringify({
+              event: 'mobile_notification_materialization_failed',
+              type: 'ARTIFACT_AVAILABLE',
+              errorClass:
+                error instanceof Error ? error.constructor.name : 'Unknown',
+            }),
+          );
+        }
+      }
       await this.repository.audit(
         job.organizationId,
         source.businessUnitId,

@@ -55,7 +55,7 @@ export function StatusSection({
     <PanelFrame
       panelId="artifact-execution-status"
       title="Status"
-      description="As transições válidas são decididas pelo backend"
+      description="As mudanças possíveis dependem da situação atual"
       actions={<ExecutionStatusBadge status={execution.status} />}
     >
       <div className="space-y-4">
@@ -80,8 +80,7 @@ export function StatusSection({
 
             {execution.progressDetails.canComplete ? null : (
               <p className="text-xs text-muted-foreground">
-                O backend informa que ainda há campos obrigatórios ou
-                assinaturas pendentes — transições que exigem execução completa
+                Ainda há campos obrigatórios ou assinaturas pendentes — transições que exigem execução completa
                 serão recusadas.
               </p>
             )}

@@ -79,7 +79,7 @@ export function AutomationsSettingsTab() {
         <PanelFrame
           panelId="settings-automations-loading"
           title="Automações"
-          description="Carregando o catálogo publicado pelo servidor"
+          description="Carregando o catálogo de relatórios"
         >
           <PanelLoading rows={4} />
         </PanelFrame>
@@ -87,7 +87,7 @@ export function AutomationsSettingsTab() {
         <PanelFrame
           panelId="settings-automations-error"
           title="Automações"
-          description="O catálogo de acontecimentos e ações vem do servidor"
+          description="Acontecimentos e ações disponíveis"
         >
           <PanelError
             error={catalog.error}
@@ -141,8 +141,7 @@ function ReminderExample() {
 
         <p className="text-sm text-muted-foreground">
           Quando a ordem de serviço for finalizada, o Orbit guarda o
-          compromisso. Passados seis meses <strong>de calendário</strong> — a
-          conta é do servidor, não do navegador —, o lembrete aparece sozinho na{" "}
+          compromisso. Passados seis meses <strong>de calendário</strong> — a contagem não depende do relógio deste navegador —, o lembrete aparece sozinho na{" "}
           <strong>Agenda</strong>, no calendário da unidade, apontando para a
           operação que o originou. Ninguém precisa abrir esta tela, nem a
           Agenda, para que isso aconteça.
@@ -197,8 +196,7 @@ function ScopeNotice() {
         </li>
         <li>
           <strong className="text-foreground">Não chama nada de fora.</strong>{" "}
-          Sem webhook, sem URL e sem requisição HTTP. O que uma regra aciona é
-          trabalho interno de uma lista fechada do servidor.
+          Sem webhook, sem URL e sem requisição HTTP. O que uma regra aciona vem de uma lista fechada de ações do Orbit.
         </li>
         <li>
           <strong className="text-foreground">
@@ -222,8 +220,7 @@ function ScopeNotice() {
           <strong className="text-foreground">
             Não abre operação de acompanhamento.
           </strong>{" "}
-          A ação existe no catálogo, marcada como indisponível, com o motivo do
-          servidor: uma ordem de serviço exige código único, e não há regra
+          A ação existe no catálogo, marcada como indisponível, com o motivo: uma ordem de serviço exige código único, e não há regra
           automática de numeração.
         </li>
       </ul>

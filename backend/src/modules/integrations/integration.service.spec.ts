@@ -50,6 +50,7 @@ describe('IntegrationService', () => {
     expect(encrypt).toHaveBeenCalledWith('{"token":"plain-text"}');
 
     const persisted = create.mock.calls[0]?.[0];
+    if (!persisted) throw new Error('integration was not persisted');
     expect(persisted.encryptedSecrets).toBeInstanceOf(Uint8Array);
     expect(persisted.secretKeyVersion).toBe(2);
   });

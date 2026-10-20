@@ -84,7 +84,7 @@ export function loadStorageConfig(): StorageConfig {
     localRoot: process.env.STORAGE_LOCAL_DIR?.trim() || 'storage/objects',
     localPublicBaseUrl:
       process.env.STORAGE_LOCAL_PUBLIC_URL?.trim() ||
-      'http://localhost:5001/api/v1',
+      'http://localhost:6001/api/v1',
     /**
      * Sem segredo dedicado, a assinatura local reaproveita o segredo do JWT —
      * já obrigatório e do mesmo nível de sensibilidade. Nunca há assinatura

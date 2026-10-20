@@ -11,6 +11,14 @@ export interface IdentitySessionReadModel {
   refreshToken: string;
   tokenType: 'Bearer';
   expiresIn: number;
+  /**
+   * A senha usada agora é provisória e precisa ser trocada.
+   *
+   * Vai no login para o cliente decidir a primeira tela sem uma segunda
+   * chamada. `false` no refresh: renovar sessão não é o momento de descobrir
+   * isso, e o perfil é quem responde depois.
+   */
+  mustChangePassword: boolean;
 }
 
 export interface IdentityProfileReadModel {
@@ -26,6 +34,8 @@ export interface IdentityProfileReadModel {
   status: UserStatus;
   emailVerifiedAt: string | null;
   mfaEnabled: boolean;
+  /** A senha atual é provisória e precisa ser trocada antes de usar o sistema. */
+  mustChangePassword: boolean;
   createdAt: string;
   updatedAt: string;
 }

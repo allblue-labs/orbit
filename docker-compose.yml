@@ -28,7 +28,10 @@ services:
       context: ./backend
       dockerfile: Dockerfile
       target: runner
-    image: orbit-api:${ORBIT_VERSION:-latest}
+      args:
+        ORBIT_COMMIT_SHA: ${ORBIT_COMMIT_SHA:?ORBIT_COMMIT_SHA is required}
+        ORBIT_BUILD_TIME: ${ORBIT_BUILD_TIME:?ORBIT_BUILD_TIME is required}
+    image: orbit-api:${ORBIT_VERSION:?ORBIT_VERSION is required}
     restart: unless-stopped
     init: true
     environment:
@@ -52,6 +55,9 @@ services:
       DATABASE_TRANSACTION_MAX_WAIT_MS: ${DATABASE_TRANSACTION_MAX_WAIT_MS:-10000}
       LOG_CLIENT_ERRORS: ${LOG_CLIENT_ERRORS:-false}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET is required}
+      # Segredo long-lived do antiabuso de trials. Não compartilha rotação com
+      # JWT/AES e não possui fallback.
+      TRIAL_FINGERPRINT_SECRET: ${TRIAL_FINGERPRINT_SECRET:?TRIAL_FINGERPRINT_SECRET is required}
       JWT_ISSUER: ${JWT_ISSUER:-orbit-api}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-orbit}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
@@ -64,9 +70,38 @@ services:
       STORAGE_PROVIDER: ${STORAGE_PROVIDER:-LOCAL}
       STORAGE_BUCKET: ${STORAGE_BUCKET:-orbit-artifacts}
       STORAGE_LOCAL_DIR: /app/storage/objects
-      STORAGE_LOCAL_PUBLIC_URL: ${STORAGE_LOCAL_PUBLIC_URL:-http://localhost:5001/api/v1}
+      # A URL pública do storage segue a porta publicada, não uma fixa: a API é
+      # exposta em ${API_PORT}, e era 5001 aqui enquanto o mapeamento acima
+      # dizia 6001. O endereço assinado que a API devolvia apontava para a porta
+      # interna do container e não era alcançável do host — o upload do smoke de
+      # RVT falhava com ECONNREFUSED.
+      STORAGE_LOCAL_PUBLIC_URL: ${STORAGE_LOCAL_PUBLIC_URL:-http://localhost:${API_PORT:-5001}/api/v1}
       STORAGE_SIGNED_URL_TTL_SECONDS: ${STORAGE_SIGNED_URL_TTL_SECONDS:-300}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
+      IDENTITY_PUBLIC_WEB_URL: ${IDENTITY_PUBLIC_WEB_URL:-}
+      CUSTOMER_PORTAL_ENABLED: "false"
+      # Billing is an explicit optional subsystem. Disabled mode does not need
+      # provider credentials; enabled mode validates every value at startup.
+      STRIPE_ENABLED: ${STRIPE_ENABLED:-false}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_PRICE_ESSENTIAL_MONTHLY: ${STRIPE_PRICE_ESSENTIAL_MONTHLY:-}
+      STRIPE_PRICE_ESSENTIAL_SEMIANNUAL: ${STRIPE_PRICE_ESSENTIAL_SEMIANNUAL:-}
+      STRIPE_PRICE_ESSENTIAL_ANNUAL: ${STRIPE_PRICE_ESSENTIAL_ANNUAL:-}
+      STRIPE_PRICE_PROFESSIONAL_MONTHLY: ${STRIPE_PRICE_PROFESSIONAL_MONTHLY:-}
+      STRIPE_PRICE_PROFESSIONAL_SEMIANNUAL: ${STRIPE_PRICE_PROFESSIONAL_SEMIANNUAL:-}
+      STRIPE_PRICE_PROFESSIONAL_ANNUAL: ${STRIPE_PRICE_PROFESSIONAL_ANNUAL:-}
+      STRIPE_PRICE_PROFESSIONAL_INTELLIGENCE_MONTHLY: ${STRIPE_PRICE_PROFESSIONAL_INTELLIGENCE_MONTHLY:-}
+      STRIPE_PRICE_PROFESSIONAL_INTELLIGENCE_SEMIANNUAL: ${STRIPE_PRICE_PROFESSIONAL_INTELLIGENCE_SEMIANNUAL:-}
+      STRIPE_PRICE_PROFESSIONAL_INTELLIGENCE_ANNUAL: ${STRIPE_PRICE_PROFESSIONAL_INTELLIGENCE_ANNUAL:-}
+      STRIPE_PRICE_ENTERPRISE_UNLIMITED_MONTHLY: ${STRIPE_PRICE_ENTERPRISE_UNLIMITED_MONTHLY:-}
+      STRIPE_PRICE_ENTERPRISE_UNLIMITED_SEMIANNUAL: ${STRIPE_PRICE_ENTERPRISE_UNLIMITED_SEMIANNUAL:-}
+      STRIPE_PRICE_ENTERPRISE_UNLIMITED_ANNUAL: ${STRIPE_PRICE_ENTERPRISE_UNLIMITED_ANNUAL:-}
+      BILLING_CHECKOUT_SUCCESS_URL: ${BILLING_CHECKOUT_SUCCESS_URL:-}
+      BILLING_CHECKOUT_CANCEL_URL: ${BILLING_CHECKOUT_CANCEL_URL:-}
+      BILLING_PORTAL_RETURN_URL: ${BILLING_PORTAL_RETURN_URL:-}
+      BILLING_EVENTS_WORKER_ENABLED: ${BILLING_EVENTS_WORKER_ENABLED:-true}
+      BILLING_EVENTS_POLL_INTERVAL_MS: ${BILLING_EVENTS_POLL_INTERVAL_MS:-2000}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_SECURE: ${SMTP_SECURE:-false}
@@ -95,7 +130,7 @@ services:
           "CMD",
           "node",
           "-e",
-          "fetch('http://127.0.0.1:5001').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+          "fetch('http://127.0.0.1:5001/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
         ]
       interval: 15s
       timeout: 5s
@@ -112,7 +147,10 @@ services:
       context: ./backend
       dockerfile: Dockerfile
       target: migrator
-    image: orbit-api-migrator:${ORBIT_VERSION:-latest}
+      args:
+        ORBIT_COMMIT_SHA: ${ORBIT_COMMIT_SHA:?ORBIT_COMMIT_SHA is required}
+        ORBIT_BUILD_TIME: ${ORBIT_BUILD_TIME:?ORBIT_BUILD_TIME is required}
+    image: orbit-api-migrator:${ORBIT_VERSION:?ORBIT_VERSION is required}
     restart: "no"
     environment:
       NODE_ENV: production
@@ -134,7 +172,10 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       target: runner
-    image: orbit-frontend:${ORBIT_VERSION:-latest}
+      args:
+        ORBIT_COMMIT_SHA: ${ORBIT_COMMIT_SHA:?ORBIT_COMMIT_SHA is required}
+        ORBIT_BUILD_TIME: ${ORBIT_BUILD_TIME:?ORBIT_BUILD_TIME is required}
+    image: orbit-frontend:${ORBIT_VERSION:?ORBIT_VERSION is required}
     restart: unless-stopped
     init: true
     environment:
@@ -142,7 +183,13 @@ services:
       PORT: 3000
       HOSTNAME: 0.0.0.0
       ORBIT_API_URL: http://api:5001/api/v1
-      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
+      # Origem pública canônica usada pela proteção same-origin do BFF. Não é
+      # inferida do host interno do container/reverse proxy.
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:?FRONTEND_ORIGIN is required}
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:?AUTH_COOKIE_SECURE is required}
+      # Exclusivo para smoke local em HTTP. Produção pública deve omitir ou
+      # manter false, sempre com AUTH_COOKIE_SECURE=true.
+      ALLOW_INSECURE_LOCAL_COOKIES: ${ALLOW_INSECURE_LOCAL_COOKIES:-false}
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
     depends_on:

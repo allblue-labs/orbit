@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { enderecoDeAtendimento } from './customer-address-seed';
 import { Prisma } from '@prisma/client';
 import {
   ConflictException,
@@ -7,16 +8,25 @@ import {
 } from '../../../../exceptions';
 import type {
   CreateContactDto,
+  CreateCustomerAddressDto,
   CreateCustomerDto,
   CustomerQueryDto,
   UpdateContactDto,
+  UpdateCustomerAddressDto,
   UpdateCustomerDto,
 } from './customer.dto';
+import {
+  AllocationResource,
+  EntitlementService,
+} from '../../../subscription-plans/entitlements';
 import { CustomerRepository } from './customer.repository';
 
 @Injectable()
 export class CustomerService {
-  constructor(private readonly repository: CustomerRepository) {}
+  constructor(
+    private readonly repository: CustomerRepository,
+    private readonly entitlements: EntitlementService,
+  ) {}
 
   list(organizationId: string, query: CustomerQueryDto) {
     return this.repository.list(organizationId, query);
@@ -31,18 +41,28 @@ export class CustomerService {
   async create(organizationId: string, input: CreateCustomerDto) {
     this.validateDocument(input.documentType, input.documentNumber);
     try {
-      return await this.repository.create({
+      return await this.entitlements.guardAllocation(
         organizationId,
-        type: input.type,
-        legalName: input.legalName,
-        tradeName: input.tradeName,
-        documentType: input.documentType,
-        documentNumber: this.document(input.documentNumber),
-        email: input.email?.toLowerCase(),
-        phone: input.phone,
-        notes: input.notes,
-        address: input.address as Prisma.InputJsonValue | undefined,
-      });
+        AllocationResource.ACTIVE_CUSTOMERS,
+        () =>
+          this.repository.create(
+            {
+              organizationId,
+              type: input.type,
+              legalName: input.legalName,
+              tradeName: input.tradeName,
+              documentType: input.documentType,
+              documentNumber: this.document(input.documentNumber),
+              email: input.email?.toLowerCase(),
+              phone: input.phone,
+              notes: input.notes,
+              address: input.address as Prisma.InputJsonValue | undefined,
+            },
+            /* O mesmo endereço, agora também como destino do técnico. Ver
+               `customer-address-seed`. */
+            enderecoDeAtendimento(input.address),
+          ),
+      );
     } catch (error) {
       this.mapConflict(error);
     }
@@ -75,6 +95,78 @@ export class CustomerService {
   async remove(id: string, organizationId: string): Promise<void> {
     await this.get(id, organizationId);
     await this.repository.softDelete(id);
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Endereços de atendimento                                          */
+  /* ---------------------------------------------------------------- */
+
+  /**
+   * Os endereços de atendimento do cliente.
+   *
+   * `Customer.address` continua sendo o endereço **fiscal** — o que vai na nota.
+   * Isto aqui é para onde o técnico vai, e uma rede com três lojas tem três.
+   */
+  async listAddresses(
+    customerId: string,
+    organizationId: string,
+    onlyActive = false,
+  ) {
+    await this.get(customerId, organizationId);
+    return this.repository.listAddresses(customerId, onlyActive);
+  }
+
+  async createAddress(
+    customerId: string,
+    organizationId: string,
+    input: CreateCustomerAddressDto,
+  ) {
+    await this.get(customerId, organizationId);
+    return this.repository.createAddress({
+      organizationId,
+      customerId,
+      label: input.label,
+      street: input.street,
+      city: input.city,
+      number: input.number,
+      complement: input.complement,
+      district: input.district,
+      stateCode: input.stateCode?.toUpperCase(),
+      postalCode: input.postalCode?.replace(/\D/g, ''),
+      notes: input.notes,
+      isPrimary: input.isPrimary,
+    });
+  }
+
+  async updateAddress(
+    id: string,
+    customerId: string,
+    organizationId: string,
+    input: UpdateCustomerAddressDto,
+  ) {
+    await this.get(customerId, organizationId);
+    const atual = await this.repository.findAddress(id, customerId);
+    if (!atual) throw new EntityNotFoundException('CustomerAddress', id);
+    return this.repository.updateAddress(id, customerId, {
+      label: input.label,
+      street: input.street,
+      city: input.city,
+      number: input.number,
+      complement: input.complement,
+      district: input.district,
+      stateCode: input.stateCode?.toUpperCase(),
+      postalCode: input.postalCode?.replace(/\D/g, ''),
+      notes: input.notes,
+      isPrimary: input.isPrimary,
+      isActive: input.isActive,
+    });
+  }
+
+  async removeAddress(id: string, customerId: string, organizationId: string) {
+    await this.get(customerId, organizationId);
+    const atual = await this.repository.findAddress(id, customerId);
+    if (!atual) throw new EntityNotFoundException('CustomerAddress', id);
+    await this.repository.softDeleteAddress(id);
   }
 
   async listContacts(customerId: string, organizationId: string) {
@@ -186,7 +278,10 @@ export class CustomerService {
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === 'P2002'
     ) {
-      throw new ConflictException('Customer document is already registered');
+      throw new ConflictException(
+        'Customer document is already registered',
+        'CUSTOMER_DOCUMENT_ALREADY_EXISTS',
+      );
     }
     throw error;
   }
@@ -196,7 +291,10 @@ export class CustomerService {
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === 'P2002'
     ) {
-      throw new ConflictException('The customer already has a primary contact');
+      throw new ConflictException(
+        'The customer already has a primary contact',
+        'CUSTOMER_PRIMARY_CONTACT_ALREADY_EXISTS',
+      );
     }
     throw error;
   }

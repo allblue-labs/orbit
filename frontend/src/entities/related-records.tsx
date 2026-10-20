@@ -54,7 +54,13 @@ export function RelatedRecordsPanel<TData>({
   query: RelatedQuery<TData>;
   toRows: (data: TData) => readonly RelatedRow[];
   emptyMessage: string;
-  seeAllHref: string;
+  /**
+   * O destino do "Ver tudo". **Opcional**: nem todo recorte tem uma listagem
+   * global correspondente, e mandar para uma lista sem o filtro seria pior do
+   * que não oferecer o link — pareceria um filtro que silenciosamente não
+   * valeu.
+   */
+  seeAllHref?: string;
 }) {
   const definition = resolveEntity(entity);
 
@@ -64,12 +70,14 @@ export function RelatedRecordsPanel<TData>({
       title={title}
       description={description}
       actions={
-        <Button size="sm" variant="ghost" asChild>
-          <Link href={seeAllHref}>
-            Ver tudo
-            <ArrowUpRight className="size-3.5" />
-          </Link>
-        </Button>
+        seeAllHref ? (
+          <Button size="sm" variant="ghost" asChild>
+            <Link href={seeAllHref}>
+              Ver tudo
+              <ArrowUpRight className="size-3.5" />
+            </Link>
+          </Button>
+        ) : null
       }
     >
       <PanelState

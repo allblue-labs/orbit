@@ -37,8 +37,11 @@
  * O cabeçalho e a navegação resolvem tudo pelo **Entity Registry** — não há
  * `switch` de entidade nesta árvore.
  */
+import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, RefreshCw } from "lucide-react";
+import { ArrowLeft, Pencil, RefreshCw } from "lucide-react";
+
+import { useAction } from "@/actions";
 
 import { ContentContainer } from "@/components/layout/page-primitives";
 import { PanelError, PanelLoading } from "@/components/panels";
@@ -51,8 +54,10 @@ import { useCustomer } from "@/hooks/customers/use-customers";
 import { formatDateTime } from "@/lib/formatters";
 import { ROUTES } from "@/lib/routes";
 import { useSession } from "@/providers/session-provider";
+import { PRODUCT_CAPABILITY, PRODUCT_FEATURE } from "@/registry/product-access";
 import type { Customer } from "@/types/customers";
 import { TabBoundary } from "@/workspace";
+import { CustomerFormDialog } from "../customer-form.dialog";
 import {
   CustomerStatusBadge,
   customerTypeLabel,
@@ -65,6 +70,7 @@ import {
   OverviewSection,
 } from "./panels";
 import { CustomerQuotesTab } from "./tabs/quotes.tab";
+import { AddressesTab } from "./tabs/addresses.tab";
 import { EquipmentTab } from "./tabs/equipment.tab";
 import { HistoryTab } from "./tabs/history.tab";
 import {
@@ -118,9 +124,25 @@ function WorkspaceBody({
   onRefresh: () => void;
 }) {
   const session = useSession();
-  const { definition, can } = useEntityAccess("customer");
-  const canManage = can("update");
-  const canReadIntelligence = session.hasCapability("ai.executions.read");
+  const { definition } = useEntityAccess("customer");
+  const canReadIntelligence =
+    session.hasPermission("ai.executions.read") &&
+    session.hasCapability("ai.executions.read") &&
+    session.canUseProductFeature(
+      PRODUCT_CAPABILITY.ORBIT_INTELLIGENCE,
+      PRODUCT_FEATURE.ORBIT_INTELLIGENCE,
+    );
+
+  /**
+   * Uma autoridade só para editar.
+   *
+   * `can("update")` e `useAction("customer.update")` resolvem a mesma entrada
+   * do registry pela mesma função — ter as duas na tela seria manter dois
+   * caminhos que só por acidente concordam. Fica a que também traz o rótulo.
+   */
+  const edit = useAction("customer.update");
+  const canManage = edit.allowed;
+  const [editOpen, setEditOpen] = useState(false);
 
   return (
     <ContentContainer size="wide" className="space-y-6">
@@ -155,13 +177,32 @@ function WorkspaceBody({
           </p>
         </div>
 
-        <Button variant="ghost" size="sm" onClick={onRefresh}>
-          <RefreshCw className="size-4" />
-          Atualizar
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {edit.allowed ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setEditOpen(true)}
+            >
+              <Pencil className="size-4" />
+              {edit.label}
+            </Button>
+          ) : null}
+          <Button variant="ghost" size="sm" onClick={onRefresh}>
+            <RefreshCw className="size-4" />
+            Atualizar
+          </Button>
+        </div>
       </header>
 
-      <Tabs defaultValue="geral" className="space-y-5">
+      {/* A escrita semeia o cache com a resposta do servidor; a ficha se redesenha sozinha. */}
+      <CustomerFormDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        editing={customer}
+      />
+
+      <Tabs defaultValue="geral">
         <TabsList>
           <TabsTrigger value="geral">Visão geral</TabsTrigger>
           <TabsTrigger value="equipamentos">
@@ -170,6 +211,7 @@ function WorkspaceBody({
               {customer.counts.assets}
             </Badge>
           </TabsTrigger>
+          <TabsTrigger value="enderecos">Endereços</TabsTrigger>
           <TabsTrigger value="operacoes">
             Operações
             <Badge variant="secondary" className="ml-1.5">
@@ -206,10 +248,9 @@ function WorkspaceBody({
               </div>
               <div className="min-w-0 space-y-6">
                 <IndicatorsSection customer={customer} />
-                <IntelligenceSection
-                  customerId={customer.id}
-                  enabled={canReadIntelligence}
-                />
+                {canReadIntelligence ? (
+                  <IntelligenceSection customerId={customer.id} enabled />
+                ) : null}
               </div>
             </div>
           </TabBoundary>
@@ -218,6 +259,18 @@ function WorkspaceBody({
         <TabsContent value="equipamentos">
           <TabBoundary id="customer-equipment" label="os equipamentos">
             <EquipmentTab customerId={customer.id} />
+          </TabBoundary>
+        </TabsContent>
+
+        {/*
+          Onde o técnico é atendido, e não onde a nota é emitida.
+
+          A aba existe porque o endereço deixou de ser um campo do cadastro: um
+          cliente pode ter várias lojas, e o atendimento precisa dizer em qual.
+        */}
+        <TabsContent value="enderecos">
+          <TabBoundary id="customer-addresses" label="os endereços">
+            <AddressesTab customerId={customer.id} />
           </TabBoundary>
         </TabsContent>
 

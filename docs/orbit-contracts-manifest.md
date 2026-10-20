@@ -11,7 +11,7 @@ existe**.
 | Frontend Web | Next.js 16 (App Router)            | via BFF próprio (`/api/orbit/**`)  |
 | Mobile       | Flutter 3.44 (Orbit Operator)      | direto no NestJS, com Bearer token |
 
-Última revisão: PR-26 (PMOC Domain & Compliance Engine).
+Última revisão: PR-35 (PT-BR Product Language & Public Error Contract).
 
 ---
 
@@ -42,14 +42,16 @@ Erro (`FoundationExceptionFilter`):
 ```jsonc
 {
   "success": false,
-  "error": { "code": "…", "message": "… | […]", "details": … },
+  "error": { "code": "…", "message": "…", "status": 400, "details": … },
   "requestId": "…",
   "timestamp": "…"
 }
 ```
 
-`message` pode ser string ou lista (validação do `ValidationPipe`). Os dois
-clientes normalizam para uma única mensagem.
+`code` é a authority estável. `message` é sempre uma string pública PT-BR.
+Validações usam `details[]` com `{ field, code, message }`; nenhum cliente
+precisa interpretar texto cru do ValidationPipe. O Web mantém leitura
+temporária do array legado somente durante a migração.
 
 | Cliente | Onde desembrulha                                                     |
 | ------- | -------------------------------------------------------------------- |
@@ -91,6 +93,9 @@ clientes.
 | Artifact Manifest & Storage                      | Read Models públicos + mappers explícitos       | **sincronizado** por `contracts:sync`                                           | espelhado em `artifact_manifest_contracts.dart`         |
 | Artifact Rendering                               | Read Models públicos                            | **sincronizado** por `contracts:sync`                                           | espelhado em `artifact_render_contracts.dart`           |
 | Notifications                                    | registro do Prisma, sem Read Model              | **espelhado à mão** em `src/types/notifications.ts`                             | não consumido                                           |
+| Customer Portal Identity                         | Read Models públicos + mapper explícito          | contrato disponível; BFF ainda fora de escopo                                  | não consumido                                           |
+| Customer Service Requests                        | Read Models públicos + mapper explícito          | contrato sincronizado; UI fora de escopo                                        | contrato disponível; UI fora de escopo                  |
+| Public Error Contract                            | catálogo + mapper HTTP central                   | sincronizado; `ApiError`                                                         | `OrbitException` compatível                              |
 
 ### Consequência prática
 
@@ -242,6 +247,36 @@ Duas propriedades úteis a qualquer cliente:
 - **Os erros têm código estável** (`INVALID_ARTIFACT_EXECUTION_TRANSITION`,
   `ARTIFACT_EXECUTION_INCOMPLETE`, `ARTIFACT_EXECUTION_NOT_EDITABLE`), o que
   permite reagir a uma regra sem reproduzi-la.
+
+### 6.6 Professional Roles & Signatures
+
+| Endpoint | Web | Mobile |
+| --- | --- | --- |
+| `GET /workforce/field-technicians` | contrato sincronizado | contrato público disponível |
+| `GET /workforce/eligible-technical-responsibles` | contrato sincronizado | contrato público disponível |
+| `GET/PATCH /workforce/members/:userId/professional-profile` | contrato sincronizado | administração futura |
+| `POST /workforce/members/:userId/professional-credentials` | contrato sincronizado | administração futura |
+| `POST /workforce/members/:userId/signature` | contrato sincronizado | coleta futura |
+| `GET /workforce/members/:userId/document-eligibility` | contrato sincronizado | contrato público disponível |
+
+`ProfessionalProfileReadModel` separa `professionalRoles` de RBAC.
+Seletores usam `EligibleProfessionalReadModel`, que publica somente nome,
+credential apropriada e `signatureAvailable`; asset, hash e storage key não
+atravessam essa fronteira. `ArtifactExecutionSignatureReadModel` preserva
+`signedAs` e o snapshot profissional imutável usado por Web e Mobile.
+
+### 6.7 Operation assignments
+
+`OperationListItemReadModel` distingue `responsibleFieldTechnician` de
+`auxiliaryTechnicians`, preserva `startedBy`/`completedBy` e publica
+`allowedActions` por ator. `SchedulingOccurrenceReadModel` expõe os mesmos
+papéis e `assignmentAuthority` (`OPERATION` ou `SCHEDULING`). Assignment nunca
+é interpretado pelo cliente como autorização nem abre informações comerciais.
+
+Os comandos explícitos são `PATCH /operations/:id/responsible-field-technician`,
+`POST /operations/:id/auxiliary-technicians` e
+`DELETE /operations/:id/auxiliary-technicians/:userId`, disponíveis nas rotas
+legadas e `/api/v1`.
 
 ---
 
@@ -481,6 +516,7 @@ Ausências de contrato levantadas pelos clientes, sem contorno improvisado:
 | Management Reports Engine (backend)             | `backend/docs/management-reports.md`            |
 | Management Reports Center (web)                 | `frontend/docs/management-reports-center.md`    |
 | PMOC & Compliance Engine (backend)              | `backend/docs/pmoc-compliance.md`               |
+| PMOC V2 — execução por equipamento (backend)    | `backend/docs/pmoc-v2-execution-model.md`       |
 | BFF, cliente HTTP e Query Layer (web)           | `frontend/docs/frontend-core.md`                |
 | Autenticação e sessão (web)                     | `frontend/docs/authentication.md`               |
 | Dashboard e procedência (web)                   | `frontend/docs/dashboard.md`                    |

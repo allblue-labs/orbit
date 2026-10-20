@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useAction } from "@/actions";
+import { useWorkforceManagement } from "@/hooks/workforce/use-workforce-management";
 import {
   useAssignSpecialty,
   useMemberSpecialties,
@@ -41,7 +41,7 @@ const LEVEL_LABELS: Readonly<Record<string, string>> = {
 export function MemberSpecialtiesSection({ userId }: { userId: string }) {
   const assigned = useMemberSpecialties(userId);
   const catalog = useSpecialties();
-  const manage = useAction("team-member.update");
+  const workforce = useWorkforceManagement().workforce;
 
   const assign = useAssignSpecialty(userId);
   const unassign = useUnassignSpecialty(userId);
@@ -83,7 +83,7 @@ export function MemberSpecialtiesSection({ userId }: { userId: string }) {
                   <Badge variant="secondary" className="text-[10px]">
                     {LEVEL_LABELS[item.level] ?? item.level}
                   </Badge>
-                  {manage.allowed ? (
+                  {workforce.allowed ? (
                     <button
                       type="button"
                       onClick={() => unassign.mutate(item.specialty.id)}
@@ -100,7 +100,7 @@ export function MemberSpecialtiesSection({ userId }: { userId: string }) {
           </ul>
         )}
 
-        {manage.allowed && available.length > 0 ? (
+        {workforce.allowed && available.length > 0 ? (
           <div className="flex flex-wrap items-end gap-2 border-t border-border pt-3">
             <Select value={specialtyId} onValueChange={setSpecialtyId}>
               <SelectTrigger className="w-52" aria-label="Especialidade">
@@ -144,7 +144,7 @@ export function MemberSpecialtiesSection({ userId }: { userId: string }) {
           </div>
         ) : null}
 
-        {manage.allowed && catalog.data?.length === 0 ? (
+        {workforce.allowed && catalog.data?.length === 0 ? (
           <p className="border-t border-border pt-3 text-xs text-muted-foreground">
             O catálogo de especialidades está vazio. Cadastre na aba
             Especialidades.

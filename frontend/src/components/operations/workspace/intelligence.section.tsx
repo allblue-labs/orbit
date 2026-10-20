@@ -168,7 +168,7 @@ function ExecutionCard({ execution }: { execution: AiExecution }) {
       {execution.error ? (
         <p className="flex items-start gap-2 text-xs text-destructive">
           <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-          Falha registrada pelo backend nesta execução.
+          Falha registrada nesta análise.
         </p>
       ) : null}
     </li>

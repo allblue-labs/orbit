@@ -76,8 +76,9 @@ class SignedUrlContract {
     url: json['url'] as String? ?? '',
     method: json['method'] as String? ?? 'GET',
     expiresAt: DateTime.tryParse(json['expiresAt'] as String? ?? ''),
-    requiredHeaders: (json['requiredHeaders'] as JsonObject? ?? const {})
-        .map((key, value) => MapEntry(key, value?.toString() ?? '')),
+    requiredHeaders: (json['requiredHeaders'] as JsonObject? ?? const {}).map(
+      (key, value) => MapEntry(key, value?.toString() ?? ''),
+    ),
   );
 
   final String url;

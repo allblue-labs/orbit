@@ -48,6 +48,8 @@ export const ORGANIZATION_REFRESH = {
   members: CACHE.catalog,
   integrations: CACHE.stable,
   plans: CACHE.catalog,
+  /** Troca uma vez por ano, e só quem abre as configurações a pede. */
+  logo: CACHE.catalog,
 } as const;
 
 export function useOrganization() {
@@ -59,18 +61,81 @@ export function useOrganization() {
 }
 
 /**
+ * O limite é explícito e alto porque quem usa esta consulta precisa
+ * **encontrar** a pessoa, não paginar. Com o padrão do servidor (20), uma
+ * organização de trinta pessoas mostraria o id truncado no lugar do nome das
+ * dez últimas — e o defeito pareceria aleatório, dependendo de quem tivesse
+ * caído na primeira página.
+ */
+const MEMBER_LOOKUP_LIMIT = 100;
+
+/**
  * Membros da organização.
  *
  * Única fonte de identificadores de usuário do tenant — é o que permite
  * atribuir e reatribuir uma operação. Somente leitura: convidar, remover e
  * trocar papel não têm endpoint.
  */
+
 export function useOrganizationMembers() {
+  const query = { page: 1, limit: MEMBER_LOOKUP_LIMIT };
   return useApiQuery(
-    organizationService.keys.members(),
-    ({ signal }) => organizationService.members({ signal }),
+    organizationService.keys.members(query),
+    ({ signal }) => organizationService.members(query, { signal }),
     ORGANIZATION_REFRESH.members,
   );
+}
+
+/**
+ * A marca da empresa, com a imagem.
+ *
+ * Consulta separada de `useOrganization` de propósito: `GET current` é pedido em
+ * toda navegação e publica só `hasLogo`. Quem chama isto é o painel de
+ * configurações, que precisa **desenhar** a marca — e paga o meio megabyte uma
+ * vez, onde ele serve para algo.
+ */
+export function useOrganizationLogo() {
+  return useApiQuery(
+    organizationService.keys.logo(),
+    ({ signal }) => organizationService.logo({ signal }),
+    ORGANIZATION_REFRESH.logo,
+  );
+}
+
+/**
+ * Envia a marca da empresa.
+ *
+ * Invalida `current` junto porque o `hasLogo` que ela publica acabou de mudar, e
+ * a sessão, que carrega a organização.
+ */
+export function useSetOrganizationLogo() {
+  const invalidate = useOrganizationLogoInvalidation();
+  return useApiMutation((image: string) => organizationService.setLogo(image), {
+    scope: { id: "organization:logo" },
+    onSuccess: invalidate,
+  });
+}
+
+export function useRemoveOrganizationLogo() {
+  const invalidate = useOrganizationLogoInvalidation();
+  return useApiMutation(() => organizationService.removeLogo(), {
+    scope: { id: "organization:logo" },
+    onSuccess: invalidate,
+  });
+}
+
+function useOrganizationLogoInvalidation() {
+  const queryClient = useQueryClient();
+  return async () => {
+    await queryClient.invalidateQueries({
+      queryKey: organizationService.keys.logo(),
+    });
+    /* `hasLogo` vive no Read Model da organização, e a sessão o carrega. */
+    await queryClient.invalidateQueries({
+      queryKey: organizationService.keys.current(),
+    });
+    await queryClient.invalidateQueries({ queryKey: queryKeys.session() });
+  };
 }
 
 export function useOrganizationEntitlements() {
@@ -163,6 +228,28 @@ export function useUpdateBusinessUnit(id: string) {
   return useApiMutation(
     (input: UpdateBusinessUnitInput) =>
       organizationService.updateBusinessUnit(id, input),
+    { scope: { id: `business-units:${id}` }, onSuccess: invalidate },
+  );
+}
+
+/**
+ * Envia a marca da unidade.
+ *
+ * `scope` por unidade, como o update: duas telas abertas na mesma organização
+ * editando unidades diferentes não devem se bloquear.
+ */
+export function useSetBusinessUnitLogo(id: string) {
+  const invalidate = useBusinessUnitInvalidation();
+  return useApiMutation(
+    (image: string) => organizationService.setBusinessUnitLogo(id, image),
+    { scope: { id: `business-units:${id}` }, onSuccess: invalidate },
+  );
+}
+
+export function useRemoveBusinessUnitLogo(id: string) {
+  const invalidate = useBusinessUnitInvalidation();
+  return useApiMutation(
+    () => organizationService.removeBusinessUnitLogo(id),
     { scope: { id: `business-units:${id}` }, onSuccess: invalidate },
   );
 }

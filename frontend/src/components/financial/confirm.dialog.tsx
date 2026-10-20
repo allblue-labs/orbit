@@ -26,6 +26,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { MutationError } from "@/components/artifact-studio/mutation-error";
+import type { ReactNode } from "react";
+
 import type { ApiError } from "@/lib/api-error";
 
 export function ConfirmDialog({
@@ -37,6 +39,7 @@ export function ConfirmDialog({
   onConfirm,
   isPending = false,
   error = null,
+  children,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -46,6 +49,14 @@ export function ConfirmDialog({
   onConfirm: () => void;
   isPending?: boolean;
   error?: ApiError | null;
+  /**
+   * O que a decisão ainda precisa coletar, entre o texto e os botões.
+   *
+   * Opcional e deliberadamente estreito: serve a confirmações que pedem **um**
+   * dado — uma resposta, um motivo —, e não a um formulário. Confirmação que
+   * precise de formulário não é confirmação, é outro diálogo.
+   */
+  children?: ReactNode;
 }) {
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -56,6 +67,8 @@ export function ConfirmDialog({
             <AlertDialogDescription>{body}</AlertDialogDescription>
           ) : null}
         </AlertDialogHeader>
+
+        {children ? <div className="space-y-2">{children}</div> : null}
 
         <MutationError error={error} />
 

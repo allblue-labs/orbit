@@ -1,8 +1,14 @@
 import { CanActivate, type ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { IAuthenticatedUser, IRequestContext } from '../contracts';
-import { PERMISSIONS_KEY, PUBLIC_KEY, ROLES_KEY } from '../decorators';
+import {
+  PERMISSIONS_KEY,
+  PUBLIC_KEY,
+  ROLES_KEY,
+  SURFACES_KEY,
+} from '../decorators';
 import { ForbiddenException, UnauthorizedException } from '../exceptions';
+import { AuthorizationService } from '../common/authorization.service';
 
 interface GuardRequest {
   user?: IAuthenticatedUser;
@@ -45,20 +51,19 @@ abstract class MetadataGuard {
 
 @Injectable()
 export class PermissionGuard extends MetadataGuard implements CanActivate {
-  constructor(reflector: Reflector) {
+  constructor(
+    reflector: Reflector,
+    private readonly authorization: AuthorizationService,
+  ) {
     super(reflector);
   }
 
   canActivate(context: ExecutionContext): boolean {
     const required = this.required(context, PERMISSIONS_KEY);
-    const granted =
-      getRequest(context).requestContext?.permissions ??
-      getRequest(context).user?.permissions ??
-      [];
-    if (
-      !granted.includes('*') &&
-      !required.every((permission) => granted.includes(permission))
-    ) {
+    if (required.length === 0) return true;
+    const actor =
+      getRequest(context).requestContext ?? getRequest(context).user;
+    if (!actor || !this.authorization.hasPermissions(actor, required)) {
       throw new ForbiddenException('Missing required permission');
     }
     return true;
@@ -67,21 +72,50 @@ export class PermissionGuard extends MetadataGuard implements CanActivate {
 
 @Injectable()
 export class RoleGuard extends MetadataGuard implements CanActivate {
-  constructor(reflector: Reflector) {
+  constructor(
+    reflector: Reflector,
+    private readonly authorization: AuthorizationService,
+  ) {
     super(reflector);
   }
 
   canActivate(context: ExecutionContext): boolean {
     const required = this.required(context, ROLES_KEY);
-    const granted =
-      getRequest(context).requestContext?.roles ??
-      getRequest(context).user?.roles ??
-      [];
-    if (
-      required.length > 0 &&
-      !required.some((role) => granted.includes(role))
-    ) {
+    if (required.length === 0) return true;
+    const actor =
+      getRequest(context).requestContext ?? getRequest(context).user;
+    if (!actor || !this.authorization.hasAnyRole(actor, required)) {
       throw new ForbiddenException('Missing required role');
+    }
+    return true;
+  }
+}
+
+@Injectable()
+export class SurfaceGuard extends MetadataGuard implements CanActivate {
+  constructor(reflector: Reflector) {
+    super(reflector);
+  }
+
+  canActivate(context: ExecutionContext): boolean {
+    const isPublic = this.reflector.getAllAndOverride<boolean>(PUBLIC_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (isPublic) return true;
+
+    const declared = this.required(context, SURFACES_KEY);
+    // Authenticated product APIs are Web/API by default. Mobile access is an
+    // explicit capability of the small shared/mobile surface, never a
+    // consequence of knowing a URL or carrying a valid MOBILE session.
+    const required = declared.length > 0 ? declared : ['WEB', 'API'];
+    const actor =
+      getRequest(context).requestContext ?? getRequest(context).user;
+    if (
+      !actor ||
+      !required.some((surface) => actor.allowedSurfaces.includes(surface))
+    ) {
+      throw new ForbiddenException('Client surface is not allowed');
     }
     return true;
   }

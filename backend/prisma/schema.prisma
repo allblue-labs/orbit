@@ -19,7 +19,12 @@ model User {
   lastName            String    @map("last_name") @db.VarChar(120)
   displayName         String    @map("display_name") @db.VarChar(180)
   phone               String?   @db.VarChar(32)
+  /// URL pública herdada (provedor externo). Continua publicada porque contas
+  /// antigas a possuem; foto enviada pelo produto vive em `avatarFile`.
   avatarUrl           String?   @map("avatar_url") @db.Text
+  /// Foto de perfil enviada pelo produto. Referência ao objeto de storage —
+  /// nunca o binário, e nunca uma URL permanente.
+  avatarStorageFileId String?   @map("avatar_storage_file_id") @db.Uuid
   locale              String    @default("pt-BR") @db.VarChar(16)
   timezone            String    @default("America/Recife") @db.VarChar(64)
   status              String    @default("PENDING_VERIFICATION") @db.VarChar(40)
@@ -29,63 +34,96 @@ model User {
   updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt           DateTime? @map("deleted_at") @db.Timestamptz(3)
 
-  credential                    Credential?
-  sessions                      Session[]
-  ownedOrganizations            Organization[]                 @relation("OrganizationOwner")
-  organizationMemberships       OrganizationMembership[]
-  platformRoleAssignments       PlatformRoleAssignment[]
-  businessUnitMemberships       BusinessUnitMembership[]
-  operationAssignments          OperationUser[]                @relation("OperationAssignedUser")
-  assignedOperations            OperationUser[]                @relation("OperationAssignedBy")
-  operationHistory              OperationHistory[]
-  operationAttachments          OperationAttachment[]
-  createdReports                Report[]                       @relation("ReportCreatedBy")
-  signatures                    Signature[]                    @relation("SignatureUser")
-  notifications                 Notification[]
-  checklistExecutions           ChecklistExecution[]           @relation("ChecklistCreatedBy")
-  requestedAiExecutions         AiExecution[]                  @relation("AiExecutionUser")
-  createdSchedulingEvents       SchedulingEvent[]              @relation("SchedulingEventCreatedBy")
-  schedulingAllocations         SchedulingResourceAllocation[]
-  schedulingAvailability        SchedulingAvailability[]
-  specialties                   MemberSpecialty[]
-  certifications                MemberCertification[]
-  teamMemberships               TeamMembership[]
-  ledTeams                      Team[]                         @relation("TeamLeader")
-  locations                     MemberLocation[]
-  financialEntriesCreated       FinancialEntry[]               @relation("FinancialEntryCreatedBy")
-  financialEntriesConfirmed     FinancialEntry[]               @relation("FinancialEntryConfirmedBy")
-  financialEntriesCancelled     FinancialEntry[]               @relation("FinancialEntryCancelledBy")
-  quotesCreated                 Quote[]                        @relation("QuoteCreatedBy")
-  quotesSent                    Quote[]                        @relation("QuoteSentBy")
-  quotesDecided                 Quote[]                        @relation("QuoteDecidedBy")
-  inventoryMovements            InventoryMovement[]            @relation("InventoryMovementActor")
-  automationRules               AutomationRule[]               @relation("AutomationRuleCreatedBy")
-  managementReports             ManagementReport[]             @relation("ManagementReportGeneratedBy")
-  pmocPlansCreated              PmocPlan[]                     @relation("PmocPlanCreatedBy")
-  pmocPlansResponsible          PmocPlan[]                     @relation("PmocPlanTechnician")
-  pmocExecutionsCompleted       PmocExecution[]                @relation("PmocExecutionCompletedBy")
-  schedulingHistory             SchedulingEventHistory[]
-  notificationPreferences       NotificationPreference[]
-  notificationDeliveries        NotificationDelivery[]
-  pushSubscriptions             PushSubscription[]
-  auditLogs                     AuditLog[]
-  invitationsSent               IdentityInvitation[]           @relation("InvitationInviter")
-  passwordResetTokens           PasswordResetToken[]
-  mfaFactors                    MfaFactor[]
-  createdArtifactTemplates      ArtifactTemplate[]             @relation("ArtifactTemplateCreatedBy")
-  createdArtifactVersions       ArtifactTemplateVersion[]      @relation("ArtifactTemplateVersionCreatedBy")
-  artifactExecutionsResponsible ArtifactExecution[]            @relation("ArtifactExecutionResponsible")
-  artifactExecutionsCreated     ArtifactExecution[]            @relation("ArtifactExecutionCreatedBy")
-  artifactExecutionTeam         ArtifactExecutionTeam[]
-  artifactResponses             ArtifactExecutionResponse[]    @relation("ArtifactResponseAnsweredBy")
-  artifactAttachments           ArtifactExecutionAttachment[]  @relation("ArtifactAttachmentUploadedBy")
-  artifactSignatures            ArtifactExecutionSignature[]   @relation("ArtifactSignatureUser")
-  storageFilesCreated           StorageFile[]                  @relation("StorageFileCreatedBy")
-  artifactManifestsIssued       ArtifactManifest[]             @relation("ArtifactManifestIssuedBy")
-  artifactManifestsCreated      ArtifactManifest[]             @relation("ArtifactManifestCreatedBy")
+  avatarFile                         StorageFile?                   @relation("UserAvatarFile", fields: [avatarStorageFileId], references: [id], onDelete: SetNull)
+  credential                         Credential?
+  sessions                           Session[]
+  ownedOrganizations                 Organization[]                 @relation("OrganizationOwner")
+  organizationMemberships            OrganizationMembership[]
+  platformRoleAssignments            PlatformRoleAssignment[]
+  businessUnitMemberships            BusinessUnitMembership[]
+  operationAssignments               OperationUser[]                @relation("OperationAssignedUser")
+  assignedOperations                 OperationUser[]                @relation("OperationAssignedBy")
+  responsibleFieldOperations         Operation[]                    @relation("OperationResponsibleFieldTechnician")
+  startedOperations                  Operation[]                    @relation("OperationStartedBy")
+  completedOperations                Operation[]                    @relation("OperationCompletedBy")
+  authorizedOperations               Operation[]                    @relation("OperationAuthorizedBy")
+  auxiliaryOperationAssignments      OperationAuxiliaryTechnician[] @relation("OperationAuxiliaryUser")
+  auxiliaryAssignmentsCreated        OperationAuxiliaryTechnician[] @relation("OperationAuxiliaryAssignedBy")
+  auxiliaryAssignmentsRemoved        OperationAuxiliaryTechnician[] @relation("OperationAuxiliaryRemovedBy")
+  operationHistory                   OperationHistory[]
+  operationAttachments               OperationAttachment[]
+  createdReports                     Report[]                       @relation("ReportCreatedBy")
+  signatures                         Signature[]                    @relation("SignatureUser")
+  notifications                      Notification[]
+  checklistExecutions                ChecklistExecution[]           @relation("ChecklistCreatedBy")
+  requestedAiExecutions              AiExecution[]                  @relation("AiExecutionUser")
+  createdSchedulingEvents            SchedulingEvent[]              @relation("SchedulingEventCreatedBy")
+  schedulingAllocations              SchedulingResourceAllocation[]
+  schedulingAvailability             SchedulingAvailability[]
+  specialties                        MemberSpecialty[]
+  certifications                     MemberCertification[]
+  teamMemberships                    TeamMembership[]
+  ledTeams                           Team[]                         @relation("TeamLeader")
+  locations                          MemberLocation[]
+  financialEntriesCreated            FinancialEntry[]               @relation("FinancialEntryCreatedBy")
+  financialEntriesConfirmed          FinancialEntry[]               @relation("FinancialEntryConfirmedBy")
+  financialEntriesCancelled          FinancialEntry[]               @relation("FinancialEntryCancelledBy")
+  quotesCreated                      Quote[]                        @relation("QuoteCreatedBy")
+  quotesSent                         Quote[]                        @relation("QuoteSentBy")
+  quotesDecided                      Quote[]                        @relation("QuoteDecidedBy")
+  quotesResponsible                  Quote[]                        @relation("QuoteResponsible")
+  inventoryMovements                 InventoryMovement[]            @relation("InventoryMovementActor")
+  automationRules                    AutomationRule[]               @relation("AutomationRuleCreatedBy")
+  managementReports                  ManagementReport[]             @relation("ManagementReportGeneratedBy")
+  pmocPlansCreated                   PmocPlan[]                     @relation("PmocPlanCreatedBy")
+  pmocPlansResponsible               PmocPlan[]                     @relation("PmocPlanTechnician")
+  pmocPlansTechnicalResponsible      PmocPlan[]                     @relation("PmocPlanTechnicalResponsible")
+  pmocExecutionsCompleted            PmocExecution[]                @relation("PmocExecutionCompletedBy")
+  pmocEquipmentExecutionsStarted     PmocEquipmentExecution[]       @relation("PmocEquipmentExecutionStartedBy")
+  pmocEquipmentExecutionsCompleted   PmocEquipmentExecution[]       @relation("PmocEquipmentExecutionCompletedBy")
+  pmocEquipmentExecutionsResponsible PmocEquipmentExecution[]       @relation("PmocEquipmentExecutionResponsible")
+  pmocEquipmentEvidenceUploaded      PmocEquipmentEvidence[]        @relation("PmocEquipmentEvidenceUploadedBy")
+  schedulingHistory                  SchedulingEventHistory[]
+  notificationPreferences            NotificationPreference[]
+  notificationDeliveries             NotificationDelivery[]
+  pushSubscriptions                  PushSubscription[]
+  mobileDeviceInstallations          MobileDeviceInstallation[]
+  auditLogs                          AuditLog[]
+  invitationsSent                    IdentityInvitation[]           @relation("InvitationInviter")
+  passwordResetTokens                PasswordResetToken[]
+  mfaFactors                         MfaFactor[]
+  createdArtifactTemplates           ArtifactTemplate[]             @relation("ArtifactTemplateCreatedBy")
+  createdArtifactVersions            ArtifactTemplateVersion[]      @relation("ArtifactTemplateVersionCreatedBy")
+  artifactExecutionsResponsible      ArtifactExecution[]            @relation("ArtifactExecutionResponsible")
+  artifactExecutionsCreated          ArtifactExecution[]            @relation("ArtifactExecutionCreatedBy")
+  artifactExecutionTeam              ArtifactExecutionTeam[]
+  artifactResponses                  ArtifactExecutionResponse[]    @relation("ArtifactResponseAnsweredBy")
+  artifactAttachments                ArtifactExecutionAttachment[]  @relation("ArtifactAttachmentUploadedBy")
+  artifactSignatures                 ArtifactExecutionSignature[]   @relation("ArtifactSignatureUser")
+  storageFilesCreated                StorageFile[]                  @relation("StorageFileCreatedBy")
+  artifactManifestsIssued            ArtifactManifest[]             @relation("ArtifactManifestIssuedBy")
+  artifactManifestsCreated           ArtifactManifest[]             @relation("ArtifactManifestCreatedBy")
+  professionalProfiles               ProfessionalProfile[]
+  professionalCredentials            ProfessionalCredential[]
+  professionalSignatures             UserSignature[]                @relation("ProfessionalSignatureUser")
+  pmocSignatureLinks                 PmocPlanSignatureLink[]        @relation("PmocSignatureLinkCreator")
+  fieldEvidenceUploads               FieldEvidenceUpload[]          @relation("FieldEvidenceUploadActor")
+  fieldEvidenceCaptured              FieldEvidence[]                @relation("FieldEvidenceCapturedBy")
+  customerPortalInvitationsSent      CustomerPortalInvitation[]     @relation("CustomerPortalInvitationInviter")
+  assignedCustomerServiceRequests    CustomerServiceRequest[]       @relation("CustomerServiceRequestAssignee")
+  customerServiceRequestEvents       CustomerServiceRequestEvent[]  @relation("CustomerServiceRequestInternalActor")
+  commissionPolicies                 CommissionPolicy[]             @relation("CommissionPolicyCreatedBy")
+  commissionPaymentsReceived         CommissionPayment[]            @relation("CommissionPaymentUser")
+  commissionPaymentsCreated          CommissionPayment[]            @relation("CommissionPaymentCreatedBy")
+  commissionItems                    CommissionPaymentItem[]        @relation("CommissionPaymentItemUser")
+  commissionCancellationsReceived    CommissionCancellation[]       @relation("CommissionCancellationUser")
+  commissionCancellationsMade        CommissionCancellation[]       @relation("CommissionCancelledBy")
+  commissionCancellationsRevoked     CommissionCancellation[]       @relation("CommissionCancellationRevokedBy")
 
   @@index([status, deletedAt])
   @@map("users")
+  operationCancellationsRequested OperationCancellationRequest[] @relation("OperationCancellationRequestedBy")
+  operationCancellationsResolved  OperationCancellationRequest[] @relation("OperationCancellationResolvedBy")
 }
 
 model Credential {
@@ -201,74 +239,118 @@ model Organization {
   currentPeriodEnd       DateTime? @map("current_period_end") @db.Timestamptz(3)
   externalCustomerId     String?   @map("external_customer_id") @db.VarChar(160)
   externalSubscriptionId String?   @map("external_subscription_id") @db.VarChar(160)
+  /// A marca da empresa, como data URI. Timbra os documentos de toda unidade
+  /// que não tenha logo próprio — e é a única marca que existe para quem opera
+  /// com uma unidade só.
+  logoUrl                String?   @map("logo_url") @db.Text
   settings               Json?     @db.JsonB
   createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt              DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt              DateTime? @map("deleted_at") @db.Timestamptz(3)
 
-  owner                    User                          @relation("OrganizationOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
-  plan                     Plan                          @relation(fields: [planId], references: [id], onDelete: Restrict)
-  businessUnits            BusinessUnit[]
-  memberships              OrganizationMembership[]
-  roles                    Role[]
-  usages                   PlanUsage[]
-  integrations             Integration[]
-  sessions                 Session[]
-  customers                Customer[]
-  categories               ProductCategory[]
-  products                 Product[]
-  assets                   Asset[]
-  operations               Operation[]
-  reportTemplates          ReportTemplate[]
-  artifactTemplates        ArtifactTemplate[]
-  artifactTemplateVersions ArtifactTemplateVersion[]
-  artifactSnapshots        ArtifactSnapshot[]
-  artifactExecutions       ArtifactExecution[]
-  artifactResponses        ArtifactExecutionResponse[]
-  artifactAttachments      ArtifactExecutionAttachment[]
-  artifactSignatures       ArtifactExecutionSignature[]
-  artifactInsights         ArtifactExecutionInsight[]
-  storageFiles             StorageFile[]
-  artifactManifests        ArtifactManifest[]
-  backgroundJobs           BackgroundJob[]
-  reports                  Report[]
-  checklistTemplates       ChecklistTemplate[]
-  checklistExecutions      ChecklistExecution[]
-  notifications            Notification[]
-  notificationPreferences  NotificationPreference[]
-  pushSubscriptions        PushSubscription[]
-  aiAgents                 AiAgent[]
-  aiExecutions             AiExecution[]
-  auditLogs                AuditLog[]
-  calendars                SchedulingCalendar[]
-  schedulingEvents         SchedulingEvent[]
-  schedulingAvailability   SchedulingAvailability[]
-  invitations              IdentityInvitation[]
-  businessUnitMemberships  BusinessUnitMembership[]
-  specialties              Specialty[]
-  memberSpecialties        MemberSpecialty[]
-  memberCertifications     MemberCertification[]
-  teams                    Team[]
-  teamMemberships          TeamMembership[]
-  memberLocations          MemberLocation[]
-  financialCategories      FinancialCategory[]
-  financialEntries         FinancialEntry[]
-  financialSettings        FinancialSettings?
-  quotes                   Quote[]
-  quoteItems               QuoteItem[]
-  inventoryMovements       InventoryMovement[]
-  inventoryBalances        InventoryBalance[]
-  domainEvents             DomainEvent[]
-  automationRules          AutomationRule[]
-  automationExecutions     AutomationExecution[]
-  managementReports        ManagementReport[]
-  pmocPlans                PmocPlan[]
-  pmocCoverages            PmocEquipmentCoverage[]
-  pmocExecutions           PmocExecution[]
+  owner                         User                           @relation("OrganizationOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  plan                          Plan                           @relation(fields: [planId], references: [id], onDelete: Restrict)
+  businessUnits                 BusinessUnit[]
+  memberships                   OrganizationMembership[]
+  roles                         Role[]
+  usages                        PlanUsage[]
+  usageEvents                   PlanUsageEvent[]
+  subscriptions                 OrganizationSubscription[]
+  trialGrants                   SubscriptionTrialGrant[]
+  billingCustomers              BillingCustomer[]
+  billingCheckoutAttempts       BillingCheckoutAttempt[]
+  billingInvoices               BillingInvoice[]
+  billingInvoiceTransitions     BillingInvoiceTransition[]
+  billingFinancialAdjustments   BillingFinancialAdjustment[]
+  integrations                  Integration[]
+  sessions                      Session[]
+  customers                     Customer[]
+  customerAddresses             CustomerAddress[]
+  categories                    ProductCategory[]
+  products                      Product[]
+  assets                        Asset[]
+  equipmentQrIdentities         EquipmentQrIdentity[]
+  operations                    Operation[]
+  operationAuxiliaryTechnicians OperationAuxiliaryTechnician[]
+  pmocEquipmentExecutions       PmocEquipmentExecution[]
+  pmocEquipmentEvidence         PmocEquipmentEvidence[]
+  reportTemplates               ReportTemplate[]
+  artifactTemplates             ArtifactTemplate[]
+  artifactTemplateVersions      ArtifactTemplateVersion[]
+  artifactSnapshots             ArtifactSnapshot[]
+  artifactExecutions            ArtifactExecution[]
+  artifactResponses             ArtifactExecutionResponse[]
+  artifactAttachments           ArtifactExecutionAttachment[]
+  artifactSignatures            ArtifactExecutionSignature[]
+  artifactInsights              ArtifactExecutionInsight[]
+  storageFiles                  StorageFile[]
+  artifactManifests             ArtifactManifest[]
+  backgroundJobs                BackgroundJob[]
+  reports                       Report[]
+  checklistTemplates            ChecklistTemplate[]
+  checklistExecutions           ChecklistExecution[]
+  notifications                 Notification[]
+  notificationPreferences       NotificationPreference[]
+  pushSubscriptions             PushSubscription[]
+  mobileDeviceInstallations     MobileDeviceInstallation[]
+  mobilePushDeliveries          MobilePushDelivery[]
+  aiAgents                      AiAgent[]
+  aiExecutions                  AiExecution[]
+  auditLogs                     AuditLog[]
+  calendars                     SchedulingCalendar[]
+  schedulingEvents              SchedulingEvent[]
+  schedulingAvailability        SchedulingAvailability[]
+  invitations                   IdentityInvitation[]
+  businessUnitMemberships       BusinessUnitMembership[]
+  specialties                   Specialty[]
+  memberSpecialties             MemberSpecialty[]
+  memberCertifications          MemberCertification[]
+  teams                         Team[]
+  teamMemberships               TeamMembership[]
+  memberLocations               MemberLocation[]
+  financialCategories           FinancialCategory[]
+  financialEntries              FinancialEntry[]
+  financialSettings             FinancialSettings?
+  quotes                        Quote[]
+  quoteItems                    QuoteItem[]
+  inventoryMovements            InventoryMovement[]
+  inventoryBalances             InventoryBalance[]
+  domainEvents                  DomainEvent[]
+  automationRules               AutomationRule[]
+  automationExecutions          AutomationExecution[]
+  managementReports             ManagementReport[]
+  pmocPlans                     PmocPlan[]
+  pmocSignatureLinks            PmocPlanSignatureLink[]
+  pmocCoverages                 PmocEquipmentCoverage[]
+  pmocExecutions                PmocExecution[]
+  professionalProfiles          ProfessionalProfile[]
+  professionalCredentials       ProfessionalCredential[]
+  professionalSignatures        UserSignature[]
+  fieldEvidenceUploads          FieldEvidenceUpload[]
+  fieldEvidence                 FieldEvidence[]
+  customerPortalIdentities      CustomerPortalIdentity[]
+  customerPortalSessions        CustomerPortalSession[]
+  customerPortalInvitations     CustomerPortalInvitation[]
+  customerPortalPasswordResets  CustomerPortalPasswordReset[]
+  customerServiceRequests       CustomerServiceRequest[]
+  customerServiceRequestEvents  CustomerServiceRequestEvent[]
+
+  pmocCodeSequences       PmocCodeSequence[]
+  serviceOrderSequence    ServiceOrderSequence?
+  productSkuSequences     ProductSkuSequence[]
+  assetInternalCodes      AssetInternalCodeSequence?
+  receiptSequence         ReceiptSequence?
+  pmocUnits               PmocUnit[]
+  rvtMaintenanceTypes     RvtMaintenanceType[]
+  commissionPolicy        CommissionPolicy?
+  commissionPayments      CommissionPayment[]
+  commissionPaymentItems  CommissionPaymentItem[]
+  commissionCancellations CommissionCancellation[]
 
   @@index([ownerUserId, status])
   @@index([planId, subscriptionStatus])
   @@map("organizations")
+  operationCancellationRequests OperationCancellationRequest[]
 }
 
 model BusinessUnit {
@@ -307,27 +389,29 @@ model BusinessUnit {
   updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt             DateTime? @map("deleted_at") @db.Timestamptz(3)
 
-  organization           Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  parent                 BusinessUnit?            @relation("BusinessUnitHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
-  children               BusinessUnit[]           @relation("BusinessUnitHierarchy")
-  memberships            BusinessUnitMembership[]
-  sessions               Session[]
-  contacts               Contact[]
-  assets                 Asset[]
-  products               Product[]
-  operations             Operation[]
-  reports                Report[]
-  notifications          Notification[]
-  checklistExecutions    ChecklistExecution[]
-  auditLogs              AuditLog[]
-  calendars              SchedulingCalendar[]
-  schedulingEvents       SchedulingEvent[]
-  schedulingAvailability SchedulingAvailability[]
-  invitations            IdentityInvitation[]
-  artifactExecutions     ArtifactExecution[]
-  storageFiles           StorageFile[]
-  artifactManifests      ArtifactManifest[]
-  backgroundJobs         BackgroundJob[]
+  organization            Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parent                  BusinessUnit?            @relation("BusinessUnitHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  children                BusinessUnit[]           @relation("BusinessUnitHierarchy")
+  memberships             BusinessUnitMembership[]
+  sessions                Session[]
+  contacts                Contact[]
+  equipmentQrIdentities   EquipmentQrIdentity[]
+  assets                  Asset[]
+  products                Product[]
+  operations              Operation[]
+  reports                 Report[]
+  notifications           Notification[]
+  checklistExecutions     ChecklistExecution[]
+  auditLogs               AuditLog[]
+  calendars               SchedulingCalendar[]
+  schedulingEvents        SchedulingEvent[]
+  schedulingAvailability  SchedulingAvailability[]
+  invitations             IdentityInvitation[]
+  artifactExecutions      ArtifactExecution[]
+  storageFiles            StorageFile[]
+  artifactManifests       ArtifactManifest[]
+  backgroundJobs          BackgroundJob[]
+  pmocEquipmentExecutions PmocEquipmentExecution[]
 
   teams Team[]
 
@@ -340,14 +424,19 @@ model BusinessUnit {
 
   automationRules AutomationRule[]
 
-  managementReports ManagementReport[]
-  pmocPlans         PmocPlan[]
+  managementReports       ManagementReport[]
+  pmocPlans               PmocPlan[]
+  fieldEvidenceUploads    FieldEvidenceUpload[]
+  fieldEvidence           FieldEvidence[]
+  customerServiceRequests CustomerServiceRequest[]
+  commissionPayments      CommissionPayment[]
 
   @@unique([organizationId, slug])
   @@unique([organizationId, documentType, documentNumber])
   @@index([organizationId, status, deletedAt])
   @@index([organizationId, isPrimary])
   @@map("business_units")
+  operationCancellationRequests OperationCancellationRequest[]
 }
 
 model OrganizationMembership {
@@ -358,6 +447,12 @@ model OrganizationMembership {
   status         String    @default("ACTIVE") @db.VarChar(40)
   joinedAt       DateTime  @default(now()) @map("joined_at") @db.Timestamptz(3)
   deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  /// Optional access override for one member. BusinessUnitMembership remains
+  /// scope-only; it never grants permissions or surfaces.
+  usesCustomAccess      Boolean  @default(false) @map("uses_custom_access")
+  customPermissions     String[] @default([]) @map("custom_permissions") @db.VarChar(160)
+  customAllowedSurfaces String[] @default([]) @map("custom_allowed_surfaces") @db.VarChar(10)
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -389,16 +484,29 @@ model BusinessUnitMembership {
 }
 
 model Role {
-  id             String    @id @default(uuid(7)) @db.Uuid
-  organizationId String?   @map("organization_id") @db.Uuid
-  key            String    @db.VarChar(80)
-  name           String    @db.VarChar(120)
-  description    String?   @db.Text
-  permissions    String[]  @default([]) @db.VarChar(160)
-  isSystem       Boolean   @default(false) @map("is_system")
-  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
-  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(3)
+  id             String   @id @default(uuid(7)) @db.Uuid
+  organizationId String?  @map("organization_id") @db.Uuid
+  key            String   @db.VarChar(80)
+  name           String   @db.VarChar(120)
+  description    String?  @db.Text
+  permissions    String[] @default([]) @db.VarChar(160)
+
+  /// Onde este papel pode entrar: `WEB`, `MOBILE`, `API`.
+  ///
+  /// O técnico operacional e o auxiliar existem para o aplicativo de campo —
+  /// o painel web é da administração da operação. Antes disso não havia nada
+  /// separando as duas superfícies: quem recebia uma senha temporária para o
+  /// celular entrava no painel e enxergava a organização inteira.
+  ///
+  /// É coluna do papel, e não uma lista de chaves no código, porque o dono
+  /// cria papéis próprios: uma constante com `FIELD_TECHNICIAN` dentro deixaria
+  /// passar o "Ajudante" que ele cadastrar amanhã.
+  allowedSurfaces String[] @default(["WEB", "MOBILE"]) @map("allowed_surfaces") @db.VarChar(10)
+
+  isSystem  Boolean   @default(false) @map("is_system")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
 
   organization            Organization?            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   organizationMemberships OrganizationMembership[]
@@ -487,6 +595,421 @@ model PlanUsage {
   @@map("plan_usage")
 }
 
+/// Cada consumo de cota, uma linha — o razão de uso.
+///
+/// O agregado `plan_usage` responde "quanto já se usou" em O(1); este razão
+/// responde "por causa de quê", e é ele que torna a contagem idempotente: o
+/// índice único por origem faz a segunda tentativa do mesmo evento de negócio
+/// falhar em vez de somar de novo. É o que separa um retry técnico de uma nova
+/// emissão — renderizar três vezes o mesmo documento consome uma unidade.
+model PlanUsageEvent {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  resource       String   @db.VarChar(100)
+  /// A janela é sempre mensal, e vem de fora: a PR-PL-02 dará a âncora da
+  /// assinatura. Nada aqui deriva do mês do calendário.
+  windowStart    DateTime @map("window_start") @db.Timestamptz(3)
+  windowEnd      DateTime @map("window_end") @db.Timestamptz(3)
+  quantity       Decimal  @default(1) @db.Decimal(20, 4)
+  /// A identidade do evento de negócio que consumiu a cota.
+  sourceType     String   @map("source_type") @db.VarChar(60)
+  sourceId       String   @map("source_id") @db.VarChar(120)
+  occurredAt     DateTime @default(now()) @map("occurred_at") @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, resource, sourceType, sourceId], map: "plan_usage_events_source_unique")
+  @@index([organizationId, resource, windowStart, windowEnd])
+  @@map("plan_usage_events")
+}
+
+/// A autoridade comercial da organização.
+///
+/// O que a empresa contratou, por quanto tempo e com que direitos — e é ela,
+/// não `organizations.plan_id`, que responde a partir da PR-PL-02. A coluna
+/// antiga continua existindo por compatibilidade e vira eco, não fonte.
+///
+/// ## O retrato vale mais que o catálogo
+///
+/// `entitlementsSnapshot` guarda os direitos **no momento da contratação**.
+/// Se amanhã o Essencial passar de 5 para 8 usuários, quem assinou ontem
+/// continua com 5 até renovar ou trocar de plano — um contrato histórico não
+/// muda porque alguém editou uma tabela.
+///
+/// ## Cobrança e uso são períodos diferentes
+///
+/// `currentPeriodStart/End` é o **acesso comprado**: 1, 6 ou 12 meses. A
+/// janela de uso é sempre de um mês e sai da mesma âncora. Assinar por ano não
+/// adianta doze meses de cota.
+model OrganizationSubscription {
+  id             String @id @default(uuid(7)) @db.Uuid
+  organizationId String @map("organization_id") @db.Uuid
+
+  /// Código do catálogo contratado. Estável; o rótulo comercial pode mudar.
+  planCode             String @map("plan_code") @db.VarChar(60)
+  /// Versão do catálogo vigente quando o retrato foi tirado.
+  catalogVersion       Int    @map("catalog_version")
+  /// `{ capabilities, allocation, usage }` — o mesmo formato que o resolvedor
+  /// de direitos já valida, para não existirem dois caminhos de leitura.
+  entitlementsSnapshot Json   @map("entitlements_snapshot") @db.JsonB
+
+  /// `MONTHLY` · `SEMIANNUAL` · `ANNUAL`. Muda preço e duração, nunca direito.
+  billingInterval String @map("billing_interval") @db.VarChar(20)
+  /// `PENDING_PAYMENT` · `TRIALING` · `ACTIVE` · `PAST_DUE` ·
+  /// `GRACE_PERIOD` · `SUSPENDED` · `CANCELED` · `EXPIRED`.
+  status          String @db.VarChar(20)
+
+  /// O aniversário. Cobrança e uso saem daqui, e não do mês do calendário.
+  billingAnchorAt    DateTime @map("billing_anchor_at") @db.Timestamptz(3)
+  currentPeriodStart DateTime @map("current_period_start") @db.Timestamptz(3)
+  currentPeriodEnd   DateTime @map("current_period_end") @db.Timestamptz(3)
+
+  trialStartsAt DateTime? @map("trial_starts_at") @db.Timestamptz(3)
+  trialEndsAt   DateTime? @map("trial_ends_at") @db.Timestamptz(3)
+
+  /// Cancelamento é sempre no fim do período já pago. Não há devolução aqui.
+  cancelAtPeriodEnd Boolean   @default(false) @map("cancel_at_period_end")
+  canceledAt        DateTime? @map("canceled_at") @db.Timestamptz(3)
+
+  graceStartsAt DateTime? @map("grace_starts_at") @db.Timestamptz(3)
+  graceEndsAt   DateTime? @map("grace_ends_at") @db.Timestamptz(3)
+
+  /// Mudança programada. Rebaixar vale no próximo período; subir vale agora e
+  /// não passa por aqui.
+  pendingPlanCode             String?   @map("pending_plan_code") @db.VarChar(60)
+  pendingBillingInterval      String?   @map("pending_billing_interval") @db.VarChar(20)
+  pendingCatalogVersion       Int?      @map("pending_catalog_version")
+  pendingEntitlementsSnapshot Json?     @map("pending_entitlements_snapshot") @db.JsonB
+  pendingEffectiveAt          DateTime? @map("pending_effective_at") @db.Timestamptz(3)
+
+  startedAt DateTime  @default(now()) @map("started_at") @db.Timestamptz(3)
+  /// Preenchido quando a assinatura deixa de ser a corrente. Histórico fica.
+  endedAt   DateTime? @map("ended_at") @db.Timestamptz(3)
+
+  /// O vínculo com o provedor de pagamento.
+  ///
+  /// Colunas opcionais de propósito: uma assinatura existe e vale sem provedor
+  /// nenhum — é assim que a avaliação gratuita e os inquilinos anteriores à
+  /// integração continuam funcionando. `providerStatus` é diagnóstico; quem
+  /// decide acesso é `status`.
+  provider               String?   @db.VarChar(20)
+  providerSubscriptionId String?   @unique @map("provider_subscription_id") @db.VarChar(255)
+  providerCustomerId     String?   @map("provider_customer_id") @db.VarChar(255)
+  providerPriceId        String?   @map("provider_price_id") @db.VarChar(255)
+  providerStatus         String?   @map("provider_status") @db.VarChar(40)
+  /// O último evento do provedor já aplicado a esta linha.
+  providerLastEventId    String?   @map("provider_last_event_id") @db.VarChar(255)
+  providerUpdatedAt      DateTime? @map("provider_updated_at") @db.Timestamptz(3)
+
+  /// Controle otimista: dois comandos concorrentes não produzem estado torto.
+  version   Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization     Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  trialGrants      SubscriptionTrialGrant[]
+  checkoutAttempts BillingCheckoutAttempt[]
+  billingInvoices  BillingInvoice[]
+
+  @@unique([id, organizationId], map: "organization_subscriptions_tenant_identity")
+  @@index([organizationId, endedAt])
+  @@index([status, currentPeriodEnd])
+  @@index([status, trialEndsAt])
+  @@index([status, graceEndsAt])
+  @@index([pendingEffectiveAt])
+  @@index([provider, providerCustomerId])
+  @@map("organization_subscriptions")
+}
+
+/// A concessão de avaliação gratuita — e a memória de que ela aconteceu.
+///
+/// O índice único é **global**, e é ele o antifraude: a mesma entidade
+/// jurídica não recebe um segundo período de teste, nem criando outra conta,
+/// nem outra organização, nem mudando de endereço. Não é uma consulta que
+/// alguém pode esquecer de fazer; é o banco recusando a segunda linha.
+///
+/// O documento cru não mora aqui. O que mora é o HMAC dele, com segredo do
+/// servidor: CPF e CNPJ são enumeráveis, e um SHA simples desta coluna seria
+/// um dicionário reversível de quem já testou o Orbit.
+model SubscriptionTrialGrant {
+  id             String @id @default(uuid(7)) @db.Uuid
+  organizationId String @map("organization_id") @db.Uuid
+  planCode       String @map("plan_code") @db.VarChar(60)
+
+  /// HMAC-SHA256 do documento normalizado. Único no sistema inteiro.
+  legalDocumentFingerprint String @unique(map: "subscription_trial_grants_fingerprint_unique") @map("legal_document_fingerprint") @db.Char(64)
+
+  grantedAt DateTime @default(now()) @map("granted_at") @db.Timestamptz(3)
+  startsAt  DateTime @map("starts_at") @db.Timestamptz(3)
+  endsAt    DateTime @map("ends_at") @db.Timestamptz(3)
+
+  /// `GRANTED` · `CONVERTED` · `EXPIRED`.
+  status String @db.VarChar(20)
+
+  /// `ALLOW` · `REVIEW_REQUIRED` · `DENY`. Hoje só o documento decide negar;
+  /// os demais sinais são registrados, e não bloqueiam sozinhos.
+  riskDecision String @map("risk_decision") @db.VarChar(20)
+  riskSignals  Json?  @map("risk_signals") @db.JsonB
+
+  convertedSubscriptionId String? @map("converted_subscription_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  subscription OrganizationSubscription? @relation(fields: [convertedSubscriptionId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([status, endsAt])
+  @@map("subscription_trial_grants")
+}
+
+/// A identidade da organização no provedor de pagamento.
+///
+/// Uma por organização, por provedor e por modo — misturar identificador de
+/// teste com chave de produção é o acidente mais comum desta integração, e o
+/// índice único torna isso impossível de acontecer por descuido.
+///
+/// O e-mail **não** é chave. E-mail muda, repete entre empresas do mesmo grupo
+/// e não pertence a ninguém; o identificador do provedor é persistido porque é
+/// ele que a reconciliação usa.
+model BillingCustomer {
+  id             String @id @default(uuid(7)) @db.Uuid
+  organizationId String @map("organization_id") @db.Uuid
+
+  /// `STRIPE`. Um só, por enquanto — enum ornamental não ajuda ninguém.
+  provider           String @db.VarChar(20)
+  /// `TEST` ou `LIVE`.
+  mode               String @db.VarChar(10)
+  providerCustomerId String @map("provider_customer_id") @db.VarChar(255)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization     Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  checkoutAttempts BillingCheckoutAttempt[]
+
+  @@unique([id, organizationId], map: "billing_customers_tenant_identity")
+  @@unique([provider, providerCustomerId], map: "billing_customers_provider_customer_unique")
+  @@unique([organizationId, provider, mode], map: "billing_customers_organization_unique")
+  @@index([organizationId])
+  @@map("billing_customers")
+}
+
+/// Uma intenção de primeira contratação criada pelo Orbit.
+///
+/// Ela existe antes da chamada de rede. Assim, retry, concorrência e webhook
+/// possuem a mesma identidade server-owned; o redirect do navegador nunca é a
+/// autoridade que concede acesso.
+model BillingCheckoutAttempt {
+  id                String @id @default(uuid(7)) @db.Uuid
+  organizationId    String @map("organization_id") @db.Uuid
+  subscriptionId    String @map("subscription_id") @db.Uuid
+  billingCustomerId String @map("billing_customer_id") @db.Uuid
+
+  provider String @db.VarChar(20)
+  mode     String @db.VarChar(10)
+
+  planCode        String @map("plan_code") @db.VarChar(60)
+  billingInterval String @map("billing_interval") @db.VarChar(20)
+
+  /// `CREATING` · `OPEN` · `COMPLETED` · `EXPIRED` · `FAILED`.
+  status String @default("CREATING") @db.VarChar(20)
+
+  idempotencyKey         String  @map("idempotency_key") @db.VarChar(64)
+  providerSessionId      String? @map("provider_session_id") @db.VarChar(255)
+  providerSubscriptionId String? @map("provider_subscription_id") @db.VarChar(255)
+
+  expiresAt   DateTime? @map("expires_at") @db.Timestamptz(3)
+  completedAt DateTime? @map("completed_at") @db.Timestamptz(3)
+  failedAt    DateTime? @map("failed_at") @db.Timestamptz(3)
+  failureCode String?   @map("failure_code") @db.VarChar(80)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization    Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  subscription    OrganizationSubscription @relation(fields: [subscriptionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  billingCustomer BillingCustomer          @relation(fields: [billingCustomerId, organizationId], references: [id, organizationId], onDelete: Restrict)
+
+  @@unique([provider, idempotencyKey], map: "billing_checkout_attempts_idempotency_unique")
+  @@unique([provider, providerSessionId], map: "billing_checkout_attempts_provider_session_unique")
+  @@index([organizationId, status, createdAt])
+  @@index([subscriptionId, createdAt])
+  @@map("billing_checkout_attempts")
+}
+
+/// Projeção financeira canônica de uma fatura do provedor.
+///
+/// Não guarda cartão, endereço, documento fiscal nem client secret. Valores
+/// são inteiros na menor unidade monetária e URLs são as superfícies hospedadas
+/// pelo próprio provedor, já validadas pelo adaptador.
+model BillingInvoice {
+  id             String @id @default(uuid(7)) @db.Uuid
+  organizationId String @map("organization_id") @db.Uuid
+  subscriptionId String @map("subscription_id") @db.Uuid
+
+  provider          String  @db.VarChar(20)
+  mode              String  @db.VarChar(10)
+  providerInvoiceId String  @map("provider_invoice_id") @db.VarChar(255)
+  invoiceNumber     String? @map("invoice_number") @db.VarChar(120)
+
+  status               String @db.VarChar(30)
+  currency             String @db.Char(3)
+  subtotalMinor        Int    @map("subtotal_minor")
+  discountMinor        Int    @map("discount_minor")
+  taxMinor             Int    @map("tax_minor")
+  totalMinor           Int    @map("total_minor")
+  amountDueMinor       Int    @map("amount_due_minor")
+  amountPaidMinor      Int    @map("amount_paid_minor")
+  amountRemainingMinor Int    @map("amount_remaining_minor")
+  creditNotesMinor     Int    @map("credit_notes_minor")
+
+  attempted        Boolean
+  attemptCount     Int     @map("attempt_count")
+  billingReason    String? @map("billing_reason") @db.VarChar(60)
+  collectionMethod String  @map("collection_method") @db.VarChar(40)
+
+  hostedInvoiceUrl String? @map("hosted_invoice_url") @db.VarChar(2048)
+  invoicePdfUrl    String? @map("invoice_pdf_url") @db.VarChar(2048)
+
+  periodStart           DateTime  @map("period_start") @db.Timestamptz(3)
+  periodEnd             DateTime  @map("period_end") @db.Timestamptz(3)
+  dueAt                 DateTime? @map("due_at") @db.Timestamptz(3)
+  nextPaymentAttemptAt  DateTime? @map("next_payment_attempt_at") @db.Timestamptz(3)
+  finalizedAt           DateTime? @map("finalized_at") @db.Timestamptz(3)
+  paidAt                DateTime? @map("paid_at") @db.Timestamptz(3)
+  voidedAt              DateTime? @map("voided_at") @db.Timestamptz(3)
+  markedUncollectibleAt DateTime? @map("marked_uncollectible_at") @db.Timestamptz(3)
+  providerCreatedAt     DateTime  @map("provider_created_at") @db.Timestamptz(3)
+  providerObservedAt    DateTime  @map("provider_observed_at") @db.Timestamptz(3)
+  lastProviderEventId   String?   @map("last_provider_event_id") @db.VarChar(255)
+
+  version   Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization Organization                 @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  subscription OrganizationSubscription     @relation(fields: [subscriptionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  transitions  BillingInvoiceTransition[]
+  adjustments  BillingFinancialAdjustment[]
+
+  @@unique([id, organizationId], map: "billing_invoices_tenant_identity")
+  @@unique([provider, providerInvoiceId], map: "billing_invoices_provider_invoice_unique")
+  @@index([organizationId, providerCreatedAt(sort: Desc)])
+  @@index([subscriptionId, providerCreatedAt(sort: Desc)])
+  @@map("billing_invoices")
+}
+
+/// Razão append-only das observações que formaram a projeção da fatura.
+model BillingInvoiceTransition {
+  id                   String   @id @default(uuid(7)) @db.Uuid
+  organizationId       String   @map("organization_id") @db.Uuid
+  billingInvoiceId     String   @map("billing_invoice_id") @db.Uuid
+  provider             String   @db.VarChar(20)
+  providerEventId      String   @map("provider_event_id") @db.VarChar(255)
+  status               String   @db.VarChar(30)
+  totalMinor           Int      @map("total_minor")
+  amountPaidMinor      Int      @map("amount_paid_minor")
+  amountRemainingMinor Int      @map("amount_remaining_minor")
+  attemptCount         Int      @map("attempt_count")
+  observedAt           DateTime @map("observed_at") @db.Timestamptz(3)
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoice      BillingInvoice @relation(fields: [billingInvoiceId, organizationId], references: [id, organizationId], onDelete: Restrict)
+
+  @@unique([provider, providerEventId], map: "billing_invoice_transitions_provider_event_unique")
+  @@index([organizationId, createdAt(sort: Desc)])
+  @@index([billingInvoiceId, createdAt])
+  @@map("billing_invoice_transitions")
+}
+
+/// Reembolso ou disputa correlacionado a uma fatura da organização.
+model BillingFinancialAdjustment {
+  id                  String   @id @default(uuid(7)) @db.Uuid
+  organizationId      String   @map("organization_id") @db.Uuid
+  billingInvoiceId    String   @map("billing_invoice_id") @db.Uuid
+  provider            String   @db.VarChar(20)
+  type                String   @db.VarChar(20)
+  providerObjectId    String   @map("provider_object_id") @db.VarChar(255)
+  status              String   @db.VarChar(40)
+  amountMinor         Int      @map("amount_minor")
+  currency            String   @db.Char(3)
+  reason              String?  @db.VarChar(80)
+  occurredAt          DateTime @map("occurred_at") @db.Timestamptz(3)
+  providerObservedAt  DateTime @map("provider_observed_at") @db.Timestamptz(3)
+  lastProviderEventId String   @map("last_provider_event_id") @db.VarChar(255)
+  version             Int      @default(1)
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoice      BillingInvoice @relation(fields: [billingInvoiceId, organizationId], references: [id, organizationId], onDelete: Restrict)
+
+  @@unique([provider, type, providerObjectId], map: "billing_financial_adjustments_provider_object_unique")
+  @@index([organizationId, occurredAt(sort: Desc)])
+  @@index([billingInvoiceId, occurredAt])
+  @@map("billing_financial_adjustments")
+}
+
+/// A caixa de entrada dos eventos do provedor.
+///
+/// ## Por que existe
+///
+/// O webhook precisa responder rápido e não pode perder evento. Guardar
+/// primeiro e processar depois separa as duas coisas: a resposta ao provedor
+/// depende só de verificar a assinatura e gravar uma linha; o trabalho pesado
+/// acontece fora do ciclo da requisição.
+///
+/// ## Por que o índice único é o antifraude da duplicidade
+///
+/// Provedores reentregam. O mesmo evento pode chegar dez vezes, e nenhuma
+/// delas pode virar um segundo efeito. O único por `(provider, event)` decide
+/// isso no banco — não numa consulta anterior, que teria janela entre ler e
+/// escrever.
+///
+/// ## Por que não guarda o corpo inteiro
+///
+/// O que o processamento precisa é do objeto **canônico** do provedor, buscado
+/// na hora de reconciliar — um corpo antigo guardado seria justamente a versão
+/// desatualizada que causa regressão de estado. E o corpo carrega dados que
+/// não temos motivo para reter.
+model BillingWebhookEvent {
+  id String @id @default(uuid(7)) @db.Uuid
+
+  provider               String  @db.VarChar(20)
+  providerEventId        String  @map("provider_event_id") @db.VarChar(255)
+  eventType              String  @map("event_type") @db.VarChar(120)
+  /// O objeto tocado, e a assinatura envolvida quando o evento a revela.
+  providerObjectId       String? @map("provider_object_id") @db.VarChar(255)
+  providerSubscriptionId String? @map("provider_subscription_id") @db.VarChar(255)
+  apiVersion             String? @map("api_version") @db.VarChar(40)
+
+  providerCreatedAt   DateTime  @map("provider_created_at") @db.Timestamptz(3)
+  receivedAt          DateTime  @default(now()) @map("received_at") @db.Timestamptz(3)
+  /// `PENDING` · `PROCESSING` · `PROCESSED` · `IGNORED` · `DEAD_LETTER`.
+  processingStatus    String    @default("PENDING") @map("processing_status") @db.VarChar(20)
+  attempts            Int       @default(0)
+  nextAttemptAt       DateTime  @default(now()) @map("next_attempt_at") @db.Timestamptz(3)
+  processingToken     String?   @map("processing_token") @db.Uuid
+  processingStartedAt DateTime? @map("processing_started_at") @db.Timestamptz(3)
+  leaseExpiresAt      DateTime? @map("lease_expires_at") @db.Timestamptz(3)
+  processedAt         DateTime? @map("processed_at") @db.Timestamptz(3)
+  deadLetteredAt      DateTime? @map("dead_lettered_at") @db.Timestamptz(3)
+  /// Código curto da falha. Nunca a mensagem crua do provedor.
+  lastErrorCode       String?   @map("last_error_code") @db.VarChar(80)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([provider, providerEventId], map: "billing_webhook_events_provider_event_unique")
+  @@index([processingStatus, receivedAt])
+  @@index([processingStatus, nextAttemptAt, leaseExpiresAt], map: "billing_webhook_events_claim_idx")
+  @@index([providerSubscriptionId])
+  @@map("billing_webhook_events")
+}
+
 model Integration {
   id               String    @id @default(uuid(7)) @db.Uuid
   organizationId   String    @map("organization_id") @db.Uuid
@@ -532,24 +1055,70 @@ model Customer {
   updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(3)
 
-  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  contacts           Contact[]
-  assets             Asset[]
-  operations         Operation[]
-  reports            Report[]
-  signatures         Signature[]
-  aiExecutions       AiExecution[]
-  schedulingEvents   SchedulingEvent[]
-  artifactExecutions ArtifactExecution[]
+  organization         Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  addresses            CustomerAddress[]
+  contacts             Contact[]
+  assets               Asset[]
+  operations           Operation[]
+  reports              Report[]
+  signatures           Signature[]
+  aiExecutions         AiExecution[]
+  schedulingEvents     SchedulingEvent[]
+  artifactExecutions   ArtifactExecution[]
+  portalIdentities     CustomerPortalIdentity[]
+  portalSessions       CustomerPortalSession[]
+  portalInvitations    CustomerPortalInvitation[]
+  portalPasswordResets CustomerPortalPasswordReset[]
+  serviceRequests      CustomerServiceRequest[]
 
   financialEntries FinancialEntry[]
 
   quotes    Quote[]
   pmocPlans PmocPlan[]
 
+  pmocCodeSequences PmocCodeSequence[]
+
   @@index([organizationId, status, deletedAt])
   @@index([organizationId, documentNumber])
   @@map("customers")
+}
+
+/// Um endereço de atendimento do cliente.
+///
+/// O cliente tinha **um** endereço, num campo JSON — suficiente para emitir
+/// nota, insuficiente para mandar técnico. Uma rede com três lojas era um
+/// cliente só, e o endereço do atendimento acabava digitado na descrição.
+///
+/// `Customer.address` continua existindo e continua sendo o endereço fiscal;
+/// isto aqui é para onde o técnico vai.
+model CustomerAddress {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  customerId     String    @map("customer_id") @db.Uuid
+  /// Como a equipe chama este lugar: "Matriz", "Loja Shopping", "Obra Norte".
+  label          String    @db.VarChar(120)
+  postalCode     String?   @map("postal_code") @db.VarChar(16)
+  street         String    @db.VarChar(255)
+  number         String?   @db.VarChar(30)
+  complement     String?   @db.VarChar(120)
+  district       String?   @db.VarChar(120)
+  city           String    @db.VarChar(120)
+  stateCode      String?   @map("state_code") @db.VarChar(2)
+  /// Ponto de referência, portaria, instruções de acesso.
+  notes          String?   @db.Text
+  isPrimary      Boolean   @default(false) @map("is_primary")
+  isActive       Boolean   @default(true) @map("is_active")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  operations   Operation[]
+  quotes       Quote[]
+
+  @@index([organizationId, customerId, deletedAt])
+  @@map("customer_addresses")
 }
 
 model Contact {
@@ -566,12 +1135,128 @@ model Contact {
   updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(3)
 
-  businessUnit BusinessUnit? @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
-  customer     Customer?     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  businessUnit     BusinessUnit?            @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  customer         Customer?                @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  portalIdentities CustomerPortalIdentity[]
 
   @@index([organizationId, customerId, deletedAt])
   @@index([organizationId, businessUnitId])
   @@map("contacts")
+}
+
+// -----------------------------------------------------------------------------
+// CUSTOMER PORTAL IDENTITY — external actors, never internal RBAC users
+// -----------------------------------------------------------------------------
+
+model CustomerPortalIdentity {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  organizationId    String    @map("organization_id") @db.Uuid
+  customerId        String    @map("customer_id") @db.Uuid
+  contactId         String?   @map("contact_id") @db.Uuid
+  email             String    @db.VarChar(320)
+  normalizedEmail   String    @map("normalized_email") @db.VarChar(320)
+  displayName       String    @map("display_name") @db.VarChar(180)
+  passwordHash      String?   @map("password_hash") @db.VarChar(255)
+  status            String    @default("INVITED") @db.VarChar(30)
+  failedAttempts    Int       @default(0) @map("failed_attempts")
+  lockedUntil       DateTime? @map("locked_until") @db.Timestamptz(3)
+  emailVerifiedAt   DateTime? @map("email_verified_at") @db.Timestamptz(3)
+  passwordUpdatedAt DateTime? @map("password_updated_at") @db.Timestamptz(3)
+  lastLoginAt       DateTime? @map("last_login_at") @db.Timestamptz(3)
+  disabledAt        DateTime? @map("disabled_at") @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization         Organization                  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  customer             Customer                      @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  contact              Contact?                      @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  sessions             CustomerPortalSession[]
+  invitations          CustomerPortalInvitation[]
+  passwordResets       CustomerPortalPasswordReset[]
+  serviceRequests      CustomerServiceRequest[]
+  serviceRequestEvents CustomerServiceRequestEvent[]
+
+  @@unique([organizationId, normalizedEmail])
+  @@index([organizationId, customerId, status])
+  @@index([contactId])
+  @@map("customer_portal_identities")
+}
+
+model CustomerPortalSession {
+  id               String    @id @default(uuid(7)) @db.Uuid
+  organizationId   String    @map("organization_id") @db.Uuid
+  customerId       String    @map("customer_id") @db.Uuid
+  portalIdentityId String    @map("portal_identity_id") @db.Uuid
+  refreshTokenHash String    @unique @map("refresh_token_hash") @db.Char(64)
+  userAgent        String?   @map("user_agent") @db.Text
+  ipAddress        String?   @map("ip_address") @db.Inet
+  expiresAt        DateTime  @map("expires_at") @db.Timestamptz(3)
+  lastSeenAt       DateTime  @default(now()) @map("last_seen_at") @db.Timestamptz(3)
+  revokedAt        DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  customer     Customer               @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  identity     CustomerPortalIdentity @relation(fields: [portalIdentityId], references: [id], onDelete: Cascade)
+
+  @@index([portalIdentityId, expiresAt, revokedAt])
+  @@index([organizationId, customerId])
+  @@map("customer_portal_sessions")
+}
+
+model CustomerPortalInvitation {
+  id               String    @id @default(uuid(7)) @db.Uuid
+  organizationId   String    @map("organization_id") @db.Uuid
+  customerId       String    @map("customer_id") @db.Uuid
+  portalIdentityId String    @map("portal_identity_id") @db.Uuid
+  invitedById      String    @map("invited_by_id") @db.Uuid
+  tokenHash        String    @unique @map("token_hash") @db.Char(64)
+  expiresAt        DateTime  @map("expires_at") @db.Timestamptz(3)
+  acceptedAt       DateTime? @map("accepted_at") @db.Timestamptz(3)
+  revokedAt        DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  customer     Customer               @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  identity     CustomerPortalIdentity @relation(fields: [portalIdentityId], references: [id], onDelete: Cascade)
+  invitedBy    User                   @relation("CustomerPortalInvitationInviter", fields: [invitedById], references: [id], onDelete: Restrict)
+
+  @@index([portalIdentityId, expiresAt])
+  @@index([organizationId, customerId, createdAt])
+  @@map("customer_portal_invitations")
+}
+
+model CustomerPortalPasswordReset {
+  id               String    @id @default(uuid(7)) @db.Uuid
+  organizationId   String    @map("organization_id") @db.Uuid
+  customerId       String    @map("customer_id") @db.Uuid
+  portalIdentityId String    @map("portal_identity_id") @db.Uuid
+  tokenHash        String    @unique @map("token_hash") @db.Char(64)
+  expiresAt        DateTime  @map("expires_at") @db.Timestamptz(3)
+  usedAt           DateTime? @map("used_at") @db.Timestamptz(3)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  customer     Customer               @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  identity     CustomerPortalIdentity @relation(fields: [portalIdentityId], references: [id], onDelete: Cascade)
+
+  @@index([portalIdentityId, expiresAt])
+  @@index([organizationId, customerId])
+  @@map("customer_portal_password_resets")
+}
+
+model CustomerPortalRateLimit {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  action       String    @db.VarChar(40)
+  scopeHash    String    @map("scope_hash") @db.Char(64)
+  windowStart  DateTime  @map("window_start") @db.Timestamptz(3)
+  attempts     Int       @default(0)
+  blockedUntil DateTime? @map("blocked_until") @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([action, scopeHash])
+  @@index([blockedUntil])
+  @@map("customer_portal_rate_limits")
 }
 
 // -----------------------------------------------------------------------------
@@ -599,12 +1284,43 @@ model ProductCategory {
   @@map("product_categories")
 }
 
+/// O contador do SKU, por organização **e por fluxo**.
+///
+/// Produto, serviço e peça moram na mesma tabela, separados por `kind`, e são
+/// catálogos diferentes: uma sequência única faria o primeiro serviço nascer com
+/// o número 47 porque existem 46 produtos.
+///
+/// Mesmo padrão de [PmocCodeSequence] e [ServiceOrderSequence]: linha por
+/// inquilino, incrementada com `ON CONFLICT DO UPDATE` dentro da transação que
+/// cria o item. A autoridade contra duplicidade continua sendo
+/// `@@unique([organizationId, sku])` em `Product` — e o SKU também pode ser
+/// digitado, então a alocação avança até achar livre.
+model ProductSkuSequence {
+  organizationId String   @map("organization_id") @db.Uuid
+  /// `PRODUCT` · `SERVICE` · `PART`. Texto, como em `Product`.
+  kind           String   @db.VarChar(40)
+  lastValue      Int      @default(0) @map("last_value")
+  updatedAt      DateTime @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@id([organizationId, kind])
+  @@map("product_sku_sequences")
+}
+
 model Product {
   id             String    @id @default(uuid(7)) @db.Uuid
   organizationId String    @map("organization_id") @db.Uuid
   businessUnitId String?   @map("business_unit_id") @db.Uuid
   categoryId     String?   @map("category_id") @db.Uuid
   kind           String    @default("PRODUCT") @db.VarChar(40)
+  /// O código do item. **Gerado** na criação, com contagem por fluxo:
+  /// `PRD-000001` para produto, `SRV-000001` para serviço, `PEC-000001` para
+  /// peça. Continua aceitando valor digitado — quem vem de outro sistema importa
+  /// os códigos antigos —, e é por isso que a geração avança até achar livre.
+  ///
+  /// Opcional na coluna por causa do histórico: itens criados antes da geração
+  /// existiam sem código, e a migração os preencheu. Nada novo nasce sem.
   sku            String?   @db.VarChar(80)
   name           String    @db.VarChar(180)
   description    String?   @db.Text
@@ -636,6 +1352,25 @@ model Product {
 // ASSETS
 // -----------------------------------------------------------------------------
 
+/// O contador do código interno de equipamento, por organização.
+///
+/// Só o código interno é gerado: os outros tipos de identificador (série, QR,
+/// NFC, barras, RFID) são lidos da máquina física, e gerá-los inventaria um fato
+/// sobre o equipamento do cliente.
+///
+/// Por organização porque a unicidade do identificador também é — e porque um
+/// contador global faria a primeira máquina de um inquilino novo nascer com o
+/// número de outra empresa, numa etiqueta que vai colada no equipamento.
+model AssetInternalCodeSequence {
+  organizationId String   @id @map("organization_id") @db.Uuid
+  lastValue      Int      @default(0) @map("last_value")
+  updatedAt      DateTime @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("asset_internal_code_sequences")
+}
+
 model Asset {
   id             String    @id @default(uuid(7)) @db.Uuid
   organizationId String    @map("organization_id") @db.Uuid
@@ -646,7 +1381,12 @@ model Asset {
   manufacturer   String?   @db.VarChar(120)
   model          String?   @db.VarChar(120)
   serialNumber   String?   @map("serial_number") @db.VarChar(120)
+  /// O que é o conteúdo de [identifier]: série, QR, NFC, barras, RFID ou código
+  /// interno. Só o **código interno** é atribuído pela organização; os demais são
+  /// lidos da máquina.
   identifierType String?   @map("identifier_type") @db.VarChar(30)
+  /// O conteúdo lido da etiqueta — ou, quando o tipo é `INTERNAL_CODE` e nada foi
+  /// informado, o código que o sistema gera (`EQP-000001`, por organização).
   identifier     String?   @db.VarChar(180)
   installationAt DateTime? @map("installation_at") @db.Date
   warrantyUntil  DateTime? @map("warranty_until") @db.Date
@@ -657,14 +1397,18 @@ model Asset {
   updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(3)
 
-  organization          Organization                   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  businessUnit          BusinessUnit                   @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
-  customer              Customer?                      @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  operations            Operation[]
-  schedulingEvents      SchedulingEvent[]
-  schedulingAllocations SchedulingResourceAllocation[]
-  artifactExecutions    ArtifactExecution[]
-  pmocCoverages         PmocEquipmentCoverage[]
+  organization            Organization                   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  businessUnit            BusinessUnit                   @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  customer                Customer?                      @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  operationLinks          OperationAsset[]
+  quoteLinks              QuoteAsset[]
+  schedulingEvents        SchedulingEvent[]
+  schedulingAllocations   SchedulingResourceAllocation[]
+  artifactExecutions      ArtifactExecution[]
+  pmocEquipmentExecutions PmocEquipmentExecution[]
+  pmocCoverages           PmocEquipmentCoverage[]
+  qrIdentities            EquipmentQrIdentity[]
+  customerServiceRequests CustomerServiceRequest[]
 
   @@unique([organizationId, identifier])
   @@index([organizationId, businessUnitId, status, deletedAt])
@@ -673,44 +1417,140 @@ model Asset {
   @@map("assets")
 }
 
+/// Stable, physical QR identity for an Equipment. The random token is not an
+/// authorization credential; every resolution still runs under authenticated
+/// tenant and Business Unit RLS context.
+model EquipmentQrIdentity {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  businessUnitId String    @map("business_unit_id") @db.Uuid
+  equipmentId    String    @map("equipment_id") @db.Uuid
+  token          String    @unique @db.VarChar(64)
+  tokenHash      String    @unique @map("token_hash") @db.Char(64)
+  status         String    @default("ACTIVE") @db.VarChar(20)
+  metadata       Json      @default("{}") @db.JsonB
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  revokedAt      DateTime? @map("revoked_at") @db.Timestamptz(3)
+  rotatedAt      DateTime? @map("rotated_at") @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
+  equipment    Asset        @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, businessUnitId, status])
+  @@index([equipmentId, status])
+  @@map("equipment_qr_identities")
+}
+
 // -----------------------------------------------------------------------------
 // OPERATIONS
 // -----------------------------------------------------------------------------
 
-model Operation {
-  id             String    @id @default(uuid(7)) @db.Uuid
-  organizationId String    @map("organization_id") @db.Uuid
-  businessUnitId String    @map("business_unit_id") @db.Uuid
-  customerId     String?   @map("customer_id") @db.Uuid
-  assetId        String?   @map("asset_id") @db.Uuid
-  code           String    @db.VarChar(60)
-  kind           String    @db.VarChar(60)
-  title          String    @db.VarChar(220)
-  description    String?   @db.Text
-  status         String    @default("OPEN") @db.VarChar(40)
-  priority       String    @default("NORMAL") @db.VarChar(30)
-  scheduledStart DateTime? @map("scheduled_start") @db.Timestamptz(3)
-  scheduledEnd   DateTime? @map("scheduled_end") @db.Timestamptz(3)
-  startedAt      DateTime? @map("started_at") @db.Timestamptz(3)
-  completedAt    DateTime? @map("completed_at") @db.Timestamptz(3)
-  location       Json?     @db.JsonB
-  data           Json?     @db.JsonB
-  createdById    String?   @map("created_by_id") @db.Uuid
-  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
-  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(3)
+/// Os equipamentos de um atendimento.
+///
+/// Substitui `Operation.assetId`, que era um só. Um atendimento em campo
+/// raramente toca um equipamento: o técnico vai ao endereço e atende os
+/// aparelhos que estão lá, e obrigar uma ordem por aparelho multiplicava o
+/// trabalho administrativo sem descrever melhor o serviço.
+model OperationAsset {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  operationId String   @map("operation_id") @db.Uuid
+  assetId     String   @map("asset_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  organization        Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  businessUnit        BusinessUnit          @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
-  customer            Customer?             @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  asset               Asset?                @relation(fields: [assetId], references: [id], onDelete: SetNull)
-  users               OperationUser[]
-  history             OperationHistory[]
-  attachments         OperationAttachment[]
-  reports             Report[]
-  checklistExecutions ChecklistExecution[]
-  aiExecutions        AiExecution[]
-  artifactExecutions  ArtifactExecution[]
+  operation Operation @relation(fields: [operationId], references: [id], onDelete: Cascade)
+  asset     Asset     @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@unique([operationId, assetId])
+  @@index([assetId])
+  @@map("operation_assets")
+}
+
+model Operation {
+  id                           String    @id @default(uuid(7)) @db.Uuid
+  organizationId               String    @map("organization_id") @db.Uuid
+  businessUnitId               String    @map("business_unit_id") @db.Uuid
+  customerId                   String?   @map("customer_id") @db.Uuid
+  /// Para onde o técnico vai. Sempre um endereço do cliente do atendimento.
+  customerAddressId            String?   @map("customer_address_id") @db.Uuid
+  /// O ponto exato dentro do endereço: "Auditório", "Sala 2", "Cozinha".
+  sector                       String?   @db.VarChar(120)
+  code                         String    @db.VarChar(60)
+  /// O número da Ordem de Serviço — contagem própria, por organização.
+  ///
+  /// Operação é o gênero: o PMOC executa criando operação, a RVT também. OS é
+  /// uma espécie, e a numeração dela é a que o cliente cobra ao telefone. Por
+  /// isso não é o `code` (texto digitado pelo dono, sem contagem) nem um
+  /// `COUNT` de operações, que somaria manutenções preventivas que ninguém
+  /// chamou de ordem de serviço.
+  ///
+  /// Nulo nas operações que nascem de PMOC ou RVT: elas têm as contagens delas.
+  serviceOrderNumber           Int?      @map("service_order_number")
+  kind                         String    @db.VarChar(60)
+  title                        String    @db.VarChar(220)
+  description                  String?   @db.Text
+  status                       String    @default("OPEN") @db.VarChar(40)
+  priority                     String    @default("NORMAL") @db.VarChar(30)
+  scheduledStart               DateTime? @map("scheduled_start") @db.Timestamptz(3)
+  scheduledEnd                 DateTime? @map("scheduled_end") @db.Timestamptz(3)
+  startedAt                    DateTime? @map("started_at") @db.Timestamptz(3)
+  completedAt                  DateTime? @map("completed_at") @db.Timestamptz(3)
+  location                     Json?     @db.JsonB
+  data                         Json?     @db.JsonB
+  createdById                  String?   @map("created_by_id") @db.Uuid
+  responsibleFieldTechnicianId String?   @map("responsible_field_technician_id") @db.Uuid
+
+  /// Quando a atribuição foi autorizada, e por quem.
+  ///
+  /// Só importa nas organizações que ligaram
+  /// `settings.operations.requireAssignmentAuthorization`. Nelas, um
+  /// atendimento atribuído mas **não** autorizado não chega ao técnico: não
+  /// aparece na fila do aplicativo nem responde às rotas de campo.
+  ///
+  /// Nulo é o estado de quem nunca precisou disso — e é por isso que a
+  /// migração marca como autorizado tudo o que já existia: ligar a chave não
+  /// pode esconder retroativamente o trabalho do dia.
+  authorizedAt      DateTime? @map("authorized_at") @db.Timestamptz(3)
+  authorizedById    String?   @map("authorized_by_id") @db.Uuid
+
+  /// O técnico em campo pode ver quanto este atendimento vale?
+  ///
+  /// `false` por padrão, e a omissão é deliberada: o valor combinado com o cliente
+  /// não é informação que todo técnico precise ter na mão dentro da casa do cliente,
+  /// e revelá-lo retroativamente em todo atendimento que já existe seria decidir isso
+  /// pelo dono. Ligar é um ato por atendimento, na tela que o configura.
+  ///
+  /// O valor em si não mora aqui: é o total do orçamento vinculado
+  /// (`Quote.operationId`). Esta coluna governa a **visibilidade**, não o número —
+  /// um segundo campo de dinheiro na operação divergiria do orçamento no primeiro
+  /// reajuste.
+  amountVisibleInField Boolean @default(false) @map("amount_visible_in_field")
+  startedByUserId   String?   @map("started_by_user_id") @db.Uuid
+  completedByUserId String?   @map("completed_by_user_id") @db.Uuid
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  organization               Organization                   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  businessUnit               BusinessUnit                   @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  customer                   Customer?                      @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerAddress            CustomerAddress?               @relation(fields: [customerAddressId], references: [id], onDelete: SetNull)
+  assets                     OperationAsset[]
+  responsibleFieldTechnician User?                          @relation("OperationResponsibleFieldTechnician", fields: [responsibleFieldTechnicianId], references: [id], onDelete: SetNull)
+  authorizedBy               User?                          @relation("OperationAuthorizedBy", fields: [authorizedById], references: [id], onDelete: SetNull)
+  startedBy                  User?                          @relation("OperationStartedBy", fields: [startedByUserId], references: [id], onDelete: SetNull)
+  completedBy                User?                          @relation("OperationCompletedBy", fields: [completedByUserId], references: [id], onDelete: SetNull)
+  auxiliaryTechnicians       OperationAuxiliaryTechnician[]
+  users                      OperationUser[]
+  history                    OperationHistory[]
+  attachments                OperationAttachment[]
+  reports                    Report[]
+  checklistExecutions        ChecklistExecution[]
+  aiExecutions               AiExecution[]
+  artifactExecutions         ArtifactExecution[]
+  fieldEvidenceUploads       FieldEvidenceUpload[]
+  fieldEvidence              FieldEvidence[]
+  sourceServiceRequest       CustomerServiceRequest?
 
   financialEntries FinancialEntry[]
 
@@ -718,16 +1558,115 @@ model Operation {
 
   inventoryMovements InventoryMovement[]
 
-  pmocExecution PmocExecution?
+  pmocExecution           PmocExecution?
+  pmocEquipmentExecution  PmocEquipmentExecution?
+  commissionItems         CommissionPaymentItem[]
+  commissionCancellations CommissionCancellation[]
 
   @@index([organizationId, code])
   @@index([organizationId, businessUnitId, status, scheduledStart])
   @@index([organizationId, customerId, createdAt])
-  @@index([organizationId, assetId])
+  @@index([organizationId, customerAddressId])
   /// Relatórios gerenciais: "tudo da organização entre duas datas".
   @@index([organizationId, createdAt])
   @@index([organizationId, completedAt])
+  @@index([organizationId, responsibleFieldTechnicianId, status, scheduledStart])
+  /// A fila do técnico filtra por autorização quando a organização a exige.
+  @@index([organizationId, authorizedAt])
   @@map("operations")
+  cancellationRequests OperationCancellationRequest[]
+}
+
+// -----------------------------------------------------------------------------
+// CUSTOMER SERVICE REQUESTS — Portal demand, never an Operation by itself
+// -----------------------------------------------------------------------------
+
+model CustomerServiceRequest {
+  id                        String    @id @default(uuid(7)) @db.Uuid
+  organizationId            String    @map("organization_id") @db.Uuid
+  customerId                String    @map("customer_id") @db.Uuid
+  createdByPortalIdentityId String    @map("created_by_portal_identity_id") @db.Uuid
+  businessUnitId            String?   @map("business_unit_id") @db.Uuid
+  assetId                   String?   @map("asset_id") @db.Uuid
+  code                      String    @db.VarChar(60)
+  category                  String    @db.VarChar(40)
+  subject                   String    @db.VarChar(180)
+  description               String    @db.Text
+  status                    String    @default("OPEN") @db.VarChar(30)
+  assignedToUserId          String?   @map("assigned_to_user_id") @db.Uuid
+  convertedOperationId      String?   @unique @map("converted_operation_id") @db.Uuid
+  version                   Int       @default(1)
+  createIdempotencyKey      String    @map("create_idempotency_key") @db.VarChar(160)
+  createPayloadHash         String    @map("create_payload_hash") @db.Char(64)
+  conversionIdempotencyKey  String?   @map("conversion_idempotency_key") @db.VarChar(160)
+  conversionPayloadHash     String?   @map("conversion_payload_hash") @db.Char(64)
+  submittedAt               DateTime  @default(now()) @map("submitted_at") @db.Timestamptz(3)
+  closedAt                  DateTime? @map("closed_at") @db.Timestamptz(3)
+  cancelledAt               DateTime? @map("cancelled_at") @db.Timestamptz(3)
+  createdAt                 DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                 DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization            Organization                  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  customer                Customer                      @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  createdByPortalIdentity CustomerPortalIdentity        @relation(fields: [createdByPortalIdentityId], references: [id], onDelete: Restrict)
+  businessUnit            BusinessUnit?                 @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
+  asset                   Asset?                        @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  assignedTo              User?                         @relation("CustomerServiceRequestAssignee", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  convertedOperation      Operation?                    @relation(fields: [convertedOperationId], references: [id], onDelete: Restrict)
+  events                  CustomerServiceRequestEvent[]
+
+  @@unique([organizationId, code])
+  @@unique([createdByPortalIdentityId, createIdempotencyKey])
+  @@index([organizationId, customerId, status, createdAt])
+  @@index([organizationId, businessUnitId, status, createdAt])
+  @@index([organizationId, assignedToUserId, status, createdAt])
+  @@map("customer_service_requests")
+}
+
+model CustomerServiceRequestEvent {
+  id               String   @id @default(uuid(7)) @db.Uuid
+  organizationId   String   @map("organization_id") @db.Uuid
+  requestId        String   @map("request_id") @db.Uuid
+  visibility       String   @db.VarChar(20)
+  type             String   @db.VarChar(40)
+  actorType        String   @map("actor_type") @db.VarChar(30)
+  portalIdentityId String?  @map("portal_identity_id") @db.Uuid
+  internalUserId   String?  @map("internal_user_id") @db.Uuid
+  actorDisplayName String   @map("actor_display_name") @db.VarChar(180)
+  message          String?  @db.Text
+  fromStatus       String?  @map("from_status") @db.VarChar(30)
+  toStatus         String?  @map("to_status") @db.VarChar(30)
+  metadata         Json     @default("{}") @db.JsonB
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  organization   Organization            @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  request        CustomerServiceRequest  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  portalIdentity CustomerPortalIdentity? @relation(fields: [portalIdentityId], references: [id], onDelete: SetNull)
+  internalUser   User?                   @relation("CustomerServiceRequestInternalActor", fields: [internalUserId], references: [id], onDelete: SetNull)
+
+  @@index([requestId, createdAt, id])
+  @@index([organizationId, visibility, createdAt])
+  @@map("customer_service_request_events")
+}
+
+/// O contador do número da OS, por organização.
+///
+/// Mesmo padrão de [PmocCodeSequence], e pela mesma razão: `MAX(numero) + 1`
+/// calculado na aplicação faria duas criações simultâneas lerem o mesmo máximo,
+/// e uma SEQUENCE por organização seria DDL criado em runtime. Aqui é uma linha
+/// por inquilino, incrementada com `ON CONFLICT DO UPDATE` dentro da transação
+/// que cria a ordem.
+///
+/// A autoridade contra duplicidade continua sendo o índice único parcial de
+/// `operations`; este contador é quem diz **qual é o próximo**.
+model ServiceOrderSequence {
+  organizationId String   @id @map("organization_id") @db.Uuid
+  lastValue      Int      @default(0) @map("last_value")
+  updatedAt      DateTime @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("service_order_sequences")
 }
 
 model OperationUser {
@@ -743,6 +1682,27 @@ model OperationUser {
   @@id([operationId, userId])
   @@index([userId, assignedAt])
   @@map("operation_users")
+}
+
+model OperationAuxiliaryTechnician {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  operationId    String    @map("operation_id") @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  assignedById   String    @map("assigned_by_id") @db.Uuid
+  assignedAt     DateTime  @default(now()) @map("assigned_at") @db.Timestamptz(3)
+  removedById    String?   @map("removed_by_id") @db.Uuid
+  removedAt      DateTime? @map("removed_at") @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  operation    Operation    @relation(fields: [operationId], references: [id], onDelete: Cascade)
+  user         User         @relation("OperationAuxiliaryUser", fields: [userId], references: [id], onDelete: Cascade)
+  assignedBy   User         @relation("OperationAuxiliaryAssignedBy", fields: [assignedById], references: [id], onDelete: Restrict)
+  removedBy    User?        @relation("OperationAuxiliaryRemovedBy", fields: [removedById], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, userId, removedAt])
+  @@index([operationId, removedAt, assignedAt])
+  @@map("operation_auxiliary_technicians")
 }
 
 model OperationHistory {
@@ -786,10 +1746,19 @@ model OperationAttachment {
 // -----------------------------------------------------------------------------
 
 model ChecklistTemplate {
-  id                 String    @id @default(uuid(7)) @db.Uuid
-  organizationId     String    @map("organization_id") @db.Uuid
-  key                String    @db.VarChar(100)
-  name               String    @db.VarChar(180)
+  id             String @id @default(uuid(7)) @db.Uuid
+  organizationId String @map("organization_id") @db.Uuid
+  key            String @db.VarChar(100)
+  name           String @db.VarChar(180)
+
+  /// O tipo de atendimento a que este checklist pertence.
+  ///
+  /// Nulo quando o modelo serve a qualquer tipo — é o que todo modelo era
+  /// antes desta coluna, e continua válido. Guardado como texto, e não como
+  /// enum do Prisma, pelo mesmo motivo de `Operation.kind`: o conjunto de
+  /// tipos é do domínio e cresce sem migração de enum.
+  operationKind String? @map("operation_kind") @db.VarChar(40)
+
   description        String?   @db.Text
   version            Int       @default(1)
   items              Json      @default("[]") @db.JsonB
@@ -799,12 +1768,15 @@ model ChecklistTemplate {
   deletedAt          DateTime? @map("deleted_at") @db.Timestamptz(3)
   artifactTemplateId String?   @map("artifact_template_id") @db.Uuid
 
-  organization     Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  executions       ChecklistExecution[]
-  artifactTemplate ArtifactTemplate?    @relation(fields: [artifactTemplateId], references: [id], onDelete: SetNull)
+  organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  executions          ChecklistExecution[]
+  artifactTemplate    ArtifactTemplate?    @relation(fields: [artifactTemplateId], references: [id], onDelete: SetNull)
+  pmocUnits           PmocUnit[]
+  rvtMaintenanceTypes RvtMaintenanceType[]
 
   @@unique([organizationId, key, version])
   @@index([organizationId, isActive, deletedAt])
+  @@index([organizationId, operationKind, isActive, deletedAt])
   @@index([artifactTemplateId])
   @@map("checklist_templates")
 }
@@ -874,6 +1846,26 @@ model ArtifactTemplateVersion {
 // ARTIFACT EXECUTION ENGINE
 // -----------------------------------------------------------------------------
 
+/// O contador do número do recibo, por organização.
+///
+/// Recibo é o único documento da série que prova um fato jurídico, e por isso é
+/// citado por número — em cobrança, em conciliação e, quando dá briga, em juízo.
+/// A execução de artefato exige `code` único por organização, então sem contador a
+/// tela teria de inventar um código no navegador: dois recibos no mesmo minuto
+/// colidiriam, e o segundo receberia 409 depois do formulário inteiro preenchido.
+///
+/// Independente das outras contagens — ordem de serviço, SKU, código interno de
+/// equipamento. Mesmo padrão de [ServiceOrderSequence].
+model ReceiptSequence {
+  organizationId String   @id @map("organization_id") @db.Uuid
+  lastValue      Int      @default(0) @map("last_value")
+  updatedAt      DateTime @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("receipt_sequences")
+}
+
 model ArtifactSnapshot {
   id                String   @id @default(uuid(7)) @db.Uuid
   organizationId    String   @map("organization_id") @db.Uuid
@@ -938,22 +1930,24 @@ model ArtifactExecution {
   updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(3)
 
-  organization  Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  businessUnit  BusinessUnit                  @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
-  operation     Operation?                    @relation(fields: [operationId], references: [id], onDelete: SetNull)
-  customer      Customer?                     @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  asset         Asset?                        @relation(fields: [assetId], references: [id], onDelete: SetNull)
-  template      ArtifactTemplate              @relation(fields: [templateId], references: [id], onDelete: Restrict)
-  snapshot      ArtifactSnapshot              @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
-  responsible   User?                         @relation("ArtifactExecutionResponsible", fields: [responsibleUserId], references: [id], onDelete: SetNull)
-  createdBy     User                          @relation("ArtifactExecutionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  team          ArtifactExecutionTeam[]
-  responses     ArtifactExecutionResponse[]
-  attachments   ArtifactExecutionAttachment[]
-  signatures    ArtifactExecutionSignature[]
-  insights      ArtifactExecutionInsight[]
-  manifests     ArtifactManifest[]
-  pmocExecution PmocExecution?
+  organization           Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  businessUnit           BusinessUnit                  @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
+  operation              Operation?                    @relation(fields: [operationId], references: [id], onDelete: SetNull)
+  customer               Customer?                     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  asset                  Asset?                        @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  template               ArtifactTemplate              @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  snapshot               ArtifactSnapshot              @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+  responsible            User?                         @relation("ArtifactExecutionResponsible", fields: [responsibleUserId], references: [id], onDelete: SetNull)
+  createdBy              User                          @relation("ArtifactExecutionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  team                   ArtifactExecutionTeam[]
+  responses              ArtifactExecutionResponse[]
+  attachments            ArtifactExecutionAttachment[]
+  signatures             ArtifactExecutionSignature[]
+  insights               ArtifactExecutionInsight[]
+  manifests              ArtifactManifest[]
+  fieldArtifact          FieldArtifact?
+  pmocExecution          PmocExecution?
+  pmocEquipmentExecution PmocEquipmentExecution?
 
   @@unique([organizationId, code])
   @@index([organizationId, businessUnitId, status, createdAt])
@@ -962,6 +1956,31 @@ model ArtifactExecution {
   @@index([assetId])
   @@index([responsibleUserId, status])
   @@map("artifact_executions")
+}
+
+/// Projeção documental congelada de uma autoridade operacional de campo.
+/// O renderer consome exclusivamente `snapshot`; `sourceType/sourceId` servem
+/// para autorização e identidade idempotente, nunca para recompor conteúdo.
+model FieldArtifact {
+  id                  String   @id @default(uuid(7)) @db.Uuid
+  organizationId      String   @map("organization_id") @db.Uuid
+  businessUnitId      String   @map("business_unit_id") @db.Uuid
+  sourceType          String   @map("source_type") @db.VarChar(40)
+  sourceId            String   @map("source_id") @db.Uuid
+  documentType        String   @map("document_type") @db.VarChar(40)
+  snapshotVersion     Int      @default(1) @map("snapshot_version")
+  snapshot            Json     @db.JsonB
+  snapshotHash        String   @map("snapshot_hash") @db.Char(64)
+  artifactExecutionId String   @unique @map("artifact_execution_id") @db.Uuid
+  createdById         String   @map("created_by_id") @db.Uuid
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  artifactExecution ArtifactExecution @relation(fields: [artifactExecutionId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, sourceType, sourceId, documentType, snapshotVersion])
+  @@index([organizationId, businessUnitId, createdAt])
+  @@index([organizationId, sourceType, sourceId])
+  @@map("field_artifacts")
 }
 
 model ArtifactExecutionTeam {
@@ -1033,23 +2052,31 @@ model ArtifactExecutionAttachment {
 }
 
 model ArtifactExecutionSignature {
-  id             String            @id @default(uuid(7)) @db.Uuid
-  organizationId String            @map("organization_id") @db.Uuid
-  executionId    String            @map("execution_id") @db.Uuid
-  slotId         String            @map("slot_id") @db.VarChar(120)
-  signerRole     String            @map("signer_role") @db.VarChar(80)
-  userId         String?           @map("user_id") @db.Uuid
-  signerName     String            @map("signer_name") @db.VarChar(180)
-  signerDocument String?           @map("signer_document") @db.VarChar(32)
-  signatureData  Json              @map("signature_data") @db.JsonB
-  signatureHash  String            @map("signature_hash") @db.Char(64)
-  consentText    String?           @map("consent_text") @db.Text
-  geolocation    Json?             @db.JsonB
-  signedAt       DateTime          @default(now()) @map("signed_at") @db.Timestamptz(3)
-  revokedAt      DateTime?         @map("revoked_at") @db.Timestamptz(3)
-  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  execution      ArtifactExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
-  user           User?             @relation("ArtifactSignatureUser", fields: [userId], references: [id], onDelete: SetNull)
+  id                 String            @id @default(uuid(7)) @db.Uuid
+  organizationId     String            @map("organization_id") @db.Uuid
+  executionId        String            @map("execution_id") @db.Uuid
+  slotId             String            @map("slot_id") @db.VarChar(120)
+  signerRole         String            @map("signer_role") @db.VarChar(80)
+  signedAs           String?           @map("signed_as") @db.VarChar(40)
+  userId             String?           @map("user_id") @db.Uuid
+  signerName         String            @map("signer_name") @db.VarChar(180)
+  signerDocument     String?           @map("signer_document") @db.VarChar(32)
+  signatureData      Json              @map("signature_data") @db.JsonB
+  signatureHash      String            @map("signature_hash") @db.Char(64)
+  signatureAssetId   String?           @map("signature_asset_id") @db.Uuid
+  signatureAssetHash String?           @map("signature_asset_hash") @db.Char(64)
+  professionalRole   String?           @map("professional_role") @db.VarChar(40)
+  credentialType     String?           @map("credential_type") @db.VarChar(20)
+  credentialNumber   String?           @map("credential_number") @db.VarChar(100)
+  credentialRegion   String?           @map("credential_region") @db.VarChar(40)
+  capturedAt         DateTime?         @map("captured_at") @db.Timestamptz(3)
+  consentText        String?           @map("consent_text") @db.Text
+  geolocation        Json?             @db.JsonB
+  signedAt           DateTime          @default(now()) @map("signed_at") @db.Timestamptz(3)
+  revokedAt          DateTime?         @map("revoked_at") @db.Timestamptz(3)
+  organization       Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  execution          ArtifactExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  user               User?             @relation("ArtifactSignatureUser", fields: [userId], references: [id], onDelete: SetNull)
 
   @@unique([executionId, slotId])
   @@index([organizationId, signedAt])
@@ -1100,18 +2127,187 @@ model StorageFile {
   updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(3)
 
-  organization      Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  businessUnit      BusinessUnit?                 @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
-  createdBy         User?                         @relation("StorageFileCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  manifests         ArtifactManifest[]
-  managementReports ManagementReport[]
-  attachments       ArtifactExecutionAttachment[]
+  organization          Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  businessUnit          BusinessUnit?                 @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
+  createdBy             User?                         @relation("StorageFileCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  manifests             ArtifactManifest[]
+  managementReports     ManagementReport[]
+  attachments           ArtifactExecutionAttachment[]
+  pmocEquipmentEvidence PmocEquipmentEvidence[]
 
-  memberCertifications MemberCertification[]
+  memberCertifications   MemberCertification[]
+  professionalSignatures UserSignature[]
+  pmocSignatureLinks     PmocPlanSignatureLink[]
+  userAvatars            User[]                @relation("UserAvatarFile")
+  fieldEvidenceUploads   FieldEvidenceUpload[]
+  fieldEvidence          FieldEvidence[]
 
   @@unique([provider, bucket, objectKey])
   @@index([organizationId, status, createdAt])
   @@map("storage_files")
+}
+
+/// Intenção autorizada e temporária de upload direto. Não é evidência até que
+/// o objeto real seja verificado e associado transacionalmente.
+model FieldEvidenceUpload {
+  id                       String    @id @default(uuid(7)) @db.Uuid
+  organizationId           String    @map("organization_id") @db.Uuid
+  businessUnitId           String    @map("business_unit_id") @db.Uuid
+  operationId              String?   @map("operation_id") @db.Uuid
+  pmocEquipmentExecutionId String?   @map("pmoc_equipment_execution_id") @db.Uuid
+  rvtExecutionId           String?   @map("rvt_execution_id") @db.Uuid
+  storageFileId            String    @unique @map("storage_file_id") @db.Uuid
+  capturedByUserId         String    @map("captured_by_user_id") @db.Uuid
+  idempotencyKey           String    @map("idempotency_key") @db.VarChar(160)
+  payloadHash              String    @map("payload_hash") @db.Char(64)
+  localMediaId             String?   @map("local_media_id") @db.VarChar(160)
+  category                 String    @default("GENERAL") @db.VarChar(30)
+  source                   String    @default("CAMERA") @db.VarChar(20)
+  capturedAt               DateTime? @map("captured_at") @db.Timestamptz(3)
+  expectedSha256           String?   @map("expected_sha256") @db.Char(64)
+  status                   String    @default("PENDING_UPLOAD") @db.VarChar(30)
+  expiresAt                DateTime  @map("expires_at") @db.Timestamptz(3)
+  uploadedAt               DateTime? @map("uploaded_at") @db.Timestamptz(3)
+  finalizedAt              DateTime? @map("finalized_at") @db.Timestamptz(3)
+  failureCode              String?   @map("failure_code") @db.VarChar(80)
+  createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization           Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  businessUnit           BusinessUnit            @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  operation              Operation?              @relation(fields: [operationId], references: [id], onDelete: Cascade)
+  pmocEquipmentExecution PmocEquipmentExecution? @relation(fields: [pmocEquipmentExecutionId], references: [id], onDelete: Cascade)
+  rvtExecution           RvtExecution?           @relation(fields: [rvtExecutionId], references: [id], onDelete: Cascade)
+  storageFile            StorageFile             @relation(fields: [storageFileId], references: [id], onDelete: Restrict)
+  capturedBy             User                    @relation("FieldEvidenceUploadActor", fields: [capturedByUserId], references: [id], onDelete: Restrict)
+  evidence               FieldEvidence?
+
+  @@unique([organizationId, capturedByUserId, idempotencyKey], map: "field_evidence_upload_actor_idem_key")
+  @@unique([organizationId, capturedByUserId, localMediaId], map: "field_evidence_upload_local_media_key")
+  @@index([organizationId, businessUnitId, status, expiresAt])
+  @@index([operationId, status])
+  @@index([pmocEquipmentExecutionId, status])
+  @@index([rvtExecutionId, status])
+  @@map("field_evidence_uploads")
+}
+
+/// Evidência final e imutável. As três FKs opcionais são protegidas por CHECK
+/// no PostgreSQL: exatamente um target sempre existe.
+model FieldEvidence {
+  id                       String    @id @default(uuid(7)) @db.Uuid
+  organizationId           String    @map("organization_id") @db.Uuid
+  businessUnitId           String    @map("business_unit_id") @db.Uuid
+  uploadId                 String    @unique @map("upload_id") @db.Uuid
+  operationId              String?   @map("operation_id") @db.Uuid
+  pmocEquipmentExecutionId String?   @map("pmoc_equipment_execution_id") @db.Uuid
+  rvtExecutionId           String?   @map("rvt_execution_id") @db.Uuid
+  /// O pedido de cancelamento que citou esta foto, quando é o caso.
+  ///
+  /// A evidência continua sendo **da operação** — o alvo não muda e o pipeline de
+  /// upload é o mesmo. Esta coluna só registra que a foto foi apresentada como
+  /// justificativa, para o dono ver as que importam em vez de todas as do
+  /// atendimento.
+  cancellationRequestId    String?   @map("cancellation_request_id") @db.Uuid
+  storageFileId            String    @unique @map("storage_file_id") @db.Uuid
+  category                 String    @db.VarChar(30)
+  source                   String    @db.VarChar(20)
+  fileName                 String    @map("file_name") @db.VarChar(255)
+  mimeType                 String    @map("mime_type") @db.VarChar(160)
+  sizeBytes                BigInt    @map("size_bytes")
+  sha256                   String    @db.Char(64)
+  capturedAt               DateTime? @map("captured_at") @db.Timestamptz(3)
+  uploadedAt               DateTime  @map("uploaded_at") @db.Timestamptz(3)
+  capturedByUserId         String    @map("captured_by_user_id") @db.Uuid
+  localMediaId             String?   @map("local_media_id") @db.VarChar(160)
+  status                   String    @default("FINALIZED") @db.VarChar(20)
+  createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  organization           Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  businessUnit           BusinessUnit            @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
+  upload                 FieldEvidenceUpload     @relation(fields: [uploadId], references: [id], onDelete: Restrict)
+  operation              Operation?              @relation(fields: [operationId], references: [id], onDelete: Restrict)
+  cancellationRequest    OperationCancellationRequest? @relation(fields: [cancellationRequestId], references: [id], onDelete: SetNull)
+  pmocEquipmentExecution PmocEquipmentExecution? @relation(fields: [pmocEquipmentExecutionId], references: [id], onDelete: Restrict)
+  rvtExecution           RvtExecution?           @relation(fields: [rvtExecutionId], references: [id], onDelete: Restrict)
+  storageFile            StorageFile             @relation(fields: [storageFileId], references: [id], onDelete: Restrict)
+  capturedBy             User                    @relation("FieldEvidenceCapturedBy", fields: [capturedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, businessUnitId, createdAt])
+  @@index([operationId, createdAt])
+  @@index([pmocEquipmentExecutionId, createdAt])
+  @@index([rvtExecutionId, createdAt])
+  @@map("field_evidence")
+}
+
+/// O pedido de cancelamento feito em campo.
+///
+/// ## Por que pedido, e não cancelamento
+///
+/// Quem está na porta descobre que não dá para atender — ninguém no local, acesso
+/// negado, equipamento inacessível. Isso precisa de desfecho imediato para o técnico
+/// e **nenhuma** autoridade para encerrar o compromisso: cancelar é decisão
+/// comercial, e o dono pode preferir remarcar ou mandar outra pessoa.
+///
+/// Por isso o pedido é registro próprio, e não um estado da operação. A operação
+/// segue viva enquanto o dono não decide, e o que ele decide — cancelar, reagendar,
+/// reatribuir ou manter — fica em `resolution`, ao lado do motivo que o técnico deu.
+///
+/// ## A justificativa é obrigatória e as fotos não
+///
+/// A frase é o que o dono lê para decidir; sem ela o pedido não diz nada e o
+/// cancelamento vira estatística sem causa. As fotos reforçam e faltam com
+/// frequência legítima — chuva, pressa, bateria —, e exigi-las transformaria uma
+/// recusa justa em impossível de registrar.
+model OperationCancellationRequest {
+  id             String @id @default(uuid(7)) @db.Uuid
+  organizationId String @map("organization_id") @db.Uuid
+  businessUnitId String @map("business_unit_id") @db.Uuid
+  operationId    String @map("operation_id") @db.Uuid
+
+  /// O que o técnico encontrou. Obrigatório.
+  reason        String   @db.Text
+  requestedById String   @map("requested_by_id") @db.Uuid
+  requestedAt   DateTime @map("requested_at") @db.Timestamptz(3)
+
+  /// `PENDING` enquanto o dono não decidiu; `RESOLVED` depois.
+  status String @default("PENDING") @db.VarChar(20)
+
+  /// O que o dono decidiu: `CANCELLED`, `RESCHEDULED`, `REASSIGNED` ou `DISMISSED`.
+  ///
+  /// `DISMISSED` é "mantenha como está" — e é uma resposta, não a ausência de uma:
+  /// o técnico precisa saber que foi lido e que o atendimento continua de pé.
+  resolution      String?   @db.VarChar(20)
+  resolutionNotes String?   @map("resolution_notes") @db.Text
+  resolvedById    String?   @map("resolved_by_id") @db.Uuid
+  resolvedAt      DateTime? @map("resolved_at") @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
+  operation    Operation    @relation(fields: [operationId], references: [id], onDelete: Cascade)
+  requestedBy  User         @relation("OperationCancellationRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+  resolvedBy   User?        @relation("OperationCancellationResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  /// As fotos que o técnico apresentou junto do pedido.
+  evidence FieldEvidence[]
+
+  /// Os ids **locais** das capturas citadas, como o aparelho as nomeia.
+  ///
+  /// Guardados porque a foto quase nunca existe no servidor no instante do pedido: a
+  /// captura é offline-first, e o upload acontece minutos ou horas depois. Sem esta
+  /// lista não haveria como saber, na finalização daquele upload, que aquela foto
+  /// pertencia a este pedido — e a citação só funcionaria com rede boa, que é quando
+  /// ela menos importa.
+  ///
+  /// Convive com `evidence` e não a substitui: esta é a intenção declarada pelo
+  /// aparelho; aquela é o que de fato chegou.
+  citedLocalMediaIds String[] @map("cited_local_media_ids")
+
+  @@index([organizationId, status, requestedAt])
+  @@index([operationId, requestedAt])
+  @@map("operation_cancellation_requests")
 }
 
 /// Documento oficialmente emitido pela plataforma.
@@ -1171,6 +2367,12 @@ model ChecklistExecution {
   businessUnitId   String    @map("business_unit_id") @db.Uuid
   templateId       String    @map("template_id") @db.Uuid
   operationId      String?   @map("operation_id") @db.Uuid
+  /// O checklist preenchido numa visita técnica.
+  ///
+  /// `operationId` já era opcional: o modelo foi feito para checklist que não
+  /// pertence a uma ordem. RVT é o segundo dono, e reusar aqui traz de graça o
+  /// snapshot do roteiro, as respostas, o progresso e a conclusão.
+  rvtExecutionId   String?   @map("rvt_execution_id") @db.Uuid
   createdById      String    @map("created_by_id") @db.Uuid
   status           String    @default("IN_PROGRESS") @db.VarChar(40)
   templateVersion  Int       @map("template_version")
@@ -1186,10 +2388,12 @@ model ChecklistExecution {
   businessUnit BusinessUnit      @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
   template     ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
   operation    Operation?        @relation(fields: [operationId], references: [id], onDelete: SetNull)
+  rvtExecution RvtExecution?     @relation(fields: [rvtExecutionId], references: [id], onDelete: SetNull)
   createdBy    User              @relation("ChecklistCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
   @@index([organizationId, businessUnitId, status])
   @@index([operationId])
+  @@index([rvtExecutionId])
   @@index([createdById, createdAt])
   @@map("checklist_executions")
 }
@@ -1326,6 +2530,7 @@ model Notification {
   businessUnitId  String?   @map("business_unit_id") @db.Uuid
   recipientUserId String    @map("recipient_user_id") @db.Uuid
   type            String    @db.VarChar(80)
+  dedupeKey       String?   @map("dedupe_key") @db.VarChar(180)
   channels        String[]  @default(["IN_APP", "REALTIME"]) @db.VarChar(30)
   title           String    @db.VarChar(180)
   body            String    @db.Text
@@ -1338,14 +2543,71 @@ model Notification {
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  businessUnit BusinessUnit?          @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
-  recipient    User                   @relation(fields: [recipientUserId], references: [id], onDelete: Cascade)
-  deliveries   NotificationDelivery[]
+  organization         Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  businessUnit         BusinessUnit?          @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  recipient            User                   @relation(fields: [recipientUserId], references: [id], onDelete: Cascade)
+  deliveries           NotificationDelivery[]
+  mobilePushDeliveries MobilePushDelivery[]
 
+  @@unique([organizationId, dedupeKey], map: "notifications_org_dedupe_key")
   @@index([recipientUserId, readAt, createdAt])
   @@index([organizationId, status, scheduledAt])
   @@map("notifications")
+}
+
+model MobileDeviceInstallation {
+  id               String    @id @default(uuid(7)) @db.Uuid
+  organizationId   String    @map("organization_id") @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  deviceInstanceId String    @map("device_instance_id") @db.VarChar(120)
+  platform         String    @db.VarChar(20)
+  pushProvider     String    @map("push_provider") @db.VarChar(30)
+  pushToken        String    @map("push_token") @db.Text
+  pushTokenHash    String    @map("push_token_hash") @db.Char(64)
+  appVersion       String    @map("app_version") @db.VarChar(40)
+  osVersion        String?   @map("os_version") @db.VarChar(60)
+  locale           String?   @db.VarChar(16)
+  timezone         String?   @db.VarChar(64)
+  enabled          Boolean   @default(true)
+  lastSeenAt       DateTime  @default(now()) @map("last_seen_at") @db.Timestamptz(3)
+  tokenUpdatedAt   DateTime  @default(now()) @map("token_updated_at") @db.Timestamptz(3)
+  revokedAt        DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveries   MobilePushDelivery[]
+
+  @@unique([deviceInstanceId])
+  @@index([organizationId, userId, enabled, revokedAt])
+  @@index([pushTokenHash, enabled, revokedAt])
+  @@map("mobile_device_installations")
+}
+
+model MobilePushDelivery {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  organizationId    String    @map("organization_id") @db.Uuid
+  notificationId    String    @map("notification_id") @db.Uuid
+  installationId    String    @map("installation_id") @db.Uuid
+  status            String    @default("PENDING") @db.VarChar(40)
+  provider          String?   @db.VarChar(40)
+  providerMessageId String?   @map("provider_message_id") @db.VarChar(255)
+  attempts          Int       @default(0)
+  lastErrorCode     String?   @map("last_error_code") @db.VarChar(80)
+  acceptedAt        DateTime? @map("accepted_at") @db.Timestamptz(3)
+  failedAt          DateTime? @map("failed_at") @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  notification Notification             @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  installation MobileDeviceInstallation @relation(fields: [installationId], references: [id], onDelete: Cascade)
+
+  @@unique([notificationId, installationId])
+  @@index([organizationId, status, createdAt])
+  @@index([installationId, createdAt])
+  @@map("mobile_push_deliveries")
 }
 
 model NotificationPreference {
@@ -1886,6 +3148,164 @@ model MemberLocation {
 }
 
 // -----------------------------------------------------------------------------
+// PROFESSIONAL IDENTITY
+// -----------------------------------------------------------------------------
+
+/// Identidade profissional tenant-scoped. Não concede permissões RBAC.
+/// O perfil pertence à organização; o escopo por unidade continua sendo
+/// determinado pelos BusinessUnitMemberships ativos da mesma identidade.
+model ProfessionalProfile {
+  id                          String   @id @default(uuid(7)) @db.Uuid
+  organizationId              String   @map("organization_id") @db.Uuid
+  userId                      String   @map("user_id") @db.Uuid
+  fieldTechnicianEnabled      Boolean  @default(false) @map("field_technician_enabled")
+  technicalResponsibleEnabled Boolean  @default(false) @map("technical_responsible_enabled")
+  active                      Boolean  @default(true)
+  createdAt                   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credentials  ProfessionalCredential[]
+
+  @@unique([organizationId, userId])
+  @@index([organizationId, active, fieldTechnicianEnabled])
+  @@index([organizationId, active, technicalResponsibleEnabled])
+  @@map("professional_profiles")
+}
+
+/// Registro emitido por conselho/autoridade. É evidência descritiva e nunca
+/// concede papel profissional automaticamente.
+model ProfessionalCredential {
+  id                    String    @id @default(uuid(7)) @db.Uuid
+  organizationId        String    @map("organization_id") @db.Uuid
+  professionalProfileId String    @map("professional_profile_id") @db.Uuid
+  userId                String    @map("user_id") @db.Uuid
+  type                  String    @db.VarChar(20)
+  registrationNumber    String    @map("registration_number") @db.VarChar(100)
+  region                String?   @db.VarChar(40)
+  issuingAuthority      String?   @map("issuing_authority") @db.VarChar(120)
+  displayLabel          String?   @map("display_label") @db.VarChar(180)
+  active                Boolean   @default(true)
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  revokedAt             DateTime? @map("revoked_at") @db.Timestamptz(3)
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  profile      ProfessionalProfile @relation(fields: [professionalProfileId], references: [id], onDelete: Cascade)
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([professionalProfileId, type, registrationNumber])
+  @@index([organizationId, userId, active])
+  @@map("professional_credentials")
+}
+
+/// Uma única assinatura gráfica ativa por pessoa e organização. O binário
+/// vive no Storage; esta tabela mantém versão, hash e ciclo de revogação.
+model UserSignature {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  organizationId  String    @map("organization_id") @db.Uuid
+  userId          String    @map("user_id") @db.Uuid
+  storageObjectId String    @map("storage_object_id") @db.Uuid
+  sha256          String    @db.Char(64)
+  version         Int       @default(1)
+  active          Boolean   @default(true)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  revokedAt       DateTime? @map("revoked_at") @db.Timestamptz(3)
+
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user          User         @relation("ProfessionalSignatureUser", fields: [userId], references: [id], onDelete: Cascade)
+  storageObject StorageFile  @relation(fields: [storageObjectId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, userId, version])
+  @@index([organizationId, userId, active])
+  @@map("user_signatures")
+}
+
+/// Evidência de que uma pessoa reconheceu o resumo congelado de uma execução.
+/// É deliberadamente independente do Customer master e da assinatura gráfica
+/// profissional do usuário.
+model CustomerAcknowledgement {
+  id                     String    @id @default(uuid(7)) @db.Uuid
+  organizationId         String    @map("organization_id") @db.Uuid
+  businessUnitId         String    @map("business_unit_id") @db.Uuid
+  executionType          String    @map("execution_type") @db.VarChar(30)
+  executionId            String    @map("execution_id") @db.Uuid
+  customerId             String?   @map("customer_id") @db.Uuid
+  contactId              String?   @map("contact_id") @db.Uuid
+  signerName             String    @map("signer_name") @db.VarChar(180)
+  signatureStorageFileId String?   @map("signature_storage_file_id") @db.Uuid
+  signatureSha256        String?   @map("signature_sha256") @db.Char(64)
+  contentVersion         String    @map("content_version") @db.VarChar(80)
+  contentHash            String    @map("content_hash") @db.Char(64)
+  summarySnapshot        Json      @map("summary_snapshot") @db.JsonB
+  commandId              String    @map("command_id") @db.VarChar(120)
+  payloadHash            String    @map("payload_hash") @db.Char(64)
+  capturedByUserId       String    @map("captured_by_user_id") @db.Uuid
+  occurredAt             DateTime? @map("occurred_at") @db.Timestamptz(3)
+  acknowledgedAt         DateTime  @default(now()) @map("acknowledged_at") @db.Timestamptz(3)
+  invalidatedAt          DateTime? @map("invalidated_at") @db.Timestamptz(3)
+  invalidationReason     String?   @map("invalidation_reason") @db.VarChar(120)
+  metadata               Json      @default("{}") @db.JsonB
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([organizationId, capturedByUserId, commandId])
+  @@index([organizationId, businessUnitId, executionType, executionId])
+  @@index([organizationId, customerId, acknowledgedAt])
+  @@index([signatureStorageFileId])
+  @@map("customer_acknowledgements")
+}
+
+/// Recibo durável do protocolo offline. O payload não é persistido: somente
+/// seu hash canônico e o resultado público necessário para retries seguros.
+model MobileOfflineCommandReceipt {
+  id               String   @id @default(uuid(7)) @db.Uuid
+  organizationId   String   @map("organization_id") @db.Uuid
+  businessUnitId   String   @map("business_unit_id") @db.Uuid
+  actorId          String   @map("actor_id") @db.Uuid
+  commandId        String   @map("command_id") @db.VarChar(120)
+  idempotencyKey   String   @map("idempotency_key") @db.VarChar(160)
+  commandType      String   @map("command_type") @db.VarChar(60)
+  aggregateType    String   @map("aggregate_type") @db.VarChar(40)
+  aggregateId      String   @map("aggregate_id") @db.Uuid
+  deviceInstanceId String?  @map("device_instance_id") @db.VarChar(120)
+  payloadHash      String   @map("payload_hash") @db.Char(64)
+  resultStatus     String   @map("result_status") @db.VarChar(30)
+  result           Json     @default("{}") @db.JsonB
+  serverVersion    String?  @map("server_version") @db.VarChar(80)
+  occurredAt       DateTime @map("occurred_at") @db.Timestamptz(3)
+  processedAt      DateTime @default(now()) @map("processed_at") @db.Timestamptz(3)
+  expiresAt        DateTime @map("expires_at") @db.Timestamptz(3)
+
+  @@unique([organizationId, commandId])
+  @@unique([organizationId, actorId, idempotencyKey])
+  @@index([organizationId, businessUnitId, processedAt])
+  @@index([expiresAt])
+  @@map("mobile_offline_command_receipts")
+}
+
+/// Journal de metadados para pull incremental. Snapshots públicos são
+/// reconstruídos no momento da leitura, evitando duplicação de PII.
+model MobileSyncChange {
+  sequence        BigInt   @id @default(autoincrement())
+  organizationId  String   @map("organization_id") @db.Uuid
+  businessUnitId  String   @map("business_unit_id") @db.Uuid
+  resourceType    String   @map("resource_type") @db.VarChar(40)
+  resourceId      String   @map("resource_id") @db.VarChar(180)
+  changeType      String   @map("change_type") @db.VarChar(30)
+  resourceVersion String?  @map("resource_version") @db.VarChar(80)
+  actorId         String?  @map("actor_id") @db.Uuid
+  occurredAt      DateTime @default(now()) @map("occurred_at") @db.Timestamptz(3)
+  expiresAt       DateTime @map("expires_at") @db.Timestamptz(3)
+
+  @@index([organizationId, businessUnitId, sequence])
+  @@index([organizationId, resourceType, resourceId, sequence])
+  @@index([expiresAt])
+  @@map("mobile_sync_changes")
+}
+
+// -----------------------------------------------------------------------------
 // FINANCIAL CORE
 //
 // Registro de entradas e saídas de dinheiro. **Não é contabilidade**: não há
@@ -2017,6 +3437,182 @@ model FinancialSettings {
 }
 
 // -----------------------------------------------------------------------------
+// COMISSÃO DE TÉCNICOS
+//
+// ## A comissão pendente é derivada, não gravada
+//
+// Não existe tabela de comissões a pagar. Ela é calculada a partir do que já é
+// verdade no banco — atendimento concluído, técnico responsável, auxiliares
+// ativos, receita confirmada — cruzado com a política vigente. Materializar uma
+// linha por atendimento concluído exigiria um gatilho na conclusão, e o dia em
+// que ele falhasse a comissão simplesmente não existiria: ninguém procura o que
+// nunca apareceu.
+//
+// O que **é** gravado é o pagamento. A partir dele o valor congela: `amount` no
+// item é o que foi pago, e não recalcula quando a política muda. Comissão paga é
+// fato histórico; comissão pendente é sempre a política de hoje.
+//
+// ## O que impede pagar duas vezes
+//
+// O índice único de `commission_payment_items` sobre
+// `(organization_id, operation_id, user_id, role)`. Não é validação de
+// aplicação — é o banco recusando. Dois cliques simultâneos em "pagar todas"
+// terminam com um pagamento e um erro, nunca com dois pagamentos.
+// -----------------------------------------------------------------------------
+
+/// Política de comissão da organização.
+///
+/// Uma por organização: as regras de comissão são combinadas com a equipe, não
+/// por filial. Um escopo por unidade acrescentaria uma pergunta ("de qual
+/// unidade?") a toda leitura, para um caso que ninguém pediu.
+model CommissionPolicy {
+  id             String @id @default(uuid(7)) @db.Uuid
+  organizationId String @unique @map("organization_id") @db.Uuid
+
+  /// Janela de fechamento: `WEEKLY` · `BIWEEKLY` · `MONTHLY`.
+  period String @default("MONTHLY") @db.VarChar(20)
+  /// `FIXED` (reais por atendimento) · `PERCENTAGE` (sobre a receita).
+  mode   String @default("FIXED") @db.VarChar(20)
+
+  /// Valor do técnico responsável: reais ou percentual, conforme `mode`.
+  primaryValue   Decimal @default(0) @map("primary_value") @db.Decimal(14, 4)
+  /// Valor do auxiliar. Separado porque a combinação é diferente por papel.
+  assistantValue Decimal @default(0) @map("assistant_value") @db.Decimal(14, 4)
+
+  /// Tipos de atendimento que geram comissão. Vazio significa todos.
+  eligibleKinds String[] @default([]) @map("eligible_kinds") @db.VarChar(60)
+
+  /// Só atendimento com receita confirmada gera comissão.
+  ///
+  /// Em `PERCENTAGE` é obrigatório na prática: sem receita não há base. Em
+  /// `FIXED` é escolha — pagar pelo serviço feito ou só pelo serviço recebido.
+  requiresConfirmedRevenue Boolean @default(true) @map("requires_confirmed_revenue")
+
+  /// Desligada, nenhuma comissão é calculada e a tela diz isso.
+  active Boolean @default(false)
+
+  createdById String?  @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User?        @relation("CommissionPolicyCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@map("commission_policies")
+}
+
+/// Comissão que a organização decidiu não pagar.
+///
+/// ## Por que uma linha, e não um status na comissão
+///
+/// A comissão pendente é derivada — não existe linha para receber um status. O
+/// cancelamento é a **decisão**, e decisão é fato: quem decidiu, quando, e por
+/// quê. Guardá-la aqui deixa a derivação continuar sendo derivação.
+///
+/// ## Desfazer é revogar, não apagar
+///
+/// `revokedAt` marca a decisão desfeita, e o índice único só vale para a
+/// cancelação em vigor — cancelar, desfazer e cancelar de novo é uma sequência
+/// legítima, e cada passo fica registrado. Apagar a linha perderia a primeira
+/// decisão, que é justamente o que alguém vai querer explicar depois.
+model CommissionCancellation {
+  id             String @id @default(uuid(7)) @db.Uuid
+  organizationId String @map("organization_id") @db.Uuid
+  operationId    String @map("operation_id") @db.Uuid
+  userId         String @map("user_id") @db.Uuid
+  /// `PRIMARY` (responsável) · `ASSISTANT` (auxiliar).
+  role           String @db.VarChar(20)
+
+  reason String? @db.VarChar(500)
+
+  cancelledById String   @map("cancelled_by_id") @db.Uuid
+  cancelledAt   DateTime @default(now()) @map("cancelled_at") @db.Timestamptz(3)
+
+  /// Quando a própria cancelação foi desfeita.
+  revokedAt   DateTime? @map("revoked_at") @db.Timestamptz(3)
+  revokedById String?   @map("revoked_by_id") @db.Uuid
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  operation    Operation    @relation(fields: [operationId], references: [id], onDelete: Restrict)
+  user         User         @relation("CommissionCancellationUser", fields: [userId], references: [id], onDelete: Restrict)
+  cancelledBy  User         @relation("CommissionCancelledBy", fields: [cancelledById], references: [id], onDelete: Restrict)
+  revokedBy    User?        @relation("CommissionCancellationRevokedBy", fields: [revokedById], references: [id], onDelete: SetNull)
+
+  /// O índice único em vigor é criado na migração, com `WHERE revoked_at IS NULL`.
+  @@index([organizationId, operationId, userId, role])
+  @@index([organizationId, userId, cancelledAt])
+  @@map("commission_cancellations")
+}
+
+/// Pagamento de comissão a uma pessoa.
+///
+/// `amount` é a soma dos itens, calculada pelo servidor. O cliente nunca envia
+/// valor: enviar o que se vai pagar seria deixar o pagador decidir o preço.
+model CommissionPayment {
+  id             String  @id @default(uuid(7)) @db.Uuid
+  organizationId String  @map("organization_id") @db.Uuid
+  businessUnitId String? @map("business_unit_id") @db.Uuid
+  /// Quem recebe.
+  userId         String  @map("user_id") @db.Uuid
+
+  amount   Decimal @db.Decimal(14, 2)
+  currency String  @default("BRL") @db.VarChar(3)
+  /// `PIX` · `TRANSFER` · `CASH` · `PAYROLL` · `OTHER`.
+  method   String? @db.VarChar(20)
+  notes    String? @db.Text
+
+  /// Recorte que o pagamento fecha, quando foi pago por período.
+  periodStart DateTime? @map("period_start") @db.Date
+  periodEnd   DateTime? @map("period_end") @db.Date
+
+  paidAt      DateTime @default(now()) @map("paid_at") @db.Timestamptz(3)
+  createdById String   @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  organization Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  businessUnit BusinessUnit?           @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
+  user         User                    @relation("CommissionPaymentUser", fields: [userId], references: [id], onDelete: Restrict)
+  createdBy    User                    @relation("CommissionPaymentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  items        CommissionPaymentItem[]
+
+  @@index([organizationId, userId, paidAt])
+  @@map("commission_payments")
+}
+
+/// A comissão de um atendimento, congelada no pagamento.
+///
+/// `role` distingue o técnico responsável do auxiliar: a mesma pessoa pode
+/// receber pelos dois papéis em atendimentos diferentes, e o valor é outro.
+model CommissionPaymentItem {
+  id             String @id @default(uuid(7)) @db.Uuid
+  organizationId String @map("organization_id") @db.Uuid
+  paymentId      String @map("payment_id") @db.Uuid
+  operationId    String @map("operation_id") @db.Uuid
+  userId         String @map("user_id") @db.Uuid
+  /// `PRIMARY` (responsável) · `ASSISTANT` (auxiliar).
+  role           String @db.VarChar(20)
+
+  /// Como foi calculado, para o histórico não depender da política de hoje.
+  mode       String   @db.VarChar(20)
+  rate       Decimal  @db.Decimal(14, 4)
+  /// Receita considerada, quando percentual.
+  baseAmount Decimal? @map("base_amount") @db.Decimal(14, 2)
+  amount     Decimal  @db.Decimal(14, 2)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  payment      CommissionPayment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  operation    Operation         @relation(fields: [operationId], references: [id], onDelete: Restrict)
+  user         User              @relation("CommissionPaymentItemUser", fields: [userId], references: [id], onDelete: Restrict)
+
+  /// O que impede pagar a mesma comissão duas vezes.
+  @@unique([organizationId, operationId, userId, role])
+  @@index([organizationId, userId, createdAt])
+  @@map("commission_payment_items")
+}
+
+// -----------------------------------------------------------------------------
 // COMMERCIAL ENGINE — QUOTES
 //
 // Proposta comercial: o que se ofereceu, por quanto, até quando. **Não é
@@ -2038,26 +3634,45 @@ model FinancialSettings {
 /// orçamento aprovado e convertido continua aprovado; o que mudou é que existe
 /// trabalho a fazer por causa dele.
 model Quote {
-  id             String    @id @default(uuid(7)) @db.Uuid
-  organizationId String    @map("organization_id") @db.Uuid
-  businessUnitId String    @map("business_unit_id") @db.Uuid
-  customerId     String    @map("customer_id") @db.Uuid
+  id                String    @id @default(uuid(7)) @db.Uuid
+  organizationId    String    @map("organization_id") @db.Uuid
+  businessUnitId    String    @map("business_unit_id") @db.Uuid
+  customerId        String    @map("customer_id") @db.Uuid
   /// Sequencial por organização, atribuído sob trava — nunca se repete.
-  number         Int
+  number            Int
   /// Identificador legível derivado do número (`ORC-000042`).
-  code           String    @db.VarChar(40)
+  code              String    @db.VarChar(40)
   /// `DRAFT` · `SENT` · `APPROVED` · `REJECTED` · `EXPIRED` · `CANCELLED`.
-  status         String    @default("DRAFT") @db.VarChar(20)
-  title          String    @db.VarChar(220)
-  notes          String?   @db.Text
+  status            String    @default("DRAFT") @db.VarChar(20)
+  title             String    @db.VarChar(220)
+  notes             String?   @db.Text
+  /// O parágrafo de abertura da proposta ("Atendendo à honrosa solicitação…").
+  ///
+  /// Campo do orçamento, e não constante do gerador: é texto que a empresa
+  /// negocia caso a caso, e um padrão no código obrigaria a mexer no código
+  /// para mudar uma frase. Nulo imprime o padrão.
+  introText         String?   @map("intro_text") @db.Text
+  /// Endereço de execução, entre os cadastrados do cliente.
+  ///
+  /// Antes disso o documento imprimia o primeiro endereço do cliente, o que
+  /// para quem tem duas filiais era um chute com aparência de dado.
+  serviceAddressId  String?   @map("service_address_id") @db.Uuid
+  /// Quem responde tecnicamente pela proposta, e de quem sai a assinatura.
+  ///
+  /// Separado de `createdById`: quem digita não é necessariamente quem assina,
+  /// e a assinatura impressa tem de ser a de quem responde.
+  responsibleUserId String?   @map("responsible_user_id") @db.Uuid
   /// Última data em que a proposta vale. Sem hora: validade é dia.
-  validUntil     DateTime? @map("valid_until") @db.Date
-  currency       String    @default("BRL") @db.VarChar(3)
+  validUntil        DateTime? @map("valid_until") @db.Date
+  currency          String    @default("BRL") @db.VarChar(3)
   /// Soma dos itens. Recalculado pelo servidor.
-  subtotal       Decimal   @default(0) @db.Decimal(14, 2)
+  subtotal          Decimal   @default(0) @db.Decimal(14, 2)
   /// Desconto sobre o total do orçamento, além dos descontos por item.
-  discount       Decimal   @default(0) @db.Decimal(14, 2)
-  total          Decimal   @default(0) @db.Decimal(14, 2)
+  discount          Decimal   @default(0) @db.Decimal(14, 2)
+  /// Por que houve desconto. Separado de `notes`, que é o objeto da proposta:
+  /// a justificativa comercial não é parte do serviço contratado.
+  discountReason    String?   @map("discount_reason") @db.VarChar(500)
+  total             Decimal   @default(0) @db.Decimal(14, 2)
 
   sentAt        DateTime? @map("sent_at") @db.Timestamptz(3)
   sentById      String?   @map("sent_by_id") @db.Uuid
@@ -2079,20 +3694,46 @@ model Quote {
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(3)
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
-  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  operation    Operation?   @relation(fields: [operationId], references: [id], onDelete: SetNull)
-  createdBy    User         @relation("QuoteCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  sentBy       User?        @relation("QuoteSentBy", fields: [sentById], references: [id], onDelete: SetNull)
-  decidedBy    User?        @relation("QuoteDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
-  items        QuoteItem[]
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  businessUnit   BusinessUnit     @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
+  customer       Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  operation      Operation?       @relation(fields: [operationId], references: [id], onDelete: SetNull)
+  createdBy      User             @relation("QuoteCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  sentBy         User?            @relation("QuoteSentBy", fields: [sentById], references: [id], onDelete: SetNull)
+  decidedBy      User?            @relation("QuoteDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+  /// `SetNull`: apagar o endereço não pode apagar a proposta que o citou.
+  serviceAddress CustomerAddress? @relation(fields: [serviceAddressId], references: [id], onDelete: SetNull)
+  responsible    User?            @relation("QuoteResponsible", fields: [responsibleUserId], references: [id], onDelete: SetNull)
+  items          QuoteItem[]
+  assets         QuoteAsset[]
 
   @@unique([organizationId, number])
   @@index([organizationId, businessUnitId, status, createdAt])
   @@index([organizationId, customerId, createdAt])
   @@index([organizationId, status, validUntil])
   @@map("quotes")
+}
+
+/// Os equipamentos que a proposta cobre.
+///
+/// Pelo mesmo motivo de `OperationAsset`: um orçamento de manutenção raramente
+/// trata de um aparelho só, e obrigar uma proposta por equipamento
+/// multiplicaria o trabalho comercial sem descrever melhor o escopo.
+///
+/// É vínculo, não fotografia: diferente de `QuoteItem`, aqui o que interessa é
+/// *qual* aparelho, e o cadastro do aparelho é a fonte viva desse dado.
+model QuoteAsset {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  quoteId   String   @map("quote_id") @db.Uuid
+  assetId   String   @map("asset_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  quote Quote @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@unique([quoteId, assetId])
+  @@index([assetId])
+  @@map("quote_assets")
 }
 
 /// Item de um orçamento — **cópia comercial**, não referência viva.
@@ -2436,6 +4077,16 @@ model PmocPlan {
   /// Responsável técnico — referência **operacional**, não registro profissional.
   technicianUserId String? @map("technician_user_id") @db.Uuid
 
+  /// Responsável técnico profissional (PR-27). O campo anterior permanece
+  /// apenas para leitura de históricos legados.
+  technicalResponsibleUserId String? @map("technical_responsible_user_id") @db.Uuid
+  serviceLocation            Json?   @map("service_location") @db.JsonB
+  scope                      Json?   @db.JsonB
+  serviceTypes               Json    @default("[]") @map("service_types") @db.JsonB
+  procedure                  Json    @default("{}") @db.JsonB
+  schedulingPaused           Boolean @default(false) @map("scheduling_paused")
+  reviewRequired             Boolean @default(false) @map("review_required")
+
   /// Derivados mantidos pelo servidor, nunca escritos pelo cliente.
   lastExecutedAt DateTime? @map("last_executed_at") @db.Timestamptz(3)
   nextDueOn      DateTime? @map("next_due_on") @db.Date
@@ -2450,19 +4101,43 @@ model PmocPlan {
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(3)
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
-  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  technician   User?        @relation("PmocPlanTechnician", fields: [technicianUserId], references: [id], onDelete: SetNull)
-  createdBy    User         @relation("PmocPlanCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  businessUnit         BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
+  customer             Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  technician           User?        @relation("PmocPlanTechnician", fields: [technicianUserId], references: [id], onDelete: SetNull)
+  technicalResponsible User?        @relation("PmocPlanTechnicalResponsible", fields: [technicalResponsibleUserId], references: [id], onDelete: SetNull)
+  createdBy            User         @relation("PmocPlanCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
-  coverages  PmocEquipmentCoverage[]
-  executions PmocExecution[]
+  coverages           PmocEquipmentCoverage[]
+  executions          PmocExecution[]
+  equipmentExecutions PmocEquipmentExecution[]
+  units               PmocPlanUnit[]
+  signatureLinks      PmocPlanSignatureLink[]
 
   @@index([organizationId, status, nextDueOn])
   @@index([organizationId, businessUnitId, status])
   @@index([organizationId, customerId])
   @@map("pmoc_plans")
+}
+
+/// O contador do código sugerido, por cliente.
+///
+/// Não é `COUNT(*) + 1`: a unicidade do código é parcial (só vale onde
+/// `deletedAt IS NULL`), então contar planos devolveria um número já usado
+/// assim que alguém apagasse um. Também não é uma SEQUENCE por cliente, que
+/// seria DDL criado em runtime. É um contador persistido, incrementado dentro
+/// da transação do create — atômico sob concorrência e sem reuso.
+model PmocCodeSequence {
+  organizationId String   @map("organization_id") @db.Uuid
+  customerId     String   @map("customer_id") @db.Uuid
+  lastValue      Int      @default(0) @map("last_value")
+  updatedAt      DateTime @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@id([organizationId, customerId])
+  @@map("pmoc_code_sequences")
 }
 
 /// Um equipamento coberto por um plano.
@@ -2482,9 +4157,10 @@ model PmocEquipmentCoverage {
   updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(3)
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  plan         PmocPlan     @relation(fields: [planId], references: [id], onDelete: Cascade)
-  asset        Asset        @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  organization        Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  plan                PmocPlan                 @relation(fields: [planId], references: [id], onDelete: Cascade)
+  asset               Asset                    @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  equipmentExecutions PmocEquipmentExecution[]
 
   @@index([organizationId, planId])
   @@index([organizationId, assetId])
@@ -2497,6 +4173,143 @@ model PmocEquipmentCoverage {
 /// serviço que a cumpriu e a execução de artefato que a documentou. Sem ela não
 /// haveria como responder "quando foi a última" nem impedir duas ordens para o
 /// mesmo vencimento.
+/// Uma unidade do sistema que recebe manutenção.
+///
+/// Condensadora, evaporadora, dutos, torre. É o nível em que o PMOC descreve
+/// o serviço: o relatório final lista, por unidade, o que foi feito nela.
+///
+/// ## Unidade não é equipamento
+///
+/// `Asset` é a máquina sob contrato — "Split Cassete 1, Sala 1". Unidade é a
+/// **parte** dessa máquina que recebe manutenção, e cada parte tem o seu
+/// roteiro. Um plano cobre equipamentos (que existem no cliente) e declara
+/// unidades (que descrevem o serviço).
+///
+/// O nome é o do mercado: foi assim que as empresas que usam PMOC pediram.
+model PmocUnit {
+  id             String  @id @default(uuid(7)) @db.Uuid
+  organizationId String  @map("organization_id") @db.Uuid
+  key            String  @db.VarChar(60)
+  name           String  @db.VarChar(160)
+  description    String? @db.Text
+
+  /// O roteiro desta unidade. Opcional: uma unidade recém-cadastrada ainda
+  /// não tem checklist, e recusar o cadastro por isso impediria o caminho
+  /// natural — criar a unidade, depois escrever o roteiro dela.
+  checklistTemplateId String? @map("checklist_template_id") @db.Uuid
+
+  sortOrder Int       @default(0) @map("sort_order")
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  checklistTemplate ChecklistTemplate? @relation(fields: [checklistTemplateId], references: [id], onDelete: SetNull)
+  plans             PmocPlanUnit[]
+
+  @@unique([organizationId, key])
+  @@index([organizationId, isActive, deletedAt])
+  @@index([checklistTemplateId])
+  @@map("pmoc_units")
+}
+
+/// As unidades declaradas por um plano.
+/// Link temporário para o contratante ler o contrato e assiná-lo.
+///
+/// ## Por que um registro, e não só um token assinado
+///
+/// Porque ele guarda a prova. Um JWT diria "este token é válido"; o que o contrato
+/// precisa responder depois é "quem assinou, quando, de onde" — e isso é linha de
+/// banco. A assinatura coletada vive aqui, e é daqui que o documento do PMOC a lê.
+///
+/// ## Um pendente por plano
+///
+/// `pmoc_signature_links_pending_unique` é parcial: vale só enquanto o link não foi
+/// revogado nem assinado. Gerar um link novo revoga o anterior — pedido explícito do
+/// produto, e a razão é de segurança: um link antigo circulando por e-mail continuaria
+/// abrindo o contrato depois de o dono ter decidido gerar outro.
+///
+/// Links já assinados não entram no índice, então eles permanecem como histórico e não
+/// impedem uma nova coleta.
+///
+/// ## O token não é guardado
+///
+/// Só o SHA-256 dele, como em `customer_portal_invitations`. Vazando o banco, ninguém
+/// assina em nome de ninguém: o segredo existe uma vez, na resposta que o dono copia.
+model PmocPlanSignatureLink {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  planId         String    @map("plan_id") @db.Uuid
+  tokenHash      String    @unique @map("token_hash") @db.Char(64)
+  expiresAt      DateTime  @map("expires_at") @db.Timestamptz(3)
+  createdById    String    @map("created_by_id") @db.Uuid
+  revokedAt      DateTime? @map("revoked_at") @db.Timestamptz(3)
+
+  /// Quando o contratante assinou. Nulo enquanto o link está pendente.
+  signedAt DateTime? @map("signed_at") @db.Timestamptz(3)
+  /// Quem declarou assinar — nome e documento são digitados por ele.
+  signerName     String? @map("signer_name") @db.VarChar(180)
+  signerDocument String? @map("signer_document") @db.VarChar(40)
+  signerEmail    String? @map("signer_email") @db.VarChar(180)
+  /// Evidência de onde veio o aceite. Não identifica ninguém sozinha, e é o que
+  /// sobra para contestar uma assinatura meses depois.
+  signedIp        String? @map("signed_ip") @db.VarChar(64)
+  signedUserAgent String? @map("signed_user_agent") @db.VarChar(400)
+
+  /// A imagem da assinatura, no storage — como as assinaturas profissionais.
+  signatureFileId String? @map("signature_file_id") @db.Uuid
+  signatureSha256 String? @map("signature_sha256") @db.Char(64)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  plan          PmocPlan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+  createdBy     User         @relation("PmocSignatureLinkCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  signatureFile StorageFile? @relation(fields: [signatureFileId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, planId, createdAt])
+  @@index([planId, signedAt])
+  @@map("pmoc_plan_signature_links")
+}
+
+model PmocPlanUnit {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  planId    String   @map("plan_id") @db.Uuid
+  unitId    String   @map("unit_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  plan PmocPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  unit PmocUnit @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, unitId])
+  @@index([unitId])
+  @@map("pmoc_plan_units")
+}
+
+/// Nomes sugeridos para um plano de PMOC.
+///
+/// Catálogo **da plataforma**, não da organização: são os nomes que a norma e
+/// o mercado usam, iguais para todo inquilino. Por isso não tem
+/// `organizationId` e não tem RLS — mesma forma de `Plan`.
+///
+/// Quem precisa de um nome fora da lista escolhe "Outros" no formulário e
+/// digita o seu; esse texto vai para `PmocPlan.name` como sempre foi, e não
+/// entra aqui. O catálogo é sugestão, não restrição.
+model PmocPlanNameOption {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  key       String   @unique @db.VarChar(60)
+  label     String   @db.VarChar(160)
+  sortOrder Int      @default(0) @map("sort_order")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([isActive, sortOrder])
+  @@map("pmoc_plan_name_options")
+}
+
 model PmocExecution {
   id             String   @id @default(uuid(7)) @db.Uuid
   organizationId String   @map("organization_id") @db.Uuid
@@ -2504,6 +4317,7 @@ model PmocExecution {
   /// Vencimento previsto deste ciclo.
   dueOn          DateTime @map("due_on") @db.Date
   status         String   @default("PENDING") @db.VarChar(20)
+  sequenceNumber Int      @default(1) @map("sequence_number")
 
   /// A ordem de serviço que cumpriu o ciclo. Única: um ciclo, uma ordem.
   operationId         String? @unique @map("operation_id") @db.Uuid
@@ -2518,15 +4332,310 @@ model PmocExecution {
   createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  plan              PmocPlan           @relation(fields: [planId], references: [id], onDelete: Cascade)
-  operation         Operation?         @relation(fields: [operationId], references: [id], onDelete: SetNull)
-  artifactExecution ArtifactExecution? @relation(fields: [artifactExecutionId], references: [id], onDelete: SetNull)
-  schedulingEvent   SchedulingEvent?   @relation(fields: [schedulingEventId], references: [id], onDelete: SetNull)
-  completedBy       User?              @relation("PmocExecutionCompletedBy", fields: [completedById], references: [id], onDelete: SetNull)
+  organization        Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  plan                PmocPlan                 @relation(fields: [planId], references: [id], onDelete: Cascade)
+  operation           Operation?               @relation(fields: [operationId], references: [id], onDelete: SetNull)
+  artifactExecution   ArtifactExecution?       @relation(fields: [artifactExecutionId], references: [id], onDelete: SetNull)
+  schedulingEvent     SchedulingEvent?         @relation(fields: [schedulingEventId], references: [id], onDelete: SetNull)
+  completedBy         User?                    @relation("PmocExecutionCompletedBy", fields: [completedById], references: [id], onDelete: SetNull)
+  equipmentExecutions PmocEquipmentExecution[]
 
   @@unique([planId, dueOn])
+  @@unique([planId, sequenceNumber])
   @@index([organizationId, planId, dueOn])
   @@index([organizationId, status, dueOn])
   @@map("pmoc_executions")
+}
+
+/// Execução física de um equipamento em um ciclo PMOC. O índice composto é a
+/// autoridade contra duas execuções para o mesmo equipamento e vencimento.
+model PmocEquipmentExecution {
+  id                           String    @id @default(uuid(7)) @db.Uuid
+  organizationId               String    @map("organization_id") @db.Uuid
+  businessUnitId               String    @map("business_unit_id") @db.Uuid
+  cycleId                      String    @map("cycle_id") @db.Uuid
+  /// Denormalizado do ciclo para que a contagem por equipamento possa ser
+  /// garantida por índice. Sai sempre da mesma preparação que cria a linha.
+  planId                       String    @map("plan_id") @db.Uuid
+  coverageId                   String    @map("coverage_id") @db.Uuid
+  assetId                      String    @map("asset_id") @db.Uuid
+  /// A posição desta execução na história **deste equipamento** neste plano.
+  ///
+  /// Não é o número do ciclo: um equipamento que entra no plano depois, ou que
+  /// fica de fora de um ciclo, tem contagem própria. É o número que o relatório
+  /// de execução imprime.
+  sequenceNumber               Int       @map("sequence_number")
+  operationId                  String?   @unique @map("operation_id") @db.Uuid
+  artifactExecutionId          String?   @unique @map("artifact_execution_id") @db.Uuid
+  responsibleFieldTechnicianId String    @map("responsible_field_technician_id") @db.Uuid
+  status                       String    @default("IN_PROGRESS") @db.VarChar(24)
+  performedAt                  DateTime? @map("performed_at") @db.Timestamptz(3)
+  procedureSnapshot            Json      @map("procedure_snapshot") @db.JsonB
+  technicalResponsibleSnapshot Json      @map("technical_responsible_snapshot") @db.JsonB
+  notes                        String?   @db.VarChar(1000)
+  startedById                  String    @map("started_by_id") @db.Uuid
+  completedById                String?   @map("completed_by_id") @db.Uuid
+  startedAt                    DateTime  @default(now()) @map("started_at") @db.Timestamptz(3)
+  completedAt                  DateTime? @map("completed_at") @db.Timestamptz(3)
+  createdAt                    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization               Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  businessUnit               BusinessUnit            @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
+  cycle                      PmocExecution           @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  plan                       PmocPlan                @relation(fields: [planId], references: [id], onDelete: Cascade)
+  coverage                   PmocEquipmentCoverage   @relation(fields: [coverageId], references: [id], onDelete: Restrict)
+  asset                      Asset                   @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  operation                  Operation?              @relation(fields: [operationId], references: [id], onDelete: SetNull)
+  artifactExecution          ArtifactExecution?      @relation(fields: [artifactExecutionId], references: [id], onDelete: SetNull)
+  responsibleFieldTechnician User                    @relation("PmocEquipmentExecutionResponsible", fields: [responsibleFieldTechnicianId], references: [id], onDelete: Restrict)
+  startedBy                  User                    @relation("PmocEquipmentExecutionStartedBy", fields: [startedById], references: [id], onDelete: Restrict)
+  completedBy                User?                   @relation("PmocEquipmentExecutionCompletedBy", fields: [completedById], references: [id], onDelete: SetNull)
+  evidence                   PmocEquipmentEvidence[]
+  fieldEvidenceUploads       FieldEvidenceUpload[]
+  fieldEvidence              FieldEvidence[]
+
+  @@unique([cycleId, coverageId])
+  /// A autoridade contra duas execuções com o mesmo número para o mesmo
+  /// equipamento — o que torna `max+1` seguro sob concorrência.
+  @@unique([planId, assetId, sequenceNumber])
+  @@index([organizationId, planId, assetId, sequenceNumber])
+  @@index([organizationId, cycleId, status])
+  @@index([organizationId, responsibleFieldTechnicianId, status])
+  @@map("pmoc_equipment_executions")
+}
+
+model PmocEquipmentEvidence {
+  id                   String   @id @default(uuid(7)) @db.Uuid
+  organizationId       String   @map("organization_id") @db.Uuid
+  equipmentExecutionId String   @map("equipment_execution_id") @db.Uuid
+  storageFileId        String   @map("storage_file_id") @db.Uuid
+  kind                 String   @default("PHOTO") @db.VarChar(24)
+  caption              String?  @db.VarChar(500)
+  uploadedById         String   @map("uploaded_by_id") @db.Uuid
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  organization       Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  equipmentExecution PmocEquipmentExecution @relation(fields: [equipmentExecutionId], references: [id], onDelete: Cascade)
+  storageFile        StorageFile            @relation(fields: [storageFileId], references: [id], onDelete: Restrict)
+  uploadedBy         User                   @relation("PmocEquipmentEvidenceUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@unique([equipmentExecutionId, storageFileId])
+  @@index([organizationId, equipmentExecutionId, createdAt])
+  @@map("pmoc_equipment_evidence")
+}
+
+// -----------------------------------------------------------------------------
+// RVT V2 — TECHNICAL VISIT REPORT
+// -----------------------------------------------------------------------------
+
+/// Tipo de manutenção de uma visita técnica.
+///
+/// ## O que ele substitui
+///
+/// `RvtConfiguration.visitType` era um literal de **dois** valores — semanal e
+/// semestral — e governava a matemática de recorrência (mais 7 dias, ou mais 6
+/// meses). Operação real tem mensal, trimestral, anual, e a cada novo ritmo o
+/// literal precisava de outra migração e outro `if` no domínio.
+///
+/// Aqui a cadência é dado: `intervalDays` **ou** `intervalMonths`, um deles.
+/// Dias para ritmos curtos, meses para os que seguem o calendário — somar 30
+/// dias não é o mesmo que somar um mês, e quem contrata trimestral espera a
+/// visita no mesmo dia do terceiro mês.
+///
+/// ## Cada tipo tem o seu roteiro
+///
+/// `checklistTemplateId` é o que o técnico preenche em campo, e o que o
+/// relatório final descreve. Um tipo sem roteiro é legítimo — nem toda visita
+/// tem lista — e aparece como tal na hora de escolher.
+model RvtMaintenanceType {
+  id                  String    @id @default(uuid(7)) @db.Uuid
+  organizationId      String    @map("organization_id") @db.Uuid
+  key                 String    @db.VarChar(60)
+  label               String    @db.VarChar(120)
+  /// Cadência em dias. Exclusivo com `intervalMonths`.
+  intervalDays        Int?      @map("interval_days")
+  /// Cadência em meses de calendário. Exclusivo com `intervalDays`.
+  intervalMonths      Int?      @map("interval_months")
+  checklistTemplateId String?   @map("checklist_template_id") @db.Uuid
+  sortOrder           Int       @default(0) @map("sort_order")
+  isActive            Boolean   @default(true) @map("is_active")
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt           DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  checklistTemplate ChecklistTemplate? @relation(fields: [checklistTemplateId], references: [id], onDelete: SetNull)
+  configurations    RvtConfiguration[]
+
+  @@unique([organizationId, key])
+  @@index([organizationId, isActive, deletedAt])
+  @@map("rvt_maintenance_types")
+}
+
+model RvtConfiguration {
+  id                                  String    @id @default(uuid(7)) @db.Uuid
+  organizationId                      String    @map("organization_id") @db.Uuid
+  businessUnitId                      String    @map("business_unit_id") @db.Uuid
+  customerId                          String    @map("customer_id") @db.Uuid
+  code                                String    @db.VarChar(60)
+  name                                String    @db.VarChar(220)
+  /// O tipo de manutenção contratado — é dele que sai a cadência.
+  maintenanceTypeId                   String?   @map("maintenance_type_id") @db.Uuid
+  scheduleMode                        String    @map("schedule_mode") @db.VarChar(20)
+  coverageStart                       DateTime  @map("coverage_start") @db.Date
+  coverageEnd                         DateTime? @map("coverage_end") @db.Date
+  timezone                            String    @db.VarChar(80)
+  serviceLocation                     Json      @map("service_location") @db.JsonB
+  recurrence                          Json?     @db.JsonB
+  procedure                           Json      @default("{}") @db.JsonB
+  technicalResponsibleUserId          String?   @map("technical_responsible_user_id") @db.Uuid
+  defaultResponsibleFieldTechnicianId String?   @map("default_responsible_field_technician_id") @db.Uuid
+  requiresTechnicalResponsible        Boolean   @default(false) @map("requires_technical_responsible")
+  status                              String    @default("ACTIVE") @db.VarChar(20)
+  metadata                            Json      @default("{}") @db.JsonB
+  createdById                         String    @map("created_by_id") @db.Uuid
+  createdAt                           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt                           DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  equipment       RvtConfigurationEquipment[]
+  occurrences     RvtOccurrence[]
+  maintenanceType RvtMaintenanceType?         @relation(fields: [maintenanceTypeId], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, code])
+  @@index([organizationId, businessUnitId, status])
+  @@index([organizationId, customerId, status])
+  @@map("rvt_configurations")
+}
+
+model RvtConfigurationEquipment {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  organizationId  String    @map("organization_id") @db.Uuid
+  configurationId String    @map("configuration_id") @db.Uuid
+  assetId         String    @map("asset_id") @db.Uuid
+  addedAt         DateTime  @default(now()) @map("added_at") @db.Timestamptz(3)
+  removedAt       DateTime? @map("removed_at") @db.Timestamptz(3)
+
+  configuration RvtConfiguration @relation(fields: [configurationId], references: [id], onDelete: Cascade)
+
+  @@unique([configurationId, assetId])
+  @@index([organizationId, assetId, removedAt])
+  @@map("rvt_configuration_equipment")
+}
+
+model RvtOccurrence {
+  id                 String    @id @default(uuid(7)) @db.Uuid
+  organizationId     String    @map("organization_id") @db.Uuid
+  businessUnitId     String    @map("business_unit_id") @db.Uuid
+  configurationId    String    @map("configuration_id") @db.Uuid
+  sequenceNumber     Int       @map("sequence_number")
+  scheduledFor       DateTime? @map("scheduled_for") @db.Timestamptz(3)
+  localScheduledDate DateTime? @map("local_scheduled_date") @db.Date
+  status             String    @default("SCHEDULED") @db.VarChar(20)
+  schedulingEventId  String?   @unique @map("scheduling_event_id") @db.Uuid
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  configuration RvtConfiguration @relation(fields: [configurationId], references: [id], onDelete: Cascade)
+  execution     RvtExecution?
+
+  @@unique([configurationId, sequenceNumber])
+  @@unique([configurationId, localScheduledDate])
+  @@index([organizationId, businessUnitId, status, scheduledFor])
+  @@index([organizationId, configurationId, scheduledFor])
+  @@map("rvt_occurrences")
+}
+
+model RvtExecution {
+  id                            String    @id @default(uuid(7)) @db.Uuid
+  organizationId                String    @map("organization_id") @db.Uuid
+  businessUnitId                String    @map("business_unit_id") @db.Uuid
+  occurrenceId                  String    @unique @map("occurrence_id") @db.Uuid
+  operationId                   String?   @unique @map("operation_id") @db.Uuid
+  artifactExecutionId           String?   @unique @map("artifact_execution_id") @db.Uuid
+  responsibleFieldTechnicianId  String    @map("responsible_field_technician_id") @db.Uuid
+  technicalResponsibleUserId    String?   @map("technical_responsible_user_id") @db.Uuid
+  status                        String    @default("IN_PROGRESS") @db.VarChar(20)
+  procedureSnapshot             Json      @map("procedure_snapshot") @db.JsonB
+  configurationSnapshot         Json      @map("configuration_snapshot") @db.JsonB
+  observations                  Json      @default("[]") @db.JsonB
+  recommendations               Json      @default("[]") @db.JsonB
+  freeTextRecommendation        String?   @map("free_text_recommendation") @db.Text
+  customerAcknowledgement       Json?     @map("customer_acknowledgement") @db.JsonB
+  fieldTechnicianSignature      Json?     @map("field_technician_signature") @db.JsonB
+  technicalResponsibleSignature Json?     @map("technical_responsible_signature") @db.JsonB
+  performedAt                   DateTime? @map("performed_at") @db.Timestamptz(3)
+  startedById                   String    @map("started_by_id") @db.Uuid
+  completedById                 String?   @map("completed_by_id") @db.Uuid
+  startedAt                     DateTime  @default(now()) @map("started_at") @db.Timestamptz(3)
+  completedAt                   DateTime? @map("completed_at") @db.Timestamptz(3)
+  createdAt                     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  occurrence           RvtOccurrence           @relation(fields: [occurrenceId], references: [id], onDelete: Restrict)
+  equipment            RvtExecutionEquipment[]
+  evidence             RvtExecutionEvidence[]
+  fieldEvidenceUploads FieldEvidenceUpload[]
+  fieldEvidence        FieldEvidence[]
+  checklistExecutions  ChecklistExecution[]
+
+  @@index([organizationId, businessUnitId, status])
+  @@index([organizationId, responsibleFieldTechnicianId, status])
+  @@map("rvt_executions")
+}
+
+model RvtExecutionEquipment {
+  id                   String   @id @default(uuid(7)) @db.Uuid
+  organizationId       String   @map("organization_id") @db.Uuid
+  executionId          String   @map("execution_id") @db.Uuid
+  assetId              String   @map("asset_id") @db.Uuid
+  assetSnapshot        Json     @map("asset_snapshot") @db.JsonB
+  addedDuringExecution Boolean  @default(false) @map("added_during_execution")
+  addedById            String   @map("added_by_id") @db.Uuid
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  execution RvtExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+
+  @@unique([executionId, assetId])
+  @@index([organizationId, assetId])
+  @@map("rvt_execution_equipment")
+}
+
+model RvtExecutionEvidence {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  executionId    String   @map("execution_id") @db.Uuid
+  storageFileId  String   @map("storage_file_id") @db.Uuid
+  assetId        String?  @map("asset_id") @db.Uuid
+  kind           String   @default("PHOTO") @db.VarChar(24)
+  caption        String?  @db.VarChar(500)
+  uploadedById   String   @map("uploaded_by_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  execution RvtExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+
+  @@unique([executionId, storageFileId])
+  @@index([organizationId, executionId, createdAt])
+  @@map("rvt_execution_evidence")
+}
+
+model RvtAdHocCommand {
+  id              String   @id @default(uuid(7)) @db.Uuid
+  organizationId  String   @map("organization_id") @db.Uuid
+  businessUnitId  String   @map("business_unit_id") @db.Uuid
+  actorId         String   @map("actor_id") @db.Uuid
+  idempotencyKey  String   @map("idempotency_key") @db.VarChar(160)
+  payloadHash     String   @map("payload_hash") @db.Char(64)
+  configurationId String   @map("configuration_id") @db.Uuid
+  occurrenceId    String   @map("occurrence_id") @db.Uuid
+  executionId     String   @map("execution_id") @db.Uuid
+  operationId     String   @map("operation_id") @db.Uuid
+  customerId      String   @map("customer_id") @db.Uuid
+  assetId         String?  @map("asset_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([organizationId, actorId, idempotencyKey])
+  @@index([organizationId, businessUnitId, createdAt])
+  @@map("rvt_ad_hoc_commands")
 }

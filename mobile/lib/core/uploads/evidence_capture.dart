@@ -111,24 +111,24 @@ class PlatformEvidenceSource implements EvidenceSource {
     );
   }
 
-  static String _mimeFromExtension(String? extension) =>
-      switch (extension?.toLowerCase()) {
-        'pdf' => 'application/pdf',
-        'jpg' || 'jpeg' => 'image/jpeg',
-        'png' => 'image/png',
-        'heic' => 'image/heic',
-        'mp4' => 'video/mp4',
-        'mov' => 'video/quicktime',
-        'doc' => 'application/msword',
-        'docx' =>
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'xls' => 'application/vnd.ms-excel',
-        'xlsx' =>
-          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'csv' => 'text/csv',
-        'txt' => 'text/plain',
-        _ => 'application/octet-stream',
-      };
+  static String _mimeFromExtension(String? extension) => switch (extension
+      ?.toLowerCase()) {
+    'pdf' => 'application/pdf',
+    'jpg' || 'jpeg' => 'image/jpeg',
+    'png' => 'image/png',
+    'heic' => 'image/heic',
+    'mp4' => 'video/mp4',
+    'mov' => 'video/quicktime',
+    'doc' => 'application/msword',
+    'docx' =>
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'xls' => 'application/vnd.ms-excel',
+    'xlsx' =>
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'csv' => 'text/csv',
+    'txt' => 'text/plain',
+    _ => 'application/octet-stream',
+  };
 }
 
 /// Liga a captura à fila.

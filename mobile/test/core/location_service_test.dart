@@ -40,7 +40,10 @@ void main() {
     test('sem coordenadas, devolve nulo em vez de inventar', () {
       expect(extractGeoPoint(null), isNull);
       expect(extractGeoPoint({}), isNull);
-      expect(extractGeoPoint({'address': 'Rua A, 100', 'city': 'Recife'}), isNull);
+      expect(
+        extractGeoPoint({'address': 'Rua A, 100', 'city': 'Recife'}),
+        isNull,
+      );
       expect(extractGeoPoint({'latitude': -8.05}), isNull, reason: 'falta lng');
     });
 

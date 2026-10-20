@@ -19,7 +19,8 @@ export interface ApiErrorEnvelope {
   success: false;
   error: {
     code: string;
-    message: string | string[];
+    message: string;
+    status: number;
     details?: unknown;
   };
   requestId: string;

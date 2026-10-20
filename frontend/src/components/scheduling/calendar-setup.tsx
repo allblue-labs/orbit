@@ -77,9 +77,8 @@ export function CalendarSetup({
   if (!canCreate) {
     return (
       <p className="text-sm text-muted-foreground">
-        Não há calendário nesta organização e o seu perfil não pode criar um.
-        Peça a quem administra a conta para criar o primeiro calendário — sem
-        ele o backend recusa qualquer agendamento.
+        Não há calendário nesta organização e o seu acesso não permite criar um.
+        Peça a quem administra a conta para criar o primeiro calendário — sem ele não é possível agendar.
       </p>
     );
   }
@@ -92,43 +91,53 @@ export function CalendarSetup({
           {isFirst ? "Nenhum calendário nesta organização" : "Novo calendário"}
         </p>
         <p className="text-xs text-muted-foreground">
-          Todo agendamento pertence a um calendário — é assim que o backend
-          organiza a agenda. Crie o primeiro para começar.
+          Todo agendamento pertence a um calendário. Crie o primeiro para começar.
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
-        <div className="space-y-2">
-          <Label htmlFor="calendar-name">Nome</Label>
-          <Input
-            id="calendar-name"
-            value={name}
-            maxLength={160}
-            onChange={(event) => setName(event.target.value)}
-          />
-          <p className="font-mono text-[11px] text-muted-foreground">
-            chave: {key || "—"} · fuso: {timeZone}
-          </p>
+      {/*
+        O botão alinha pela base do **campo**, não pela da coluna.
+
+        A linha de ajuda (chave e fuso) ficava dentro da coluna do campo, e
+        com `items-end` o botão descia para a base dela — 25 pixels abaixo do
+        campo, medidos. Ela descreve o que será gravado, então pertence à
+        linha de baixo, ocupando a largura toda.
+      */}
+      <div className="space-y-2">
+        <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+          <div className="space-y-2">
+            <Label htmlFor="calendar-name">Nome</Label>
+            <Input
+              id="calendar-name"
+              value={name}
+              maxLength={160}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </div>
+
+          <Button
+            disabled={!valid || create.isPending}
+            onClick={() =>
+              create.mutate(
+                {
+                  key,
+                  name: name.trim(),
+                  timezone: timeZone,
+                  businessUnitId,
+                  isDefault: isFirst,
+                  isActive: true,
+                },
+                { onSuccess: onCreated },
+              )
+            }
+          >
+            {create.isPending ? "Criando…" : "Criar calendário"}
+          </Button>
         </div>
 
-        <Button
-          disabled={!valid || create.isPending}
-          onClick={() =>
-            create.mutate(
-              {
-                key,
-                name: name.trim(),
-                timezone: timeZone,
-                businessUnitId,
-                isDefault: isFirst,
-                isActive: true,
-              },
-              { onSuccess: onCreated },
-            )
-          }
-        >
-          {create.isPending ? "Criando…" : "Criar calendário"}
-        </Button>
+        <p className="font-mono text-[11px] text-muted-foreground">
+          chave: {key || "—"} · fuso: {timeZone}
+        </p>
       </div>
 
       <MutationError error={create.error} />

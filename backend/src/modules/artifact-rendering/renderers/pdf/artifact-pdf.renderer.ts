@@ -102,6 +102,7 @@ export class ArtifactPdfRenderer implements ArtifactRenderer {
         )) {
           this.section(document, section);
         }
+        this.evidence(document, input);
         this.signatures(document, input.signatures);
         this.footer(document, input);
         document.end();
@@ -109,6 +110,39 @@ export class ArtifactPdfRenderer implements ArtifactRenderer {
         reject(error instanceof Error ? error : new Error('PDF render failed'));
       }
     });
+  }
+
+  private evidence(document: PDFKit.PDFDocument, input: RenderInput): void {
+    if (!input.evidence?.length) return;
+    this.ensureSpace(document, 100);
+    document
+      .font('Helvetica-Bold')
+      .fontSize(12)
+      .fillColor('#1c2333')
+      .text('Evidências');
+    document.moveDown(0.5);
+    for (const item of input.evidence) {
+      this.ensureSpace(document, 190);
+      if (item.bytes && /^image\/(png|jpeg|jpg)$/i.test(item.mimeType)) {
+        document.image(item.bytes, {
+          fit: [document.page.width - MARGIN * 2, 150],
+          align: 'center',
+        });
+        document.moveDown(0.3);
+      }
+      document
+        .font('Helvetica-Bold')
+        .fontSize(9)
+        .fillColor('#1c2333')
+        .text(item.caption ?? item.fileName);
+      document
+        .font('Helvetica')
+        .fontSize(8)
+        .fillColor('#5b6478')
+        .text(`${item.fileName} · ${item.kind}`);
+      if (item.sha256) document.font('Courier').fontSize(7).text(item.sha256);
+      document.moveDown(0.8);
+    }
   }
 
   private header(
@@ -238,6 +272,14 @@ export class ArtifactPdfRenderer implements ArtifactRenderer {
       this.ensureSpace(document, 90);
       document.moveDown(1.6);
 
+      if (
+        signature.signatureImage &&
+        /^image\/(png|jpeg|jpg)$/i.test(signature.signatureImageMimeType ?? '')
+      ) {
+        document.image(signature.signatureImage, { fit: [220, 70] });
+        document.moveDown(0.3);
+      }
+
       const width = (document.page.width - MARGIN * 2) * 0.6;
       document
         .moveTo(MARGIN, document.y)
@@ -266,6 +308,13 @@ export class ArtifactPdfRenderer implements ArtifactRenderer {
           .fontSize(8)
           .fillColor('#5b6478')
           .text(signature.signerDocument);
+      }
+      if (signature.professionalCredential) {
+        document
+          .font('Helvetica')
+          .fontSize(8)
+          .fillColor('#5b6478')
+          .text(signature.professionalCredential);
       }
       if (signature.signedAt) {
         document

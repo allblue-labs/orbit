@@ -1,7 +1,18 @@
 "use client";
 
 /**
- * Unidades de negócio.
+ * Organizações.
+ *
+ * ## O nome no produto e o nome no código
+ *
+ * O produto chama isto de **organização**; o banco, o contrato da API e todo
+ * identificador deste arquivo continuam chamando de `BusinessUnit`. A troca foi
+ * de vocabulário, não de conceito: renomear a tabela e as rotas quebraria
+ * clientes publicados para resolver uma questão de palavra.
+ *
+ * Cuidado ao ler: "organização" tem dois donos agora. A conta (`Organization`,
+ * o inquilino) e isto aqui, que vive dentro dela. Onde os dois aparecem juntos
+ * — a barra lateral — o de cima é a conta.
  *
  * ## O que o contrato suporta, e o que não
  *
@@ -27,7 +38,8 @@
  * que o aceitam — e é assim que ele é apresentado aqui: seleção de contexto de
  * trabalho, não mudança de sessão.
  */
-import { Building2, Check, MapPin, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { Building2, Check, MapPin, Pencil, Plus, Trash2 } from "lucide-react";
 
 import { MutationError } from "@/components/artifact-studio/mutation-error";
 import { PanelFrame, PanelState, toPanelQuery } from "@/components/panels";
@@ -37,7 +49,9 @@ import {
   useBusinessUnits,
   useRemoveBusinessUnit,
 } from "@/hooks/organization/use-organization";
+import { BusinessUnitFormDialog } from "./business-unit-form.dialog";
 import { useActiveScope } from "@/providers/use-active-scope";
+import { lifecycleLabel } from "@/registry";
 import { cn } from "@/lib/utils";
 import type { BusinessUnit } from "@/types/organization";
 
@@ -46,18 +60,29 @@ export function BusinessUnitsSection({ canManage }: { canManage: boolean }) {
   const remove = useRemoveBusinessUnit();
   const { businessUnitId, switchBusinessUnit } = useActiveScope();
 
+  /** `null` fechado; `"new"` criando; uma unidade editando. */
+  const [editando, setEditando] = useState<BusinessUnit | "new" | null>(null);
+
   return (
     <PanelFrame
       panelId="organization-business-units"
-      title="Unidades de negócio"
-      description="Filiais, sedes e departamentos da organização"
+      title="Organizações"
+      description="Filiais, sedes e departamentos da sua conta"
+      actions={
+        canManage ? (
+          <Button size="sm" onClick={() => setEditando("new")}>
+            <Plus className="size-3.5" />
+            Nova unidade
+          </Button>
+        ) : undefined
+      }
     >
       <div className="space-y-4">
         <PanelState
           query={toPanelQuery(units)}
           loadingRows={3}
           isEmpty={(data) => data.length === 0}
-          emptyMessage="Nenhuma unidade cadastrada."
+          emptyMessage="Nenhuma organização cadastrada."
         >
           {(data) => (
             <ul className="space-y-2">
@@ -69,6 +94,7 @@ export function BusinessUnitsSection({ canManage }: { canManage: boolean }) {
                   canManage={canManage}
                   removing={remove.isPending}
                   onSelect={() => switchBusinessUnit(unit.id)}
+                  onEdit={() => setEditando(unit)}
                   onRemove={() => remove.mutate(unit.id)}
                 />
               ))}
@@ -82,17 +108,22 @@ export function BusinessUnitsSection({ canManage }: { canManage: boolean }) {
           <p>
             <strong>Ativar e desativar não existem no contrato.</strong> O campo{" "}
             <code>status</code> é publicado na leitura, mas
-            <code> UpdateBusinessUnitDto</code> não o aceita — enviá-lo devolve
-            400.
+            <code> UpdateBusinessUnitDto</code> não o aceita.
           </p>
           <p>
-            <strong>Trocar a unidade ativa é local.</strong> O backend deriva o
-            escopo das claims do token e não expõe rota de troca; a seleção
-            acima muda o filtro <code>businessUnitId</code> das consultas que o
+            <strong>Trocar a unidade ativa é local.</strong> O escopo vem da sua sessão e não pode ser trocado por aqui; a seleção acima muda o filtro <code>businessUnitId</code> das consultas que o
             aceitam, não a sessão.
           </p>
         </div>
       </div>
+
+      <BusinessUnitFormDialog
+        unit={editando === "new" ? null : editando}
+        open={editando !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditando(null);
+        }}
+      />
     </PanelFrame>
   );
 }
@@ -103,6 +134,7 @@ function UnitRow({
   canManage,
   removing,
   onSelect,
+  onEdit,
   onRemove,
 }: {
   unit: BusinessUnit;
@@ -110,6 +142,7 @@ function UnitRow({
   canManage: boolean;
   removing: boolean;
   onSelect: () => void;
+  onEdit: () => void;
   onRemove: () => void;
 }) {
   return (
@@ -136,7 +169,7 @@ function UnitRow({
             {unit.type}
           </Badge>
           <Badge variant="outline" className="text-[10px]">
-            {unit.status}
+            {lifecycleLabel(unit.status)}
           </Badge>
         </p>
         <p className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
@@ -158,6 +191,20 @@ function UnitRow({
         {active ? "Contexto atual" : "Trabalhar nesta"}
       </Button>
 
+      {canManage ? (
+        <Button
+          size="icon"
+          variant="ghost"
+          className="size-8"
+          onClick={onEdit}
+          aria-label={`Editar ${unit.tradeName ?? unit.legalName}`}
+        >
+          <Pencil className="size-4" />
+        </Button>
+      ) : null}
+
+      {/* A principal não some: sem ela a organização fica sem unidade de
+          referência, e o servidor recusaria de qualquer forma. */}
       {canManage && !unit.isPrimary ? (
         <Button
           size="icon"

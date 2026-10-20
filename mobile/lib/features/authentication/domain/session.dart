@@ -25,6 +25,7 @@ class OrbitSession {
     required this.claims,
     this.organization,
     this.entitlements,
+    this.productAccess,
     this.activeBusinessUnitId,
   });
 
@@ -32,6 +33,7 @@ class OrbitSession {
   final AccessTokenClaims claims;
   final Organization? organization;
   final Entitlements? entitlements;
+  final ProductAccess? productAccess;
 
   /// Unidade escolhida pelo usuário; na ausência, a do token.
   final String? activeBusinessUnitId;
@@ -55,9 +57,12 @@ class OrbitSession {
   /// Módulos habilitados pelo plano — o mesmo conjunto que o backend valida
   /// em `@Capabilities(...)`.
   List<String> get capabilities =>
-      entitlements?.capabilities ?? organization?.plan?.capabilities ?? const [];
+      entitlements?.capabilities ??
+      organization?.plan?.capabilities ??
+      const [];
 
   bool get isPlatformAdmin => claims.isPlatformAdmin;
+  bool get isOwner => claims.isOrganizationOwner;
 
   bool get hasActiveSubscription =>
       entitlements?.isActive ??
@@ -66,26 +71,35 @@ class OrbitSession {
       );
 
   bool hasPermission(String permission) =>
+      isOwner ||
       permissions.contains(_wildcardPermission) ||
       permissions.contains(permission);
 
-  bool hasRole(String role) => roles.contains(role);
+  bool hasRole(String role) =>
+      (isOwner && role != platformAdminRole) || roles.contains(role);
 
   bool hasCapability(String capability) => capabilities.contains(capability);
 
-  OrbitProfile get profile =>
-      hasPermission(_managePermission) ? OrbitProfile.owner : OrbitProfile.operator;
+  bool canUseProductFeature(String capability, [String? feature]) =>
+      productAccess?.hasCapability(capability) == true &&
+      productAccess?.hasFeature(feature ?? capability) == true;
+
+  OrbitProfile get profile => isOwner || hasPermission(_managePermission)
+      ? OrbitProfile.owner
+      : OrbitProfile.operator;
 
   OrbitSession copyWith({
     OrbitUser? user,
     Organization? organization,
     Entitlements? entitlements,
+    ProductAccess? productAccess,
     String? activeBusinessUnitId,
   }) => OrbitSession(
     user: user ?? this.user,
     claims: claims,
     organization: organization ?? this.organization,
     entitlements: entitlements ?? this.entitlements,
+    productAccess: productAccess ?? this.productAccess,
     activeBusinessUnitId: activeBusinessUnitId ?? this.activeBusinessUnitId,
   );
 }

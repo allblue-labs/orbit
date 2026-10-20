@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/providers.dart';
 import '../../../../core/contracts/operation_contracts.dart';
+import '../../../../core/errors/orbit_exception.dart';
 import '../../../../core/routing/guards.dart';
 import '../../../../core/theme/orbit_theme.dart';
 import '../../../../core/uploads/upload_task.dart';
@@ -36,7 +37,7 @@ class EvidenceSection extends ConsumerWidget {
         .where((task) => task.status == UploadStatus.failed)
         .toList();
 
-    return SectionCard(
+    return SectionBlock(
       title: 'Evidências',
       subtitle: pending.isEmpty
           ? '${attachments.length} enviada(s)'
@@ -95,7 +96,14 @@ class _CaptureMenuState extends ConsumerState<_CaptureMenu> {
     } on Object catch (error) {
       if (!mounted) return;
       messenger.showSnackBar(
-        SnackBar(content: Text('Não foi possível registrar: $error')),
+        SnackBar(
+          content: Text(
+            OrbitException.publicCopyForAny(
+              error,
+              prefixo: 'Não foi possível registrar a evidência.',
+            ),
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -119,7 +127,8 @@ class _CaptureMenuState extends ConsumerState<_CaptureMenu> {
       onSelected: (action) => action(),
       itemBuilder: (context) => [
         PopupMenuItem(
-          value: () => _capture(() => evidence.capturePhoto(widget.operationId)),
+          value: () =>
+              _capture(() => evidence.capturePhoto(widget.operationId)),
           child: const _MenuRow(icon: Icons.photo_camera, label: 'Tirar foto'),
         ),
         PopupMenuItem(
@@ -131,7 +140,8 @@ class _CaptureMenuState extends ConsumerState<_CaptureMenu> {
           child: const _MenuRow(icon: Icons.videocam, label: 'Gravar vídeo'),
         ),
         PopupMenuItem(
-          value: () => _capture(() => evidence.pickDocument(widget.operationId)),
+          value: () =>
+              _capture(() => evidence.pickDocument(widget.operationId)),
           child: const _MenuRow(
             icon: Icons.description_outlined,
             label: 'Documento',

@@ -45,7 +45,7 @@ function cnpj(): string {
     const sum = numbers
       .split('')
       .reduce(
-        (total, digit, index) => total + Number(digit) * weights[index],
+        (total, digit, index) => total + Number(digit) * weights[index]!,
         0,
       );
     const rest = sum % 11;
@@ -116,7 +116,7 @@ describe('Artifact Rendering (e2e)', () => {
     ).expect(200);
     const businessUnitId = (
       units.body as { data: { businessUnits: { id: string }[] } }
-    ).data.businessUnits[0].id;
+    ).data.businessUnits[0]!.id;
 
     const template = await auth(http().post('/api/v1/artifact-templates'))
       .send({
@@ -199,6 +199,56 @@ describe('Artifact Rendering (e2e)', () => {
     expect(state.completedAt).toBeNull();
   });
 
+  /**
+   * O preview roda **antes** de qualquer renderização deste arquivo, de
+   * propósito: é o caso que importa. Quem quer ver como está ficando quer ver
+   * justamente antes de emitir, quando não há manifesto, revisão nem arquivo
+   * no storage para cair de volta.
+   */
+  it('desenha o rascunho sem emitir nada', async () => {
+    const response = await auth(
+      http().get(`/api/v1/artifact-executions/${executionId}/preview`),
+    ).expect(200);
+
+    expect(response.headers['content-type']).toContain('application/pdf');
+    expect(response.headers['content-disposition']).toContain('inline');
+    expect(response.headers['content-disposition']).toContain('rascunho');
+    /* Um rascunho em cache mostraria as respostas de dez minutos atrás. */
+    expect(response.headers['cache-control']).toContain('no-store');
+    expect(response.body).toBeInstanceOf(Buffer);
+    expect((response.body as Buffer).subarray(0, 5).toString()).toBe('%PDF-');
+
+    const estado = await auth(
+      http().get(`/api/v1/artifact-executions/${executionId}/render`),
+    ).expect(200);
+    expect(
+      (estado.body as { data: { renderStatus: string } }).data.renderStatus,
+    ).toBe('NOT_RENDERED');
+
+    const revisoes = await auth(
+      http().get(`/api/v1/artifact-executions/${executionId}/manifests`),
+    ).expect(200);
+    expect(
+      (revisoes.body as { data: { data: unknown[] } }).data.data,
+    ).toHaveLength(0);
+  });
+
+  it('o rascunho respeita o motor pedido', async () => {
+    const response = await auth(
+      http()
+        .get(`/api/v1/artifact-executions/${executionId}/preview`)
+        .query({ renderer: 'html.default' }),
+    ).expect(200);
+
+    expect(response.headers['content-type']).toContain('text/html');
+  });
+
+  it('não desenha rascunho sem sessão', async () => {
+    await http()
+      .get(`/api/v1/artifact-executions/${executionId}/preview`)
+      .expect(401);
+  });
+
   it('recusa renderizador desconhecido antes de enfileirar', async () => {
     const response = await auth(
       http().post(`/api/v1/artifact-executions/${executionId}/render`),
@@ -206,11 +256,15 @@ describe('Artifact Rendering (e2e)', () => {
       .send({ renderer: 'inexistente' })
       .expect(400);
 
-    /** A recusa diz o que existe, para quem pediu não ter de adivinhar. */
-    const message = (response.body as { error: { message: string } }).error
-      .message;
-    expect(message).toContain('html.default');
-    expect(message).toContain('pdf.default');
+    const error = (
+      response.body as { error: { code: string; message: string } }
+    ).error;
+    expect(error).toEqual({
+      code: 'RENDERER_NOT_SUPPORTED',
+      message: 'O formato de documento solicitado não está disponível.',
+      status: 400,
+    });
+    expect(JSON.stringify(error)).not.toMatch(/html\.default|pdf\.default/);
   });
 
   it('aceita o pedido e responde 202 sem esperar o documento', async () => {
@@ -370,6 +424,7 @@ describe('Artifact Rendering (e2e)', () => {
           started: number;
           succeeded: number;
           renderers: string[];
+          defaultRenderer: string;
           byRenderer: Record<string, { succeeded: number }>;
         };
       }
@@ -377,9 +432,12 @@ describe('Artifact Rendering (e2e)', () => {
 
     expect(metrics.succeeded).toBeGreaterThanOrEqual(2);
     expect(metrics.renderers).toEqual(
-      expect.arrayContaining(['html.default', 'pdf.default']),
+      expect.arrayContaining(['html.default', 'pdf.default', 'pdf.premium']),
     );
-    expect(metrics.byRenderer['pdf.default'].succeeded).toBeGreaterThanOrEqual(
+    /* A tela pré-seleciona por este campo; se ele sumir, o preview passa a
+       mostrar um documento diferente do que a emissão produziria. */
+    expect(metrics.defaultRenderer).toBe('pdf.premium');
+    expect(metrics.byRenderer['pdf.default']!.succeeded).toBeGreaterThanOrEqual(
       1,
     );
   });

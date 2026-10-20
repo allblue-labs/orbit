@@ -28,7 +28,7 @@ export function ProgressSection({
     <PanelFrame
       panelId="artifact-execution-progress"
       title="Progresso"
-      description="Calculado pelo backend a cada resposta e assinatura"
+      description="Atualizado a cada resposta e assinatura"
     >
       <div className="space-y-5">
         <div className="space-y-2">

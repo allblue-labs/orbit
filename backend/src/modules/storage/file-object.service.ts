@@ -36,6 +36,10 @@ export const STORAGE_NAMESPACES = {
   attachment: 'attachments',
   /** Relatórios gerenciais: mesmo storage, ciclo de vida próprio. */
   report: 'reports',
+  signature: 'signatures',
+  evidence: 'field-evidence',
+  /** Foto de perfil. Namespace próprio: outro dono, outro ciclo de vida. */
+  avatar: 'avatars',
 } as const;
 
 export type StorageNamespace =
@@ -158,8 +162,6 @@ export class FileObjectService {
     if (!file) {
       throw new InfrastructureException('Storage file is not registered');
     }
-    if (file.status === 'AVAILABLE') return file;
-
     const stat = await this.provider.head({
       bucket: file.bucket,
       objectKey: file.objectKey,
@@ -201,6 +203,11 @@ export class FileObjectService {
   /** Conteúdo do objeto — usado pela rota local de download assinado. */
   read(bucket: string, objectKey: string): Promise<Buffer> {
     return this.provider.get({ bucket, objectKey });
+  }
+
+  /** Remove um objeto pelo provider; metadata só deve ser expirada após sucesso. */
+  remove(bucket: string, objectKey: string): Promise<void> {
+    return this.provider.remove({ bucket, objectKey });
   }
 
   /** URL temporária de acesso a um arquivo já registrado (Stage 3). */

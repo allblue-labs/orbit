@@ -285,6 +285,23 @@ export class InventoryRepository {
       },
     );
 
+    if (input.operationId) {
+      await tx.operationHistory.create({
+        data: {
+          operationId: input.operationId,
+          userId: input.createdById,
+          action: 'FIELD_MATERIAL_REGISTERED',
+          details: {
+            movementId: movement.id,
+            catalogItemId: input.catalogItemId,
+            quantity: input.quantity,
+            balanceAfter,
+            sourceEntityId: input.sourceEntityId ?? null,
+          },
+        },
+      });
+    }
+
     /**
      * Estoque baixo é um evento de **cruzamento**, não de estado.
      *

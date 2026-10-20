@@ -1,6 +1,13 @@
 import { ValidationException } from '../../exceptions';
+import type { EntitlementService } from '../subscription-plans/entitlements';
 import { AiProvider } from './ai.dto';
 import { AiService } from './ai.service';
+
+/** Estes testes são sobre o agente, não sobre o portão de inteligência. */
+const semPlano = {
+  assertCapability: () => Promise.resolve(),
+  consume: () => Promise.resolve(undefined),
+} as unknown as EntitlementService;
 
 describe('AiService', () => {
   const repository = {
@@ -13,6 +20,7 @@ describe('AiService', () => {
     {} as never,
     {} as never,
     {} as never,
+    semPlano,
   );
 
   beforeEach(() => jest.clearAllMocks());

@@ -11,23 +11,37 @@
  * | Editar      | `PATCH /operations/:id`               |
  * | Reagendar   | `PATCH /operations/:id` (janela)      |
  * | Prioridade  | `PATCH /operations/:id` (prioridade)  |
- * | Reatribuir  | `POST`/`DELETE /operations/:id/assignments` |
  * | Cancelar    | `PATCH /operations/:id/status`        |
  * | Excluir     | `DELETE /operations/:id`              |
  *
  * ## Transições
  *
- * O menu oferece **todos** os status do literal e deixa o backend recusar o
- * que não vale. Reproduzir aqui a máquina de estados criaria uma segunda
- * verdade que envelheceria na primeira mudança do servidor — a recusa vem com
- * mensagem e é exibida como está.
+ * O detalhe da operação publica `transitions` — a máquina de estados do
+ * servidor, já resolvida para o status atual. É ela que preenche o seletor.
  *
- * ## Permissões
+ * Até a PR-FE-01 o menu oferecia **todos** os status do literal e deixava o
+ * backend recusar. A intenção era não duplicar a máquina de estados, e estava
+ * certa; o que faltava era usar a que o servidor publica. Oferecer destinos
+ * inválidos não é neutralidade — é empurrar para o usuário a descoberta de uma
+ * regra que o contrato já entrega pronta.
  *
- * `operations.update`, `operations.assign`, `operations.status.update` e
- * `operations.delete` são exigidas pelo backend. As ações são escondidas de
- * quem não as tem — não para proteger (o servidor protege), mas para não
- * oferecer o que vai falhar.
+ * A partir da listagem não há `transitions`: o Read Model de lista é compacto
+ * de propósito. O seletor então **busca o detalhe** em vez de cair de volta no
+ * enum completo.
+ *
+ * ## Permissões e ações permitidas
+ *
+ * Duas camadas, e as duas vêm do servidor:
+ *
+ * - a **sessão** diz o que a conta poderia fazer (`operations.update`,
+ *   `operations.assign`, `operations.status.update`, `operations.delete`);
+ * - o **registro** diz o que vale para esta linha, em `allowedActions`.
+ *
+ * A segunda é a que o navegador não teria como calcular: mudar status exige
+ * participar da operação — ser o responsável ou um auxiliar — a menos que a
+ * pessoa gerencie a carteira. Antes desta PR o menu ignorava `allowedActions`,
+ * e um técnico não escalado via "Alterar status", clicava e recebia 403 sem
+ * explicação.
  */
 import { useState } from "react";
 import {
@@ -35,7 +49,6 @@ import {
   MoreHorizontal,
   Pencil,
   Trash2,
-  UserCog,
   XCircle,
 } from "lucide-react";
 
@@ -68,43 +81,56 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  useAssignOperationUser,
   useChangeOperationStatus,
   useRemoveOperation,
-  useUnassignOperationUser,
+  useOperation,
   useUpdateOperation,
 } from "@/hooks/operations/use-operations";
-import { useOrganizationMembers } from "@/hooks/organization/use-organization";
 import { instantFromZoned, zonedParts } from "@/lib/scheduling";
 import { useSession } from "@/providers/session-provider";
-import { OperationPriority, OperationStatus } from "@/types/contracts";
+import { actionAuthority, availableTransitions } from "@/registry";
+import { OperationPriority } from "@/types/contracts";
 import {
   OPERATION_LIMITS,
   OPERATION_STATUS_LABELS,
   type Operation,
+  type OperationListItem,
 } from "@/types/operations";
 import { operationPriorityLabel } from "./operation-badges";
 
-type ActionKind = "reschedule" | "assign" | "priority" | "status" | "delete";
+type ActionKind = "reschedule" | "priority" | "status" | "delete";
 
 export function OperationActions({
   operation,
   timeZone,
   onEdit,
 }: {
-  operation: Operation;
+  /** Linha da listagem ou detalhe — ambos publicam `allowedActions`. */
+  operation: OperationListItem;
   timeZone: string;
   onEdit: () => void;
 }) {
   const session = useSession();
   const [action, setAction] = useState<ActionKind | null>(null);
 
-  const canUpdate = session.hasPermission("operations.update");
-  const canAssign = session.hasPermission("operations.assign");
-  const canChangeStatus = session.hasPermission("operations.status.update");
+  /** O que este registro permite, segundo o servidor. */
+  const authority = actionAuthority(operation.allowedActions);
+
+  /**
+   * Sessão **e** registro.
+   *
+   * A sessão esconde o que a conta nunca poderia fazer; `allowedActions`
+   * esconde o que não vale para esta linha. Excluir não está no contrato de
+   * ações — segue apenas pela permissão, como antes.
+   */
+  const canUpdate =
+    session.hasPermission("operations.update") && authority.permits("EDIT");
+  const canChangeStatus =
+    session.hasPermission("operations.status.update") &&
+    authority.permits("CHANGE_STATUS");
   const canDelete = session.hasPermission("operations.delete");
 
-  if (!canUpdate && !canAssign && !canChangeStatus && !canDelete) return null;
+  if (!canUpdate && !canChangeStatus && !canDelete) return null;
 
   return (
     <>
@@ -139,13 +165,6 @@ export function OperationActions({
                 Alterar prioridade
               </DropdownMenuItem>
             </>
-          ) : null}
-
-          {canAssign ? (
-            <DropdownMenuItem onSelect={() => setAction("assign")}>
-              <UserCog className="size-4" />
-              Reatribuir técnico
-            </DropdownMenuItem>
           ) : null}
 
           {canChangeStatus ? (
@@ -190,9 +209,6 @@ export function OperationActions({
               onClose={() => setAction(null)}
             />
           ) : null}
-          {action === "assign" ? (
-            <AssignForm operation={operation} onClose={() => setAction(null)} />
-          ) : null}
           {action === "status" ? (
             <StatusForm operation={operation} onClose={() => setAction(null)} />
           ) : null}
@@ -214,7 +230,7 @@ function RescheduleForm({
   timeZone,
   onClose,
 }: {
-  operation: Operation;
+  operation: OperationListItem;
   timeZone: string;
   onClose: () => void;
 }) {
@@ -222,39 +238,32 @@ function RescheduleForm({
   const [start, setStart] = useState(() =>
     toLocalInput(operation.scheduledStart, timeZone),
   );
-  const [end, setEnd] = useState(() =>
-    toLocalInput(operation.scheduledEnd, timeZone),
-  );
 
   return (
     <>
       <DialogHeader>
         <DialogTitle>Reagendar {operation.code}</DialogTitle>
         <DialogDescription>
-          Janela prevista, no fuso {timeZone}. A operação não passa pelo motor
-          de agenda — nenhuma sobreposição é avaliada.
+          Quando o atendimento começa, no fuso {timeZone}. A operação não passa
+          pelo motor de agenda — nenhuma sobreposição é avaliada.
         </DialogDescription>
       </DialogHeader>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor="reschedule-start">Início</Label>
-          <Input
-            id="reschedule-start"
-            type="datetime-local"
-            value={start}
-            onChange={(event) => setStart(event.target.value)}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="reschedule-end">Fim</Label>
-          <Input
-            id="reschedule-end"
-            type="datetime-local"
-            value={end}
-            onChange={(event) => setEnd(event.target.value)}
-          />
-        </div>
+      {/*
+        Só o começo, como na criação.
+
+        Pedir o fim aqui e não lá deixaria o produto incoerente consigo
+        mesmo: o atendimento nasceria sem previsão de término e ganharia uma
+        ao ser remarcado.
+      */}
+      <div className="space-y-2">
+        <Label htmlFor="reschedule-start">Início</Label>
+        <Input
+          id="reschedule-start"
+          type="datetime-local"
+          value={start}
+          onChange={(event) => setStart(event.target.value)}
+        />
       </div>
 
       <MutationError error={update.error} />
@@ -264,13 +273,10 @@ function RescheduleForm({
           Cancelar
         </Button>
         <Button
-          disabled={update.isPending || (!!start && !!end && end < start)}
+          disabled={update.isPending}
           onClick={() =>
             update.mutate(
-              {
-                scheduledStart: toInstant(start, timeZone),
-                scheduledEnd: toInstant(end, timeZone),
-              },
+              { scheduledStart: toInstant(start, timeZone) },
               { onSuccess: onClose },
             )
           }
@@ -290,7 +296,7 @@ function PriorityForm({
   operation,
   onClose,
 }: {
-  operation: Operation;
+  operation: OperationListItem;
   onClose: () => void;
 }) {
   const update = useUpdateOperation(operation.id);
@@ -301,8 +307,7 @@ function PriorityForm({
       <DialogHeader>
         <DialogTitle>Prioridade de {operation.code}</DialogTitle>
         <DialogDescription>
-          A prioridade não altera a ordem da listagem — o backend ordena por
-          agendamento e criação.
+          A prioridade não altera a ordem da listagem, que segue o agendamento e a data de criação.
         </DialogDescription>
       </DialogHeader>
 
@@ -345,106 +350,6 @@ function PriorityForm({
 }
 
 /* ------------------------------------------------------------------ */
-/* Reatribuição                                                        */
-/* ------------------------------------------------------------------ */
-
-/**
- * Reatribuir é atribuir e desatribuir.
- *
- * Não existe endpoint de troca; `POST /assignments` adiciona e
- * `DELETE /assignments/:userId` remove. A tela executa as duas chamadas na
- * ordem — adicionar primeiro, para que a operação nunca fique sem responsável
- * caso a segunda falhe.
- */
-function AssignForm({
-  operation,
-  onClose,
-}: {
-  operation: Operation;
-  onClose: () => void;
-}) {
-  const members = useOrganizationMembers();
-  const assign = useAssignOperationUser(operation.id);
-  const unassign = useUnassignOperationUser(operation.id);
-
-  const current = operation.users.map((entry) => entry.userId);
-  const [selected, setSelected] = useState<string>(current[0] ?? "");
-
-  const eligible = (members.data ?? []).filter(
-    (member) => member.status === "ACTIVE",
-  );
-
-  const replace = async () => {
-    if (!selected) return;
-    if (!current.includes(selected)) {
-      await assign.mutateAsync({ userId: selected });
-    }
-    for (const userId of current) {
-      if (userId !== selected) await unassign.mutateAsync(userId);
-    }
-    onClose();
-  };
-
-  return (
-    <>
-      <DialogHeader>
-        <DialogTitle>Responsável por {operation.code}</DialogTitle>
-        <DialogDescription>
-          {current.length === 0
-            ? "Sem técnico atribuído."
-            : `Hoje: ${operation.users.map((entry) => entry.user.displayName).join(", ")}`}
-        </DialogDescription>
-      </DialogHeader>
-
-      <div className="space-y-2">
-        <Label htmlFor="operation-assignee">Técnico</Label>
-        <Select
-          value={selected}
-          disabled={members.isPending || eligible.length === 0}
-          onValueChange={setSelected}
-        >
-          <SelectTrigger id="operation-assignee">
-            <SelectValue
-              placeholder={members.isPending ? "Carregando…" : "Selecione"}
-            />
-          </SelectTrigger>
-          <SelectContent>
-            {eligible.map((member) => (
-              <SelectItem key={member.userId} value={member.userId}>
-                {member.displayName} · {member.role.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <p className="text-xs text-muted-foreground">
-          O backend aceita mais de um responsável por operação; esta tela
-          trabalha com um, e substituir remove os demais.
-        </p>
-      </div>
-
-      <MutationError error={members.error ?? assign.error ?? unassign.error} />
-
-      <DialogFooter>
-        <Button variant="ghost" onClick={onClose}>
-          Cancelar
-        </Button>
-        <Button
-          disabled={
-            !selected ||
-            assign.isPending ||
-            unassign.isPending ||
-            (current.length === 1 && current[0] === selected)
-          }
-          onClick={() => void replace()}
-        >
-          {assign.isPending || unassign.isPending ? "Atribuindo…" : "Atribuir"}
-        </Button>
-      </DialogFooter>
-    </>
-  );
-}
-
-/* ------------------------------------------------------------------ */
 /* Status                                                              */
 /* ------------------------------------------------------------------ */
 
@@ -452,38 +357,68 @@ function StatusForm({
   operation,
   onClose,
 }: {
-  operation: Operation;
+  operation: OperationListItem;
   onClose: () => void;
 }) {
   const change = useChangeOperationStatus(operation.id);
   const [status, setStatus] = useState<string>(operation.status);
   const [reason, setReason] = useState("");
 
+  /**
+   * A máquina de estados vem do detalhe.
+   *
+   * Aberto a partir da listagem, o registro em mãos não tem `transitions` — e
+   * a alternativa seria oferecer o enum inteiro, que é justamente o que esta
+   * PR remove. Uma consulta ao detalhe custa menos que um destino inválido
+   * oferecido ao usuário.
+   */
+  const detail = useOperation(operation.id);
+  const transitions = availableTransitions(
+    detail.data?.transitions,
+    operation.status,
+  );
+
   return (
     <>
       <DialogHeader>
         <DialogTitle>Status de {operation.code}</DialogTitle>
         <DialogDescription>
-          Quem valida a transição é o backend. Um destino inválido é recusado
-          com a mensagem do servidor.
+          Apenas as mudanças possíveis a partir da situação atual são oferecidas.
         </DialogDescription>
       </DialogHeader>
 
       <div className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="operation-status">Novo status</Label>
-          <Select value={status} onValueChange={setStatus}>
+          <Select
+            value={status === operation.status ? "" : status}
+            onValueChange={setStatus}
+            disabled={detail.isPending || transitions?.length === 0}
+          >
             <SelectTrigger id="operation-status">
-              <SelectValue />
+              <SelectValue
+                placeholder={
+                  detail.isPending
+                    ? "Carregando destinos…"
+                    : "Selecione o novo status"
+                }
+              />
             </SelectTrigger>
             <SelectContent>
-              {Object.values(OperationStatus).map((value) => (
+              {(transitions ?? []).map((value) => (
                 <SelectItem key={value} value={value}>
                   {OPERATION_STATUS_LABELS[value] ?? value}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+          {transitions?.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              Este atendimento está em{" "}
+              {OPERATION_STATUS_LABELS[operation.status] ?? operation.status} e
+              não pode mais mudar de situação.
+            </p>
+          ) : null}
         </div>
 
         <div className="space-y-2">
@@ -506,7 +441,12 @@ function StatusForm({
           Cancelar
         </Button>
         <Button
-          disabled={change.isPending || status === operation.status}
+          disabled={
+            change.isPending ||
+            detail.isPending ||
+            status === operation.status ||
+            !transitions?.includes(status as Operation["status"])
+          }
           onClick={() =>
             change.mutate(
               {
@@ -532,7 +472,7 @@ function DeleteForm({
   operation,
   onClose,
 }: {
-  operation: Operation;
+  operation: OperationListItem;
   onClose: () => void;
 }) {
   const remove = useRemoveOperation();
@@ -542,8 +482,7 @@ function DeleteForm({
       <DialogHeader>
         <DialogTitle>Excluir {operation.code}?</DialogTitle>
         <DialogDescription>
-          A exclusão é lógica no backend: o registro sai das listagens e o
-          histórico permanece no banco. Cancelar a operação, mudando o status,
+          A exclusão remove o registro das listagens e preserva o histórico. Cancelar a operação, mudando o status,
           preserva o rastro na interface.
         </DialogDescription>
       </DialogHeader>

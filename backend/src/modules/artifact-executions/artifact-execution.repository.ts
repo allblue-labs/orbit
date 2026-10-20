@@ -27,6 +27,71 @@ const details = Prisma.validator<Prisma.ArtifactExecutionInclude>()({
   insights: { orderBy: { createdAt: 'desc' as const } },
 });
 
+/**
+ * O último instante do dia informado, quando vem só a data.
+ *
+ * `2026-03-31` chega como `2026-03-31T00:00:00Z`; usado cru em `lte`, o dia 31
+ * inteiro fica de fora. Com hora explícita o valor é respeitado como veio —
+ * quem pede um instante quer aquele instante.
+ */
+function endOfDay(value: string): Date {
+  const date = new Date(value);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
+    date.setUTCHours(23, 59, 59, 999);
+  }
+  return date;
+}
+
+/**
+ * O `where` da listagem, separado da transação.
+ *
+ * A montagem do filtro é a parte que erra — período aberto de um lado, tipo
+ * vindo do template em vez do snapshot, um `undefined` que virou `null` e
+ * apagou metade da lista. Fora da transação ela se testa sem banco, e a
+ * contagem e a página passam a usar exatamente o mesmo objeto.
+ */
+export function executionFilter(
+  organizationId: string,
+  query: ArtifactExecutionQueryDto,
+): Prisma.ArtifactExecutionWhereInput {
+  return {
+    organizationId,
+    deletedAt: null,
+    businessUnitId: query.businessUnitId,
+    operationId: query.operationId,
+    customerId: query.customerId,
+    assetId: query.assetId,
+    responsibleUserId: query.responsibleUserId,
+    status: query.status,
+    renderStatus: query.renderStatus,
+    /* O tipo é do snapshot, não do template: o documento emitido é do tipo
+         que valia quando a execução nasceu, e trocar o template depois não
+         reescreve o passado da listagem. */
+    ...(query.artifactType
+      ? { snapshot: { artifactType: query.artifactType } }
+      : {}),
+    ...(query.createdFrom || query.createdTo
+      ? {
+          createdAt: {
+            ...(query.createdFrom ? { gte: new Date(query.createdFrom) } : {}),
+            /* O fim do período é inclusivo: quem filtra "até 31/03" espera o
+                 dia 31 inteiro, e uma data sem hora chega como meia-noite —
+                 `lte` cru descartaria o dia todo. */
+            ...(query.createdTo ? { lte: endOfDay(query.createdTo) } : {}),
+          },
+        }
+      : {}),
+    ...(query.search
+      ? {
+          OR: [
+            { code: { contains: query.search, mode: 'insensitive' } },
+            { title: { contains: query.search, mode: 'insensitive' } },
+          ],
+        }
+      : {}),
+  };
+}
+
 @Injectable()
 export class ArtifactExecutionRepository {
   constructor(
@@ -36,24 +101,7 @@ export class ArtifactExecutionRepository {
 
   list(organizationId: string, query: ArtifactExecutionQueryDto) {
     const pagination = PaginationHelper.normalize(query.page, query.limit);
-    const where: Prisma.ArtifactExecutionWhereInput = {
-      organizationId,
-      deletedAt: null,
-      businessUnitId: query.businessUnitId,
-      operationId: query.operationId,
-      customerId: query.customerId,
-      assetId: query.assetId,
-      responsibleUserId: query.responsibleUserId,
-      status: query.status,
-      ...(query.search
-        ? {
-            OR: [
-              { code: { contains: query.search, mode: 'insensitive' } },
-              { title: { contains: query.search, mode: 'insensitive' } },
-            ],
-          }
-        : {}),
-    };
+    const where = executionFilter(organizationId, query);
     return this.rls.run(async (tx) => {
       const data = await tx.artifactExecution.findMany({
         where,
@@ -425,6 +473,16 @@ export class ArtifactExecutionRepository {
     input: CollectArtifactSignatureDto,
     signerRole: string,
     signatureHash: string,
+    signatorySnapshot?: {
+      signedAs: string;
+      signatureAssetId: string;
+      signatureAssetHash: string;
+      professionalRole: string;
+      credentialType?: string;
+      credentialNumber?: string;
+      credentialRegion?: string;
+      capturedAt: Date;
+    },
   ) {
     return this.rls.run(async (tx) => {
       const execution = await tx.artifactExecution.findFirstOrThrow({
@@ -441,6 +499,14 @@ export class ArtifactExecutionRepository {
           signerDocument: input.signerDocument,
           signatureData: this.json(input.signatureData),
           signatureHash,
+          signedAs: signatorySnapshot?.signedAs ?? input.signedAs,
+          signatureAssetId: signatorySnapshot?.signatureAssetId,
+          signatureAssetHash: signatorySnapshot?.signatureAssetHash,
+          professionalRole: signatorySnapshot?.professionalRole,
+          credentialType: signatorySnapshot?.credentialType,
+          credentialNumber: signatorySnapshot?.credentialNumber,
+          credentialRegion: signatorySnapshot?.credentialRegion,
+          capturedAt: signatorySnapshot?.capturedAt,
           consentText: input.consentText,
           geolocation: input.geolocation
             ? this.json(input.geolocation)
@@ -455,7 +521,11 @@ export class ArtifactExecutionRepository {
         'ARTIFACT_SIGNATURE_COLLECTED',
         id,
         null,
-        { slotId: input.slotId, signerRole },
+        {
+          slotId: input.slotId,
+          signerRole,
+          signedAs: signatorySnapshot?.signedAs ?? input.signedAs,
+        },
       );
       return tx.artifactExecution.findUniqueOrThrow({
         where: { id },

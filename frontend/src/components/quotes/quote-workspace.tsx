@@ -172,7 +172,7 @@ function HeaderPanel({ quote }: { quote: Quote }) {
       title="Proposta"
       description={
         editable
-          ? "Cliente e unidade não mudam: trocar o destinatário é criar outra proposta."
+          ? "Cliente e organização não mudam: trocar o destinatário é criar outra proposta."
           : "Enviada ao cliente — o conteúdo não muda mais."
       }
       actions={
@@ -194,7 +194,7 @@ function HeaderPanel({ quote }: { quote: Quote }) {
             </dd>
           </div>
           <div>
-            <dt className="text-xs text-muted-foreground">Unidade</dt>
+            <dt className="text-xs text-muted-foreground">Organização</dt>
             <dd className="text-sm">{quote.businessUnit.name}</dd>
           </div>
         </dl>
@@ -234,7 +234,7 @@ function HeaderPanel({ quote }: { quote: Quote }) {
                   onChange={(event) => touch(setDiscount)(event.target.value)}
                 />
                 <p className="text-xs text-muted-foreground">
-                  O servidor recusa desconto maior que o subtotal.
+                  O desconto não pode ser maior que o subtotal.
                 </p>
               </div>
             </div>

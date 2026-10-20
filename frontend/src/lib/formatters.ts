@@ -80,3 +80,22 @@ export function formatBytes(bytes: number): string {
   const formatted = unit === 0 ? value : Math.round(value * 10) / 10;
   return `${formatted} ${units[unit]}`;
 }
+
+/**
+ * As iniciais de um nome — o substituto da foto.
+ *
+ * Duas letras, sempre: uma só fica solitária num círculo, e três não cabem no
+ * tamanho em que o avatar aparece nas listas. Nome vazio devolve vazio, e quem
+ * chama decide o que colocar no lugar — inventar "?" aqui seria decidir a
+ * apresentação de outra tela.
+ */
+export function initialsOf(name: string | null | undefined): string {
+  return (name ?? "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word[0])
+    .join("")
+    .toUpperCase();
+}

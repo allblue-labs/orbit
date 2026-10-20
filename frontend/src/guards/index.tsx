@@ -189,6 +189,10 @@ export function RequireCapability({
  *
  * Fica em um componente próprio porque precisa de hooks — o `fallback` do
  * `SessionGate` é renderizado dentro dos providers.
+ *
+ * Sobrou para o caso em que **não há sessão de organização alguma** — uma
+ * conta sem inquilino resolvível. Assinatura vencida não passa mais por aqui:
+ * ver `RequireActiveSubscription`.
  */
 function SubscriptionFallback() {
   const session = useSession();
@@ -201,7 +205,25 @@ function SubscriptionFallback() {
   );
 }
 
-/** Exige assinatura em estado que libera o produto. */
+/**
+ * Exige sessão — e deixa entrar mesmo com a assinatura vencida.
+ *
+ * ## O que este guarda deixou de fazer
+ *
+ * Ele barrava a aplicação inteira: assinatura fora dos estados que liberam o
+ * produto e a pessoa via um cartão "Assinatura inativa" com um botão de sair
+ * da conta, em **toda** tela. Como a avaliação vence pelo relógio, isso era o
+ * que acontecia no trigésimo primeiro dia — a operação chegava de manhã e
+ * encontrava a plataforma trancada, sem conseguir consultar o próprio
+ * histórico nem baixar o PMOC que o cliente estava cobrando.
+ *
+ * Nada disso protegia coisa alguma: quem decide é o servidor, e ele passou a
+ * recusar **escrita** com `402` e a servir leitura normalmente. A tela agora
+ * acompanha essa regra em vez de inventar uma mais dura.
+ *
+ * O aviso de vencimento e o selo da topbar contam o que aconteceu, e cada
+ * comando que o servidor recusar diz o porquê no lugar onde foi tentado.
+ */
 export function RequireActiveSubscription({ children, fallback }: GuardProps) {
   return (
     <SessionGate
@@ -210,7 +232,7 @@ export function RequireActiveSubscription({ children, fallback }: GuardProps) {
         if (!session.isAuthenticated) {
           return { kind: "redirect", to: loginUrl(LoginReason.expired) };
         }
-        return session.subscriptionActive ? ALLOW : { kind: "block" };
+        return ALLOW;
       }}
     >
       {children}

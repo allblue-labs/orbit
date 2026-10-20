@@ -9,7 +9,6 @@ import {
   EyeOff,
   Loader2,
   Lock,
-  MailCheck,
   ShieldAlert,
 } from "lucide-react";
 import { motion } from "motion/react";
@@ -21,7 +20,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SessionLoading } from "@/guards";
-import { useForgotPassword, useResetPassword } from "@/hooks/api";
+import { useResetPassword } from "@/hooks/api";
+import { useChangePassword } from "@/hooks/profile/use-profile";
 import { ROUTES } from "@/lib/routes";
 import { useOptionalSession } from "@/providers";
 
@@ -188,69 +188,142 @@ function ResetPasswordView() {
 /**
  * Página aberta sem o token do e-mail.
  *
- * Na troca obrigatória o usuário chega aqui autenticado e sem token — o
- * caminho suportado pelo backend hoje é disparar o e-mail de recuperação para
- * a própria conta e concluir pelo link.
+ * ## Dois caminhos, e eles não são intercambiáveis
+ *
+ * **Troca obrigatória**: a pessoa chega autenticada, com a senha temporária que
+ * o dono da organização entregou. Ela troca aqui mesmo, informando essa senha
+ * como atual — `POST /identity/me/password`, o mesmo caminho do aplicativo.
+ *
+ * Esta tela antes mandava a pessoa pedir um link por e-mail. Era um beco: quem
+ * passa pela troca obrigatória é justamente o técnico cadastrado pelo dono,
+ * que muitas vezes não usa e-mail no trabalho — e ficava preso, autenticado,
+ * sem tela nenhuma acessível e sem o e-mail que a página pedia.
+ *
+ * **Link inválido**: quem caiu aqui sem token e sem sessão só pode pedir um
+ * link novo, porque não há nada que prove quem é.
  */
 function MissingTokenState({ mandatory }: { mandatory: boolean }) {
   const session = useOptionalSession();
-  const forgotPassword = useForgotPassword();
+  const changePassword = useChangePassword();
   const email = session?.user?.email;
-  const [sent, setSent] = useState(false);
 
-  async function requestLink() {
-    if (!email) return;
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const newPassword = String(form.get("newPassword") ?? "");
+    if (newPassword !== String(form.get("confirmPassword") ?? "")) {
+      toast.error("As senhas não coincidem");
+      return;
+    }
     try {
-      await forgotPassword.mutateAsync({ email });
-    } finally {
-      setSent(true);
+      await changePassword.mutateAsync({
+        currentPassword: String(form.get("currentPassword") ?? ""),
+        newPassword,
+      });
+      toast.success("Senha atualizada");
+      /**
+       * Recarga de página inteira, e não navegação do cliente.
+       *
+       * `requiresPasswordChange` vive na sessão que o servidor monta; sem
+       * recarregar, o guard continuaria lendo o valor antigo e devolveria a
+       * pessoa para cá — um laço logo depois de ela ter obedecido.
+       */
+      window.location.assign(ROUTES.home);
+    } catch (error) {
+      toast.error("Não foi possível trocar a senha", {
+        description:
+          error instanceof Error
+            ? error.message
+            : "Confira a senha atual e tente de novo.",
+      });
     }
   }
 
-  if (sent) {
+  if (!mandatory || !email) {
     return (
-      <Alert className="mt-8">
-        <MailCheck className="size-4" />
-        <AlertTitle>Link enviado</AlertTitle>
-        <AlertDescription>
-          Enviamos o link de definição de senha para {email}. Ele expira em 30
-          minutos.
-        </AlertDescription>
-      </Alert>
+      <div className="mt-8 space-y-6">
+        <Alert>
+          <ShieldAlert className="size-4" />
+          <AlertTitle>Link inválido</AlertTitle>
+          <AlertDescription>
+            Esta página precisa do link enviado por e-mail. Solicite um novo
+            link de recuperação para continuar.
+          </AlertDescription>
+        </Alert>
+        <Button asChild className="w-full" size="lg">
+          <Link href={ROUTES.forgotPassword}>Solicitar novo link</Link>
+        </Button>
+      </div>
     );
   }
 
   return (
-    <div className="mt-8 space-y-6">
-      <Alert>
-        <ShieldAlert className="size-4" />
-        <AlertTitle>
-          {mandatory ? "Confirme por e-mail" : "Link inválido"}
-        </AlertTitle>
-        <AlertDescription>
-          {mandatory && email
-            ? `Para definir a nova senha com segurança, enviamos um link para ${email}.`
-            : "Esta página precisa do link enviado por e-mail. Solicite um novo link de recuperação para continuar."}
-        </AlertDescription>
-      </Alert>
-      {mandatory && email ? (
-        <Button
-          className="w-full"
-          size="lg"
-          onClick={requestLink}
-          disabled={forgotPassword.isPending}
-        >
-          {forgotPassword.isPending ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            "Enviar link para meu e-mail"
-          )}
-        </Button>
-      ) : (
-        <Button asChild className="w-full" size="lg">
-          <Link href={ROUTES.forgotPassword}>Solicitar novo link</Link>
-        </Button>
-      )}
-    </div>
+    <form onSubmit={handleSubmit} className="mt-8 space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="currentPassword">Senha temporária</Label>
+        <div className="relative">
+          <Lock className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            id="currentPassword"
+            name="currentPassword"
+            type="password"
+            autoComplete="current-password"
+            required
+            placeholder="A senha que você recebeu"
+            className="px-9"
+          />
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {`Entrando como ${email}.`}
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="newPassword">Nova senha</Label>
+        <div className="relative">
+          <Lock className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            id="newPassword"
+            name="newPassword"
+            type="password"
+            autoComplete="new-password"
+            minLength={MIN_PASSWORD_LENGTH}
+            required
+            placeholder="••••••••••••"
+            className="px-9"
+          />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="confirmPassword">Confirme a nova senha</Label>
+        <div className="relative">
+          <Lock className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            id="confirmPassword"
+            name="confirmPassword"
+            type="password"
+            autoComplete="new-password"
+            minLength={MIN_PASSWORD_LENGTH}
+            required
+            placeholder="••••••••••••"
+            className="pl-9"
+          />
+        </div>
+      </div>
+
+      <Button
+        type="submit"
+        className="w-full"
+        size="lg"
+        disabled={changePassword.isPending}
+      >
+        {changePassword.isPending ? (
+          <Loader2 className="size-4 animate-spin" />
+        ) : (
+          "Salvar e continuar"
+        )}
+      </Button>
+    </form>
   );
 }

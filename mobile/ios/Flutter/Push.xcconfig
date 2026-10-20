@@ -1,0 +1,29 @@
+// Push Notifications: ligado ou desligado no build.
+//
+// ## Por que isto é uma chave, e não um entitlement fixo
+//
+// Um time de desenvolvimento **pessoal** (conta gratuita da Apple) não
+// suporta a capacidade de Push Notifications. Com o entitlement fixo no
+// projeto, o build para o aparelho falha inteiro:
+//
+//   Personal development teams do not support the Push Notifications
+//   capability.
+//
+// Ou seja: fixar o entitlement trocaria "o app não recebe push" por "o app
+// não instala", que é muito pior. A ponte nativa, o registro do token e a
+// revogação no logout continuam no código o tempo todo — só o entitlement
+// entra sob demanda.
+//
+// ## Como ligar
+//
+// 1. Programa de Desenvolvedor Apple pago (o pessoal não serve).
+// 2. No App ID `com.allbluelabs.orbitOperator`, habilitar Push Notifications.
+// 3. Gerar a chave APNs (.p8) e configurá-la no backend — é o servidor que
+//    entrega, o aplicativo só registra o token.
+// 4. Trocar a linha abaixo por:
+//
+//        ORBIT_PUSH_ENTITLEMENTS = Runner/Runner.entitlements
+//
+// Sem o passo 4 o aplicativo compila, instala e funciona inteiro; o que não
+// acontece é a chegada do aviso.
+ORBIT_PUSH_ENTITLEMENTS =

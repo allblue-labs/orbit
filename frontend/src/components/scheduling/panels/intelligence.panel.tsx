@@ -50,14 +50,14 @@ export function IntelligencePanel({
     <PanelFrame
       panelId="scheduling-intelligence"
       title="Scheduling Intelligence"
-      description="Contrato publicado pelo backend para o período"
+      description="Análise do período"
       actions={<NotObservedBadge />}
     >
       <PanelState query={toPanelQuery(query)} loadingRows={4}>
         {(intelligence) => (
           <div className="space-y-5">
             <p className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs">
-              O backend declara <code>source: {intelligence.source}</code> nesta
+              A análise indica <code>source: {intelligence.source}</code> nesta
               resposta. Os blocos abaixo existem para o contrato — os números
               não são observações da sua operação. Os conflitos reais estão no
               painel de conflitos.
@@ -148,8 +148,7 @@ export function IntelligencePanel({
                     {intelligence.weatherImpact.summary}
                   </p>
                   <p className="text-[10px] text-muted-foreground">
-                    Derivado do segmento da organização — não há integração
-                    meteorológica no backend.
+                    Derivado do segmento da organização. Não há integração com dados de clima.
                   </p>
                 </div>
               ) : (

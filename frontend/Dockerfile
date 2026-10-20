@@ -16,11 +16,19 @@ RUN npm run build
 
 FROM node:22-bookworm-slim AS runner
 
+ARG ORBIT_COMMIT_SHA=unknown
+ARG ORBIT_BUILD_TIME=unknown
+LABEL org.opencontainers.image.revision=$ORBIT_COMMIT_SHA \
+  org.opencontainers.image.created=$ORBIT_BUILD_TIME \
+  org.opencontainers.image.source="https://github.com/allbluelabs/orbit"
+
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
+ENV ORBIT_COMMIT_SHA=$ORBIT_COMMIT_SHA
+ENV ORBIT_BUILD_TIME=$ORBIT_BUILD_TIME
 
 RUN groupadd --system --gid 1001 nodejs \
   && useradd --system --uid 1001 --gid nodejs nextjs

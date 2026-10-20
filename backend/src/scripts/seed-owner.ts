@@ -23,14 +23,16 @@
  * - **papel** → `Role.permissions`, conferido pelo `PermissionsGuard`;
  * - **plano** → `Plan.capabilities`, conferido pelo `CapabilityGuard`.
  *
- * O papel recebe `['*']`. O plano é um plano **próprio**, com `['*']` e criado
- * inativo: assim ele não aparece no catálogo público (`listActive` filtra por
- * `is_active`) e nenhum outro inquilino o assina por engano — mas as
- * permissões do dono saem completas, porque `getEntitlements` lê o plano da
- * organização sem olhar para `is_active`.
+ * O papel recebe `['*']`. O plano é um plano **próprio**, também com `['*']`,
+ * em vez de uma alteração no `STARTER` — mexer no plano que os outros
+ * inquilinos assinam mudaria o que todos eles podem fazer.
  *
- * Mexer no `STARTER` para conseguir o mesmo efeito mudaria o que todos os
- * outros inquilinos podem fazer.
+ * O plano nasce **ativo**. A primeira versão o criava inativo, para não
+ * aparecer no catálogo, na suposição de que só `listActive` olhava esse campo.
+ * Não é o caso: o Dashboard resolve o contexto do inquilino e recusa plano
+ * inativo, então toda a tela inicial respondia "organização não encontrada".
+ * Um plano de teste visível no catálogo de um ambiente de desenvolvimento é
+ * bem menos incômodo que um acesso que não abre o Dashboard.
  *
  * ## Idempotente
  *
@@ -44,6 +46,8 @@ import * as argon2 from 'argon2';
 import { config } from 'dotenv';
 import { resolve } from 'node:path';
 import { generateUuidV7 } from '../utils';
+import { ASSIGNABLE_TEAM_ROLES } from '../modules/organizations/team-roles';
+import { RVT_MAINTENANCE_TYPE_SEEDS } from '../modules/rvt/rvt-maintenance-types.seed';
 
 config({ path: resolve(process.cwd(), '.env'), quiet: true });
 config({ path: resolve(process.cwd(), '../.env'), quiet: true });
@@ -141,7 +145,7 @@ async function seed(): Promise<void> {
   const passwordHash = await argon2.hash(password, { type: argon2.argon2id });
 
   const result = await prisma.$transaction(async (tx) => {
-    /** Plano de acesso irrestrito, fora do catálogo público. */
+    /** Plano de acesso irrestrito para o inquilino de teste. */
     const plan = await tx.plan.upsert({
       where: { key: PLAN_KEY },
       create: {
@@ -149,12 +153,12 @@ async function seed(): Promise<void> {
         key: PLAN_KEY,
         name: 'Acesso completo (teste)',
         description:
-          'Plano de uso interno criado por npm run seed:owner. Não é vendável e não aparece no catálogo.',
+          'Plano de uso interno criado por npm run seed:owner. Não é vendável.',
         capabilities: ['*'],
         limits: {},
-        isActive: false,
+        isActive: true,
       },
-      update: { capabilities: ['*'], limits: {}, isActive: false },
+      update: { capabilities: ['*'], limits: {}, isActive: true },
       select: { id: true },
     });
 
@@ -291,7 +295,7 @@ async function seed(): Promise<void> {
       select: { id: true },
     });
 
-    /** O papel do dono: `['*']` é o que o `PermissionsGuard` reconhece. */
+    /** Ownership authority comes from Organization.ownerUserId. */
     const ownerRole = await tx.role.findFirst({
       where: { organizationId, key: 'OWNER', deletedAt: null },
       select: { id: true },
@@ -305,11 +309,73 @@ async function seed(): Promise<void> {
         key: 'OWNER',
         name: 'Owner',
         description: 'Organization owner',
-        permissions: ['*'],
+        permissions: [],
+        allowedSurfaces: ['WEB', 'MOBILE'],
+        isSystem: true,
       },
-      update: { permissions: ['*'], deletedAt: null },
+      update: {
+        permissions: [],
+        allowedSurfaces: ['WEB', 'MOBILE'],
+        isSystem: true,
+        deletedAt: null,
+      },
       select: { id: true },
     });
+
+    /**
+     * O tenant manual precisa dos mesmos dados estruturais do cadastro real.
+     * São papéis e cadências do produto, não pessoas/atendimentos de demo.
+     */
+    for (const role of ASSIGNABLE_TEAM_ROLES) {
+      await tx.role.upsert({
+        where: {
+          organizationId_key: { organizationId, key: role.key },
+        },
+        create: {
+          organizationId,
+          key: role.key,
+          name: role.name,
+          description: role.description,
+          permissions: [...role.permissions],
+          allowedSurfaces: [...role.allowedSurfaces],
+          isSystem: true,
+        },
+        update: {
+          name: role.name,
+          description: role.description,
+          permissions: [...role.permissions],
+          allowedSurfaces: [...role.allowedSurfaces],
+          isSystem: true,
+          deletedAt: null,
+        },
+        select: { id: true },
+      });
+    }
+
+    for (const type of RVT_MAINTENANCE_TYPE_SEEDS) {
+      await tx.rvtMaintenanceType.upsert({
+        where: {
+          organizationId_key: { organizationId, key: type.key },
+        },
+        create: {
+          organizationId,
+          key: type.key,
+          label: type.label,
+          intervalDays: type.intervalDays,
+          intervalMonths: type.intervalMonths,
+          sortOrder: type.sortOrder,
+        },
+        update: {
+          label: type.label,
+          intervalDays: type.intervalDays,
+          intervalMonths: type.intervalMonths,
+          sortOrder: type.sortOrder,
+          isActive: true,
+          deletedAt: null,
+        },
+        select: { id: true },
+      });
+    }
 
     const organizationMembership = await tx.organizationMembership.findFirst({
       where: { organizationId, userId },
@@ -340,6 +406,35 @@ async function seed(): Promise<void> {
         data: { organizationId, businessUnitId, userId, roleId },
       });
     }
+
+    /**
+     * A conta de referência exercita os dois papéis profissionais.
+     *
+     * `OWNER_FULL_ACCESS` libera RBAC/capabilities, mas isso nao transforma a
+     * pessoa em profissional: o aggregate exige um perfil ativo separado. Sem
+     * este seed, a suíte Web só passava em bancos antigos que por acaso já
+     * tinham esse perfil, e falhava num deploy realmente fresco ao consultar a
+     * assinatura. O perfil continua sendo requisito de domínio; apenas o
+     * inquilino interno de teste nasce completo e reproduzível.
+     */
+    await tx.professionalProfile.upsert({
+      where: {
+        organizationId_userId: { organizationId, userId },
+      },
+      create: {
+        organizationId,
+        userId,
+        fieldTechnicianEnabled: true,
+        technicalResponsibleEnabled: true,
+        active: true,
+      },
+      update: {
+        fieldTechnicianEnabled: true,
+        technicalResponsibleEnabled: true,
+        active: true,
+      },
+      select: { id: true },
+    });
 
     return {
       userId,

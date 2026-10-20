@@ -37,6 +37,7 @@ import {
   useSetNotificationPreference,
 } from "@/hooks/profile/use-profile";
 import { NOTIFICATIONS_POLL_MS } from "@/hooks/notifications/use-notifications";
+import { humanizeId } from "@/registry";
 import { NotificationType } from "@/types/contracts";
 import {
   PREFERENCE_CHANNELS,
@@ -88,8 +89,7 @@ export function NotificationsSettingsTab() {
           contrato as guarda por usuário, não por empresa.
         </p>
         <p className="text-xs text-muted-foreground">
-          Sem preferência gravada, o padrão do servidor é receber no app e em
-          tempo real.
+          Sem preferência gravada, o padrão é receber no app e em tempo real.
         </p>
       </div>
 
@@ -119,16 +119,14 @@ export function NotificationsSettingsTab() {
           gravaria algo que ninguém obedece.
         </p>
         <p className="text-xs text-muted-foreground">
-          <strong>SMS</strong> aparece no literal de canais, mas o DTO de
-          preferência não o aceita — só <span className="font-mono">IN_APP</span>,{" "}
+          <strong>SMS</strong> aparece na lista de canais, mas ainda não pode ser escolhido aqui — só <span className="font-mono">IN_APP</span>,{" "}
           <span className="font-mono">REALTIME</span>,{" "}
           <span className="font-mono">EMAIL</span> e{" "}
           <span className="font-mono">PUSH</span>.
         </p>
         <p className="text-xs text-muted-foreground">
           A central de notificações atualiza a cada{" "}
-          {Math.round(NOTIFICATIONS_POLL_MS / 1000)}s: o gateway de tempo real
-          do backend não é exposto a este cliente.
+          {Math.round(NOTIFICATIONS_POLL_MS / 1000)}s: a atualização em tempo real ainda não está disponível nesta tela.
         </p>
       </div>
     </div>
@@ -164,8 +162,9 @@ function PreferenceRow({
     <li className="space-y-3 px-4 py-3">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm font-medium">{TYPE_LABELS[type] ?? type}</p>
-          <p className="font-mono text-xs text-muted-foreground">{type}</p>
+          <p className="text-sm font-medium">
+            {TYPE_LABELS[type] ?? humanizeId(type)}
+          </p>
         </div>
 
         <div className="flex items-center gap-2">
@@ -177,7 +176,7 @@ function PreferenceRow({
           <Switch
             checked={enabled}
             disabled={saving}
-            aria-label={`Receber ${TYPE_LABELS[type] ?? type}`}
+            aria-label={`Receber ${TYPE_LABELS[type] ?? humanizeId(type)}`}
             onCheckedChange={(value) =>
               onChange({ type, enabled: value, channels: [...channels] })
             }

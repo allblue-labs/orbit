@@ -17,6 +17,7 @@ export class ChecklistRepository {
       organizationId,
       deletedAt: null,
       isActive: query.isActive,
+      ...(query.operationKind ? { operationKind: query.operationKind } : {}),
       ...(query.search
         ? {
             OR: [

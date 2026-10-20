@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsDate,
   IsIn,
   IsInt,
@@ -41,6 +42,81 @@ export const LocationSource = {
 } as const;
 export type LocationSource =
   (typeof LocationSource)[keyof typeof LocationSource];
+
+export const ProfessionalRole = {
+  FIELD_TECHNICIAN: 'FIELD_TECHNICIAN',
+  TECHNICAL_RESPONSIBLE: 'TECHNICAL_RESPONSIBLE',
+} as const;
+export type ProfessionalRole =
+  (typeof ProfessionalRole)[keyof typeof ProfessionalRole];
+
+export const ProfessionalCredentialType = {
+  CREA: 'CREA',
+  CFT: 'CFT',
+  CRT: 'CRT',
+  OTHER: 'OTHER',
+} as const;
+
+export class UpdateProfessionalProfileDto {
+  @ApiProperty() @IsBoolean() fieldTechnicianEnabled!: boolean;
+  @ApiProperty() @IsBoolean() technicalResponsibleEnabled!: boolean;
+  @ApiPropertyOptional({ default: true }) @IsOptional() @IsBoolean() active =
+    true;
+}
+
+export class ProfessionalSelectorQueryDto {
+  @ApiPropertyOptional() @IsOptional() @IsUUIDv7() businessUnitId?: string;
+}
+
+export class CreateProfessionalCredentialDto {
+  @ApiProperty({ enum: Object.values(ProfessionalCredentialType) })
+  @IsIn(Object.values(ProfessionalCredentialType))
+  type!: keyof typeof ProfessionalCredentialType;
+
+  @ApiProperty()
+  @Transform(trim)
+  @IsString()
+  @MinLength(1)
+  @MaxLength(100)
+  registrationNumber!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(40)
+  region?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(120)
+  issuingAuthority?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(180)
+  displayLabel?: string;
+}
+
+export class RegisterProfessionalSignatureDto {
+  @ApiProperty() @IsUUIDv7() storageObjectId!: string;
+}
+
+export class ProfessionalEligibilityQueryDto extends ProfessionalSelectorQueryDto {
+  @ApiProperty({
+    enum: ['SERVICE_ORDER', 'RVT', 'PMOC', 'TECHNICAL_REPORT', 'RECEIPT'],
+  })
+  @IsIn(['SERVICE_ORDER', 'RVT', 'PMOC', 'TECHNICAL_REPORT', 'RECEIPT'])
+  documentType!: string;
+
+  @ApiProperty({ enum: ['FIELD_TECHNICIAN', 'TECHNICAL_RESPONSIBLE'] })
+  @IsIn(['FIELD_TECHNICIAN', 'TECHNICAL_RESPONSIBLE'])
+  signedAs!: ProfessionalRole;
+}
 
 /* ------------------------------------------------------------------ */
 /* Especialidades                                                      */

@@ -6,6 +6,11 @@ import { DashboardRepository } from './dashboard.repository';
 import { WidgetFactory } from './widget-factory';
 import { WidgetRegistry } from './widget-registry';
 import { WidgetResolver } from './widget-resolver';
+import {
+  ProductAccessService,
+  ProductFeature,
+} from '../subscription-plans/product-access';
+import { PlanCapability } from '../subscription-plans/catalog/plan-catalog.types';
 
 @Injectable()
 export class DashboardService {
@@ -14,15 +19,22 @@ export class DashboardService {
     private readonly registry: WidgetRegistry,
     private readonly resolver: WidgetResolver,
     private readonly factory: WidgetFactory,
+    private readonly productAccess: ProductAccessService,
   ) {}
 
   async get(identity: AuthenticatedIdentity, query: DashboardQueryDto) {
     const context = await this.context(identity);
-    const definitions = this.resolver.resolve(this.registry.all(), {
-      ...context,
-      permissions: identity.permissions,
-      tags: query.tags,
-    });
+    const definitions = this.resolver.resolve(
+      await this.productDefinitions(
+        identity.organizationId!,
+        this.registry.all(),
+      ),
+      {
+        ...context,
+        permissions: identity.permissions,
+        tags: query.tags,
+      },
+    );
     return {
       context: {
         organizationId: context.organizationId,
@@ -54,7 +66,14 @@ export class DashboardService {
     query: DashboardQueryDto,
   ) {
     const context = await this.context(identity);
-    const definition = this.registry.get(id);
+    const [definition] = await this.productDefinitions(
+      identity.organizationId!,
+      [this.registry.get(id)],
+    );
+    if (!definition)
+      throw new ForbiddenException(
+        'Widget is not available for the current product access',
+      );
     const [available] = this.resolver.resolve([definition], {
       ...context,
       permissions: identity.permissions,
@@ -73,5 +92,31 @@ export class DashboardService {
     const context = await this.repository.context(identity.organizationId);
     if (!context) throw new EntityNotFoundException('Organization');
     return context;
+  }
+
+  private async productDefinitions<T extends { id: string }>(
+    organizationId: string,
+    definitions: readonly T[],
+  ): Promise<readonly T[]> {
+    if (
+      !definitions.some(
+        (definition) =>
+          definition.id === 'orbit-intelligence' ||
+          definition.id === 'attention-center',
+      )
+    )
+      return definitions;
+    const intelligence = await this.productAccess.canUse(
+      organizationId,
+      PlanCapability.ORBIT_INTELLIGENCE,
+      ProductFeature.ORBIT_INTELLIGENCE,
+    );
+    return intelligence
+      ? definitions
+      : definitions.filter(
+          (definition) =>
+            definition.id !== 'orbit-intelligence' &&
+            definition.id !== 'attention-center',
+        );
   }
 }

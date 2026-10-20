@@ -28,14 +28,14 @@ import { useSession } from "@/providers";
 const CAPABILITIES = [
   {
     icon: Building2,
-    title: "Organizações e tenants",
+    title: "Organizações",
     description:
-      "Provisionar tenants com o primeiro owner, acompanhar assinaturas e ciclo de vida.",
+      "Criar organizações com o primeiro responsável, acompanhar assinaturas e ciclo de vida.",
   },
   {
     icon: Users,
     title: "Usuários globais",
-    description: "Consultar usuários de todos os tenants e seus vínculos.",
+    description: "Consultar usuários de todas as organizações e seus vínculos.",
   },
   {
     icon: ShieldCheck,

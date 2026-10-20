@@ -16,7 +16,16 @@
  * nenhuma permissão é derivada ou inferida aqui.
  */
 import { useMemo, useState } from "react";
-import { UserPlus, Users } from "lucide-react";
+import Link from "next/link";
+import {
+  ArrowRight,
+  KeyRound,
+  Mail,
+  Pencil,
+  UserMinus,
+  UserPlus,
+  Users,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,10 +40,14 @@ import {
 import { useAction } from "@/actions";
 import { EntityBadge, MEMBER_STATUS_LABELS } from "@/entities";
 import {
+  useDismissMember,
+  useIssuePasswordLink,
   useTeamMembers,
   useTeamRoles,
 } from "@/hooks/workforce/use-workforce";
+import { useWorkforceManagement } from "@/hooks/workforce/use-workforce-management";
 import { formatDateTime } from "@/lib/formatters";
+import { teamMemberRoute } from "@/lib/routes";
 import type { TeamMember } from "@/types/workforce";
 import {
   FilterBar,
@@ -52,9 +65,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ConfirmDialog } from "@/components/financial/confirm.dialog";
+import { CreateMemberDialog } from "../create-member.dialog";
 import { InviteMemberDialog } from "../invite-member.dialog";
 import { MemberFormDialog } from "../member-form.dialog";
-import { MemberSheet } from "../member.sheet";
+import { PasswordLinkDialog } from "../password-link.dialog";
 
 interface MemberFilters {
   search?: string;
@@ -74,8 +89,12 @@ export function MembersTab() {
 
   const invite = useAction("team-member.create");
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [selected, setSelected] = useState<TeamMember | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<TeamMember | null>(null);
+  const [desligando, setDesligando] = useState<TeamMember | null>(null);
+
+  const passwordLink = useIssuePasswordLink();
+  const dismiss = useDismissMember();
 
   const all = useMemo(() => members.data?.data ?? [], [members.data]);
   const meta = members.data?.meta;
@@ -113,17 +132,33 @@ export function MembersTab() {
         <ResultSummary
           meta={meta}
           noun="pessoa"
+          gender="f"
           note={
             list.isFiltered
-              ? "Busca e papel recortam esta página — o endpoint ainda não os aceita."
-              : "Ordenado por nome (ordem definida pelo backend)"
+              ? "Busca e papel filtram apenas esta página."
+              : "Ordenado por nome"
           }
         />
         {invite.allowed ? (
-          <Button size="sm" onClick={() => setInviteOpen(true)}>
-            <UserPlus className="size-4" />
-            {invite.label}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {/*
+              Convidar continua existindo, em segundo plano: serve a quem tem
+              e-mail e conclui o próprio cadastro. Cadastrar é o caminho da
+              equipe de campo, e por isso é o botão cheio.
+            */}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setInviteOpen(true)}
+            >
+              <Mail className="size-4" />
+              Convidar
+            </Button>
+            <Button size="sm" onClick={() => setCreateOpen(true)}>
+              <UserPlus className="size-4" />
+              Cadastrar usuário
+            </Button>
+          </div>
         ) : null}
       </div>
 
@@ -133,7 +168,7 @@ export function MembersTab() {
           value={list.searchTerm}
           onChange={list.setSearchTerm}
           placeholder="Nome ou e-mail"
-          hint="Busca sobre a página carregada — o endpoint de membros não aceita texto."
+          hint="Busca sobre a página carregada."
         />
         <FilterSelect
           id="team-members-role"
@@ -162,12 +197,12 @@ export function MembersTab() {
           title: list.isFiltered ? "Nenhuma pessoa encontrada" : "Equipe vazia",
           description: list.isFiltered
             ? "Ajuste a busca ou os filtros."
-            : "Convide as pessoas que vão executar as operações em campo.",
+            : "Cadastre as pessoas que vão executar as operações em campo.",
           action:
             invite.allowed && !list.isFiltered ? (
-              <Button size="sm" onClick={() => setInviteOpen(true)}>
+              <Button size="sm" onClick={() => setCreateOpen(true)}>
                 <UserPlus className="size-4" />
-                {invite.label}
+                Cadastrar usuário
               </Button>
             ) : undefined,
         }}
@@ -182,17 +217,18 @@ export function MembersTab() {
                   <TableHead>Unidades</TableHead>
                   <TableHead>Situação</TableHead>
                   <TableHead>Desde</TableHead>
-                  <TableHead className="w-12" />
+                  <TableHead className="text-right">Ação</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {rows.map((member) => (
                   <TableRow key={member.userId}>
                     <TableCell>
-                      <button
-                        type="button"
-                        onClick={() => setSelected(member)}
-                        className="text-left"
+                      {/* O nome é link para a página da pessoa: endereço que se
+                          guarda, recarrega e abre em outra aba. */}
+                      <Link
+                        href={teamMemberRoute(member.userId)}
+                        className="block"
                       >
                         <span className="flex items-center gap-2 font-medium hover:underline">
                           {member.displayName}
@@ -203,7 +239,7 @@ export function MembersTab() {
                         <span className="block text-xs text-muted-foreground">
                           {member.email}
                         </span>
-                      </button>
+                      </Link>
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline">{member.role.name}</Badge>
@@ -225,11 +261,27 @@ export function MembersTab() {
                     <TableCell className="text-sm text-muted-foreground">
                       {formatDateTime(member.joinedAt)}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="text-right whitespace-nowrap">
+                      {/*
+                       * O caminho principal é um botão, não um item escondido
+                       * atrás de três pontinhos: abrir o detalhe é o que se faz
+                       * com uma pessoa na lista, e estava a dois cliques e uma
+                       * adivinhação. O menu fica ao lado, com o que é menos
+                       * frequente e mais consequente.
+                       */}
+                      <Button variant="outline" size="sm" asChild>
+                        <Link href={teamMemberRoute(member.userId)}>
+                          Detalhes
+                          <ArrowRight className="size-4" />
+                        </Link>
+                      </Button>
                       <MemberRowActions
                         member={member}
-                        onOpen={() => setSelected(member)}
                         onEdit={() => setEditing(member)}
+                        onPasswordLink={() =>
+                          passwordLink.mutate(member.userId)
+                        }
+                        onDismiss={() => setDesligando(member)}
                       />
                     </TableCell>
                   </TableRow>
@@ -249,12 +301,35 @@ export function MembersTab() {
 
       <InviteMemberDialog open={inviteOpen} onOpenChange={setInviteOpen} />
 
-      <MemberSheet
-        member={selected}
+      <CreateMemberDialog open={createOpen} onOpenChange={setCreateOpen} />
+
+      <PasswordLinkDialog
+        resultado={passwordLink.data ?? null}
+        error={passwordLink.error}
+        isPending={passwordLink.isPending}
         onOpenChange={(open) => {
-          if (!open) setSelected(null);
+          if (!open) passwordLink.reset();
         }}
-        onEdit={setEditing}
+      />
+
+      <ConfirmDialog
+        open={desligando !== null}
+        onOpenChange={(open) => {
+          if (!open) setDesligando(null);
+        }}
+        title="Desligar da equipe"
+        body={
+          desligando
+            ? `${desligando.displayName} perde o acesso agora, inclusive nas sessões abertas. O histórico de trabalho continua como está, e a vaga do plano é liberada.`
+            : undefined
+        }
+        confirmLabel="Desligar"
+        isPending={dismiss.isPending}
+        error={dismiss.error}
+        onConfirm={() => {
+          if (desligando) dismiss.mutate(desligando.userId);
+          setDesligando(null);
+        }}
       />
 
       <MemberFormDialog
@@ -276,15 +351,28 @@ export function MembersTab() {
  */
 function MemberRowActions({
   member,
-  onOpen,
   onEdit,
+  onPasswordLink,
+  onDismiss,
 }: {
   member: TeamMember;
-  onOpen: () => void;
   onEdit: () => void;
+  onPasswordLink: () => void;
+  onDismiss: () => void;
 }) {
-  const edit = useAction("team-member.update");
-  const editable = edit.allowed && !member.isOwner;
+  /*
+   * O gate era `useAction("team-member.update")`, ação declarada
+   * `available: false` — então `editable` respondia `false` para todo mundo e o
+   * menu só mostrava "Detalhes". Papel, link de senha e desligamento existiam no
+   * servidor e não tinham botão.
+   *
+   * O dono continua fora: `updateMember` recusa rebaixá-lo, e desligá-lo deixaria
+   * a conta sem ninguém capaz de administrá-la.
+   */
+  const { members } = useWorkforceManagement();
+  const editable = members.allowed && !member.isOwner;
+
+  if (!editable) return null;
 
   return (
     <DropdownMenu>
@@ -298,13 +386,21 @@ function MemberRowActions({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem onSelect={onOpen}>Detalhes</DropdownMenuItem>
-        {editable ? (
-          <DropdownMenuItem onSelect={onEdit}>
-            <edit.definition.icon className="size-4" />
-            Papel e situação
-          </DropdownMenuItem>
-        ) : null}
+        <DropdownMenuItem onSelect={onEdit}>
+          <Pencil className="size-4" />
+          Papel e situação
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={onPasswordLink}>
+          <KeyRound className="size-4" />
+          Gerar link de senha
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onSelect={onDismiss}
+          className="text-destructive focus:text-destructive"
+        >
+          <UserMinus className="size-4" />
+          Desligar
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

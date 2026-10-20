@@ -1,0 +1,4 @@
+{
+  "ORBIT_API_URL": "https://api.staging.invalid/api/v1",
+  "ORBIT_FLAVOR": "staging"
+}

@@ -113,6 +113,24 @@ export class BusinessUnitRepository {
     });
   }
 
+  /**
+   * Grava (ou apaga) a marca da unidade.
+   *
+   * Escrita própria em vez de passar pelo `update` geral: aquele monta o slug,
+   * mexe em `isPrimary` e roda numa transação que reordena irmãs. Trocar uma
+   * imagem não precisa de nada disso, e passar por lá faria uma troca de logo
+   * disputar as mesmas linhas que uma edição de cadastro.
+   */
+  setLogo(id: string, logoUrl: string | null) {
+    return this.rls.run((transaction) =>
+      transaction.businessUnit.update({
+        where: { id },
+        data: { logoUrl },
+        select: { id: true, logoUrl: true },
+      }),
+    );
+  }
+
   softDelete(id: string): Promise<void> {
     return this.rls
       .run((transaction) =>

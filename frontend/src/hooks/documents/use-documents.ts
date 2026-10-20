@@ -111,5 +111,16 @@ export function useAvailableRenderers() {
     DOCUMENTS_REFRESH.metrics,
   );
 
-  return { ...query, renderers: query.data?.renderers ?? [] };
+  /**
+   * `defaultRenderer` vem do backend, não do primeiro item da lista.
+   *
+   * A ordem de `renderers` é a de registro no módulo do Nest — um detalhe de
+   * montagem. Pré-selecionar por ela faria a tela oferecer um motor e a
+   * emissão usar outro no dia em que alguém reordenasse os providers.
+   */
+  return {
+    ...query,
+    renderers: query.data?.renderers ?? [],
+    defaultRenderer: query.data?.defaultRenderer ?? "",
+  };
 }

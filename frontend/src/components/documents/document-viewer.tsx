@@ -85,8 +85,7 @@ function ViewerBody({ executionId }: { executionId: string }) {
       <SheetHeader>
         <SheetTitle>Documento</SheetTitle>
         <SheetDescription>
-          Emitido a partir da execução. Revisões, conteúdo e histórico vêm do
-          manifest.
+          Emitido a partir da execução, com revisões, conteúdo e histórico.
         </SheetDescription>
       </SheetHeader>
 
@@ -102,11 +101,10 @@ function ViewerBody({ executionId }: { executionId: string }) {
           />
         ) : revisions.length === 0 ? (
           <p className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
-            Nenhum documento emitido para esta execução. Solicite uma
-            renderização acima.
+            Nenhum documento emitido para esta execução. Solicite a emissão acima.
           </p>
         ) : (
-          <Tabs defaultValue="conteudo" className="space-y-4">
+          <Tabs defaultValue="conteudo">
             <TabsList>
               <TabsTrigger value="conteudo">Conteúdo</TabsTrigger>
               <TabsTrigger value="revisoes">

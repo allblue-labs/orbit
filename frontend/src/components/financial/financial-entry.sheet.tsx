@@ -174,7 +174,7 @@ function Body({
               <span className="text-muted-foreground">Sem categoria</span>
             )}
           </Row>
-          <Row label="Unidade">{entry.businessUnit.name}</Row>
+          <Row label="Organização">{entry.businessUnit.name}</Row>
           <Row label="Cliente">
             {entry.customer ? (
               <EntityLink entity="customer" id={entry.customer.id}>

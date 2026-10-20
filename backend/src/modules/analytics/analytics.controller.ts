@@ -14,6 +14,12 @@ import {
 } from '../subscription-plans/plan-access';
 import { AnalyticsService } from './analytics.service';
 import { AnalyticsQueryDto } from './dto/analytics-query.dto';
+import { PlanCapability } from '../subscription-plans/catalog/plan-catalog.types';
+import {
+  ProductCapabilities,
+  ProductFeature,
+  RequiresProductFeature,
+} from '../subscription-plans/product-access';
 
 @ApiTags('Analytics Engine')
 @ApiBearerAuth()
@@ -109,6 +115,8 @@ export class AnalyticsController {
   }
 
   @Get('intelligence')
+  @ProductCapabilities(PlanCapability.ORBIT_INTELLIGENCE)
+  @RequiresProductFeature(ProductFeature.ORBIT_INTELLIGENCE)
   @ApiOperation({
     summary: 'Return the stable analytics context for Orbit Intelligence',
   })

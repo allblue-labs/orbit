@@ -111,7 +111,7 @@ export function InvitationsTab() {
         <ResultSummary
           meta={meta}
           noun="convite"
-          note="Convites vencidos são marcados pelo servidor ao listar."
+          note="Convites vencidos são marcados automaticamente."
         />
         {invite.allowed ? (
           <Button size="sm" onClick={() => setInviteOpen(true)}>
@@ -127,7 +127,7 @@ export function InvitationsTab() {
           value={list.searchTerm}
           onChange={list.setSearchTerm}
           placeholder="E-mail convidado"
-          hint="A busca é do servidor, sobre o e-mail convidado."
+          hint="A busca considera o e-mail convidado."
         />
         <FilterSelect
           id="invitations-status"

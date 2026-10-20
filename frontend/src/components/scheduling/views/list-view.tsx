@@ -17,6 +17,7 @@ import {
   type DayBucket,
 } from "@/lib/scheduling";
 import { cn } from "@/lib/utils";
+import { assignmentAuthorityLabel } from "@/registry";
 import type { SchedulingOccurrence } from "@/types/scheduling";
 import {
   ConflictSeverityBadge,
@@ -155,6 +156,17 @@ function OccurrenceRow({
             {occurrence.segment ? ` · ${occurrence.segment}` : ""}
             {occurrence.allocations.length > 0
               ? ` · ${occurrence.allocations.length} alocação(ões)`
+              : ""}
+            {/**
+             * Quem manda no vínculo da equipe.
+             *
+             * `OPERATION` significa que a Agenda **reflete** o atendimento: o
+             * backend espelha responsável e auxiliares como alocações. Dizer
+             * isso responde de antemão por que a equipe não se edita aqui — e
+             * evita abrir uma segunda forma de mudar a mesma coisa.
+             */}
+            {assignmentAuthorityLabel(occurrence.assignmentAuthority)
+              ? ` · ${assignmentAuthorityLabel(occurrence.assignmentAuthority)}`
               : ""}
           </span>
         </span>

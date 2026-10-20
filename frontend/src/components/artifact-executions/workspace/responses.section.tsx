@@ -98,7 +98,7 @@ export function ResponsesSection({
 
         {sections.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
-            O snapshot desta execução não tem seções.
+            Esta execução não tem seções.
           </p>
         ) : (
           sections.map((section) => (

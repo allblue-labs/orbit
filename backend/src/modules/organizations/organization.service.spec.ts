@@ -2,11 +2,15 @@ import { ValidationException } from '../../exceptions';
 import { BusinessUnitType } from '../../contracts';
 import type { OrganizationRepository } from './organization.repository';
 import { OrganizationService } from './organization.service';
+import type { AuthorizationService } from '../../common';
 
 describe('OrganizationService', () => {
   const repository = { create: jest.fn() };
+  /* O caminho exercitado aqui (normalização de slug) não consulta
+     autorização; o stub existe para o construtor, não para o teste. */
   const service = new OrganizationService(
     repository as unknown as OrganizationRepository,
+    {} as unknown as AuthorizationService,
   );
 
   beforeEach(() => jest.clearAllMocks());

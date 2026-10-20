@@ -77,3 +77,22 @@ export interface CustomerListReadModel {
     hasPreviousPage: boolean;
   };
 }
+
+/** Um endereço de atendimento, como a tela o consome. */
+export interface CustomerAddressReadModel {
+  id: string;
+  customerId: string;
+  label: string;
+  street: string;
+  number: string | null;
+  complement: string | null;
+  district: string | null;
+  city: string;
+  stateCode: string | null;
+  postalCode: string | null;
+  notes: string | null;
+  isPrimary: boolean;
+  isActive: boolean;
+  /** O endereço em uma linha, montado no servidor. */
+  summary: string;
+}

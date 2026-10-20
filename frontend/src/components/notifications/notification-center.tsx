@@ -173,8 +173,7 @@ export function NotificationCenter() {
             : "Carregando…"}
         </p>
         <p className="text-xs text-muted-foreground">
-          Atualiza a cada {Math.round(NOTIFICATIONS_POLL_MS / 1000)}s — o
-          backend não expõe realtime a este cliente (ver documentação)
+          Atualiza a cada {Math.round(NOTIFICATIONS_POLL_MS / 1000)}s — a atualização em tempo real ainda não está disponível nesta tela
         </p>
       </div>
 

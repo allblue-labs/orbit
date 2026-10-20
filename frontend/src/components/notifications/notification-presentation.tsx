@@ -161,3 +161,41 @@ function dayLabel(key: string): string {
     year: "numeric",
   }).format(new Date(`${key}T12:00:00Z`));
 }
+
+/**
+ * Quanto tempo faz, em uma expressão curta.
+ *
+ * O popup do sino tem uma linha por notificação e nenhum espaço para
+ * `12/09/2026, 19:43` ao lado do título. "há 3 h" responde a pergunta que se
+ * faz ali — isto é novo? — e a data completa continua na central.
+ *
+ * `Intl.RelativeTimeFormat` em vez de uma tabela de plurais escrita à mão:
+ * "há 1 mês" e "há 2 meses" saem certos sem ninguém manter a regra.
+ */
+const RELATIVO = new Intl.RelativeTimeFormat("pt-BR", { numeric: "auto" });
+
+const ESCALAS: readonly { limite: number; unidade: Intl.RelativeTimeFormatUnit; em: number }[] = [
+  { limite: 60_000, unidade: "second", em: 1_000 },
+  { limite: 3_600_000, unidade: "minute", em: 60_000 },
+  { limite: 86_400_000, unidade: "hour", em: 3_600_000 },
+  { limite: 2_592_000_000, unidade: "day", em: 86_400_000 },
+  { limite: 31_536_000_000, unidade: "month", em: 2_592_000_000 },
+];
+
+export function relativeTime(iso: string, now = Date.now()): string {
+  const instante = new Date(iso).getTime();
+  if (Number.isNaN(instante)) return "";
+
+  const distancia = instante - now;
+  const modulo = Math.abs(distancia);
+
+  /** Menos de um minuto não vira "há 43 segundos": vira "agora". */
+  if (modulo < 60_000) return "agora";
+
+  for (const escala of ESCALAS) {
+    if (modulo < escala.limite) {
+      return RELATIVO.format(Math.round(distancia / escala.em), escala.unidade);
+    }
+  }
+  return RELATIVO.format(Math.round(distancia / 31_536_000_000), "year");
+}

@@ -64,7 +64,9 @@ final operationDistanceProvider = FutureProvider.autoDispose
         LocationAvailable(:final point) => OperationDistanceKnown(
           meters: distanceInMeters(point, destination),
         ),
-        LocationUnavailable(:final message) => OperationDistanceUnknown(message),
+        LocationUnavailable(:final message) => OperationDistanceUnknown(
+          message,
+        ),
       };
     });
 
@@ -78,7 +80,6 @@ final operationIntelligenceProvider = FutureProvider.autoDispose
 
 final operationIntelligenceRepositoryProvider =
     Provider<OperationIntelligenceRepository>(
-      (ref) => OperationIntelligenceRepository(
-        client: ref.watch(apiClientProvider),
-      ),
+      (ref) =>
+          OperationIntelligenceRepository(client: ref.watch(apiClientProvider)),
     );

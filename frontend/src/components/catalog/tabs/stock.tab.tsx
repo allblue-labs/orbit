@@ -95,7 +95,7 @@ function StockContent() {
           <p className="text-sm text-muted-foreground">
             {unit
               ? `${unit.tradeName ?? unit.legalName}`
-              : "Todas as unidades acessíveis"}{" "}
+              : "Todas as organizações acessíveis"}{" "}
             · movimentos de {period.from} a {period.to}
           </p>
           <p className="text-xs text-muted-foreground">
@@ -137,7 +137,7 @@ function StockContent() {
         <InventoryKpis query={analytics} />
       </TabBoundary>
 
-      <Tabs defaultValue="saldos" className="space-y-5">
+      <Tabs defaultValue="saldos">
         <TabsList>
           <TabsTrigger value="saldos">Saldos</TabsTrigger>
           <TabsTrigger value="movimentacoes">Movimentações</TabsTrigger>

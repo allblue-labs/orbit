@@ -73,23 +73,47 @@ export class DocumentsReportProvider implements ReportProvider {
     };
   }
 
-  /** Planos, conformidade e ciclos — o fato operacional. */
+  /** Planos, conformidade e execuções — o fato operacional. */
   private async composePlans(
     context: ReportProviderContext,
   ): Promise<ReportComposition> {
-    const summary = await this.pmoc.compliance(
-      {
-        organizationId: context.scope.organizationId,
-        actorId: 'report',
-        permissions: ['pmoc.read'],
-        businessUnitIds: [],
-      },
-      {
-        from: context.scope.from,
-        to: context.scope.to,
-        businessUnitId: context.scope.businessUnitId ?? undefined,
-      },
-    );
+    const [summary, unidades] = await Promise.all([
+      this.pmoc.compliance(
+        {
+          organizationId: context.scope.organizationId,
+          actorId: 'report',
+          permissions: ['pmoc.read'],
+          businessUnitIds: [],
+          /* Ator sintético de leitura: compõe relatório, nunca executa
+             manutenção. Dono nenhum — e nada aqui pede a exceção do dono. */
+          isOrganizationOwner: false,
+        },
+        {
+          from: context.scope.from,
+          to: context.scope.to,
+          businessUnitId: context.scope.businessUnitId ?? undefined,
+        },
+      ),
+      /**
+       * As unidades atendidas, pelo mesmo ator de relatório.
+       *
+       * A conformidade conta planos; isto descreve o que é feito em cada
+       * visita. Um PMOC que prova cobertura sem descrever serviço não prova o
+       * que a norma pede.
+       */
+      this.pmoc.unitCoverage(
+        {
+          organizationId: context.scope.organizationId,
+          actorId: 'report',
+          permissions: ['pmoc.read'],
+          businessUnitIds: [],
+          /* Ator sintético de leitura: compõe relatório, nunca executa
+             manutenção. Dono nenhum — e nada aqui pede a exceção do dono. */
+          isOrganizationOwner: false,
+        },
+        { businessUnitId: context.scope.businessUnitId ?? undefined },
+      ),
+    ]);
 
     const sections: ReportSectionReadModel[] = [
       {
@@ -154,7 +178,7 @@ export class DocumentsReportProvider implements ReportProvider {
       },
       {
         id: 'pmoc.cycles',
-        title: 'Ciclos de manutenção',
+        title: 'Execuções de manutenção',
         description: 'O que foi cumprido no período e o que está em aberto.',
         metrics: [
           {
@@ -167,20 +191,67 @@ export class DocumentsReportProvider implements ReportProvider {
           },
           {
             id: 'pmoc.pending_cycles',
-            label: 'Ciclos em aberto',
+            label: 'Execuções em aberto',
             value: count(summary.executions.pending),
             source: PMOC_SOURCE,
             provenance: 'OBSERVED',
           },
           {
             id: 'pmoc.overdue_cycles',
-            label: 'Ciclos vencidos',
+            label: 'Execuções vencidas',
             value: count(summary.executions.overdue),
             source: PMOC_SOURCE,
             provenance: 'OBSERVED',
           },
         ],
         tables: [],
+      },
+      {
+        id: 'pmoc.units',
+        title: 'Unidades atendidas',
+        description:
+          'As partes do sistema que recebem manutenção nos planos ativos, e o roteiro de cada uma.',
+        metrics: [
+          {
+            id: 'pmoc.units_served',
+            label: 'Unidades em atendimento',
+            value: count(unidades.length),
+            source: PMOC_SOURCE,
+            provenance: 'OBSERVED',
+            note: 'Unidades distintas declaradas por planos ativos.',
+          },
+          {
+            id: 'pmoc.units_without_checklist',
+            label: 'Sem roteiro',
+            value: count(
+              unidades.filter((unidade) => unidade.checklistName === null)
+                .length,
+            ),
+            source: PMOC_SOURCE,
+            provenance: 'DERIVED',
+            note: 'Unidade sem roteiro entra no relatório sem itens a descrever.',
+          },
+        ],
+        tables: [
+          {
+            id: 'pmoc.units_table',
+            title: 'Unidades e roteiros',
+            columns: [
+              { key: 'unit', label: 'Unidade' },
+              { key: 'checklist', label: 'Roteiro' },
+              { key: 'items', label: 'Itens', align: 'right' as const },
+              { key: 'plans', label: 'Planos', align: 'right' as const },
+            ],
+            rows: unidades.map((unidade) => ({
+              unit: unidade.name,
+              checklist: unidade.checklistName ?? 'Sem roteiro',
+              items: count(unidade.checklistItems),
+              plans: count(unidade.plans),
+            })),
+            source: PMOC_SOURCE,
+            provenance: 'OBSERVED' as const,
+          },
+        ],
       },
     ];
 
@@ -259,7 +330,7 @@ export class DocumentsReportProvider implements ReportProvider {
           ? 'Evidência documental de PMOC'
           : 'Execuções de artefato',
         description: pmocOnly
-          ? 'Formulários de PMOC preenchidos no período e documentos emitidos. É a evidência do que os ciclos acima registram.'
+          ? 'Formulários de PMOC preenchidos no período e documentos emitidos. É a evidência do que as execuções acima registram.'
           : 'Iniciadas no período, pela data de criação.',
         metrics: [
           {

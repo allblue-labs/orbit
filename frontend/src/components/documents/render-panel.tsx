@@ -16,12 +16,21 @@
  * o plano e o papel liberam a ação. Quem autoriza de fato é o backend: um 409
  * (execução em estado que não emite documento) ou 403 aparece como veio.
  *
- * Os renderizadores oferecidos vêm do backend, não de uma lista inventada.
+ * Os renderizadores oferecidos vêm do backend, não de uma lista inventada, e
+ * o pré-selecionado é o que o backend declara como padrão.
+ *
+ * ## Pré-visualizar é outra coisa
+ *
+ * Conferir o rascunho não emite nada — não cria revisão, não consome número,
+ * não aparece no histórico do cliente. Por isso o botão de pré-visualizar
+ * segue autorização própria (`artifact_executions.read`) e continua
+ * disponível para quem revisa mas não assina.
  */
 import { useState } from "react";
 import { RefreshCw } from "lucide-react";
 
 import { MutationError } from "@/components/artifact-studio/mutation-error";
+import { DraftPreviewDialog } from "./draft-preview-dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -53,9 +62,14 @@ export function RenderPanel({
   query: ReturnType<typeof useRenderState>;
 }) {
   const request = useRequestRender(executionId);
-  const { renderers, isPending: loadingRenderers } = useAvailableRenderers();
+  const {
+    renderers,
+    defaultRenderer,
+    isPending: loadingRenderers,
+  } = useAvailableRenderers();
   const [renderer, setRenderer] = useState<string>("");
   const render = useAction("artifact-execution.render");
+  const preview = useAction("artifact-execution.preview-draft");
 
   if (query.isPending) return <Skeleton className="h-24 rounded-xl" />;
 
@@ -72,7 +86,8 @@ export function RenderPanel({
    */
   const canRender = render.allowed && definition.canRequest;
 
-  const chosen = renderer || renderers[0] || "";
+  /* O padrão é o do backend; a lista é só o que mais existe. */
+  const chosen = renderer || defaultRenderer || renderers[0] || "";
 
   return (
     <div className="space-y-3 rounded-xl border border-border p-4">
@@ -99,8 +114,7 @@ export function RenderPanel({
 
       {definition.inFlight ? (
         <p className="text-xs text-muted-foreground">
-          Acompanhando o servidor — a tela se atualiza sozinha e para quando o
-          documento ficar pronto.
+          A tela se atualiza sozinha e para quando o documento ficar pronto.
         </p>
       ) : null}
 
@@ -130,6 +144,14 @@ export function RenderPanel({
             </Select>
           </div>
 
+          {preview.allowed ? (
+            <DraftPreviewDialog
+              executionId={executionId}
+              renderer={chosen}
+              disabled={!chosen}
+            />
+          ) : null}
+
           <Button
             disabled={!chosen || request.isPending}
             onClick={() => request.mutate({ renderer: chosen })}
@@ -138,17 +160,24 @@ export function RenderPanel({
             {request.isPending
               ? "Solicitando…"
               : state.renderStatus === "READY"
-                ? "Renderizar de novo"
+                ? "Emitir de novo"
                 : "Renderizar"}
           </Button>
         </div>
+      ) : preview.allowed && chosen ? (
+        /**
+         * Quem não pode emitir ainda pode conferir. É o caso de quem revisa
+         * antes de liberar: o botão de emissão é de quem assina, a conferência
+         * é de quem lê.
+         */
+        <DraftPreviewDialog executionId={executionId} renderer={chosen} />
       ) : null}
 
       <MutationError error={request.error} />
 
       {state.renderStatus === "READY" ? (
         <p className="text-xs text-muted-foreground">
-          Renderizar de novo cria a revisão seguinte; a anterior permanece no
+          Emitir de novo cria a revisão seguinte; a anterior permanece no
           histórico.
         </p>
       ) : null}

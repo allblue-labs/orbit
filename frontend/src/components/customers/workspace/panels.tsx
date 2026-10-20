@@ -11,6 +11,7 @@ import {
   Lightbulb,
   Mail,
   MapPin,
+  Pencil,
   Phone,
   Star,
   Trash2,
@@ -23,8 +24,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RelatedRecordsPanel } from "@/entities";
+import { lifecycleLabel } from "@/registry";
 import {
   useCreateContact,
+  useUpdateContact,
   useCustomerIntelligence,
   useCustomerSchedule,
   useRemoveContact,
@@ -101,8 +104,7 @@ export function OverviewSection({ customer }: { customer: Customer }) {
             </dl>
           ) : null}
           <p className="text-[10px] text-muted-foreground">
-            `address` é JSON livre — o backend não define esquema, e não há
-            coordenadas nem mapa.
+            O endereço é texto livre, sem coordenadas nem mapa.
           </p>
         </section>
 
@@ -139,8 +141,15 @@ export function ContactsSection({
   canManage: boolean;
 }) {
   const create = useCreateContact(customer.id);
+  const update = useUpdateContact(customer.id);
   const remove = useRemoveContact(customer.id);
-  const [open, setOpen] = useState(false);
+
+  /** `null` fechado; `"new"` criando; um contato editando. */
+  const [editando, setEditando] = useState<CustomerContact | "new" | null>(
+    null,
+  );
+  const alvo = editando === "new" ? null : editando;
+  const mutation = alvo ? update : create;
 
   return (
     <PanelFrame
@@ -152,24 +161,35 @@ export function ContactsSection({
           <Button
             size="sm"
             variant="outline"
-            onClick={() => setOpen((current) => !current)}
+            onClick={() =>
+              setEditando((atual) => (atual === null ? "new" : null))
+            }
           >
-            {open ? "Cancelar" : "Novo contato"}
+            {editando !== null ? "Cancelar" : "Novo contato"}
           </Button>
         ) : null
       }
     >
       <div className="space-y-4">
-        {open ? (
+        {editando !== null ? (
           <ContactForm
-            pending={create.isPending}
+            /* `key` remonta o formulário ao trocar de contato: sem isso os
+               campos do anterior sobreviveriam à troca. */
+            key={alvo?.id ?? "new"}
+            contact={alvo}
+            pending={mutation.isPending}
             onSubmit={(input) => {
-              create.mutate(input, { onSuccess: () => setOpen(false) });
+              const fechar = { onSuccess: () => setEditando(null) };
+              if (alvo) {
+                update.mutate({ contactId: alvo.id, input }, fechar);
+              } else {
+                create.mutate(input, fechar);
+              }
             }}
           />
         ) : null}
 
-        <MutationError error={create.error ?? remove.error} />
+        <MutationError error={mutation.error ?? remove.error} />
 
         {customer.contacts.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
@@ -183,6 +203,7 @@ export function ContactsSection({
                 contact={contact}
                 canManage={canManage}
                 removing={remove.isPending}
+                onEdit={() => setEditando(contact)}
                 onRemove={() => remove.mutate(contact.id)}
               />
             ))}
@@ -197,11 +218,13 @@ function ContactRow({
   contact,
   canManage,
   removing,
+  onEdit,
   onRemove,
 }: {
   contact: CustomerContact;
   canManage: boolean;
   removing: boolean;
+  onEdit: () => void;
   onRemove: () => void;
 }) {
   return (
@@ -238,25 +261,39 @@ function ContactRow({
       </div>
 
       {canManage ? (
-        <Button
-          size="icon"
-          variant="ghost"
-          className="size-8 text-destructive"
-          disabled={removing}
-          onClick={onRemove}
-          aria-label={`Remover ${contact.name}`}
-        >
-          <Trash2 className="size-4" />
-        </Button>
+        <>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="size-8"
+            onClick={onEdit}
+            aria-label={`Editar ${contact.name}`}
+          >
+            <Pencil className="size-4" />
+          </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="size-8 text-destructive"
+            disabled={removing}
+            onClick={onRemove}
+            aria-label={`Remover ${contact.name}`}
+          >
+            <Trash2 className="size-4" />
+          </Button>
+        </>
       ) : null}
     </li>
   );
 }
 
 function ContactForm({
+  contact,
   pending,
   onSubmit,
 }: {
+  /** `null` cria; preenchido edita. */
+  contact: CustomerContact | null;
   pending: boolean;
   onSubmit: (input: {
     name: string;
@@ -265,10 +302,10 @@ function ContactForm({
     phone?: string;
   }) => void;
 }) {
-  const [name, setName] = useState("");
-  const [role, setRole] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
+  const [name, setName] = useState(contact?.name ?? "");
+  const [role, setRole] = useState(contact?.role ?? "");
+  const [email, setEmail] = useState(contact?.email ?? "");
+  const [phone, setPhone] = useState(contact?.phone ?? "");
 
   return (
     <div className="grid gap-3 rounded-xl border border-border p-4 sm:grid-cols-2">
@@ -320,7 +357,11 @@ function ContactForm({
           })
         }
       >
-        {pending ? "Salvando…" : "Adicionar contato"}
+        {pending
+          ? "Salvando…"
+          : contact
+            ? "Salvar contato"
+            : "Adicionar contato"}
       </Button>
     </div>
   );
@@ -342,7 +383,7 @@ export function CustomerScheduleSection({
       entity="scheduling-event"
       panelId="customer-schedule"
       title="Agenda futura"
-      description="Próximos 90 dias, com recorrências expandidas pelo backend"
+      description="Próximos 90 dias, incluindo compromissos recorrentes"
       query={query}
       emptyMessage="Nada agendado para este cliente nos próximos 90 dias."
       seeAllHref={ROUTES.scheduling}
@@ -382,7 +423,7 @@ export function IndicatorsSection({ customer }: { customer: Customer }) {
     <PanelFrame
       panelId="customer-indicators"
       title="Indicadores"
-      description="Contagens publicadas pelo backend"
+      description="Contagens deste cliente"
     >
       <div className="grid gap-3 sm:grid-cols-2">
         <MetricCard
@@ -400,9 +441,8 @@ export function IndicatorsSection({ customer }: { customer: Customer }) {
       </div>
 
       <p className="mt-4 border-t border-border pt-3 text-xs text-muted-foreground">
-        Receita, ticket médio e tempo de resposta dependem de Read Models por
-        cliente que o Analytics não publica — ele é escopado por unidade e
-        período.
+        Receita, ticket médio e tempo de resposta ainda não estão disponíveis
+        por cliente. Os indicadores existentes são por unidade e período.
       </p>
     </PanelFrame>
   );
@@ -477,7 +517,7 @@ export function IntelligenceSection({
                     {execution.purpose}
                   </span>
                   <Badge variant="outline" className="text-[10px]">
-                    {execution.status}
+                    {lifecycleLabel(execution.status)}
                   </Badge>
                 </div>
                 <IntelligenceOutput output={execution.output} />
@@ -491,8 +531,8 @@ export function IntelligenceSection({
       </PanelState>
 
       <p className="mt-4 border-t border-border pt-3 text-xs text-muted-foreground">
-        O conteúdo de <code>output</code> é definido pelo agente que executou; o
-        backend não publica esquema. Nada é gerado no navegador.
+        O conteúdo é definido pela análise que foi executada. Nada é gerado
+        neste navegador.
       </p>
     </PanelFrame>
   );

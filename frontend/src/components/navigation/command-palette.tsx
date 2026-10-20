@@ -72,8 +72,14 @@ export function CommandPalette({
   /** Só os módulos que o plano e o papel desta sessão alcançam. */
   const destinations = useMemo(
     () =>
-      entityTargets().filter(
-        (target) => !target.capability || session.hasCapability(target.capability),
+      entityTargets().filter((target) =>
+        allowsAccess(
+          {
+            capability: target.capability,
+            permission: target.permission,
+          },
+          session,
+        ),
       ),
     [session],
   );

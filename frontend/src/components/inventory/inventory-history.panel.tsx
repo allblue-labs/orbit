@@ -100,6 +100,7 @@ export function InventoryHistoryPanel({
       <ResultSummary
         meta={meta}
         noun="movimentação"
+        gender="f"
         note="Do mais recente. O histórico não é editável."
       />
 
@@ -110,7 +111,7 @@ export function InventoryHistoryPanel({
             value={list.searchTerm}
             onChange={list.setSearchTerm}
             placeholder="Motivo, observação ou item"
-            hint="A busca do servidor cobre motivo, observações e nome do item."
+            hint="A busca cobre motivo, observações e nome do item."
           />
 
           <FilterSelect

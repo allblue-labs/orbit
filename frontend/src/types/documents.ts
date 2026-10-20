@@ -46,7 +46,16 @@ export { ARTIFACT_RENDER_STATUSES } from "./contracts/modules/artifact-rendering
 
 /** `POST /artifact-executions/:id/render` (`RequestArtifactRenderDto`). */
 export interface RequestRenderInput {
-  renderer: string;
+  /**
+   * Omitido, **o produto escolhe** — é o que o DTO do backend contrata
+   * (`defaultRendererFor`, hoje o motor premium).
+   *
+   * Era obrigatório aqui e opcional lá: quem só queria o documento tinha de
+   * escolher um motor, e a escolha vazava para telas que não têm opinião sobre
+   * isso. A tela de renderização continua mandando um explícito — comparar a saída
+   * de dois motores é o trabalho dela.
+   */
+  renderer?: string;
   metadata?: Record<string, unknown>;
 }
 

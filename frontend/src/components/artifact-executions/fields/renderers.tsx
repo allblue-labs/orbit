@@ -444,8 +444,7 @@ export function MediaEditor({
     <div className="space-y-2">
       <MediaView field={field} response={response} attachments={attachments} />
       <p className="text-xs text-muted-foreground">
-        O envio de arquivo depende de uma rota de armazenamento que o backend
-        ainda não expõe para execuções. Anexos podem ser registrados no painel
+        O envio de arquivo ainda não está disponível nas execuções. Anexos podem ser registrados no painel
         de anexos, informando a chave de armazenamento.
       </p>
     </div>

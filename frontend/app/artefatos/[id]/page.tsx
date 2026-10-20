@@ -1,37 +1,25 @@
-import { ArtifactStudio } from "@/components/artifact-studio/studio/artifact-studio";
-import { Breadcrumbs, entityCrumbs } from "@/navigation";
-import { WorkspacePage } from "@/workspace";
+import { redirect } from "next/navigation";
+
+import { ROUTES } from "@/lib/routes";
 
 /**
- * Artifact Studio — editor.
+ * O editor de estrutura, sem porta de entrada.
  *
- * Server Component: resolve o parâmetro da rota; o `WorkspacePage` compõe
- * guards e shell. O editor é Client Component por natureza — é uma sessão de
- * edição com estado local, salvamento automático de propriedades e publicação
- * de versão.
+ * ## Por que redireciona em vez de abrir
  *
- * A capability exigida é a de **leitura**: quem só lê ainda deve poder abrir o
- * template e inspecionar a estrutura. O que exige `artifact_templates.manage`
- * fica desabilitado dentro da tela, e o backend recusa de todo modo.
+ * O Artifact Studio existe e funciona: 3.400 linhas de editor de estrutura, com
+ * árvore, inspetor, versões e comparação. O que não existe é o caso de uso —
+ * construir um modelo de PMOC campo por campo produz um documento pior que o
+ * oficial, com o trabalho de um dia, e era o primeiro caminho que a tela de
+ * Modelos oferecia.
+ *
+ * O código fica: é a única forma de inspecionar a estrutura de um template, e
+ * volta quando houver caso real de personalização. Reescrevê-lo depois seria o
+ * desperdício, e um arquivo no histórico do git não compila.
+ *
+ * O redirecionamento é do servidor para que um endereço guardado nos favoritos
+ * não pisque a tela antes de sair dela.
  */
-export default async function ArtifactStudioPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = await params;
-
-  return (
-    <WorkspacePage
-      entity="artifact-template"
-      header={false}
-      suspense={false}
-      activeLabel="Artefatos"
-      breadcrumb={
-        <Breadcrumbs items={entityCrumbs("artifact-template", "Studio")} />
-      }
-    >
-      <ArtifactStudio templateId={id} />
-    </WorkspacePage>
-  );
+export default function ArtifactStudioPage() {
+  redirect(ROUTES.artifacts);
 }

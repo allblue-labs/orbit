@@ -11,6 +11,7 @@ import {
   Req,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { ApiPublicErrors } from '../../../common/public-errors';
 import { Permissions, Public } from '../../../decorators';
 import { ForbiddenException } from '../../../exceptions';
 import { InvitationService } from '../application/invitation.service';
@@ -25,6 +26,7 @@ import {
 import { InvitationReadModels } from './invitation.read-models';
 
 @ApiTags('Identity Invitations')
+@ApiPublicErrors()
 @Controller('identity/invitations')
 export class InvitationController {
   constructor(
@@ -69,6 +71,10 @@ export class InvitationController {
       roleId: input.roleId,
       invitedById: identity.id,
       email: input.email,
+      actorPermissions: identity.permissions,
+      actorSurfaces: identity.allowedSurfaces,
+      actorUnitIds: identity.businessUnitIds,
+      isOrganizationOwner: identity.isOrganizationOwner,
     });
   }
 

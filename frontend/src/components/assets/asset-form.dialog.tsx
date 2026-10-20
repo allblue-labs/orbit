@@ -54,7 +54,7 @@ import {
   type CreateAssetInput,
   type UpdateAssetInput,
 } from "@/types/assets";
-import { ASSET_CATEGORY_LABELS, ASSET_IDENTIFIER_LABELS } from "@/entities";
+import { ASSET_CATEGORY_LABELS } from "@/entities";
 
 interface FormState {
   businessUnitId: string;
@@ -174,6 +174,18 @@ function Body({
     value: FormState[TKey],
   ) => setForm((current) => ({ ...current, [key]: value }));
 
+  /**
+   * O identificador sai do formulário na criação: é o servidor que o gera.
+   *
+   * Todo equipamento novo nasce com QR — a etiqueta é impressa pelo próprio
+   * Orbit, e pedir que alguém a digitasse antes de ela existir invertia a ordem
+   * dos fatos.
+   *
+   * Na edição o campo volta: quem etiquetou o parque antes de usar o Orbit
+   * precisa fazer o sistema bater com a etiqueta que já está colada.
+   */
+  const geraCodigo = !editing;
+
   const payload = (): CreateAssetInput => ({
     businessUnitId: form.businessUnitId,
     customerId: optional(form.customerId),
@@ -182,9 +194,14 @@ function Body({
     manufacturer: optional(form.manufacturer),
     model: optional(form.model),
     serialNumber: optional(form.serialNumber),
-    identifierType: optional(form.identifier)
-      ? (form.identifierType as AssetIdentifierType)
-      : undefined,
+    /*
+      Sempre QR.
+
+      O campo que perguntava o tipo saiu: ele oferecia seis respostas para uma
+      pergunta que o produto já tinha resolvido — a etiqueta é impressa aqui. O
+      valor viaja sozinho na criação, e o servidor o gera.
+    */
+    identifierType: AssetIdentifierType.QR_CODE,
     identifier: optional(form.identifier),
     installationAt: optional(form.installationAt),
     warrantyUntil: optional(form.warrantyUntil),
@@ -340,37 +357,34 @@ function Body({
           />
         </Field>
 
-        <Field label="Tipo de identificador" htmlFor="asset-identifier-type">
-          <Select
-            value={form.identifierType}
-            onValueChange={(value) => set("identifierType", value)}
+        {/*
+          Na criação o identificador não é pedido: o equipamento nasce com QR, e
+          a etiqueta é impressa pelo Orbit. Na edição o campo volta — quem
+          etiquetou o parque antes precisa fazer o sistema bater com o que já
+          está colado.
+        */}
+        {geraCodigo ? (
+          <Field label="Identificador (QR Code)">
+            <p className="text-muted-foreground text-sm">
+              Gerado ao cadastrar, na contagem da sua organização. A etiqueta
+              para impressão fica disponível na ficha do equipamento.
+            </p>
+          </Field>
+        ) : (
+          <Field
+            label="Identificador"
+            htmlFor="asset-identifier"
+            hint="Deixe em branco para o sistema gerar, ou informe o código que já está na etiqueta."
           >
-            <SelectTrigger id="asset-identifier-type">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {Object.values(AssetIdentifierType).map((type) => (
-                <SelectItem key={type} value={type}>
-                  {ASSET_IDENTIFIER_LABELS[type] ?? type}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-
-        <Field
-          label="Identificador"
-          htmlFor="asset-identifier"
-          hint="Conteúdo do QR Code, etiqueta ou tag NFC. É por ele que o campo localiza o equipamento."
-        >
-          <Input
-            id="asset-identifier"
-            value={form.identifier}
-            onChange={(event) => set("identifier", event.target.value)}
-            maxLength={ASSET_LIMITS.identifierMaxLength}
-            className="font-mono"
-          />
-        </Field>
+            <Input
+              id="asset-identifier"
+              value={form.identifier}
+              onChange={(event) => set("identifier", event.target.value)}
+              maxLength={ASSET_LIMITS.identifierMaxLength}
+              className="font-mono"
+            />
+          </Field>
+        )}
 
         <Field label="Instalação" htmlFor="asset-installation">
           <Input
@@ -421,14 +435,23 @@ function Field({
   children,
 }: {
   label: string;
-  htmlFor: string;
+  /**
+   * Opcional porque há um campo que não é campo: o identificador gerado é texto
+   * informativo, sem controle para o rótulo apontar. Um `htmlFor` vazio apontaria
+   * para `id` inexistente, e leitor de tela anuncia rótulo órfão.
+   */
+  htmlFor?: string;
   hint?: string;
   className?: string;
   children: React.ReactNode;
 }) {
   return (
     <div className={`space-y-2 ${className ?? ""}`}>
-      <Label htmlFor={htmlFor}>{label}</Label>
+      {htmlFor ? (
+        <Label htmlFor={htmlFor}>{label}</Label>
+      ) : (
+        <span className="text-sm font-medium leading-none">{label}</span>
+      )}
       {children}
       {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
     </div>

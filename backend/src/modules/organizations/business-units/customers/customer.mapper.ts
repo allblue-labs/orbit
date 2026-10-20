@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type {
+  CustomerAddressReadModel,
   CustomerContactReadModel,
   CustomerCountsReadModel,
   CustomerListReadModel,
@@ -33,6 +34,22 @@ interface CustomerSource {
   deletedAt?: DateValue | null;
   contacts?: readonly ContactSource[];
   _count?: { assets: number; operations: number };
+}
+
+interface CustomerAddressSource {
+  id: string;
+  customerId: string;
+  label: string;
+  street: string;
+  number: string | null;
+  complement: string | null;
+  district: string | null;
+  city: string;
+  stateCode: string | null;
+  postalCode: string | null;
+  notes: string | null;
+  isPrimary: boolean;
+  isActive: boolean;
 }
 
 interface ContactSource {
@@ -103,6 +120,43 @@ export class CustomerReadModelMapper {
       isPrimary: source.isPrimary,
       createdAt: this.date(source.createdAt),
       updatedAt: this.date(source.updatedAt),
+    };
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Endereços de atendimento                                          */
+  /* ---------------------------------------------------------------- */
+
+  addresses(
+    sources: readonly CustomerAddressSource[],
+  ): readonly CustomerAddressReadModel[] {
+    return sources.map((source) => this.address(source));
+  }
+
+  address(source: CustomerAddressSource): CustomerAddressReadModel {
+    return {
+      id: source.id,
+      customerId: source.customerId,
+      label: source.label,
+      street: source.street,
+      number: source.number,
+      complement: source.complement,
+      district: source.district,
+      city: source.city,
+      stateCode: source.stateCode,
+      postalCode: source.postalCode,
+      notes: source.notes,
+      isPrimary: source.isPrimary,
+      isActive: source.isActive,
+      /** Uma linha pronta para exibir — a tela não remonta o endereço. */
+      summary: [
+        [source.street, source.number].filter(Boolean).join(', '),
+        source.complement,
+        source.district,
+        [source.city, source.stateCode].filter(Boolean).join('/'),
+      ]
+        .filter(Boolean)
+        .join(' — '),
     };
   }
 

@@ -65,6 +65,14 @@ export interface MfaEnrollment {
   secret: string;
   /** `otpauth://` — o conteúdo do QR Code. */
   uri: string;
+  /**
+   * O QR já desenhado, como data URI de SVG.
+   *
+   * Vem pronto do servidor: gerar no navegador exigiria uma biblioteca de
+   * renderização, e o código **é** a mesma URI que já está acima — não há
+   * nada exposto a mais.
+   */
+  qrCode: string;
 }
 
 export interface EnableMfaInput {

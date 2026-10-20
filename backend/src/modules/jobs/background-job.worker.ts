@@ -42,7 +42,7 @@ import {
 import { hostname } from 'node:os';
 import type { UUID } from '../../contracts';
 import { RequestContext, RequestContextStorage } from '../../context';
-import { internalErrorStack } from '../../errors';
+import { classifyInternalError, internalErrorStack } from '../../errors';
 import { generateUuidV7 } from '../../utils';
 import { BackgroundJobQueue } from './background-job.queue';
 import {
@@ -123,8 +123,14 @@ export class BackgroundJobWorker implements OnModuleInit, OnModuleDestroy {
       }
     } catch (error) {
       /** Falha do laço não derruba o worker: o próximo ciclo tenta de novo. */
+      const classified = classifyInternalError(error);
       this.logger.error(
-        `[jobs] ciclo falhou: ${error instanceof Error ? error.message : 'erro desconhecido'}`,
+        JSON.stringify({
+          stage: 'job-worker-cycle-failed',
+          errorCategory: classified.category,
+          exceptionClass: classified.exceptionClass,
+          errorCode: classified.code,
+        }),
       );
     }
     return processed;
@@ -147,10 +153,13 @@ export class BackgroundJobWorker implements OnModuleInit, OnModuleDestroy {
      * distinguir de zeros verdadeiros.
      */
     if (units.length === 0) {
-      const reason =
-        'Job sem escopo de unidade resolvido: enfileirado antes da PR-26.6 ou com solicitante sem unidades ativas';
-      this.logger.error(JSON.stringify({ ...this.trace(job), reason }));
-      await this.queue.fail(job, reason, true);
+      this.logger.error(
+        JSON.stringify({
+          ...this.trace(job),
+          failureCode: 'JOB_SCOPE_INVALID',
+        }),
+      );
+      await this.queue.fail(job, 'JOB_SCOPE_INVALID', true);
       return;
     }
 
@@ -167,21 +176,25 @@ export class BackgroundJobWorker implements OnModuleInit, OnModuleDestroy {
         );
       } catch (error) {
         const permanent = error instanceof PermanentJobError;
-        const reason =
-          error instanceof Error ? error.message : 'erro desconhecido';
-        this.logger.error(
-          JSON.stringify({
-            ...this.trace(job),
-            outcome: 'FAILED',
-            permanent,
-            durationMs: Date.now() - started,
-            exceptionClass:
-              error instanceof Error ? error.constructor.name : typeof error,
-            reason,
-          }),
-          internalErrorStack(error),
-        );
-        await this.queue.fail(job, reason, permanent);
+        const classified = classifyInternalError(error);
+        const failureCode = permanent
+          ? 'PERMANENT_JOB_ERROR'
+          : [classified.category, classified.code].filter(Boolean).join(':');
+        const record = JSON.stringify({
+          ...this.trace(job),
+          outcome: 'FAILED',
+          permanent,
+          durationMs: Date.now() - started,
+          errorCategory: classified.category,
+          exceptionClass: classified.exceptionClass,
+          errorCode: classified.code,
+        });
+        if (process.env.NODE_ENV === 'production') {
+          this.logger.error(record);
+        } else {
+          this.logger.error(record, internalErrorStack(error));
+        }
+        await this.queue.fail(job, failureCode, permanent);
       }
     });
   }
@@ -230,6 +243,7 @@ export class BackgroundJobWorker implements OnModuleInit, OnModuleDestroy {
 
     const context = new RequestContext({
       requestId: job.correlationId,
+      actorType: 'SYSTEM',
       userId: asUuid(job.actorUserId),
       organizationId: asUuid(job.organizationId),
       businessUnitId: asUuid(job.businessUnitId),

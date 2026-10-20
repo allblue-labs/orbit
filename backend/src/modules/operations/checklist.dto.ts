@@ -16,6 +16,7 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
+import { OperationKind } from '../../contracts';
 import { IsUUIDv7 } from '../../validators';
 
 export const ChecklistItemType = {
@@ -82,6 +83,18 @@ export class CreateChecklistTemplateDto {
   @MaxLength(2000)
   description?: string;
 
+  /**
+   * O tipo de atendimento a que este modelo pertence.
+   *
+   * Omitido, o modelo serve a qualquer tipo — é o que todo modelo era antes
+   * desta coluna existir, e continua valendo. Quando presente, é o que faz o
+   * formulário de nova operação achar o checklist ao escolher o tipo.
+   */
+  @ApiPropertyOptional({ enum: Object.values(OperationKind) })
+  @IsOptional()
+  @IsIn(Object.values(OperationKind))
+  operationKind?: OperationKind;
+
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(200)
@@ -104,6 +117,11 @@ export class ChecklistTemplateQueryDto {
   @MaxLength(180)
   search?: string;
 
+  /** Só os modelos deste tipo de atendimento. */
+  @IsOptional()
+  @IsIn(Object.values(OperationKind))
+  operationKind?: OperationKind;
+
   @IsOptional()
   @Transform(({ value }) => value === 'true')
   @IsBoolean()
@@ -125,6 +143,21 @@ export class StartChecklistExecutionDto {
   @ApiProperty()
   @IsUUIDv7()
   templateId!: string;
+
+  /**
+   * Itens além dos do modelo, só para esta execução.
+   *
+   * O modelo é do **dono da organização** e não muda porque um atendimento
+   * pediu uma verificação a mais: os extras entram no snapshot desta
+   * execução, ao lado dos herdados, e o modelo segue intacto para o próximo.
+   */
+  @ApiPropertyOptional({ type: [ChecklistItemDto] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @ValidateNested({ each: true })
+  @Type(() => ChecklistItemDto)
+  additionalItems?: ChecklistItemDto[];
 
   @ApiPropertyOptional()
   @IsOptional()

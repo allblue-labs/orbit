@@ -118,7 +118,10 @@ export class NotificationService {
           status: 'FAILED',
           attempts: { increment: 1 },
           failedAt: new Date(),
-          lastError: this.errorMessage(error).slice(0, 4000),
+          lastError:
+            error instanceof Error
+              ? error.constructor.name.slice(0, 160)
+              : 'DELIVERY_FAILED',
         });
       }
     }
@@ -251,9 +254,5 @@ export class NotificationService {
 
   private endpointHash(endpoint: string) {
     return createHash('sha256').update(endpoint).digest('hex');
-  }
-
-  private errorMessage(error: unknown) {
-    return error instanceof Error ? error.message : String(error);
   }
 }

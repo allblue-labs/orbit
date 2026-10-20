@@ -25,14 +25,21 @@ Map<String, dynamic> _operationJson({
   'priority': 'HIGH',
   'description': 'Troca de filtros',
   'scheduledStart': '2026-08-01T13:00:00.000Z',
-  'businessUnit': {'id': 'unit-1', 'legalName': 'Acme LTDA', 'tradeName': 'Acme'},
-  'customer': {'id': 'cus-1', 'legalName': 'Cliente Um', 'tradeName': 'Um'},
-  'asset': {
-    'id': 'ast-1',
-    'name': 'Chiller 200TR',
-    'identifier': 'CH-200',
-    'status': 'ACTIVE',
+  'businessUnit': {
+    'id': 'unit-1',
+    'legalName': 'Acme LTDA',
+    'tradeName': 'Acme',
   },
+  'customer': {'id': 'cus-1', 'legalName': 'Cliente Um', 'tradeName': 'Um'},
+  // O contrato publica uma lista: o técnico atende os aparelhos do endereço.
+  'assets': [
+    {
+      'id': 'ast-1',
+      'name': 'Chiller 200TR',
+      'identifier': 'CH-200',
+      'status': 'ACTIVE',
+    },
+  ],
   'users': [
     {
       'userId': 'user-1',
@@ -76,7 +83,11 @@ void main() {
   final environment = OrbitEnvironment.fromDefines();
   const logger = OrbitLogger(isProduction: true);
 
-  ({OperationsRepository repository, InMemoryReadCache cache, ScriptedAdapter adapter})
+  ({
+    OperationsRepository repository,
+    InMemoryReadCache cache,
+    ScriptedAdapter adapter,
+  })
   build(Future<ResponseBody> Function(RequestOptions) handler) {
     final adapter = ScriptedAdapter(handler);
     final dio = Dio()..httpClientAdapter = adapter;
@@ -114,9 +125,7 @@ void main() {
   });
 
   test('envia apenas os filtros aceitos pelo backend', () async {
-    final setup = build(
-      (_) async => jsonResponse(envelope(_page(const []))),
-    );
+    final setup = build((_) async => jsonResponse(envelope(_page(const []))));
 
     await setup.repository.list(
       const OperationQuery(status: 'OPEN', search: 'chiller', page: 2),
@@ -131,28 +140,31 @@ void main() {
     expect(sent.containsKey('order'), isFalse);
   });
 
-  test('sem rede, devolve a última lista consultada e sinaliza o cache', () async {
-    var online = true;
-    final setup = build((options) async {
-      if (!online) {
-        throw DioException.connectionError(
-          requestOptions: options,
-          reason: 'sem rede',
-        );
-      }
-      return jsonResponse(envelope(_page([_operationJson()])));
-    });
+  test(
+    'sem rede, devolve a última lista consultada e sinaliza o cache',
+    () async {
+      var online = true;
+      final setup = build((options) async {
+        if (!online) {
+          throw DioException.connectionError(
+            requestOptions: options,
+            reason: 'sem rede',
+          );
+        }
+        return jsonResponse(envelope(_page([_operationJson()])));
+      });
 
-    const query = OperationQuery();
-    await setup.repository.list(query); // popula o cache
+      const query = OperationQuery();
+      await setup.repository.list(query); // popula o cache
 
-    online = false;
-    final offline = await setup.repository.list(query);
+      online = false;
+      final offline = await setup.repository.list(query);
 
-    expect(offline.isFromCache, isTrue);
-    expect(offline.cachedAt, isNotNull);
-    expect(offline.value.data.single.code, 'OP-0001');
-  });
+      expect(offline.isFromCache, isTrue);
+      expect(offline.cachedAt, isNotNull);
+      expect(offline.value.data.single.code, 'OP-0001');
+    },
+  );
 
   test('sem rede e sem cache, o erro chega à interface', () async {
     final setup = build(
@@ -164,14 +176,19 @@ void main() {
 
     await expectLater(
       setup.repository.list(const OperationQuery()),
-      throwsA(isA<OrbitException>().having((e) => e.isOffline, 'offline', isTrue)),
+      throwsA(
+        isA<OrbitException>().having((e) => e.isOffline, 'offline', isTrue),
+      ),
     );
   });
 
   test('403 não cai para o cache — o usuário precisa ver a recusa', () async {
     final setup = build(
       (_) async => jsonResponse(
-        errorEnvelope(code: 'FORBIDDEN', message: 'Missing required permission'),
+        errorEnvelope(
+          code: 'FORBIDDEN',
+          message: 'Missing required permission',
+        ),
         status: 403,
       ),
     );
@@ -212,7 +229,10 @@ void main() {
 
     final timeline = await setup.repository.timeline('op-1');
 
-    expect(timeline.events.single.label, 'Status alterado: Agendada → Em execução');
+    expect(
+      timeline.events.single.label,
+      'Status alterado: Agendada → Em execução',
+    );
     expect(timeline.attachments.single.fileName, 'laudo.pdf');
   });
 
@@ -232,7 +252,11 @@ void main() {
       throwsA(
         isA<OrbitException>()
             .having((e) => e.isConflict, 'conflict', isTrue)
-            .having((e) => e.message, 'message', contains('Cannot transition')),
+            .having(
+              (e) => e.publicMessage,
+              'message',
+              contains('Cannot transition'),
+            ),
       ),
     );
   });

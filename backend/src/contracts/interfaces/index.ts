@@ -25,16 +25,31 @@ export interface IAuthenticatedUser {
   id: UUID;
   roles: readonly string[];
   permissions: readonly string[];
+  businessUnitIds: readonly UUID[];
+  allowedSurfaces: readonly string[];
+  isOrganizationOwner: boolean;
 }
+
+export type ActorType =
+  | 'ANONYMOUS'
+  | 'INTERNAL_USER'
+  | 'CUSTOMER_PORTAL'
+  | 'CUSTOMER_PORTAL_AUTH'
+  | 'SYSTEM';
 
 export interface IRequestContext {
   requestId: string;
+  actorType: ActorType;
   userId: Nullable<UUID>;
+  portalIdentityId: Nullable<UUID>;
   organizationId: Nullable<UUID>;
+  customerId: Nullable<UUID>;
   businessUnitId: Nullable<UUID>;
   businessUnitIds: readonly UUID[];
   roles: readonly string[];
   permissions: readonly string[];
+  allowedSurfaces: readonly string[];
+  isOrganizationOwner: boolean;
   ip: Nullable<string>;
   userAgent: Nullable<string>;
   locale: string;

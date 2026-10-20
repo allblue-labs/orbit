@@ -153,7 +153,7 @@ function GenerationPanel({
           <Field
             label="Período analisado"
             value={`${formatDate(report.period.from)} a ${formatDate(report.period.to)}`}
-            hint={`Fuso ${report.period.timezone}, resolvido pelo servidor.`}
+            hint={`Horários no fuso ${report.period.timezone}.`}
           />
           <Field
             label="Gerado por"
@@ -205,12 +205,12 @@ function SnapshotPanel({ report }: { report: ManagementReport }) {
     return (
       <PanelFrame
         panelId="report-detail-snapshot-missing"
-        title="Snapshot"
-        description="O conteúdo do retrato"
+        title="Conteúdo"
+        description="Os números deste retrato"
       >
         <p className="text-sm text-muted-foreground">
-          Este relatório não tem snapshot gravado. É o que acontece quando a
-          composição não chegou ao fim.
+          Este relatório não tem conteúdo gravado. É o que acontece quando a
+          geração não chegou ao fim.
         </p>
       </PanelFrame>
     );
@@ -228,20 +228,19 @@ function SnapshotPanel({ report }: { report: ManagementReport }) {
             <Field
               label="Versão do formato"
               value={`v${snapshot.schemaVersion}`}
-              hint="Sobe quando a estrutura do snapshot muda. Um relatório antigo continua legível na versão em que nasceu."
+              hint="Muda quando a estrutura do relatório muda. Um relatório antigo continua legível na versão em que nasceu."
             />
             <div className="space-y-1">
               <dt className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Fingerprint className="size-3.5" aria-hidden />
-                Hash da fonte
+                Código de verificação
               </dt>
               <dd className="font-mono text-xs break-all">
                 {report.sourceHash ?? "—"}
               </dd>
               <p className="text-[0.7rem] text-muted-foreground/80">
-                SHA-256 dos dados compostos. Dois relatórios do mesmo recorte,
-                sem mudança no operacional, têm o mesmo hash — é assim que se
-                confere que nada mudou.
+                Dois relatórios do mesmo recorte, sem mudança no operacional,
+                recebem o mesmo código — é assim que se confere que nada mudou.
               </p>
             </div>
           </dl>
@@ -283,13 +282,12 @@ function InFlightNotice({ status }: { status: string }) {
         <div className="space-y-1">
           <p className="text-sm">
             {status === "PENDING"
-              ? "Na fila. O servidor começa em instantes."
-              : "O servidor está compondo o relatório."}
+              ? "Na fila. A geração começa em instantes."
+              : "O relatório está sendo gerado."}
           </p>
           <p className="text-xs text-muted-foreground">
-            Esta tela se atualiza sozinha quando terminar — pode continuar
-            usando o Orbit. Não há porcentagem porque o servidor publica
-            situação, não progresso.
+            Esta tela se atualiza sozinha quando terminar — você pode continuar
+            usando o Orbit.
           </p>
         </div>
       </div>
@@ -306,12 +304,12 @@ function FailedNotice({ report }: { report: ManagementReport }) {
     >
       <div className="space-y-3">
         <p className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {report.error ?? "O servidor não informou o motivo."}
+          {report.error ?? "O motivo não foi informado."}
         </p>
         <p className="text-xs text-muted-foreground">
-          Um relatório que falhou não tem snapshot: ele não chegou a existir
-          como retrato. Gerar de novo cria outra solicitação; esta permanece no
-          histórico com o motivo.
+          Um relatório que falhou não tem conteúdo: ele não chegou a existir
+          como retrato. Gerar de novo cria uma nova solicitação; esta permanece
+          no histórico com o motivo.
         </p>
       </div>
     </PanelFrame>
@@ -343,7 +341,7 @@ function FilePanel({ report }: { report: ManagementReport }) {
       >
         <p className="text-sm text-muted-foreground">
           Este relatório não tem arquivo. Os números continuam disponíveis
-          acima — o snapshot é o relatório; o PDF é uma forma de levá-lo.
+          acima — o conteúdo é o relatório; o PDF é uma forma de levá-lo.
         </p>
       </PanelFrame>
     );
@@ -353,7 +351,7 @@ function FilePanel({ report }: { report: ManagementReport }) {
     <PanelFrame
       panelId="report-detail-file"
       title="Arquivo"
-      description={`${report.format} desenhado pelo mesmo renderizador dos documentos de campo.`}
+      description={`${report.format} no mesmo padrão visual dos documentos de campo.`}
     >
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
@@ -417,8 +415,7 @@ function FilePanel({ report }: { report: ManagementReport }) {
             <p className="text-xs text-muted-foreground">
               Acesso temporário, renovado automaticamente enquanto esta tela
               estiver aberta — o atual vale até{" "}
-              {formatDateTime(signed.data.expiresAt)}. A URL é assinada pelo
-              backend; o armazenamento nunca é acessado diretamente.
+              {formatDateTime(signed.data.expiresAt)}. O link é temporário e pessoal; o arquivo nunca é acessado diretamente.
             </p>
           </div>
         ) : null}

@@ -125,8 +125,7 @@ export function SignaturesSection({
       )}
 
       <p className="mt-4 border-t border-border pt-3 text-xs text-muted-foreground">
-        A coleta de assinatura não faz parte desta entrega. O endpoint existe e
-        exige os dados do signatário e o consentimento.
+        A coleta de assinatura ainda não está disponível nesta tela.
       </p>
     </PanelFrame>
   );

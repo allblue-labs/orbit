@@ -26,9 +26,8 @@
  *
  * ## Módulos
  *
- * O prefixo da permissão (`operations.create` → `operations`) é o mesmo
- * vocabulário que o backend usa para nomear módulos. Agrupar por ele é
- * **apresentação**: nenhuma permissão é inventada, só ordenada.
+ * Os rótulos vêm do catálogo server-owned; códigos internos não fazem parte
+ * da linguagem da tela de administração.
  */
 import { useMemo, useState } from "react";
 import { Pencil, Plus, ShieldCheck, Trash2 } from "lucide-react";
@@ -36,51 +35,37 @@ import { Pencil, Plus, ShieldCheck, Trash2 } from "lucide-react";
 import { MutationError } from "@/components/artifact-studio/mutation-error";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useAction } from "@/actions";
+import { useWorkforceManagement } from "@/hooks/workforce/use-workforce-management";
+import { ManagementBlocked } from "../management-blocked";
 import {
+  useAccessCatalog,
   useRemoveRole,
   useTeamRoles,
 } from "@/hooks/workforce/use-workforce";
 import { useSession } from "@/providers/session-provider";
-import { cn } from "@/lib/utils";
-import type { TeamRole } from "@/types/workforce";
+import type { AccessCatalog, TeamRole } from "@/types/workforce";
 import { ListState } from "@/workspace";
 import { RoleFormDialog } from "../role-form.dialog";
 
-/** Agrupa permissões pelo prefixo, que é o módulo que o backend nomeia. */
-function byModule(
-  permissions: readonly string[],
-): { module: string; items: readonly string[] }[] {
-  const groups = new Map<string, string[]>();
-  for (const permission of permissions) {
-    /** `module` é palavra reservada no escopo do Next; daí `moduleKey`. */
-    const moduleKey = permission.split(".")[0] ?? permission;
-    const items = groups.get(moduleKey) ?? [];
-    items.push(permission);
-    groups.set(moduleKey, items);
-  }
-  return [...groups.entries()]
-    .map(([moduleKey, items]) => ({ module: moduleKey, items: items.sort() }))
-    .sort((left, right) => left.module.localeCompare(right.module));
-}
-
 export function RolesTab() {
   const query = useTeamRoles();
+  const catalog = useAccessCatalog();
   const roles = useMemo(() => query.data ?? [], [query.data]);
 
-  const manage = useAction("team-member.update");
+  const gate = useWorkforceManagement().roles;
   const remove = useRemoveRole();
   const [editing, setEditing] = useState<TeamRole | null>(null);
   const [creating, setCreating] = useState(false);
 
   return (
     <div className="space-y-5">
+      <ManagementBlocked reason={gate.reason} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
           O papel define as permissões de quem o tem. Papéis de sistema não são
           editáveis.
         </p>
-        {manage.allowed ? (
+        {gate.allowed ? (
           <Button size="sm" onClick={() => setCreating(true)}>
             <Plus className="size-4" />
             Novo papel
@@ -108,6 +93,7 @@ export function RolesTab() {
               <RoleCard
                 key={role.id}
                 role={role}
+                catalog={catalog.data}
                 onEdit={() => setEditing(role)}
                 onRemove={() => remove.mutate(role.id)}
                 removing={remove.isPending && remove.variables === role.id}
@@ -133,30 +119,41 @@ export function RolesTab() {
 
 function RoleCard({
   role,
+  catalog,
   onEdit,
   onRemove,
   removing,
 }: {
   role: TeamRole;
+  catalog: AccessCatalog | undefined;
   onEdit: () => void;
   onRemove: () => void;
   removing: boolean;
 }) {
   const session = useSession();
-  const manage = useAction("team-member.update");
-  const modules = useMemo(() => byModule(role.permissions), [role.permissions]);
+  const gate = useWorkforceManagement().roles;
+  const groups = useMemo(
+    () =>
+      (catalog?.permissionGroups ?? [])
+        .map((group) => ({
+          key: group.key,
+          label: group.label,
+          items: group.permissions.filter((item) =>
+            role.permissions.includes(item.code),
+          ),
+        }))
+        .filter((group) => group.items.length > 0),
+    [catalog, role.permissions],
+  );
 
   /** Papel de sistema é protegido pelo servidor; a tela reflete a condição. */
-  const editable = manage.allowed && !role.isSystem;
+  const editable = gate.allowed && !role.isSystem;
 
   return (
     <article className="glass-panel space-y-4 rounded-xl p-4">
       <header className="space-y-1">
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="font-medium">{role.name}</h3>
-          <span className="font-mono text-xs text-muted-foreground">
-            {role.key}
-          </span>
           {role.isSystem ? <Badge variant="secondary">Sistema</Badge> : null}
           <Badge variant="outline">
             {role.memberCount === 1
@@ -191,23 +188,22 @@ function RoleCard({
         <h4 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
           Permissões por módulo
         </h4>
-        {modules.length === 0 ? (
+        {groups.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             Nenhuma permissão declarada.
           </p>
         ) : (
           <ul className="space-y-2">
-            {modules.map((group) => (
-              <li key={group.module}>
-                <p className="font-mono text-xs text-foreground">
-                  {group.module}
+            {groups.map((group) => (
+              <li key={group.key}>
+                <p className="text-xs font-medium text-foreground">
+                  {group.label}
                 </p>
                 <ul className="mt-1 flex flex-wrap gap-1">
                   {group.items.map((permission) => (
-                    <li key={permission}>
-                      <span className="rounded-md bg-surface-strong px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
-                        {permission.slice(group.module.length + 1) ||
-                          permission}
+                    <li key={permission.code}>
+                      <span className="rounded-md bg-surface-strong px-2 py-0.5 text-[11px] text-muted-foreground">
+                        {permission.label}
                       </span>
                     </li>
                   ))}
@@ -225,32 +221,16 @@ function RoleCard({
       */}
       <section className="space-y-2 border-t border-border pt-3">
         <h4 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-          Capabilities do plano
+          Recursos contratados
         </h4>
         <p className="text-xs text-muted-foreground">
-          O backend exige permissão <em>e</em> capability. Estas vêm do plano
-          contratado e valem para toda a organização, independentemente do
-          papel.
+          Permissões dizem o que a pessoa pode fazer. Recursos contratados dizem
+          o que está disponível para toda a organização — uma condição nunca
+          substitui a outra.
         </p>
-        <ul className="flex flex-wrap gap-1">
-          {session.capabilities.slice(0, 12).map((capability) => (
-            <li key={capability}>
-              <span
-                className={cn(
-                  "rounded-md px-1.5 py-0.5 font-mono text-[11px]",
-                  "bg-primary/10 text-primary",
-                )}
-              >
-                {capability}
-              </span>
-            </li>
-          ))}
-          {session.capabilities.length > 12 ? (
-            <li className="text-[11px] text-muted-foreground">
-              e mais {session.capabilities.length - 12}
-            </li>
-          ) : null}
-        </ul>
+        <Badge variant="secondary">
+          {session.productCapabilities.length} recursos ativos neste plano
+        </Badge>
       </section>
     </article>
   );

@@ -1,33 +1,20 @@
-import { OrganizationWorkspace } from "@/components/organization/organization-workspace";
-import { WorkspacePage } from "@/workspace";
+import { redirect } from "next/navigation";
+
+import { ROUTES } from "@/lib/routes";
+import { SECTION_PARAM } from "@/lib/section-navigation";
 
 /**
- * Organization Workspace.
+ * A administração da organização mudou de porta, não de lugar.
  *
- * Server Component: o `WorkspacePage` compõe guards, shell e cabeçalho.
+ * `/organizacao` e `/configuracoes` mostravam o mesmo conteúdo montado de dois
+ * jeitos — plano, unidades, capabilities e dados da empresa apareciam nas duas
+ * rotas, e "Integrações" tinha uma seção aqui e uma aba lá. Ficou uma porta: a
+ * seção **Organização** das Configurações, que já existia e reunia as mesmas
+ * peças.
  *
- * O guard usa **permissão**, não capability: `organization.read` é o que
- * distingue o Owner de um operador. As capabilities entram painel a painel,
- * porque cada área da administração exige a sua — e é assim que o backend
- * também decide.
- *
- * `RequireActiveSubscription`, dentro do `WorkspacePage`, cobre o
- * `@RequiresActivePlan()` de `GET /organizations/current`: plano inativo vê o
- * estado de assinatura bloqueada, com o status vindo da sessão, e não uma tela
- * vazia.
+ * A rota sobrevive porque endereços guardados e links antigos apontam para
+ * ela, e leva direto à seção certa — não à primeira aba.
  */
 export default function OrganizationPage() {
-  return (
-    <WorkspacePage
-      title="Administração"
-      description="Organização, plano, unidades, integrações e capabilities."
-      permission="organization.read"
-      activeLabel="Organização"
-      breadcrumb={<span>Organização</span>}
-      contained={false}
-      loadingRows={8}
-    >
-      <OrganizationWorkspace />
-    </WorkspacePage>
-  );
+  redirect(`${ROUTES.settings}?${SECTION_PARAM}=organizacao`);
 }

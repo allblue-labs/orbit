@@ -181,11 +181,11 @@ export function useEnvironmentalImpact() {
   );
 }
 
-export function useOrbitIntelligence(query: AnalyticsQuery) {
+export function useOrbitIntelligence(query: AnalyticsQuery, enabled = true) {
   return useApiQuery(
     analyticsService.keys.intelligence(query),
     ({ signal }) => analyticsService.intelligence(query, { signal }),
-    REFRESH_POLICY.intelligence,
+    { ...REFRESH_POLICY.intelligence, enabled },
   );
 }
 

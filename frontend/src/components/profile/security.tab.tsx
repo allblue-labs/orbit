@@ -16,6 +16,16 @@
 import { useState } from "react";
 import { KeyRound, Laptop, ShieldCheck, ShieldOff } from "lucide-react";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { MutationError } from "@/components/artifact-studio/mutation-error";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -52,10 +62,10 @@ export function SecurityTab() {
 
       <section className="space-y-3">
         <div className="space-y-1">
-          <h3 className="flex items-center gap-2 text-sm font-medium">
+          <h2 className="flex items-center gap-2 text-sm font-medium">
             <Laptop className="size-4 text-muted-foreground" aria-hidden />
             Dispositivos e sessões
-          </h3>
+          </h2>
           <p className="text-xs text-muted-foreground">
             Cada sessão é um dispositivo que entrou na conta. Encerrar uma
             sessão desconecta aquele dispositivo imediatamente.
@@ -116,8 +126,7 @@ export function SecurityTab() {
         </ListState>
 
         <p className="text-xs text-muted-foreground">
-          Não há histórico de acessos: o backend não publica auditoria por
-          usuário. O que existe de datado é quando cada dispositivo entrou.
+          O histórico de acessos ainda não está disponível. O que existe de datado é quando cada dispositivo entrou.
         </p>
       </section>
 
@@ -154,8 +163,23 @@ function PasswordSection() {
   const tooShort =
     next.length > 0 && next.length < PROFILE_LIMITS.passwordMinLength;
 
+  /**
+   * O envio espera confirmação.
+   *
+   * Trocar a senha derruba as outras sessões — o próprio painel abaixo explica
+   * isso — e não há como desfazer: a senha antiga deixa de valer no instante
+   * em que a nova é aceita. Um clique a mais é barato perto de descobrir o
+   * efeito depois.
+   */
+  const [confirmando, setConfirmando] = useState(false);
+
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
+    setConfirmando(true);
+  };
+
+  const trocar = () => {
+    setConfirmando(false);
     change.mutate(
       { currentPassword: current, newPassword: next },
       {
@@ -174,10 +198,10 @@ function PasswordSection() {
       className="glass-panel space-y-4 rounded-xl p-5"
     >
       <div className="space-y-1">
-        <h3 className="flex items-center gap-2 text-sm font-medium">
+        <h2 className="flex items-center gap-2 text-sm font-medium">
           <KeyRound className="size-4 text-muted-foreground" aria-hidden />
           Senha
-        </h3>
+        </h2>
         <p className="text-xs text-muted-foreground">
           Trocar a senha encerra as outras sessões. Esta janela continua
           conectada.
@@ -259,6 +283,25 @@ function PasswordSection() {
         Esqueceu a senha atual? Saia da conta e use a recuperação por e-mail —
         ela existe justamente para quem não a tem.
       </p>
+
+      <AlertDialog open={confirmando} onOpenChange={setConfirmando}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Alterar sua senha?</AlertDialogTitle>
+            <AlertDialogDescription>
+              A senha atual deixa de valer imediatamente. As sessões abertas em
+              outros dispositivos são encerradas e vão pedir a nova senha — esta
+              aqui continua aberta.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={trocar}>
+              Alterar senha
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </form>
   );
 }

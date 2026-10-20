@@ -77,7 +77,7 @@ Widget wrap(
       ),
     ],
     child: MaterialApp(
-      theme: OrbitTheme.dark(),
+      theme: OrbitTheme.light(),
       home: Scaffold(body: SingleChildScrollView(child: child)),
     ),
   );

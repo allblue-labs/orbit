@@ -203,7 +203,7 @@ GET    /customers?search=
 
 ## Verificado contra a API
 
-43 verificações contra `http://localhost:5001/api/v1`, em organizações
+43 verificações contra `http://localhost:6001/api/v1`, em organizações
 descartáveis:
 
 criar orçamento e receber `transitions` do servidor; selecionar cliente;

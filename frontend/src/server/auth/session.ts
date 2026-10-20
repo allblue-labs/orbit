@@ -15,16 +15,14 @@ import type {
   LoginInput,
   RegisterInput,
   SessionEntitlements,
+  SessionAccess,
+  SessionProductAccess,
   SessionOrganization,
   SessionState,
   SessionUser,
   TokenPair,
 } from "@/types/session";
-import {
-  ACTIVE_SUBSCRIPTION_STATUSES,
-  ANONYMOUS_SESSION,
-  PLATFORM_ADMIN_ROLE,
-} from "@/types/session";
+import { ANONYMOUS_SESSION, PLATFORM_ADMIN_ROLE } from "@/types/session";
 import {
   ACCESS_COOKIE,
   REFRESH_COOKIE,
@@ -32,6 +30,7 @@ import {
   clearSessionCookies,
   writeSessionCookies,
 } from "./cookies";
+import { assinaturaVigente } from "@/components/billing/subscription-status";
 import { claimList, decodeAccessToken, expiresAtIso, isExpired } from "./jwt";
 import { refreshTokens } from "./refresh";
 
@@ -104,58 +103,79 @@ export async function buildSessionState(
   claims: AccessTokenClaims,
 ): Promise<SessionState> {
   try {
-    const roles = claimList(claims.roles);
-    const isPlatformAdmin = roles.includes(PLATFORM_ADMIN_ROLE);
-
     /**
      * O perfil é obrigatório; organização e plano só existem para usuários de
      * tenant. Um Platform Administrator não pertence a nenhuma organização,
      * então essas chamadas nem são disparadas para ele.
      */
-    const [user, organization, entitlements] = await Promise.all([
-      backendJson<SessionUser & { mustChangePassword?: boolean }>({
-        path: "/identity/me",
-        accessToken,
-        retries: 0,
-      }),
-      claims.organizationId
-        ? tolerate(
-            backendJson<SessionOrganization>({
-              path: "/organizations/current",
-              accessToken,
-              retries: 0,
-            }),
-          )
-        : null,
-      claims.organizationId
-        ? tolerate(
-            backendJson<SessionEntitlements>({
-              path: "/organizations/current/subscription",
-              accessToken,
-              retries: 0,
-            }),
-          )
-        : null,
-    ]);
+    const [user, access, organization, entitlements, productAccess] =
+      await Promise.all([
+        backendJson<SessionUser & { mustChangePassword?: boolean }>({
+          path: "/identity/me",
+          accessToken,
+          retries: 0,
+        }),
+        backendJson<SessionAccess>({
+          path: "/identity/me/access",
+          accessToken,
+          retries: 0,
+        }),
+        claims.organizationId
+          ? tolerate(
+              backendJson<SessionOrganization>({
+                path: "/organizations/current",
+                accessToken,
+                retries: 0,
+              }),
+            )
+          : null,
+        claims.organizationId
+          ? tolerate(
+              backendJson<SessionEntitlements>({
+                path: "/organizations/current/subscription",
+                accessToken,
+                retries: 0,
+              }),
+            )
+          : null,
+        claims.organizationId
+          ? tolerate(
+              backendJson<SessionProductAccess>({
+                path: "/organizations/current/product-access",
+                accessToken,
+                retries: 0,
+              }),
+            )
+          : null,
+      ]);
 
     const subscriptionStatus =
       entitlements?.subscriptionStatus ?? organization?.subscriptionStatus;
+    const roles = claimList(access.roles);
+    const isPlatformAdmin = roles.includes(PLATFORM_ADMIN_ROLE);
+    const unitIds = claimList(access.unitIds);
 
     const session: AuthenticatedSession = {
       authenticated: true,
       user,
       scope: {
         organizationId: claims.organizationId,
-        businessUnitId: claims.businessUnitId,
-        businessUnitIds: claimList(claims.businessUnitIds),
+        businessUnitId:
+          claims.businessUnitId && unitIds.includes(claims.businessUnitId)
+            ? claims.businessUnitId
+            : (unitIds[0] ?? null),
+        businessUnitIds: unitIds,
       },
-      roles,
-      permissions: claimList(claims.permissions),
+      roles: claimList(access.roles),
+      permissions: claimList(access.permissions),
+      isOwner: access.isOwner,
+      surfaceAccess: claimList(access.surfaceAccess),
       sessionId: claims.sid,
       expiresAt: expiresAtIso(claims),
       organization,
       businessUnits: organization?.businessUnits ?? [],
       entitlements,
+      productAccess,
       organizations: organization
         ? [
             {
@@ -167,15 +187,23 @@ export async function buildSessionState(
           ]
         : [],
       isPlatformAdmin,
-      subscriptionActive: subscriptionStatus
-        ? ACTIVE_SUBSCRIPTION_STATUSES.includes(subscriptionStatus)
-        : isPlatformAdmin,
       /**
-       * `Credential.mustChangePassword` existe no schema mas ainda não é
-       * exposto por `GET /identity/me`. A leitura opcional mantém o fluxo
-       * pronto: no dia em que o backend devolver o campo, ele passa a valer
-       * sem mudança no frontend.
+       * A mesma conta que o backend faz, e não uma aproximação — ver
+       * `assinaturaVigente`. Sem sessão de organização, quem responde é o
+       * papel de plataforma.
        */
+      subscriptionActive: subscriptionStatus
+        ? assinaturaVigente(
+            subscriptionStatus,
+            entitlements?.currentPeriodEnd ??
+              organization?.currentPeriodEnd ??
+              null,
+          )
+        : isPlatformAdmin,
+      subscriptionEndsAt:
+        entitlements?.currentPeriodEnd ??
+        organization?.currentPeriodEnd ??
+        null,
       requiresPasswordChange: user.mustChangePassword === true,
     };
     return session;

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { RlsTransaction } from '../../database';
+import { assistsFieldWork, grantedAccessOf } from './field-eligibility';
 
 const specialtyView = {
   id: true,
@@ -37,6 +38,23 @@ const teamView = {
     orderBy: { joinedAt: 'asc' },
   },
 } satisfies Prisma.TeamSelect;
+
+export const professionalProfileView = {
+  id: true,
+  organizationId: true,
+  userId: true,
+  fieldTechnicianEnabled: true,
+  technicalResponsibleEnabled: true,
+  active: true,
+  createdAt: true,
+  updatedAt: true,
+  user: { select: { displayName: true, status: true, deletedAt: true } },
+  credentials: {
+    where: { active: true, revokedAt: null },
+    orderBy: { createdAt: 'desc' as const },
+  },
+  organization: { select: { id: true } },
+} satisfies Prisma.ProfessionalProfileSelect;
 
 @Injectable()
 export class WorkforceRepository {
@@ -331,5 +349,340 @@ export class WorkforceRepository {
         },
       }),
     );
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Identidade profissional                                           */
+  /* ---------------------------------------------------------------- */
+
+  findProfessionalProfile(organizationId: string, userId: string) {
+    return this.rls.run((tx) =>
+      tx.professionalProfile.findUnique({
+        where: { organizationId_userId: { organizationId, userId } },
+        select: professionalProfileView,
+      }),
+    );
+  }
+
+  /**
+   * Quem pode acompanhar um atendimento como auxiliar.
+   *
+   * ## Por que não sai de `professional_profiles`
+   *
+   * Porque o auxiliar não é um profissional designado — ele lê o atendimento e
+   * os documentos emitidos, e não executa nem assina nada. A pergunta aqui é de
+   * vínculo e acesso: está ativo na organização, atua na unidade, e o acesso
+   * dele abre o aplicativo de campo com leitura de atendimento.
+   *
+   * ## Por que o filtro não é do banco, e por que é daqui
+   *
+   * O acesso efetivo é o override do membro **ou** o do papel, e a escolha é por
+   * linha. Expressar isso num `where` exigiria repetir a regra em SQL ao lado da
+   * versão em TypeScript que o resto do módulo usa; a segunda cópia é a que
+   * divergiria. A equipe de uma organização é pequena — é uma lista de pessoas,
+   * não um histórico.
+   *
+   * O recorte fica **dentro** deste método, e não em quem o chama: há dois
+   * chamadores — o seletor do formulário e a validação da atribuição — e um
+   * deles aplicando a regra enquanto o outro confia na lista crua é um portão
+   * aberto que o compilador não aponta.
+   */
+  async listFieldAssistantCandidates(
+    organizationId: string,
+    businessUnitId?: string,
+  ) {
+    const vinculos = await this.rls.run((tx) =>
+      tx.organizationMembership.findMany({
+        where: {
+          organizationId,
+          status: 'ACTIVE',
+          deletedAt: null,
+          user: {
+            status: 'ACTIVE',
+            deletedAt: null,
+            ...(businessUnitId
+              ? {
+                  businessUnitMemberships: {
+                    some: {
+                      organizationId,
+                      businessUnitId,
+                      status: 'ACTIVE',
+                      deletedAt: null,
+                    },
+                  },
+                }
+              : {}),
+          },
+        },
+        select: {
+          userId: true,
+          usesCustomAccess: true,
+          customPermissions: true,
+          customAllowedSurfaces: true,
+          role: { select: { permissions: true, allowedSurfaces: true } },
+          user: { select: { displayName: true } },
+        },
+        orderBy: { user: { displayName: 'asc' } },
+      }),
+    );
+    return vinculos.filter((vinculo) =>
+      assistsFieldWork(grantedAccessOf(vinculo)),
+    );
+  }
+
+  listProfessionals(
+    organizationId: string,
+    role: 'FIELD_TECHNICIAN' | 'TECHNICAL_RESPONSIBLE',
+    businessUnitId?: string,
+  ) {
+    return this.rls.run((tx) =>
+      tx.professionalProfile.findMany({
+        where: {
+          organizationId,
+          active: true,
+          ...(role === 'FIELD_TECHNICIAN'
+            ? { fieldTechnicianEnabled: true }
+            : { technicalResponsibleEnabled: true }),
+          user: {
+            status: 'ACTIVE',
+            deletedAt: null,
+            organizationMemberships: {
+              some: { organizationId, status: 'ACTIVE', deletedAt: null },
+            },
+            ...(businessUnitId
+              ? {
+                  businessUnitMemberships: {
+                    some: {
+                      organizationId,
+                      businessUnitId,
+                      status: 'ACTIVE',
+                      deletedAt: null,
+                    },
+                  },
+                }
+              : {}),
+          },
+        },
+        select: {
+          ...professionalProfileView,
+          user: {
+            select: { displayName: true, status: true, deletedAt: true },
+          },
+        },
+        orderBy: { user: { displayName: 'asc' } },
+      }),
+    );
+  }
+
+  activeSignature(organizationId: string, userId: string) {
+    return this.rls.run((tx) =>
+      tx.userSignature.findFirst({
+        where: { organizationId, userId, active: true, revokedAt: null },
+        select: {
+          id: true,
+          storageObjectId: true,
+          sha256: true,
+          version: true,
+        },
+      }),
+    );
+  }
+
+  activeSignatures(organizationId: string, userIds: string[]) {
+    return this.rls.run((tx) =>
+      tx.userSignature.findMany({
+        where: {
+          organizationId,
+          userId: { in: userIds },
+          active: true,
+          revokedAt: null,
+        },
+        select: { userId: true },
+      }),
+    );
+  }
+
+  findStorageFile(organizationId: string, id: string) {
+    return this.rls.run((tx) =>
+      tx.storageFile.findFirst({
+        where: { id, organizationId, deletedAt: null },
+      }),
+    );
+  }
+
+  activeMember(organizationId: string, userId: string) {
+    return this.rls.run((tx) =>
+      tx.organizationMembership.findFirst({
+        where: { organizationId, userId, status: 'ACTIVE', deletedAt: null },
+        select: { id: true },
+      }),
+    );
+  }
+
+  upsertProfessionalProfile(
+    organizationId: string,
+    userId: string,
+    actorId: string,
+    data: {
+      fieldTechnicianEnabled: boolean;
+      technicalResponsibleEnabled: boolean;
+      active: boolean;
+    },
+  ) {
+    return this.rls.run(async (tx) => {
+      const member = await tx.organizationMembership.findFirst({
+        where: { organizationId, userId, status: 'ACTIVE', deletedAt: null },
+        select: { id: true },
+      });
+      if (!member) return null;
+      const before = await tx.professionalProfile.findUnique({
+        where: { organizationId_userId: { organizationId, userId } },
+      });
+      const profile = await tx.professionalProfile.upsert({
+        where: { organizationId_userId: { organizationId, userId } },
+        create: { organizationId, userId, ...data },
+        update: data,
+        select: professionalProfileView,
+      });
+      await this.audit(
+        tx,
+        organizationId,
+        actorId,
+        'professional.role.updated',
+        profile.id,
+        before,
+        data,
+      );
+      return profile;
+    });
+  }
+
+  createCredential(
+    organizationId: string,
+    userId: string,
+    actorId: string,
+    data: {
+      type: string;
+      registrationNumber: string;
+      region?: string;
+      issuingAuthority?: string;
+      displayLabel?: string;
+    },
+  ) {
+    return this.rls.run(async (tx) => {
+      const profile = await tx.professionalProfile.findUnique({
+        where: { organizationId_userId: { organizationId, userId } },
+      });
+      if (!profile) return null;
+      const credential = await tx.professionalCredential.create({
+        data: {
+          organizationId,
+          userId,
+          professionalProfileId: profile.id,
+          ...data,
+        },
+      });
+      await this.audit(
+        tx,
+        organizationId,
+        actorId,
+        'professional.credential.updated',
+        credential.id,
+        null,
+        { type: credential.type, active: true },
+      );
+      return credential;
+    });
+  }
+
+  revokeCredential(organizationId: string, id: string, actorId: string) {
+    return this.rls.run(async (tx) => {
+      const current = await tx.professionalCredential.findFirst({
+        where: { id, organizationId, active: true },
+      });
+      if (!current) return null;
+      const credential = await tx.professionalCredential.update({
+        where: { id },
+        data: { active: false, revokedAt: new Date() },
+      });
+      await this.audit(
+        tx,
+        organizationId,
+        actorId,
+        'professional.credential.updated',
+        id,
+        { active: true },
+        { active: false },
+      );
+      return credential;
+    });
+  }
+
+  registerSignature(
+    organizationId: string,
+    userId: string,
+    actorId: string,
+    storageObjectId: string,
+    sha256: string,
+  ) {
+    return this.rls.run(async (tx) => {
+      const current = await tx.userSignature.findFirst({
+        where: { organizationId, userId, active: true },
+      });
+      if (current)
+        await tx.userSignature.update({
+          where: { id: current.id },
+          data: { active: false, revokedAt: new Date() },
+        });
+      const latest = await tx.userSignature.aggregate({
+        where: { organizationId, userId },
+        _max: { version: true },
+      });
+      const signature = await tx.userSignature.create({
+        data: {
+          organizationId,
+          userId,
+          storageObjectId,
+          sha256,
+          version: (latest._max.version ?? 0) + 1,
+        },
+      });
+      await this.audit(
+        tx,
+        organizationId,
+        actorId,
+        'professional.signature.updated',
+        signature.id,
+        current ? { version: current.version } : null,
+        { version: signature.version, signatureAvailable: true },
+      );
+      return signature;
+    });
+  }
+
+  private audit(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    actorId: string,
+    action: string,
+    entityId: string,
+    before: unknown,
+    after: unknown,
+  ) {
+    return tx.auditLog.create({
+      data: {
+        organizationId,
+        userId: actorId,
+        action,
+        entityType: 'PROFESSIONAL_PROFILE',
+        entityId,
+        before: before
+          ? (JSON.parse(JSON.stringify(before)) as Prisma.InputJsonValue)
+          : undefined,
+        after: after
+          ? (JSON.parse(JSON.stringify(after)) as Prisma.InputJsonValue)
+          : undefined,
+      },
+    });
   }
 }

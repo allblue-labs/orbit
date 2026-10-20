@@ -222,3 +222,48 @@ export const FINANCIAL_SOURCE_DESCRIPTIONS: Readonly<
   QUOTE: "Derivado de um orçamento aprovado.",
   SYSTEM: "Gerado pela plataforma a partir de outro registro.",
 };
+
+/* ------------------------------------------------------------------ */
+/* Recibo                                                             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * O que se informa para emitir um recibo.
+ *
+ * `amount` é **texto**: o valor vai para um campo decimal do documento e para o
+ * lançamento de receita, e `number` em JSON é ponto flutuante — um centavo perdido
+ * num recibo é um recibo contestável.
+ *
+ * Nem número nem template entram: o número é do servidor e o modelo é o oficial de
+ * recibo da organização. Deixar a tela escolher permitiria emitir um recibo com o
+ * modelo de PMOC.
+ */
+export interface CreateReceiptInput {
+  /** Atendimento de origem, quando o recibo nasce de um serviço executado. */
+  operationId?: string;
+  customerId?: string;
+  businessUnitId?: string;
+  payer: string;
+  payerDocument?: string;
+  amount: string;
+  /** `YYYY-MM-DD`. */
+  paidOn: string;
+  referring: string;
+  paymentMethod?: string;
+}
+
+/** O atendimento concluído que pode originar um recibo, com o que oferece pronto. */
+export interface ReceiptSource {
+  id: string;
+  code: string;
+  serviceOrderNumber: number | null;
+  title: string;
+  status: string;
+  completedAt: string | null;
+  customer: {
+    id: string;
+    legalName: string;
+    tradeName: string | null;
+    documentNumber: string | null;
+  } | null;
+}

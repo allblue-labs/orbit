@@ -229,7 +229,6 @@ export class AiRepository {
               id: true,
               businessUnitId: true,
               customerId: true,
-              assetId: true,
               code: true,
               kind: true,
               title: true,

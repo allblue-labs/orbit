@@ -7,7 +7,7 @@
  * cliente e ativo aninhados, então estas seções compartilham a mesma query e
  * não geram chamadas extras.
  */
-import { Building2, User, Wrench } from "lucide-react";
+import { Building2, DoorOpen, MapPin, User, Wrench } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { PanelFrame, PanelState, type PanelQuery } from "@/components/panels";
@@ -30,6 +30,19 @@ export function DetailsSection({ query }: { query: PanelQuery<Operation> }) {
         {(operation) => (
           <div className="space-y-5">
             <dl className="grid gap-4 sm:grid-cols-2">
+              {/*
+                Número da OS e código são coisas diferentes, e aparecem os dois.
+
+                O número é a contagem própria das ordens de serviço — o que sai no
+                documento e o que o cliente cita. O código é o texto interno, que
+                muitas organizações usam para amarrar com o sistema anterior.
+                Mostrar um no lugar do outro faria alguém procurar pelo que não vê.
+              */}
+              {operation.serviceOrderCode ? (
+                <Field label="Ordem de serviço">
+                  <span className="font-mono">{operation.serviceOrderCode}</span>
+                </Field>
+              ) : null}
               <Field label="Código">
                 <span className="font-mono">{operation.code}</span>
               </Field>
@@ -81,21 +94,79 @@ export function RelationsSection({ query }: { query: PanelQuery<Operation> }) {
             />
             <RelationRow
               icon={<Wrench className="size-4" />}
-              label="Ativo"
-              value={operation.asset?.name ?? null}
+              label={
+                operation.assets.length > 1 ? "Equipamentos" : "Equipamento"
+              }
+              value={
+                operation.assets.length > 0
+                  ? operation.assets
+                      .map((equipamento) => equipamento.name)
+                      .join(", ")
+                  : null
+              }
               detail={
-                operation.asset ? (
-                  <span className="flex items-center gap-2">
-                    {operation.asset.identifier ? (
-                      <span className="font-mono text-xs">
-                        {operation.asset.identifier}
+                operation.assets.length > 0 ? (
+                  <span className="flex flex-wrap items-center gap-2">
+                    {operation.assets.map((equipamento) => (
+                      <span
+                        key={equipamento.id}
+                        className="flex items-center gap-1"
+                      >
+                        {equipamento.identifier ? (
+                          <span className="font-mono text-xs">
+                            {equipamento.identifier}
+                          </span>
+                        ) : null}
+                        <Badge variant="outline">{equipamento.status}</Badge>
                       </span>
-                    ) : null}
-                    <Badge variant="outline">{operation.asset.status}</Badge>
+                    ))}
                   </span>
                 ) : null
               }
             />
+
+            {/*
+              Para onde o técnico foi, e o ponto exato dentro do endereço.
+
+              O atendimento dizia só a unidade de negócio — que é de quem
+              atende, não de onde o serviço acontece.
+            */}
+            {operation.customerAddress ? (
+              <RelationRow
+                icon={<MapPin className="size-4" />}
+                label="Endereço do atendimento"
+                value={operation.customerAddress.label}
+                detail={
+                  <span className="text-xs text-muted-foreground">
+                    {[
+                      [
+                        operation.customerAddress.street,
+                        operation.customerAddress.number,
+                      ]
+                        .filter(Boolean)
+                        .join(", "),
+                      operation.customerAddress.district,
+                      [
+                        operation.customerAddress.city,
+                        operation.customerAddress.stateCode,
+                      ]
+                        .filter(Boolean)
+                        .join("/"),
+                    ]
+                      .filter(Boolean)
+                      .join(" — ")}
+                  </span>
+                }
+              />
+            ) : null}
+
+            {operation.sector ? (
+              <RelationRow
+                icon={<DoorOpen className="size-4" />}
+                label="Setor"
+                value={operation.sector}
+              />
+            ) : null}
             <RelationRow
               icon={<Building2 className="size-4" />}
               label="Unidade"
@@ -163,7 +234,7 @@ export function AdditionalDataSection({
     <PanelFrame
       panelId="operation-additional"
       title="Informações adicionais"
-      description="Campos livres gravados pelo backend"
+      description="Campos livres da organização"
     >
       <PanelState
         query={query}

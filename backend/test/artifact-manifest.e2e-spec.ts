@@ -44,7 +44,7 @@ function cnpj(): string {
     const sum = numbers
       .split('')
       .reduce(
-        (total, digit, index) => total + Number(digit) * weights[index],
+        (total, digit, index) => total + Number(digit) * weights[index]!,
         0,
       );
     const rest = sum % 11;
@@ -113,7 +113,7 @@ describe('Artifact Manifest (e2e)', () => {
       .expect(200);
     const businessUnitId = (
       units.body as { data: { businessUnits: { id: string }[] } }
-    ).data.businessUnits[0].id;
+    ).data.businessUnits[0]!.id;
 
     const template = await http()
       .post('/api/v1/artifact-templates')

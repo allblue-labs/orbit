@@ -14,6 +14,10 @@
  *   item nasce `ACTIVE` pelo default do schema. Retirar de circulação é uma
  *   ação posterior, verificada — `POST` com `status` responde
  *   `400 property status should not exist`.
+ * - **O SKU na criação.** Não é pedido: o servidor o gera, com contagem própria
+ *   por fluxo. O campo era opcional e ninguém o preenchia — todo item nascia sem
+ *   código. Na edição ele aparece, porque quem importou um catálogo antigo precisa
+ *   ajustar o código para bater com a nota fiscal de antes.
  * - **Unicidade do SKU.** O banco tem `@@unique([organizationId, sku])`; a
  *   tela não pré-verifica. Duplicidade volta como 409 e aparece como veio.
  * - **`taxData` e `metadata`.** JSON livre do tenant, sem esquema no contrato.
@@ -265,19 +269,38 @@ function Body({
           />
         </Field>
 
-        <Field
-          label="SKU"
-          htmlFor="catalog-sku"
-          hint="Código interno. Único na organização — o servidor recusa duplicados."
-        >
-          <Input
-            id="catalog-sku"
-            value={form.sku}
-            onChange={(event) => set("sku", event.target.value)}
-            maxLength={CATALOG_LIMITS.skuMaxLength}
-            className="font-mono"
-          />
-        </Field>
+        {/*
+          Na criação o SKU não é pedido: o servidor o gera, com contagem própria
+          do fluxo — `PRD-000001` para produto, `SRV-000001` para serviço,
+          `PEC-000001` para peça. O campo existia, ninguém preenchia, e todo item
+          nascia sem código.
+
+          Na edição ele aparece: quem vem de outro sistema precisa poder ajustar o
+          código para bater com a nota fiscal antiga, e o contrato aceita.
+        */}
+        {editing ? (
+          <Field
+            label="SKU"
+            htmlFor="catalog-sku"
+            hint="Gerado pelo sistema na criação. Único na organização: não é possível repetir um código já usado."
+          >
+            <Input
+              id="catalog-sku"
+              value={form.sku}
+              onChange={(event) => set("sku", event.target.value)}
+              maxLength={CATALOG_LIMITS.skuMaxLength}
+              className="font-mono"
+            />
+          </Field>
+        ) : (
+          <Field label="SKU">
+            <p className="text-muted-foreground text-sm">
+              Gerado pelo sistema quando o item for criado, com a contagem
+              própria de{" "}
+              {CATALOG_KIND_LABELS[form.kind]?.toLowerCase() ?? "item"}.
+            </p>
+          </Field>
+        )}
 
         <Field label="Categoria" htmlFor="catalog-category">
           <Select
@@ -330,7 +353,7 @@ function Body({
           label="Disponível em"
           htmlFor="catalog-unit-scope"
           className="sm:col-span-2"
-          hint="Sem unidade, o item vale para a organização inteira."
+          hint="Sem organização, o item vale para a conta inteira."
         >
           <Select
             value={form.businessUnitId || NONE}
@@ -397,14 +420,23 @@ function Field({
   children,
 }: {
   label: string;
-  htmlFor: string;
+  /**
+   * Opcional porque há um campo que não é campo: o SKU na criação é texto
+   * informativo, sem controle para o rótulo apontar. `<Label htmlFor>` vazio
+   * apontaria para um `id` inexistente, e leitor de tela anuncia rótulo órfão.
+   */
+  htmlFor?: string;
   hint?: string;
   className?: string;
   children: React.ReactNode;
 }) {
   return (
     <div className={`space-y-2 ${className ?? ""}`}>
-      <Label htmlFor={htmlFor}>{label}</Label>
+      {htmlFor ? (
+        <Label htmlFor={htmlFor}>{label}</Label>
+      ) : (
+        <span className="text-sm font-medium leading-none">{label}</span>
+      )}
       {children}
       {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
     </div>

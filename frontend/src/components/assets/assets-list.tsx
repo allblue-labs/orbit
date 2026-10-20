@@ -4,7 +4,7 @@
  * Listagem geral de equipamentos.
  *
  * **Filtros.** `AssetQueryDto` aceita busca, unidade, cliente, categoria e
- * status — e só isso. A busca do servidor cobre nome, identificador, número de
+ * status — e só isso. A busca cobre nome, identificador, número de
  * série, fabricante e modelo, então "tipo, fabricante e modelo" são
  * alcançáveis pela busca, não por filtro próprio.
  *
@@ -109,7 +109,7 @@ export function AssetsList() {
       <ResultSummary
         meta={meta}
         noun="equipamento"
-        note="Ordenado por nome (ordem definida pelo backend)"
+        note="Ordenado por nome"
       />
 
       <ListState

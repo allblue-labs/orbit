@@ -93,7 +93,7 @@ describe('BackgroundJobQueue.fail', () => {
   it('fecha o job pela transação que declara o worker', async () => {
     const { queue, settings } = build();
 
-    await queue.fail(job(), 'erro');
+    await queue.fail(job(), 'TRANSIENT_ERROR');
 
     expect(settings).toEqual(['app.job_worker']);
   });
@@ -101,24 +101,24 @@ describe('BackgroundJobQueue.fail', () => {
   it('devolve o job à fila enquanto restam tentativas', async () => {
     const { queue, updates } = build();
 
-    const outcome = await queue.fail(job({ attempts: 1 }), 'timeout');
+    const outcome = await queue.fail(job({ attempts: 1 }), 'TIMEOUT');
 
     expect(outcome).toBe('RETRY');
-    expect(updates[0].status).toBe('PENDING');
-    expect(updates[0].availableAt).toBeInstanceOf(Date);
-    expect(updates[0].finishedAt).toBeNull();
+    expect(updates[0]!.status).toBe('PENDING');
+    expect(updates[0]!.availableAt).toBeInstanceOf(Date);
+    expect(updates[0]!.finishedAt).toBeNull();
   });
 
   it('enterra quando as tentativas se esgotam', async () => {
     const { queue, updates } = build();
 
-    const outcome = await queue.fail(job({ attempts: 3 }), 'falhou de novo');
+    const outcome = await queue.fail(job({ attempts: 3 }), 'RETRY_EXHAUSTED');
 
     expect(outcome).toBe('DEAD');
-    expect(updates[0].status).toBe('DEAD');
-    expect(updates[0].finishedAt).toBeInstanceOf(Date);
+    expect(updates[0]!.status).toBe('DEAD');
+    expect(updates[0]!.finishedAt).toBeInstanceOf(Date);
     /** Sem `availableAt`: um job morto não volta sozinho. */
-    expect(updates[0].availableAt).toBeUndefined();
+    expect(updates[0]!.availableAt).toBeUndefined();
   });
 
   it('erro permanente não gasta as tentativas restantes', async () => {
@@ -126,28 +126,34 @@ describe('BackgroundJobQueue.fail', () => {
 
     const outcome = await queue.fail(
       job({ attempts: 1 }),
-      'payload inválido',
+      'PAYLOAD_INVALID',
       true,
     );
 
     expect(outcome).toBe('DEAD');
-    expect(updates[0].status).toBe('DEAD');
+    expect(updates[0]!.status).toBe('DEAD');
   });
 
-  it('guarda o motivo truncado — o campo tem limite', async () => {
+  it('never persists an arbitrary failure message', async () => {
     const { queue, updates } = build();
 
-    await queue.fail(job(), 'x'.repeat(2000));
+    await queue.fail(
+      job(),
+      'provider failed with token SENSITIVE_JOB_SECRET_MUST_NOT_LEAK',
+    );
 
-    expect(String(updates[0].lastError)).toHaveLength(1000);
+    expect(updates[0]!.lastError).toBe('UNCLASSIFIED_FAILURE');
+    expect(JSON.stringify(updates)).not.toContain(
+      'SENSITIVE_JOB_SECRET_MUST_NOT_LEAK',
+    );
   });
 
   it('libera a trava para outra réplica poder pegar', async () => {
     const { queue, updates } = build();
 
-    await queue.fail(job(), 'erro');
+    await queue.fail(job(), 'TRANSIENT_ERROR');
 
-    expect(updates[0].lockedAt).toBeNull();
-    expect(updates[0].lockedBy).toBeNull();
+    expect(updates[0]!.lockedAt).toBeNull();
+    expect(updates[0]!.lockedBy).toBeNull();
   });
 });

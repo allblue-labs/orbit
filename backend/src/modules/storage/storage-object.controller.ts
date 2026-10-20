@@ -73,7 +73,10 @@ export class StorageObjectController {
     });
     /** Assinatura inválida e expirada dão a mesma resposta, de propósito. */
     if (!valid) {
-      throw new ForbiddenException('Invalid or expired object signature');
+      throw new ForbiddenException(
+        'Invalid or expired object signature',
+        'STORAGE_SIGNATURE_INVALID',
+      );
     }
 
     if (query.operation === 'upload') {
@@ -132,7 +135,10 @@ export class StorageObjectController {
         signature: query.signature,
       })
     ) {
-      throw new ForbiddenException('Invalid or expired object signature');
+      throw new ForbiddenException(
+        'Invalid or expired object signature',
+        'STORAGE_SIGNATURE_INVALID',
+      );
     }
 
     const body = await this.readBody(request);

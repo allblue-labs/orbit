@@ -86,5 +86,16 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<!--
+	  Entrega em segundo plano.
+
+	  Sem isto o iOS só mostra o aviso; com isto o aplicativo também acorda
+	  para tratá-lo — é o que permite o Orbit atualizar a fila antes de a
+	  pessoa abrir a tela.
+	-->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 </dict>
 </plist>

@@ -36,10 +36,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useAction } from "@/actions";
+import { ConfirmDialog } from "@/components/financial/confirm.dialog";
 import { CATALOG_STATUS_LABELS, EntityBadge } from "@/entities";
 import {
   useCatalogCategories,
   useCatalogItems,
+  useRemoveCatalogItem,
   useUpdateCatalogItem,
 } from "@/hooks/catalog/use-catalog";
 import { ProductKind, ProductStatus } from "@/types/contracts";
@@ -66,12 +68,15 @@ const STATUS_OPTIONS = optionsFrom(
 export function CatalogItemsTab({
   kind,
   noun,
+  gender,
   emptyTitle,
   emptyDescription,
 }: {
   kind: ProductKind;
   /** Como contar: "produto", "serviço", "peça". */
   noun: string;
+  /** Gênero do substantivo, repassado para a contagem concordar. */
+  gender?: "m" | "f";
   emptyTitle: string;
   emptyDescription: string;
 }) {
@@ -105,7 +110,8 @@ export function CatalogItemsTab({
         <ResultSummary
           meta={meta}
           noun={noun}
-          note="Ordenado por nome (ordem definida pelo backend)"
+          gender={gender}
+          note="Ordenado por nome"
         />
         {create.allowed ? (
           <Button size="sm" onClick={openNew}>
@@ -121,7 +127,7 @@ export function CatalogItemsTab({
           value={list.searchTerm}
           onChange={list.setSearchTerm}
           placeholder="Nome, SKU ou descrição"
-          hint="A busca do servidor cobre nome, SKU e descrição."
+          hint="A busca cobre nome, SKU e descrição."
         />
         <FilterSelect
           id={`catalog-${kind}-category`}
@@ -231,10 +237,14 @@ function ItemRow({
   const edit = useAction("catalog-item.update");
   const activate = useAction("catalog-item.activate");
   const deactivate = useAction("catalog-item.deactivate");
+  const excluir = useAction("catalog-item.delete");
 
   const update = useUpdateCatalogItem(item.id);
+  const remove = useRemoveCatalogItem();
   const inactive = item.status === ProductStatus.INACTIVE;
   const toggle = inactive ? activate : deactivate;
+
+  const [excluindo, setExcluindo] = useState(false);
 
   return (
     <TableRow>
@@ -273,7 +283,7 @@ function ItemRow({
       </TableCell>
       <TableCell>
         <div className="flex items-center justify-end gap-1">
-          {edit.allowed || toggle.allowed ? (
+          {edit.allowed || toggle.allowed || excluir.allowed ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -307,10 +317,39 @@ function ItemRow({
                     {toggle.label}
                   </DropdownMenuItem>
                 ) : null}
+
+                {/* Retirar de circulação e excluir são coisas diferentes, e
+                    o texto de confirmação do registry diz qual é qual. A
+                    ação existia declarada e nenhuma tela a oferecia. */}
+                {excluir.allowed ? (
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onSelect={(event) => {
+                      event.preventDefault();
+                      setExcluindo(true);
+                    }}
+                  >
+                    <excluir.definition.icon className="size-4" />
+                    {excluir.label}
+                  </DropdownMenuItem>
+                ) : null}
               </DropdownMenuContent>
             </DropdownMenu>
           ) : null}
         </div>
+
+        <ConfirmDialog
+          open={excluindo}
+          onOpenChange={setExcluindo}
+          title={excluir.confirm?.title ?? "Excluir este item?"}
+          body={excluir.confirm?.body ?? ""}
+          confirmLabel={excluir.confirm?.confirmLabel ?? "Excluir"}
+          isPending={remove.isPending}
+          error={remove.error}
+          onConfirm={() =>
+            remove.mutate(item.id, { onSuccess: () => setExcluindo(false) })
+          }
+        />
       </TableCell>
     </TableRow>
   );

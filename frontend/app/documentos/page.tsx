@@ -1,23 +1,22 @@
-import { DocumentCenter } from "@/components/documents/document-center";
-import { WorkspacePage } from "@/workspace";
+import { redirect } from "next/navigation";
+
+import { ROUTES } from "@/lib/routes";
+import { SECTION_PARAM } from "@/lib/section-navigation";
+import { REPORTS_SECTIONS } from "@/components/management-reports/sections";
 
 /**
- * Document Center.
+ * Documentos emitidos virou aba de Relatórios.
  *
- * Server Component: o `WorkspacePage` compõe guards, shell e cabeçalho. A
- * capability é a que o backend exige em `@Capabilities('artifact_manifests.read')`.
+ * O grupo "Documentos" do menu tinha três itens que descrevem o mesmo ciclo: o
+ * documento emitido, o relatório do período e o modelo que os gera. Os modelos já
+ * eram aba de Relatórios; agora os emitidos também, e o grupo deixou de existir —
+ * o menu estava criando rolagem em tela full HD.
  *
- * `contained={false}` porque a central gerencia a própria largura.
+ * A rota fica e redireciona, pela mesma razão de `/pmoc` e `/orcamentos`: está em
+ * favorito e em link guardado. As rotas de dentro (`/execucoes/:id`) não mudam.
  */
-export default function DocumentsPage() {
-  return (
-    <WorkspacePage
-      title="Documentos"
-      description="Documentos emitidos pela plataforma: revisões, conteúdo, histórico e estado da renderização."
-      capability="artifact_manifests.read"
-      contained={false}
-    >
-      <DocumentCenter />
-    </WorkspacePage>
+export default function DocumentsPage(): never {
+  redirect(
+    `${ROUTES.managementReports}?${SECTION_PARAM}=${REPORTS_SECTIONS.documents}`,
   );
 }

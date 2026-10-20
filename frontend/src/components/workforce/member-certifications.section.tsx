@@ -10,56 +10,42 @@
  * habilitado — decidir isso no cliente deixaria um navegador com data errada
  * transformar um técnico vencido em habilitado, e habilitação é exatamente o
  * tipo de coisa que não pode depender do relógio de quem olha.
+ *
+ * ## O formulário é o mesmo da aba da organização
+ *
+ * Havia aqui um formulário inline com três dos quatro campos do contrato — o
+ * número do registro ficou de fora, provavelmente por esquecimento, e ninguém
+ * notaria: um campo que não existe no formulário não dá erro. Agora é o
+ * `CertificationFormDialog`, o mesmo que a aba Certificações abre, com a pessoa
+ * já decidida.
  */
 import { useState } from "react";
-import { BadgeCheck, Plus, Trash2 } from "lucide-react";
+import { BadgeCheck, Pencil, Plus, Trash2 } from "lucide-react";
 
 import { MutationError } from "@/components/artifact-studio/mutation-error";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useAction } from "@/actions";
+import { useWorkforceManagement } from "@/hooks/workforce/use-workforce-management";
 import {
   useCertifications,
-  useCreateCertification,
   useRemoveCertification,
 } from "@/hooks/workforce/use-workforce";
+import type { MemberCertification } from "@/types/workforce";
 import { formatDateTime } from "@/lib/formatters";
 import { CertificationBadge } from "./certification-badge";
+import { CertificationFormDialog } from "./certification-form.dialog";
 
 export function MemberCertificationsSection({ userId }: { userId: string }) {
   const query = useCertifications({ userId });
-  const manage = useAction("team-member.update");
+  const workforce = useWorkforceManagement().workforce;
 
-  const create = useCreateCertification(userId);
+  /** `null` fechado; `"new"` cadastrando; uma certificação editando. */
+  const [editando, setEditando] = useState<MemberCertification | "new" | null>(
+    null,
+  );
   const remove = useRemoveCertification();
 
-  const [adding, setAdding] = useState(false);
-  const [name, setName] = useState("");
-  const [issuer, setIssuer] = useState("");
-  const [expiresAt, setExpiresAt] = useState("");
-
   const items = query.data ?? [];
-
-  const submit = (event: React.FormEvent) => {
-    event.preventDefault();
-    create.mutate(
-      {
-        name: name.trim(),
-        issuer: issuer.trim() || undefined,
-        expiresAt: expiresAt || undefined,
-      },
-      {
-        onSuccess: () => {
-          setName("");
-          setIssuer("");
-          setExpiresAt("");
-          setAdding(false);
-        },
-      },
-    );
-  };
 
   return (
     <section className="space-y-3">
@@ -68,8 +54,8 @@ export function MemberCertificationsSection({ userId }: { userId: string }) {
           <BadgeCheck className="size-4 text-muted-foreground" aria-hidden />
           Certificações
         </h3>
-        {manage.allowed && !adding ? (
-          <Button variant="ghost" size="sm" onClick={() => setAdding(true)}>
+        {workforce.allowed ? (
+          <Button variant="ghost" size="sm" onClick={() => setEditando("new")}>
             <Plus className="size-4" />
             Adicionar
           </Button>
@@ -107,82 +93,43 @@ export function MemberCertificationsSection({ userId }: { userId: string }) {
                   daysUntilExpiry={certification.daysUntilExpiry}
                 />
 
-                {manage.allowed ? (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label={`Remover ${certification.name}`}
-                    disabled={remove.isPending}
-                    onClick={() => remove.mutate(certification.id)}
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
+                {workforce.allowed ? (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Editar ${certification.name}`}
+                      onClick={() => setEditando(certification)}
+                    >
+                      <Pencil className="size-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Remover ${certification.name}`}
+                      disabled={remove.isPending}
+                      onClick={() => remove.mutate(certification.id)}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </>
                 ) : null}
               </li>
             ))}
           </ul>
         )}
 
-        {adding ? (
-          <form
-            onSubmit={submit}
-            className="space-y-3 border-t border-border pt-3"
-          >
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5 sm:col-span-2">
-                <Label htmlFor="certification-name">Certificação</Label>
-                <Input
-                  id="certification-name"
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  placeholder="Ex.: NR-35 Trabalho em Altura"
-                  required
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="certification-issuer">Emissor</Label>
-                <Input
-                  id="certification-issuer"
-                  value={issuer}
-                  onChange={(event) => setIssuer(event.target.value)}
-                  placeholder="Ex.: SENAI"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="certification-expires">Válida até</Label>
-                <Input
-                  id="certification-expires"
-                  type="date"
-                  value={expiresAt}
-                  onChange={(event) => setExpiresAt(event.target.value)}
-                />
-              </div>
-            </div>
-
-            <MutationError error={create.error} />
-
-            <div className="flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setAdding(false)}
-              >
-                Cancelar
-              </Button>
-              <Button
-                type="submit"
-                size="sm"
-                disabled={!name.trim() || create.isPending}
-              >
-                {create.isPending ? "Salvando…" : "Salvar"}
-              </Button>
-            </div>
-          </form>
-        ) : null}
-
         <MutationError error={remove.error} />
       </div>
+
+      <CertificationFormDialog
+        certification={editando === "new" ? null : editando}
+        userId={userId}
+        open={editando !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditando(null);
+        }}
+      />
     </section>
   );
 }

@@ -55,6 +55,7 @@ import {
 } from "@/hooks/scheduling/use-scheduling";
 import { formatZonedDateTime, formatZonedTime } from "@/lib/scheduling";
 import { ROUTES } from "@/lib/routes";
+import { allocationRoleLabel } from "@/registry";
 import type { SchedulingEventDetail } from "@/types/scheduling";
 import {
   EventPriorityBadge,
@@ -278,7 +279,7 @@ function RecurrenceSummary({
           : null}
       </p>
       <p className="text-[10px] text-muted-foreground">
-        As ocorrências são expandidas pelo backend.
+        As ocorrências são geradas a partir da regra de recorrência.
       </p>
     </section>
   );
@@ -346,6 +347,17 @@ function LinkedRecords({
 }
 
 function Allocations({ event }: { event: SchedulingEventDetail }) {
+  /**
+   * A autoridade do vínculo **não** é lida aqui.
+   *
+   * `assignmentAuthority` pertence ao Read Model da ocorrência
+   * (`SchedulingOccurrenceReadModel`); o detalhe do evento é um espelho do
+   * registro do Prisma e não o publica. Derivá-la de `sourceModule` seria
+   * reimplementar no cliente a regra que o backend já decide — e ela viraria
+   * mentira no dia em que a regra mudasse.
+   *
+   * Onde o contrato a publica, a Agenda a mostra: ver `views/list-view.tsx`.
+   */
   return (
     <section className="space-y-2 border-t border-border pt-4">
       <h3 className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase">
@@ -374,9 +386,9 @@ function Allocations({ event }: { event: SchedulingEventDetail }) {
                   allocation.resourceKey ??
                   allocation.resourceType}
               </span>
-              {allocation.role ? (
+              {allocationRoleLabel(allocation.role) ? (
                 <Badge variant="secondary" className="text-[10px]">
-                  {allocation.role}
+                  {allocationRoleLabel(allocation.role)}
                 </Badge>
               ) : null}
               <Badge variant="outline" className="text-[10px]">

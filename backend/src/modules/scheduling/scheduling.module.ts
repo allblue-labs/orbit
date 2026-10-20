@@ -7,8 +7,11 @@ import {
   SCHEDULING_EVENT_PUBLISHER,
   SchedulingEventPublisherAdapter,
 } from './scheduling.publisher';
+import { OperationsModule } from '../operations/operations.module';
+import { WorkforceModule } from '../workforce/workforce.module';
 
 @Module({
+  imports: [OperationsModule, WorkforceModule],
   controllers: [SchedulingController],
   providers: [
     SchedulingRepository,

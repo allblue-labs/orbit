@@ -16,9 +16,15 @@ import type {
   OrganizationRoleReadModel,
 } from "./contracts/modules/organizations/organization.read-models";
 import type {
+  EligibleProfessionalReadModel,
   MemberCertificationReadModel,
   MemberLocationReadModel,
   MemberSpecialtyReadModel,
+  ProfessionalCredentialReadModel,
+  ProfessionalEligibilityBlockedReason,
+  ProfessionalEligibilityReadModel,
+  ProfessionalProfileReadModel,
+  PublicProfessionalRole,
   SpecialtyReadModel,
   TeamReadModel,
 } from "./contracts/modules/workforce/workforce.read-models";
@@ -79,6 +85,19 @@ export interface MemberQuery {
 export interface UpdateMemberInput {
   roleId?: string;
   status?: MembershipStatus;
+  businessUnitIds?: string[];
+  useRoleDefaults?: boolean;
+  permissions?: string[];
+  allowedSurfaces?: string[];
+}
+
+export interface AccessCatalog {
+  surfaces: readonly { code: string; label: string }[];
+  permissionGroups: readonly {
+    key: string;
+    label: string;
+    permissions: readonly { code: string; label: string }[];
+  }[];
 }
 
 /** Situação de uma associação, como o backend a define. */
@@ -95,6 +114,13 @@ export interface CreateRoleInput {
   name: string;
   description?: string;
   permissions?: string[];
+  /**
+   * Onde o papel entra: `WEB`, `MOBILE`, `API`.
+   *
+   * Omitido, o backend concede os dois — o padrão de todo papel antes de a
+   * separação existir. Ao menos uma superfície, ou a criação é recusada.
+   */
+  allowedSurfaces?: string[];
 }
 
 export type UpdateRoleInput = Partial<CreateRoleInput>;
@@ -222,3 +248,101 @@ export const WORKFORCE_CONTRACT_GAPS = [
   "realtimePresence",
   "intelligence",
 ] as const;
+
+/* ------------------------------------------------------------------ */
+/* Domínio profissional (PR-27)                                        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Papel profissional ≠ papel de acesso.
+ *
+ * `TeamRole` é RBAC — o que a pessoa pode fazer no sistema.
+ * `PublicProfessionalRole` é ofício — o que ela faz em campo. Os dois tipos
+ * ficam separados de propósito: um `string` compartilhado convidaria a
+ * confundi-los na primeira tela apressada.
+ */
+export type ProfessionalRole = PublicProfessionalRole;
+export type ProfessionalCredential = ProfessionalCredentialReadModel;
+export type ProfessionalProfile = ProfessionalProfileReadModel;
+
+/**
+ * `PATCH /workforce/members/:userId/professional-profile`
+ * (`UpdateProfessionalProfileDto`).
+ *
+ * Os dois papéis viajam juntos porque o contrato os substitui: enviar só um
+ * apagaria o outro. Quem monta a requisição parte do estado atual.
+ */
+export interface UpdateProfessionalProfileInput {
+  fieldTechnicianEnabled: boolean;
+  technicalResponsibleEnabled: boolean;
+  active?: boolean;
+}
+export type ProfessionalEligibility = ProfessionalEligibilityReadModel;
+export type BlockedReason = ProfessionalEligibilityBlockedReason;
+
+/**
+ * Um candidato de seletor.
+ *
+ * Já vem filtrado pelo servidor — perfil ativo, papel habilitado, usuário
+ * ativo na organização e no escopo da unidade. A tela **não** refiltra.
+ */
+export type EligibleProfessional = EligibleProfessionalReadModel;
+
+/** `?businessUnitId=` — recorta os candidatos pela unidade do atendimento. */
+export interface ProfessionalSelectorQuery {
+  businessUnitId?: string;
+}
+
+/** `GET /workforce/members/:userId/document-eligibility`. */
+export interface ProfessionalEligibilityQuery {
+  documentType: string;
+  signedAs: ProfessionalRole;
+  businessUnitId?: string;
+}
+
+/* ------------------------------------------------------------------ */
+/* Cadastro de pessoas                                                 */
+/* ------------------------------------------------------------------ */
+
+/** `POST /organizations/current/team/members`. */
+export interface CreateTeamMemberInput {
+  email: string;
+  firstName: string;
+  lastName: string;
+  /** Um papel **atribuível** da organização — `OWNER` é recusado. */
+  roleId: string;
+  /** Omitido, a pessoa entra na unidade principal. */
+  businessUnitId?: string;
+  /** Escopo operacional explícito. Ao menos uma unidade é obrigatória na UI. */
+  businessUnitIds?: string[];
+  /** Mantém o acesso sincronizado com o papel escolhido. */
+  useRoleDefaults?: boolean;
+  /** Override opcional; sempre validado e limitado pelo servidor. */
+  permissions?: string[];
+  allowedSurfaces?: string[];
+}
+
+/**
+ * A resposta do cadastro.
+ *
+ * `temporaryPassword` existe **só aqui**. Nenhuma consulta a devolve e não há
+ * onde relê-la: a tela precisa mostrá-la antes de fechar, e dizer isso.
+ */
+export interface CreatedTeamMember {
+  member: TeamMember;
+  temporaryPassword: string;
+}
+
+/**
+ * O link de definição de senha que o owner repassa.
+ *
+ * `emailSent` diz se o servidor conseguiu mandar por e-mail — quando não, é o
+ * link na mão do owner que resolve, por WhatsApp, Telegram ou o que a pessoa
+ * usar.
+ */
+export interface TeamPasswordLink {
+  link: string;
+  expiresAt: string;
+  emailSent: boolean;
+  member: TeamMember;
+}

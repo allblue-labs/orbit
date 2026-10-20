@@ -137,8 +137,7 @@ export function AttachmentsSection({
         )}
 
         <p className="border-t border-border pt-3 text-xs text-muted-foreground">
-          Envio, download e pré-visualização do arquivo dependem de rotas de
-          armazenamento que o backend ainda não expõe para execuções. O que
+          Envio, download e pré-visualização de arquivos ainda não estão disponíveis nas execuções. O que
           existe hoje é o registro do anexo a partir de uma chave já armazenada.
         </p>
       </div>

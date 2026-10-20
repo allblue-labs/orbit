@@ -1,11 +1,11 @@
 "use client";
 
 /**
- * Recusa do servidor, apresentada como veio.
+ * A recusa, em linguagem de produto.
  *
- * O backend é a autoridade sobre unicidade de chave, propriedade do template e
- * validade da estrutura. Quando ele recusa, a mensagem dele é o que interessa —
- * traduzir para um texto genérico esconderia justamente o motivo.
+ * Quando a recusa explica uma regra de negócio — chave repetida, vínculo
+ * existente, limite atingido —, essa frase é a informação mais útil que existe
+ * e aparece como veio. Quando é texto interno, `errorCopy` a converte.
  *
  * 403 tem tratamento próprio porque não é falha: é ausência de acesso, e
  * "tentar novamente" não muda nada.
@@ -13,6 +13,7 @@
 import { Lock, TriangleAlert } from "lucide-react";
 
 import { ApiError } from "@/lib/api-error";
+import { errorCopy } from "@/lib/error-copy";
 import { cn } from "@/lib/utils";
 
 export function MutationError({
@@ -44,10 +45,12 @@ export function MutationError({
       )}
       <div className="min-w-0 space-y-1">
         <p className="break-words">
-          {apiError?.message ?? "Não foi possível concluir a operação."}
+          {errorCopy(error)}
         </p>
         {apiError?.requestId ? (
-          <p className="text-xs opacity-70">Requisição {apiError.requestId}</p>
+          <p className="text-xs opacity-70">
+            Código de referência: {apiError.requestId}
+          </p>
         ) : null}
       </div>
     </div>

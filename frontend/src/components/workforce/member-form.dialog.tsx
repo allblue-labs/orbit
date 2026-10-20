@@ -1,28 +1,9 @@
 "use client";
 
-/**
- * Papel e situação de um membro.
- *
- * Escreve em `PATCH /organizations/current/members/:userId`. O DTO aceita
- * **dois campos**, e o formulário oferece exatamente esses dois.
- *
- * ## Por que não edita nome, e-mail ou avatar
- *
- * Não é limitação: é a divisão do domínio. Identidade é do **perfil**, que
- * cada pessoa administra em `identity/me`. Um gestor decide o que alguém pode
- * fazer na organização; não decide como essa pessoa se chama.
- *
- * ## O dono não aparece aqui
- *
- * `ownerUserId` é atributo da organização, e o servidor recusa alterá-lo
- * (`400 The organization owner cannot be modified here`). Rebaixar o dono
- * deixaria a conta sem ninguém capaz de administrá-la — e transferir a
- * propriedade é outra operação, com outras consequências.
- */
 import { useState } from "react";
 
 import { MutationError } from "@/components/artifact-studio/mutation-error";
-import { Badge } from "@/components/ui/badge";
+import { MemberAccessEditor } from "@/components/workforce/member-access-editor";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -41,7 +22,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { MEMBER_STATUS_LABELS } from "@/entities";
+import { useBusinessUnits } from "@/hooks/organization/use-organization";
 import {
+  useAccessCatalog,
   useTeamRoles,
   useUpdateMember,
 } from "@/hooks/workforce/use-workforce";
@@ -60,9 +43,13 @@ export function MemberFormDialog({
 }) {
   return (
     <Dialog open={member !== null} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-2xl">
         {member ? (
-          <Body key={member.userId} member={member} onOpenChange={onOpenChange} />
+          <Body
+            key={member.userId}
+            member={member}
+            onOpenChange={onOpenChange}
+          />
         ) : null}
       </DialogContent>
     </Dialog>
@@ -77,27 +64,59 @@ function Body({
   onOpenChange: (open: boolean) => void;
 }) {
   const roles = useTeamRoles();
+  const units = useBusinessUnits();
+  const catalog = useAccessCatalog();
   const update = useUpdateMember(member.userId);
 
   const [roleId, setRoleId] = useState(member.role.id);
   const [status, setStatus] = useState<string>(member.status);
+  const [businessUnitIds, setBusinessUnitIds] = useState<string[]>(
+    member.businessUnits.map((unit) => unit.id),
+  );
+  const [useRoleDefaults, setUseRoleDefaults] = useState(
+    member.access.useRoleDefaults,
+  );
+  const [permissions, setPermissions] = useState<string[]>([
+    ...member.access.permissions,
+  ]);
+  const [allowedSurfaces, setAllowedSurfaces] = useState<string[]>([
+    ...member.access.allowedSurfaces,
+  ]);
+
+  const role = (roles.data ?? []).find((item) => item.id === roleId);
+
+  const setDefaults = (enabled: boolean) => {
+    setUseRoleDefaults(enabled);
+    if (!enabled && role) {
+      setPermissions([...role.permissions]);
+      setAllowedSurfaces([...role.allowedSurfaces]);
+    }
+  };
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
 
-    /**
-     * Só o que mudou viaja.
-     *
-     * `undefined` significa "não mexa" no DTO — enviar o valor atual seria uma
-     * escrita sem motivo, e cada escrita é uma linha a mais na auditoria.
-     */
+    const accessChanged =
+      useRoleDefaults !== member.access.useRoleDefaults ||
+      !sameValues(allowedSurfaces, member.access.allowedSurfaces) ||
+      !sameValues(permissions, member.access.permissions);
+    const unitsChanged = !sameValues(
+      businessUnitIds,
+      member.businessUnits.map((unit) => unit.id),
+    );
+
     const input: UpdateMemberInput = {
       roleId: roleId === member.role.id ? undefined : roleId,
       status:
         status === member.status ? undefined : (status as MembershipStatus),
+      businessUnitIds: unitsChanged ? businessUnitIds : undefined,
+      useRoleDefaults: accessChanged ? useRoleDefaults : undefined,
+      permissions: accessChanged && !useRoleDefaults ? permissions : undefined,
+      allowedSurfaces:
+        accessChanged && !useRoleDefaults ? allowedSurfaces : undefined,
     };
 
-    if (!input.roleId && !input.status) {
+    if (Object.values(input).every((value) => value === undefined)) {
       onOpenChange(false);
       return;
     }
@@ -105,17 +124,21 @@ function Body({
     update.mutate(input, { onSuccess: () => onOpenChange(false) });
   };
 
+  const invalid =
+    businessUnitIds.length === 0 ||
+    (!useRoleDefaults && allowedSurfaces.length === 0);
+
   return (
     <form onSubmit={submit} className="space-y-5">
       <DialogHeader>
         <DialogTitle>{member.displayName}</DialogTitle>
         <DialogDescription>
-          Papel e situação na organização. Nome, e-mail e foto são do perfil,
-          que cada pessoa administra.
+          Altere o papel, as superfícies e o escopo operacional. Nome, e-mail e
+          foto continuam pertencendo ao perfil da própria pessoa.
         </DialogDescription>
       </DialogHeader>
 
-      <div className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="member-role">Papel</Label>
           <Select value={roleId} onValueChange={setRoleId}>
@@ -123,17 +146,13 @@ function Body({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {(roles.data ?? []).map((role) => (
-                <SelectItem key={role.id} value={role.id}>
-                  {role.name}
+              {(roles.data ?? []).map((item) => (
+                <SelectItem key={item.id} value={item.id}>
+                  {item.name}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-          <p className="text-xs text-muted-foreground">
-            O papel define as permissões. Trocá-lo altera o que esta pessoa
-            pode fazer imediatamente.
-          </p>
         </div>
 
         <div className="space-y-2">
@@ -150,33 +169,22 @@ function Body({
               ))}
             </SelectContent>
           </Select>
-          <p className="text-xs text-muted-foreground">
-            Quem não está ativo permanece na organização e no histórico, mas
-            deixa de receber trabalho.
-          </p>
-        </div>
-
-        <div className="rounded-lg border border-border p-3">
-          <p className="text-xs text-muted-foreground">Unidades</p>
-          <div className="mt-1 flex flex-wrap gap-1.5">
-            {member.businessUnits.length > 0 ? (
-              member.businessUnits.map((unit) => (
-                <Badge key={unit.id} variant="outline">
-                  {unit.tradeName ?? unit.legalName}
-                </Badge>
-              ))
-            ) : (
-              <span className="text-sm text-muted-foreground">
-                Toda a organização
-              </span>
-            )}
-          </div>
-          <p className="mt-2 text-xs text-muted-foreground">
-            O vínculo de unidade é definido no convite. Não há rota para
-            alterá-lo depois.
-          </p>
         </div>
       </div>
+
+      <MemberAccessEditor
+        units={units.data ?? []}
+        selectedUnitIds={businessUnitIds}
+        onSelectedUnitIdsChange={setBusinessUnitIds}
+        role={role}
+        catalog={catalog.data}
+        useRoleDefaults={useRoleDefaults}
+        onUseRoleDefaultsChange={setDefaults}
+        permissions={permissions}
+        onPermissionsChange={setPermissions}
+        allowedSurfaces={allowedSurfaces}
+        onAllowedSurfacesChange={setAllowedSurfaces}
+      />
 
       <MutationError error={update.error} />
 
@@ -188,10 +196,19 @@ function Body({
         >
           Cancelar
         </Button>
-        <Button type="submit" disabled={update.isPending}>
-          {update.isPending ? "Salvando…" : "Salvar"}
+        <Button type="submit" disabled={invalid || update.isPending}>
+          {update.isPending ? "Salvando…" : "Salvar acesso"}
         </Button>
       </DialogFooter>
     </form>
+  );
+}
+
+function sameValues(left: readonly string[], right: readonly string[]) {
+  const sortedLeft = [...left].sort();
+  const sortedRight = [...right].sort();
+  return (
+    left.length === right.length &&
+    sortedLeft.every((value, index) => value === sortedRight[index])
   );
 }

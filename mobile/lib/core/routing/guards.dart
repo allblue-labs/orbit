@@ -44,9 +44,7 @@ class PermissionGate extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(sessionProvider);
-    return isAllowed(session)
-        ? child
-        : (fallback ?? const SizedBox.shrink());
+    return isAllowed(session) ? child : (fallback ?? const SizedBox.shrink());
   }
 
   bool isAllowed(OrbitSession? session) {

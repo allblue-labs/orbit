@@ -6,6 +6,7 @@
 export { PanelErrorBoundary } from "./panel-error-boundary";
 export {
   PanelAccessDenied,
+  PanelMissing,
   PanelChartFrame,
   PanelEmpty,
   PanelError,

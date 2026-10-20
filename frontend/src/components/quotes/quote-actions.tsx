@@ -20,6 +20,7 @@
  * certeza?" mandaria uma requisição que voltaria 400.
  */
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { MutationError } from "@/components/artifact-studio/mutation-error";
 import { Button } from "@/components/ui/button";
@@ -39,10 +40,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { ConfirmDialog } from "@/components/financial/confirm.dialog";
+import { QuoteReasonDialog } from "./quote-reason.dialog";
 import { useAction } from "@/actions";
-import { useQuoteTransition } from "@/hooks/quotes/use-quotes";
+import {
+  useIssueQuoteDocument,
+  useQuoteTransition,
+} from "@/hooks/quotes/use-quotes";
+import { ROUTES } from "@/lib/routes";
 import { OPERATION_KIND_LABELS, type Quote } from "@/types/quotes";
 
 type Pending = "reject" | "cancel" | "convert" | null;
@@ -53,8 +58,11 @@ export function QuoteActions({ quote }: { quote: Quote }) {
   const reject = useAction("quote.reject");
   const cancel = useAction("quote.cancel");
   const convert = useAction("quote.convert");
+  const issue = useAction("quote.issueDocument");
 
   const transition = useQuoteTransition(quote.id);
+  const issueDocument = useIssueQuoteDocument(quote.id);
+  const router = useRouter();
   const [pending, setPending] = useState<Pending>(null);
 
   const can = quote.transitions;
@@ -64,8 +72,23 @@ export function QuoteActions({ quote }: { quote: Quote }) {
   const showCancel = cancel.allowed && can.canCancel;
   const showConvert = convert.allowed && can.canConvert;
 
+  /**
+   * Emitir não é transição, e por isso não consulta `transitions`.
+   *
+   * O que a proposta permite agora é sobre o ciclo dela — enviar, aprovar,
+   * converter. Emitir o documento não muda o estado de nada: é criar o papel.
+   * Só não se emite rascunho, porque ali o preço ainda muda — e essa é a mesma
+   * regra que o servidor aplica, não uma segunda cópia dela.
+   */
+  const showIssue = issue.allowed && quote.status !== "DRAFT";
+
   const anything =
-    showSend || showApprove || showReject || showCancel || showConvert;
+    showSend ||
+    showApprove ||
+    showReject ||
+    showCancel ||
+    showConvert ||
+    showIssue;
 
   if (!anything) {
     return (
@@ -107,6 +130,29 @@ export function QuoteActions({ quote }: { quote: Quote }) {
           </Button>
         ) : null}
 
+        {/*
+          Emitir leva para a execução, e isso é parte do ato.
+          O documento ainda precisa da assinatura do proponente, e é lá que se
+          assina e se emite. Ficar nesta tela deixaria a pessoa achando que
+          terminou — com um documento em rascunho que ninguém recebeu.
+        */}
+        {showIssue ? (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={issueDocument.isPending}
+            onClick={() =>
+              issueDocument.mutate(undefined, {
+                onSuccess: (execution) =>
+                  router.push(`${ROUTES.executions}/${execution.id}`),
+              })
+            }
+          >
+            <issue.definition.icon className="size-4" />
+            {issueDocument.isPending ? "Emitindo…" : issue.label}
+          </Button>
+        ) : null}
+
         {showReject ? (
           <Button
             size="sm"
@@ -133,7 +179,7 @@ export function QuoteActions({ quote }: { quote: Quote }) {
 
       <MutationError error={transition.error} />
 
-      <ReasonDialog
+      <QuoteReasonDialog
         open={pending === "reject"}
         onOpenChange={(open) => !open && setPending(null)}
         title="Registrar recusa do cliente"
@@ -148,7 +194,7 @@ export function QuoteActions({ quote }: { quote: Quote }) {
         }
       />
 
-      <ReasonDialog
+      <QuoteReasonDialog
         open={pending === "cancel"}
         onOpenChange={(open) => !open && setPending(null)}
         title={cancel.confirm?.title ?? "Cancelar esta proposta?"}
@@ -177,80 +223,6 @@ export function QuoteActions({ quote }: { quote: Quote }) {
         }
       />
     </div>
-  );
-}
-
-/** Diálogo com motivo obrigatório — o contrato exige três caracteres. */
-function ReasonDialog({
-  open,
-  onOpenChange,
-  title,
-  description,
-  confirmLabel,
-  destructive = false,
-  isPending,
-  onConfirm,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  title: string;
-  description: string;
-  confirmLabel: string;
-  destructive?: boolean;
-  isPending: boolean;
-  onConfirm: (reason: string) => void;
-}) {
-  const [reason, setReason] = useState("");
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            onConfirm(reason.trim());
-          }}
-          className="space-y-5"
-        >
-          <DialogHeader>
-            <DialogTitle>{title}</DialogTitle>
-            {description ? (
-              <DialogDescription>{description}</DialogDescription>
-            ) : null}
-          </DialogHeader>
-
-          <div className="space-y-2">
-            <Label htmlFor="quote-reason">Motivo</Label>
-            <Textarea
-              id="quote-reason"
-              value={reason}
-              onChange={(event) => setReason(event.target.value)}
-              rows={3}
-              maxLength={500}
-              placeholder="Ex.: preço acima do orçamento disponível do cliente"
-              required
-            />
-          </div>
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => onOpenChange(false)}
-            >
-              Voltar
-            </Button>
-            <Button
-              type="submit"
-              variant={destructive ? "destructive" : "default"}
-              disabled={reason.trim().length < 3 || isPending}
-            >
-              {isPending ? "Registrando…" : confirmLabel}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
   );
 }
 
@@ -292,8 +264,8 @@ function ConvertDialog({
             <DialogTitle>Converter em operação</DialogTitle>
             <DialogDescription>
               Abre a ordem de serviço de {quote.code} para{" "}
-              {quote.customer.displayName}. Repetir não cria uma segunda: o
-              servidor devolve a mesma.
+              {quote.customer.displayName}. Repetir não cria uma segunda: a
+              mesma proposta é devolvida.
             </DialogDescription>
           </DialogHeader>
 

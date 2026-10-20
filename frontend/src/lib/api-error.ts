@@ -62,12 +62,21 @@ export class ApiError extends Error {
     return this.kind === "aborted";
   }
 
-  /** Mensagens de validação do `ValidationPipe` (array de strings). */
+  /** Mensagens seguras do contrato estruturado de validação. */
   get validationMessages(): readonly string[] {
     if (Array.isArray(this.details)) {
-      return this.details.filter(
-        (item): item is string => typeof item === "string",
-      );
+      return this.details.flatMap((item) => {
+        if (typeof item === "string") return [item];
+        if (
+          typeof item === "object" &&
+          item !== null &&
+          "message" in item &&
+          typeof item.message === "string"
+        ) {
+          return [item.message];
+        }
+        return [];
+      });
     }
     return [];
   }
@@ -75,7 +84,12 @@ export class ApiError extends Error {
   toJSON(): ApiErrorEnvelope {
     return {
       success: false,
-      error: { code: this.code, message: this.message, details: this.details },
+      error: {
+        code: this.code,
+        message: this.message,
+        status: this.status,
+        details: this.details,
+      },
       requestId: this.requestId ?? "unknown",
       timestamp: new Date().toISOString(),
     };

@@ -79,13 +79,23 @@ export function RequestContextProvider({ children }: { children: ReactNode }) {
     setAmbientContext(context);
   }, [context]);
 
-  /** Descarta os dados do escopo anterior, preservando a sessão. */
+  /**
+   * Descarta os dados do escopo anterior, preservando a sessão.
+   *
+   * Cancelar antes de remover não é detalhe: uma requisição em voo da unidade
+   * anterior continuaria correndo e, ao responder, repovoaria o cache **já no
+   * escopo novo** — a filial que se acabou de deixar reaparecendo na tela da
+   * filial escolhida. `cancelQueries` aborta o que está em trânsito; o
+   * `signal` que os serviços já propagam faz o resto.
+   */
   const discardScopedQueries = useCallback(() => {
-    queryClient.removeQueries({
-      predicate: (query) =>
+    const scoped = {
+      predicate: (query: { queryKey: readonly unknown[] }) =>
         query.queryKey[0] === ORBIT_QUERY_SCOPE &&
         query.queryKey[1] !== "session",
-    });
+    };
+    void queryClient.cancelQueries(scoped);
+    queryClient.removeQueries(scoped);
   }, [queryClient]);
 
   const setBusinessUnit = useCallback(

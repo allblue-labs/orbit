@@ -1,8 +1,4 @@
 {
-  "//": "Copie para config/local.json e ajuste o IP da máquina que roda a API.",
-  "//emulador-android": "http://10.0.2.2:3001/api/v1",
-  "//simulador-ios": "http://localhost:3001/api/v1",
-  "//aparelho-fisico": "http://<ip-da-maquina-na-lan>:3001/api/v1",
-  "ORBIT_API_URL": "http://10.0.2.2:3001/api/v1",
+  "ORBIT_API_URL": "http://192.168.1.100:6001/api/v1",
   "ORBIT_FLAVOR": "development"
 }

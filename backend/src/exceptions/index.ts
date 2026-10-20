@@ -45,23 +45,37 @@ export class ConflictException extends BaseException {
 }
 
 export class ValidationException extends BaseException {
-  constructor(message: string, details?: JSONObject) {
-    super(
-      { code: 'VALIDATION_ERROR', message, details },
-      HttpStatus.BAD_REQUEST,
-    );
+  constructor(
+    message: string,
+    details?: JSONObject,
+    code = 'VALIDATION_ERROR',
+  ) {
+    super({ code, message, details }, HttpStatus.BAD_REQUEST);
   }
 }
 
 export class ForbiddenException extends BaseException {
-  constructor(message = 'Access denied') {
-    super({ code: 'FORBIDDEN', message }, HttpStatus.FORBIDDEN);
+  constructor(message = 'Access denied', code = 'FORBIDDEN') {
+    super({ code, message }, HttpStatus.FORBIDDEN);
   }
 }
 
 export class UnauthorizedException extends BaseException {
-  constructor(message = 'Authentication is required') {
-    super({ code: 'UNAUTHORIZED', message }, HttpStatus.UNAUTHORIZED);
+  constructor(message = 'Authentication is required', code = 'UNAUTHORIZED') {
+    super({ code, message }, HttpStatus.UNAUTHORIZED);
+  }
+}
+
+export class RateLimitException extends BaseException {
+  constructor(retryAfterSeconds: number) {
+    super(
+      {
+        code: 'RATE_LIMITED',
+        message: 'Too many requests. Try again later.',
+        details: { retryAfterSeconds },
+      },
+      HttpStatus.TOO_MANY_REQUESTS,
+    );
   }
 }
 

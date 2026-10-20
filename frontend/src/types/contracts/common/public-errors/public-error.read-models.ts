@@ -1,0 +1,108 @@
+/**
+ * ARQUIVO GERADO — NÃO EDITE MANUALMENTE.
+ * Fonte: backend/src
+ * Regenerar: npm run contracts:sync
+ */
+
+/** Contrato público e versionado de erros da API v1. */
+export const PUBLIC_ERROR_CODES = [
+  'VALIDATION_ERROR',
+  'UNAUTHORIZED',
+  'INVALID_CREDENTIALS',
+  'ACCOUNT_LOCKED',
+  'MFA_REQUIRED',
+  'MFA_INVALID',
+  'FORBIDDEN',
+  'SURFACE_NOT_ALLOWED',
+  'SUBSCRIPTION_EXPIRED',
+  'ENTITY_NOT_FOUND',
+  'CONFLICT',
+  'RESOURCE_VERSION_CONFLICT',
+  'STALE_VERSION',
+  'IDEMPOTENCY_MISMATCH',
+  'BUSINESS_RULE_VIOLATION',
+  'REQUEST_REJECTED',
+  'RATE_LIMITED',
+  'CUSTOMER_DOCUMENT_ALREADY_EXISTS',
+  'CUSTOMER_PRIMARY_CONTACT_ALREADY_EXISTS',
+  'PORTAL_INVITATION_INVALID',
+  'PORTAL_RESET_INVALID',
+  'ARTIFACT_EXECUTION_INCOMPLETE',
+  'ARTIFACT_EXECUTION_NOT_EDITABLE',
+  'INVALID_ARTIFACT_EXECUTION_TRANSITION',
+  'RENDERER_NOT_SUPPORTED',
+  'SIGNATURE_MISSING',
+  'SERVICE_REQUEST_NOT_CANCELLABLE',
+  'SERVICE_REQUEST_INVALID_TRANSITION',
+  'SERVICE_REQUEST_CONVERSION_NOT_ALLOWED',
+  'SERVICE_REQUEST_ALREADY_CONVERTED',
+  'CANCELLATION_NOT_ALLOWED',
+  'INVALID_STATUS_TRANSITION',
+  'CONVERSION_NOT_ALLOWED',
+  'REQUEST_ALREADY_CONVERTED',
+  'BUSINESS_UNIT_SCOPE_MISMATCH',
+  'PLAN_CAPABILITY_NOT_AVAILABLE',
+  'PLAN_LIMIT_REACHED',
+  'PLAN_USAGE_LIMIT_REACHED',
+  'PLAN_CONFIGURATION_INVALID',
+  'SUBSCRIPTION_NOT_FOUND',
+  'SUBSCRIPTION_NOT_ACTIVE',
+  'SUBSCRIPTION_INVALID_TRANSITION',
+  'PLAN_CHANGE_NOT_ALLOWED',
+  'TRIAL_NOT_ELIGIBLE',
+  'BILLING_NOT_CONFIGURED',
+  'BILLING_CONFIGURATION_INVALID',
+  'BILLING_CUSTOMER_NOT_AVAILABLE',
+  'BILLING_CHECKOUT_NOT_ALLOWED',
+  'BILLING_PROVIDER_UNAVAILABLE',
+  'BILLING_WEBHOOK_INVALID',
+  'EVIDENCE_LIMIT_REACHED',
+  'UPLOAD_EXPIRED',
+  'FILE_INVALID',
+  'FILE_TOO_LARGE',
+  'PAYLOAD_TOO_LARGE',
+  'STORAGE_SIGNATURE_INVALID',
+  'INTERNAL_ERROR',
+  'INTERNAL_SERVER_ERROR',
+  'SERVICE_UNAVAILABLE',
+] as const;
+
+export type PublicErrorCode = (typeof PUBLIC_ERROR_CODES)[number];
+
+export const PUBLIC_VALIDATION_CODES = [
+  'REQUIRED',
+  'UNKNOWN_FIELD',
+  'INVALID_FORMAT',
+  'INVALID_TYPE',
+  'INVALID_VALUE',
+  'MIN_LENGTH',
+  'MAX_LENGTH',
+  'OUT_OF_RANGE',
+] as const;
+
+export type PublicValidationCode = (typeof PUBLIC_VALIDATION_CODES)[number];
+
+export interface PublicValidationIssueReadModel {
+  /** Caminho estável do campo, inclusive para DTOs aninhados. */
+  field: string;
+  code: PublicValidationCode;
+  message: string;
+}
+
+export interface PublicErrorReadModel {
+  code: PublicErrorCode;
+  message: string;
+  status: number;
+  details?:
+    | readonly PublicValidationIssueReadModel[]
+    | {
+        retryAfterSeconds: number;
+      };
+}
+
+export interface PublicErrorEnvelopeReadModel {
+  success: false;
+  error: PublicErrorReadModel;
+  requestId: string;
+  timestamp: string;
+}

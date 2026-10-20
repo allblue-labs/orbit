@@ -39,7 +39,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useGenerateReport, useReportCatalog } from "@/hooks/management-reports/use-management-reports";
+import {
+  useGenerateReport,
+  useReportCatalog,
+} from "@/hooks/management-reports/use-management-reports";
 import { cn } from "@/lib/utils";
 import { useActiveScope } from "@/providers/use-active-scope";
 import {
@@ -58,7 +61,9 @@ const ANY = "__any__";
 /** Primeiro e último dia do mês passado — o recorte que quase sempre se quer. */
 function defaultPeriod(): { from: string; to: string } {
   const now = new Date();
-  const first = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+  const first = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1),
+  );
   const last = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0));
   return {
     from: first.toISOString().slice(0, 10),
@@ -70,11 +75,20 @@ export function ReportGenerator({
   canManage,
   onGenerated,
   initialType,
+  initialPeriod,
 }: {
   canManage: boolean;
   /** Chamado com o id da solicitação — quem acompanha é a tela de cima. */
   onGenerated: (reportId: string) => void;
   initialType?: string;
+  /**
+   * Recorte escolhido em outra aba.
+   *
+   * Quem olhou "como foi o mês passado" na Visão geral já decidiu o período;
+   * pedir que digite de novo aqui transformaria uma decisão em duas digitações,
+   * e a segunda erraria.
+   */
+  initialPeriod?: { from: string; to: string };
 }) {
   const catalog = useReportCatalog();
   const [selected, setSelected] = useState<string | null>(initialType ?? null);
@@ -84,7 +98,7 @@ export function ReportGenerator({
       <PanelFrame
         panelId="reports-generator-loading"
         title="Gerar relatório"
-        description="Carregando o catálogo publicado pelo servidor"
+        description="Carregando o catálogo de relatórios"
       >
         <PanelLoading rows={4} />
       </PanelFrame>
@@ -96,7 +110,7 @@ export function ReportGenerator({
       <PanelFrame
         panelId="reports-generator-error"
         title="Gerar relatório"
-        description="O catálogo de tipos vem do servidor"
+        description="Tipos de relatório disponíveis"
       >
         <PanelError
           error={catalog.error}
@@ -130,10 +144,11 @@ export function ReportGenerator({
 
       {current ? (
         <ParametersForm
-          key={current.type}
+          key={`${current.type}:${initialPeriod?.from ?? ""}:${initialPeriod?.to ?? ""}`}
           type={current}
           canManage={canManage}
           onGenerated={onGenerated}
+          initialPeriod={initialPeriod}
         />
       ) : null}
     </div>
@@ -185,15 +200,26 @@ function ParametersForm({
   type,
   canManage,
   onGenerated,
+  initialPeriod,
 }: {
   type: ReportCatalogType;
   canManage: boolean;
   onGenerated: (reportId: string) => void;
+  initialPeriod?: { from: string; to: string };
 }) {
   const scope = useActiveScope();
   const generate = useGenerateReport();
-  /** Congelado na montagem: o padrão não deve mudar sob quem está digitando. */
-  const period = useMemo(() => defaultPeriod(), []);
+  /**
+   * Congelado na montagem: o padrão não deve mudar sob quem está digitando.
+   *
+   * A `key` do formulário inclui o recorte recebido, então escolher outro
+   * período na Visão geral remonta o formulário com ele — e não sobrescreve o
+   * que alguém está digitando aqui.
+   */
+  const period = useMemo(
+    () => initialPeriod ?? defaultPeriod(),
+    [initialPeriod],
+  );
 
   const [from, setFrom] = useState(period.from);
   const [to, setTo] = useState(period.to);
@@ -211,8 +237,7 @@ function ParametersForm({
 
   const accepts = (parameter: string) => type.parameters.includes(parameter);
 
-  const days =
-    (new Date(to).getTime() - new Date(from).getTime()) / 86_400_000;
+  const days = (new Date(to).getTime() - new Date(from).getTime()) / 86_400_000;
   const invalidPeriod = !from || !to || Number.isNaN(days) || days < 0;
 
   const submit = (event: React.FormEvent) => {
@@ -270,8 +295,8 @@ function ParametersForm({
 
         <p className="flex items-center gap-2 text-xs text-muted-foreground">
           <CalendarRange className="size-4" aria-hidden />
-          Até {type.maxRangeDays} dias por relatório. O fuso é o da unidade,
-          resolvido pelo servidor — as datas são dias, não horários.
+          Até {type.maxRangeDays} dias por relatório. O fuso é o da unidade — as
+          datas são dias, não horários.
         </p>
 
         <div className="grid gap-4 sm:grid-cols-2">
@@ -322,7 +347,10 @@ function ParametersForm({
               <Label htmlFor="report-status">
                 {REPORT_PARAMETER_LABELS.operationStatus}
               </Label>
-              <Select value={operationStatus} onValueChange={setOperationStatus}>
+              <Select
+                value={operationStatus}
+                onValueChange={setOperationStatus}
+              >
                 <SelectTrigger id="report-status">
                   <SelectValue />
                 </SelectTrigger>

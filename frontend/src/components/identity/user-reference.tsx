@@ -47,7 +47,10 @@ export function UserReference({
     return <span className={cn("text-muted-foreground", className)}>—</span>;
   }
 
-  const member = members.data?.find((item) => item.userId === userId);
+  /* `data` é a página; `data.data` são as pessoas. O tipo do serviço dizia que
+     a resposta era um array e o `.find` compilava — estourava em execução, na
+     primeira linha de tabela que mostrasse um nome. */
+  const member = members.data?.data.find((item) => item.userId === userId);
 
   if (!member) {
     return (

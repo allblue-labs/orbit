@@ -18,6 +18,11 @@ import {
   normalizeBrazilianDocument,
 } from '../../../../utils';
 import { IsDocument, IsUUIDv7 } from '../../../../validators';
+import { ACCEPTED_IMAGE_MIME_TYPES } from '../../../storage/image-signature';
+import { AVATAR_MAX_BYTES } from '../../application/avatar.service';
+
+const trim = ({ value }: { value: unknown }): unknown =>
+  typeof value === 'string' ? value.trim() : value;
 
 const normalizeEmail = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.trim().toLowerCase() : value;
@@ -334,4 +339,36 @@ export class EnableMfaDto extends VerifyMfaDto {
   @ApiProperty()
   @IsUUIDv7()
   factorId!: string;
+}
+
+/**
+ * Reserva do envio da foto de perfil.
+ *
+ * O tipo declarado aqui não decide nada: o servidor confere os primeiros bytes
+ * do que chegou. Ele existe para recusar cedo o que já se sabe que não serve,
+ * e para que a URL assinada carregue o `Content-Type` certo.
+ */
+export class ReserveAvatarUploadDto {
+  @ApiProperty()
+  @Transform(trim)
+  @IsString()
+  @MinLength(1)
+  @MaxLength(255)
+  fileName!: string;
+
+  @ApiProperty({ enum: ACCEPTED_IMAGE_MIME_TYPES })
+  @IsIn(ACCEPTED_IMAGE_MIME_TYPES)
+  mimeType!: (typeof ACCEPTED_IMAGE_MIME_TYPES)[number];
+
+  @ApiProperty({ maximum: AVATAR_MAX_BYTES })
+  @IsInt()
+  @Min(1)
+  @Max(AVATAR_MAX_BYTES)
+  sizeBytes!: number;
+}
+
+export class ActivateAvatarDto {
+  @ApiProperty()
+  @IsUUIDv7()
+  storageObjectId!: string;
 }

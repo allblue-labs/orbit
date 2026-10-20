@@ -77,7 +77,7 @@ export function ProvenanceBadge({ provenance }: { provenance: string }) {
       </TooltipTrigger>
       <TooltipContent side="top" className="max-w-xs">
         {REPORT_PROVENANCE_DESCRIPTIONS[provenance] ??
-          "Procedência publicada pelo servidor."}
+          "Procedência de cada número."}
       </TooltipContent>
     </Tooltip>
   );

@@ -28,10 +28,24 @@ import {
   UpdateAiAgentDto,
 } from './ai.dto';
 import { AiService } from './ai.service';
+import { PlanCapability } from '../subscription-plans/catalog/plan-catalog.types';
+import {
+  ProductCapabilities,
+  ProductFeature,
+  RequiresProductFeature,
+} from '../subscription-plans/product-access';
 
 @ApiTags('AI')
 @Controller()
 @RequiresActivePlan()
+@ProductCapabilities(
+  PlanCapability.ORBIT_INTELLIGENCE,
+  PlanCapability.AI_ASSISTANTS,
+)
+@RequiresProductFeature(
+  ProductFeature.ORBIT_INTELLIGENCE,
+  ProductFeature.AI_ASSISTANTS,
+)
 export class AiController {
   constructor(private readonly ai: AiService) {}
 

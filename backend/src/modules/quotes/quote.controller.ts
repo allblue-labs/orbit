@@ -27,8 +27,11 @@ import {
   Post,
   Query,
   Req,
+  Res,
+  StreamableFile,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { Permissions } from '../../decorators';
 import { ForbiddenException } from '../../exceptions';
 import { ParseUUIDv7Pipe } from '../../pipes';
@@ -42,12 +45,14 @@ import {
   CancelQuoteDto,
   ConvertQuoteDto,
   CreateQuoteDto,
+  CreateQuoteFromOperationDto,
   QuoteQueryDto,
   RejectQuoteDto,
   UpdateQuoteDto,
   UpdateQuoteItemDto,
 } from './quote.dto';
 import { QuoteMapper } from './quote.mapper';
+import { QuoteEmissionService } from './quote-emission.service';
 import { QuoteService } from './quote.service';
 
 @ApiTags('Quotes')
@@ -57,6 +62,7 @@ export class QuoteController {
   constructor(
     private readonly quotes: QuoteService,
     private readonly mapper: QuoteMapper,
+    private readonly emission: QuoteEmissionService,
   ) {}
 
   /* ---------------------------------------------------------------- */
@@ -72,6 +78,57 @@ export class QuoteController {
       data: result.data.map((quote) => this.mapper.summary(quote)),
       meta: result.meta,
     };
+  }
+
+  /**
+   * A proposta em PDF.
+   *
+   * Declarada antes de `:id` porque o Nest resolve na ordem de declaração, e
+   * uma rota mais específica registrada depois nunca é alcançada.
+   *
+   * `quotes.read` e não `quotes.manage`: imprimir a proposta é lê-la.
+   * `no-store` porque o orçamento muda enquanto é rascunho — um PDF em cache
+   * mostraria valores que já não valem, e quem enviasse esse arquivo ao
+   * cliente estaria propondo um preço que o sistema não pratica mais.
+   */
+  @Get(':id/document')
+  @Capabilities('quotes.read')
+  @Permissions('quotes.read')
+  async document(
+    @Param('id', ParseUUIDv7Pipe) id: string,
+    @Req() request: IdentityRequest,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<StreamableFile> {
+    const documento = await this.quotes.document(id, this.org(request));
+
+    response.set({
+      'Content-Type': documento.mimeType,
+      'Content-Disposition': `inline; filename="${documento.fileName}"`,
+      'Cache-Control': 'no-store',
+    });
+
+    return new StreamableFile(documento.bytes);
+  }
+
+  /**
+   * Emitir o documento da proposta.
+   *
+   * Declarada antes de `:id` pela mesma razão do PDF: o Nest resolve na ordem de
+   * declaração.
+   *
+   * `quotes.manage` e não `quotes.read`, ao contrário de baixar: baixar é ler a
+   * proposta, emitir **cria um documento** com código e revisão. E
+   * `artifact_executions.create`, porque é literalmente o que acontece — quem não
+   * pode criar execução não emite por esta porta de atalho.
+   */
+  @Post(':id/document/issue')
+  @Capabilities('quotes.manage', 'artifact_executions.create')
+  @Permissions('quotes.manage', 'artifact_executions.create')
+  issueDocument(
+    @Param('id', ParseUUIDv7Pipe) id: string,
+    @Req() request: IdentityRequest,
+  ) {
+    return this.emission.issue(id, this.org(request), this.actor(request));
   }
 
   @Get(':id')
@@ -94,6 +151,35 @@ export class QuoteController {
   async create(@Req() request: IdentityRequest, @Body() input: CreateQuoteDto) {
     return this.mapper.detail(
       await this.quotes.create(
+        this.org(request),
+        request.identity?.businessUnitId ?? null,
+        this.actor(request),
+        input,
+      ),
+    );
+  }
+
+  /**
+   * A proposta copiada de um atendimento concluído.
+   *
+   * Rota própria porque são duas operações diferentes com a mesma aparência:
+   * criar recebe os dados, copiar **lê** um registro que já existe. Um
+   * `operationId` opcional no `POST /quotes` tornaria metade dos campos
+   * condicionalmente obrigatórios, e a recusa deixaria de dizer o que fazer.
+   *
+   * Exige `operations.read` além de `quotes.manage`: quem copia um atendimento
+   * está lendo o atendimento, e o cliente, o endereço e os equipamentos dele
+   * atravessam para a proposta.
+   */
+  @Post('from-operation')
+  @Capabilities('quotes.manage')
+  @Permissions('quotes.manage', 'operations.read')
+  async createFromOperation(
+    @Req() request: IdentityRequest,
+    @Body() input: CreateQuoteFromOperationDto,
+  ) {
+    return this.mapper.detail(
+      await this.quotes.createFromOperation(
         this.org(request),
         request.identity?.businessUnitId ?? null,
         this.actor(request),

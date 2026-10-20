@@ -17,7 +17,7 @@
 import { UserRound, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { FilterSelect } from "@/workspace";
+import { FilterBar, FilterSelect } from "@/workspace";
 import { useSession } from "@/providers/session-provider";
 import { schedulingReferencesService } from "@/services/scheduling-references.service";
 import {
@@ -70,7 +70,7 @@ export function SchedulingFilters({
   );
 
   return (
-    <div className="grid gap-4 lg:grid-cols-5">
+    <FilterBar>
       <FilterSelect
         id="scheduling-calendar"
         label="Calendário"
@@ -84,7 +84,7 @@ export function SchedulingFilters({
 
       <FilterSelect
         id="scheduling-unit"
-        label="Unidade"
+        label="Organização"
         value={value.businessUnitId}
         onChange={(businessUnitId) => onChange({ businessUnitId })}
         options={session.businessUnits.map((unit) => ({
@@ -144,7 +144,7 @@ export function SchedulingFilters({
         onChange={(assetId, label) => onChange({ assetId }, { asset: label })}
       />
 
-      <div className="flex items-end gap-2 lg:col-span-5">
+      <div className="col-span-full flex items-end gap-2">
         {session.user ? (
           <Button
             variant={mine ? "default" : "outline"}
@@ -167,6 +167,6 @@ export function SchedulingFilters({
           Limpar filtros
         </Button>
       </div>
-    </div>
+    </FilterBar>
   );
 }

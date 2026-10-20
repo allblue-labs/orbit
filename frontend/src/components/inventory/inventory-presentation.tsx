@@ -177,7 +177,7 @@ export function ReservedNotice({ className }: { className?: string }) {
   return (
     <p className={cn("text-xs text-muted-foreground", className)}>
       <strong className="text-foreground">Reservado é somente leitura.</strong>{" "}
-      O backend já publica o campo e calcula <em>disponível</em> a partir dele,
+      O campo já existe e é calculado <em>disponível</em> a partir dele,
       mas ainda não existe fluxo de reserva — nada no sistema reserva material
       hoje.
     </p>

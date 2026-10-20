@@ -43,11 +43,10 @@ export function HistoryTab() {
         <History className="size-6 text-muted-foreground" aria-hidden />
         <div className="max-w-lg space-y-2">
           <p className="text-sm font-medium">
-            O backend ainda não publica histórico de cliente
+            O histórico do cliente ainda não está disponível
           </p>
           <p className="text-sm text-muted-foreground">
-            A auditoria é registrada no servidor, mas nenhuma rota a expõe para
-            a organização. Enquanto isso, o que existe de datado está nas abas
+            As alterações ficam registradas, mas ainda não podem ser consultadas aqui. Enquanto isso, o que existe de datado está nas abas
             de Equipamentos, Operações, Execuções e Documentos — cada registro
             com a sua própria data.
           </p>

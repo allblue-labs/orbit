@@ -52,7 +52,7 @@ export function IndicatorsSection({ assetId }: { assetId: string }) {
     <PanelFrame
       panelId="asset-indicators"
       title="Indicadores"
-      description="Contagens do servidor para este ativo"
+      description="Contagens deste equipamento"
     >
       <div className="grid gap-3 sm:grid-cols-3">
         <MetricCard
@@ -82,9 +82,8 @@ export function IndicatorsSection({ assetId }: { assetId: string }) {
       </div>
 
       <p className="mt-4 border-t border-border pt-3 text-xs text-muted-foreground">
-        Indicadores de engenharia de manutenção — MTBF, disponibilidade, custo
-        acumulado — dependem de Read Models por ativo que o Analytics ainda não
-        publica.
+        Indicadores de engenharia de manutenção — MTBF, disponibilidade e
+        custo acumulado — ainda não estão disponíveis por equipamento.
       </p>
     </PanelFrame>
   );
@@ -104,7 +103,7 @@ export function HealthSection() {
       title="Saúde do ativo"
       description="Índice de condição do equipamento"
     >
-      <PanelWithoutSource reason="O índice de saúde publicado pelo Analytics é da organização ou da unidade — GET /analytics/health não aceita assetId. Não há Read Model de saúde por equipamento, e atribuir o índice da operação a este ativo seria falso." />
+      <PanelWithoutSource reason="O índice de saúde disponível hoje é da organização ou da unidade. Não há índice por equipamento, e atribuir o da operação a este ativo seria enganoso." />
     </PanelFrame>
   );
 }
@@ -124,7 +123,7 @@ export function HistorySection() {
       title="Histórico"
       description="Eventos do equipamento ao longo do tempo"
     >
-      <PanelWithoutSource reason="Não há tabela de histórico do ativo nem endpoint de auditoria. Os painéis de operações, agenda e artefatos mostram os registros vinculados; uma linha do tempo do equipamento depende de o backend publicá-la." />
+      <PanelWithoutSource reason="A linha do tempo do equipamento ainda não está disponível. Os painéis de atendimentos, agenda e documentos mostram os registros vinculados a ele." />
     </PanelFrame>
   );
 }
@@ -144,7 +143,7 @@ export function IntelligenceSection() {
       title="Orbit Intelligence"
       description="Alertas, recomendações, anomalias e tendências do ativo"
     >
-      <PanelWithoutSource reason="Nenhum endpoint devolve inteligência com escopo de ativo: /analytics/intelligence é da organização, /ai-executions filtra por operação e os insights de artefato pertencem à execução. Enquanto não houver, este painel declara a ausência em vez de reaproveitar dados de outro escopo." />
+      <PanelWithoutSource reason="A análise inteligente por equipamento ainda não está disponível. O que existe hoje tem escopo de organização ou de atendimento, e reaproveitá-lo aqui daria ao equipamento um número que não é dele." />
     </PanelFrame>
   );
 }

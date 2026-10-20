@@ -96,12 +96,10 @@ export class IntegrationService {
         lastError: null,
       });
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Provider validation failed';
       await this.repository.update(id, {
         status: 'ERROR',
         lastValidatedAt: new Date(),
-        lastError: message.slice(0, 2_000),
+        lastError: 'PROVIDER_VALIDATION_FAILED',
       });
       throw error;
     }

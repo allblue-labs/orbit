@@ -128,8 +128,7 @@ function TypeInput({
         </datalist>
       ) : null}
       <p className="text-xs text-muted-foreground">
-        Metadado livre — o backend valida o formato, não a lista. Quem
-        interpreta é o consumidor do artefato.
+        Campo livre: apenas o formato é conferido. O significado é dado por quem consome o documento.
       </p>
     </div>
   );
@@ -345,7 +344,7 @@ function FieldInspector({
        */}
       {node.type && !REGISTERED_FIELD_TYPES.includes(node.type) ? (
         <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs">
-          Nenhum renderizador registrado para <code>{node.type}</code>. O campo
+          Nenhum formato disponível para <code>{node.type}</code>. O campo
           será exibido pelo tratamento genérico na execução.
         </p>
       ) : null}

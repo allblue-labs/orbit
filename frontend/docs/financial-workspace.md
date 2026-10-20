@@ -183,7 +183,7 @@ PATCH  /financial/settings
 
 ## Verificado contra a API
 
-48 verificações contra `http://localhost:5001/api/v1`, em organizações
+48 verificações contra `http://localhost:6001/api/v1`, em organizações
 descartáveis:
 
 - receita e despesa manuais, com valor devolvido como `"1250.50"`;

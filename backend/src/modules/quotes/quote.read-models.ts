@@ -24,6 +24,34 @@ export interface QuoteActorReadModel {
   displayName: string;
 }
 
+/**
+ * O endereço onde o serviço acontece.
+ *
+ * Publicado inteiro, e não só o id: quem desenha a proposta precisa mostrá-lo,
+ * e obrigar uma segunda consulta ao cliente para cada linha da lista trocaria
+ * uma resposta por N.
+ */
+export interface QuoteAddressReadModel {
+  id: string;
+  label: string;
+  /** Uma linha, já montada pelo servidor — a mesma que vai no documento. */
+  summary: string;
+}
+
+/**
+ * Um equipamento coberto pela proposta.
+ *
+ * Diferente de `QuoteItemReadModel`, aqui **não** é fotografia: o que interessa
+ * é qual aparelho, e o cadastro dele é a fonte viva desse dado. Renomear o
+ * equipamento deve mudar o que a proposta mostra.
+ */
+export interface QuoteAssetReadModel {
+  id: string;
+  name: string;
+  identifier: string | null;
+  location: string | null;
+}
+
 export interface QuoteItemReadModel {
   id: string;
   /** `PRODUCT` · `SERVICE` · `PART`, congelado na inclusão. */
@@ -68,6 +96,8 @@ export interface QuoteReadModel {
   status: QuoteStatus;
   title: string;
   notes: string | null;
+  /** Parágrafo de abertura. `null` imprime o padrão do documento. */
+  introText: string | null;
   /** `YYYY-MM-DD`. Validade é dia, não instante. */
   validUntil: string | null;
   /**
@@ -80,9 +110,27 @@ export interface QuoteReadModel {
   currency: string;
   subtotal: string;
   discount: string;
+  /** Por que houve desconto. `null` quando não houve, ou quando não se disse. */
+  discountReason: string | null;
   total: string;
   customer: { id: string; displayName: string };
   businessUnit: { id: string; name: string };
+  /** Endereço de execução escolhido. `null` quando não foi informado. */
+  serviceAddress: QuoteAddressReadModel | null;
+  /**
+   * Quem responde pela proposta, e de quem sai a assinatura impressa.
+   *
+   * Separado de `createdBy`: quem digita não é necessariamente quem assina.
+   */
+  responsible: QuoteActorReadModel | null;
+  /**
+   * Os equipamentos cobertos.
+   *
+   * Vem na **listagem** também, ao contrário dos itens: é coluna da tabela e a
+   * pergunta que o cliente faz primeiro numa proposta de manutenção. São
+   * poucos por proposta, e o custo é o de um `join`.
+   */
+  assets: QuoteAssetReadModel[];
   items: QuoteItemReadModel[];
   itemCount: number;
   transitions: QuoteTransitionsReadModel;
@@ -108,5 +156,9 @@ export interface QuoteReadModel {
  * Sem `items`: uma página de vinte orçamentos com todos os itens de cada um é
  * um payload que cresce sem que ninguém tenha pedido. Quem precisa dos itens
  * abre o orçamento.
+ *
+ * `assets` **fica**: é coluna da tabela, e são poucos por proposta. Tirar os
+ * itens e manter os equipamentos não é inconsistência — é a diferença entre o
+ * que a linha mostra e o que só o detalhe precisa.
  */
 export type QuoteSummaryReadModel = Omit<QuoteReadModel, 'items'>;

@@ -4,10 +4,13 @@
 /// `analytics.read-models.ts` (`AnalyticsDashboardReadModel`).
 library;
 
+import '../time/civil_time.dart';
+
 /// Ocorrência da agenda (`SchedulingOccurrenceReadModel`).
 class AgendaEvent {
   const AgendaEvent({
     required this.id,
+    required this.eventId,
     required this.title,
     required this.startsAt,
     required this.endsAt,
@@ -18,6 +21,7 @@ class AgendaEvent {
 
   factory AgendaEvent.fromJson(Map<String, dynamic> json) => AgendaEvent(
     id: json['occurrenceId'] as String? ?? json['eventId'] as String? ?? '',
+    eventId: json['eventId'] as String? ?? '',
     title: json['title'] as String? ?? '',
     startsAt: DateTime.tryParse(json['startsAt'] as String? ?? ''),
     endsAt: DateTime.tryParse(json['endsAt'] as String? ?? ''),
@@ -27,6 +31,10 @@ class AgendaEvent {
   );
 
   final String id;
+
+  /// O evento de agenda. É por ele que um item de trabalho se reconhece:
+  /// `MobileWorkItemContract.schedulingId` aponta para cá.
+  final String eventId;
   final String title;
   final DateTime? startsAt;
   final DateTime? endsAt;
@@ -36,25 +44,66 @@ class AgendaEvent {
 }
 
 /// `GET /scheduling/agenda`.
+class AgendaRange {
+  const AgendaRange({
+    required this.from,
+    required this.to,
+    required this.timezone,
+  });
+
+  factory AgendaRange.fromJson(Map<String, dynamic> json) => AgendaRange(
+    from: DateTime.tryParse(json['from'] as String? ?? ''),
+    to: DateTime.tryParse(json['to'] as String? ?? ''),
+    timezone: json['timezone'] as String? ?? '',
+  );
+
+  /// Instantes: o começo e o fim da janela, já resolvidos pelo servidor.
+  final DateTime? from;
+  final DateTime? to;
+
+  /// O fuso **da unidade** que o servidor usou para recortar o dia.
+  final String timezone;
+}
+
+/// Um dia do calendário, com os eventos que caem nele.
+///
+/// `date` é **data civil**, decidida pelo servidor no fuso da unidade. É por
+/// isso que ela chega como string e não como `DateTime`: converter aqui
+/// devolveria a decisão ao relógio do aparelho, que é justamente quem não pode
+/// tomá-la.
+class AgendaDay {
+  const AgendaDay({required this.date, required this.events});
+
+  factory AgendaDay.fromJson(Map<String, dynamic> json) => AgendaDay(
+    date: CivilDate.tryParse(json['date'] as String?),
+    events: (json['events'] as List<dynamic>? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(AgendaEvent.fromJson)
+        .toList(growable: false),
+  );
+
+  final CivilDate? date;
+  final List<AgendaEvent> events;
+}
+
 class Agenda {
   const Agenda({
     required this.view,
+    required this.range,
     required this.total,
     required this.hoursAllocated,
+    required this.days,
     required this.events,
+    this.generatedAt,
   });
 
   factory Agenda.fromJson(Map<String, dynamic> json) {
     final summary = json['summary'] as Map<String, dynamic>? ?? const {};
-    final days = json['days'] as List<dynamic>? ?? const [];
-    final events = days
+    final days = (json['days'] as List<dynamic>? ?? const [])
         .whereType<Map<String, dynamic>>()
-        .expand(
-          (day) => (day['events'] as List<dynamic>? ?? const [])
-              .whereType<Map<String, dynamic>>()
-              .map(AgendaEvent.fromJson),
-        )
-        .toList()
+        .map(AgendaDay.fromJson)
+        .toList(growable: false);
+    final events = days.expand((day) => day.events).toList()
       ..sort((a, b) {
         final left = a.startsAt;
         final right = b.startsAt;
@@ -64,16 +113,36 @@ class Agenda {
 
     return Agenda(
       view: json['view'] as String? ?? 'DAY',
+      range: AgendaRange.fromJson(
+        json['range'] as Map<String, dynamic>? ?? const {},
+      ),
       total: (summary['total'] as num?)?.toInt() ?? events.length,
       hoursAllocated: (summary['hoursAllocated'] as num?)?.toDouble() ?? 0,
+      days: days,
       events: events,
+      generatedAt: DateTime.tryParse(json['generatedAt'] as String? ?? ''),
     );
   }
 
   final String view;
+
+  /// A janela que o servidor resolveu — e o fuso em que a resolveu.
+  final AgendaRange range;
   final int total;
   final double hoursAllocated;
+  final List<AgendaDay> days;
+
+  /// Todos os eventos da janela, achatados e ordenados por início.
   final List<AgendaEvent> events;
+
+  /// Quando o servidor montou esta resposta — instante, não data civil.
+  final DateTime? generatedAt;
+
+  /// O dia civil que esta resposta representa, segundo o servidor.
+  ///
+  /// Na visão de dia é o único dia devolvido. É esta a data que a tela exibe e
+  /// da qual navega — não a que o aparelho calculou.
+  CivilDate? get civilDate => days.length == 1 ? days.first.date : null;
 }
 
 /// Indicador do Analytics (`AnalyticsKpi`).

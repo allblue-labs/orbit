@@ -35,6 +35,8 @@ class AccessTokenClaims {
     this.businessUnitIds = const [],
     this.roles = const [],
     this.permissions = const [],
+    this.allowedSurfaces = const [],
+    this.isOrganizationOwner = false,
     this.expiresAt,
   });
 
@@ -47,6 +49,8 @@ class AccessTokenClaims {
         businessUnitIds: _stringList(json['businessUnitIds']),
         roles: _stringList(json['roles']),
         permissions: _stringList(json['permissions']),
+        allowedSurfaces: _stringList(json['allowedSurfaces']),
+        isOrganizationOwner: json['isOrganizationOwner'] as bool? ?? false,
         expiresAt: json['exp'] is num
             ? DateTime.fromMillisecondsSinceEpoch(
                 (json['exp'] as num).toInt() * 1000,
@@ -61,6 +65,8 @@ class AccessTokenClaims {
   final List<String> businessUnitIds;
   final List<String> roles;
   final List<String> permissions;
+  final List<String> allowedSurfaces;
+  final bool isOrganizationOwner;
   final DateTime? expiresAt;
 
   bool get isPlatformAdmin => roles.contains(platformAdminRole);
@@ -80,20 +86,35 @@ class OrbitUser {
     this.timezone,
     this.status = 'ACTIVE',
     this.mfaEnabled = false,
+    this.mustChangePassword = false,
   });
 
-  factory OrbitUser.fromJson(Map<String, dynamic> json) => OrbitUser(
+  /// [resolverUrl] traduz endereços que o servidor entrega.
+  ///
+  /// A foto vem como URL assinada apontando para onde o **servidor** acha que
+  /// vive — `localhost`, em desenvolvimento. Sem traduzir, o aparelho tenta
+  /// carregá-la de si mesmo e cai nas iniciais, em silêncio. Quem tem a base
+  /// alcançável é o cliente HTTP, e é ele que passa a função.
+  factory OrbitUser.fromJson(
+    Map<String, dynamic> json, {
+    Uri Function(Uri)? resolverUrl,
+  }) => OrbitUser(
     id: json['id'] as String? ?? '',
     email: json['email'] as String? ?? '',
-    displayName: json['displayName'] as String? ?? json['email'] as String? ?? '',
+    displayName:
+        json['displayName'] as String? ?? json['email'] as String? ?? '',
     firstName: json['firstName'] as String?,
     lastName: json['lastName'] as String?,
     phone: json['phone'] as String?,
-    avatarUrl: json['avatarUrl'] as String?,
+    avatarUrl: _enderecoResolvido(
+      json['avatarUrl'] as String?,
+      resolverUrl,
+    ),
     locale: json['locale'] as String?,
     timezone: json['timezone'] as String?,
     status: json['status'] as String? ?? 'ACTIVE',
     mfaEnabled: json['mfaEnabled'] as bool? ?? false,
+    mustChangePassword: json['mustChangePassword'] as bool? ?? false,
   );
 
   final String id;
@@ -107,6 +128,14 @@ class OrbitUser {
   final String? timezone;
   final String status;
   final bool mfaEnabled;
+
+  /// A senha atual é provisória e precisa ser trocada antes de trabalhar.
+  ///
+  /// Verdadeiro quando o dono da organização cadastrou a pessoa e entregou uma
+  /// senha temporária. Enquanto for verdadeiro o roteador prende o aplicativo
+  /// na troca: o dono não deve continuar sabendo a senha do técnico, e é a
+  /// troca que encerra isso.
+  final bool mustChangePassword;
 
   String get initials {
     final parts = displayName.trim().split(RegExp(r'\s+'));
@@ -223,6 +252,42 @@ class Entitlements {
   bool get isActive => activeSubscriptionStatuses.contains(subscriptionStatus);
 }
 
+/// Canonical product entitlement + implementation availability.
+class ProductAccess {
+  const ProductAccess({
+    this.capabilities = const [],
+    this.featureAvailability = const {},
+  });
+
+  factory ProductAccess.fromJson(Map<String, dynamic> json) => ProductAccess(
+    capabilities: _stringList(json['capabilities']),
+    featureAvailability:
+        (json['featureAvailability'] as Map<String, dynamic>? ?? const {}).map(
+          (key, value) => MapEntry(key, value == true),
+        ),
+  );
+
+  final List<String> capabilities;
+  final Map<String, bool> featureAvailability;
+
+  bool hasCapability(String code) => capabilities.contains(code);
+  bool hasFeature(String code) => featureAvailability[code] == true;
+}
+
 List<String> _stringList(Object? value) => value is List
     ? value.whereType<String>().toList(growable: false)
     : const <String>[];
+
+
+/// O endereço da foto, traduzido quando há tradutor.
+///
+/// Devolve `null` para o que não é URL utilizável: string vazia ou texto que
+/// não parseia. Um endereço quebrado viraria um `Image.network` que falha, e a
+/// tela já tem as iniciais para esse caso.
+String? _enderecoResolvido(String? bruto, Uri Function(Uri)? resolverUrl) {
+  final texto = bruto?.trim();
+  if (texto == null || texto.isEmpty) return null;
+  final uri = Uri.tryParse(texto);
+  if (uri == null) return null;
+  return (resolverUrl?.call(uri) ?? uri).toString();
+}

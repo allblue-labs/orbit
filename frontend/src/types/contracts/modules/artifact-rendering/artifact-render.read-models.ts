@@ -71,4 +71,12 @@ export interface RenderMetricsReadModel {
   byRenderer: Readonly<Record<string, RendererCountersReadModel>>;
   /** Renderizadores disponíveis nesta instalação. */
   renderers: readonly string[];
+  /**
+   * O que o backend usa quando o pedido não escolhe.
+   *
+   * Publicado porque a tela precisa pré-selecionar o mesmo motor que a
+   * emissão usaria — sem isso ela pré-selecionaria o primeiro da lista, e o
+   * preview mostraria um documento diferente do que sairia.
+   */
+  defaultRenderer: string;
 }

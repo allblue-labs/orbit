@@ -21,6 +21,9 @@ import type {
   CustomerQuery,
   UpdateContactInput,
   UpdateCustomerInput,
+  CustomerAddress,
+  CreateCustomerAddressInput,
+  UpdateCustomerAddressInput,
 } from "@/types/customers";
 
 const RESOURCE = "customers";
@@ -57,6 +60,47 @@ export const customersService = {
 
   remove: (id: string): Promise<void> => apiClient.delete<void>(item(id)),
 
+  /* ---------------------------------------------------------------- */
+  /* Endereços de atendimento                                          */
+  /* ---------------------------------------------------------------- */
+
+  /**
+   * Para onde o técnico vai.
+   *
+   * Distinto do endereço do cadastro do cliente, que é o **fiscal**: uma rede
+   * com três lojas é um cliente e três endereços de atendimento.
+   */
+  addresses: (
+    id: string,
+    onlyActive?: boolean,
+    options?: RequestOptions,
+  ): Promise<readonly CustomerAddress[]> =>
+    apiClient.get<readonly CustomerAddress[]>(`${item(id)}/addresses`, {
+      ...options,
+      ...(onlyActive ? { query: { onlyActive: "true" } } : {}),
+    }),
+
+  createAddress: (
+    id: string,
+    input: CreateCustomerAddressInput,
+  ): Promise<CustomerAddress> =>
+    apiClient.post<CustomerAddress>(`${item(id)}/addresses`, input),
+
+  updateAddress: (
+    id: string,
+    addressId: string,
+    input: UpdateCustomerAddressInput,
+  ): Promise<CustomerAddress> =>
+    apiClient.patch<CustomerAddress>(
+      `${item(id)}/addresses/${encodeURIComponent(addressId)}`,
+      input,
+    ),
+
+  removeAddress: (id: string, addressId: string): Promise<void> =>
+    apiClient.delete<void>(
+      `${item(id)}/addresses/${encodeURIComponent(addressId)}`,
+    ),
+
   contacts: (
     id: string,
     options?: RequestOptions,
@@ -87,5 +131,7 @@ export const customersService = {
     detail: (id: string): QueryKey => queryKeys.detail(RESOURCE, id),
     contacts: (id: string): QueryKey =>
       queryKeys.nested(RESOURCE, id, "contacts"),
+    addresses: (id: string): QueryKey =>
+      queryKeys.nested(RESOURCE, id, "addresses"),
   },
 } as const;

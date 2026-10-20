@@ -11,8 +11,59 @@ import {
   IdentityRepository,
   type IdentityUser,
 } from '../infrastructure/identity.repository';
+import {
+  SurfaceNotAllowedException,
+  allowsSurface,
+  normalizeSurface,
+} from '../domain/surface-access';
 import { IdentityTokenService } from './token.service';
 import { MfaService } from './mfa.service';
+
+/** Pure, shared resolution used at issuance and at every authenticated call. */
+export function toAuthenticatedIdentity(
+  user: IdentityUser,
+  sessionId: UUID,
+): AuthenticatedIdentity {
+  const organization = user.organizationMemberships[0] ?? null;
+  const roles = new Set<string>();
+  const permissions = new Set<string>();
+  const allowedSurfaces = new Set<string>();
+  user.platformRoleAssignments.forEach((assignment) => {
+    roles.add(assignment.role.key);
+    assignment.role.permissions.forEach((item) => permissions.add(item));
+    assignment.role.allowedSurfaces.forEach((item) =>
+      allowedSurfaces.add(item),
+    );
+  });
+  if (organization) {
+    roles.add(organization.role.key);
+    const accessPermissions = organization.usesCustomAccess
+      ? organization.customPermissions
+      : organization.role.permissions;
+    const accessSurfaces = organization.usesCustomAccess
+      ? organization.customAllowedSurfaces
+      : organization.role.allowedSurfaces;
+    accessPermissions.forEach((item) => permissions.add(item));
+    accessSurfaces.forEach((item) => allowedSurfaces.add(item));
+  }
+  if (user.isOrganizationOwner) {
+    // Runtime compatibility only. OWNER no longer persists this wildcard.
+    permissions.add('*');
+    ['WEB', 'MOBILE', 'API'].forEach((item) => allowedSurfaces.add(item));
+  }
+  const unitIds = user.effectiveBusinessUnitIds;
+  return {
+    id: user.id as UUID,
+    sessionId,
+    organizationId: (organization?.organizationId as UUID) ?? null,
+    businessUnitId: (unitIds[0] as UUID) ?? null,
+    businessUnitIds: unitIds.map((unit) => unit as UUID),
+    roles: [...roles],
+    permissions: [...permissions],
+    allowedSurfaces: [...allowedSurfaces],
+    isOrganizationOwner: user.isOrganizationOwner,
+  };
+}
 
 @Injectable()
 export class AuthenticationService {
@@ -35,13 +86,21 @@ export class AuthenticationService {
   ): Promise<TokenPair> {
     const user = await this.repository.findByEmail(email);
     if (!user?.credential || user.deletedAt || user.status !== 'ACTIVE') {
-      throw new UnauthorizedException('Invalid credentials');
+      /* Mesma recusa para e-mail que não existe e conta desativada: a diferença
+         entre as duas só interessa a quem está sondando endereços. */
+      throw new UnauthorizedException(
+        'Invalid credentials',
+        'INVALID_CREDENTIALS',
+      );
     }
     if (
       user.credential.lockedUntil &&
       user.credential.lockedUntil.getTime() > Date.now()
     ) {
-      throw new UnauthorizedException('Account temporarily locked');
+      throw new UnauthorizedException(
+        'Account temporarily locked',
+        'ACCOUNT_LOCKED',
+      );
     }
     const passwordValid = await this.hashes.verify(
       user.credential.passwordHash,
@@ -49,13 +108,27 @@ export class AuthenticationService {
     );
     if (!passwordValid) {
       await this.recordFailedAttempt(user);
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException(
+        'Invalid credentials',
+        'INVALID_CREDENTIALS',
+      );
     }
     const factor = user.mfaFactors[0];
     if (factor) await this.mfa.verifyFactor(factor, mfaCode);
 
+    /**
+     * A superfície, depois da senha e do segundo fator.
+     *
+     * Nesta ordem de propósito: recusar antes de conferir a credencial diria a
+     * quem tentasse que aquele endereço existe e é de campo. Quem chega aqui já
+     * provou quem é — a recusa passa a ser sobre **onde**, e pode explicar.
+     */
+    if (!allowsSurface(user, metadata.client)) {
+      throw new SurfaceNotAllowedException(normalizeSurface(metadata.client));
+    }
+
     const sessionId = this.uuids.generate();
-    const identity = this.toIdentity(user, sessionId);
+    const identity = toAuthenticatedIdentity(user, sessionId);
     const pair = await this.tokens.issue(identity);
     await this.repository.createSession({
       id: sessionId,
@@ -67,7 +140,10 @@ export class AuthenticationService {
       ...metadata,
     });
     await this.repository.markAuthenticated(user.id, user.credential.id);
-    return this.publicPair(pair);
+    return {
+      ...this.publicPair(pair),
+      mustChangePassword: user.credential.mustChangePassword,
+    };
   }
 
   async refresh(refreshToken: string): Promise<TokenPair> {
@@ -85,8 +161,21 @@ export class AuthenticationService {
       await this.repository.revokeSession(session.id);
       throw new UnauthorizedException('Invalid refresh token');
     }
+
+    /**
+     * A superfície é reconferida a cada renovação, e a sessão morre se mudou.
+     *
+     * Só barrar o login deixaria de pé tudo o que já foi emitido: a sessão web
+     * de um técnico criada antes desta regra seguiria se renovando por dias. E
+     * o mesmo vale quando o dono muda o papel de alguém — a mudança tem de
+     * alcançar quem já está dentro, não só a próxima entrada.
+     */
+    if (!allowsSurface(user, session.client)) {
+      await this.repository.revokeSession(session.id);
+      throw new SurfaceNotAllowedException(normalizeSurface(session.client));
+    }
     const pair = await this.tokens.issue(
-      this.toIdentity(user, session.id as UUID),
+      toAuthenticatedIdentity(user, session.id as UUID),
     );
     await this.repository.rotateSession(
       session.id,
@@ -131,41 +220,6 @@ export class AuthenticationService {
       attempts,
       lockedUntil,
     );
-  }
-
-  private toIdentity(
-    user: IdentityUser,
-    sessionId: UUID,
-  ): AuthenticatedIdentity {
-    const organization = user.organizationMemberships[0] ?? null;
-    const units = user.businessUnitMemberships.filter(
-      (membership) =>
-        !organization ||
-        membership.organizationId === organization.organizationId,
-    );
-    const roles = new Set<string>();
-    const permissions = new Set<string>();
-    user.platformRoleAssignments.forEach((assignment) => {
-      roles.add(assignment.role.key);
-      assignment.role.permissions.forEach((item) => permissions.add(item));
-    });
-    if (organization) {
-      roles.add(organization.role.key);
-      organization.role.permissions.forEach((item) => permissions.add(item));
-    }
-    units.forEach((membership) => {
-      roles.add(membership.role.key);
-      membership.role.permissions.forEach((item) => permissions.add(item));
-    });
-    return {
-      id: user.id as UUID,
-      sessionId,
-      organizationId: (organization?.organizationId as UUID) ?? null,
-      businessUnitId: (units[0]?.businessUnitId as UUID) ?? null,
-      businessUnitIds: units.map((unit) => unit.businessUnitId as UUID),
-      roles: [...roles],
-      permissions: [...permissions],
-    };
   }
 
   private publicPair(

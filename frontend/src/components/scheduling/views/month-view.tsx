@@ -39,7 +39,17 @@ export function MonthView({
   onOpenDay: (dayKey: string) => void;
 }) {
   return (
-    <div className="glass-panel overflow-hidden rounded-xl">
+    <div
+      /**
+       * A semana rola dentro do painel, não some nele.
+       *
+       * `overflow-hidden` existia para as bordas arredondadas, e numa tela de
+       * 375px cortava trinta pixels da grade — os dois últimos dias ficavam
+       * inalcançáveis, sem barra e sem aviso. Rolar na horizontal mantém a
+       * grade inteira ao alcance e o corte onde ele é decoração.
+       */
+      className="glass-panel overflow-x-auto rounded-xl"
+    >
       <div className="grid grid-cols-7 border-b border-border">
         {WEEKDAYS.map((weekday) => (
           <div

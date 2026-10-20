@@ -24,6 +24,7 @@ import 'dart:async';
 import 'dart:io';
 
 import '../errors/orbit_exception.dart';
+import '../errors/orbit_public_copy.dart';
 import '../observability/orbit_logger.dart';
 import 'upload_task.dart';
 
@@ -239,10 +240,16 @@ class UploadQueue {
             current.copyWith(status: UploadStatus.completed, progress: 1),
       );
       await _deleteFile(task);
-      _logger.info('evidência enviada', data: {'operationId': task.operationId});
+      _logger.info(
+        'evidência enviada',
+        data: {'operationId': task.operationId},
+      );
     } on Object catch (error) {
       if (signal.isCancelled) {
-        _update(task.id, (current) => current.copyWith(status: UploadStatus.cancelled));
+        _update(
+          task.id,
+          (current) => current.copyWith(status: UploadStatus.cancelled),
+        );
       } else {
         _handleFailure(task, error);
       }
@@ -275,7 +282,9 @@ class UploadQueue {
         (current) => current.copyWith(
           status: UploadStatus.failed,
           attempts: attempts,
-          lastError: orbitError?.message ?? 'Falha ao enviar a evidência.',
+          lastError:
+              orbitError?.publicMessage ??
+              'Não foi possível enviar esta evidência agora.',
           clearNextAttempt: true,
         ),
       );
@@ -298,7 +307,7 @@ class UploadQueue {
         status: UploadStatus.retrying,
         attempts: attempts,
         progress: 0,
-        lastError: orbitError?.message ?? 'Sem conexão.',
+        lastError: orbitError?.publicMessage ?? OrbitPublicCopy.offline,
         nextAttemptAt: DateTime.now().add(delay),
       ),
     );

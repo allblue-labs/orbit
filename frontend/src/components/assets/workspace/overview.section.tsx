@@ -157,7 +157,7 @@ function Specifications({
         ))}
       </dl>
       <p className="text-[10px] text-muted-foreground">
-        JSON livre definido pela organização — o backend não o interpreta.
+        Campos livres definidos pela organização.
       </p>
     </section>
   );

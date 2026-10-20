@@ -238,8 +238,7 @@ export function PropertiesPanel({
         <Label>Chave</Label>
         <Input value={template.key} disabled className="font-mono text-sm" />
         <p className="text-xs text-muted-foreground">
-          A chave é definida na criação e o backend não expõe rota para
-          alterá-la — ela identifica o template em integrações. Para outra
+          A chave é definida na criação e não pode ser alterada — ela identifica o template em integrações. Para outra
           chave, duplique o template.
         </p>
       </div>

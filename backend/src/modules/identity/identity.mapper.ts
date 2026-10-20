@@ -26,6 +26,7 @@ interface ProfileSource {
   updatedAt: DateValue;
   mfaEnabled?: boolean;
   mfaFactors?: readonly unknown[];
+  mustChangePassword?: boolean;
 }
 
 interface DeviceSessionSource {
@@ -49,6 +50,7 @@ export class IdentityReadModelMapper {
       refreshToken: source.refreshToken,
       tokenType: source.tokenType,
       expiresIn: source.expiresIn,
+      mustChangePassword: source.mustChangePassword ?? false,
     };
   }
 
@@ -66,6 +68,7 @@ export class IdentityReadModelMapper {
       status: source.status,
       emailVerifiedAt: this.nullableDate(source.emailVerifiedAt),
       mfaEnabled: source.mfaEnabled ?? Boolean(source.mfaFactors?.length),
+      mustChangePassword: source.mustChangePassword ?? false,
       createdAt: this.date(source.createdAt),
       updatedAt: this.date(source.updatedAt),
     };

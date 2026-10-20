@@ -25,7 +25,7 @@ class IntelligenceSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final intelligence = ref.watch(operationIntelligenceProvider(operationId));
 
-    return SectionCard(
+    return SectionBlock(
       title: 'Assistência operacional',
       subtitle: 'Análises registradas para esta operação',
       child: intelligence.when(

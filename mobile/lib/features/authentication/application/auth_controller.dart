@@ -38,12 +38,14 @@ class AuthController extends StateNotifier<AuthState> {
   /// dispara a renovação pelo interceptor. Isso deixa a abertura rápida mesmo
   /// com rede ruim.
   Future<void> restore() async {
-    final claims = await _repository.readClaims();
-    if (claims == null) {
-      state = const AuthUnauthenticated();
-      return;
-    }
     try {
+      // A leitura do armazenamento seguro entra no `try`: ela também pode
+      // falhar, e falhar aqui deixava a splash girando pelo mesmo motivo.
+      final claims = await _repository.readClaims();
+      if (claims == null) {
+        state = const AuthUnauthenticated();
+        return;
+      }
       state = AuthAuthenticated(await _composeSession(claims));
     } on OrbitException catch (error) {
       if (error.isUnauthorized) {
@@ -52,7 +54,22 @@ class AuthController extends StateNotifier<AuthState> {
         );
         return;
       }
-      rethrow;
+      // Qualquer outra falha também precisa sair da restauração.
+      //
+      // O erro era relançado, e ninguém o pegava: `restore()` é chamada sem
+      // `await` na abertura do app. Sem servidor alcançável, o estado ficava em
+      // `AuthRestoring` para sempre e a pessoa via a splash girando sem
+      // explicação nenhuma.
+      //
+      // A sessão guardada **não** é apagada: o problema é chegar ao servidor,
+      // não o token. Entrar de novo, ou uma rede que volte, resolve.
+      state = AuthUnauthenticated(reason: error.publicMessage);
+    } catch (_) {
+      // Nada justifica ficar preso na abertura: o que não se sabe explicar
+      // ainda assim leva ao login, onde há o que fazer.
+      state = const AuthUnauthenticated(
+        reason: 'Não foi possível retomar a sessão. Entre novamente.',
+      );
     }
   }
 
@@ -70,7 +87,7 @@ class AuthController extends StateNotifier<AuthState> {
     if (claims == null) {
       throw const OrbitException(
         kind: OrbitErrorKind.parse,
-        message: 'Não foi possível ler a sessão retornada pelo servidor.',
+        publicMessage: 'Não foi possível concluir a entrada. Tente novamente.',
         code: 'PARSE',
       );
     }
@@ -81,6 +98,52 @@ class AuthController extends StateNotifier<AuthState> {
     await _repository.logout();
     state = const AuthUnauthenticated();
   }
+
+  /// Aplica os dados que a pessoa acabou de editar sobre si.
+  ///
+  /// Sem recompor a sessão inteira: organização, plano e claims não mudaram
+  /// porque alguém corrigiu o próprio telefone, e recarregá-los custaria
+  /// três requisições para atualizar um campo que já veio na resposta do
+  /// `PATCH`.
+  void applyUser(OrbitUser user) {
+    final current = state;
+    if (current is! AuthAuthenticated) return;
+    state = AuthAuthenticated(current.session.copyWith(user: user));
+  }
+
+  /// Recarrega o perfil do servidor, mantendo o resto da sessão.
+  ///
+  /// Existe para o que **não** volta na resposta de um comando: o endereço
+  /// da foto é assinado e temporário, e só o `GET /identity/me` o traz.
+  Future<void> refreshProfile() async {
+    final current = state;
+    if (current is! AuthAuthenticated) return;
+    final user = await _repository.loadProfile();
+    state = AuthAuthenticated(current.session.copyWith(user: user));
+  }
+
+  /// Troca a própria senha e libera o aplicativo.
+  ///
+  /// Recarrega o perfil em seguida porque é ele que carrega
+  /// `mustChangePassword`: sem isso o roteador continuaria prendendo a pessoa
+  /// na tela de troca depois de ela já ter trocado.
+  ///
+  /// O backend revoga as **outras** sessões, não esta: quem acabou de provar a
+  /// senha atual segue trabalhando sem precisar entrar de novo.
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    await _repository.changePassword(
+      currentPassword: currentPassword,
+      newPassword: newPassword,
+    );
+    await refreshProfile();
+  }
+
+  /// Pede o link de redefinição de senha — a tela de login usa.
+  Future<void> requestPasswordReset(String email) =>
+      _repository.requestPasswordReset(email);
 
   /// Troca a unidade ativa.
   ///
@@ -107,6 +170,10 @@ class AuthController extends StateNotifier<AuthState> {
         _repository.loadEntitlements()
       else
         Future<Entitlements?>.value(),
+      if (claims.organizationId != null)
+        _repository.loadProductAccess()
+      else
+        Future<ProductAccess?>.value(),
     ]);
 
     return OrbitSession(
@@ -114,6 +181,7 @@ class AuthController extends StateNotifier<AuthState> {
       claims: claims,
       organization: results[1] as Organization?,
       entitlements: results[2] as Entitlements?,
+      productAccess: results[3] as ProductAccess?,
     );
   }
 

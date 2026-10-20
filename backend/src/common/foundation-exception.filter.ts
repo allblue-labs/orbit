@@ -6,9 +6,10 @@ import {
   Logger,
   type ExceptionFilter,
 } from '@nestjs/common';
+import { redactSensitivePath } from './redact-sensitive-path';
 import type { Request, Response } from 'express';
-import { BaseException } from '../exceptions';
 import { classifyInternalError, internalErrorStack } from '../errors';
+import { exposedClientStatus, PublicErrorMapper } from './public-errors';
 
 interface RequestWithId extends Request {
   id?: string;
@@ -21,6 +22,7 @@ interface RequestWithId extends Request {
 @Catch()
 export class FoundationExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(FoundationExceptionFilter.name);
+  private readonly publicErrors = new PublicErrorMapper();
 
   /**
    * Lido a cada uso, não na construção.
@@ -37,50 +39,45 @@ export class FoundationExceptionFilter implements ExceptionFilter {
     const http = host.switchToHttp();
     const response = http.getResponse<Response>();
     const request = http.getRequest<RequestWithId>();
+    /* O mesmo cálculo do mapeador: se os dois divergirem, a resposta sai com um
+       status no cabeçalho e outro no corpo. */
     const status =
       exception instanceof HttpException
         ? exception.getStatus()
-        : HttpStatus.INTERNAL_SERVER_ERROR;
-    const domainPayload =
-      exception instanceof BaseException
-        ? {
-            code: exception.code,
-            message: exception.message,
-            details: exception.details,
-          }
-        : exception instanceof HttpException
-          ? this.httpPayload(exception)
-          : {
-              code: 'INTERNAL_SERVER_ERROR',
-              message: 'An unexpected error occurred',
-            };
-    const payload =
-      status >= 500
-        ? {
-            code:
-              exception instanceof BaseException
-                ? exception.code
-                : 'INTERNAL_SERVER_ERROR',
-            message: 'An unexpected error occurred',
-          }
-        : domainPayload;
+        : (exposedClientStatus(exception) ?? HttpStatus.INTERNAL_SERVER_ERROR);
+    const payload = this.publicErrors.map(exception);
+    if (
+      payload.code === 'RATE_LIMITED' &&
+      payload.details &&
+      'retryAfterSeconds' in payload.details
+    ) {
+      response.setHeader(
+        'Retry-After',
+        String(payload.details.retryAfterSeconds),
+      );
+    }
     if (status >= 500) {
       const classified = classifyInternalError(exception);
-      this.logger.error(
-        JSON.stringify({
-          stage: 'internal-error',
-          status,
-          method: request.method,
-          path: request.originalUrl ?? request.path,
-          requestId: request.id ?? null,
-          actorId: request.identity?.id ?? null,
-          organizationId: request.identity?.organizationId ?? null,
-          errorCategory: classified.category,
-          exceptionClass: classified.exceptionClass,
-          errorCode: classified.code,
-        }),
-        internalErrorStack(exception) ?? String(exception),
-      );
+      const record = JSON.stringify({
+        stage: 'internal-error',
+        status,
+        method: request.method,
+        path: redactSensitivePath(request.originalUrl ?? request.path),
+        requestId: request.id ?? null,
+        actorId: request.identity?.id ?? null,
+        organizationId: request.identity?.organizationId ?? null,
+        errorCategory: classified.category,
+        exceptionClass: classified.exceptionClass,
+        errorCode: classified.code,
+      });
+      if (process.env.NODE_ENV === 'production') {
+        this.logger.error(record);
+      } else {
+        this.logger.error(
+          record,
+          internalErrorStack(exception) ?? String(exception),
+        );
+      }
     } else if (status >= 400 && this.logsClientErrors) {
       /**
        * Recusa de cliente, registrada sob demanda.
@@ -95,7 +92,7 @@ export class FoundationExceptionFilter implements ExceptionFilter {
           stage: 'client-error',
           status,
           method: request.method,
-          path: request.path,
+          path: redactSensitivePath(request.path),
           code: 'code' in payload ? payload.code : null,
           message: 'message' in payload ? payload.message : null,
           requestId: request.id ?? null,
@@ -108,25 +105,5 @@ export class FoundationExceptionFilter implements ExceptionFilter {
       requestId: request.id ?? 'unknown',
       timestamp: new Date().toISOString(),
     });
-  }
-
-  private httpPayload(exception: HttpException): {
-    code: string;
-    message: string | string[];
-  } {
-    const response = exception.getResponse();
-    if (typeof response === 'string') {
-      return { code: 'HTTP_ERROR', message: response };
-    }
-    const message = 'message' in response ? response.message : undefined;
-    return {
-      code: 'HTTP_ERROR',
-      message:
-        typeof message === 'string' ||
-        (Array.isArray(message) &&
-          message.every((item) => typeof item === 'string'))
-          ? message
-          : exception.message,
-    };
   }
 }

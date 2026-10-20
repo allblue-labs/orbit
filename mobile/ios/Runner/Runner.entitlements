@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  O ambiente do APNs.
+
+	  `development` é o que o Xcode usa em build de depuração e em
+	  instalação direta no aparelho. A App Store reescreve para `production`
+	  ao processar o pacote, então este valor não precisa mudar para
+	  publicar — mas o servidor precisa falar com o ambiente certo, e é por
+	  isso que o backend guarda o provedor por instalação.
+	-->
+	<key>aps-environment</key>
+	<string>development</string>
+</dict>
+</plist>

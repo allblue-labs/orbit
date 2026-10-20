@@ -1,30 +1,18 @@
-import { CreateTemplateDialog } from "@/components/artifact-studio/create-template-dialog";
-import { TemplatesList } from "@/components/artifact-studio/templates-list";
-import { WorkspacePage } from "@/workspace";
+import { redirect } from "next/navigation";
+
+import { ROUTES } from "@/lib/routes";
+import { SECTION_PARAM } from "@/lib/section-navigation";
 
 /**
- * Artifact Studio — listagem.
+ * Modelos de documento viraram aba de Relatórios.
  *
- * Server Component: o `WorkspacePage` compõe guards, shell e cabeçalho. A lista
- * é Client Component porque filtros, paginação e diálogos são interação.
+ * A rota fica e redireciona: está em favorito e em link colado numa conversa, e
+ * apagá-la daria 404 para quem não fez nada de errado.
  *
- * Não há prefetch no servidor: a consulta depende de filtros escolhidos no
- * cliente, e buscar no servidor duplicaria a requisição.
- *
- * O título é próprio, e não o do Entity Registry: a entidade se chama
- * "Artefatos" no menu, mas a tela é o Studio — são nomes diferentes de
- * propósito, e por isso `activeLabel` aponta para o item do menu.
+ * `/artefatos/:id` **não** muda — é a página do modelo, com o registro na tela,
+ * e ela continua exigindo apenas `artifact_templates.read`. Só a porta de
+ * entrada se mudou de lugar.
  */
-export default function ArtifactTemplatesPage() {
-  return (
-    <WorkspacePage
-      title="Artifact Studio"
-      description="Templates de artefatos da organização e da plataforma. Estrutura, versões e publicação."
-      capability="artifact_templates.read"
-      activeLabel="Artefatos"
-      action={<CreateTemplateDialog />}
-    >
-      <TemplatesList />
-    </WorkspacePage>
-  );
+export default function ArtifactTemplatesPage(): never {
+  redirect(`${ROUTES.managementReports}?${SECTION_PARAM}=modelos`);
 }

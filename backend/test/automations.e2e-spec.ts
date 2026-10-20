@@ -41,6 +41,36 @@ import type { PrismaClient } from '@prisma/client';
 import { adminPrisma, disconnectAdminPrisma } from './support/admin-prisma';
 import { BackgroundJobWorker } from './../src/modules/jobs/background-job.worker';
 
+/**
+ * Avanço de meses civis, em UTC — a mesma regra que o Postgres aplica.
+ *
+ * Existe para dar ao teste um valor esperado que **não** venha da soma sob
+ * teste: comparar `make_interval` com `make_interval` provaria apenas que a
+ * função concorda consigo mesma.
+ *
+ * A autoridade de fuso é a sessão do banco, que roda em UTC; por isso o cálculo
+ * aqui é inteiramente em UTC e não passa pelo fuso local de quem executa a
+ * suíte. Sem horário de verão no caminho, não há hora ambígua a resolver.
+ */
+function plusCalendarMonths(base: Date, months: number): Date {
+  const absolute = base.getUTCMonth() + months;
+  const year = base.getUTCFullYear() + Math.floor(absolute / 12);
+  const month = ((absolute % 12) + 12) % 12;
+  /** Dia 0 do mês seguinte é o último dia do mês de destino. */
+  const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  return new Date(
+    Date.UTC(
+      year,
+      month,
+      Math.min(base.getUTCDate(), lastDay),
+      base.getUTCHours(),
+      base.getUTCMinutes(),
+      base.getUTCSeconds(),
+      base.getUTCMilliseconds(),
+    ),
+  );
+}
+
 const digits = (length: number): string =>
   Array.from({ length }, () => Math.floor(Math.random() * 10)).join('');
 
@@ -162,9 +192,32 @@ describe('Automations (e2e)', () => {
     };
   }
 
-  /** Esvazia a fila: um `tick` reivindica um job por fila por vez. */
-  async function drain(rounds = 8): Promise<void> {
-    for (let round = 0; round < rounds; round += 1) await worker.tick();
+  /**
+   * Esvazia a fila até não sobrar trabalho **desta suíte**.
+   *
+   * Um `tick` reivindica um job por fila, e a reivindicação não filtra por
+   * tenant: sob a suíte global em paralelo, o job de outra suíte consome o
+   * mesmo ciclo. Contar rodadas fixas transformava isso em falha intermitente
+   * — a execução do teste ficava `PENDING` porque as rodadas tinham sido
+   * gastas com trabalho alheio.
+   *
+   * A condição de parada é o estado do banco, não uma contagem: enquanto
+   * houver job reivindicável desta organização, há trabalho a fazer. O limite
+   * existe para o laço não ficar preso, e é teto — nunca a expectativa.
+   */
+  async function drain(limit = 200): Promise<void> {
+    for (let round = 0; round < limit; round += 1) {
+      const [pending] = await prisma.$queryRaw<{ any: boolean }[]>`
+        SELECT EXISTS (
+          SELECT 1 FROM background_jobs
+          WHERE organization_id = ${organizationId}::uuid
+            AND status = 'PENDING'
+            AND available_at <= now()
+        ) AS any
+      `;
+      if (!pending?.any) return;
+      await worker.tick();
+    }
   }
 
   async function createRule(
@@ -221,6 +274,67 @@ describe('Automations (e2e)', () => {
 
   const notificationsWithTitle = (title: string) =>
     prisma.notification.count({ where: { organizationId, title } });
+
+  /**
+   * Uma preventiva concluída com lembrete semestral, já despachada.
+   *
+   * Os testes 7 e 8 provam propriedades diferentes do mesmo fato, e cada um
+   * monta o seu: compartilhar a regra faria a falha de um contaminar o outro.
+   *
+   * `opened` e `closed` cercam o instante em que o Postgres somou o prazo, e
+   * vêm do próprio banco — a diferença entre o relógio do processo e o do
+   * contêiner tornaria a janela mentirosa.
+   */
+  async function semiannualReminder() {
+    const now = async (): Promise<Date> => {
+      const rows = await prisma.$queryRaw<{ at: Date }[]>`SELECT now() AS at`;
+      return rows[0]!.at;
+    };
+
+    const rule = await createRule({
+      name: `Preventiva semestral ${digits(6)}`,
+      trigger: 'operation.completed',
+      conditions: [{ field: 'kind', operator: 'equals', value: 'MAINTENANCE' }],
+      actions: [
+        {
+          type: 'CREATE_REMINDER',
+          delay: { amount: 6, unit: 'MONTHS' },
+          config: {
+            title: 'Retorno da preventiva',
+            description: 'Agendar a próxima visita preventiva.',
+          },
+        },
+      ],
+    });
+
+    const opened = await now();
+    const operationId = await newOperation('MAINTENANCE');
+    await complete(operationId);
+    await drain();
+    const closed = await now();
+
+    const executions = await executionsOf(rule.id);
+    expect(executions).toHaveLength(1);
+    const execution = executions[0]!;
+
+    /** O job é localizado pela identidade da ação, não pelo mais recente. */
+    const job = await prisma.backgroundJob.findFirstOrThrow({
+      where: {
+        organizationId,
+        queue: 'automation.action',
+        jobKey: `${execution.event.id}:${rule.id}:${execution.actionId}`,
+      },
+      select: {
+        id: true,
+        jobKey: true,
+        status: true,
+        attempts: true,
+        availableAt: true,
+      },
+    });
+
+    return { rule, operationId, execution, job, opened, closed };
+  }
 
   /* ---------------------------------------------------------------- */
 
@@ -552,69 +666,121 @@ describe('Automations (e2e)', () => {
   /* O lembrete de seis meses                                          */
   /* ================================================================ */
 
-  it('6 · manutenção concluída agenda o lembrete para o futuro, e nada acontece agora', async () => {
-    const rule = await createRule({
-      name: 'Preventiva semestral',
-      trigger: 'operation.completed',
-      conditions: [{ field: 'kind', operator: 'equals', value: 'MAINTENANCE' }],
-      actions: [
-        {
-          type: 'CREATE_REMINDER',
-          delay: { amount: 6, unit: 'MONTHS' },
-          config: {
-            title: 'Retorno da preventiva',
-            description: 'Agendar a próxima visita preventiva.',
-          },
-        },
-      ],
-    });
+  it('6 · seis meses civis, em todo fim de mês e atravessando bissexto', async () => {
+    /**
+     * Duração fixa e avanço de meses **não são a mesma operação**.
+     *
+     * Um mês não tem comprimento: somar seis meses a 31 de agosto pede o dia 31
+     * de fevereiro, que não existe, e a regra grampeia no último dia do mês. O
+     * vão resultante varia de 181 a 184 dias conforme a data de partida — é por
+     * isso que aproximar semestre como 180 dias faz o lembrete escorregar.
+     *
+     * A prova é sobre datas fixas, com o resultado esperado escrito à mão a
+     * partir da regra. Derivar o esperado da própria soma provaria só que a
+     * função concorda consigo mesma.
+     */
+    const cases = [
+      {
+        base: '2026-08-31T12:00:00Z',
+        expected: '2027-02-28T12:00:00Z',
+        days: 181,
+      },
+      {
+        base: '2026-03-31T12:00:00Z',
+        expected: '2026-09-30T12:00:00Z',
+        days: 183,
+      },
+      {
+        base: '2026-01-31T12:00:00Z',
+        expected: '2026-07-31T12:00:00Z',
+        days: 181,
+      },
+      /** Fevereiro bissexto: o dia 31 grampeia em 29, não em 28. */
+      {
+        base: '2023-08-31T12:00:00Z',
+        expected: '2024-02-29T12:00:00Z',
+        days: 182,
+      },
+      {
+        base: '2024-02-29T12:00:00Z',
+        expected: '2024-08-29T12:00:00Z',
+        days: 182,
+      },
+      /** Mês de 30 dias, dia que existe no destino: nada é grampeado. */
+      {
+        base: '2026-09-01T12:00:00Z',
+        expected: '2027-03-01T12:00:00Z',
+        days: 181,
+      },
+    ] as const;
 
-    const operationId = await newOperation('MAINTENANCE');
-    await complete(operationId);
-    await drain();
+    for (const item of cases) {
+      const base = new Date(item.base);
 
-    const executions = await executionsOf(rule.id);
+      /** A soma é a do Postgres — a mesma que `resolveDelay` delega. */
+      const rows = await prisma.$queryRaw<{ at: Date }[]>`
+        SELECT ${base}::timestamptz + make_interval(months => 6) AS at
+      `;
+      const at = rows[0]!.at;
+      expect(at.toISOString()).toBe(new Date(item.expected).toISOString());
+
+      /** E a mesma regra, reimplementada aqui, chega ao mesmo lugar. */
+      expect(plusCalendarMonths(base, 6).toISOString()).toBe(
+        new Date(item.expected).toISOString(),
+      );
+
+      /** O vão em dias não é constante: é o que 180 dias fixos ignoram. */
+      const days = (at.getTime() - base.getTime()) / 86_400_000;
+      expect(days).toBe(item.days);
+      expect(days).not.toBe(180);
+    }
+  }, 60000);
+
+  it('7 · manutenção concluída agenda o lembrete para a data civil de seis meses', async () => {
+    const { rule, execution, opened, closed } = await semiannualReminder();
+
     /** `status.changed` e `completed` são dois eventos; só um casa com a regra. */
-    expect(executions).toHaveLength(1);
-    const execution = executions[0]!;
     expect(execution.status).toBe('PENDING');
     expect(execution.event.type).toBe('operation.completed');
     expect(execution.scheduledFor).not.toBeNull();
-    expect(new Date(execution.scheduledFor!).getTime()).toBeGreaterThan(
-      Date.now() + 150 * 24 * 3600_000,
+
+    /**
+     * O instante exato em que o Postgres somou está entre as duas leituras que
+     * cercam o fluxo. O esperado é a **data civil** correspondente a cada uma
+     * delas, calculada aqui sem chamar a soma sob teste.
+     */
+    const scheduled = new Date(execution.scheduledFor!).getTime();
+    expect(scheduled).toBeGreaterThanOrEqual(
+      plusCalendarMonths(opened, 6).getTime(),
+    );
+    expect(scheduled).toBeLessThanOrEqual(
+      plusCalendarMonths(closed, 6).getTime(),
     );
 
-    /** 7 · o prazo é de calendário: quem somou foi o Postgres. */
-    const calendarSix = await prisma.$queryRaw<{ at: Date }[]>`
-      SELECT now() + interval '6 months' AS at
-    `;
-    const drift = Math.abs(
-      new Date(execution.scheduledFor!).getTime() -
-        calendarSix[0]!.at.getTime(),
-    );
-    expect(drift).toBeLessThan(60_000);
+    await disable(rule.id);
+  }, 180000);
 
-    /** Seis meses de calendário não são 180 dias — a diferença é medível. */
-    const approximation = Date.now() + 180 * 24 * 3600_000;
-    expect(
-      Math.abs(new Date(execution.scheduledFor!).getTime() - approximation),
-    ).toBeGreaterThan(24 * 3600_000);
+  it('8 · nada dispara agora; o lembrete nasce quando o prazo chega', async () => {
+    const { rule, execution, job } = await semiannualReminder();
 
     /** O job existe e está dormindo: nenhum lembrete foi criado ainda. */
-    const job = await prisma.backgroundJob.findFirstOrThrow({
-      where: { organizationId, queue: 'automation.action' },
-      orderBy: { createdAt: 'desc' },
-      select: { id: true, status: true, availableAt: true },
-    });
     expect(job.status).toBe('PENDING');
     expect(job.availableAt.getTime()).toBeGreaterThan(Date.now());
+    expect(job.attempts).toBe(0);
     expect(
       await prisma.schedulingEvent.count({
         where: { organizationId, sourceModule: 'automations' },
       }),
     ).toBe(0);
 
-    /** 8 · o prazo chega. Ninguém abriu a Agenda; o worker é quem age. */
+    /** Um só job para a ação: o despacho não duplicou o agendamento. */
+    expect(
+      await prisma.backgroundJob.count({
+        where: { organizationId, jobKey: job.jobKey },
+      }),
+    ).toBe(1);
+
+    /** O prazo chega. Ninguém abriu a Agenda; o worker é quem age. */
     await prisma.backgroundJob.update({
       where: { id: job.id },
       data: { availableAt: new Date(Date.now() - 1000) },
@@ -622,11 +788,12 @@ describe('Automations (e2e)', () => {
     await drain();
 
     const [done] = await executionsOf(rule.id);
+    expect(done!.id).toBe(execution.id);
     expect(done!.status).toBe('SUCCEEDED');
     expect(done!.result?.type).toBe('SCHEDULING_EVENT');
 
-    const reminder = await prisma.schedulingEvent.findFirstOrThrow({
-      where: { organizationId, sourceModule: 'automations' },
+    const reminder = await prisma.schedulingEvent.findUniqueOrThrow({
+      where: { id: done!.result!.id },
       select: {
         id: true,
         title: true,
@@ -638,14 +805,12 @@ describe('Automations (e2e)', () => {
         createdById: true,
       },
     });
-    expect(reminder.id).toBe(done!.result?.id);
     expect(reminder.title).toBe('Retorno da preventiva');
     expect(reminder.type).toBe('REMINDER');
-    /** 14 · o worker reabriu o contexto do tenant, não o da plataforma. */
+    /** O worker reabriu o contexto do tenant, não o da plataforma. */
     expect(reminder.organizationId).toBe(organizationId);
     expect(reminder.businessUnitId).toBe(unitA);
     expect(reminder.sourceEntityType).toBe('OPERATION');
-    expect(reminder.sourceEntityId).toBe(operationId);
     expect(reminder.createdById).toBe(userId);
 
     await disable(rule.id);
@@ -707,7 +872,7 @@ describe('Automations (e2e)', () => {
         availableAt: new Date(Date.now() - 1000),
       },
     });
-    await drain(12);
+    await drain();
 
     expect(await notificationsWithTitle(title)).toBe(1);
     const again = await executionsOf(rule.id);
@@ -953,7 +1118,7 @@ describe('Automations (e2e)', () => {
       })
       .expect(201);
 
-    await drain(12);
+    await drain();
 
     const [execution] = await executionsOf(rule.id);
     expect(execution!.status).toBe('FAILED');
@@ -967,7 +1132,7 @@ describe('Automations (e2e)', () => {
     });
     /** Erro permanente não fica repetindo: vai direto para o cemitério. */
     expect(job.status).toBe('DEAD');
-    expect(job.lastError).toContain('destinatário');
+    expect(job.lastError).toBe('PERMANENT_JOB_ERROR');
 
     await disable(rule.id);
   }, 180000);

@@ -113,7 +113,9 @@ void main() {
   });
 
   test('preserva nome, tipo e tamanho declarados', () async {
-    final setup = build(writeOriginal(name: 'laudo.pdf', mime: 'application/pdf'));
+    final setup = build(
+      writeOriginal(name: 'laudo.pdf', mime: 'application/pdf'),
+    );
 
     final task = await setup.repository.pickDocument('op-9');
 

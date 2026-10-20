@@ -11,8 +11,14 @@ import {
   IdentityTokenPurpose,
   type IIdentityTokenDelivery,
 } from '../domain/identity.types';
+import {
+  AllocationResource,
+  EntitlementService,
+} from '../../subscription-plans/entitlements';
 import { IdentityRepository } from '../infrastructure/identity.repository';
 import { IdentityTokenService } from './token.service';
+import { AuthorizationService } from '../../../common';
+import { ForbiddenException } from '../../../exceptions';
 
 @Injectable()
 export class InvitationService {
@@ -22,6 +28,8 @@ export class InvitationService {
     @Inject(HASH_PROVIDER) private readonly hashes: IHashProvider,
     @Inject(IDENTITY_TOKEN_DELIVERY)
     private readonly delivery: IIdentityTokenDelivery,
+    private readonly entitlements: EntitlementService,
+    private readonly authorization: AuthorizationService,
   ) {}
 
   async create(input: {
@@ -30,11 +38,60 @@ export class InvitationService {
     roleId: string;
     invitedById: string;
     email: string;
+    actorPermissions: readonly string[];
+    actorSurfaces: readonly string[];
+    actorUnitIds: readonly string[];
+    isOrganizationOwner: boolean;
   }): Promise<{ id: string; expiresAt: Date }> {
+    /**
+     * Aviso antecipado, não a autoridade.
+     *
+     * A vaga só é de fato ocupada quando alguém aceita, e é lá que o teto é
+     * aplicado sob bloqueio. Conferir aqui existe para que a recusa apareça
+     * para quem convida, e não para o convidado no meio do cadastro.
+     */
+    await this.entitlements.assertCanAllocate(
+      input.organizationId,
+      AllocationResource.PLATFORM_USERS,
+    );
+    const role = await this.repository.findDelegatedRole(
+      input.organizationId,
+      input.roleId,
+      input.invitedById,
+      input.actorUnitIds,
+    );
+    if (!role || role.key === 'OWNER' || role.permissions.includes('*'))
+      throw new ValidationException('Invalid role');
+    if (
+      !this.authorization.canDelegate(
+        {
+          permissions: input.actorPermissions,
+          allowedSurfaces: input.actorSurfaces,
+          isOrganizationOwner: input.isOrganizationOwner,
+        },
+        role.permissions,
+        role.allowedSurfaces,
+      )
+    )
+      throw new ForbiddenException(
+        'Access cannot exceed the current actor authority',
+      );
+    if (
+      input.businessUnitId &&
+      !this.authorization.canAccessUnit(
+        {
+          businessUnitIds: input.actorUnitIds,
+          isOrganizationOwner: input.isOrganizationOwner,
+        },
+        input.businessUnitId,
+      )
+    )
+      throw new ForbiddenException('Business unit is outside actor scope');
     const token = this.tokens.generateOpaqueToken();
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60_000);
+    let invitation: Awaited<ReturnType<IdentityRepository['createInvitation']>>;
     try {
-      const invitation = await this.repository.createInvitation({
+      invitation = await this.repository.createInvitation({
         organizationId: input.organizationId,
         businessUnitId: input.businessUnitId,
         roleId: input.roleId,
@@ -44,15 +101,15 @@ export class InvitationService {
         tokenHash: this.tokens.hashOpaqueToken(token),
         expiresAt,
       });
-      await this.delivery.deliver(
-        IdentityTokenPurpose.INVITATION,
-        invitation.email,
-        token,
-      );
-      return { id: invitation.id, expiresAt };
     } catch {
       throw new ConflictException('A pending invitation already exists');
     }
+    await this.delivery.deliver(
+      IdentityTokenPurpose.INVITATION,
+      invitation.email,
+      token,
+    );
+    return { id: invitation.id, expiresAt };
   }
 
   /**
@@ -88,7 +145,6 @@ export class InvitationService {
     organizationId: string,
   ): Promise<{ id: string; expiresAt: Date }> {
     const invitation = await this.requirePending(id, organizationId);
-
     const token = this.tokens.generateOpaqueToken();
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60_000);
 
@@ -145,15 +201,24 @@ export class InvitationService {
     ) {
       throw new ValidationException('Invalid or expired invitation');
     }
-    await this.repository.acceptInvitation(invitation.id, {
-      email: invitation.email,
-      normalizedEmail: invitation.normalizedEmail,
-      firstName: input.firstName,
-      lastName: input.lastName,
-      passwordHash: await this.hashes.hash(input.password),
-      organizationId: invitation.organizationId,
-      businessUnitId: invitation.businessUnitId,
-      roleId: invitation.roleId,
-    });
+    await this.repository.acceptInvitation(
+      invitation.id,
+      {
+        email: invitation.email,
+        normalizedEmail: invitation.normalizedEmail,
+        firstName: input.firstName,
+        lastName: input.lastName,
+        passwordHash: await this.hashes.hash(input.password),
+        organizationId: invitation.organizationId,
+        businessUnitId: invitation.businessUnitId,
+        roleId: invitation.roleId,
+      },
+      (transaction) =>
+        this.entitlements.enforceAllocationIn(
+          transaction,
+          invitation.organizationId,
+          AllocationResource.PLATFORM_USERS,
+        ),
+    );
   }
 }

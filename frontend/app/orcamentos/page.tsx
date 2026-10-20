@@ -1,23 +1,22 @@
-import { QuotesWorkspace } from "@/components/quotes/quotes-workspace";
-import { Breadcrumbs, entityCrumbs } from "@/navigation";
-import { WorkspacePage } from "@/workspace";
+import { redirect } from "next/navigation";
+
+import { ROUTES } from "@/lib/routes";
+import { SECTION_PARAM } from "@/lib/section-navigation";
+import { FINANCIAL_SECTIONS } from "@/components/financial/sections";
 
 /**
- * Quotes Workspace.
+ * Orçamentos virou aba do Financeiro.
  *
- * Server Component: o `WorkspacePage` compõe guards, shell e cabeçalho.
- * Título, descrição e capability vêm do Entity Registry — `quotes.read` é a
- * mesma que o backend exige, e ela não decorre de ter acesso a clientes ou ao
- * catálogo.
+ * A rota fica e redireciona: ela está em favorito, em link colado numa conversa e
+ * no histórico de quem usa o sistema há meses. Apagá-la daria 404 para quem não
+ * fez nada de errado.
+ *
+ * `redirect` do servidor, e não uma tela com "fomos para lá": a pessoa pediu os
+ * orçamentos e os orçamentos são isto — o intermediário só cobraria um clique.
+ *
+ * As rotas de dentro (`/orcamentos/:id`) **não** mudam: são páginas próprias, com
+ * o registro na tela, e nada nelas virou aba.
  */
-export default function QuotesPage() {
-  return (
-    <WorkspacePage
-      entity="quote"
-      contained={false}
-      breadcrumb={<Breadcrumbs items={entityCrumbs("quote")} />}
-    >
-      <QuotesWorkspace />
-    </WorkspacePage>
-  );
+export default function QuotesPage(): never {
+  redirect(`${ROUTES.financial}?${SECTION_PARAM}=${FINANCIAL_SECTIONS.quotes}`);
 }

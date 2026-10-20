@@ -2,7 +2,12 @@ import { ProfileWorkspace } from "@/components/profile/profile-workspace";
 import { WorkspacePage } from "@/workspace";
 
 /**
- * Perfil — a própria conta.
+ * Minha conta — o que é da própria pessoa.
+ *
+ * Fica separada de Configurações de propósito: ali se administra a
+ * organização, aqui se administra a si mesmo. Consolidar a navegação não
+ * significa misturar donos — dados pessoais, senha e preferências continuam
+ * pertencendo a quem entrou, não à empresa.
  *
  * Server Component: o `WorkspacePage` compõe guards, shell e cabeçalho.
  *
@@ -16,9 +21,9 @@ import { WorkspacePage } from "@/workspace";
 export default function ProfilePage() {
   return (
     <WorkspacePage
-      title="Meu perfil"
+      title="Minha conta"
       description="Seus dados, segurança, preferências e o contexto em que você está trabalhando."
-      activeLabel="Perfil"
+      activeLabel="Minha conta"
       subscription={false}
       contained={false}
     >

@@ -14,6 +14,7 @@ import type { IAuthenticatedUser, IRequestContext } from '../contracts';
 
 export const ROLES_KEY = 'foundation:roles';
 export const PERMISSIONS_KEY = 'foundation:permissions';
+export const SURFACES_KEY = 'foundation:surfaces';
 export const PUBLIC_KEY = 'foundation:public';
 
 interface ContextRequest extends Request {
@@ -47,6 +48,9 @@ export const Permissions = (...permissions: string[]) =>
   SetMetadata(PERMISSIONS_KEY, permissions);
 
 export const Roles = (...roles: string[]) => SetMetadata(ROLES_KEY, roles);
+
+export const Surfaces = (...surfaces: string[]) =>
+  SetMetadata(SURFACES_KEY, surfaces);
 
 export const Public = () => SetMetadata(PUBLIC_KEY, true);
 

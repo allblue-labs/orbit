@@ -30,6 +30,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useApiMutation } from "@/hooks/api/use-api-mutation";
 import { useApiQuery } from "@/hooks/api/use-api-query";
 import { CACHE } from "@/hooks/api/cache-policy";
+import { artifactExecutionsService } from "@/services/artifact-executions.service";
 import { financialService } from "@/services/financial.service";
 import { operationsService } from "@/services/operations.service";
 import { quotesService } from "@/services/quotes.service";
@@ -41,7 +42,6 @@ import type {
   Quote,
   QuoteQuery,
   QuoteReasonInput,
-  QuoteStatus,
   UpdateQuoteInput,
   UpdateQuoteItemInput,
 } from "@/types/quotes";
@@ -139,7 +139,14 @@ export function useQuoteForecast(quoteId: string | null, enabled = true) {
  * e as operações são invalidados. O Financeiro entra porque aprovar e cancelar
  * mexem na receita prevista; as operações, porque converter cria uma.
  */
-function useQuoteWrite() {
+/**
+ * Exportado porque o wizard também escreve.
+ *
+ * A invalidação depois de gravar uma proposta é a mesma, venha de onde vier — e
+ * uma segunda cópia esqueceria de invalidar o Financeiro na primeira vez que
+ * alguém mexesse numa delas.
+ */
+export function useQuoteWrite() {
   const queryClient = useQueryClient();
 
   return {
@@ -147,7 +154,9 @@ function useQuoteWrite() {
       queryClient.setQueryData(quotesService.keys.detail(quote.id), quote);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: quotesService.keys.lists() }),
-        queryClient.invalidateQueries({ queryKey: financialService.keys.all() }),
+        queryClient.invalidateQueries({
+          queryKey: financialService.keys.all(),
+        }),
         /** A raiz do módulo: converter cria operação e muda listagens e detalhes. */
         queryClient.invalidateQueries({
           queryKey: operationsService.keys.module(),
@@ -255,9 +264,35 @@ export function useQuoteTransition(id: string) {
   );
 }
 
-/** Situações agrupadas na aba "Encerrados". */
-export const CLOSED_STATUSES: readonly QuoteStatus[] = [
-  "REJECTED",
-  "EXPIRED",
-  "CANCELLED",
-];
+/**
+ * Baixa a proposta impressa.
+ *
+ * Mutação, e não consulta: produz um efeito — o arquivo salvo — e repetir é
+ * pedir de novo, não reler um cache. Como consulta, o React Query guardaria o
+ * blob e o segundo clique não baixaria nada.
+ *
+ * `scope` por proposta: baixar uma não trava o botão da linha de baixo.
+ */
+export function useQuoteDocument(id: string) {
+  return useApiMutation(() => quotesService.document(id), {
+    scope: { id: `quote-document-${id}` },
+  });
+}
+
+/**
+ * Emite o documento oficial da proposta.
+ *
+ * Devolve a execução criada, e é por isso que quem chama navega para ela: o
+ * documento ainda precisa da assinatura do proponente, e é na tela da execução
+ * que se assina e se emite. Igual ao recibo.
+ *
+ * Invalida as execuções porque a central de documentos emitidos acabou de ganhar
+ * uma linha — sem isso, a aba abriria sem o documento que a pessoa acabou de
+ * emitir e pareceria que a emissão não funcionou.
+ */
+export function useIssueQuoteDocument(id: string) {
+  return useApiMutation(() => quotesService.issueDocument(id), {
+    scope: { id: `quote-issue-document-${id}` },
+    invalidate: [artifactExecutionsService.keys.module()],
+  });
+}

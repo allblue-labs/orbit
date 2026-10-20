@@ -6,11 +6,15 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint .",
+    "lint": "eslint . && node scripts/check-product-language.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
-    "contracts:sync": "node scripts/sync-contracts.mjs"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:browser": "playwright test",
+    "contracts:sync": "node scripts/sync-contracts.mjs",
+    "lint:language": "node scripts/check-product-language.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -50,15 +54,14 @@
     "input-otp": "^1.4.2",
     "lucide-react": "^0.575.0",
     "motion": "^12.43.0",
-    "next": "^16.2.12",
-    "qrcode.react": "^4.2.0",
+    "next": "^16.3.4",
     "react": "^19.2.0",
     "react-day-picker": "^9.14.0",
     "react-dom": "^19.2.0",
     "react-hook-form": "^7.71.2",
     "react-resizable-panels": "^4.6.5",
     "recharts": "^2.15.4",
-    "sharp": "0.35.3",
+    "sharp": "^0.35.4",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4.2.1",
@@ -67,14 +70,17 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@types/node": "^22.16.5",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "eslint": "^9.39.5",
-    "eslint-config-next": "^16.2.12",
+    "eslint-config-next": "^16.3.4",
     "eslint-config-prettier": "^10.1.8",
+    "jsqr": "^1.4.0",
     "prettier": "^3.9.6",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.7"
   },
   "overrides": {
     "postcss": "8.5.25",

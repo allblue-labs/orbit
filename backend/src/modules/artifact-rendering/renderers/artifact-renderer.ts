@@ -54,6 +54,10 @@ export interface RenderSignatureInput {
   readonly signerDocument?: string | null;
   readonly signedAt?: string;
   readonly signatureHash?: string;
+  readonly signedAs?: string;
+  readonly professionalCredential?: string;
+  readonly signatureImage?: Buffer;
+  readonly signatureImageMimeType?: string;
 }
 
 /**
@@ -68,6 +72,17 @@ export interface RenderBranding {
   readonly primaryColor?: string;
   readonly headerText?: string;
   readonly footerText?: string;
+}
+
+export interface RenderEvidenceInput {
+  readonly id: string;
+  readonly kind: string;
+  readonly caption?: string | null;
+  readonly fileName: string;
+  readonly mimeType: string;
+  readonly sha256?: string | null;
+  /** Conteúdo imutável carregado pelo pipeline; nunca persistido no snapshot. */
+  readonly bytes?: Buffer;
 }
 
 export interface RenderInput {
@@ -89,6 +104,7 @@ export interface RenderInput {
   };
   readonly sections: readonly RenderSectionInput[];
   readonly signatures: readonly RenderSignatureInput[];
+  readonly evidence?: readonly RenderEvidenceInput[];
   readonly branding: RenderBranding;
   /** `layout` do snapshot, como veio — o renderer lê o que entende. */
   readonly layout: Readonly<Record<string, unknown>>;

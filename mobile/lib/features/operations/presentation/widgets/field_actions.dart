@@ -90,8 +90,17 @@ class _FieldActionsSectionState extends ConsumerState<FieldActionsSection> {
       );
     } on OrbitException catch (error) {
       if (!mounted) return;
-      // A recusa é do servidor; mostramos a razão que ele deu.
-      messenger.showSnackBar(SnackBar(content: Text(error.message)));
+
+      /// A recusa do servidor é mostrada como ele a deu. O que muda é o caso
+      /// ambíguo: se a requisição pode ter sido processada, a frase pede para
+      /// conferir antes de repetir — mudar de status duas vezes é pior do que
+      /// esperar um instante.
+      messenger.showSnackBar(
+        SnackBar(content: Text(error.publicMessageForCommand)),
+      );
+      if (error.mayHaveBeenApplied) {
+        invalidateOperation(ref, widget.operation.id);
+      }
     } finally {
       if (mounted) setState(() => _submitting = null);
     }
@@ -109,7 +118,7 @@ class _FieldActionsSectionState extends ConsumerState<FieldActionsSection> {
       return true;
     }).toList();
 
-    return SectionCard(
+    return SectionBlock(
       title: 'Execução',
       subtitle: 'Cada transição é validada pelo servidor',
       child: PermissionGate(

@@ -37,10 +37,7 @@ export function IntegrationsSettingsTab() {
               aria-hidden
             />
             <span className="text-sm text-muted-foreground">
-              <strong className="text-foreground">Webhooks</strong> — não há
-              modelo nem rota (<span className="font-mono">/webhooks</span> →
-              404). A plataforma já tem fila de jobs em background, que é a
-              infraestrutura sobre a qual a entrega assíncrona seria construída.
+              <strong className="text-foreground">Webhooks</strong> — ainda não existem. Avisar sistemas externos quando algo acontece no Orbit é uma extensão prevista, ainda não construída.
             </span>
           </li>
           <li className="flex items-start gap-2">
@@ -49,10 +46,7 @@ export function IntegrationsSettingsTab() {
               aria-hidden
             />
             <span className="text-sm text-muted-foreground">
-              <strong className="text-foreground">API Keys</strong> — não
-              existem (<span className="font-mono">/api-keys</span> → 404). Hoje
-              todo acesso passa por sessão de usuário; uma chave de serviço
-              exigiria um portador que não é pessoa, com escopo próprio.
+              <strong className="text-foreground">Chaves de integração</strong> — ainda não existem. Hoje todo acesso é feito por uma pessoa com sessão iniciada; uma chave de sistema teria escopo próprio.
             </span>
           </li>
           <li className="flex items-start gap-2">
@@ -61,9 +55,7 @@ export function IntegrationsSettingsTab() {
               aria-hidden
             />
             <span className="text-sm text-muted-foreground">
-              <strong className="text-foreground">SSO</strong> — não há provedor
-              de identidade externo em contrato. `Credential` é senha local, e
-              federar exigiria um segundo caminho de autenticação.
+              <strong className="text-foreground">Login único (SSO)</strong> — ainda não é possível entrar com um provedor de identidade da sua empresa. O acesso é feito com senha do próprio Orbit.
             </span>
           </li>
         </ul>

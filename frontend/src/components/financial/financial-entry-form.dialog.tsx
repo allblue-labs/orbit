@@ -306,7 +306,7 @@ function Body({
         <Field
           label="Vencimento"
           htmlFor="financial-due"
-          hint="Opcional. O servidor marca como vencido o que passar da data."
+          hint="Opcional. O lançamento é marcado como vencido depois desta data."
         >
           <Input
             id="financial-due"
@@ -339,9 +339,9 @@ function Body({
 
         {editing ? null : (
           <Field
-            label="Unidade"
+            label="Organização"
             htmlFor="financial-unit"
-            hint="Dinheiro é contado por unidade, e não muda depois."
+            hint="Dinheiro é contado por organização, e não muda depois."
           >
             <Select
               value={form.businessUnitId}

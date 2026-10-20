@@ -13,6 +13,7 @@ type DecimalValue = { toString(): string } | string | number | null;
 
 interface BusinessUnitSource {
   id: string;
+  logoUrl?: string | null;
   organizationId: string;
   parentId: string | null;
   slug: string;
@@ -63,6 +64,7 @@ interface OrganizationSource {
   subscriptionStartedAt: DateValue | null;
   currentPeriodStart: DateValue | null;
   currentPeriodEnd: DateValue | null;
+  logoUrl?: string | null;
   settings: unknown;
   createdAt: DateValue;
   updatedAt: DateValue;
@@ -80,8 +82,19 @@ interface MemberSource {
     email: string;
     avatarUrl: string | null;
     status: string;
+    /* Só a existência: `take: 1` na consulta, e nunca a imagem. */
+    professionalSignatures?: readonly { id: string }[];
   };
-  role: { id: string; key: string; name: string };
+  usesCustomAccess: boolean;
+  customPermissions: readonly string[];
+  customAllowedSurfaces: readonly string[];
+  role: {
+    id: string;
+    key: string;
+    name: string;
+    permissions: readonly string[];
+    allowedSurfaces: readonly string[];
+  };
 }
 
 interface UnitMembershipSource {
@@ -95,6 +108,7 @@ interface RoleSource {
   name: string;
   description: string | null;
   permissions: readonly string[];
+  allowedSurfaces: readonly string[];
   isSystem: boolean;
   organizationId: string | null;
   _count: { organizationMemberships: number };
@@ -115,6 +129,8 @@ export class OrganizationReadModelMapper {
       subscriptionStartedAt: this.nullableDate(source.subscriptionStartedAt),
       currentPeriodStart: this.nullableDate(source.currentPeriodStart),
       currentPeriodEnd: this.nullableDate(source.currentPeriodEnd),
+      /* Igual às unidades: o fato, não a imagem. */
+      hasLogo: Boolean(source.logoUrl),
       settings: source.settings,
       createdAt: this.date(source.createdAt),
       updatedAt: this.date(source.updatedAt),
@@ -148,6 +164,9 @@ export class OrganizationReadModelMapper {
       timezone: source.timezone,
       locale: source.locale,
       currency: source.currency,
+      /* Só o fato, não a imagem: a lista de unidades não deve carregar
+         centenas de quilobytes por linha. */
+      hasLogo: Boolean(source.logoUrl),
       status: source.status,
       createdAt: this.date(source.createdAt),
       updatedAt: this.date(source.updatedAt),
@@ -201,7 +220,21 @@ export class OrganizationReadModelMapper {
       },
       businessUnits: businessUnits.map((unit) => ({ ...unit })),
       joinedAt: this.date(source.joinedAt),
+      hasSignature: (source.user.professionalSignatures ?? []).length > 0,
       isOwner: source.userId === ownerUserId,
+      access: {
+        useRoleDefaults: !source.usesCustomAccess,
+        permissions: [
+          ...(source.usesCustomAccess
+            ? source.customPermissions
+            : source.role.permissions),
+        ],
+        allowedSurfaces: [
+          ...(source.usesCustomAccess
+            ? source.customAllowedSurfaces
+            : source.role.allowedSurfaces),
+        ],
+      },
     };
   }
 
@@ -216,6 +249,7 @@ export class OrganizationReadModelMapper {
       name: source.name,
       description: source.description,
       permissions: [...source.permissions],
+      allowedSurfaces: [...source.allowedSurfaces],
       isSystem: source.isSystem,
       isOrganizationOwned: source.organizationId !== null,
       memberCount: source._count.organizationMemberships,

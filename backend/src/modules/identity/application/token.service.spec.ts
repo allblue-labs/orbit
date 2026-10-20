@@ -21,6 +21,8 @@ describe('IdentityTokenService', () => {
       businessUnitIds: [],
       roles: ['MEMBER'],
       permissions: ['profile.read'],
+      allowedSurfaces: ['WEB', 'MOBILE'],
+      isOrganizationOwner: false,
     });
 
     expect(pair.refreshToken).not.toBe(pair.refreshTokenHash);

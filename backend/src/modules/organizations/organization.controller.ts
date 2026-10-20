@@ -8,11 +8,12 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   Req,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { Permissions } from '../../decorators';
+import { Permissions, Surfaces } from '../../decorators';
 import { PaginationHelper } from '../../database/helpers/database.helpers';
 import { ForbiddenException } from '../../exceptions';
 import { ParseUUIDv7Pipe } from '../../pipes';
@@ -24,6 +25,7 @@ import {
   MemberQueryDto,
   UpdateMemberDto,
   UpdateOrganizationDto,
+  UpdateOrganizationLogoDto,
   UpdateRoleDto,
 } from './dto/organization.dto';
 import { OrganizationService } from './organization.service';
@@ -48,6 +50,7 @@ export class OrganizationController {
   }
 
   @Get('current')
+  @Surfaces('WEB', 'MOBILE', 'API')
   @RequiresActivePlan()
   async getCurrent(@Req() request: IdentityRequest) {
     return this.readModels.context(
@@ -82,6 +85,34 @@ export class OrganizationController {
   }
 
   /**
+   * Um membro.
+   *
+   * A página de detalhe precisa de uma pessoa, e não da lista. Antes a tela
+   * recebia o objeto da listagem — o que só funciona num painel aberto a partir
+   * dela: endereço guardado, recarregar ou abrir em outra aba não tinham de onde
+   * buscar.
+   *
+   * Mesma autorização e mesmo Read Model da listagem: é a mesma leitura, de uma
+   * linha só.
+   */
+  @Get('current/members/:userId')
+  @RequiresActivePlan()
+  async member(
+    @Param('userId', ParseUUIDv7Pipe) userId: string,
+    @Req() request: IdentityRequest,
+  ) {
+    const { member, unitMemberships, ownerUserId } =
+      await this.organizations.getMember(this.organizationId(request), userId);
+
+    const [readModel] = this.readModels.members(
+      [member],
+      ownerUserId,
+      unitMemberships,
+    );
+    return readModel;
+  }
+
+  /**
    * Altera papel e situação de um membro.
    *
    * Só isso: nome, e-mail e avatar são do **perfil**, que cada pessoa
@@ -95,12 +126,18 @@ export class OrganizationController {
     @Req() request: IdentityRequest,
     @Body() input: UpdateMemberDto,
   ) {
-    const { member, ownerUserId } = await this.organizations.updateMember(
-      this.organizationId(request),
-      userId,
-      input,
+    const { member, ownerUserId, unitMemberships } =
+      await this.organizations.updateMember(
+        this.organizationId(request),
+        userId,
+        input,
+        request.identity!,
+      );
+    return this.readModels.member(
+      member,
+      ownerUserId,
+      unitMemberships.map((item) => item.businessUnit),
     );
-    return this.readModels.member(member, ownerUserId);
   }
 
   /**
@@ -120,6 +157,13 @@ export class OrganizationController {
     );
   }
 
+  @Get('current/access-catalog')
+  @RequiresActivePlan()
+  @Permissions('organization.members.update')
+  accessCatalog() {
+    return this.organizations.accessCatalog();
+  }
+
   @Post('current/roles')
   @RequiresActivePlan()
   @Permissions('organization.roles.manage')
@@ -128,7 +172,11 @@ export class OrganizationController {
     @Body() input: CreateRoleDto,
   ) {
     return this.readModels.role(
-      await this.organizations.createRole(this.organizationId(request), input),
+      await this.organizations.createRole(
+        this.organizationId(request),
+        input,
+        request.identity!,
+      ),
     );
   }
 
@@ -145,6 +193,7 @@ export class OrganizationController {
         id,
         this.organizationId(request),
         input,
+        request.identity!,
       ),
     );
   }
@@ -170,6 +219,48 @@ export class OrganizationController {
     return this.readModels.context(
       await this.organizations.update(this.organizationId(request), input),
     );
+  }
+
+  /**
+   * A marca que timbra os documentos da empresa.
+   *
+   * ## Recurso separado de `current`
+   *
+   * `GET current` é pedido em toda navegação e publica só `hasLogo`. A imagem
+   * chega a meio megabyte e se pede aqui, por quem vai desenhá-la — na prática,
+   * o painel de configurações.
+   *
+   * Leitura com a mesma autorização de `GET current`: é a marca da própria
+   * empresa, visível a quem já vê o nome dela. Escrita exige
+   * `organization.update`, porque trocar o timbre muda todo documento emitido
+   * daqui em diante, inclusive os que forem reimpressos.
+   */
+  @Get('current/logo')
+  @Surfaces('WEB', 'MOBILE', 'API')
+  @RequiresActivePlan()
+  async getLogo(@Req() request: IdentityRequest) {
+    return this.organizations.getLogo(this.organizationId(request));
+  }
+
+  /** `PUT` e não `PATCH`: o recurso é a imagem inteira, substituída de uma vez. */
+  @Put('current/logo')
+  @RequiresActivePlan()
+  @Permissions('organization.update')
+  async setLogo(
+    @Req() request: IdentityRequest,
+    @Body() input: UpdateOrganizationLogoDto,
+  ) {
+    return this.organizations.setLogo(
+      this.organizationId(request),
+      input.image,
+    );
+  }
+
+  @Delete('current/logo')
+  @RequiresActivePlan()
+  @Permissions('organization.update')
+  async removeLogo(@Req() request: IdentityRequest) {
+    return this.organizations.removeLogo(this.organizationId(request));
   }
 
   private organizationId(request: IdentityRequest): string {

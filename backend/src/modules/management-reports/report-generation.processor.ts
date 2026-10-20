@@ -34,6 +34,9 @@
 import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { ArtifactRendererRegistry } from '../artifact-rendering/renderers/renderer.registry';
+import { DocumentContextBuilder } from '../artifact-rendering/document-context.builder';
+import { readEmbeddedImage } from '../../common/embedded-image';
+import { issuerLogo } from '../../common/issuer-brand';
 import {
   JOB_QUEUES,
   PermanentJobError,
@@ -72,6 +75,7 @@ export class ReportGenerationProcessor implements JobProcessor, OnModuleInit {
     private readonly renderers: ArtifactRendererRegistry,
     private readonly files: FileObjectService,
     private readonly registry: JobProcessorRegistry,
+    private readonly documentContext: DocumentContextBuilder,
   ) {}
 
   onModuleInit(): void {
@@ -220,9 +224,10 @@ export class ReportGenerationProcessor implements JobProcessor, OnModuleInit {
   /**
    * Desenha e guarda.
    *
-   * O renderizador é o do Artifact Engine — `pdf.default` produz o mesmo tipo
-   * de documento que os artefatos de campo. O arquivo vai para o Storage com
-   * SHA-256 calculado sobre o que foi gravado, no namespace de relatórios.
+   * O renderizador é o do Artifact Engine — `pdf.premium` produz o mesmo
+   * documento que os artefatos de campo, com timbre, faixa da marca e rodapé
+   * numerado. O arquivo vai para o Storage com SHA-256 calculado sobre o que foi
+   * gravado, no namespace de relatórios.
    */
   private async render(
     report: { id: string; type: string; format: string },
@@ -249,6 +254,19 @@ export class ReportGenerationProcessor implements JobProcessor, OnModuleInit {
     }
 
     const renderer = this.renderers.get(rendererId);
+
+    /* O timbre da unidade do recorte. A logo é data URI do próprio inquilino:
+       `readEmbeddedImage` recusa URL — que o servidor teria de buscar — e SVG,
+       que é documento e não imagem. */
+    const unidade = await this.repository.findLetterhead(
+      context.organizationId,
+      context.businessUnitId,
+    );
+    const { emitter } = this.documentContext.build({
+      businessUnit: unidade ?? undefined,
+      logo: readEmbeddedImage(issuerLogo(unidade)) ?? undefined,
+    });
+
     const output = await renderer.render(
       this.adapter.toRenderInput({
         reportId: report.id,
@@ -256,6 +274,7 @@ export class ReportGenerationProcessor implements JobProcessor, OnModuleInit {
         organizationName: context.snapshot.scope.businessUnitName ?? 'Orbit',
         correlationId: context.correlationId,
         sourceHash,
+        emitter,
       }),
     );
 
@@ -309,10 +328,7 @@ export class ReportGenerationProcessor implements JobProcessor, OnModuleInit {
   /** Motivo de negócio. Stack e caminho ficam no log, com o correlationId. */
   private publicReason(error: unknown): string {
     if (error instanceof PermanentJobError) return error.message;
-    if (error instanceof Error) {
-      return `Falha ao compor o relatório: ${error.message}`;
-    }
-    return 'Falha desconhecida ao compor o relatório';
+    return 'Não foi possível compor o relatório. Tente novamente ou contate o suporte.';
   }
 
   /** Input/configuração inválida não fica bloqueando a fila com retry inútil. */

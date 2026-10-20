@@ -219,8 +219,7 @@ function ReminderForm({
           {editing ? "Editar lembrete" : "Novo lembrete"}
         </DialogTitle>
         <DialogDescription>
-          Cai no calendário {calendar.name}, no fuso {timeZone}. A repetição é
-          expandida pelo backend.
+          Cai no calendário {calendar.name}, no fuso {timeZone}. As ocorrências são geradas a partir da repetição.
         </DialogDescription>
       </DialogHeader>
 
@@ -255,7 +254,7 @@ function ReminderForm({
               ))}
             </datalist>
             <p className="text-xs text-muted-foreground">
-              Texto livre — o backend não mantém catálogo de tipos.
+              Texto livre: não há catálogo de tipos.
             </p>
           </div>
 

@@ -156,8 +156,8 @@ describe('ArtifactHtmlRenderer', () => {
   it('respeita a ordem declarada, não a ordem do array', async () => {
     const input = base({
       sections: [
-        { ...base().sections[0], id: 'b', title: 'Segunda', order: 2 },
-        { ...base().sections[0], id: 'a', title: 'Primeira', order: 1 },
+        { ...base().sections[0]!, id: 'b', title: 'Segunda', order: 2 },
+        { ...base().sections[0]!, id: 'a', title: 'Primeira', order: 1 },
       ],
     });
     const document = await html(input);
@@ -177,7 +177,7 @@ describe('ArtifactHtmlRenderer', () => {
   describe('sanitização', () => {
     it('escapa marcação vinda de resposta', async () => {
       const input = base();
-      const section = input.sections[0];
+      const section = input.sections[0]!;
       const document = await html({
         ...input,
         sections: [
@@ -185,7 +185,7 @@ describe('ArtifactHtmlRenderer', () => {
             ...section,
             fields: [
               {
-                ...section.fields[0],
+                ...section.fields[0]!,
                 value: '<script>alert(1)</script>',
               },
             ],
@@ -203,7 +203,7 @@ describe('ArtifactHtmlRenderer', () => {
         ...input,
         sections: [
           {
-            ...input.sections[0],
+            ...input.sections[0]!,
             title: '<img src=x onerror=alert(1)>',
           },
         ],
@@ -221,7 +221,7 @@ describe('ArtifactHtmlRenderer', () => {
           ...input.branding,
           organizationName: '</title><script>x</script>',
         },
-        signatures: [{ ...input.signatures[0], signerName: '<b>Ana</b>' }],
+        signatures: [{ ...input.signatures[0]!, signerName: '<b>Ana</b>' }],
       });
 
       expect(document).not.toContain('<script>x</script>');

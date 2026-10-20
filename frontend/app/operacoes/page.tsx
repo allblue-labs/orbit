@@ -13,7 +13,7 @@ export default function OperationsPage() {
   return (
     <WorkspacePage
       entity="operation"
-      description="Ordens de serviço da unidade ativa: criação, reagendamento, atribuição e acompanhamento, com filtros aplicados pelo backend."
+      description="Ordens de serviço da unidade ativa: criação, reagendamento, atribuição e acompanhamento."
       suspense={false}
     >
       <OperationsTabs />

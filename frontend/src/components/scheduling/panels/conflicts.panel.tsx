@@ -34,7 +34,7 @@ export function ConflictsPanel({
     <PanelFrame
       panelId="scheduling-conflicts"
       title="Conflitos"
-      description="Detectados pelo backend no período visível"
+      description="Detectados no período visível"
     >
       <PanelState
         query={toPanelQuery(query)}

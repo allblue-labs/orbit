@@ -28,6 +28,7 @@ import {
 } from "@/hooks/organization/use-organization";
 import { formatDateTime } from "@/lib/formatters";
 import { ROUTES } from "@/lib/routes";
+import { lifecycleLabel } from "@/registry";
 import { cn } from "@/lib/utils";
 import type { Integration } from "@/types/organization";
 
@@ -73,9 +74,7 @@ export function IntegrationsSection({ canManage }: { canManage: boolean }) {
         <MutationError error={validate.error} />
 
         <p className="border-t border-border pt-3 text-xs text-muted-foreground">
-          O backend valida credenciais; não há rota de sincronização de dados
-          nem catálogo de provedores disponíveis. Segredos ficam cifrados no
-          servidor e não são publicados.
+          As credenciais são conferidas, mas a sincronização de dados e o catálogo de provedores ainda não estão disponíveis. Os segredos ficam cifrados e não são publicados.
         </p>
       </div>
     </PanelFrame>
@@ -110,7 +109,7 @@ function IntegrationRow({
               "bg-surface-strong text-muted-foreground",
           )}
         >
-          {integration.status}
+          {lifecycleLabel(integration.status)}
         </span>
         {canManage ? (
           <Button

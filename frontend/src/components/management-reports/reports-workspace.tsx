@@ -20,6 +20,28 @@
  * continua respondendo isso em setembro. Um relatório não é o dashboard
  * exportado.
  *
+ * ## Os emitidos e os modelos moram aqui
+ *
+ * Eram itens de menu num grupo "Documentos" cujos três membros descrevem o mesmo
+ * ciclo: o documento emitido, o relatório do período e o modelo que gera os dois.
+ * Quem ajusta um olha o outro na mesma sessão.
+ *
+ * A distinção entre relatório gerencial e documento emitido **continua** — está
+ * escrita acima e nas abas. O que mudou é que as duas coisas se alcançam sem
+ * trocar de página.
+ *
+ * ## Modelos mora aqui
+ *
+ * O modelo é o que define o documento que o relatório gera, e quem ajusta um
+ * está olhando o outro na mesma sessão. Eram dois itens de menu no mesmo grupo
+ * descrevendo as duas pontas do mesmo ciclo.
+ *
+ * A aba pede `artifact_templates.read` por conta própria. E herda o guard da
+ * página — `reports.management.read` —, que é a consequência de morar aqui:
+ * quem não alcança relatórios gerenciais deixa de alcançar os modelos por esta
+ * porta. Hoje nenhum plano separa as duas; `/artefatos/:id` continua aberto a
+ * quem tem só `artifact_templates.read`.
+ *
  * ## Isolamento de falha
  *
  * Cada aba tem `TabBoundary` própria, e dentro delas catálogo, histórico e
@@ -29,12 +51,8 @@
  * confundir com "quebrou".
  */
 import { Suspense, useState } from "react";
-import { ArrowRight, CalendarClock, FileBarChart, LayoutGrid } from "lucide-react";
-import Link from "next/link";
-
 import { ContentContainer } from "@/components/layout/page-primitives";
 import { PanelError, PanelFrame, PanelLoading } from "@/components/panels";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAction } from "@/actions";
 import {
@@ -47,10 +65,16 @@ import { useSession } from "@/providers/session-provider";
 import type { ManagementReportSummary } from "@/types/management-reports";
 import { MetricCard, TabBoundary } from "@/workspace";
 import { formatDate, formatDateTime } from "@/lib/formatters";
+import { PeriodSnapshot } from "./period-snapshot";
 import { ReportGenerator } from "./report-generator";
 import { ReportHistory } from "./report-history";
 import { ReportStatusBadge } from "./report-presentation";
 import { useRouter, useSearchParams } from "next/navigation";
+import { TemplatesList } from "@/components/artifact-studio/templates-list";
+import { DocumentCenter } from "@/components/documents/document-center";
+import { REPORTS_SECTIONS } from "./sections";
+import { useSectionFromUrl } from "@/hooks/use-section-from-url";
+import { SECTION_PARAM } from "@/lib/section-navigation";
 
 /**
  * `useSearchParams` exige um limite de Suspense: a leitura do parâmetro só
@@ -88,8 +112,54 @@ function Workspace() {
   const canManage = session.hasCapability("reports.management.manage");
   const create = useAction("management-report.create");
 
-  const [tab, setTab] = useState(requestedType ? "gerar" : "visao-geral");
+  const canTemplates = session.hasCapability("artifact_templates.read");
+
+  /*
+   * Os documentos emitidos pedem a capability deles.
+   *
+   * O grupo "Documentos" do menu tinha três itens que descrevem o mesmo ciclo: o
+   * documento emitido, o relatório do período e o modelo que gera os dois. Os
+   * modelos já eram aba daqui; agora os emitidos também, e o grupo deixou de
+   * existir — o menu criava rolagem em tela full HD.
+   *
+   * ## Por que `artifact_executions.read`, e não `artifact_manifests.read`
+   *
+   * Porque é o que a rota exige. A aba lê `GET /issued-documents`, que une as
+   * execuções do Artifact Engine com os relatórios gerenciais e cobra as duas
+   * capacidades — quem pergunta recebe linhas das duas origens, e pedir só uma
+   * entregaria linhas que a pessoa não deveria ver. A metade de relatórios já está
+   * garantida: a página inteira exige `reports.management.read`.
+   *
+   * Com `artifact_manifests.read` aqui, alguém que tivesse essa e não a de
+   * execuções veria a aba e receberia 403 ao abri-la — uma porta que existe e não
+   * abre é pior que porta nenhuma.
+   */
+  const canDocuments = session.hasCapability("artifact_executions.read");
+
+  /* Os apelidos são públicos: entram em link guardado e não mudam. */
+  const sections = [
+    REPORTS_SECTIONS.overview,
+    REPORTS_SECTIONS.generate,
+    REPORTS_SECTIONS.history,
+    ...(canDocuments ? [REPORTS_SECTIONS.documents] : []),
+    ...(canTemplates ? [REPORTS_SECTIONS.templates] : []),
+  ];
+
+  const section = useSectionFromUrl(sections);
+
+  /*
+   * `?tipo=` abre a geração sem `?secao=`.
+   *
+   * É o retorno de "gerar de novo", um link que já existe e que só carrega o
+   * tipo. Exigir `?secao=gerar` junto quebraria esses links; então o tipo pedido
+   * decide a aba quando ninguém pediu seção nenhuma.
+   */
+  const tab =
+    requestedType && !params.get(SECTION_PARAM) ? "gerar" : section.current;
+  const setTab = section.go;
   const [seedType, setSeedType] = useState<string | undefined>(requestedType);
+  /** O recorte escolhido na Visão geral, quando veio de lá. */
+  const [seedPeriod, setSeedPeriod] = useState<{ from: string; to: string }>();
 
   const catalog = useReportCatalog(canRead);
 
@@ -122,18 +192,29 @@ function Workspace() {
 
   return (
     <ContentContainer size="wide" className="space-y-6">
-      <Tabs value={tab} onValueChange={setTab} className="space-y-5">
+      <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
           <TabsTrigger value="visao-geral">Visão geral</TabsTrigger>
           <TabsTrigger value="gerar">Gerar relatório</TabsTrigger>
           <TabsTrigger value="historico">Histórico</TabsTrigger>
+          {canDocuments ? (
+            <TabsTrigger value={REPORTS_SECTIONS.documents}>
+              Documentos emitidos
+            </TabsTrigger>
+          ) : null}
+          {canTemplates ? (
+            <TabsTrigger value="modelos">Modelos</TabsTrigger>
+          ) : null}
         </TabsList>
 
         <TabsContent value="visao-geral">
           <TabBoundary id="reports-overview" label="a visão geral">
             <Overview
               canGenerate={canManage && create.allowed}
-              onGenerate={() => setTab("gerar")}
+              onGenerate={(period) => {
+                setSeedPeriod(period);
+                setTab("gerar");
+              }}
               onOpen={openReport}
             />
           </TabBoundary>
@@ -144,6 +225,7 @@ function Workspace() {
             <ReportGenerator
               canManage={canManage}
               initialType={seedType}
+              initialPeriod={seedPeriod}
               onGenerated={(id) =>
                 router.push(`${ROUTES.managementReports}/${id}`)
               }
@@ -160,6 +242,40 @@ function Workspace() {
             />
           </TabBoundary>
         </TabsContent>
+
+        {canDocuments ? (
+          <TabsContent value={REPORTS_SECTIONS.documents}>
+            {/* Só monta na aba ativa: a central lista manifestos e abre o
+                conteúdo de um documento. Abrir Relatórios não deveria disparar
+                essas consultas. */}
+            {tab === REPORTS_SECTIONS.documents ? (
+              <TabBoundary
+                id="reports-documents"
+                label="os documentos emitidos"
+              >
+                <DocumentCenter embedded />
+              </TabBoundary>
+            ) : null}
+          </TabsContent>
+        ) : null}
+
+        {canTemplates ? (
+          <TabsContent value="modelos">
+            {/* Só monta na aba ativa: a lista carrega o catálogo de modelos, e
+                abrir Relatórios não deveria disparar essa consulta. */}
+            {tab === "modelos" ? (
+              <TabBoundary id="reports-templates" label="os modelos">
+                <div className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    Os modelos que a sua operação pode emitir. Abra um para ver
+                    como o documento sai.
+                  </p>
+                  <TemplatesList />
+                </div>
+              </TabBoundary>
+            ) : null}
+          </TabsContent>
+        ) : null}
       </Tabs>
     </ContentContainer>
   );
@@ -183,7 +299,7 @@ function Overview({
   onOpen,
 }: {
   canGenerate: boolean;
-  onGenerate: () => void;
+  onGenerate: (period?: { from: string; to: string }) => void;
   onOpen: (report: { id: string }) => void;
 }) {
   const total = useManagementReportCount({});
@@ -238,50 +354,16 @@ function Overview({
         />
       </div>
 
-      <PanelFrame
-        panelId="reports-what-is-this"
-        title="Relatório gerencial não é dashboard exportado"
-        description="A diferença muda o que cada um serve para responder"
-        actions={
-          canGenerate ? (
-            <Button size="sm" onClick={onGenerate}>
-              <FileBarChart className="size-4" />
-              Gerar relatório
-            </Button>
-          ) : null
-        }
-      >
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2 rounded-lg border border-border p-3">
-            <p className="flex items-center gap-2 text-sm font-medium">
-              <LayoutGrid className="size-4 text-muted-foreground" aria-hidden />
-              Dashboard
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Situação atual e acompanhamento contínuo. Os números mudam
-              sozinhos, porque a operação continua acontecendo.
-            </p>
-            <Button asChild variant="ghost" size="sm">
-              <Link href={ROUTES.dashboard}>
-                Abrir o painel
-                <ArrowRight className="size-4" />
-              </Link>
-            </Button>
-          </div>
-
-          <div className="space-y-2 rounded-lg border border-border p-3">
-            <p className="flex items-center gap-2 text-sm font-medium">
-              <CalendarClock className="size-4 text-chart-1" aria-hidden />
-              Relatório gerencial
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Fotografia de um período, com hash da fonte e procedência de cada
-              número. Não muda depois — é isso que permite levá-lo a uma reunião
-              e voltar a ele meses depois.
-            </p>
-          </div>
-        </div>
-      </PanelFrame>
+      {/*
+       * Aqui havia um painel explicando a diferença entre dashboard e
+       * relatório gerencial: dois cartões de texto, um link para o painel e
+       * nenhum número. Documentação numa tela de trabalho — a distinção vale, e
+       * o lugar dela é o comentário no topo deste arquivo.
+       *
+       * No lugar entrou a operação real do período, que é o que decide se vale
+       * gerar o relatório e de qual recorte.
+       */}
+      <PeriodSnapshot onGenerate={canGenerate ? onGenerate : undefined} />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <PanelFrame
@@ -332,7 +414,7 @@ function Overview({
         <PanelFrame
           panelId="reports-available-types"
           title="Tipos disponíveis"
-          description="Publicados pelo servidor, com o que cada um exige"
+          description="Cada tipo, com o que exige"
         >
           {catalog.isPending ? (
             <PanelLoading rows={4} />

@@ -48,8 +48,23 @@ export function ExecutiveKpisWidget({ widget, analytics }: WidgetProps) {
 function KpiTile({ metric }: { metric: PresentedMetric }) {
   const Icon = metric.icon;
   return (
-    <div className="space-y-1.5">
+    /*
+      Altura igual entre vizinhos, e a faixa de situação no pé.
+
+      A grade já estica os itens, mas o cartão dentro do contêiner esticado
+      continuava com a altura do conteúdo: um rótulo que quebra em duas linhas
+      deixava aquele cartão mais alto que os outros e a faixa de situação dele
+      desalinhada das vizinhas. `flex-1` no cartão faz os quatro terminarem na mesma
+      linha, e a faixa fica embaixo em todos.
+
+      `labelLines={2}` completa o alinhamento por dentro: sem isso, os cartões ficam
+      da mesma altura mas os **números** não, porque o rótulo de duas linhas empurra
+      o valor para baixo só no cartão dele.
+    */
+    <div className="flex h-full flex-col gap-1.5">
       <StatCard
+        className="flex-1"
+        labelLines={2}
         label={metric.label}
         value={metric.value}
         delta={metric.change}

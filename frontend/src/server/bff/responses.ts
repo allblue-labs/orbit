@@ -7,6 +7,7 @@
 import { NextResponse } from "next/server";
 
 import { CONTEXT_HEADERS } from "@/lib/context-headers";
+import { serverEnv } from "@/lib/env";
 import type { ApiErrorEnvelope } from "@/types/api";
 
 export interface BffErrorInit {
@@ -20,7 +21,12 @@ export interface BffErrorInit {
 export function bffError(init: BffErrorInit): NextResponse<ApiErrorEnvelope> {
   const body: ApiErrorEnvelope = {
     success: false,
-    error: { code: init.code, message: init.message, details: init.details },
+    error: {
+      code: init.code,
+      message: init.message,
+      status: init.status,
+      details: init.details,
+    },
     requestId: init.requestId,
     timestamp: new Date().toISOString(),
   };
@@ -42,11 +48,27 @@ export function bffJson<T>(
 }
 
 /**
- * Requisições devem partir da própria aplicação. `sec-fetch-site` é enviado
- * por todos os browsers suportados; ausência do cabeçalho indica cliente
- * não-browser, que também não deve usar o BFF.
+ * Requisições devem partir de uma das origens exatas da aplicação.
+ * `same-site` não é suficiente: um subdomínio comprometido também é
+ * same-site, mas não deve conseguir usar cookies HttpOnly do BFF como
+ * autoridade.
+ *
+ * A comparação é de **igualdade exata** contra a lista configurada — não há
+ * prefixo, sufixo nem curinga. Uma implantação serve mais de uma origem
+ * legítima (`localhost` no smoke local, o domínio público em produção), e
+ * `localhost` e `127.0.0.1` são origens **diferentes** para o navegador:
+ * configurar uma e navegar pela outra é recusa, não engano.
  */
 export function isSameOriginRequest(request: Request): boolean {
   const site = request.headers.get("sec-fetch-site");
-  return site === "same-origin" || site === "same-site" || site === "none";
+  const origin = request.headers.get("origin");
+  const configured = serverEnv.frontendOrigins;
+  const permitidas =
+    configured.length > 0 ? configured : [new URL(request.url).origin];
+  const safeMethod = request.method === "GET" || request.method === "HEAD";
+  const conhecida = origin !== null && permitidas.includes(origin);
+
+  if (origin && !conhecida) return false;
+  if (safeMethod) return site === "same-origin" || site === "none";
+  return site === "same-origin" && conhecida;
 }

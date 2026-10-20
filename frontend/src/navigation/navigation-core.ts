@@ -29,6 +29,8 @@ export interface NavigationTarget {
   readonly href: string;
   /** Capability exigida — a superfície não oferece o que seria recusado. */
   readonly capability?: string;
+  /** Permission required by the authoritative backend route. */
+  readonly permission?: string;
   /** Entidade dona, quando o destino é a listagem de uma. */
   readonly entity?: EntityId;
 }
@@ -47,6 +49,7 @@ export function entityTargets(): readonly NavigationTarget[] {
     icon: entity.icon,
     href: entity.basePath,
     capability: entity.capability.read,
+    permission: entity.permissions.read,
     entity: entity.id,
   }));
 }

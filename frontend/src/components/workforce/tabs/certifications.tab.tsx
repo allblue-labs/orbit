@@ -10,7 +10,11 @@
  * O vencimento vem calculado pelo backend, com o mesmo relógio para todos:
  * habilitação não pode depender da data do navegador de quem olha.
  */
-import { BadgeCheck } from "lucide-react";
+import { useState } from "react";
+import { BadgeCheck, Pencil, Plus, Trash2 } from "lucide-react";
+
+import { MutationError } from "@/components/artifact-studio/mutation-error";
+import { Button } from "@/components/ui/button";
 
 import { Badge } from "@/components/ui/badge";
 import {
@@ -22,7 +26,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { UserReference } from "@/components/identity/user-reference";
-import { useCertifications } from "@/hooks/workforce/use-workforce";
+import {
+  useCertifications,
+  useRemoveCertification,
+} from "@/hooks/workforce/use-workforce";
+import { useWorkforceManagement } from "@/hooks/workforce/use-workforce-management";
+import { ManagementBlocked } from "../management-blocked";
+import type { MemberCertification } from "@/types/workforce";
 import { formatDateTime } from "@/lib/formatters";
 import {
   FilterBar,
@@ -31,6 +41,7 @@ import {
   useListController,
 } from "@/workspace";
 import { CertificationBadge } from "../certification-badge";
+import { CertificationFormDialog } from "../certification-form.dialog";
 
 interface CertificationFilters {
   expiringWithinDays?: number;
@@ -48,6 +59,13 @@ const WINDOW_OPTIONS = [
 
 export function CertificationsTab() {
   const list = useListController<CertificationFilters>();
+  const workforce = useWorkforceManagement().workforce;
+
+  /** `null` fechado; `"new"` cadastrando; uma certificação editando. */
+  const [editando, setEditando] = useState<MemberCertification | "new" | null>(
+    null,
+  );
+  const remove = useRemoveCertification();
 
   const window = list.query.expiringWithinDays;
   const query = useCertifications(
@@ -58,10 +76,21 @@ export function CertificationsTab() {
 
   return (
     <div className="space-y-5">
-      <p className="text-sm text-muted-foreground">
-        Habilitações da equipe, ordenadas por vencimento. O prazo é comparado
-        pelo servidor — não pelo relógio deste navegador.
-      </p>
+      <ManagementBlocked reason={workforce.reason} />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">
+          Habilitações da equipe, ordenadas por vencimento. O prazo não depende
+          do relógio deste navegador.
+        </p>
+        {workforce.allowed ? (
+          <Button size="sm" onClick={() => setEditando("new")}>
+            <Plus className="size-4" />
+            Nova certificação
+          </Button>
+        ) : null}
+      </div>
+
+      <MutationError error={remove.error} />
 
       <FilterBar onClear={list.reset} canClear={list.isFiltered}>
         <FilterSelect
@@ -90,7 +119,13 @@ export function CertificationsTab() {
             ? "Nenhuma certificação neste prazo"
             : "Nenhuma certificação registrada",
           description:
-            "Certificações são registradas no detalhe de cada pessoa, na aba Usuários.",
+            "Cadastre aqui ou no detalhe de cada pessoa, na aba Usuários — é o mesmo registro.",
+          action: workforce.allowed ? (
+            <Button size="sm" onClick={() => setEditando("new")}>
+              <Plus className="size-4" />
+              Nova certificação
+            </Button>
+          ) : undefined,
         }}
       >
         {(rows) => (
@@ -103,6 +138,9 @@ export function CertificationsTab() {
                   <TableHead>Emissor</TableHead>
                   <TableHead>Validade</TableHead>
                   <TableHead>Situação</TableHead>
+                  {workforce.allowed ? (
+                    <TableHead className="text-right">Ações</TableHead>
+                  ) : null}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -135,6 +173,27 @@ export function CertificationsTab() {
                         daysUntilExpiry={certification.daysUntilExpiry}
                       />
                     </TableCell>
+                    {workforce.allowed ? (
+                      <TableCell className="text-right whitespace-nowrap">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`Editar ${certification.name}`}
+                          onClick={() => setEditando(certification)}
+                        >
+                          <Pencil className="size-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`Remover ${certification.name}`}
+                          disabled={remove.isPending}
+                          onClick={() => remove.mutate(certification.id)}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </TableCell>
+                    ) : null}
                   </TableRow>
                 ))}
               </TableBody>
@@ -142,6 +201,14 @@ export function CertificationsTab() {
           </div>
         )}
       </ListState>
+
+      <CertificationFormDialog
+        certification={editando === "new" ? null : editando}
+        open={editando !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditando(null);
+        }}
+      />
     </div>
   );
 }

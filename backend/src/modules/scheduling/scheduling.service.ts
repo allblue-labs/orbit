@@ -37,6 +37,8 @@ import {
   civilMinute,
   localViewRange,
 } from './scheduling-time';
+import { OperationService } from '../operations/operation.service';
+import { WorkforceRepository } from '../workforce/workforce.repository';
 
 type SchedulingEventRecord = NonNullable<
   Awaited<ReturnType<SchedulingRepository['findEvent']>>
@@ -47,6 +49,8 @@ export class SchedulingService {
   constructor(
     private readonly repository: SchedulingRepository,
     private readonly recurrence: RecurrenceEngine,
+    private readonly operations: OperationService,
+    private readonly workforce: WorkforceRepository,
   ) {}
 
   listCalendars(organizationId: string, businessUnitId?: string) {
@@ -151,7 +155,14 @@ export class SchedulingService {
         'Event must use the calendar business unit',
       );
     await this.validateReferences(organizationId, this.referenceInput(input));
-    const conflicts = await this.detectInputConflicts(organizationId, input);
+    const allocations = await this.authoritativeAllocations(
+      organizationId,
+      input,
+    );
+    const conflicts = await this.detectInputConflicts(organizationId, {
+      ...input,
+      allocations,
+    });
     this.assertConflicts(conflicts, input.allowConflicts);
     return this.repository.createEvent(
       {
@@ -180,7 +191,7 @@ export class SchedulingService {
         metadata: input.metadata as Prisma.InputJsonValue | undefined,
       },
       this.recurrenceData(input.recurrence),
-      this.allocationData(input.allocations ?? []),
+      this.allocationData(allocations),
       actorId,
     );
   }
@@ -605,40 +616,177 @@ export class SchedulingService {
         from,
         to,
       )
-      .map((occurrence) => ({
-        occurrenceId: `${event.id}:${occurrence.startsAt.toISOString()}`,
-        eventId: event.id,
-        calendarId: event.calendarId,
-        title: event.title,
-        description: event.description,
-        type: event.type,
-        status: event.status,
-        priority: event.priority,
-        startsAt: occurrence.startsAt.toISOString(),
-        endsAt: occurrence.endsAt.toISOString(),
-        allDay: event.allDay,
-        timezone: event.timezone,
-        businessUnitId: event.businessUnitId,
-        customerId: event.customerId,
-        assetId: event.assetId,
-        segment: event.segment,
-        source: {
-          module: event.sourceModule,
-          entityType: event.sourceEntityType,
-          entityId: event.sourceEntityId,
-        },
-        location: event.location,
-        allocations: event.allocations.map((allocation) => ({
-          id: allocation.id,
-          resourceType: allocation.resourceType,
-          userId: allocation.userId,
-          assetId: allocation.assetId,
-          resourceKey: allocation.resourceKey,
-          role: allocation.role,
-          status: allocation.status,
+      .map((occurrence) => {
+        const responsible = event.allocations.find(
+          (allocation) =>
+            allocation.role === 'RESPONSIBLE_FIELD_TECHNICIAN' &&
+            allocation.userId,
+        );
+        const auxiliaries = event.allocations.filter(
+          (allocation) =>
+            allocation.role === 'AUXILIARY_TECHNICIAN' && allocation.userId,
+        );
+        return {
+          occurrenceId: `${event.id}:${occurrence.startsAt.toISOString()}`,
+          eventId: event.id,
+          calendarId: event.calendarId,
+          title: event.title,
+          description: event.description,
+          type: event.type,
+          status: event.status,
+          priority: event.priority,
+          startsAt: occurrence.startsAt.toISOString(),
+          endsAt: occurrence.endsAt.toISOString(),
+          allDay: event.allDay,
+          timezone: event.timezone,
+          businessUnitId: event.businessUnitId,
+          customerId: event.customerId,
+          assetId: event.assetId,
+          segment: event.segment,
+          source: {
+            module: event.sourceModule,
+            entityType: event.sourceEntityType,
+            entityId: event.sourceEntityId,
+          },
+          location: event.location,
+          allocations: event.allocations.map((allocation) => ({
+            id: allocation.id,
+            resourceType: allocation.resourceType,
+            userId: allocation.userId,
+            assetId: allocation.assetId,
+            resourceKey: allocation.resourceKey,
+            role: allocation.role,
+            status: allocation.status,
+          })),
+          assignmentAuthority: this.isOperationLinked(event)
+            ? ('OPERATION' as const)
+            : ('SCHEDULING' as const),
+          responsibleFieldTechnician: responsible?.userId
+            ? {
+                userId: responsible.userId,
+                role: 'RESPONSIBLE_FIELD_TECHNICIAN' as const,
+              }
+            : null,
+          auxiliaryTechnicians: auxiliaries.map((allocation) => ({
+            userId: allocation.userId!,
+            role: 'AUXILIARY_TECHNICIAN' as const,
+          })),
+          recurring: Boolean(event.recurrence),
+        };
+      });
+  }
+
+  private isOperationLinked(input: {
+    sourceModule: string;
+    sourceEntityType: string;
+    sourceEntityId?: string | null;
+  }) {
+    return (
+      input.sourceModule.toLowerCase() === 'operations' &&
+      input.sourceEntityType.toUpperCase() === 'OPERATION' &&
+      Boolean(input.sourceEntityId)
+    );
+  }
+
+  private async authoritativeAllocations(
+    organizationId: string,
+    input: CreateEventDto,
+  ): Promise<ResourceAllocationDto[]> {
+    if (this.isOperationLinked(input)) {
+      const operation = await this.operations.get(
+        input.sourceEntityId!,
+        organizationId,
+      );
+      if (
+        input.businessUnitId &&
+        input.businessUnitId !== operation.businessUnitId
+      )
+        throw new ValidationException(
+          'Operation-linked event must use the operation business unit',
+        );
+      return [
+        ...(operation.responsibleFieldTechnicianId
+          ? [
+              {
+                resourceType: ResourceType.USER,
+                userId: operation.responsibleFieldTechnicianId,
+                role: 'RESPONSIBLE_FIELD_TECHNICIAN',
+              },
+            ]
+          : []),
+        ...operation.auxiliaryTechnicians.map((assignment) => ({
+          resourceType: ResourceType.USER,
+          userId: assignment.userId,
+          role: 'AUXILIARY_TECHNICIAN',
         })),
-        recurring: Boolean(event.recurrence),
-      }));
+      ];
+    }
+    const allocations = input.allocations ?? [];
+    const technicians = allocations.filter((allocation) =>
+      ['RESPONSIBLE_FIELD_TECHNICIAN', 'AUXILIARY_TECHNICIAN'].includes(
+        allocation.role ?? '',
+      ),
+    );
+    if (!technicians.length) return allocations;
+    if (!input.businessUnitId)
+      throw new ValidationException(
+        'Technician allocations require a business unit',
+      );
+    if (
+      technicians.filter(
+        (allocation) => allocation.role === 'RESPONSIBLE_FIELD_TECHNICIAN',
+      ).length > 1
+    )
+      throw new ValidationException(
+        'An event can have at most one responsible field technician',
+      );
+    const ids = technicians
+      .map((allocation) => allocation.userId)
+      .filter((id): id is string => Boolean(id));
+    if (ids.length !== technicians.length || new Set(ids).size !== ids.length)
+      throw new ValidationException(
+        'Technician allocations require distinct users',
+      );
+    /**
+     * Responsável e auxiliar não passam pelo mesmo portão — como na operação.
+     *
+     * As alocações daqui saem da própria operação quando o evento nasce de uma
+     * (logo acima), então cobrar perfil de técnico de campo do auxiliar
+     * transformava um atendimento atribuído corretamente num evento impossível
+     * de agendar: a atribuição passava e a agenda recusava, sem que nada na
+     * operação tivesse mudado.
+     */
+    const executante = technicians.find(
+      (allocation) => allocation.role === 'RESPONSIBLE_FIELD_TECHNICIAN',
+    )?.userId;
+    if (executante) {
+      const eligible = await this.workforce.listProfessionals(
+        organizationId,
+        'FIELD_TECHNICIAN',
+        input.businessUnitId,
+      );
+      if (!eligible.some((profile) => profile.userId === executante))
+        throw new ValidationException(
+          'The scheduled responsible technician must be an active FIELD_TECHNICIAN in the event business unit',
+        );
+    }
+
+    const acompanhantes = technicians
+      .filter((allocation) => allocation.role === 'AUXILIARY_TECHNICIAN')
+      .map((allocation) => allocation.userId)
+      .filter((id): id is string => Boolean(id));
+    if (acompanhantes.length) {
+      const candidatos = await this.workforce.listFieldAssistantCandidates(
+        organizationId,
+        input.businessUnitId,
+      );
+      const permitidos = new Set(candidatos.map((item) => item.userId));
+      if (acompanhantes.some((id) => !permitidos.has(id)))
+        throw new ValidationException(
+          'Every scheduled auxiliary technician must be an active member with field app access in the event business unit',
+        );
+    }
+    return allocations;
   }
 
   private conflictsBetween(events: SchedulingOccurrenceReadModel[]) {

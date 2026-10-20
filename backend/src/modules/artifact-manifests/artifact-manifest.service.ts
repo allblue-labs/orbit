@@ -304,6 +304,7 @@ export class ArtifactManifestService {
    */
   private sourceHash(execution: {
     snapshot: { structureHash: string };
+    context?: unknown;
     responses: readonly {
       sectionId: string;
       fieldId: string;
@@ -330,6 +331,7 @@ export class ArtifactManifestService {
       .update(
         JSON.stringify({
           structure: execution.snapshot.structureHash,
+          context: execution.context ?? null,
           responses,
           signatures,
         }),

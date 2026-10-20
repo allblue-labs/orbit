@@ -83,7 +83,11 @@ void main() {
       // Requisição que saiu antes da rotação chega agora, ainda com o antigo.
       final late = await authenticator.refresh('refresh-1');
 
-      expect(backendCalls, 1, reason: 'a janela de rotação evita o segundo uso');
+      expect(
+        backendCalls,
+        1,
+        reason: 'a janela de rotação evita o segundo uso',
+      );
       expect(late?.accessToken, 'access-novo');
     },
   );

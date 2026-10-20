@@ -11,7 +11,8 @@ import {
   Query,
   Req,
 } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiPublicErrors } from '../../../../common/public-errors';
 import { Permissions } from '../../../../decorators';
 import { ForbiddenException } from '../../../../exceptions';
 import { ParseUUIDv7Pipe } from '../../../../pipes';
@@ -22,15 +23,18 @@ import {
 } from '../../../subscription-plans/plan-access';
 import {
   CreateContactDto,
+  CreateCustomerAddressDto,
   CreateCustomerDto,
   CustomerQueryDto,
   UpdateContactDto,
+  UpdateCustomerAddressDto,
   UpdateCustomerDto,
 } from './customer.dto';
 import { CustomerReadModelMapper } from './customer.mapper';
 import { CustomerService } from './customer.service';
 
 @ApiTags('Customers')
+@ApiPublicErrors()
 @Controller('customers')
 @RequiresActivePlan()
 export class CustomerController {
@@ -97,6 +101,80 @@ export class CustomerController {
     @Req() request: IdentityRequest,
   ) {
     return this.customers.remove(id, this.organizationId(request));
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Endereços de atendimento                                          */
+  /* ---------------------------------------------------------------- */
+
+  @Get(':id/addresses')
+  @Capabilities('crm.read')
+  @Permissions('customers.read')
+  @ApiOperation({ summary: 'Endereços para onde o técnico vai' })
+  async addresses(
+    @Param('id', ParseUUIDv7Pipe) id: string,
+    @Req() request: IdentityRequest,
+    @Query('onlyActive') onlyActive?: string,
+  ) {
+    return this.readModels.addresses(
+      await this.customers.listAddresses(
+        id,
+        this.organizationId(request),
+        onlyActive === 'true',
+      ),
+    );
+  }
+
+  @Post(':id/addresses')
+  @Capabilities('crm.manage')
+  @Permissions('customers.update')
+  async createAddress(
+    @Param('id', ParseUUIDv7Pipe) id: string,
+    @Req() request: IdentityRequest,
+    @Body() input: CreateCustomerAddressDto,
+  ) {
+    return this.readModels.address(
+      await this.customers.createAddress(
+        id,
+        this.organizationId(request),
+        input,
+      ),
+    );
+  }
+
+  @Patch(':id/addresses/:addressId')
+  @Capabilities('crm.manage')
+  @Permissions('customers.update')
+  async updateAddress(
+    @Param('id', ParseUUIDv7Pipe) id: string,
+    @Param('addressId', ParseUUIDv7Pipe) addressId: string,
+    @Req() request: IdentityRequest,
+    @Body() input: UpdateCustomerAddressDto,
+  ) {
+    return this.readModels.address(
+      await this.customers.updateAddress(
+        addressId,
+        id,
+        this.organizationId(request),
+        input,
+      ),
+    );
+  }
+
+  @Delete(':id/addresses/:addressId')
+  @Capabilities('crm.manage')
+  @Permissions('customers.update')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  removeAddress(
+    @Param('id', ParseUUIDv7Pipe) id: string,
+    @Param('addressId', ParseUUIDv7Pipe) addressId: string,
+    @Req() request: IdentityRequest,
+  ) {
+    return this.customers.removeAddress(
+      addressId,
+      id,
+      this.organizationId(request),
+    );
   }
 
   @Get(':id/contacts')

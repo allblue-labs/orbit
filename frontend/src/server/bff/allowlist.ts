@@ -18,25 +18,43 @@ export const ALLOWED_API_ROOTS: readonly string[] = [
   "artifact-templates",
   "assets",
   "automations",
+  "billing",
   "catalog",
   "checklist-executions",
   "checklist-templates",
+  "commissions",
   "customers",
   "dashboard",
   "financial",
   "identity",
   "integrations",
   "inventory",
+  "issued-documents",
   "management-reports",
   "notifications",
   "operations",
+  "pmoc",
   "organizations",
   "plans",
   "platform-admin",
+  /** Contrato de PMOC assinado por link — ver `PUBLIC_ENDPOINT_PATTERNS`. */
+  "public",
   "quotes",
   "report-templates",
   "reports",
+  "rvt",
   "scheduling",
+  /**
+   * Objetos de storage.
+   *
+   * O navegador precisa alcançar o destino de um upload assinado — foto de
+   * perfil e assinatura chegam por aí. A URL assinada aponta para o backend, e
+   * o navegador só fala com o proxy: sem esta raiz, o envio morre em 404.
+   *
+   * A assinatura na URL continua sendo a credencial do objeto, e o proxy ainda
+   * exige sessão. Duas barreiras, não uma.
+   */
+  "storage",
   "workforce",
 ];
 
@@ -68,6 +86,35 @@ const PUBLIC_ENDPOINTS: ReadonlySet<string> = new Set([
   "POST /identity/invitations/accept",
 ]);
 
+/**
+ * Rotas públicas cujo caminho carrega um segredo — e por isso não casam por igualdade.
+ *
+ * O conjunto acima compara método e caminho exatos, de propósito: é o que mantém o
+ * proxy exigindo sessão em todo o resto. Um link de assinatura traz o token **no
+ * caminho**, então nenhuma string fixa o descreve.
+ *
+ * Cada padrão é ancorado nas duas pontas e descreve o formato do segredo, não um
+ * curinga: `[A-Za-z0-9_-]{32,128}` é a forma de um token `base64url` de 48 bytes.
+ * Sem a âncora e sem a forma, `^/public/` viraria uma porta aberta para qualquer
+ * caminho que alguém pendurasse ali depois.
+ *
+ * A comparação recebe o caminho em minúsculas, e a classe aceita as duas caixas de
+ * propósito: um token `base64url` é sensível a caixa, e restringir a classe ao que a
+ * normalização deixa passar amarraria este padrão a esse detalhe de `inspectPath`.
+ * Quem segue para o backend é o caminho original — a caixa do token sobrevive.
+ */
+const PUBLIC_ENDPOINT_PATTERNS: readonly { method: HttpMethod; path: RegExp }[] =
+  [
+    {
+      method: "GET",
+      path: /^\/public\/pmoc\/contracts\/[A-Za-z0-9_-]{32,128}$/,
+    },
+    {
+      method: "POST",
+      path: /^\/public\/pmoc\/contracts\/[A-Za-z0-9_-]{32,128}\/signature$/,
+    },
+  ];
+
 export type PathVerdict =
   | { allowed: true; requiresSession: boolean }
   | { allowed: false; status: 403 | 404; message: string };
@@ -91,6 +138,20 @@ export function inspectPath(path: string, method: HttpMethod): PathVerdict {
   }
   return {
     allowed: true,
-    requiresSession: !PUBLIC_ENDPOINTS.has(`${method} ${normalized}`),
+    requiresSession: !isPublic(normalized, method),
   };
+}
+
+/**
+ * O caminho dispensa sessão?
+ *
+ * Igualdade primeiro, padrão depois — e o padrão só para o que não cabe em igualdade.
+ * Toda regra aqui amplia o que o proxy encaminha sem credencial, e é por isso que elas
+ * ficam neste arquivo e não espalhadas por quem precisa delas.
+ */
+function isPublic(normalized: string, method: HttpMethod): boolean {
+  if (PUBLIC_ENDPOINTS.has(`${method} ${normalized}`)) return true;
+  return PUBLIC_ENDPOINT_PATTERNS.some(
+    (regra) => regra.method === method && regra.path.test(normalized),
+  );
 }

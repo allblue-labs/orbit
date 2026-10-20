@@ -29,7 +29,12 @@ class GeoPoint {
 }
 
 /// Por que a localização não está disponível.
-enum LocationUnavailableReason { serviceDisabled, permissionDenied, permissionDeniedForever, failure }
+enum LocationUnavailableReason {
+  serviceDisabled,
+  permissionDenied,
+  permissionDeniedForever,
+  failure,
+}
 
 /// Resultado de uma tentativa de obter a posição.
 sealed class LocationResult {
@@ -167,10 +172,8 @@ String formatDistance(double meters) {
 /// que o backend não expõe e que esta PR não deve integrar. Devolver uma
 /// estimativa a partir da linha reta seria número inventado apresentado como
 /// previsão. Fica declarado como indisponível até existir a fonte.
-Duration? estimatedTravelTime({
-  required GeoPoint from,
-  required GeoPoint to,
-}) => null;
+Duration? estimatedTravelTime({required GeoPoint from, required GeoPoint to}) =>
+    null;
 
 /// Ângulo em radianos — exposto para testes de geometria.
 double degreesToRadians(double degrees) => degrees * math.pi / 180;

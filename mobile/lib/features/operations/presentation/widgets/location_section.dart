@@ -26,7 +26,7 @@ class LocationSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final distance = ref.watch(operationDistanceProvider(operationId));
 
-    return SectionCard(
+    return SectionBlock(
       title: 'Deslocamento',
       trailing: IconButton(
         tooltip: 'Atualizar posição',

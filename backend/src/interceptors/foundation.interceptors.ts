@@ -6,7 +6,9 @@ import {
   Injectable,
   Logger,
   type NestInterceptor,
+  StreamableFile,
 } from '@nestjs/common';
+import { redactSensitivePath } from '../common/redact-sensitive-path';
 import type { Request, Response } from 'express';
 import { defer, type Observable, tap, map } from 'rxjs';
 import type {
@@ -22,6 +24,9 @@ interface FoundationRequest extends Request {
   id?: string;
   user?: IAuthenticatedUser;
   requestContext?: IRequestContext;
+  actorType?: IRequestContext['actorType'];
+  portalIdentityId?: UUID;
+  customerId?: UUID;
   organizationId?: UUID;
   businessUnitId?: UUID;
   businessUnitIds?: readonly UUID[];
@@ -55,14 +60,19 @@ export class RequestContextInterceptor implements NestInterceptor {
     const request = execution.switchToHttp().getRequest<FoundationRequest>();
     const context = new RequestContext({
       requestId: request.id ?? generateUuidV7(),
+      actorType: request.actorType,
       userId: request.user?.id ?? null,
+      portalIdentityId: request.portalIdentityId ?? null,
       organizationId: request.organizationId ?? null,
+      customerId: request.customerId ?? null,
       businessUnitId: request.businessUnitId ?? null,
       businessUnitIds:
         request.businessUnitIds ??
         (request.businessUnitId ? [request.businessUnitId] : []),
       roles: request.user?.roles ?? [],
       permissions: request.user?.permissions ?? [],
+      allowedSurfaces: request.user?.allowedSurfaces ?? [],
+      isOrganizationOwner: request.user?.isOrganizationOwner ?? false,
       ip: request.ip ?? null,
       userAgent: request.header('user-agent') ?? null,
       locale: request.acceptsLanguages()[0] ?? 'pt-BR',
@@ -106,7 +116,7 @@ export class LoggingInterceptor implements NestInterceptor {
       JSON.stringify({
         requestId: request.id,
         method: request.method,
-        path: request.originalUrl,
+        path: redactSensitivePath(request.originalUrl),
         statusCode,
         durationMs: Number(durationMs.toFixed(2)),
       }),
@@ -114,24 +124,36 @@ export class LoggingInterceptor implements NestInterceptor {
   }
 }
 
-/** Wraps successful controller results in the global API envelope. */
+/**
+ * Wraps successful controller results in the global API envelope.
+ *
+ * **Exceto arquivo.** Uma rota que devolve `StreamableFile` já escolheu o
+ * `Content-Type` e o `Content-Disposition` do corpo; embrulhar o stream num
+ * envelope JSON produz a pior combinação possível — cabeçalhos dizendo
+ * `application/pdf` e um corpo que é `{ "success": true, ... }`. O navegador
+ * salva o arquivo, o arquivo não abre, e nada na resposta denuncia o motivo.
+ */
 @Injectable()
 export class ResponseInterceptor<T> implements NestInterceptor<
   T,
-  IBaseResponse<T>
+  IBaseResponse<T> | StreamableFile
 > {
   intercept(
     context: ExecutionContext,
     next: CallHandler<T>,
-  ): Observable<IBaseResponse<T>> {
+  ): Observable<IBaseResponse<T> | StreamableFile> {
     const request = context.switchToHttp().getRequest<FoundationRequest>();
     return next.handle().pipe(
-      map((data) => ({
-        success: true,
-        data,
-        requestId: request.id ?? 'unknown',
-        timestamp: new Date().toISOString(),
-      })),
+      map((data) =>
+        data instanceof StreamableFile
+          ? data
+          : {
+              success: true,
+              data,
+              requestId: request.id ?? 'unknown',
+              timestamp: new Date().toISOString(),
+            },
+      ),
     );
   }
 }

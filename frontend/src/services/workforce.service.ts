@@ -17,6 +17,14 @@ import type { QueryParams, RequestOptions } from "@/types/api";
 import type { PaginatedResult } from "@/types/api";
 import type {
   AddTeamMemberInput,
+  AccessCatalog,
+  EligibleProfessional,
+  ProfessionalEligibility,
+  ProfessionalEligibilityQuery,
+  ProfessionalProfile,
+  UpdateProfessionalProfileInput,
+  ProfessionalRole,
+  ProfessionalSelectorQuery,
   AssignSpecialtyInput,
   CertificationQuery,
   CreateCertificationInput,
@@ -40,6 +48,9 @@ import type {
   UpdateRoleInput,
   UpdateSpecialtyInput,
   UpdateTeamInput,
+  CreateTeamMemberInput,
+  CreatedTeamMember,
+  TeamPasswordLink,
 } from "@/types/workforce";
 
 const INVITATIONS = "identity-invitations";
@@ -80,8 +91,52 @@ export const workforceService = {
   /* Papéis                                                            */
   /* ---------------------------------------------------------------- */
 
+  /* ---------------------------------------------------------------- */
+  /* Cadastro de pessoas                                                */
+  /* ---------------------------------------------------------------- */
+
+  /**
+   * Cadastra alguém e recebe a senha temporária — **uma vez**.
+   *
+   * Nenhuma outra rota a devolve, e não há coluna que a guarde. Perdida a
+   * resposta, o caminho é `issuePasswordLink`.
+   */
+  createTeamMember: (
+    input: CreateTeamMemberInput,
+    options?: RequestOptions,
+  ): Promise<CreatedTeamMember> =>
+    apiClient.post<CreatedTeamMember>(
+      `${ORG_PATH}/team/members`,
+      input,
+      options,
+    ),
+
+  /** Um link de definição de senha, para o owner repassar. */
+  issuePasswordLink: (
+    userId: string,
+    options?: RequestOptions,
+  ): Promise<TeamPasswordLink> =>
+    apiClient.post<TeamPasswordLink>(
+      `${path(`${ORG_PATH}/team/members`, userId)}/password-link`,
+      undefined,
+      options,
+    ),
+
+  /**
+   * Desliga da organização: o vínculo sai, a pessoa e o histórico dela ficam.
+   *
+   * `dismissMember`, e não `removeTeamMember` — este último já existe e tira
+   * alguém de uma **equipe** de trabalho, que é outra coisa: continuar na
+   * organização sem estar naquela equipe é normal.
+   */
+  dismissMember: (userId: string, options?: RequestOptions): Promise<void> =>
+    apiClient.delete<void>(path(`${ORG_PATH}/team/members`, userId), options),
+
   roles: (options?: RequestOptions): Promise<TeamRole[]> =>
     apiClient.get<TeamRole[]>(`${ORG_PATH}/roles`, options),
+
+  accessCatalog: (options?: RequestOptions): Promise<AccessCatalog> =>
+    apiClient.get<AccessCatalog>(`${ORG_PATH}/access-catalog`, options),
 
   createRole: (input: CreateRoleInput): Promise<TeamRole> =>
     apiClient.post<TeamRole>(`${ORG_PATH}/roles`, input),
@@ -111,9 +166,7 @@ export const workforceService = {
     apiClient.post<{ id: string; expiresAt: string }>(INVITATIONS_PATH, input),
 
   /** Reenvia: gera token novo, e o anterior deixa de valer. */
-  resendInvitation: (
-    id: string,
-  ): Promise<{ id: string; expiresAt: string }> =>
+  resendInvitation: (id: string): Promise<{ id: string; expiresAt: string }> =>
     apiClient.post<{ id: string; expiresAt: string }>(
       `${invitation(id)}/resend`,
       {},
@@ -246,6 +299,103 @@ export const workforceService = {
       query: { withinMinutes },
     }),
 
+  /* ---------------------------------------------------------------- */
+  /* Domínio profissional (PR-27)                                      */
+  /* ---------------------------------------------------------------- */
+
+  /**
+   * Candidatos a Técnico em Campo, já filtrados pelo servidor.
+   *
+   * Perfil ativo, papel habilitado, usuário ativo na organização e — quando a
+   * unidade é informada — atuando nela. A tela mostra o que voltou; refiltrar
+   * aqui seria reimplementar a elegibilidade no navegador, com metade da
+   * informação.
+   */
+  fieldTechnicians: (
+    query?: ProfessionalSelectorQuery,
+    options?: RequestOptions,
+  ): Promise<EligibleProfessional[]> =>
+    apiClient.get<EligibleProfessional[]>("/workforce/field-technicians", {
+      ...options,
+      query: query as QueryParams | undefined,
+    }),
+
+  /**
+   * Quem pode acompanhar um atendimento como auxiliar.
+   *
+   * Porta separada da de técnicos porque a pergunta é outra: ali é quem executa
+   * e assina, aqui é quem lê. O auxiliar não tem perfil profissional — ele não
+   * assina nada —, então ele não aparecia em nenhum dos dois seletores acima e o
+   * campo de auxiliares abria vazio mesmo com auxiliares cadastrados.
+   */
+  fieldAssistants: (
+    query?: ProfessionalSelectorQuery,
+    options?: RequestOptions,
+  ): Promise<EligibleProfessional[]> =>
+    apiClient.get<EligibleProfessional[]>("/workforce/field-assistants", {
+      ...options,
+      query: query as QueryParams | undefined,
+    }),
+
+  /** Candidatos a Responsável Técnico. Seletor próprio, não o mesmo do campo. */
+  technicalResponsibles: (
+    query?: ProfessionalSelectorQuery,
+    options?: RequestOptions,
+  ): Promise<EligibleProfessional[]> =>
+    apiClient.get<EligibleProfessional[]>(
+      "/workforce/eligible-technical-responsibles",
+      { ...options, query: query as QueryParams | undefined },
+    ),
+
+  /**
+   * Um membro, para a página de detalhe.
+   *
+   * A listagem continua existindo para a tabela; esta rota atende o endereço
+   * direto — recarregar a página ou abrir em outra aba.
+   */
+  member: (userId: string, options?: RequestOptions): Promise<TeamMember> =>
+    apiClient.get<TeamMember>(
+      `/organizations/current/members/${encodeURIComponent(userId)}`,
+      options,
+    ),
+
+  professionalProfile: (
+    userId: string,
+    options?: RequestOptions,
+  ): Promise<ProfessionalProfile> =>
+    apiClient.get<ProfessionalProfile>(
+      `/workforce/members/${userId}/professional-profile`,
+      options,
+    ),
+
+  /**
+   * Liga ou desliga os papéis profissionais de um membro.
+   *
+   * O contrato **substitui** os dois: é por isso que a entrada exige os dois, e
+   * não aceita um patch parcial que apagaria o papel que ninguém tocou.
+   */
+  updateProfessionalProfile: (
+    userId: string,
+    input: UpdateProfessionalProfileInput,
+    options?: RequestOptions,
+  ): Promise<ProfessionalProfile> =>
+    apiClient.patch<ProfessionalProfile>(
+      `/workforce/members/${userId}/professional-profile`,
+      input,
+      options,
+    ),
+
+  /** Elegibilidade para assinar um tipo de documento — com o motivo do bloqueio. */
+  documentEligibility: (
+    userId: string,
+    query: ProfessionalEligibilityQuery,
+    options?: RequestOptions,
+  ): Promise<ProfessionalEligibility> =>
+    apiClient.get<ProfessionalEligibility>(
+      `/workforce/members/${userId}/document-eligibility`,
+      { ...options, query: query as unknown as QueryParams },
+    ),
+
   keys: {
     /** Membros e papéis pertencem ao módulo `organizations`. */
     members: (query?: MemberQuery): QueryKey =>
@@ -253,6 +403,8 @@ export const workforceService = {
         ? queryKeys.list("organizations-members", query as QueryParams)
         : organizationService.keys.members(),
     roles: (): QueryKey => queryKeys.query("organizations", "roles"),
+    accessCatalog: (): QueryKey =>
+      queryKeys.query("organizations", "access-catalog"),
 
     invitationsModule: (): QueryKey => queryKeys.module(INVITATIONS),
     invitations: (query?: InvitationQuery): QueryKey =>
@@ -271,5 +423,38 @@ export const workforceService = {
     teams: (): QueryKey => queryKeys.query(WORKFORCE, "teams"),
     locations: (withinMinutes: number): QueryKey =>
       queryKeys.query(WORKFORCE, "locations", { withinMinutes }),
+
+    /**
+     * Seletores por papel **e** por unidade.
+     *
+     * A unidade entra na key porque muda o resultado: o mesmo seletor devolve
+     * candidatos diferentes por filial. Compartilhar uma key entre unidades
+     * serviria o elenco da filial errada a partir do cache.
+     */
+    professionals: (
+      role: ProfessionalRole,
+      query?: ProfessionalSelectorQuery,
+    ): QueryKey =>
+      queryKeys.query(WORKFORCE, "professionals", {
+        role,
+        ...(query as QueryParams | undefined),
+      }),
+    /** Chave própria: auxiliar não é um `ProfessionalRole`, é um vínculo. */
+    fieldAssistants: (query?: ProfessionalSelectorQuery): QueryKey =>
+      queryKeys.query(WORKFORCE, "field-assistants", {
+        ...(query as QueryParams | undefined),
+      }),
+    member: (userId: string): QueryKey =>
+      queryKeys.detail("workforce-members", userId),
+    professionalProfile: (userId: string): QueryKey =>
+      queryKeys.query(WORKFORCE, "professional-profile", { userId }),
+    documentEligibility: (
+      userId: string,
+      query: ProfessionalEligibilityQuery,
+    ): QueryKey =>
+      queryKeys.query(WORKFORCE, "document-eligibility", {
+        userId,
+        ...(query as unknown as QueryParams),
+      }),
   },
 } as const;

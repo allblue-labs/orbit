@@ -21,7 +21,14 @@
  * comportamento observado, não configuração.
  */
 import Link from "next/link";
-import { ArrowRight, KeyRound, Lock, ShieldAlert, Users } from "lucide-react";
+import {
+  ArrowRight,
+  History,
+  KeyRound,
+  Lock,
+  ShieldAlert,
+  Users,
+} from "lucide-react";
 
 import { PanelFrame } from "@/components/panels";
 import { Badge } from "@/components/ui/badge";
@@ -48,9 +55,8 @@ export function SecuritySettingsTab() {
           </p>
           <p className="text-xs text-muted-foreground">
             Não é descuido: expor os dispositivos de todo mundo a quem
-            administra a conta é decisão de privacidade que o backend não tomou.
-            Quem precisa tirar alguém de circulação o faz pela situação do
-            membro, na Equipe.
+            administra a conta seria uma quebra de privacidade. Para tirar
+            alguém de circulação, altere a situação do membro em Equipe.
           </p>
 
           <div className="flex flex-wrap gap-2">
@@ -75,7 +81,7 @@ export function SecuritySettingsTab() {
       <PanelFrame
         panelId="settings-security-policies"
         title="Políticas de autenticação"
-        description="O que o servidor decide"
+        description="Regras aplicadas ao acesso"
       >
         <div className="space-y-3">
           <ul className="space-y-2 text-sm text-muted-foreground">
@@ -99,8 +105,8 @@ export function SecuritySettingsTab() {
                 <strong className="text-foreground">
                   Bloqueio por tentativas
                 </strong>{" "}
-                — o servidor conta as falhas e bloqueia a credencial. O limite e
-                a duração não são publicados.
+                — tentativas seguidas de senha errada bloqueiam o acesso
+                temporariamente.
               </span>
             </li>
             <li className="flex items-start gap-2">
@@ -117,29 +123,64 @@ export function SecuritySettingsTab() {
           </ul>
 
           <p className="text-xs text-muted-foreground">
-            Nenhum destes parâmetros é configurável: o backend não publica nem
-            aceita política de segurança por organização. Esta lista descreve o
-            comportamento, não o configura.
+            Nenhum destes parâmetros é configurável por organização. Esta lista
+            descreve o comportamento, não o configura.
           </p>
         </div>
       </PanelFrame>
 
       <PanelFrame
         panelId="settings-security-audit"
-        title="Auditoria e histórico de acesso"
-        description="O que existe e o que não é publicado"
+        title="Histórico de alterações"
+        description="O que fica registrado, e onde se consulta"
       >
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            O servidor grava auditoria (<span className="font-mono">audit_logs</span>,
-            com tipo de entidade, ação, antes e depois), mas{" "}
-            <strong>nenhuma rota a expõe para a organização</strong> —
-            verificado.
+            Toda alteração é registrada com quem fez, quando, e o valor antes e
+            depois. O registro é permanente: nada é sobrescrito nem apagado.
           </p>
+
+          <ul className="space-y-2 text-sm text-muted-foreground">
+            <li className="flex items-start gap-2">
+              <History
+                className="mt-0.5 size-4 shrink-0 text-muted-foreground"
+                aria-hidden
+              />
+              <span>
+                <strong className="text-foreground">Por registro.</strong> O
+                histórico aparece dentro do próprio registro: o plano de PMOC, a
+                configuração de RVT e o orçamento têm a linha do tempo dos
+                eventos deles.
+              </span>
+            </li>
+            <li className="flex items-start gap-2">
+              <KeyRound
+                className="mt-0.5 size-4 shrink-0 text-muted-foreground"
+                aria-hidden
+              />
+              <span>
+                <strong className="text-foreground">Seus acessos.</strong> Os
+                dispositivos com sessão aberta na sua conta ficam no Perfil, e
+                de lá você encerra qualquer um.
+              </span>
+            </li>
+          </ul>
+
+          {/*
+           * A consulta ampla ainda não existe — e a tela diz isso em vez de
+           * montar uma linha do tempo com o que tem à mão.
+           *
+           * `AuditLog` guarda tudo e tem o índice certo
+           * (`entityType, entityId, createdAt`), mas só PMOC e RVT publicam
+           * rota de leitura. Uma "auditoria da organização" montada a partir
+           * dos `updatedAt` das listas já carregadas diria "cliente
+           * atualizado" sem saber o que mudou, e omitiria tudo que não passa
+           * por essas listas: parece completa sem ser, que é o pior defeito
+           * possível numa tela de auditoria.
+           */}
           <p className="text-xs text-muted-foreground">
-            De histórico de acesso, o que existe é quando cada sessão começou.
-            Nada é reconstruído aqui: uma linha do tempo montada a partir das
-            sessões pareceria completa sem ser.
+            Uma busca por toda a organização — filtrando por pessoa, período ou
+            tipo de registro — ainda não está disponível.
           </p>
         </div>
       </PanelFrame>
@@ -147,34 +188,33 @@ export function SecuritySettingsTab() {
       <PanelFrame
         panelId="settings-security-context"
         title="Autorização em vigor"
-        description="Como o backend decide cada requisição"
+        description="O que o seu acesso permite hoje"
       >
         <div className="space-y-3">
+          {/*
+           * Havia aqui "12 capabilities · 43 permissões". Dois números que
+           * ninguém usa para nada: não dizem o que se pode fazer, e o que dá
+           * para deduzir deles está errado — ter mais permissões não é ter
+           * mais acesso.
+           */}
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <span className="text-muted-foreground">Plano</span>
             <Badge variant="outline">
               {session.entitlements?.planKey ?? "—"}
             </Badge>
-            <span className="text-muted-foreground">·</span>
-            <span className="text-muted-foreground">
-              {session.capabilities.length} capabilities
-            </span>
-            <span className="text-muted-foreground">·</span>
-            <span className="text-muted-foreground">
-              {session.permissions.length} permissões
-            </span>
           </div>
 
-          <p className="text-xs text-muted-foreground">
-            Toda requisição passa por dois crivos: a{" "}
-            <strong>permissão</strong>, que vem do papel, e a{" "}
-            <strong>capability</strong>, que vem do plano. Papéis se administram
-            na Equipe; capabilities dependem do plano contratado.
+          <p className="text-sm text-muted-foreground">
+            Cada operação passa por dois crivos: o que o seu{" "}
+            <strong>papel</strong> autoriza e o que o seu <strong>plano</strong>{" "}
+            inclui. É por isso que um recurso pode faltar mesmo para quem
+            administra a conta — e é aí que a resposta muda de lugar: papel se
+            resolve em Equipe, plano se resolve na assinatura.
           </p>
 
           <Button variant="ghost" size="sm" asChild>
             <Link href={ROUTES.profile}>
-              Ver as minhas permissões efetivas
+              Ver o que a minha conta alcança
               <ArrowRight className="size-4" />
             </Link>
           </Button>

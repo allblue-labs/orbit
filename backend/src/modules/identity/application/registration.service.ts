@@ -8,6 +8,7 @@ import { AuthenticationService } from './authentication.service';
 import { RegistrationRepository } from '../infrastructure/registration.repository';
 import type { RegisterOrganizationDto } from '../presentation/dto/identity.dto';
 import type { SessionMetadata } from '../domain/identity.types';
+import { SubscriptionProvisioningService } from '../../subscription-plans/subscriptions/subscription-provisioning.service';
 
 @Injectable()
 export class RegistrationService {
@@ -15,6 +16,7 @@ export class RegistrationService {
     private readonly repository: RegistrationRepository,
     private readonly authentication: AuthenticationService,
     @Inject(HASH_PROVIDER) private readonly hashes: IHashProvider,
+    private readonly subscriptions: SubscriptionProvisioningService,
   ) {}
 
   async register(input: RegisterOrganizationDto, metadata: SessionMetadata) {
@@ -32,6 +34,18 @@ export class RegistrationService {
         slug,
       );
       if (!created) throw new ValidationException('Invalid plan');
+      /**
+       * A assinatura nasce junto com a organização.
+       *
+       * Depois do cadastro, e não dentro dele: a transação de registro é longa
+       * o bastante, e uma recusa de avaliação não pode desfazer uma empresa
+       * que acabou de se cadastrar corretamente.
+       */
+      await this.subscriptions.provision({
+        organizationId: created.organizationId,
+        planKey: normalized.planKey,
+        legalDocument: normalized.documentNumber,
+      });
       return this.authentication.login(
         normalized.email,
         input.password,

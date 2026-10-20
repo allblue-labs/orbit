@@ -65,7 +65,10 @@ class PreferencesReadCache implements ReadCache {
   Future<void> write(String key, Map<String, dynamic> value) async {
     await _preferences.setString(
       '$_prefix$key',
-      jsonEncode({'cachedAt': DateTime.now().toIso8601String(), 'value': value}),
+      jsonEncode({
+        'cachedAt': DateTime.now().toIso8601String(),
+        'value': value,
+      }),
     );
   }
 

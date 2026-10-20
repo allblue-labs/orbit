@@ -159,7 +159,7 @@ cliente sobre o próprio conteúdo — e é o hash que prova o documento.
 | `STORAGE_BUCKET`                  | `orbit-artifacts`             | bucket padrão             |
 | `STORAGE_SIGNED_URL_TTL_SECONDS`  | `300` (teto de 3600)          | validade das URLs         |
 | `STORAGE_LOCAL_DIR`               | `storage/objects`             | raiz do provider local    |
-| `STORAGE_LOCAL_PUBLIC_URL`        | `http://localhost:5001/api/v1`| base das URLs locais      |
+| `STORAGE_LOCAL_PUBLIC_URL`        | `http://localhost:6001/api/v1`| base das URLs locais      |
 | `STORAGE_LOCAL_SIGNING_SECRET`    | `JWT_ACCESS_SECRET`           | segredo da assinatura local |
 | `STORAGE_S3_ENDPOINT`             | —                             | obrigatório em S3/MinIO   |
 | `STORAGE_S3_REGION`               | `us-east-1`                   |                           |

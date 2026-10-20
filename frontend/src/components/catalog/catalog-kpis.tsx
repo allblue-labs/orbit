@@ -77,9 +77,7 @@ export function CatalogKpis() {
         ))}
       </div>
       <p className="text-xs text-muted-foreground">
-        Contagens do backend, uma consulta por recorte. O Analytics não publica
-        indicadores de catálogo — nenhum valor agregado de preço ou margem é
-        calculado aqui.
+        Contagens por recorte. Indicadores de preço e margem consolidados ainda não estão disponíveis.
       </p>
     </div>
   );

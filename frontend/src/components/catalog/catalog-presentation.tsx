@@ -10,6 +10,7 @@
 import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
+import { FORMATTERS } from "@/metrics";
 import type { CatalogItem } from "@/types/catalog";
 
 /**
@@ -21,18 +22,16 @@ import type { CatalogItem } from "@/types/catalog";
  *
  * A conversão para `Number` acontece **só para formatar**, no último momento
  * possível, e o resultado nunca volta a ser usado em conta. Nenhum total,
- * margem ou imposto é calculado nesta tela — quando existir Orçamento, quem
- * soma é o servidor.
+ * margem ou imposto é calculado nesta tela — quem soma é o servidor.
+ *
+ * O formatador é o **do Metric Registry**, como no Financeiro e nas Propostas.
+ * Este arquivo mantinha um `Intl.NumberFormat` próprio — exatamente o segundo
+ * mapa de formatação que aqueles dois documentam estar evitando.
  */
-const BRL = new Intl.NumberFormat("pt-BR", {
-  style: "currency",
-  currency: "BRL",
-});
-
 export function formatPrice(value: string | null): string {
   if (value === null) return "—";
   const parsed = Number(value);
-  return Number.isFinite(parsed) ? BRL.format(parsed) : value;
+  return Number.isFinite(parsed) ? FORMATTERS.currency(parsed) : value;
 }
 
 /** Preço de venda, com a unidade que o item declara. */

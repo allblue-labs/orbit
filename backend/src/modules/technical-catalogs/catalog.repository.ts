@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client';
 import { RlsTransaction } from '../../database';
 import { PaginationHelper } from '../../database/helpers/database.helpers';
 import type { CatalogQueryDto } from './catalog.dto';
+import { allocateProductSku } from './product-sku';
 
 const productInclude = {
   category: {
@@ -128,10 +129,32 @@ export class CatalogRepository {
     );
   }
 
+  /**
+   * Cria um item e, quando não vem código, **reserva um**.
+   *
+   * A reserva mora aqui porque é a fronteira por onde todo item de catálogo nasce
+   * — e na mesma transação da criação: um item sem código, ou um código sem item,
+   * seriam duas formas de quebrar a contagem do fluxo.
+   *
+   * Código digitado passa intacto. Quem vem de outro sistema importa os códigos
+   * antigos, e sobrescrevê-los faria o catálogo novo não conversar com a nota
+   * fiscal antiga.
+   */
   createProduct(data: Prisma.ProductUncheckedCreateInput) {
-    return this.rls.run((transaction) =>
-      transaction.product.create({ data, include: productInclude }),
-    );
+    return this.rls.run(async (transaction) => {
+      const sku =
+        data.sku ??
+        (await allocateProductSku(
+          transaction,
+          data.organizationId,
+          data.kind ?? 'PRODUCT',
+        ));
+
+      return transaction.product.create({
+        data: { ...data, sku },
+        include: productInclude,
+      });
+    });
   }
 
   updateProduct(id: string, data: Prisma.ProductUpdateInput) {

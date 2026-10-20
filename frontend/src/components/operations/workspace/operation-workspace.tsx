@@ -23,6 +23,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   useOperation,
   useOperationChecklists,
+  useOperationFieldRecord,
   useOperationHistory,
   useOperationIntelligence,
   useOperationTimeline,
@@ -31,8 +32,10 @@ import { formatDateTime } from "@/lib/formatters";
 import { ROUTES } from "@/lib/routes";
 import { OperationStatusBadge } from "../operation-badges";
 import { AssigneesSection } from "./assignees.section";
+import { OperationArtifactExecutionsSection } from "./artifact-executions.section";
 import { AttachmentsSection } from "./attachments.section";
 import { ChecklistsSection } from "./checklists.section";
+import { FieldRecordSection } from "./field-record.section";
 import {
   AdditionalDataSection,
   DetailsSection,
@@ -43,13 +46,27 @@ import { IntelligenceSection } from "./intelligence.section";
 import { MaterialsSection } from "./materials.section";
 import { StatusSection } from "./status.section";
 import { HistorySection, TimelineSection } from "./timeline.section";
+import { useSession } from "@/providers/session-provider";
+import { PRODUCT_CAPABILITY, PRODUCT_FEATURE } from "@/registry/product-access";
 
 export function OperationWorkspace({ operationId }: { operationId: string }) {
+  const session = useSession();
+  const canUseIntelligence =
+    session.hasPermission("ai.executions.read") &&
+    session.hasCapability("ai.executions.read") &&
+    session.canUseProductFeature(
+      PRODUCT_CAPABILITY.ORBIT_INTELLIGENCE,
+      PRODUCT_FEATURE.ORBIT_INTELLIGENCE,
+    );
   const operation = useOperation(operationId);
   const timeline = useOperationTimeline(operationId);
   const history = useOperationHistory(operationId);
   const checklists = useOperationChecklists(operationId);
-  const intelligence = useOperationIntelligence(operationId);
+  const fieldRecord = useOperationFieldRecord(operationId);
+  const intelligence = useOperationIntelligence(
+    operationId,
+    canUseIntelligence,
+  );
 
   const operationQuery = toPanelQuery(operation);
 
@@ -96,7 +113,8 @@ export function OperationWorkspace({ operationId }: { operationId: string }) {
             void timeline.refetch();
             void history.refetch();
             void checklists.refetch();
-            void intelligence.refetch();
+            void fieldRecord.refetch();
+            if (canUseIntelligence) void intelligence.refetch();
           }}
         >
           <RefreshCw className="size-4" />
@@ -108,19 +126,28 @@ export function OperationWorkspace({ operationId }: { operationId: string }) {
           <DetailsSection query={operationQuery} />
           <TimelineSection query={toPanelQuery(timeline)} />
           <ChecklistsSection query={toPanelQuery(checklists)} />
+          <OperationArtifactExecutionsSection operationId={operationId} />
           {/*
             Materiais utilizados: baixa de estoque vinculada a esta operação.
             Fica na coluna principal, ao lado de checklists — as duas respondem
             "o que foi feito em campo".
           */}
           <MaterialsSection operation={operationQuery.data} />
-          <IntelligenceSection query={toPanelQuery(intelligence)} />
+          {/*
+            O registro de campo fica na coluna principal, junto de checklists e
+            materiais: as três respondem "o que foi feito em campo". A assinatura
+            do cliente é a última peça dessa resposta.
+          */}
+          <FieldRecordSection query={toPanelQuery(fieldRecord)} />
+          {canUseIntelligence ? (
+            <IntelligenceSection query={toPanelQuery(intelligence)} />
+          ) : null}
           <AdditionalDataSection query={operationQuery} />
         </div>
 
         <div className="space-y-6 lg:col-span-4">
           <StatusSection operationId={operationId} query={operationQuery} />
-          <AssigneesSection operationId={operationId} query={operationQuery} />
+          <AssigneesSection query={operationQuery} />
           <RelationsSection query={operationQuery} />
           <ScheduleSection query={operationQuery} />
           <AttachmentsSection

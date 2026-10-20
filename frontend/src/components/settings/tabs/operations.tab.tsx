@@ -16,6 +16,11 @@
  * execuções" ou "política padrão do catálogo" gravaria uma chave que nenhum
  * módulo consulta — configuração que não configura nada é pior que ausência,
  * porque quem a liga acredita ter mudado algo.
+ *
+ * Havia aqui um painel inteiro dizendo isso: "Outros parâmetros operacionais",
+ * com três parágrafos sobre `Organization.settings` não ter esquema. Explicar
+ * ao usuário por que uma seção está vazia é uma seção vazia com texto. A
+ * decisão é de projeto, e o lugar dela é este comentário.
  */
 import { OperationAuthorizationSection } from "@/components/operations/authorization.section";
 import { PanelFrame } from "@/components/panels";
@@ -30,31 +35,6 @@ export function OperationsSettingsTab() {
       <OperationAuthorizationSection />
 
       <PanelFrame
-        panelId="settings-operations-parameters"
-        title="Outros parâmetros operacionais"
-        description="Comportamento de execuções, políticas padrão e catálogo"
-      >
-        <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            O backend guarda as configurações da organização num JSON livre
-            (<span className="font-mono">Organization.settings</span>), sem
-            esquema nem catálogo de parâmetros. A autorização acima é a única
-            chave que a plataforma de fato lê.
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Oferecer outros interruptores aqui gravaria chaves que nenhum módulo
-            consulta — quem as ligasse acreditaria ter mudado algo. Cada
-            parâmetro novo entra quando o módulo que o obedece existir.
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Regras que já são do servidor e não se configuram: transições de
-            status de operação, validação de preenchimento de execução e
-            disponibilidade de item do catálogo.
-          </p>
-        </div>
-      </PanelFrame>
-
-      <PanelFrame
         panelId="settings-operations-shortcuts"
         title="Onde cada coisa se administra"
         description="Configuração vive junto do que ela configura"
@@ -62,7 +42,7 @@ export function OperationsSettingsTab() {
         <ul className="space-y-2">
           {[
             {
-              label: "Templates de artefato",
+              label: "Modelos de documento",
               hint: "Estrutura, versões e publicação",
               href: ROUTES.artifacts,
             },

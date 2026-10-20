@@ -21,8 +21,11 @@ class OperationsFilterNotifier extends StateNotifier<OperationQuery> {
     page: 1,
   );
 
-  void setStatus(String? value) =>
-      state = state.copyWith(status: value, clearStatus: value == null, page: 1);
+  void setStatus(String? value) => state = state.copyWith(
+    status: value,
+    clearStatus: value == null,
+    page: 1,
+  );
 
   void setKind(String? value) =>
       state = state.copyWith(kind: value, clearKind: value == null, page: 1);

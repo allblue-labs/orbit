@@ -8,36 +8,62 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Req,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { ApiPublicErrors } from '../../../common/public-errors';
+import { Surfaces } from '../../../decorators';
+import { ForbiddenException } from '../../../exceptions';
 import { ParseUUIDv7Pipe } from '../../../pipes';
 import { AuthenticationService } from '../application/authentication.service';
 import { MfaService } from '../application/mfa.service';
+import { AvatarService } from '../application/avatar.service';
 import { ProfileService } from '../application/profile.service';
 import type { IdentityRequest } from '../infrastructure/jwt-authentication.guard';
 import { IdentityReadModelMapper } from '../identity.mapper';
 import {
+  ActivateAvatarDto,
   ChangePasswordDto,
   EnableMfaDto,
+  ReserveAvatarUploadDto,
   UpdateProfileDto,
 } from './dto/identity.dto';
 
 @ApiTags('Identity Profile')
+@ApiPublicErrors()
 @Controller('identity/me')
+@Surfaces('WEB', 'MOBILE', 'API')
 export class ProfileController {
   constructor(
     private readonly profiles: ProfileService,
     private readonly authentication: AuthenticationService,
     private readonly mfa: MfaService,
+    private readonly avatars: AvatarService,
     private readonly readModels: IdentityReadModelMapper,
   ) {}
 
   @Get()
   async get(@Req() request: IdentityRequest) {
     return this.readModels.profile(
-      await this.profiles.get(request.identity!.id),
+      await this.profiles.get(
+        request.identity!.id,
+        request.identity!.organizationId!,
+      ),
     );
+  }
+
+  /** Current server-resolved access; no token or credential material. */
+  @Get('access')
+  access(@Req() request: IdentityRequest) {
+    const identity = request.identity!;
+    return {
+      isOwner: identity.isOrganizationOwner,
+      roles: identity.roles,
+      permissions: identity.permissions,
+      surfaceAccess: identity.allowedSurfaces,
+      unitIds: identity.businessUnitIds,
+    };
   }
 
   @Patch()
@@ -48,6 +74,60 @@ export class ProfileController {
     return this.readModels.profile(
       await this.profiles.update(request.identity!.id, input),
     );
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Foto de perfil                                                    */
+  /* ---------------------------------------------------------------- */
+
+  /**
+   * A foto atual, com endereço temporário.
+   *
+   * Separada do `GET /identity/me` de propósito: a URL assinada expira, e
+   * embuti-la no perfil obrigaria a recarregar o perfil inteiro só para
+   * renovar o endereço de uma imagem.
+   */
+  @Get('avatar')
+  avatar(@Req() request: IdentityRequest) {
+    return this.avatars.view(this.actor(request));
+  }
+
+  @Post('avatar/uploads')
+  reserveAvatar(
+    @Req() request: IdentityRequest,
+    @Body() input: ReserveAvatarUploadDto,
+  ) {
+    return this.avatars.reserveUpload(this.actor(request), input);
+  }
+
+  @Put('avatar')
+  activateAvatar(
+    @Req() request: IdentityRequest,
+    @Body() input: ActivateAvatarDto,
+  ) {
+    return this.avatars.activate(this.actor(request), input.storageObjectId);
+  }
+
+  @Delete('avatar')
+  @HttpCode(HttpStatus.OK)
+  removeAvatar(@Req() request: IdentityRequest) {
+    return this.avatars.remove(this.actor(request));
+  }
+
+  /**
+   * Quem está pedindo, e por qual organização.
+   *
+   * A organização importa porque o arquivo é do inquilino: é ela que a RLS
+   * exige para que a foto seja alcançável.
+   */
+  private actor(request: IdentityRequest): {
+    id: string;
+    organizationId: string;
+  } {
+    const identity = request.identity;
+    if (!identity?.organizationId)
+      throw new ForbiddenException('Contexto de organização obrigatório');
+    return { id: identity.id, organizationId: identity.organizationId };
   }
 
   /**
@@ -89,10 +169,8 @@ export class ProfileController {
   @Post('mfa/enrollment')
   beginMfa(@Req() request: IdentityRequest) {
     return this.profiles
-      .get(request.identity!.id)
-      .then((profile) =>
-        this.mfa.beginEnrollment(request.identity!.id, profile.email),
-      );
+      .email(request.identity!.id)
+      .then((email) => this.mfa.beginEnrollment(request.identity!.id, email));
   }
 
   @Post('mfa/enable')

@@ -12,7 +12,6 @@ import '../errors/orbit_exception.dart';
 import '../network/orbit_api_client.dart';
 import 'upload_queue.dart';
 
-
 /// Limite do backend. Validado antes de enviar para não gastar rede até o 413.
 const int maxAttachmentBytes = 20 * 1024 * 1024;
 
@@ -25,7 +24,10 @@ UploadExecutor createAttachmentUploadExecutor(OrbitApiClient client) {
         kind: OrbitErrorKind.http,
         status: 413,
         code: 'PAYLOAD_TOO_LARGE',
-        message: 'Arquivo acima do limite de 20 MB aceito pelo servidor.',
+
+        /// Fala do arquivo, não do servidor: o limite é do produto, e quem
+        /// precisa agir é quem escolheu a foto.
+        publicMessage: 'Este arquivo passa do limite de 20 MB.',
       );
     }
 

@@ -92,7 +92,7 @@ void main() {
       onRequest: (_) async => _json(
         errorEnvelope(
           code: 'CONFLICT',
-          message: 'Cannot transition from COMPLETED to OPEN',
+          message: 'Esta mudança de status não é permitida.',
         ),
         status: 409,
       ),
@@ -105,13 +105,40 @@ void main() {
             .having((error) => error.status, 'status', 409)
             .having((error) => error.code, 'code', 'CONFLICT')
             .having(
-              (error) => error.message,
+              (error) => error.publicMessage,
               'message',
-              contains('Cannot transition'),
+              equals('Esta mudança de status não é permitida.'),
             ),
       ),
     );
   });
+
+  test(
+    'lê detalhes estruturados de validação sem depender de texto interno',
+    () {
+      final error = OrbitException.fromEnvelope(
+        status: 400,
+        body: const {
+          'success': false,
+          'error': {
+            'code': 'VALIDATION_ERROR',
+            'message': 'Revise os campos informados.',
+            'status': 400,
+            'details': [
+              {
+                'field': 'email',
+                'code': 'INVALID_FORMAT',
+                'message': 'Informe um e-mail válido.',
+              },
+            ],
+          },
+        },
+      );
+
+      expect(error.code, 'VALIDATION_ERROR');
+      expect(error.validationMessages, ['Informe um e-mail válido.']);
+    },
+  );
 
   test('envia x-request-id e o token guardado', () async {
     final storage = InMemoryTokenStorage(
@@ -153,7 +180,10 @@ void main() {
       body: const {'email': 'a@b.com'},
     );
 
-    expect(setup.adapter.requests.single.headers.containsKey('authorization'), isFalse);
+    expect(
+      setup.adapter.requests.single.headers.containsKey('authorization'),
+      isFalse,
+    );
   });
 
   test('401 dispara renovação e repete a requisição', () async {
@@ -173,7 +203,10 @@ void main() {
         // Primeira tentativa: token vencido.
         if (options.headers['authorization'] == 'Bearer access-vencido') {
           return _json(
-            errorEnvelope(code: 'UNAUTHORIZED', message: 'Unauthorized'),
+            errorEnvelope(
+              code: 'UNAUTHORIZED',
+              message: 'Sua sessão não é válida ou expirou.',
+            ),
             status: 401,
           );
         }
@@ -233,5 +266,75 @@ void main() {
     final sent = setup.adapter.requests.single;
     expect(sent.queryParameters, {'status': 'OPEN'});
   });
-}
 
+  group('para onde tentou ir é diagnóstico, não mensagem', () {
+    /// Este grupo mudou de lado.
+    ///
+    /// Antes ele cobrava o contrário: que a mensagem pública **nomeasse** o
+    /// destino fora de produção, para que a URL errada não ficasse invisível.
+    /// A intenção era boa e o efeito foi o incidente — um técnico abriu o
+    /// aplicativo e leu "(tentei 10.0.2.2:6001)".
+    ///
+    /// O dado continua existindo, e continua sendo o que resolve o chamado.
+    /// Mudou de canal: vai para o diagnóstico, que a interface não recebe.
+    DioException semRede(RequestOptions options) => DioException(
+      requestOptions: options,
+      type: DioExceptionType.connectionError,
+      error: 'nada respondeu',
+    );
+
+    Future<OrbitException> mapear(String? destino) async {
+      final dio = Dio()
+        ..httpClientAdapter = _ScriptedAdapter(
+          (options) async => throw semRede(options),
+        )
+        ..interceptors.add(ErrorMappingInterceptor(destination: destino));
+      try {
+        await dio.get<dynamic>('/operations');
+        fail('a requisição deveria ter falhado');
+      } on DioException catch (error) {
+        return error.error as OrbitException;
+      }
+    }
+
+    test('o destino vai para o diagnóstico', () async {
+      final erro = await mapear('192.168.1.233:6001');
+
+      expect(erro.code, 'NETWORK');
+      expect(erro.diagnostics?.host, '192.168.1.233:6001');
+    });
+
+    test('e nunca para a mensagem pública', () async {
+      final erro = await mapear('192.168.1.233:6001');
+
+      expect(erro.publicMessage, isNot(contains('192.168.1.233')));
+      expect(erro.publicMessage, isNot(contains('6001')));
+      expect(erro.publicMessage, contains('conexão com a internet'));
+    });
+
+    test('sem destino informado, a mensagem é a mesma', () async {
+      /// A frase pública não depende de haver diagnóstico — se dependesse,
+      /// haveria duas mensagens para o mesmo caso, e uma delas seria a longa.
+      final comDestino = await mapear('192.168.1.233:6001');
+      final semDestino = await mapear(null);
+
+      expect(semDestino.publicMessage, comDestino.publicMessage);
+      expect(semDestino.diagnostics?.host, isNull);
+    });
+
+    test('o ambiente informa o destino em qualquer sabor', () {
+      /// Antes era `null` em produção, porque o ambiente era a única barreira
+      /// contra o vazamento. Hoje a barreira é estrutural, e quem investiga um
+      /// erro em produção precisa do endereço tanto quanto em bancada.
+      const producao = OrbitEnvironment(
+        apiBaseUrl: 'https://api.orbit.app/api/v1',
+        flavor: OrbitFlavor.production,
+        connectTimeout: Duration(seconds: 15),
+        receiveTimeout: Duration(seconds: 30),
+      );
+
+      expect(producao.diagnosticHost, 'api.orbit.app');
+      expect(producao.apiHost, 'api.orbit.app');
+    });
+  });
+}

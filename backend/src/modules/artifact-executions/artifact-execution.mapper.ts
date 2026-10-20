@@ -60,10 +60,17 @@ interface SignatureSource {
   id: string;
   slotId: string;
   signerRole: string;
+  signedAs: string | null;
   userId: string | null;
   signerName: string;
   signerDocument: string | null;
   signatureHash: string;
+  signatureAssetHash: string | null;
+  professionalRole: string | null;
+  credentialType: string | null;
+  credentialNumber: string | null;
+  credentialRegion: string | null;
+  capturedAt: DateValue | null;
   consentText: string | null;
   geolocation: unknown;
   signedAt: DateValue;
@@ -249,7 +256,27 @@ export class ArtifactExecutionReadModelMapper {
     source: SignatureSource,
   ): ArtifactExecutionSignatureReadModel {
     return {
-      ...source,
+      id: source.id,
+      slotId: source.slotId,
+      signerRole: source.signerRole,
+      signedAs:
+        source.signedAs as ArtifactExecutionSignatureReadModel['signedAs'],
+      userId: source.userId,
+      signerName: source.signerName,
+      signerDocument: source.signerDocument,
+      signatureHash: source.signatureHash,
+      signatureAssetHash: source.signatureAssetHash,
+      professionalRole: source.professionalRole,
+      professionalCredential:
+        source.credentialType && source.credentialNumber
+          ? {
+              type: source.credentialType,
+              registrationNumber: source.credentialNumber,
+              region: source.credentialRegion,
+            }
+          : null,
+      capturedAt: this.nullableDate(source.capturedAt),
+      consentText: source.consentText,
       geolocation: source.geolocation ? this.object(source.geolocation) : null,
       signedAt: this.date(source.signedAt),
       revokedAt: this.nullableDate(source.revokedAt),

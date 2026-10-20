@@ -61,7 +61,17 @@ if (!existsSync(source)) {
 
 await rm(target, { recursive: true, force: true });
 await mkdir(target, { recursive: true });
-await cp(source, target, { recursive: true });
+/*
+ * Os testes ficam no backend, que é onde o código nasce.
+ *
+ * Copiá-los produzia um `*.spec.ts` no frontend que o vitest **não** executa —
+ * ele só casa `*.test.ts`. Um arquivo de teste que nunca roda é pior que nenhum:
+ * parece cobertura e não é.
+ */
+await cp(source, target, {
+  recursive: true,
+  filter: (path) => !path.endsWith(".spec.ts"),
+});
 
 for (const readModel of READ_MODELS) {
   const from = resolve(backendSrc, readModel);

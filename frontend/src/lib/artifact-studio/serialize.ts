@@ -88,7 +88,7 @@ export function inspectDocument(
   }
   if (sections.length > ARTIFACT_LIMITS.maxSections) {
     problems.push({
-      message: `O backend aceita no máximo ${ARTIFACT_LIMITS.maxSections} seções.`,
+      message: `O limite é de ${ARTIFACT_LIMITS.maxSections} seções.`,
     });
   }
 
@@ -98,7 +98,7 @@ export function inspectDocument(
       problems.push({
         nodeId: node.nodeId,
         message:
-          "Agrupamentos ainda não são persistidos pelo backend. Remova o grupo ou mova os campos para a seção.",
+          "Agrupamentos ainda não são salvos. Remova o grupo ou mova os campos para a seção.",
       });
     }
   }
@@ -122,7 +122,7 @@ export function inspectDocument(
   );
   if (signatures.length > ARTIFACT_LIMITS.maxSignatureSlots) {
     problems.push({
-      message: `O backend aceita no máximo ${ARTIFACT_LIMITS.maxSignatureSlots} assinaturas.`,
+      message: `O limite é de ${ARTIFACT_LIMITS.maxSignatureSlots} assinaturas.`,
     });
   }
   problems.push(...duplicates(signatures, "assinatura"));

@@ -21,6 +21,10 @@ import type {
   OperationChecklistReadModel,
   OperationDetailsReadModel,
   OperationHistoryReadModel,
+  OperationListItemReadModel,
+  OperationFieldAcknowledgementReadModel,
+  OperationFieldEvidenceReadModel,
+  OperationFieldRecordReadModel,
   OperationTimelineAttachmentReadModel,
   OperationTimelineReadModel,
   OperationUserReadModel,
@@ -32,11 +36,27 @@ export type OperationAttachment = OperationAttachmentReadModel;
 export type OperationTimelineAttachment = OperationTimelineAttachmentReadModel;
 export type OperationHistoryEntry = OperationHistoryReadModel;
 export type OperationTimeline = OperationTimelineReadModel;
+
+/** O que o campo registrou: fotos e o aceite do cliente. */
+export type OperationFieldRecord = OperationFieldRecordReadModel;
+export type OperationFieldEvidence = OperationFieldEvidenceReadModel;
+export type OperationFieldAcknowledgement =
+  OperationFieldAcknowledgementReadModel;
 export type OperationBusinessUnitRef = OperationBusinessUnitReadModel;
 export type OperationCustomerRef = OperationCustomerReadModel;
 export type OperationAssetRef = OperationAssetReadModel;
 export type OperationChecklistSummary = OperationChecklistReadModel;
+/**
+ * A ordem de serviço como o **detalhe** a publica.
+ *
+ * Só ela traz `transitions`: a listagem é compacta de propósito no backend.
+ * Tipar uma linha de lista como este tipo prometeria uma máquina de estados
+ * que não vem no payload — e foi o que aconteceu até a PR-FE-01.
+ */
 export type Operation = OperationDetailsReadModel;
+
+/** Uma linha da listagem. Traz `allowedActions`, não traz `transitions`. */
+export type OperationListItem = OperationListItemReadModel;
 
 /** Query de `GET /operations` (`OperationQueryDto`). */
 export interface OperationQuery {
@@ -45,6 +65,13 @@ export interface OperationQuery {
   customerId?: string;
   assetId?: string;
   assignedUserId?: string;
+  /**
+   * Só o que está atribuído e esperando autorização.
+   *
+   * É a fila da aba Autorização. Recorte do servidor, não da página: com vinte por
+   * página, contar no navegador diria "3 pendentes" numa organização com duzentas.
+   */
+  pendingAuthorization?: boolean;
   kind?: OperationKind;
   status?: OperationStatus;
   priority?: OperationPriority;
@@ -65,7 +92,19 @@ export interface OperationQuery {
 export interface CreateOperationInput {
   businessUnitId: string;
   customerId?: string;
-  assetId?: string;
+  /** Os equipamentos atendidos — era `assetId`, um só. */
+  assetIds?: string[];
+  /** Para onde o técnico vai: um endereço cadastrado do cliente. */
+  customerAddressId?: string;
+  /** O ponto exato dentro do endereço. */
+  sector?: string;
+  /**
+   * O técnico em campo pode ver quanto este atendimento vale?
+   *
+   * Governa a visibilidade, não o número: o valor é o total do orçamento
+   * vinculado. Omitido é `false` — liberar é um ato consciente.
+   */
+  amountVisibleInField?: boolean;
   code: string;
   kind: OperationKind;
   title: string;
@@ -73,6 +112,17 @@ export interface CreateOperationInput {
   priority?: OperationPriority;
   scheduledStart?: string;
   scheduledEnd?: string;
+
+  /**
+   * Quem executa, e quem acompanha.
+   *
+   * Os dois campos existem no `CreateOperationDto` desde sempre e nenhuma
+   * tela os enviava: o atendimento nascia sem dono, e atribuir dependia de
+   * abrir a operação depois. O formulário passa a oferecê-los.
+   */
+  responsibleFieldTechnicianId?: string;
+  auxiliaryTechnicianIds?: string[];
+
   location?: Record<string, unknown>;
   data?: Record<string, unknown>;
 }
@@ -108,6 +158,40 @@ export interface ChecklistTemplateRef {
   id: string;
   key: string;
   name: string;
+}
+
+/**
+ * Modelo de checklist (`GET /checklist-templates`).
+ *
+ * `operationKind` é o vínculo com o tipo de atendimento. Nulo significa que o
+ * modelo serve a qualquer tipo — é o que todo modelo era antes de a coluna
+ * existir.
+ */
+export interface ChecklistTemplate {
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  operationKind: OperationKind | null;
+  version: number;
+  isActive: boolean;
+  items: readonly ChecklistItem[];
+}
+
+export interface ChecklistTemplateQuery {
+  operationKind?: OperationKind;
+  isActive?: boolean;
+  search?: string;
+  page?: number;
+  limit?: number;
+}
+
+/** `POST /operations/:id/checklists`. */
+export interface StartChecklistInput {
+  templateId: string;
+  notes?: string;
+  /** Itens só desta execução; o modelo não muda. */
+  additionalItems?: readonly ChecklistItem[];
 }
 
 /** Item do snapshot do template (`ChecklistItemDto`). */
@@ -232,3 +316,57 @@ export const OPERATION_HISTORY_LABELS: Readonly<Record<string, string>> = {
   CHECKLIST_CANCELLED: "Checklist cancelado",
   DELETED: "Operação removida",
 };
+
+/* ------------------------------------------------------------------ */
+/* Roteiros — o catálogo que o dono da organização mantém              */
+/* ------------------------------------------------------------------ */
+
+/** Os tipos de resposta que um item de roteiro aceita. */
+export const CHECKLIST_ITEM_TYPES = [
+  { value: "BOOLEAN", label: "Sim / Não" },
+  { value: "TEXT", label: "Texto" },
+  { value: "NUMBER", label: "Número" },
+  { value: "SELECT", label: "Escolha" },
+  { value: "PHOTO", label: "Foto" },
+  { value: "SIGNATURE", label: "Assinatura" },
+] as const;
+
+/** `POST /checklist-templates`. */
+export interface CreateChecklistTemplateInput {
+  key: string;
+  name: string;
+  description?: string;
+  /**
+   * O tipo de atendimento a que o roteiro pertence.
+   *
+   * É o que faz o formulário de nova operação achar o roteiro ao escolher o
+   * tipo. Omitido, o roteiro serve a qualquer tipo.
+   */
+  operationKind?: OperationKind;
+  items: readonly ChecklistItem[];
+  isActive?: boolean;
+}
+
+export type UpdateChecklistTemplateInput =
+  Partial<CreateChecklistTemplateInput>;
+
+/* ---------------------------------------------------------------- */
+/* Pedido de cancelamento vindo do campo                             */
+/* ---------------------------------------------------------------- */
+
+export type {
+  OperationCancellationResolution,
+  OperationCancellationStatus,
+} from "./contracts/modules/operations/operation-cancellation.read-models";
+
+import type {
+  OperationCancellationInboxItemReadModel,
+  OperationCancellationResolution as Resolucao,
+} from "./contracts/modules/operations/operation-cancellation.read-models";
+
+/** Um pedido na caixa de entrada do dono. */
+export type OperationCancellationRequest =
+  OperationCancellationInboxItemReadModel;
+
+/** Alias interno, para as assinaturas abaixo não dependerem da re-exportação. */
+export type OperationCancellationDecision = Resolucao;

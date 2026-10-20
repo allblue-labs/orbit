@@ -86,14 +86,21 @@ export function EventBlock({
 
       {compact ? null : (
         <span className="flex min-w-0 items-center gap-1 text-[10px] text-muted-foreground">
-          {occurrence.allDay ? (
-            "Dia todo"
-          ) : (
-            <>
-              {formatZonedTime(occurrence.startsAt, timeZone)}–
-              {formatZonedTime(occurrence.endsAt, timeZone)}
-            </>
-          )}
+          {/*
+            * O horário vai num elemento próprio para poder encurtar com
+            * reticências. Solto, era texto anónimo dentro de um flex: não
+            * encolhia, e o `overflow-hidden` do bloco cortava-o em silêncio.
+            */}
+          <span className="truncate">
+            {occurrence.allDay ? (
+              "Dia todo"
+            ) : (
+              <>
+                {formatZonedTime(occurrence.startsAt, timeZone)}–
+                {formatZonedTime(occurrence.endsAt, timeZone)}
+              </>
+            )}
+          </span>
           {foreignZone ? (
             <span
               className="flex items-center gap-0.5"

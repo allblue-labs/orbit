@@ -296,6 +296,48 @@ export class ReportRepository {
   }
 
   /**
+   * O timbre do relatório.
+   *
+   * A unidade do recorte quando o relatório é de uma; a matriz quando é da
+   * organização inteira — a mesma regra do fuso, logo abaixo, porque é a mesma
+   * pergunta: "de quem é este papel?".
+   *
+   * São as colunas que o cabeçalho imprime, e só elas. Um `include` generoso
+   * arrastaria o cadastro inteiro da unidade para desenhar um timbre.
+   */
+  findLetterhead(organizationId: string, businessUnitId: string | null) {
+    return this.rls.run((tx) =>
+      tx.businessUnit.findFirst({
+        where: {
+          organizationId,
+          deletedAt: null,
+          ...(businessUnitId ? { id: businessUnitId } : {}),
+        },
+        orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+        select: {
+          legalName: true,
+          tradeName: true,
+          documentType: true,
+          documentNumber: true,
+          email: true,
+          phone: true,
+          website: true,
+          logoUrl: true,
+          /* A marca da empresa, para quando a unidade não tiver a sua.
+             `issuerLogo` decide; aqui só se garante que o dado chegue. */
+          organization: { select: { logoUrl: true } },
+          city: true,
+          stateCode: true,
+          district: true,
+          street: true,
+          number: true,
+          timezone: true,
+        },
+      }),
+    );
+  }
+
+  /**
    * O fuso do recorte.
    *
    * Da unidade quando há uma; da matriz quando o relatório é da organização

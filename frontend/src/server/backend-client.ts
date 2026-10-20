@@ -37,6 +37,18 @@ export interface BackendRequest extends BackendContextInput {
   signal?: AbortSignal;
   timeoutMs?: number;
   retries?: number;
+  /**
+   * Quantos segundos a resposta pode ser reaproveitada.
+   *
+   * Ausente significa `no-store`, que é o certo para tudo o que depende de
+   * quem está pedindo: dado de inquilino não se compartilha entre requisições,
+   * e um cache aqui serviria a resposta de uma organização para outra.
+   *
+   * Só leitura **pública e igual para todo mundo** deve usar isto — hoje, o
+   * catálogo comercial de planos. É o que permite a landing e a página de
+   * preços serem servidas sem uma ida ao backend por visita.
+   */
+  revalidateSeconds?: number;
 }
 
 /**
@@ -65,7 +77,9 @@ export async function backendFetch(request: BackendRequest): Promise<Response> {
         method,
         headers,
         body: request.body ?? undefined,
-        cache: "no-store",
+        ...(request.revalidateSeconds === undefined
+          ? { cache: "no-store" as const }
+          : { next: { revalidate: request.revalidateSeconds } }),
         redirect: "manual",
         signal,
       });

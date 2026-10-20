@@ -3,6 +3,10 @@ import type { Prisma } from '@prisma/client';
 import { RlsTransaction } from '../../../../database';
 import { PaginationHelper } from '../../../../database/helpers/database.helpers';
 import type { AssetQueryDto } from './asset.dto';
+import {
+  allocateInternalCode,
+  isGeneratedIdentifierType,
+} from './asset-internal-code';
 
 const assetInclude = {
   businessUnit: {
@@ -73,10 +77,31 @@ export class AssetRepository {
     );
   }
 
+  /**
+   * Cria um equipamento e, quando o identificador é **código interno** sem valor,
+   * gera um.
+   *
+   * A reserva mora aqui porque é a fronteira por onde o cadastro de equipamento
+   * passa, e na mesma transação da criação: um equipamento sem código, ou um
+   * número consumido sem equipamento, seriam duas formas de furar a contagem.
+   *
+   * Os outros tipos de identificador passam intactos — eles são lidos da máquina,
+   * e gerar um número de série inventaria um fato sobre o equipamento do cliente.
+   * Código interno digitado também passa: quem etiquetou o parque antes de usar o
+   * Orbit tem a convenção dele.
+   */
   create(data: Prisma.AssetUncheckedCreateInput) {
-    return this.rls.run((transaction) =>
-      transaction.asset.create({ data, include: assetInclude }),
-    );
+    return this.rls.run(async (transaction) => {
+      const identifier =
+        isGeneratedIdentifierType(data.identifierType) && !data.identifier
+          ? await allocateInternalCode(transaction, data.organizationId)
+          : data.identifier;
+
+      return transaction.asset.create({
+        data: { ...data, identifier },
+        include: assetInclude,
+      });
+    });
   }
 
   update(id: string, data: Prisma.AssetUpdateInput) {

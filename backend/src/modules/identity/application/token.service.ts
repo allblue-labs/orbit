@@ -27,6 +27,8 @@ export class IdentityTokenService {
       businessUnitIds: identity.businessUnitIds,
       roles: identity.roles,
       permissions: identity.permissions,
+      allowedSurfaces: identity.allowedSurfaces,
+      isOrganizationOwner: identity.isOrganizationOwner,
       type: 'access',
     };
     const refreshToken = randomBytes(48).toString('base64url');

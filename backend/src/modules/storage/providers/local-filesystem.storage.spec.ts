@@ -12,7 +12,7 @@ describe('LocalFilesystemStorageProvider', () => {
     provider = new LocalFilesystemStorageProvider(
       'orbit-artifacts',
       root,
-      'http://localhost:5001/api/v1',
+      'http://localhost:6001/api/v1',
       'segredo-de-teste',
     );
   });
@@ -103,7 +103,7 @@ describe('LocalFilesystemStorageProvider', () => {
       const outro = new LocalFilesystemStorageProvider(
         'orbit-artifacts',
         root,
-        'http://localhost:5001/api/v1',
+        'http://localhost:6001/api/v1',
         'outro-segredo',
       );
       const signed = await sign();

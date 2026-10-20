@@ -54,7 +54,7 @@ export function IntelligenceSection({
     <PanelFrame
       panelId="artifact-execution-intelligence"
       title="Orbit Intelligence"
-      description="Produzido pelo backend para esta execução"
+      description="Gerado para esta execução"
     >
       {groups.length === 0 ? (
         <p className="py-6 text-center text-sm text-muted-foreground">

@@ -60,10 +60,19 @@ export interface ArtifactExecutionSignatureReadModel {
   id: string;
   slotId: string;
   signerRole: string;
+  signedAs: 'FIELD_TECHNICIAN' | 'TECHNICAL_RESPONSIBLE' | 'CUSTOMER' | null;
   userId: string | null;
   signerName: string;
   signerDocument: string | null;
   signatureHash: string;
+  signatureAssetHash: string | null;
+  professionalRole: string | null;
+  professionalCredential: {
+    type: string;
+    registrationNumber: string;
+    region: string | null;
+  } | null;
+  capturedAt: string | null;
   consentText: string | null;
   geolocation: Readonly<Record<string, unknown>> | null;
   signedAt: string;

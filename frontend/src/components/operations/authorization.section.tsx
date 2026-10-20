@@ -3,33 +3,32 @@
 /**
  * Autorização de operações atribuídas.
  *
- * ## O que existe hoje, com precisão
+ * ## A regra é aplicada pelo servidor
  *
- * A **preferência é persistida de verdade**: `Organization.settings` é um JSON
- * livre publicado em `GET /organizations/current` e aceito por
- * `PATCH /organizations/current`. A chave gravada é
- * `operations.requireAssignmentAuthorization`, e o padrão é **desligado**.
+ * Por muito tempo esta tela avisava que a chave era gravada e **não fazia
+ * nada** — nenhum ponto do backend a lia, e ligá-la não escondia um
+ * atendimento sequer. A tela dizia isso com todas as letras em vez de fingir
+ * um fluxo que não acontecia, porque esconder só no cliente daria uma falsa
+ * sensação de controle: o técnico continuaria vendo tudo pelo aplicativo.
  *
- * A **aplicação da regra não existe**. Nenhum ponto do backend lê essa chave:
+ * Agora existe de verdade. `Operation.authorizedAt` guarda o carimbo, a fila
+ * de campo filtra por ele quando a organização exige, e
+ * `POST/DELETE /operations/:id/authorization` são os comandos. Um atendimento
+ * atribuído e não autorizado não chega ao aplicativo do técnico.
  *
- * - `OperationQueryDto` não filtra por "autorizada";
- * - `Operation` não tem campo de autorização — o `status` vai de `OPEN` a
- *   `CANCELLED` sem etapa intermediária;
- * - `POST /operations/:id/assignments` atribui e pronto, sem estado pendente.
+ * ## Ligar hoje não esconde o trabalho de ontem
  *
- * Ou seja: ligar a chave **não esconde nada de ninguém ainda**. A tela diz
- * isso com todas as letras em vez de fingir um fluxo que não acontece —
- * esconder operações no cliente seria pior: o técnico continuaria vendo tudo
- * pelo aplicativo e pela API.
+ * O que já estava atribuído continua visível: a migração carimbou o passado, e
+ * a atribuição carimba sozinha enquanto a exigência está desligada. Sem isso a
+ * operação chegaria de manhã com a fila vazia e nenhuma explicação.
  *
- * ## Por que gravar mesmo assim
+ * ## A mesma seção em dois lugares
  *
- * Porque a decisão é do Owner e precisa sobreviver ao navegador. Quando o
- * backend passar a ler a chave, quem já configurou não reconfigura. A proposta
- * de evolução mínima — um `authorizedAt` na operação e um filtro no
- * `OperationQueryDto` — está em `docs/ux-improvements.md`.
+ * Este componente é usado pela aba Autorização (em Operações) e pela aba
+ * Operações (em Configurações). É o mesmo componente, não duas cópias — é o
+ * que garante que mexer num lugar apareça no outro.
  */
-import { ShieldCheck, TriangleAlert } from "lucide-react";
+import { Info, ShieldCheck } from "lucide-react";
 
 import { MutationError } from "@/components/artifact-studio/mutation-error";
 import { PanelError, PanelFrame, PanelLoading } from "@/components/panels";
@@ -40,6 +39,8 @@ import {
 } from "@/hooks/organization/use-organization";
 import { useSession } from "@/providers/session-provider";
 import type { Organization } from "@/types/organization";
+import { AuthorizationQueuePanel } from "./authorization-queue.panel";
+import { CancellationQueuePanel } from "./cancellation-queue.panel";
 
 /** Caminho da preferência dentro de `settings`. */
 const SETTINGS_NAMESPACE = "operations";
@@ -84,7 +85,22 @@ function withAuthorization(
   return base;
 }
 
-export function OperationAuthorizationSection() {
+/**
+ * A seção da aba Autorização: a chave e, quando ela está ligada, a fila.
+ *
+ * `showQueue` é falso em Configurações › Operações, onde o que se ajusta é a
+ * preferência: uma fila de trabalho para liberar no meio das configurações seria
+ * trabalho operacional escondido num lugar de ajuste. Em Operações é o contrário — é
+ * lá que o dono decide o dia.
+ */
+export function OperationAuthorizationSection({
+  showQueue = false,
+  timeZone,
+}: {
+  showQueue?: boolean;
+  /** O fuso da unidade, para a fila agrupar por dia civil. */
+  timeZone?: string;
+} = {}) {
   const organization = useOrganization();
 
   if (organization.isPending) return <PanelLoading rows={4} />;
@@ -98,7 +114,30 @@ export function OperationAuthorizationSection() {
   }
   if (!organization.data) return null;
 
-  return <AuthorizationForm organization={organization.data} />;
+  const enabled = readRequiresAuthorization(organization.data.settings);
+
+  return (
+    <div className="space-y-6">
+      <AuthorizationForm organization={organization.data} />
+
+      {/*
+        A fila só existe onde a exigência existe.
+        Desligada, nenhum atendimento espera autorização — a atribuição carimba
+        sozinha —, e uma fila sempre vazia faria parecer que algo está travado.
+      */}
+      {showQueue && enabled ? (
+        <AuthorizationQueuePanel timeZone={timeZone ?? "America/Sao_Paulo"} />
+      ) : null}
+
+      {/*
+        Os pedidos de cancelamento vindos do campo.
+        Diferente da fila acima, **não** dependem da exigência de autorização: um
+        técnico pode não conseguir atender em qualquer organização, e o relato dele
+        precisa de um lugar independente dessa preferência.
+      */}
+      {showQueue ? <CancellationQueuePanel /> : null}
+    </div>
+  );
 }
 
 function AuthorizationForm({ organization }: { organization: Organization }) {
@@ -162,21 +201,30 @@ function AuthorizationForm({ organization }: { organization: Organization }) {
           />
         </div>
 
-        <div className="space-y-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4">
+        <div className="space-y-2 rounded-lg border border-border bg-muted/40 p-4">
           <p className="flex items-center gap-2 text-sm font-medium">
-            <TriangleAlert className="size-4 text-amber-400" aria-hidden />O
-            backend ainda não aplica esta regra
+            <Info className="size-4 text-primary" aria-hidden />
+            {enabled
+              ? "O que muda com a autorização ligada"
+              : "O que muda se você ligar"}
           </p>
+          <ul className="space-y-1 text-xs text-muted-foreground">
+            <li>
+              · Um atendimento atribuído só aparece na fila do aplicativo depois
+              de autorizado.
+            </li>
+            <li>
+              · A liberação fica no próprio atendimento, na aba Equipe, para
+              quem pode atribuir.
+            </li>
+            <li>
+              · Revogar tira o atendimento da fila de novo — o que já foi
+              executado permanece.
+            </li>
+          </ul>
           <p className="text-xs text-muted-foreground">
-            A preferência é gravada em <code>settings</code> e sobrevive ao
-            navegador, mas nenhum endpoint a consulta: a operação não tem campo
-            de autorização, e <code>GET /operations</code> não filtra por ela.
-            Enquanto isso não existir, ligar a chave <strong>não muda</strong> o
-            que o técnico enxerga — nem aqui, nem no aplicativo, nem na API.
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Esconder as operações apenas nesta tela daria uma falsa sensação de
-            controle: quem executa continuaria vendo tudo pelos outros clientes.
+            O que já está atribuído hoje continua visível: ligar a exigência
+            vale para o que for atribuído daqui em diante.
           </p>
         </div>
 

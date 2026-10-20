@@ -75,9 +75,7 @@ export function DocumentPreview({
       <div className="space-y-3 rounded-lg border border-destructive/40 bg-destructive/10 p-4">
         <p className="text-sm font-medium">Documento revogado</p>
         <p className="text-xs text-muted-foreground">
-          {summary.revokedReason ?? "Sem motivo informado."} O backend recusa
-          distribuir um documento revogado — o registro permanece para
-          auditoria.
+          {summary.revokedReason ?? "Sem motivo informado."} Um documento revogado não é mais distribuído — o registro permanece para auditoria.
         </p>
       </div>
     );
@@ -173,8 +171,7 @@ export function DocumentPreview({
           <p className="text-xs text-muted-foreground">
             Acesso temporário, renovado automaticamente enquanto esta tela
             estiver aberta — o atual vale até{" "}
-            {formatDateTime(signed.data.expiresAt)}. A URL é assinada pelo
-            backend; o armazenamento nunca é acessado diretamente.
+            {formatDateTime(signed.data.expiresAt)}. O link é temporário e pessoal; o arquivo nunca é acessado diretamente.
           </p>
         </div>
       ) : null}
@@ -243,10 +240,10 @@ function Metadata({ summary }: { summary: ArtifactManifestSummary }) {
       <Field label="Emitido por">
         <span className="text-sm">{summary.issuedBy?.displayName ?? "—"}</span>
       </Field>
-      <Field label="Hash do conteúdo">
+      <Field label="Código de verificação do arquivo">
         <ContentHash hash={summary.contentHash} />
       </Field>
-      <Field label="Hash da fonte">
+      <Field label="Código de verificação da origem">
         <ContentHash hash={summary.sourceHash} />
       </Field>
       <Field label="Versão do template">

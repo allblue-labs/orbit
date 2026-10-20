@@ -90,7 +90,19 @@ export type InfiniteApiQueryOptions<TEntity> = Omit<
   "queryKey" | "queryFn" | "getNextPageParam" | "initialPageParam"
 >;
 
-/** Rolagem infinita sobre listagens paginadas por página. */
+/**
+ * Rolagem infinita sobre listagens paginadas por página.
+ *
+ * ## `select` existe para o tipo não mentir
+ *
+ * O tipo de retorno sempre prometeu `PaginatedResult[]`, mas sem `select` o React
+ * Query entrega `InfiniteData` — `{ pages, pageParams }`. A anotação era uma
+ * mentira que o compilador aceitava, e o primeiro consumidor real estourou
+ * `flatMap is not a function` em execução, com a tela inteira caindo.
+ *
+ * Achatar aqui cumpre a promessa e deixa quem chama com um array de páginas, que
+ * é o que interessa: `data.flatMap((página) => página.data)`.
+ */
 export function useInfiniteApiQuery<TEntity>(
   queryKey: QueryKey,
   path: string,
@@ -107,11 +119,19 @@ export function useInfiniteApiQuery<TEntity>(
       }),
     getNextPageParam: (lastPage) =>
       lastPage.meta.hasNextPage ? lastPage.meta.page + 1 : undefined,
+    select: (data) => data.pages,
     ...options,
   });
 }
 
-/** Rolagem infinita sobre listagens por cursor (`{ data, nextCursor }`). */
+/**
+ * Rolagem infinita sobre listagens por cursor (`{ data, nextCursor }`).
+ *
+ * `select` pela mesma razão do irmão acima: o tipo promete o array de páginas, e
+ * sem achatar o runtime entregaria `InfiniteData`. Consertado junto — deixar um
+ * honesto e o outro mentindo é pior que os dois mentirem, porque aí a armadilha
+ * fica seletiva.
+ */
 export function useCursorQuery<TEntity>(
   queryKey: QueryKey,
   path: string,
@@ -126,5 +146,6 @@ export function useCursorQuery<TEntity>(
         signal,
       }),
     getNextPageParam: (lastPage) => lastPage.nextCursor,
+    select: (data) => data.pages,
   });
 }

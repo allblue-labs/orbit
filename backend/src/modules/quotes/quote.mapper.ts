@@ -56,11 +56,13 @@ export class QuoteMapper {
       status: source.status,
       title: source.title,
       notes: source.notes,
+      introText: source.introText,
       validUntil: source.validUntil ? this.day(source.validUntil) : null,
       isExpired: expired,
       currency: source.currency,
       subtotal: this.money(source.subtotal),
       discount: this.money(source.discount),
+      discountReason: source.discountReason,
       total: this.money(source.total),
       customer: {
         id: source.customer.id,
@@ -70,6 +72,27 @@ export class QuoteMapper {
         id: source.businessUnit.id,
         name: source.businessUnit.tradeName ?? source.businessUnit.legalName,
       },
+      serviceAddress: source.serviceAddress
+        ? {
+            id: source.serviceAddress.id,
+            label: source.serviceAddress.label,
+            summary: this.addressSummary(source.serviceAddress),
+          }
+        : null,
+      responsible: source.responsible
+        ? {
+            id: source.responsible.id,
+            displayName: source.responsible.displayName,
+          }
+        : null,
+      /* Sem fotografia: o cadastro do equipamento é a fonte viva, e renomear o
+         aparelho deve mudar o que a proposta mostra. */
+      assets: source.assets.map(({ asset }) => ({
+        id: asset.id,
+        name: asset.name,
+        identifier: asset.identifier,
+        location: asset.location,
+      })),
       itemCount: source._count.items,
       transitions: this.transitions(source, expired),
       operation: source.operation
@@ -98,6 +121,37 @@ export class QuoteMapper {
       createdAt: source.createdAt.toISOString(),
       updatedAt: source.updatedAt.toISOString(),
     };
+  }
+
+  /**
+   * O endereço em uma linha.
+   *
+   * Montado no servidor, e a mesma linha que vai no documento: se cada cliente
+   * montasse a sua, a proposta na tela e a proposta impressa descreveriam o
+   * mesmo lugar de formas diferentes.
+   */
+  private addressSummary(source: {
+    label: string;
+    street: string;
+    number: string | null;
+    complement: string | null;
+    district: string | null;
+    city: string;
+    stateCode: string | null;
+  }): string {
+    const logradouro = [source.street, source.number]
+      .filter(Boolean)
+      .join(', ');
+    const cidade = [source.city, source.stateCode].filter(Boolean).join('/');
+    return [
+      source.label,
+      logradouro,
+      source.complement,
+      source.district,
+      cidade,
+    ]
+      .filter((parte) => parte && String(parte).length > 0)
+      .join(' — ');
   }
 
   item(source: ItemRecord): QuoteItemReadModel {

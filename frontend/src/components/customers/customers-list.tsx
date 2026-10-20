@@ -14,7 +14,7 @@
  * - **cidade** — mora em `address`, que é `Json?` sem esquema e sem índice;
  * - **responsável** — não existe campo de gestor de conta.
  *
- * A busca do servidor cobre nome, nome fantasia, documento e e-mail, então
+ * A busca cobre nome, nome fantasia, documento e e-mail, então
  * localizar por cidade só funciona se ela estiver no texto buscado — e a tela
  * não promete o contrário.
  *
@@ -22,8 +22,12 @@
  *
  * Busca, filtros, contagem, paginação e estados vêm do Workspace Core.
  */
+import { useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Handshake } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowRight, Handshake, Plus } from "lucide-react";
+
+import { useAction } from "@/actions";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -52,6 +56,7 @@ import {
   SearchField,
   useListController,
 } from "@/workspace";
+import { CustomerFormDialog } from "./customer-form.dialog";
 import {
   customerStatusLabel,
   customerTypeLabel,
@@ -70,10 +75,18 @@ const STATUS_OPTIONS = Object.values(CustomerStatus).map((status) => ({
 }));
 
 export function CustomersList() {
+  const router = useRouter();
   const list = useListController<CustomerQuery>({ limit: 20 });
   const query = useCustomersList(list.query);
   const customers = query.data?.data ?? [];
   const meta = query.data?.meta;
+
+  /**
+   * Quem pode cadastrar é o Action Registry que diz — os mesmos `customers.create`
+   * e `crm.manage` que o controlador exige. A tela não recalcula autorização.
+   */
+  const create = useAction("customer.create");
+  const [formOpen, setFormOpen] = useState(false);
 
   return (
     <div className="space-y-6">
@@ -105,11 +118,19 @@ export function CustomersList() {
         />
       </FilterBar>
 
-      <ResultSummary
-        meta={meta}
-        noun="cliente"
-        note="Ordenado por razão social (ordem definida pelo backend)"
-      />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <ResultSummary
+          meta={meta}
+          noun="cliente"
+          note="Ordenado por razão social"
+        />
+        {create.allowed ? (
+          <Button size="sm" onClick={() => setFormOpen(true)}>
+            <Plus className="size-4" />
+            {create.label}
+          </Button>
+        ) : null}
+      </div>
 
       <ListState
         isPending={query.isPending}
@@ -151,6 +172,20 @@ export function CustomersList() {
         onPrevious={list.previousPage}
         onNext={list.nextPage}
         isFetching={query.isFetching}
+      />
+
+      {/*
+       * Criado o cliente, a ficha dele é o lugar onde o trabalho continua —
+       * contatos, equipamentos, operações. A listagem já foi invalidada pela
+       * escrita, então voltar para cá mostra o registro novo.
+       */}
+      <CustomerFormDialog
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        onSaved={(customer) => {
+          const href = entityHref("customer", customer.id);
+          if (href) router.push(href);
+        }}
       />
     </div>
   );

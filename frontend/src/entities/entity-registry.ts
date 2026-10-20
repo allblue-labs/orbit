@@ -33,6 +33,7 @@ import {
   LayoutTemplate,
   PackageSearch,
   ReceiptText,
+  Route,
   UsersRound,
   Wallet,
   Workflow,
@@ -43,6 +44,8 @@ import {
 
 import { createRegistry } from "@/registry";
 import { ROUTES } from "@/lib/routes";
+import { PLAN_STATUS } from "@/registry/pmoc";
+import { CONFIGURATION_STATUS } from "@/registry/rvt";
 import { OPERATION_STATUS_LABELS } from "@/types/operations";
 import { ARTIFACT_EXECUTION_STATUS_LABELS } from "@/components/artifact-executions/execution-badges";
 import { SCHEDULING_STATUS_LABELS } from "@/components/scheduling/event-badges";
@@ -60,10 +63,7 @@ import {
   FINANCIAL_TYPE_CLASSES,
   FINANCIAL_TYPE_LABELS,
 } from "./financial-labels";
-import {
-  QUOTE_STATUS_CLASSES,
-  QUOTE_STATUS_LABELS,
-} from "./quote-labels";
+import { QUOTE_STATUS_CLASSES, QUOTE_STATUS_LABELS } from "./quote-labels";
 import {
   REPORT_STATUS_CLASSES,
   REPORT_STATUS_LABELS,
@@ -90,6 +90,8 @@ export const ENTITY_IDS = [
   "scheduling-event",
   "financial-entry",
   "quote",
+  "pmoc-plan",
+  "rvt-configuration",
 ] as const;
 export type EntityId = (typeof ENTITY_IDS)[number];
 
@@ -133,6 +135,49 @@ const OPERATION_STATUS_CLASSES: Readonly<Record<string, string>> = {
   IN_PROGRESS: "bg-primary/15 text-primary",
   PAUSED: "bg-amber-500/15 text-amber-400",
   COMPLETED: "bg-emerald-500/15 text-emerald-400",
+  CANCELLED: "bg-surface-strong text-muted-foreground",
+};
+
+/**
+ * Situação do plano de PMOC.
+ *
+ * Os rótulos vêm de `registry/pmoc.ts` — um mapa só para a aplicação inteira.
+ * As classes ficam aqui, ao lado das dos outros badges do registry, pela mesma
+ * razão que as de Operação ficam: é este arquivo que desenha o `EntityBadge`.
+ */
+const PMOC_PLAN_STATUS_LABELS: Readonly<Record<string, string>> =
+  Object.fromEntries(
+    Object.entries(PLAN_STATUS).map(([status, presentation]) => [
+      status,
+      presentation.label,
+    ]),
+  );
+
+const PMOC_PLAN_STATUS_CLASSES: Readonly<Record<string, string>> = {
+  DRAFT: "bg-surface-strong text-muted-foreground",
+  ACTIVE: "bg-emerald-500/15 text-emerald-400",
+  SUSPENDED: "bg-amber-500/15 text-amber-400",
+  EXPIRED: "bg-surface-strong text-muted-foreground",
+  CANCELLED: "bg-surface-strong text-muted-foreground",
+};
+
+/**
+ * A situação da **configuração** de RVT — não a da visita.
+ *
+ * "Inativa" é ausência de novas visitas, não erro: o histórico continua lá.
+ * Por isso o cinza, e não o âmbar.
+ */
+const RVT_STATUS_LABELS: Readonly<Record<string, string>> = Object.fromEntries(
+  Object.entries(CONFIGURATION_STATUS).map(([status, presentation]) => [
+    status,
+    presentation.label,
+  ]),
+);
+
+const RVT_STATUS_CLASSES: Readonly<Record<string, string>> = {
+  ACTIVE: "bg-emerald-500/15 text-emerald-400",
+  INACTIVE: "bg-surface-strong text-muted-foreground",
+  COMPLETED: "bg-surface-strong text-muted-foreground",
   CANCELLED: "bg-surface-strong text-muted-foreground",
 };
 
@@ -222,6 +267,71 @@ const DEFINITIONS: readonly EntityDefinition[] = [
     href: (id) => `${ROUTES.operations}/${id}`,
   },
   {
+    /**
+     * A **configuração** de manutenção preventiva, não o ciclo nem a execução.
+     *
+     * A entrada da navegação leva ao contrato de manutenção: cobertura,
+     * periodicidade e Responsável Técnico. Ciclos e execuções por equipamento
+     * vivem dentro dele — não como itens paralelos de menu, porque não é assim
+     * que a operação os procura.
+     */
+    id: "pmoc-plan",
+    label: "PMOC",
+    labelPlural: "PMOC",
+    description:
+      "Planos de manutenção preventiva: cobertura, periodicidade e responsável técnico.",
+    icon: ClipboardCheck,
+    color: "text-emerald-400",
+    basePath: ROUTES.pmoc,
+    capability: { read: "pmoc.read", manage: "pmoc.manage" },
+    permissions: {
+      read: "pmoc.read",
+      create: "pmoc.manage",
+      update: "pmoc.manage",
+    },
+    badges: {
+      status: {
+        label: "Situação",
+        labels: PMOC_PLAN_STATUS_LABELS,
+        classes: PMOC_PLAN_STATUS_CLASSES,
+      },
+    },
+    href: (id) => `${ROUTES.pmoc}/${id}`,
+  },
+  {
+    /**
+     * A **configuração** da visita técnica, não a visita.
+     *
+     * A entrada leva à regra: cliente, local, periodicidade e procedimento.
+     * Ocorrências e execuções vivem dentro dela — não como itens paralelos de
+     * menu, porque não é assim que a operação as procura. E RVT não é uma
+     * Operation com outro tipo: a Operation que aparece durante a visita é
+     * projeção operacional, não a entidade principal.
+     */
+    id: "rvt-configuration",
+    label: "RVT",
+    labelPlural: "RVT",
+    description:
+      "Visitas técnicas: periodicidade, local, procedimento e responsável técnico.",
+    icon: Route,
+    color: "text-sky-400",
+    basePath: ROUTES.rvt,
+    capability: { read: "rvt.read", manage: "rvt.manage" },
+    permissions: {
+      read: "rvt.read",
+      create: "rvt.manage",
+      update: "rvt.manage",
+    },
+    badges: {
+      status: {
+        label: "Situação",
+        labels: RVT_STATUS_LABELS,
+        classes: RVT_STATUS_CLASSES,
+      },
+    },
+    href: (id) => `${ROUTES.rvt}/${id}`,
+  },
+  {
     id: "scheduling-event",
     label: "Agendamento",
     labelPlural: "Agenda",
@@ -248,8 +358,26 @@ const DEFINITIONS: readonly EntityDefinition[] = [
   {
     id: "artifact-execution",
     label: "Execução de artefato",
-    labelPlural: "Execuções",
+    /**
+     * O plural diz de que execução se trata.
+     *
+     * "Execuções", sozinho, ocupava o menu ao lado de PMOC e RVT e sugeria uma
+     * área genérica que reuniria as execuções dos dois — e não reúne: PMOC
+     * (`PmocEquipmentExecution`) e RVT (`RvtExecution`) são modelos próprios,
+     * vistos dentro do plano e da configuração. O que vive aqui é o
+     * preenchimento de artefatos, que a própria tela já nomeava assim na
+     * trilha de navegação.
+     */
+    labelPlural: "Execuções de artefato",
     description: "Preenchimento e acompanhamento de um artefato em campo.",
+    /*
+     * Sem `basePath` que valha como destino de menu.
+     *
+     * `basePath` continua apontando para a raiz porque `href(id)` a compõe —
+     * e é o deep link contextual que precisa dela. O que deixou de existir é a
+     * listagem global: a rota `/execucoes` redireciona para Documentos, que é
+     * onde a pergunta "cadê o documento?" tem resposta.
+     */
     icon: ClipboardCheck,
     color: "text-emerald-400",
     basePath: ROUTES.executions,
@@ -437,9 +565,9 @@ const DEFINITIONS: readonly EntityDefinition[] = [
   },
   {
     id: "artifact-template",
-    label: "Template de artefato",
-    labelPlural: "Artefatos",
-    description: "Estrutura versionada que dá origem às execuções.",
+    label: "Modelo de documento",
+    labelPlural: "Modelos de documento",
+    description: "Estrutura versionada que dá origem às execuções em campo.",
     icon: LayoutTemplate,
     color: "text-amber-400",
     basePath: ROUTES.artifacts,
@@ -454,7 +582,14 @@ const DEFINITIONS: readonly EntityDefinition[] = [
       delete: "artifact_templates.delete",
     },
     badges: {},
-    href: (id) => `${ROUTES.artifacts}/${id}`,
+    /*
+     * Sem `href`: o modelo não tem mais tela própria.
+     *
+     * O editor de estrutura deixou de ter porta de entrada, e o que existe é a
+     * galeria de modelos. `href` ausente é previsto pelo registry — a entidade
+     * aparece com nome e ícone, e sem link, em vez de levar a um endereço que
+     * redireciona.
+     */
   },
   {
     /**
@@ -517,7 +652,7 @@ const DEFINITIONS: readonly EntityDefinition[] = [
     label: "Membro",
     labelPlural: "Equipe",
     description:
-      "Pessoas da organização: papéis, unidades, convites e carga de trabalho.",
+      "Quem faz parte, com que papel e o que cada um tem para fazer.",
     icon: UsersRound,
     color: "text-indigo-400",
     basePath: ROUTES.team,
@@ -580,7 +715,7 @@ const registry = createRegistry<EntityDefinition>({
     id: id as EntityId,
     label: id,
     labelPlural: id,
-    description: "Entidade publicada pelo backend e ainda não registrada.",
+    description: "Tipo de registro ainda não descrito no Orbit.",
     icon: Boxes,
     color: "text-muted-foreground",
     basePath: "/",

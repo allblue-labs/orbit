@@ -43,6 +43,8 @@ export class ArtifactRendererRegistry {
     if (!renderer) {
       throw new ValidationException(
         `Unknown renderer "${id}". Available: ${this.available().join(', ')}`,
+        undefined,
+        'RENDERER_NOT_SUPPORTED',
       );
     }
     return renderer;

@@ -56,3 +56,8 @@ pids
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 /generated/prisma
+
+# Objetos do provider de storage LOCAL — dado de execução, não fonte.
+# A suíte de navegador envia arquivos reais pelo pipeline de upload; o que fica
+# no disco é subproduto de rodar, e binário de teste não pertence ao histórico.
+storage/objects/

@@ -135,7 +135,9 @@ class UploadTask {
     attempts: attempts ?? this.attempts,
     progress: progress ?? this.progress,
     lastError: clearError ? null : (lastError ?? this.lastError),
-    nextAttemptAt: clearNextAttempt ? null : (nextAttemptAt ?? this.nextAttemptAt),
+    nextAttemptAt: clearNextAttempt
+        ? null
+        : (nextAttemptAt ?? this.nextAttemptAt),
   );
 
   Map<String, dynamic> toJson() => {

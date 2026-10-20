@@ -29,6 +29,7 @@ import { CACHE, MINUTE, every } from "@/hooks/api/cache-policy";
 import { artifactExecutionsService } from "@/services/artifact-executions.service";
 import { operationsService } from "@/services/operations.service";
 import { schedulingService } from "@/services/scheduling.service";
+import { commissionsService } from "@/services/commissions.service";
 import { workforceService } from "@/services/workforce.service";
 import type { ArtifactExecutionQuery } from "@/types/artifact-executions";
 import type { OperationQuery } from "@/types/operations";
@@ -43,16 +44,21 @@ import type {
   CreateTeamInput,
   InvitationQuery,
   MemberQuery,
+  ProfessionalSelectorQuery,
   UpdateCertificationInput,
   UpdateMemberInput,
+  UpdateProfessionalProfileInput,
   UpdateRoleInput,
   UpdateSpecialtyInput,
   UpdateTeamInput,
+  CreateTeamMemberInput,
 } from "@/types/workforce";
 
 export const WORKFORCE_REFRESH = {
   members: CACHE.stable,
   roles: CACHE.catalog,
+  /** Elenco profissional muda pouco, mas não é catálogo: perfil é desativado. */
+  professionals: CACHE.stable,
   specialties: CACHE.catalog,
   certifications: CACHE.stable,
   teams: CACHE.stable,
@@ -81,9 +87,9 @@ const SCHEDULE_HORIZON_DAYS = 30;
  * `GET /organizations/current/members` passou a paginar; a key inclui a
  * consulta, então páginas diferentes não se sobrescrevem no cache.
  *
- * `useOrganizationMembers` (sem paginação) continua existindo para quem só
- * precisa resolver um nome — o `UserReference` é o caso — e usa a chamada sem
- * parâmetros, que o backend atende com a primeira página.
+ * `useOrganizationMembers` continua existindo para quem só precisa resolver um
+ * nome — o `UserReference` é o caso — e pede uma página única e ampla, porque
+ * ali não há como saber em que página está a pessoa procurada.
  */
 export function useTeamMembers(query?: MemberQuery) {
   return useApiQuery(
@@ -93,10 +99,119 @@ export function useTeamMembers(query?: MemberQuery) {
   );
 }
 
+/* ------------------------------------------------------------------ */
+/* Domínio profissional (PR-27)                                        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Candidatos a Técnico em Campo desta unidade.
+ *
+ * O `signal` chega ao `fetch`: trocar de unidade ou fechar o seletor cancela
+ * a consulta anterior em vez de deixá-la responder no escopo novo.
+ *
+ * `enabled` desliga a consulta enquanto o seletor está fechado — um diálogo
+ * que ninguém abriu não precisa buscar o elenco da filial.
+ */
+export function useFieldTechnicians(
+  query?: ProfessionalSelectorQuery,
+  enabled = true,
+) {
+  return useApiQuery(
+    workforceService.keys.professionals("FIELD_TECHNICIAN", query),
+    ({ signal }) => workforceService.fieldTechnicians(query, { signal }),
+    { ...WORKFORCE_REFRESH.professionals, enabled },
+  );
+}
+
+/**
+ * Quem pode acompanhar um atendimento como auxiliar.
+ *
+ * Lista diferente da de técnicos, e não a mesma filtrada: o auxiliar não tem
+ * perfil profissional, porque não assina nada. Quem responde é o servidor —
+ * refiltrar aqui seria reimplementar a elegibilidade com metade da informação.
+ */
+export function useFieldAssistants(
+  query?: ProfessionalSelectorQuery,
+  enabled = true,
+) {
+  return useApiQuery(
+    workforceService.keys.fieldAssistants(query),
+    ({ signal }) => workforceService.fieldAssistants(query, { signal }),
+    { ...WORKFORCE_REFRESH.professionals, enabled },
+  );
+}
+
+/** Candidatos a Responsável Técnico. Seletor próprio — ver `registry/professional`. */
+export function useTechnicalResponsibles(
+  query?: ProfessionalSelectorQuery,
+  enabled = true,
+) {
+  return useApiQuery(
+    workforceService.keys.professionals("TECHNICAL_RESPONSIBLE", query),
+    ({ signal }) => workforceService.technicalResponsibles(query, { signal }),
+    { ...WORKFORCE_REFRESH.professionals, enabled },
+  );
+}
+
+/** Um membro, pela pessoa. É o que a página de detalhe carrega. */
+export function useTeamMember(userId: string | null) {
+  return useApiQuery(
+    workforceService.keys.member(userId ?? ""),
+    ({ signal }) => workforceService.member(userId!, { signal }),
+    { ...WORKFORCE_REFRESH.members, enabled: Boolean(userId) },
+  );
+}
+
+export function useProfessionalProfile(userId: string | null) {
+  return useApiQuery(
+    workforceService.keys.professionalProfile(userId ?? ""),
+    ({ signal }) => workforceService.professionalProfile(userId!, { signal }),
+    { ...WORKFORCE_REFRESH.professionals, enabled: Boolean(userId) },
+  );
+}
+
+/**
+ * Liga ou desliga os papéis profissionais de um membro.
+ *
+ * É a superfície que faltava: sem perfil de técnico de campo, a pessoa **não
+ * pode ser atribuída** a um atendimento (`validateTechnicianAssignments` recusa)
+ * e não aparece na lista de técnicos nem ganha comissão. O endpoint existia
+ * desde o domínio profissional; a tela era somente leitura.
+ *
+ * Invalida a raiz do Workforce e as comissões: mudar quem é técnico muda quem
+ * aparece na tabela de comissão.
+ */
+export function useUpdateProfessionalProfile(userId: string) {
+  const invalidate = useWorkforceInvalidation();
+  const client = useQueryClient();
+
+  return useApiMutation(
+    (input: UpdateProfessionalProfileInput) =>
+      workforceService.updateProfessionalProfile(userId, input),
+    {
+      onSuccess: async () => {
+        await invalidate();
+        await client.invalidateQueries({
+          queryKey: commissionsService.keys.all(),
+        });
+      },
+      scope: { id: "professional-profile" },
+    },
+  );
+}
+
 export function useTeamRoles() {
   return useApiQuery(
     workforceService.keys.roles(),
     ({ signal }) => workforceService.roles({ signal }),
+    WORKFORCE_REFRESH.roles,
+  );
+}
+
+export function useAccessCatalog() {
+  return useApiQuery(
+    workforceService.keys.accessCatalog(),
+    ({ signal }) => workforceService.accessCatalog({ signal }),
     WORKFORCE_REFRESH.roles,
   );
 }
@@ -291,18 +406,16 @@ export function useInviteMember() {
 
 export function useResendInvitation() {
   const invalidate = useInvitationInvalidation();
-  return useApiMutation(
-    (id: string) => workforceService.resendInvitation(id),
-    { onSuccess: invalidate },
-  );
+  return useApiMutation((id: string) => workforceService.resendInvitation(id), {
+    onSuccess: invalidate,
+  });
 }
 
 export function useRevokeInvitation() {
   const invalidate = useInvitationInvalidation();
-  return useApiMutation(
-    (id: string) => workforceService.revokeInvitation(id),
-    { onSuccess: invalidate },
-  );
+  return useApiMutation((id: string) => workforceService.revokeInvitation(id), {
+    onSuccess: invalidate,
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -325,7 +438,9 @@ function useMemberInvalidation() {
       queryClient.invalidateQueries({
         queryKey: workforceService.keys.members(),
       }),
-      queryClient.invalidateQueries({ queryKey: workforceService.keys.roles() }),
+      queryClient.invalidateQueries({
+        queryKey: workforceService.keys.roles(),
+      }),
     ]);
   };
 }
@@ -335,6 +450,40 @@ export function useUpdateMember(userId: string) {
   return useApiMutation(
     (input: UpdateMemberInput) => workforceService.updateMember(userId, input),
     { onSuccess: invalidate, scope: { id: `member:${userId}` } },
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Cadastro de pessoas                                                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Cadastra alguém da equipe.
+ *
+ * O resultado carrega a senha temporária e **não** é guardado em cache: a
+ * resposta é mostrada uma vez e some com o diálogo. Uma senha em claro num
+ * cache de consulta sobreviveria à navegação e ao devtools.
+ */
+export function useCreateTeamMember() {
+  const invalidate = useMemberInvalidation();
+  return useApiMutation(
+    (input: CreateTeamMemberInput) => workforceService.createTeamMember(input),
+    { onSuccess: invalidate },
+  );
+}
+
+export function useIssuePasswordLink() {
+  return useApiMutation((userId: string) =>
+    workforceService.issuePasswordLink(userId),
+  );
+}
+
+/** Desliga da organização — não confundir com sair de uma equipe. */
+export function useDismissMember() {
+  const invalidate = useMemberInvalidation();
+  return useApiMutation(
+    (userId: string) => workforceService.dismissMember(userId),
+    { onSuccess: invalidate },
   );
 }
 

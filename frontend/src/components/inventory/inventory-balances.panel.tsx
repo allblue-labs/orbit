@@ -90,7 +90,7 @@ export function InventoryBalancesPanel() {
           value={list.searchTerm}
           onChange={list.setSearchTerm}
           placeholder="Nome ou SKU do item"
-          hint="A busca do servidor cobre nome e SKU."
+          hint="A busca cobre nome e SKU."
         />
 
         {businessUnits.length > 1 ? (

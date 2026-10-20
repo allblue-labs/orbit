@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import QRCode from 'qrcode';
 import { CRYPTO_PROVIDER, HASH_PROVIDER } from '../../../providers';
 import type { ICryptoProvider, IHashProvider } from '../../../contracts';
 import {
@@ -26,11 +27,40 @@ export class MfaService {
       userId,
       this.crypto.encrypt(secret),
     );
+    const uri = generateTotpUri('Orbit', email, secret);
+
     return {
       factorId: factor.id,
       secret,
-      uri: generateTotpUri('Orbit', email, secret),
+      uri,
+      /**
+       * O QR desenhado aqui, e não no navegador.
+       *
+       * A tela mostrava só o segredo em base32 e pedia que a pessoa o
+       * digitasse no aplicativo autenticador — trinta e dois caracteres sem
+       * sentido, num celular, e um erro basta para o código nunca bater.
+       * Apontar a câmera é o caminho que todo aplicativo espera.
+       *
+       * Gerar no servidor evita uma dependência de renderização no cliente, e
+       * não expõe nada a mais: o QR **é** a mesma URI que já vai na resposta,
+       * e o segredo também.
+       *
+       * SVG porque escala sem borrar em qualquer densidade de tela, e porque
+       * um QR borrado é um QR que a câmera não lê.
+       */
+      qrCode: await this.qrCode(uri),
     };
+  }
+
+  private async qrCode(uri: string): Promise<string> {
+    const svg = await QRCode.toString(uri, {
+      type: 'svg',
+      margin: 1,
+      /* `M` corrige até 15% de área danificada. Acima disso o código fica
+         mais denso sem ganho prático numa tela. */
+      errorCorrectionLevel: 'M',
+    });
+    return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
   }
 
   async enable(userId: string, factorId: string, code: string) {
@@ -55,7 +85,9 @@ export class MfaService {
     factor: { id: string; secret: string; recoveryCodes: string[] },
     code: string | undefined,
   ): Promise<void> {
-    if (!code) throw new UnauthorizedException('MFA code is required');
+    if (!code) {
+      throw new UnauthorizedException('MFA code is required', 'MFA_REQUIRED');
+    }
     if (verifyTotp(this.crypto.decrypt(factor.secret), code)) {
       await this.repository.touchMfaFactor(factor.id);
       return;
@@ -65,7 +97,7 @@ export class MfaService {
     );
     const matchedIndex = recoveryMatches.findIndex(Boolean);
     if (matchedIndex < 0) {
-      throw new UnauthorizedException('Invalid MFA code');
+      throw new UnauthorizedException('Invalid MFA code', 'MFA_INVALID');
     }
     await this.repository.consumeMfaRecoveryCode(
       factor.id,

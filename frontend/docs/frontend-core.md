@@ -289,12 +289,21 @@ refetch ao reconectar.
 
 ---
 
-## 9. Qualidade
+## 9. Autoridade do servidor
+
+A interface não decide elegibilidade nem transição de estado. O Read Model
+publica `allowedActions` por registro e `transitions` no detalhe; a tela lê.
+
+Ver **`docs/server-authority.md`** — é leitura obrigatória antes de adicionar
+qualquer menu de ações ou seletor de status.
+
+## 10. Qualidade
 
 ```bash
 npm run contracts:sync   # sincroniza contratos com o backend
 npm run typecheck        # tsc --noEmit (strict, sem any)
 npm run lint             # eslint (flat config, next + prettier)
+npm run test             # vitest — lógica pura: autoridade, erros, formatação
 npm run format           # prettier
 npm run build            # next build
 ```

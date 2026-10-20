@@ -23,6 +23,10 @@ export interface AccessRequirement {
   readonly permission?: string;
   /** Capability exigida pelo plano (`@Capabilities`). */
   readonly capability?: string;
+  /** Canonical purchased product entitlement (not a route capability). */
+  readonly productCapability?: string;
+  /** Server-published implementation availability. */
+  readonly feature?: string;
   /**
    * `false` quando o contrato não existe.
    *
@@ -37,6 +41,8 @@ export interface AccessRequirement {
 export interface AccessContext {
   hasPermission: (permission: string) => boolean;
   hasCapability: (capability: string) => boolean;
+  hasProductCapability?: (capability: string) => boolean;
+  hasFeature?: (feature: string) => boolean;
 }
 
 /**
@@ -57,6 +63,13 @@ export function allowsAccess(
   if (requirement.capability && !access.hasCapability(requirement.capability)) {
     return false;
   }
+  if (
+    requirement.productCapability &&
+    !access.hasProductCapability?.(requirement.productCapability)
+  )
+    return false;
+  if (requirement.feature && !access.hasFeature?.(requirement.feature))
+    return false;
   return true;
 }
 
@@ -76,6 +89,13 @@ export function accessBlockReason(
   if (requirement.capability && !access.hasCapability(requirement.capability)) {
     return "O plano atual não inclui este recurso.";
   }
+  if (
+    requirement.productCapability &&
+    !access.hasProductCapability?.(requirement.productCapability)
+  )
+    return "O produto contratado não inclui este recurso.";
+  if (requirement.feature && !access.hasFeature?.(requirement.feature))
+    return "Recurso ainda não disponível.";
   if (requirement.permission && !access.hasPermission(requirement.permission)) {
     return "Seu perfil não tem permissão para esta ação.";
   }

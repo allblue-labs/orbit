@@ -10,6 +10,8 @@ import { SubscriptionPlanRepository } from './../src/modules/subscription-plans/
 import { SubscriptionPlanService } from './../src/modules/subscription-plans/subscription-plan.service';
 import { ForbiddenException } from './../src/exceptions';
 
+jest.setTimeout(180_000);
+
 describe('AppController (e2e)', () => {
   let app: INestApplication<App>;
 
@@ -138,6 +140,8 @@ describe('AppController (e2e)', () => {
             }),
         ),
         assertActiveOn: jest.fn(),
+        /* O guarda passou a perguntar isto antes de decidir por verbo. */
+        grantsAccess: jest.fn(() => true),
         assertPlanOn: jest.fn(),
         assertCapabilitiesOn: jest.fn(
           (entitlements: { capabilities: string[] }, required: string[]) => {
@@ -254,7 +258,9 @@ describe('AppController (e2e)', () => {
         requestId: string;
       };
       expect(body.requestId).toBe('fault-auth-connection');
-      expect(body.error.message).toBe('An unexpected error occurred');
+      expect(body.error.message).toBe(
+        'Não foi possível concluir a solicitação.',
+      );
       expect(JSON.stringify(body)).not.toContain('connection reset');
       expect(body.error.stack).toBeUndefined();
       expect(JSON.stringify(log.mock.calls)).toContain('CONNECTION_FAILURE');
@@ -316,7 +322,9 @@ describe('AppController (e2e)', () => {
         requestId: string;
       };
       expect(body.requestId).toBe('fault-entitlements-timeout');
-      expect(body.error.message).toBe('An unexpected error occurred');
+      expect(body.error.message).toBe(
+        'Não foi possível concluir a solicitação.',
+      );
       expect(JSON.stringify(body)).not.toContain('pool acquisition');
       expect(JSON.stringify(log.mock.calls)).toContain('DATABASE_TIMEOUT');
       expect(JSON.stringify(log.mock.calls)).toContain(

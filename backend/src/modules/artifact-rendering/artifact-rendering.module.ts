@@ -27,6 +27,12 @@ import { ARTIFACT_RENDERER } from './renderers/artifact-renderer';
 import { ArtifactRendererRegistry } from './renderers/renderer.registry';
 import { ArtifactHtmlRenderer } from './renderers/html/artifact-html.renderer';
 import { ArtifactPdfRenderer } from './renderers/pdf/artifact-pdf.renderer';
+import { ArtifactPremiumPdfRenderer } from './renderers/pdf/artifact-premium-pdf.renderer';
+import { DocumentContextBuilder } from './document-context.builder';
+import { RenderInputFactory } from './render-input.factory';
+import { PmocPlanDocumentService } from './pmoc-plan-document.service';
+import { QuoteDocumentService } from './quote-document.service';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -34,21 +40,32 @@ import { ArtifactPdfRenderer } from './renderers/pdf/artifact-pdf.renderer';
     RequestContextModule,
     SubscriptionPlansModule,
     ArtifactManifestModule,
+    NotificationsModule,
   ],
   controllers: [ArtifactRenderController],
   providers: [
     ArtifactHtmlRenderer,
     ArtifactPdfRenderer,
+    ArtifactPremiumPdfRenderer,
     {
       provide: ARTIFACT_RENDERER,
-      inject: [ArtifactHtmlRenderer, ArtifactPdfRenderer],
-      useFactory: (html: ArtifactHtmlRenderer, pdf: ArtifactPdfRenderer) => [
-        html,
-        pdf,
+      inject: [
+        ArtifactHtmlRenderer,
+        ArtifactPdfRenderer,
+        ArtifactPremiumPdfRenderer,
       ],
+      useFactory: (
+        html: ArtifactHtmlRenderer,
+        pdf: ArtifactPdfRenderer,
+        premium: ArtifactPremiumPdfRenderer,
+      ) => [html, pdf, premium],
     },
     ArtifactRendererRegistry,
     ArtifactRenderAssembler,
+    DocumentContextBuilder,
+    RenderInputFactory,
+    PmocPlanDocumentService,
+    QuoteDocumentService,
     ArtifactRenderRepository,
     ArtifactRenderMetrics,
     ArtifactRenderService,
@@ -58,6 +75,12 @@ import { ArtifactPdfRenderer } from './renderers/pdf/artifact-pdf.renderer';
   ],
   exports: [
     ArtifactRenderService,
+    /* O Management Reports monta o timbre do relatório com o mesmo construtor
+       dos documentos de campo — um segundo teria de repetir endereço, documento
+       e telefone, e divergiria no primeiro campo novo. */
+    DocumentContextBuilder,
+    PmocPlanDocumentService,
+    QuoteDocumentService,
     ArtifactRendererRegistry,
     BackgroundJobWorker,
   ],

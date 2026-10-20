@@ -23,6 +23,7 @@ import {
 
 import type { QueryKey } from "@/api/query-keys";
 import type { ApiError } from "@/lib/api-error";
+import { notifySuccess } from "@/lib/notify";
 
 export interface ApiMutationOptions<
   TData,
@@ -34,6 +35,23 @@ export interface ApiMutationOptions<
 > {
   /** Keys invalidadas após o sucesso (prefixos são aceitos). */
   invalidate?: readonly QueryKey[];
+
+  /**
+   * O aviso de que deu certo.
+   *
+   * Uma frase curta no passado — "Cliente cadastrado", "Atendimento
+   * cancelado" —, ou uma função quando o texto depende do que voltou.
+   *
+   * Opcional de propósito, e não um padrão genérico: "Salvo" em toda mutação
+   * seria ruído onde a própria tela já muda à vista, e silêncio continua sendo
+   * a resposta certa para o que se vê acontecer. O aviso é para o que termina
+   * sem deixar rastro na tela — um diálogo que fecha, uma linha que some.
+   *
+   * O erro não é avisado por aqui: a maioria das telas mostra a recusa junto do
+   * formulário, com o texto do servidor, e um aviso flutuante repetindo a mesma
+   * frase duplicaria o ruído.
+   */
+  notify?: string | ((data: TData, variables: TVariables) => string);
 }
 
 export function useApiMutation<
@@ -45,7 +63,7 @@ export function useApiMutation<
   options: ApiMutationOptions<TData, TVariables, TOnMutateResult> = {},
 ): UseMutationResult<TData, ApiError, TVariables, TOnMutateResult> {
   const queryClient = useQueryClient();
-  const { invalidate, onSuccess, ...rest } = options;
+  const { invalidate, notify, onSuccess, ...rest } = options;
 
   return useMutation<TData, ApiError, TVariables, TOnMutateResult>({
     mutationFn,
@@ -55,6 +73,11 @@ export function useApiMutation<
           queryClient.invalidateQueries({ queryKey }),
         ),
       );
+      if (notify) {
+        notifySuccess(
+          typeof notify === "function" ? notify(data, variables) : notify,
+        );
+      }
       await onSuccess?.(data, variables, onMutateResult, context);
     },
     ...rest,

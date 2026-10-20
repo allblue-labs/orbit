@@ -28,7 +28,11 @@
  * não move estoque e não mantém funil de vendas. Propõe um valor e registra a
  * resposta.
  */
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import {
+  STORAGE_PROVIDER,
+  type StorageProvider,
+} from '../storage/storage.types';
 import { Prisma } from '@prisma/client';
 import {
   ConflictException,
@@ -41,6 +45,7 @@ import type {
   CancelQuoteDto,
   ConvertQuoteDto,
   CreateQuoteDto,
+  CreateQuoteFromOperationDto,
   QuoteQueryDto,
   RejectQuoteDto,
   UpdateQuoteDto,
@@ -51,6 +56,9 @@ import {
   type ItemSnapshot,
   type QuoteDetailRecord,
 } from './quote.repository';
+import { QuoteDocumentService } from '../artifact-rendering/quote-document.service';
+import { readEmbeddedImage } from '../../common/embedded-image';
+import { issuerLogo, type BrandedIssuer } from '../../common/issuer-brand';
 
 /** Moedas aceitas — as mesmas do Financeiro, que é onde o valor termina. */
 const SUPPORTED_CURRENCIES: readonly string[] = ['BRL', 'USD', 'EUR'];
@@ -71,9 +79,110 @@ const TRANSITIONS = {
 /** Só rascunho aceita edição de conteúdo — texto ou itens. */
 const EDITABLE: readonly string[] = [QuoteStatus.DRAFT];
 
+/* -------------------------------------------------------------------- */
+/* Formatação do documento                                               */
+/* -------------------------------------------------------------------- */
+
+/** `Date` do Prisma (`@db.Date`) para `AAAA-MM-DD`, sem passar pelo fuso. */
+function toDateOnlyString(valor: Date): string {
+  return valor.toISOString().slice(0, 10);
+}
+
+function formatCivil(iso: string): string {
+  const [ano, mes, dia] = iso.slice(0, 10).split('-');
+  return dia && mes && ano ? `${dia}/${mes}/${ano}` : iso;
+}
+
+function dataSimples(valor: Date | null | undefined): string | undefined {
+  return valor ? formatCivil(toDateOnlyString(valor)) : undefined;
+}
+
+/**
+ * Quantos dias a proposta vale, contados da emissão.
+ *
+ * Sai ao lado da data porque "válido até 25/10/2026 (30 dias)" responde de uma
+ * vez as duas perguntas que quem recebe faz. Prazo já vencido devolve
+ * `undefined` — imprimir "(-3 dias)" numa proposta é constrangedor.
+ */
+function diasDeValidade(
+  emissao: Date | null | undefined,
+  validUntil: string | undefined,
+): number | undefined {
+  if (!emissao || !validUntil) return undefined;
+  const de = Date.parse(`${toDateOnlyString(emissao)}T00:00:00Z`);
+  const ate = Date.parse(`${validUntil}T00:00:00Z`);
+  if (Number.isNaN(de) || Number.isNaN(ate)) return undefined;
+  const dias = Math.round((ate - de) / 86_400_000);
+  return dias > 0 ? dias : undefined;
+}
+
+/**
+ * O timbre do emissor, quando há e quando é seguro imprimir.
+ *
+ * `issuerLogo` escolhe entre a marca da unidade e a da empresa;
+ * `readEmbeddedImage` recusa URL — que o servidor teria de buscar, e o endereço
+ * é escolhido pelo inquilino — e SVG, que carrega script.
+ */
+function logoDoEmissor(emissor: BrandedIssuer | null | undefined) {
+  const imagem = readEmbeddedImage(issuerLogo(emissor));
+  return imagem
+    ? { logo: imagem.bytes, logoMimeType: imagem.mimeType }
+    : undefined;
+}
+
+/** CNPJ e CPF com máscara; um documento comercial sem ela parece rascunho. */
+function documentoFormatado(
+  tipo: string | null | undefined,
+  numero: string | null | undefined,
+): string | undefined {
+  if (!numero) return undefined;
+  const digitos = numero.replace(/\D/g, '');
+  if (digitos.length === 14) {
+    return `CNPJ ${digitos.replace(
+      /^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,
+      '$1.$2.$3/$4-$5',
+    )}`;
+  }
+  if (digitos.length === 11) {
+    return `CPF ${digitos.replace(
+      /^(\d{3})(\d{3})(\d{3})(\d{2})$/,
+      '$1.$2.$3-$4',
+    )}`;
+  }
+  return tipo ? `${tipo} ${numero}` : numero;
+}
+
+function enderecoCompleto(endereco: {
+  label: string;
+  street: string;
+  number: string | null;
+  complement: string | null;
+  district: string | null;
+  city: string;
+  stateCode: string | null;
+}): string {
+  const logradouro = [endereco.street, endereco.number]
+    .filter(Boolean)
+    .join(', ');
+  const cidade = [endereco.city, endereco.stateCode].filter(Boolean).join('/');
+  return [
+    endereco.label,
+    logradouro,
+    endereco.complement,
+    endereco.district,
+    cidade,
+  ]
+    .filter((parte) => parte && String(parte).length > 0)
+    .join(' — ');
+}
+
 @Injectable()
 export class QuoteService {
-  constructor(private readonly repository: QuoteRepository) {}
+  constructor(
+    private readonly repository: QuoteRepository,
+    private readonly documents: QuoteDocumentService,
+    @Inject(STORAGE_PROVIDER) private readonly storage: StorageProvider,
+  ) {}
 
   /* ---------------------------------------------------------------- */
   /* Leitura                                                           */
@@ -92,9 +201,231 @@ export class QuoteService {
     return quote;
   }
 
+  /**
+   * A proposta impressa.
+   *
+   * Desenhada na hora, a partir do estado atual. Não passa pela fila nem abre
+   * revisão: um orçamento é editado enquanto é rascunho, e cada reimpressão
+   * viraria versão de um documento que ninguém executou.
+   *
+   * Os valores saem como o domínio os persistiu. Recalcular na impressão
+   * criaria uma segunda fonte de verdade sobre dinheiro.
+   */
+  async document(id: string, organizationId: string) {
+    const fonte = await this.repository.documentSource(id, organizationId);
+    if (!fonte) throw new EntityNotFoundException('Quote', id);
+
+    const unidade = fonte.businessUnit;
+    /* O endereço escolhido vence o principal do cliente. Imprimir
+       `addresses[0]` para quem tem duas filiais era um chute com aparência de
+       dado; o principal continua sendo o recurso das propostas que nasceram
+       antes de haver escolha. */
+    const endereco = fonte.serviceAddress ?? fonte.customer.addresses[0];
+    const responsavel = await this.responsibleSignature(fonte.responsible);
+    const validUntil = fonte.validUntil
+      ? toDateOnlyString(fonte.validUntil)
+      : undefined;
+
+    const bytes = await this.documents.render({
+      timezone: unidade?.timezone ?? 'America/Sao_Paulo',
+      emitter: {
+        ...logoDoEmissor(unidade),
+        tradeName: unidade?.tradeName ?? undefined,
+        legalName: unidade?.legalName ?? undefined,
+        document: documentoFormatado(
+          unidade?.documentType,
+          unidade?.documentNumber,
+        ),
+        address: [unidade?.street, unidade?.number]
+          .filter(Boolean)
+          .join(', ')
+          .concat(unidade?.district ? ` — ${unidade.district}` : ''),
+        cityState: [unidade?.city, unidade?.stateCode]
+          .filter(Boolean)
+          .join('/'),
+        phone: unidade?.phone ?? undefined,
+        email: unidade?.email ?? undefined,
+        website: unidade?.website ?? undefined,
+      },
+      quote: {
+        quote: {
+          code: fonte.code,
+          title: fonte.title,
+          status: fonte.status,
+          issuedAt: dataSimples(fonte.sentAt ?? fonte.createdAt),
+          validUntil: validUntil ? formatCivil(validUntil) : undefined,
+          validityDays: diasDeValidade(
+            fonte.sentAt ?? fonte.createdAt,
+            validUntil,
+          ),
+          notes: fonte.notes ?? undefined,
+          discountReason: fonte.discountReason ?? undefined,
+          /* `?? undefined` e não `?? PADRÃO`: quem decide o padrão é o
+             compositor, que é quem sabe o que imprime. String vazia atravessa,
+             porque apagar o texto é escolha. */
+          introText: fonte.introText ?? undefined,
+          author: fonte.createdBy?.displayName ?? undefined,
+          operationCode: fonte.operation?.code ?? undefined,
+        },
+        responsible: responsavel,
+        assets: fonte.assets.map(({ asset }) => ({
+          name: asset.name,
+          identifier: asset.identifier ?? undefined,
+          location: asset.location ?? undefined,
+        })),
+        customer: {
+          name: fonte.customer.tradeName ?? fonte.customer.legalName,
+          legalName: fonte.customer.tradeName
+            ? fonte.customer.legalName
+            : undefined,
+          document: documentoFormatado(
+            fonte.customer.documentType,
+            fonte.customer.documentNumber,
+          ),
+          email: fonte.customer.email ?? undefined,
+          phone: fonte.customer.phone ?? undefined,
+          address: endereco ? enderecoCompleto(endereco) : undefined,
+        },
+        items: fonte.items.map((item) => ({
+          kind: item.kind,
+          description: item.description,
+          sku: item.sku ?? undefined,
+          unit: item.unit,
+          quantity: Number(item.quantity),
+          unitPrice: Number(item.unitPrice),
+          discount: Number(item.discount),
+          total: Number(item.total),
+          notes: item.notes ?? undefined,
+        })),
+        totals: {
+          subtotal: Number(fonte.subtotal),
+          discount: Number(fonte.discount),
+          total: Number(fonte.total),
+        },
+      },
+    });
+
+    return {
+      bytes,
+      mimeType: 'application/pdf',
+      fileName: `${fonte.code}.pdf`,
+    };
+  }
+
+  /**
+   * O responsável, com a assinatura carregada quando existe.
+   *
+   * ## Assinatura ausente não impede imprimir
+   *
+   * Quem não cadastrou assinatura recebe a linha em branco para assinar à mão —
+   * é o que o papel sempre permitiu, e recusar a emissão por isso deixaria a
+   * proposta presa a uma configuração de perfil.
+   *
+   * ## Falha de leitura também não
+   *
+   * O objeto pode estar inacessível — bucket fora do ar, chave apagada à mão. A
+   * proposta inteira não pode depender disso: sai com a linha em branco, que é
+   * o mesmo resultado de quem nunca cadastrou.
+   */
+  private async responsibleSignature(
+    responsible:
+      | {
+          displayName: string;
+          professionalSignatures: readonly {
+            storageObject: {
+              bucket: string;
+              objectKey: string;
+              mimeType: string;
+            };
+          }[];
+        }
+      | null
+      | undefined,
+  ) {
+    if (!responsible) return undefined;
+
+    const assinatura = responsible.professionalSignatures[0];
+    if (!assinatura) return { name: responsible.displayName };
+
+    try {
+      const bytes = await this.storage.get({
+        bucket: assinatura.storageObject.bucket,
+        objectKey: assinatura.storageObject.objectKey,
+      });
+      return {
+        name: responsible.displayName,
+        signatureImage: bytes,
+        signatureImageMimeType: assinatura.storageObject.mimeType,
+      };
+    } catch {
+      return { name: responsible.displayName };
+    }
+  }
+
   /* ---------------------------------------------------------------- */
   /* Criação e edição                                                  */
   /* ---------------------------------------------------------------- */
+
+  /**
+   * Confere endereço, equipamentos e responsável — os três vínculos que o
+   * orçamento passou a ter.
+   *
+   * Uma função só, usada pela criação e pela edição: as regras são as mesmas, e
+   * em duas cópias elas divergiriam na primeira vez que alguém mexesse numa.
+   *
+   * Cada recusa diz **qual** id falhou. "Algum equipamento é inválido" mandaria
+   * a pessoa conferir cinquenta linhas para achar a errada.
+   */
+  private async validateScope(
+    organizationId: string,
+    customerId: string,
+    input: {
+      serviceAddressId?: string;
+      assetIds?: readonly string[];
+      responsibleUserId?: string;
+    },
+  ): Promise<void> {
+    if (input.serviceAddressId) {
+      const address = await this.repository.findCustomerAddress(
+        input.serviceAddressId,
+        organizationId,
+        customerId,
+      );
+      if (!address) {
+        throw new ValidationException(
+          'O endereço informado não é um endereço cadastrado deste cliente.',
+        );
+      }
+    }
+
+    if (input.assetIds && input.assetIds.length > 0) {
+      /* Duplicado no pedido seria recusado pelo índice único com erro de banco;
+         aqui ele simplesmente não conta duas vezes. */
+      const pedidos = [...new Set(input.assetIds)];
+      const encontrados = await this.repository.findAssetIds(
+        pedidos,
+        organizationId,
+      );
+      const faltando = pedidos.filter((id) => !encontrados.includes(id));
+      if (faltando.length > 0) {
+        throw new ValidationException(
+          `Equipamento não encontrado: ${faltando.join(', ')}`,
+        );
+      }
+    }
+
+    if (input.responsibleUserId) {
+      const member = await this.repository.findMember(
+        input.responsibleUserId,
+        organizationId,
+      );
+      if (!member) {
+        throw new ValidationException(
+          'O responsável informado não é membro desta organização.',
+        );
+      }
+    }
+  }
 
   async create(
     organizationId: string,
@@ -119,6 +450,7 @@ export class QuoteService {
       throw new ValidationException('Unsupported currency');
     }
     this.requireFutureValidity(input.validUntil);
+    await this.validateScope(organizationId, input.customerId, input);
 
     return this.repository.create({
       organizationId,
@@ -126,10 +458,118 @@ export class QuoteService {
       customerId: input.customerId,
       title: input.title,
       notes: input.notes ?? null,
+      introText: input.introText ?? null,
       validUntil: input.validUntil ? this.dateOnly(input.validUntil) : null,
       currency,
       createdById: actorId,
+      serviceAddressId: input.serviceAddressId ?? null,
+      responsibleUserId: input.responsibleUserId ?? actorId,
+      assetIds: input.assetIds,
     });
+  }
+
+  /**
+   * A proposta copiada de um atendimento concluído.
+   *
+   * ## O que vem, e o que não vem
+   *
+   * Cliente, endereço, equipamentos, título e descrição vêm do atendimento. Os
+   * **materiais** vêm dos movimentos de consumo — é a única origem de linha que
+   * a operação oferece.
+   *
+   * **Serviço com valor não vem**, e a omissão é deliberada: `Operation` não
+   * guarda linha de serviço com preço (`kind` é categoria, não item de
+   * catálogo). Inventar uma linha de serviço aqui produziria valor numa proposta
+   * que ninguém combinou — pior que campo vazio, porque teria aparência de dado.
+   * Quem orça acrescenta os serviços no wizard.
+   *
+   * ## Só de concluído
+   *
+   * Copiar de um atendimento em andamento copiaria escopo que ainda vai mudar.
+   *
+   * ## Falha no meio não deixa rascunho pela metade
+   *
+   * A proposta é criada primeiro e os itens entram depois — cada um pelo mesmo
+   * caminho de um item escolhido à mão, para que a fotografia e o recálculo
+   * sejam os mesmos. Um material cujo item de catálogo foi desativado desde o
+   * atendimento é **pulado**, não recusado: a proposta ainda é útil sem ele, e
+   * derrubar a criação inteira por causa de um material obrigaria a pessoa a
+   * começar do zero sem saber qual era.
+   */
+  async createFromOperation(
+    organizationId: string,
+    fallbackBusinessUnitId: string | null,
+    actorId: string,
+    input: CreateQuoteFromOperationDto,
+  ) {
+    const operation = await this.repository.findOperationSource(
+      input.operationId,
+      organizationId,
+    );
+    if (!operation) {
+      throw new EntityNotFoundException('Operation', input.operationId);
+    }
+    if (operation.status !== 'COMPLETED') {
+      throw new ValidationException(
+        'Só um atendimento concluído pode virar orçamento — o escopo de um atendimento em andamento ainda vai mudar.',
+      );
+    }
+    if (!operation.customerId) {
+      throw new ValidationException(
+        'O atendimento não tem cliente, e uma proposta precisa de destinatário.',
+      );
+    }
+
+    this.requireFutureValidity(input.validUntil);
+    await this.validateScope(organizationId, operation.customerId, {
+      responsibleUserId: input.responsibleUserId,
+    });
+
+    const businessUnitId = await this.resolveBusinessUnit(
+      organizationId,
+      operation.businessUnitId ?? fallbackBusinessUnitId,
+    );
+
+    const quote = await this.repository.create({
+      organizationId,
+      businessUnitId,
+      customerId: operation.customerId,
+      title: input.title ?? `Orçamento — ${operation.title}`,
+      notes: operation.description ?? null,
+      introText: null,
+      validUntil: input.validUntil ? this.dateOnly(input.validUntil) : null,
+      currency: 'BRL',
+      createdById: actorId,
+      serviceAddressId: operation.customerAddressId,
+      responsibleUserId: input.responsibleUserId ?? actorId,
+      assetIds: operation.assets.map((link) => link.assetId),
+    });
+
+    const consumo = await this.repository.findOperationConsumption(
+      input.operationId,
+      organizationId,
+    );
+
+    let atual = quote;
+    for (const linha of consumo) {
+      try {
+        const snapshot = await this.snapshot(organizationId, businessUnitId, {
+          catalogItemId: linha.catalogItemId,
+          quantity: Number(linha.quantity),
+        });
+        atual = await this.repository.addItem(
+          quote.id,
+          organizationId,
+          businessUnitId,
+          actorId,
+          snapshot,
+        );
+      } catch {
+        /* Item desativado ou sem preço de venda desde o atendimento. A proposta
+           segue sem ele; quem orça vê a lista e completa o que faltar. */
+      }
+    }
+    return atual;
   }
 
   async update(
@@ -140,6 +580,7 @@ export class QuoteService {
   ) {
     const quote = await this.requireEditable(id, organizationId);
     if (input.validUntil) this.requireFutureValidity(input.validUntil);
+    await this.validateScope(organizationId, quote.customer.id, input);
 
     /**
      * O desconto é conferido contra o subtotal atual.
@@ -166,9 +607,13 @@ export class QuoteService {
       {
         title: input.title,
         notes: input.notes,
+        introText: input.introText,
+        discountReason: input.discountReason,
         validUntil: input.validUntil
           ? this.dateOnly(input.validUntil)
           : undefined,
+        serviceAddressId: input.serviceAddressId,
+        responsibleUserId: input.responsibleUserId,
       },
       {
         title: quote.title,
@@ -176,6 +621,7 @@ export class QuoteService {
         validUntil: quote.validUntil?.toISOString() ?? null,
       },
       input.discount === undefined ? undefined : input.discount.toFixed(2),
+      input.assetIds,
     );
   }
 

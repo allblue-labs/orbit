@@ -80,6 +80,13 @@ export interface ArtifactExecutionQuery {
   assetId?: string;
   responsibleUserId?: string;
   status?: ArtifactExecutionStatus;
+  /** Estado da emissão — outra coisa que `status`, que é o da execução. */
+  renderStatus?: ArtifactRenderStatus;
+  /** Tipo do artefato, como o snapshot congelou. */
+  artifactType?: string;
+  /** Período pela criação da execução. `YYYY-MM-DD` ou instante ISO. */
+  createdFrom?: string;
+  createdTo?: string;
   search?: string;
   page?: number;
   limit?: number;

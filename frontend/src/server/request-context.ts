@@ -16,6 +16,18 @@
  * das claims do access token, nunca destes cabeçalhos. Eles existem para
  * correlacionar logs e para que o backend possa passar a validá-los sem
  * mudanças no frontend.
+ *
+ * ## `x-timezone` não decide data civil
+ *
+ * O fuso viaja porque é útil no log, e **não** para reinterpretar datas. Quando
+ * o backend resolve um dia — competência financeira, vencimento de PMOC, o
+ * recorte de um relatório —, ele usa o fuso da unidade de negócio, que está no
+ * cadastro. Deixar o navegador opinar faria o mesmo vencimento cair em dias
+ * diferentes para duas pessoas olhando a mesma tela, e o relatório de março de
+ * uma deixaria de ser comparável ao da outra.
+ *
+ * Se algum dia o backend passar a ler este cabeçalho, que seja para registrar
+ * de onde veio a requisição — nunca para escolher o dia.
  */
 import { CONTEXT_HEADERS } from "@/lib/context-headers";
 import { DEFAULT_LOCALE, DEFAULT_TIMEZONE } from "@/lib/env";

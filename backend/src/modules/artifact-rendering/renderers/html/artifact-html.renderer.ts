@@ -91,6 +91,7 @@ export class ArtifactHtmlRenderer implements ArtifactRenderer {
       ...[...input.sections]
         .sort((left, right) => left.order - right.order)
         .map((section) => this.section(section)),
+      this.evidence(input),
       this.signatures(input.signatures),
       '</main>',
       this.footer(input),
@@ -116,7 +117,31 @@ export class ArtifactHtmlRenderer implements ArtifactRenderer {
       '.signature{border-top:1px solid #1c2333;margin-top:36px;padding-top:6px;width:60%}',
       'footer{margin-top:32px;border-top:1px solid #d8dde8;padding-top:8px;color:#5b6478;font-size:9px}',
       '.hash{font-family:monospace;word-break:break-all}',
+      '.evidence-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}',
+      '.evidence{margin:0;border:1px solid #d8dde8;padding:8px;break-inside:avoid}',
+      '.evidence img{display:block;max-width:100%;max-height:360px;margin:0 auto 6px}',
     ].join('');
+  }
+
+  private evidence(input: RenderInput): string {
+    if (!input.evidence?.length) return '';
+    const items = input.evidence.map((item) => {
+      const image =
+        item.bytes && /^image\/(png|jpeg|jpg|webp)$/i.test(item.mimeType)
+          ? `<img alt="${escapeHtml(item.caption ?? item.fileName)}" src="data:${escapeHtml(item.mimeType)};base64,${item.bytes.toString('base64')}">`
+          : '<p class="pending">Arquivo anexado</p>';
+      return [
+        '<figure class="evidence">',
+        image,
+        `<figcaption>${escapeHtml(item.caption ?? item.fileName)}</figcaption>`,
+        `<p class="meta">${escapeHtml(item.fileName)} · ${escapeHtml(item.kind)}</p>`,
+        item.sha256
+          ? `<p class="meta hash">${escapeHtml(item.sha256)}</p>`
+          : '',
+        '</figure>',
+      ].join('');
+    });
+    return `<section><h2>Evidências</h2><div class="evidence-grid">${items.join('')}</div></section>`;
   }
 
   private header(input: RenderInput): string {
@@ -188,6 +213,9 @@ export class ArtifactHtmlRenderer implements ArtifactRenderer {
         const document = signature.signerDocument
           ? `<p class="meta">${escapeHtml(signature.signerDocument)}</p>`
           : '';
+        const credential = signature.professionalCredential
+          ? `<p class="meta">${escapeHtml(signature.professionalCredential)}</p>`
+          : '';
         const when = signature.signedAt
           ? `<p class="meta">Assinado em ${escapeHtml(signature.signedAt)}</p>`
           : '';
@@ -200,12 +228,21 @@ export class ArtifactHtmlRenderer implements ArtifactRenderer {
         const hash = signature.signatureHash
           ? `<p class="meta hash">${escapeHtml(signature.signatureHash)}</p>`
           : '';
+        const image =
+          signature.signatureImage &&
+          /^image\/(png|jpeg|jpg|webp)$/i.test(
+            signature.signatureImageMimeType ?? '',
+          )
+            ? `<img alt="Assinatura de ${escapeHtml(signature.signerName ?? '')}" src="data:${escapeHtml(signature.signatureImageMimeType ?? 'image/png')};base64,${signature.signatureImage.toString('base64')}" style="max-width:240px;max-height:90px">`
+            : '';
 
         return [
           '<div class="signature">',
+          image,
           `<p><strong>${escapeHtml(signature.label)}</strong> · ${escapeHtml(signature.signerRole)}</p>`,
           `<p>${name}</p>`,
           document,
+          credential,
           when,
           hash,
           '</div>',

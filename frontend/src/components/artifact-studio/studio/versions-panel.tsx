@@ -123,7 +123,7 @@ export function VersionsPanel({
               : `Publicar como versão ${currentVersion + 1}`}
           </Button>
           <p className="text-xs text-muted-foreground">
-            O número final é atribuído pelo backend — se alguém publicar antes,
+            O número final é atribuído na publicação — se alguém publicar antes,
             a sua versão receberá o número seguinte.
           </p>
         </div>

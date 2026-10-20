@@ -63,7 +63,7 @@ export function SchedulingSettingsTab() {
               do navegador.
             </p>
           </div>
-          {manage.allowed && !creating ? (
+          {manage.allowed && !creating && calendars.length > 0 ? (
             <Button size="sm" onClick={() => setCreating(true)}>
               <Plus className="size-4" />
               Novo calendário
@@ -186,9 +186,9 @@ export function SchedulingSettingsTab() {
         </ul>
 
         <p className="mt-3 text-xs text-muted-foreground">
-          As regras de recorrência são do motor do backend, que expande as
-          ocorrências e detecta conflito — cada evento declara a sua no momento
-          em que é criado, e não há parâmetro global.
+          As regras de recorrência são da plataforma, que gera as ocorrências e
+          detecta conflito — cada evento declara a sua no momento em que é
+          criado, e não há parâmetro global.
         </p>
       </PanelFrame>
     </div>

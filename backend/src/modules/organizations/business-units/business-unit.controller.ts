@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Param,
   Patch,
+  Put,
   Post,
   Req,
 } from '@nestjs/common';
@@ -22,6 +23,7 @@ import {
 import {
   CreateBusinessUnitDto,
   UpdateBusinessUnitDto,
+  UpdateBusinessUnitLogoDto,
 } from '../dto/organization.dto';
 import { BusinessUnitService } from './business-unit.service';
 import { OrganizationReadModelMapper } from '../organization.mapper';
@@ -72,6 +74,39 @@ export class BusinessUnitController {
     return this.readModels.businessUnit(
       await this.businessUnits.update(id, this.organizationId(request), input),
     );
+  }
+
+  /**
+   * A marca que timbra os documentos da unidade.
+   *
+   * `PUT` e não `PATCH`: o recurso é a imagem inteira, substituída de uma vez.
+   * Exige `business_units.manage` — trocar o timbre muda todo documento que a
+   * unidade emitir daqui em diante, inclusive os que já foram enviados a
+   * clientes e forem reimpressos.
+   */
+  @Put(':id/logo')
+  @Permissions('business_units.update')
+  @Capabilities('business_units.manage')
+  async setLogo(
+    @Param('id', ParseUUIDv7Pipe) id: string,
+    @Req() request: IdentityRequest,
+    @Body() input: UpdateBusinessUnitLogoDto,
+  ) {
+    return this.businessUnits.setLogo(
+      id,
+      this.organizationId(request),
+      input.image,
+    );
+  }
+
+  @Delete(':id/logo')
+  @Permissions('business_units.update')
+  @Capabilities('business_units.manage')
+  async removeLogo(
+    @Param('id', ParseUUIDv7Pipe) id: string,
+    @Req() request: IdentityRequest,
+  ) {
+    return this.businessUnits.removeLogo(id, this.organizationId(request));
   }
 
   @Delete(':id')

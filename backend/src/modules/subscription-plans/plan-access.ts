@@ -6,6 +6,7 @@ import {
   Logger,
   SetMetadata,
 } from '@nestjs/common';
+import { redactSensitivePath } from '../../common/redact-sensitive-path';
 import { Reflector } from '@nestjs/core';
 import type { UUID } from '../../contracts';
 import { PUBLIC_KEY } from '../../decorators';
@@ -15,6 +16,7 @@ import type { IdentityRequest } from '../identity/infrastructure/jwt-authenticat
 import type { AuthenticatedIdentity } from '../identity/domain/identity.types';
 import type { OrganizationEntitlements } from './subscription-plan.service';
 import { SubscriptionPlanService } from './subscription-plan.service';
+import { SubscriptionExpiredException } from './subscription-expired.exception';
 
 export const REQUIRED_PLAN_KEY = 'subscription:required-plan';
 export const REQUIRED_CAPABILITIES_KEY = 'subscription:required-capabilities';
@@ -93,21 +95,23 @@ abstract class PlanMetadataGuard {
         .getRequest<RequestWithEntitlements>();
       const classified = classifyInternalError(error);
       const requestId = (request as { id?: unknown }).id;
-      this.logger.error(
-        JSON.stringify({
-          stage: 'guard-internal-error',
-          guard,
-          method: request.method,
-          path: request.path,
-          requestId: typeof requestId === 'string' ? requestId : null,
-          actorId: request.identity?.id ?? null,
-          organizationId: request.identity?.organizationId ?? null,
-          errorCategory: classified.category,
-          exceptionClass: classified.exceptionClass,
-          errorCode: classified.code,
-        }),
-        internalErrorStack(error),
-      );
+      const record = JSON.stringify({
+        stage: 'guard-internal-error',
+        guard,
+        method: request.method,
+        path: redactSensitivePath(request.path),
+        requestId: typeof requestId === 'string' ? requestId : null,
+        actorId: request.identity?.id ?? null,
+        organizationId: request.identity?.organizationId ?? null,
+        errorCategory: classified.category,
+        exceptionClass: classified.exceptionClass,
+        errorCode: classified.code,
+      });
+      if (process.env.NODE_ENV === 'production') {
+        this.logger.error(record);
+      } else {
+        this.logger.error(record, internalErrorStack(error));
+      }
       throw error;
     }
   }
@@ -134,12 +138,42 @@ abstract class PlanMetadataGuard {
   }
 }
 
+/**
+ * Métodos que só leem.
+ *
+ * A separação é pelo verbo, e não por uma lista de rotas, porque lista de
+ * rotas envelhece em silêncio: a próxima rota de escrita nasceria liberada
+ * para quem está com a assinatura vencida, e ninguém notaria.
+ *
+ * `POST` que na verdade lê — busca com corpo, sincronização que puxa — fica de
+ * fora e é recusado. É o lado seguro do erro: recusar uma leitura atrapalha;
+ * liberar uma escrita cobra depois.
+ */
+const METODOS_DE_LEITURA: ReadonlySet<string> = new Set([
+  'GET',
+  'HEAD',
+  'OPTIONS',
+]);
+
 @Injectable()
 export class ActivePlanGuard extends PlanMetadataGuard implements CanActivate {
   constructor(reflector: Reflector, plans: SubscriptionPlanService) {
     super(reflector, plans);
   }
 
+  /**
+   * Assinatura vencida tranca o que muda, não o que mostra.
+   *
+   * Antes isto era um portão só: qualquer rota marcada com
+   * `@RequiresActivePlan()` respondia 403, leitura inclusive. Como o decorador
+   * costuma estar na **classe**, uma avaliação vencida derrubava a plataforma
+   * inteira — a pessoa entrava e via erro em toda tela, sem conseguir consultar
+   * o próprio histórico nem baixar um documento que ela mesma emitiu enquanto
+   * pagava.
+   *
+   * O que ela precisa fazer é escolher um plano, e para isso precisa conseguir
+   * olhar o que tem. Ler continua; criar, alterar e apagar param com `402`.
+   */
   async canActivate(context: ExecutionContext): Promise<boolean> {
     if (this.isPublic(context)) return true;
     const required = this.reflector.getAllAndOverride<boolean>(
@@ -147,10 +181,18 @@ export class ActivePlanGuard extends PlanMetadataGuard implements CanActivate {
       [context.getHandler(), context.getClass()],
     );
     if (!required) return true;
-    this.plans.assertActiveOn(
-      await this.guardedEntitlements(context, ActivePlanGuard.name),
+
+    const entitlements = await this.guardedEntitlements(
+      context,
+      ActivePlanGuard.name,
     );
-    return true;
+    if (this.plans.grantsAccess(entitlements)) return true;
+
+    /* Verbo ausente conta como escrita: o lado seguro do erro. */
+    const metodo = context.switchToHttp().getRequest<IdentityRequest>().method;
+    if (METODOS_DE_LEITURA.has((metodo ?? '').toUpperCase())) return true;
+
+    throw new SubscriptionExpiredException();
   }
 }
 

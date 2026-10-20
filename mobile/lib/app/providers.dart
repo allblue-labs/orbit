@@ -23,7 +23,6 @@ import '../core/uploads/upload_task.dart';
 import '../features/authentication/application/auth_controller.dart';
 import '../features/authentication/data/auth_repository.dart';
 import '../features/authentication/domain/session.dart';
-import '../features/home/data/home_repository.dart';
 import '../features/operations/data/operations_repository.dart';
 import '../features/scheduling/data/agenda_repository.dart';
 
@@ -42,7 +41,8 @@ final tokenStorageProvider = Provider<TokenStorage>(
 /// Preenchido no `main` com `overrideWithValue`, porque a leitura das
 /// preferências é assíncrona e a árvore precisa dela pronta.
 final sharedPreferencesProvider = Provider<SharedPreferences>(
-  (ref) => throw UnimplementedError('sharedPreferencesProvider não inicializado'),
+  (ref) =>
+      throw UnimplementedError('sharedPreferencesProvider não inicializado'),
 );
 
 final readCacheProvider = Provider<ReadCache>(
@@ -112,13 +112,14 @@ final authRepositoryProvider = Provider<AuthRepository>(
   ),
 );
 
-final authControllerProvider =
-    StateNotifierProvider<AuthController, AuthState>((ref) {
-      return AuthController(
-        repository: ref.watch(authRepositoryProvider),
-        authenticator: ref.watch(apiClientProvider).authenticator,
-      );
-    });
+final authControllerProvider = StateNotifierProvider<AuthController, AuthState>(
+  (ref) {
+    return AuthController(
+      repository: ref.watch(authRepositoryProvider),
+      authenticator: ref.watch(apiClientProvider).authenticator,
+    );
+  },
+);
 
 /// Sessão ativa, ou `null` quando não autenticado.
 final sessionProvider = Provider<OrbitSession?>((ref) {
@@ -138,8 +139,4 @@ final agendaRepositoryProvider = Provider<AgendaRepository>(
     client: ref.watch(apiClientProvider),
     cache: ref.watch(readCacheProvider),
   ),
-);
-
-final homeRepositoryProvider = Provider<HomeRepository>(
-  (ref) => HomeRepository(client: ref.watch(apiClientProvider)),
 );

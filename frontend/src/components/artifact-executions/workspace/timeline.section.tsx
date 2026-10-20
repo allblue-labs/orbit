@@ -94,7 +94,7 @@ export function HistorySection() {
       title="Histórico"
       description="Auditoria de quem alterou o quê"
     >
-      <PanelWithoutSource reason="O backend registra auditoria das execuções em auditLog, mas não expõe endpoint de leitura, e execuções não têm tabela de histórico própria como as operações. Enquanto não houver, a linha do tempo responde “quando”, não “por quem”." />
+      <PanelWithoutSource reason="As alterações ficam registradas, mas o histórico de quem mudou o quê ainda não pode ser consultado aqui. A linha do tempo responde “quando”, não “por quem”." />
     </PanelFrame>
   );
 }

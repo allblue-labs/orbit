@@ -175,8 +175,7 @@ export function CreateTemplateDialog() {
                   className="font-mono text-sm"
                 />
                 <p className="text-xs text-muted-foreground">
-                  O backend aceita qualquer classificação no formato válido. Um
-                  tipo fora do catálogo aparece com o identificador humanizado
+                  Qualquer classificação em formato válido é aceita. Um tipo fora do catálogo aparece com o identificador legível
                   até ser registrado.
                 </p>
               </div>

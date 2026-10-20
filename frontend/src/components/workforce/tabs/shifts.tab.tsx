@@ -35,7 +35,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useAction } from "@/actions";
+import { useWorkforceManagement } from "@/hooks/workforce/use-workforce-management";
+import { ManagementBlocked } from "../management-blocked";
 import {
   useCreateSchedulingAvailability,
   useRemoveSchedulingAvailability,
@@ -69,7 +70,7 @@ function toMinutes(value: string): number {
 
 export function ShiftsTab() {
   const members = useTeamMembers({ page: 1, limit: 100 });
-  const manage = useAction("team-member.update");
+  const shifts = useWorkforceManagement().shifts;
 
   const [userId, setUserId] = useState("");
   /** `enabled` desliga a consulta enquanto ninguém foi escolhido. */
@@ -82,29 +83,46 @@ export function ShiftsTab() {
   const remove = useRemoveSchedulingAvailability();
 
   const [kind, setKind] = useState<"AVAILABLE" | "BLOCKED">("AVAILABLE");
+  /**
+   * Semanal ou data específica — o contrato aceita um dos dois, nunca os dois.
+   *
+   * `validateAvailability` no servidor recusa `date` junto de `dayOfWeek`. Sem a
+   * escolha aqui só dava para declarar recorrência semanal, e férias ou um
+   * feriado — o caso mais óbvio de bloqueio — não tinham como ser cadastrados.
+   */
+  const [repeticao, setRepeticao] = useState<"WEEKLY" | "DATE">("WEEKLY");
   const [dayOfWeek, setDayOfWeek] = useState("1");
+  const [date, setDate] = useState("");
   const [start, setStart] = useState("08:00");
   const [end, setEnd] = useState("18:00");
+  const [reason, setReason] = useState("");
 
   const people = members.data?.data ?? [];
   const windows = query.data ?? [];
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
-    create.mutate({
-      resourceType: "USER",
-      userId,
-      kind,
-      dayOfWeek: Number(dayOfWeek),
-      startMinute: toMinutes(start),
-      endMinute: toMinutes(end),
-      /** O fuso é o da organização; o backend o exige explicitamente. */
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    });
+    create.mutate(
+      {
+        resourceType: "USER",
+        userId,
+        kind,
+        ...(repeticao === "WEEKLY"
+          ? { dayOfWeek: Number(dayOfWeek) }
+          : { date }),
+        startMinute: toMinutes(start),
+        endMinute: toMinutes(end),
+        /** O fuso é o da organização; o backend o exige explicitamente. */
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        reason: reason.trim() || undefined,
+      },
+      { onSuccess: () => setReason("") },
+    );
   };
 
   return (
     <div className="space-y-5">
+      <ManagementBlocked reason={shifts.reason} />
       <div className="space-y-1">
         <p className="text-sm text-muted-foreground">
           Janelas de disponibilidade e bloqueio por pessoa. É o que o motor de
@@ -176,13 +194,20 @@ export function ShiftsTab() {
                       <span className="ml-2 font-mono text-xs text-muted-foreground">
                         {toTime(window.startMinute)}–{toTime(window.endMinute)}
                       </span>
+                      {/* O motivo é o que distingue duas janelas iguais — sem
+                          ele, "Bloqueio · sábado" pode ser férias ou plantão. */}
+                      {window.reason ? (
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {window.reason}
+                        </span>
+                      ) : null}
                     </span>
 
                     <span className="font-mono text-xs text-muted-foreground">
                       {window.timezone}
                     </span>
 
-                    {manage.allowed ? (
+                    {shifts.allowed ? (
                       <Button
                         variant="ghost"
                         size="icon"
@@ -199,7 +224,7 @@ export function ShiftsTab() {
             )}
           </ListState>
 
-          {manage.allowed ? (
+          {shifts.allowed ? (
             <form
               onSubmit={submit}
               className="glass-panel flex flex-wrap items-end gap-3 rounded-xl p-4"
@@ -223,20 +248,52 @@ export function ShiftsTab() {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="shift-day">Dia</Label>
-                <Select value={dayOfWeek} onValueChange={setDayOfWeek}>
-                  <SelectTrigger id="shift-day" className="w-36">
+                <Label htmlFor="shift-repeat">Quando</Label>
+                <Select
+                  value={repeticao}
+                  onValueChange={(value) =>
+                    setRepeticao(value as "WEEKLY" | "DATE")
+                  }
+                >
+                  <SelectTrigger id="shift-repeat" className="w-44">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {WEEKDAYS.map((label, index) => (
-                      <SelectItem key={label} value={String(index)}>
-                        {label}
-                      </SelectItem>
-                    ))}
+                    <SelectItem value="WEEKLY">Toda semana</SelectItem>
+                    <SelectItem value="DATE">Em uma data</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+
+              {repeticao === "WEEKLY" ? (
+                <div className="space-y-1.5">
+                  <Label htmlFor="shift-day">Dia</Label>
+                  <Select value={dayOfWeek} onValueChange={setDayOfWeek}>
+                    <SelectTrigger id="shift-day" className="w-36">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {WEEKDAYS.map((label, index) => (
+                        <SelectItem key={label} value={String(index)}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <Label htmlFor="shift-date">Data</Label>
+                  <Input
+                    id="shift-date"
+                    type="date"
+                    value={date}
+                    onChange={(event) => setDate(event.target.value)}
+                    className="w-40"
+                    required
+                  />
+                </div>
+              )}
 
               <div className="space-y-1.5">
                 <Label htmlFor="shift-start">Das</Label>
@@ -260,7 +317,21 @@ export function ShiftsTab() {
                 />
               </div>
 
-              <Button type="submit" size="sm" disabled={create.isPending}>
+              <div className="min-w-48 flex-1 space-y-1.5">
+                <Label htmlFor="shift-reason">Motivo</Label>
+                <Input
+                  id="shift-reason"
+                  value={reason}
+                  onChange={(event) => setReason(event.target.value)}
+                  placeholder={kind === "BLOCKED" ? "Ex.: férias" : "Opcional"}
+                />
+              </div>
+
+              <Button
+                type="submit"
+                size="sm"
+                disabled={create.isPending || (repeticao === "DATE" && !date)}
+              >
                 <Plus className="size-4" />
                 {create.isPending ? "Salvando…" : "Adicionar"}
               </Button>

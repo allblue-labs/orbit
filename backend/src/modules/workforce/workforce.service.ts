@@ -15,8 +15,18 @@ import type {
   UpdateCertificationDto,
   UpdateSpecialtyDto,
   UpdateTeamDto,
+  UpdateProfessionalProfileDto,
+  CreateProfessionalCredentialDto,
+  ProfessionalEligibilityQueryDto,
 } from './workforce.dto';
+import {
+  AllocationResource,
+  EntitlementService,
+} from '../subscription-plans/entitlements';
 import { WorkforceRepository } from './workforce.repository';
+import { WorkforceMapper } from './workforce.mapper';
+import { ProfessionalSignatoryPolicy } from './professional-signatory.policy';
+import type { ProfessionalEligibilityReadModel } from './workforce.read-models';
 
 const DAY_MS = 24 * 60 * 60_000;
 
@@ -29,7 +39,253 @@ const DAY_MS = 24 * 60 * 60_000;
  */
 @Injectable()
 export class WorkforceService {
-  constructor(private readonly repository: WorkforceRepository) {}
+  constructor(
+    private readonly repository: WorkforceRepository,
+    private readonly mapper: WorkforceMapper,
+    private readonly signatoryPolicy: ProfessionalSignatoryPolicy,
+    private readonly entitlements: EntitlementService,
+  ) {}
+
+  async professionalProfile(organizationId: string, userId: string) {
+    const profile = await this.repository.findProfessionalProfile(
+      organizationId,
+      userId,
+    );
+    if (!profile)
+      throw new EntityNotFoundException('ProfessionalProfile', userId);
+    const signature = await this.repository.activeSignature(
+      organizationId,
+      userId,
+    );
+    return this.mapper.professionalProfile(profile, Boolean(signature));
+  }
+
+  async updateProfessionalProfile(
+    organizationId: string,
+    userId: string,
+    actorId: string,
+    input: UpdateProfessionalProfileDto,
+  ) {
+    /**
+     * Habilitar para o campo é o que compra a vaga.
+     *
+     * A cota conta **pessoas habilitadas**, e é aqui — e só aqui — que uma
+     * pessoa passa a ocupar uma. Escalar essa mesma pessoa numa ordem, como
+     * responsável ou como auxiliar, não custa nada: os dois números
+     * comerciais ("técnicos operadores" e "auxiliares técnico") descrevem a
+     * mesma equipe, e ninguém paga duas vezes por acumular papéis.
+     *
+     * Desligar o papel não cobra; religar cobra de novo. A quantidade é
+     * decidida sob o bloqueio, olhando o perfil de agora.
+     */
+    const profile = await this.entitlements.guardAllocation(
+      organizationId,
+      AllocationResource.FIELD_TECHNICIANS,
+      () =>
+        this.repository.upsertProfessionalProfile(
+          organizationId,
+          userId,
+          actorId,
+          input,
+        ),
+      async () => {
+        if (!input.fieldTechnicianEnabled || !input.active) return 0;
+        const atual = await this.repository.findProfessionalProfile(
+          organizationId,
+          userId,
+        );
+        /** O mesmo predicado da contagem canônica: pessoa ativa, perfil ativo. */
+        const jaOcupaVaga =
+          atual?.active === true &&
+          atual.fieldTechnicianEnabled &&
+          atual.user.status === 'ACTIVE' &&
+          atual.user.deletedAt === null;
+        return jaOcupaVaga ? 0 : 1;
+      },
+    );
+    if (!profile)
+      throw new EntityNotFoundException('OrganizationMember', userId);
+    const signature = await this.repository.activeSignature(
+      organizationId,
+      userId,
+    );
+    return this.mapper.professionalProfile(profile, Boolean(signature));
+  }
+
+  async listProfessionals(
+    organizationId: string,
+    role: 'FIELD_TECHNICIAN' | 'TECHNICAL_RESPONSIBLE',
+    businessUnitId?: string,
+  ) {
+    const profiles = await this.repository.listProfessionals(
+      organizationId,
+      role,
+      businessUnitId,
+    );
+    const signed = new Set(
+      (
+        await this.repository.activeSignatures(
+          organizationId,
+          profiles.map((item) => item.userId),
+        )
+      ).map((item) => item.userId),
+    );
+    return profiles.map((profile) => {
+      const full = this.mapper.professionalProfile(
+        profile,
+        signed.has(profile.userId),
+      );
+      return {
+        id: full.userId,
+        name: full.displayName,
+        signatureAvailable: full.signatureAvailable,
+        professionalCredential: full.professionalCredentials[0] ?? null,
+        active: full.active,
+      };
+    });
+  }
+
+  /**
+   * Quem pode entrar como auxiliar de um atendimento.
+   *
+   * Mesma forma de resposta do seletor de técnicos, porque é o mesmo campo de
+   * formulário ao lado: a tela mostra o que voltou. `signatureAvailable` vem
+   * falso de propósito — o auxiliar não assina, e dizer o contrário aqui
+   * convidaria a tela a oferecer uma assinatura que o servidor recusa.
+   */
+  async listFieldAssistantCandidates(
+    organizationId: string,
+    businessUnitId?: string,
+  ) {
+    const vinculos = await this.repository.listFieldAssistantCandidates(
+      organizationId,
+      businessUnitId,
+    );
+    return vinculos.map((vinculo) => ({
+      id: vinculo.userId,
+      name: vinculo.user.displayName,
+      signatureAvailable: false,
+      professionalCredential: null,
+      active: true,
+    }));
+  }
+
+  async addProfessionalCredential(
+    organizationId: string,
+    userId: string,
+    actorId: string,
+    input: CreateProfessionalCredentialDto,
+  ) {
+    const credential = await this.repository.createCredential(
+      organizationId,
+      userId,
+      actorId,
+      input,
+    );
+    if (!credential)
+      throw new EntityNotFoundException('ProfessionalProfile', userId);
+    return this.mapper.professionalCredential(credential);
+  }
+
+  async revokeProfessionalCredential(
+    organizationId: string,
+    id: string,
+    actorId: string,
+  ) {
+    const credential = await this.repository.revokeCredential(
+      organizationId,
+      id,
+      actorId,
+    );
+    if (!credential)
+      throw new EntityNotFoundException('ProfessionalCredential', id);
+    return this.mapper.professionalCredential(credential);
+  }
+
+  async registerProfessionalSignature(
+    organizationId: string,
+    userId: string,
+    actorId: string,
+    storageObjectId: string,
+  ) {
+    if (!(await this.repository.activeMember(organizationId, userId)))
+      throw new EntityNotFoundException('OrganizationMember', userId);
+    const file = await this.repository.findStorageFile(
+      organizationId,
+      storageObjectId,
+    );
+    if (!file || file.status !== 'AVAILABLE' || !file.sha256)
+      throw new ValidationException(
+        'Signature storage object must be available in the same organization',
+      );
+    if (
+      !['image/png', 'image/jpeg', 'image/webp'].includes(file.mimeType) ||
+      file.sizeBytes > 2_000_000n
+    )
+      throw new ValidationException(
+        'Signature must be PNG, JPEG or WEBP and at most 2 MB',
+      );
+    await this.repository.registerSignature(
+      organizationId,
+      userId,
+      actorId,
+      storageObjectId,
+      file.sha256,
+    );
+    return { userId, signatureAvailable: true } as const;
+  }
+
+  async professionalEligibility(
+    organizationId: string,
+    userId: string,
+    query: ProfessionalEligibilityQueryDto,
+  ): Promise<ProfessionalEligibilityReadModel> {
+    const profile = await this.repository.findProfessionalProfile(
+      organizationId,
+      userId,
+    );
+    const signature = await this.repository.activeSignature(
+      organizationId,
+      userId,
+    );
+    let blockedReason: ProfessionalEligibilityReadModel['blockedReason'] = null;
+    if (
+      !profile?.active ||
+      profile.user.status !== 'ACTIVE' ||
+      profile.user.deletedAt
+    )
+      blockedReason = 'PROFESSIONAL_PROFILE_INACTIVE';
+    else if (
+      query.signedAs === 'FIELD_TECHNICIAN'
+        ? !profile.fieldTechnicianEnabled
+        : !profile.technicalResponsibleEnabled
+    )
+      blockedReason = 'PROFESSIONAL_ROLE_MISSING';
+    else if (
+      !this.signatoryPolicy.allows(query.documentType as never, query.signedAs)
+    )
+      blockedReason = 'DOCUMENT_POLICY_DENIED';
+    else if (
+      query.businessUnitId &&
+      !(
+        await this.repository.listProfessionals(
+          organizationId,
+          query.signedAs,
+          query.businessUnitId,
+        )
+      ).some((item) => item.userId === userId)
+    )
+      blockedReason = 'BUSINESS_UNIT_SCOPE_MISSING';
+    else if (!signature) blockedReason = 'SIGNATURE_MISSING';
+    return {
+      userId,
+      documentType: query.documentType,
+      signedAs: query.signedAs,
+      eligible: blockedReason === null,
+      blockedReason,
+      signatureAvailable: Boolean(signature),
+    };
+  }
 
   /* ---------------------------------------------------------------- */
   /* Especialidades                                                    */

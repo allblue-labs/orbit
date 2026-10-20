@@ -294,6 +294,22 @@ class Operation {
     this.updatedAt,
   });
 
+  /// O primeiro equipamento de `assets`, como referência nomeada.
+  ///
+  /// Fora de `fromJson` porque o detalhe do atendimento também precisa dele.
+  static NamedRef? firstAsset(Object? assets) {
+    if (assets is! List) return null;
+    for (final item in assets) {
+      if (item is! Map<String, dynamic>) continue;
+      return NamedRef(
+        id: item['id'] as String? ?? '',
+        name: item['name'] as String? ?? '',
+        detail: item['identifier'] as String?,
+      );
+    }
+    return null;
+  }
+
   factory Operation.fromJson(Map<String, dynamic> json) {
     NamedRef? ref(String key, String nameKey, {String? detailKey}) {
       final value = json[key];
@@ -317,13 +333,25 @@ class Operation {
       kind: json['kind'] as String? ?? '',
       priority: json['priority'] as String? ?? 'NORMAL',
       description: json['description'] as String?,
-      scheduledStart: DateTime.tryParse(json['scheduledStart'] as String? ?? ''),
+      scheduledStart: DateTime.tryParse(
+        json['scheduledStart'] as String? ?? '',
+      ),
       scheduledEnd: DateTime.tryParse(json['scheduledEnd'] as String? ?? ''),
       startedAt: DateTime.tryParse(json['startedAt'] as String? ?? ''),
       completedAt: DateTime.tryParse(json['completedAt'] as String? ?? ''),
       businessUnit: ref('businessUnit', 'tradeName'),
       customer: ref('customer', 'tradeName'),
-      asset: ref('asset', 'name', detailKey: 'identifier'),
+
+      /// O primeiro equipamento do atendimento.
+      ///
+      /// O contrato publicava `asset`, um só, e passou a publicar `assets`,
+      /// uma lista — o técnico vai ao endereço e atende os aparelhos que estão
+      /// lá. O cartão do atendimento tem espaço para um nome; a lista inteira
+      /// aparece no detalhe, que lê `assets` direto.
+      ///
+      /// Sem este ajuste o nome do equipamento simplesmente sumiria da tela:
+      /// `ref` devolve `null` para uma chave que não existe, sem erro nenhum.
+      asset: firstAsset(json['assets']),
       assignees: (json['users'] as List<dynamic>? ?? const [])
           .whereType<Map<String, dynamic>>()
           .map(OperationAssignee.fromJson)
@@ -364,7 +392,8 @@ class Operation {
   final DateTime? updatedAt;
 
   bool get isOpen =>
-      status != OperationStatus.completed && status != OperationStatus.cancelled;
+      status != OperationStatus.completed &&
+      status != OperationStatus.cancelled;
 }
 
 /// Execução de IA (`GET /ai-executions?operationId=`).
@@ -511,11 +540,12 @@ class OperationQuery {
 
   /// Chave estável para cache de leitura.
   String get cacheKey {
-    final entries = toQueryParameters().entries
-        .where((entry) => entry.value != null)
-        .map((entry) => '${entry.key}=${entry.value}')
-        .toList()
-      ..sort();
+    final entries =
+        toQueryParameters().entries
+            .where((entry) => entry.value != null)
+            .map((entry) => '${entry.key}=${entry.value}')
+            .toList()
+          ..sort();
     return 'operations?${entries.join('&')}';
   }
 

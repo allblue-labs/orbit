@@ -41,6 +41,7 @@ export class ChecklistService {
       key: input.key.trim().toUpperCase(),
       name: input.name.trim(),
       description: input.description?.trim(),
+      operationKind: input.operationKind,
       items: items as unknown as Prisma.InputJsonValue,
       isActive: input.isActive ?? true,
     });
@@ -58,6 +59,8 @@ export class ChecklistService {
         key: (input.key ?? current.key).trim().toUpperCase(),
         name: input.name?.trim() ?? current.name,
         description: input.description?.trim() ?? current.description,
+        /// A nova versão herda o vínculo, salvo quando o pedido o troca.
+        operationKind: input.operationKind ?? current.operationKind,
         items: this.validateItems(
           input.items ?? currentItems,
         ) as unknown as Prisma.InputJsonValue,
@@ -67,6 +70,7 @@ export class ChecklistService {
     return this.repository.updateTemplate(id, {
       name: input.name?.trim(),
       description: input.description?.trim(),
+      operationKind: input.operationKind,
       isActive: input.isActive,
     });
   }
@@ -109,11 +113,22 @@ export class ChecklistService {
         operationId,
         createdById: actorId,
         templateVersion: template.version,
+        /**
+         * O snapshot é o que a execução responde — e o que o documento cita.
+         *
+         * Os itens extras entram aqui, ao lado dos herdados, e o modelo do
+         * dono da organização segue intacto: um atendimento que pediu uma
+         * verificação a mais não reescreve o padrão dos próximos.
+         */
         templateSnapshot: {
           key: template.key,
           name: template.name,
           version: template.version,
-          items: template.items,
+          items: [
+            ...(template.items as Prisma.InputJsonValue[]),
+            ...((input.additionalItems ??
+              []) as unknown as Prisma.InputJsonValue[]),
+          ],
         },
         notes: input.notes?.trim(),
       },

@@ -15,6 +15,7 @@
  * cada uma sob demanda. Ver `docs/document-center.md`.
  */
 import { apiClient } from "@/api/client";
+import { httpRequest, readEnvelope } from "@/api/http";
 import { queryKeys, type QueryKey } from "@/api/query-keys";
 import type { RequestOptions } from "@/types/api";
 import type {
@@ -76,6 +77,49 @@ export const documentsService = {
     input: RequestRenderInput,
   ): Promise<RenderState> =>
     apiClient.post<RenderState>(`${execution(executionId)}/render`, input),
+
+  /**
+   * O rascunho do documento, desenhado na hora e não persistido.
+   *
+   * Devolve `Blob` em vez de passar pelo `apiClient`: o corpo é um PDF, e o
+   * `readEnvelope` existe para o envelope `{ success, data }` do JSON. Em erro
+   * o backend **volta** a responder JSON, e aí sim o envelope é quem sabe ler
+   * — por isso o caminho de falha delega a ele em vez de inventar mensagem.
+   */
+  previewDraft: async (
+    executionId: string,
+    renderer?: string,
+    options?: RequestOptions,
+  ): Promise<Blob> => {
+    const response = await httpRequest({
+      method: "GET",
+      path: `${execution(executionId)}/preview`,
+      query: renderer ? { renderer } : undefined,
+      ...options,
+    });
+    if (!response.ok) await readEnvelope<never>(response);
+    return response.blob();
+  },
+
+  /**
+   * A amostra de um modelo premium, com o timbre da organização.
+   *
+   * Blob, e não JSON: o backend devolve o PDF pronto — o mesmo renderizador da
+   * emissão, com dados fictícios. A tela não desenha aproximação em HTML, que
+   * seria um segundo motor de layout divergindo do documento real.
+   */
+  sampleDocument: async (
+    artifactType: string,
+    options?: RequestOptions,
+  ): Promise<Blob> => {
+    const response = await httpRequest({
+      method: "GET",
+      path: `/artifact-rendering/samples/${encodeURIComponent(artifactType)}`,
+      ...options,
+    });
+    if (!response.ok) await readEnvelope<never>(response);
+    return response.blob();
+  },
 
   /** Contadores do processo — usados para saber quais renderers existem. */
   metrics: (options?: RequestOptions): Promise<RenderMetrics> =>

@@ -1,0 +1,11 @@
+-- PR-47 — por que houve desconto.
+--
+-- O orçamento guardava o valor do desconto e nada sobre ele. Um abatimento sem
+-- explicação é o que produz a discussão seis meses depois — "por que essa
+-- proposta saiu 15% abaixo da tabela?" — e a resposta morava na memória de quem
+-- negociou.
+--
+-- Campo próprio, e não dentro de `notes`: `notes` é o objeto da proposta, o que
+-- será feito, e o documento o imprime como escopo. Misturar a justificativa
+-- comercial ali a faria sair impressa como se fosse parte do serviço.
+ALTER TABLE "quotes" ADD COLUMN "discount_reason" VARCHAR(500);

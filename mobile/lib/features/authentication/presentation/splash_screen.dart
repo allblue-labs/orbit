@@ -20,8 +20,8 @@ class SplashScreen extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const OrbitWordmark(symbolSize: 96),
-              const SizedBox(height: OrbitSpacing.xl),
+              const OrbitWordmark(symbolSize: 64),
+              const SizedBox(height: OrbitSpacing.lg),
               SizedBox(
                 width: 26,
                 height: 26,

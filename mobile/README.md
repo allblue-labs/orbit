@@ -17,33 +17,55 @@ Contratos compartilhados entre backend, web e mobile:
 cd mobile
 flutter pub get
 
-# Desenvolvimento — a URL vem de config/local.json
-cp config/local.example.json config/local.json   # primeira vez
-flutter run --dart-define-from-file=config/local.json
+# Emulador Android / simulador iOS
+make run-android
+make run-ios
 
-# Produção
-flutter build apk --dart-define=ORBIT_API_URL=https://api.orbit.app/api/v1 \
-                  --dart-define=ORBIT_FLAVOR=production
+# Aparelho físico — só o arquivo local guarda o IP da sua máquina
+cp config/local.example.json config/local.json   # primeira vez
+make run-local
+
+# Produção — copie, preencha um endpoint HTTPS real e mantenha local
+cp config/production.example.json config/production.json
+make build-android-prod
+make build-ios-prod
 ```
 
-A URL nunca é constante de código: chega por `--dart-define` e é lida em
+A URL nunca é constante de código: chega por `--dart-define-from-file` e é lida em
 `core/config/environment.dart`.
 
 ### Para onde apontar
 
 | Alvo                            | `ORBIT_API_URL`                                                                       |
 | ------------------------------- | ------------------------------------------------------------------------------------- |
-| Emulador Android                | `http://10.0.2.2:3001/api/v1` (o `localhost` da máquina, visto de dentro do emulador) |
-| Simulador iOS                   | `http://localhost:3001/api/v1`                                                        |
-| **Aparelho físico, mesma rede** | `http://<ip-da-máquina>:3001/api/v1`                                                  |
+| Emulador Android                | `http://10.0.2.2:6001/api/v1` (o `localhost` da máquina, visto de dentro do emulador) |
+| Simulador iOS                   | `http://localhost:6001/api/v1`                                                        |
+| **Aparelho físico, mesma rede** | `http://<ip-da-máquina>:6001/api/v1`                                                  |
 
-`config/local.json` é **ignorado pelo git**: o IP é da máquina de quem
+`config/local.json`, `config/staging.json` e `config/production.json` são
+**ignorados pelo git**: IPs e destinos variam por máquina/ambiente. O que fica
+versionado são presets de desenvolvimento e exemplos sem credenciais.
+
+`config/local.json` contém somente URL e flavor — nunca token ou chave. O IP é da máquina de quem
 desenvolve, não do projeto. O que está versionado é
 `config/local.example.json`.
 
-A API já escuta em `0.0.0.0` (`docker-compose.yml` publica `0.0.0.0:3001` e
-`main.ts` usa `HOST ?? '0.0.0.0'`), então não é preciso mexer no backend —
-basta o aparelho estar na mesma rede e o firewall do macOS liberar a porta.
+No VS Code, use as configurações `Orbit — Android Emulator`, `Orbit — iOS
+Simulator` e `Orbit — aparelho físico/local`. No Android Studio, informe em
+*Additional run args* o mesmo argumento do preset escolhido, por exemplo
+`--dart-define-from-file=config/development.android.json`. Para iPhone físico,
+selecione o device, mantenha-o na mesma rede da API e use `make run-local`;
+somente `config/local.json` precisa mudar quando o IP do Mac mudar.
+
+A API já escuta em `0.0.0.0` (`docker-compose.yml` publica
+`0.0.0.0:${API_PORT}` e `main.ts` usa `HOST ?? '0.0.0.0'`), então não é preciso
+mexer no backend — basta o aparelho estar na mesma rede e o firewall do macOS
+liberar a porta.
+
+**A porta é a publicada, não a interna.** O compose mapeia `${API_PORT}` para a
+`5001` de dentro do container: é `${API_PORT}` que o aparelho enxerga. Confira
+com `docker compose ps` antes de supor — apontar para a porta interna dá
+"connection refused" e nenhuma mensagem no app que explique por quê.
 
 ### HTTP em rede local
 
@@ -69,20 +91,20 @@ for negada, a permissão vive em _Ajustes › Orbit › Rede local_.
 lib/
   app/providers.dart          composição de dependências (Riverpod)
   core/
-    config/                   ambiente por --dart-define
+    config/                   ambiente por --dart-define-from-file
     contracts/                espelho dos DTOs do backend
     errors/                   OrbitException
     location/                 GPS, coordenadas do atendimento, distância
     network/                  Dio + interceptors + renovação de sessão
     observability/            log sem dados sensíveis
-    routing/                  GoRouter, shell por perfil, guards
+    routing/                  GoRouter, shell canônico, guards
     storage/                  tokens (seguro) e cache de leitura
     theme/                    tema Orbit
     uploads/                  fila persistente de evidências
     widgets/                  marca, estados de seção, indicador de sincronismo
   features/
     authentication/  data · domain · application · presentation
-    home/            data · application · presentation
+    field/           Home operacional canônica, fila e execução
     operations/      data · application · presentation
     scheduling/      data · presentation
     profile/         presentation
@@ -148,16 +170,16 @@ pelo interceptor. O app abre rápido mesmo com rede ruim.
 
 ## 4. Perfis
 
-O perfil é **derivado das permissões do backend**, não de configuração local:
-quem tem `operations.manage` recebe a experiência de gestão; os demais, a de
-execução.
+O perfil é **derivado das permissões do backend**, não de configuração local.
+Owner, Técnico em Campo e Responsável Técnico usam a mesma árvore visual e a
+mesma navegação; permissões alteram dados e ações, nunca selecionam outra Home.
 
-|                     | Operator                                   | Owner                                                                 |
-| ------------------- | ------------------------------------------ | --------------------------------------------------------------------- |
-| Aba 1               | Início                                     | Visão Geral                                                           |
-| Home                | próprias operações, agenda do dia, alertas | KPIs do Analytics, volumes da unidade, prazo vencido, agenda, alertas |
-| Operações           | filtradas por `assignedUserId`             | filtradas pela unidade ativa                                          |
-| Transição de status | conforme permissão                         | conforme permissão                                                    |
+|                     | Todos os perfis autorizados                            |
+| ------------------- | ------------------------------------------------------ |
+| Aba 1               | Início                                                 |
+| Home                | Dashboard operacional canônico de `/mobile/field/home` |
+| Atendimentos        | Mesmo componente; projeção filtrada pelo backend       |
+| Transição de status | Conforme permissão e `allowedActions`                  |
 
 A interface esconde o que o backend recusaria (`PermissionGate`), mas **nunca
 substitui a validação do servidor**.

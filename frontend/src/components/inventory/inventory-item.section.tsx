@@ -68,7 +68,7 @@ export function InventoryItemSection({
         </h3>
         <p className="text-sm text-muted-foreground">
           Serviços não têm estoque — uma hora de mão de obra não fica na
-          prateleira. O servidor recusa movimentar itens deste tipo, e nenhum
+          prateleira. Não é possível movimentar itens deste tipo, e nenhum
           saldo é exibido aqui.
         </p>
       </section>

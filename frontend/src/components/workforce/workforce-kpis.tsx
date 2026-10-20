@@ -97,8 +97,7 @@ export function WorkforceKpis() {
 
       <p className="text-xs text-muted-foreground">
         Técnicos ativos e cobertura de atribuição vêm do Analytics. Pessoas e
-        convites são o total publicado pelo servidor na paginação — nada é
-        somado a partir de uma página.
+        convites são o total da listagem — nada é somado a partir de uma página.
       </p>
     </div>
   );

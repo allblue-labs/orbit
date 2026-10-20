@@ -304,7 +304,7 @@ function Totals({ quote }: { quote: Quote }) {
         </dd>
       </div>
       <p className="text-right text-xs text-muted-foreground">
-        Calculado pelo servidor.
+        Calculado automaticamente.
       </p>
     </dl>
   );

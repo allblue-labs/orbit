@@ -71,31 +71,6 @@ export class CreatePlanDto {
 
 export class UpdatePlanDto extends PartialType(CreatePlanDto) {}
 
-export class ChangeSubscriptionDto {
-  @ApiProperty()
-  @IsString()
-  @MinLength(2)
-  @MaxLength(40)
-  planKey!: string;
-
-  @ApiPropertyOptional({ enum: ['MONTHLY', 'ANNUAL'] })
-  @IsOptional()
-  @IsIn(['MONTHLY', 'ANNUAL'])
-  billingCycle: 'MONTHLY' | 'ANNUAL' = 'MONTHLY';
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  @MaxLength(160)
-  externalCustomerId?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  @MaxLength(160)
-  externalSubscriptionId?: string;
-}
-
 export class RecordUsageDto {
   @ApiProperty()
   @IsString()

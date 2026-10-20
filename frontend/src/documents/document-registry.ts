@@ -138,7 +138,7 @@ const RENDER_STATUSES: readonly RenderStatusDefinition[] = [
   {
     id: "PENDING",
     label: "Na fila",
-    description: "A renderização foi pedida e aguarda processamento.",
+    description: "O documento foi solicitado e aguarda processamento.",
     icon: Clock,
     color: "text-amber-400",
     badgeClass: "bg-amber-500/15 text-amber-400",
@@ -200,15 +200,24 @@ export interface RendererDefinition {
 
 const RENDERERS: readonly RendererDefinition[] = [
   {
+    id: "pdf.premium",
+    label: "PDF premium",
+    description:
+      "A logo da sua organização no cabeçalho, faixa da marca, tabelas que continuam na página seguinte sem perder o título e rodapé numerado. É o que a plataforma usa por padrão.",
+    format: "PDF",
+  },
+  {
     id: "pdf.default",
-    label: "PDF padrão",
-    description: "Documento paginado, com cabeçalho, rodapé e assinaturas.",
+    label: "PDF simples",
+    description:
+      "Mesmo conteúdo, sem a identidade visual: cabeçalho de texto, tabelas e assinaturas.",
     format: "PDF",
   },
   {
     id: "html.default",
-    label: "HTML padrão",
-    description: "Mesma composição em marcação, sem paginação física.",
+    label: "Página web",
+    description:
+      "O documento como página, para abrir no navegador. Não tem paginação nem numeração.",
     format: "HTML",
   },
 ];
@@ -233,8 +242,13 @@ const formats = createRegistry<DocumentFormatDefinition>({
   normalizeId: (id) => id.trim().toUpperCase(),
   derive: (id) => ({
     id,
-    label: id,
-    description: "Formato publicado pelo backend e ainda não registrado.",
+    /**
+     * Formatos são siglas — PDF, HTML, JSON —, e a sigla é o nome que a
+     * pessoa reconhece. Só um identificador composto vira frase, para que um
+     * formato novo não apareça como `ALGUM_FORMATO_NOVO`.
+     */
+    label: id.includes("_") ? humanizeId(id) : id,
+    description: "Formato ainda não descrito no Orbit.",
     icon: FileText,
     color: "text-muted-foreground",
     mimeType: "application/octet-stream",
@@ -251,7 +265,7 @@ const renderStatuses = createRegistry<RenderStatusDefinition>({
   derive: (id) => ({
     id: id as RenderStatus,
     label: humanizeId(id),
-    description: "Estado publicado pelo backend e ainda não registrado.",
+    description: "Situação ainda não descrita no Orbit.",
     icon: MinusCircle,
     color: "text-muted-foreground",
     badgeClass: "bg-surface-strong text-muted-foreground",
@@ -267,7 +281,7 @@ const renderers = createRegistry<RendererDefinition>({
   derive: (id) => ({
     id,
     label: humanizeId(id),
-    description: "Renderizador publicado pelo backend e ainda não registrado.",
+    description: "Formato de saída ainda não descrito no Orbit.",
     /**
      * O formato é inferido do prefixo apenas para apresentação.
      *

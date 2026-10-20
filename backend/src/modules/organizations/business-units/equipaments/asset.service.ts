@@ -10,11 +10,19 @@ import type {
   CreateAssetDto,
   UpdateAssetDto,
 } from './asset.dto';
+import {
+  AllocationResource,
+  EntitlementService,
+} from '../../../subscription-plans/entitlements';
 import { AssetRepository } from './asset.repository';
+import { isGeneratedIdentifierType } from './asset-internal-code';
 
 @Injectable()
 export class AssetService {
-  constructor(private readonly repository: AssetRepository) {}
+  constructor(
+    private readonly repository: AssetRepository,
+    private readonly entitlements: EntitlementService,
+  ) {}
 
   list(organizationId: string, query: AssetQueryDto) {
     return this.repository.list(organizationId, query);
@@ -42,23 +50,28 @@ export class AssetService {
     this.validateIdentifier(input.identifierType, input.identifier);
     this.validateDates(input.installationAt, input.warrantyUntil);
     try {
-      return await this.repository.create({
+      return await this.entitlements.guardAllocation(
         organizationId,
-        businessUnitId: input.businessUnitId,
-        customerId: input.customerId,
-        category: input.category,
-        name: input.name,
-        manufacturer: input.manufacturer,
-        model: input.model,
-        serialNumber: input.serialNumber,
-        identifierType: input.identifierType,
-        identifier: input.identifier,
-        installationAt: input.installationAt,
-        warrantyUntil: input.warrantyUntil,
-        location: input.location,
-        specifications: input.specifications as
-          Prisma.InputJsonValue | undefined,
-      });
+        AllocationResource.ACTIVE_EQUIPMENT,
+        () =>
+          this.repository.create({
+            organizationId,
+            businessUnitId: input.businessUnitId,
+            customerId: input.customerId,
+            category: input.category,
+            name: input.name,
+            manufacturer: input.manufacturer,
+            model: input.model,
+            serialNumber: input.serialNumber,
+            identifierType: input.identifierType,
+            identifier: input.identifier,
+            installationAt: input.installationAt,
+            warrantyUntil: input.warrantyUntil,
+            location: input.location,
+            specifications: input.specifications as
+              Prisma.InputJsonValue | undefined,
+          }),
+      );
     } catch (error) {
       this.mapConflict(error);
     }
@@ -130,10 +143,28 @@ export class AssetService {
     }
   }
 
+  /**
+   * Tipo e identificador andam juntos — com **uma** exceção.
+   *
+   * Identificador sem tipo continua recusado: é um dado sem dizer o que ele é, e
+   * quem lê depois não sabe se aquele texto é série, QR ou etiqueta interna.
+   *
+   * Tipo sem identificador era recusado também, e é o que mudou: com
+   * `INTERNAL_CODE`, o código é **atribuído pela organização** e o sistema o gera.
+   * Os outros tipos seguem exigindo o valor, porque são lidos da máquina física —
+   * um número de série gerado seria um fato inventado sobre o equipamento do
+   * cliente, e um QR que não existe em etiqueta nenhuma é uma busca que nunca
+   * encontra nada.
+   */
   private validateIdentifier(type?: string, identifier?: string) {
-    if (Boolean(type) !== Boolean(identifier)) {
+    if (identifier && !type) {
       throw new ValidationException(
         'Identifier type and identifier must be provided together',
+      );
+    }
+    if (type && !identifier && !isGeneratedIdentifierType(type)) {
+      throw new ValidationException(
+        'Only labels the system prints can be generated; other identifier types require the value read from the equipment',
       );
     }
   }

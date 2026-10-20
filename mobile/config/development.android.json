@@ -1,0 +1,4 @@
+{
+  "ORBIT_API_URL": "http://10.0.2.2:6001/api/v1",
+  "ORBIT_FLAVOR": "development"
+}

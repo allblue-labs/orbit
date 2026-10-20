@@ -17,6 +17,7 @@ import {
   OperationStatus,
 } from "@/types/contracts";
 import {
+  FilterBar,
   FilterSelect,
   SearchField,
   optionsFrom,
@@ -54,7 +55,7 @@ export function OperationsFilters({
   );
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))_auto]">
+    <FilterBar>
       <SearchField
         id="operations-search"
         value={searchTerm}
@@ -110,6 +111,6 @@ export function OperationsFilters({
           Limpar
         </Button>
       </div>
-    </div>
+    </FilterBar>
   );
 }

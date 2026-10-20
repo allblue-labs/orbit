@@ -20,6 +20,7 @@ import 'widgets/field_actions.dart';
 import 'widgets/intelligence_section.dart';
 import 'widgets/location_section.dart';
 import 'widgets/status_badge.dart';
+import '../../../app/providers.dart';
 
 class OperationDetailScreen extends ConsumerWidget {
   const OperationDetailScreen({super.key, required this.operationId});
@@ -29,6 +30,16 @@ class OperationDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final detail = ref.watch(operationDetailProvider(operationId));
+    final session = ref.watch(sessionProvider);
+    const intelligenceCapability = 'ORBIT_INTELLIGENCE';
+    final canUseIntelligence =
+        session?.hasPermission('ai.executions.read') == true &&
+        session?.hasCapability('ai.executions.read') == true &&
+        session?.canUseProductFeature(
+              intelligenceCapability,
+              intelligenceCapability,
+            ) ==
+            true;
 
     return Scaffold(
       appBar: AppBar(
@@ -44,14 +55,14 @@ class OperationDetailScreen extends ConsumerWidget {
       body: RefreshIndicator(
         onRefresh: () async => invalidateOperation(ref, operationId),
         child: ListView(
-          padding: const EdgeInsets.all(OrbitSpacing.md),
+          padding: const EdgeInsets.all(OrbitSpacing.gutter),
           children: [
             detail.when(
-              loading: () => const SectionCard(
+              loading: () => const SectionBlock(
                 title: 'Detalhes',
                 child: SectionLoading(lines: 4),
               ),
-              error: (error, _) => SectionCard(
+              error: (error, _) => SectionBlock(
                 title: 'Detalhes',
                 child: SectionError(
                   error: error,
@@ -85,8 +96,10 @@ class OperationDetailScreen extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: OrbitSpacing.md),
-            IntelligenceSection(operationId: operationId),
-            const SizedBox(height: OrbitSpacing.md),
+            if (canUseIntelligence) ...[
+              IntelligenceSection(operationId: operationId),
+              const SizedBox(height: OrbitSpacing.md),
+            ],
             _ChecklistsSection(operationId: operationId),
             const SizedBox(height: OrbitSpacing.md),
             _TimelineSection(operationId: operationId),
@@ -107,7 +120,7 @@ class _DetailsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SectionCard(
+    return SectionBlock(
       title: operation.title,
       subtitle: operation.code,
       trailing: StatusBadge(status: operation.status),
@@ -120,7 +133,7 @@ class _DetailsSection extends StatelessWidget {
             value: OperationPriority.label(operation.priority),
           ),
           if (operation.businessUnit != null)
-            _Field(label: 'Unidade', value: operation.businessUnit!.name),
+            _Field(label: 'Organização', value: operation.businessUnit!.name),
           if (operation.description != null &&
               operation.description!.isNotEmpty) ...[
             const Divider(height: OrbitSpacing.lg),
@@ -142,7 +155,7 @@ class _RelationsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SectionCard(
+    return SectionBlock(
       title: 'Cliente e ativo',
       child: Column(
         children: [
@@ -173,7 +186,7 @@ class _ScheduleSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SectionCard(
+    return SectionBlock(
       title: 'Agendamento',
       child: Column(
         children: [
@@ -209,7 +222,7 @@ class _TeamSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SectionCard(
+    return SectionBlock(
       title: 'Equipe',
       trailing: Text(
         '${operation.assignees.length}',
@@ -278,7 +291,7 @@ class _AdditionalDataSection extends StatelessWidget {
     final hasLocation = _hasContent(operation.location);
     final hasData = _hasContent(operation.data);
 
-    return SectionCard(
+    return SectionBlock(
       title: 'Informações adicionais',
       child: !hasLocation && !hasData
           ? const SectionEmpty(message: 'Nenhuma informação adicional.')
@@ -287,8 +300,7 @@ class _AdditionalDataSection extends StatelessWidget {
               children: [
                 if (hasLocation)
                   _JsonBlock(label: 'Local', value: operation.location!),
-                if (hasData)
-                  _JsonBlock(label: 'Dados', value: operation.data!),
+                if (hasData) _JsonBlock(label: 'Dados', value: operation.data!),
               ],
             ),
     );
@@ -357,7 +369,7 @@ class _ChecklistsSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final checklists = ref.watch(operationChecklistsProvider(operationId));
 
-    return SectionCard(
+    return SectionBlock(
       title: 'Checklists',
       child: checklists.when(
         loading: () => const SectionLoading(lines: 2),
@@ -424,7 +436,7 @@ class _TimelineSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final timeline = ref.watch(operationTimelineProvider(operationId));
 
-    return SectionCard(
+    return SectionBlock(
       title: 'Linha do tempo',
       child: timeline.when(
         loading: () => const SectionLoading(),
@@ -454,7 +466,7 @@ class _HistorySection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final history = ref.watch(operationHistoryProvider(operationId));
 
-    return SectionCard(
+    return SectionBlock(
       title: 'Histórico',
       subtitle: 'Registro de auditoria',
       child: history.when(

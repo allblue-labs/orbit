@@ -6,8 +6,10 @@ const globalWidgets: DashboardWidgetDefinition[] = [
   /**
    * Radar comparativo.
    *
-   * `order: 5` e `size: 'MEDIUM'` o colocam à esquerda da Central de Atenção
-   * (`order: 10`, `LARGE`): 4 + 8 fecham exatamente a linha de 12 colunas.
+   * `order: 5` e `size: 'MEDIUM'` o colocam à esquerda dos Indicadores
+   * Executivos (`order: 6`, `LARGE`): 4 + 8 fecham exatamente a linha de 12
+   * colunas, e os dois esticam juntos — um gráfico de proporção fixa ao lado de
+   * um painel de números é o par que o painel real pede.
    *
    * O Read Model deste widget é o genérico de segmento — como já acontece com
    * os indicadores executivos, quem serve os números é o Analytics, consultado
@@ -43,7 +45,23 @@ const globalWidgets: DashboardWidgetDefinition[] = [
     description: 'Prioridades, alertas e pendências que exigem ação.',
     category: 'ATTENTION',
     order: 10,
-    size: 'LARGE',
+    /**
+     * Largura inteira, e isto é **estrutural**, não estética.
+     *
+     * Um widget `FULL` fecha o trecho anterior e abre o seguinte: é assim que a
+     * arrumação do painel separa a primeira linha — radar ao lado dos Indicadores
+     * Executivos — do bloco do Financeiro, onde a Saúde Financeira fica à esquerda
+     * com o Índice de Saúde à direita e as Atividades e os Próximos Eventos embaixo.
+     *
+     * Antes era `LARGE`, e quem fechava o trecho eram os Indicadores, que ocupavam
+     * uma faixa própria. Com eles subindo para o lado do radar, ninguém mais fechava
+     * — e tudo abaixo virou um único bloco: a Saúde Financeira foi para a largura
+     * inteira e o Índice de Saúde perdeu o lugar ao lado dela.
+     *
+     * Uma lista de alertas também lê melhor atravessada do que em oito colunas com
+     * quatro vazias ao lado.
+     */
+    size: 'FULL',
     tags: ['global', 'attention', 'alerts'],
     supportedSegments: [],
     requiredModules: [],
@@ -56,8 +74,26 @@ const globalWidgets: DashboardWidgetDefinition[] = [
     title: 'Indicadores Executivos',
     description: 'Indicadores executivos consolidados da organização.',
     category: 'EXECUTIVE',
-    order: 20,
-    size: 'FULL',
+    /**
+     * Ao lado do radar, e não numa faixa própria.
+     *
+     * Era `order: 20` com `size: 'FULL'`: uma faixa de doze colunas só para
+     * cartões de número, logo abaixo de uma linha onde o radar ocupava quatro
+     * colunas e sobravam quatro vazias ao lado da Central de Atenção. Dois
+     * desperdícios na mesma dobra — espaço vazio em cima e uma faixa inteira
+     * embaixo para o que caberia nele.
+     *
+     * `order: 6` e `LARGE` o colocam na primeira linha, completando as oito
+     * colunas que faltavam — e os dois esticam juntos, então o radar termina onde
+     * os indicadores terminam.
+     *
+     * A Central de Atenção passou a `FULL` por consequência: alguém precisa fechar
+     * esta linha para o bloco do Financeiro começar com a Saúde Financeira à
+     * esquerda e o Índice de Saúde à direita. Sem isso, tudo abaixo vira um bloco
+     * só e a Saúde Financeira ocupa a largura inteira sozinha.
+     */
+    order: 6,
+    size: 'LARGE',
     tags: ['global', 'executive', 'kpi'],
     supportedSegments: [],
     requiredModules: [],

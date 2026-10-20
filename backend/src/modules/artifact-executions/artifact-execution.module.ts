@@ -8,8 +8,10 @@ import { ArtifactExecutionRepository } from './artifact-execution.repository';
 import { ArtifactExecutionService } from './artifact-execution.service';
 import { ArtifactExecutionStateMachine } from './artifact-execution.state-machine';
 import { ArtifactExecutionValidator } from './artifact-execution.validator';
+import { WorkforceModule } from '../workforce/workforce.module';
 
 @Module({
+  imports: [WorkforceModule],
   controllers: [ArtifactExecutionController],
   providers: [
     ArtifactExecutionService,

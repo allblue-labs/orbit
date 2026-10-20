@@ -302,7 +302,7 @@ function StudioWorkspace({
         </div>
       ) : null}
 
-      <Tabs defaultValue="estrutura" className="space-y-4">
+      <Tabs defaultValue="estrutura">
         <TabsList>
           <TabsTrigger value="estrutura">
             <LayoutTemplate className="size-4" />
@@ -343,7 +343,7 @@ function StudioWorkspace({
                   root={studio.document.structure}
                   selectedNodeId={studio.selectedNodeId}
                   readOnly={readOnly}
-                  emptyMessage="Nenhuma seção. O backend exige ao menos uma para publicar."
+                  emptyMessage="Nenhuma seção. É preciso ao menos uma para publicar."
                   addRootLabel="Adicionar seção"
                   onSelect={(nodeId) => studio.select(nodeId, "structure")}
                   onAddRoot={addSection}
@@ -515,7 +515,7 @@ function ReadOnlyNotice({
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface-strong/50 px-4 py-3 text-sm">
       <span className="text-muted-foreground">
         {platformOwned
-          ? "Este é um template da plataforma. O backend recusa alterações em templates globais — duplique para criar uma versão sua."
+          ? "Este é um modelo da plataforma e não pode ser alterado. Duplique-o para criar uma versão sua."
           : !canManage
             ? "Sua conta não tem permissão ou plano para alterar templates. A estrutura fica disponível para consulta."
             : "Template em modo de leitura."}

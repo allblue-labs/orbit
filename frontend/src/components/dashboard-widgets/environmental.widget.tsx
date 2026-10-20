@@ -45,7 +45,7 @@ export function EnvironmentalWidget({ widget, analytics }: WidgetProps) {
               <CloudSun className="size-4" />
               <AlertTitle>Fonte meteorológica simulada</AlertTitle>
               <AlertDescription>
-                O backend ainda não integra um provedor de clima. Estes números
+                Os dados de clima ainda não estão integrados ao Orbit. Estes números
                 não descrevem as condições reais da sua operação e não devem
                 embasar decisão de campo.
               </AlertDescription>

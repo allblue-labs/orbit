@@ -38,6 +38,12 @@ import {
   UpdateEventDto,
 } from './dto/scheduling.dto';
 import { SchedulingService } from './scheduling.service';
+import { PlanCapability } from '../subscription-plans/catalog/plan-catalog.types';
+import {
+  ProductCapabilities,
+  ProductFeature,
+  RequiresProductFeature,
+} from '../subscription-plans/product-access';
 
 @ApiTags('Scheduling Engine')
 @ApiBearerAuth()
@@ -250,6 +256,8 @@ export class SchedulingController {
   }
 
   @Get('intelligence')
+  @ProductCapabilities(PlanCapability.ORBIT_INTELLIGENCE)
+  @RequiresProductFeature(ProductFeature.SCHEDULING_INTELLIGENCE)
   @Capabilities('scheduling.intelligence')
   @Permissions('scheduling.intelligence.read')
   @ApiOperation({ summary: 'Return mocked Scheduling Intelligence contracts' })

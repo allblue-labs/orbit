@@ -1,13 +1,21 @@
 "use client";
 
-import { Search, Menu, PanelsTopLeft, LogOut, UserRound } from "lucide-react";
+import { Search, LogOut, UserRound } from "lucide-react";
 import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { NotificationBell } from "@/components/notifications/notification-bell";
+import { SubscriptionBadge } from "@/components/billing/subscription-badge";
 import { OrbitLogo } from "@/components/brand/orbit-logo";
+import { MobileNav } from "@/components/layout/mobile-nav";
+import { ThemeToggle } from "@/components/layout/theme-toggle";
+import type { NavItem } from "@/components/layout/sidebar";
+import { useAvatar } from "@/hooks/profile/use-me-media";
+import { initialsOf } from "@/lib/formatters";
+import { ROUTES } from "@/lib/routes";
+import { useOptionalSession } from "@/providers";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -20,14 +28,36 @@ import {
 
 export function Topbar({
   onOpenCommand,
+  navigation,
+  activeLabel,
   breadcrumb,
   className,
 }: {
   onOpenCommand: () => void;
+  navigation?: { group: string; items: NavItem[] }[];
+  activeLabel?: string;
   breadcrumb?: ReactNode;
   className?: string;
 }) {
   const router = useRouter();
+  const session = useOptionalSession();
+
+  /**
+   * A foto de quem está logado — que o topo simplesmente não tinha.
+   *
+   * O avatar era `OR` escrito à mão: nenhuma sessão, nenhuma consulta. Trocar a
+   * foto em Minha conta funcionava e o topo continuava igual, o que faz a
+   * pessoa trocar de novo achando que não salvou.
+   *
+   * A consulta é a mesma de Minha conta, com a mesma chave de cache: a troca já
+   * invalida essa chave, então o topo acompanha sem nada a mais. O endereço é
+   * assinado e expira — por isso `CACHE.fresh` lá, e por isso não guardamos a
+   * URL em lugar nenhum.
+   */
+  const avatar = useAvatar();
+  const foto = avatar.data?.available ? avatar.data.url : null;
+  const pessoa = session?.user?.displayName ?? null;
+  const iniciais = initialsOf(pessoa) || "?";
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -42,14 +72,12 @@ export function Topbar({
         className,
       )}
     >
-      <Button
-        variant="ghost"
-        size="icon"
-        aria-label="Abrir menu"
-        className="lg:hidden"
-      >
-        <Menu className="size-4" />
-      </Button>
+      {/*
+        * Aqui havia um botão "Abrir menu" sem `onClick`. Abaixo de `lg` a barra
+        * lateral é `hidden`, então quem entrasse pelo tablet ficava sem
+        * navegação alguma. Agora o botão é o gatilho da gaveta.
+        */}
+      <MobileNav navigation={navigation} activeLabel={activeLabel} />
       <div className="lg:hidden">
         <OrbitLogo variant="mark" />
       </div>
@@ -69,16 +97,25 @@ export function Topbar({
         </kbd>
       </button>
 
+      {/*
+        O estado da assinatura, quando há o que dizer.
+
+        Antes do sino de propósito: o vencimento muda o que a pessoa consegue
+        fazer em toda tela, e um aviso disso não deve ficar atrás de um
+        contador de notificações.
+      */}
+      <SubscriptionBadge />
+
       {/* Contador real de não lidas — ver components/notifications/notification-bell. */}
       <NotificationBell />
-      <Button
-        variant="ghost"
-        size="icon"
-        aria-label="Alternar painéis"
-        className="hidden sm:flex"
-      >
-        <PanelsTopLeft className="size-4" />
-      </Button>
+      {/*
+        Aqui havia um botão de "alternar painéis" **sem `onClick`**: um ícone
+        que existia desde o primeiro esqueleto da topbar e prometia um recurso
+        inexistente. Quem clicasse não fazia nada e concluía que estava quebrado.
+
+        O lugar passou a ser do tema, que é a troca que de fato acontece daqui.
+      */}
+      <ThemeToggle />
 
       <div className="flex items-center gap-2 pl-1">
         <Badge variant="outline" className="hidden lg:inline-flex">
@@ -86,20 +123,30 @@ export function Topbar({
         </Badge>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <button
+              className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label={pessoa ? `Conta de ${pessoa}` : "Minha conta"}
+            >
               <Avatar className="size-8 ring-1 ring-border">
+                {foto ? (
+                  <AvatarImage src={foto} alt="" />
+                ) : null}
                 <AvatarFallback className="bg-gradient-orbit text-xs font-semibold text-primary-foreground">
-                  OR
+                  {iniciais}
                 </AvatarFallback>
               </Avatar>
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-52">
-            <DropdownMenuLabel>Minha conta</DropdownMenuLabel>
+            <DropdownMenuLabel className="truncate">
+              {pessoa ?? "Minha conta"}
+            </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem disabled>
-              <UserRound className="size-4" />
-              Perfil
+            <DropdownMenuItem asChild>
+              <Link href={ROUTES.profile}>
+                <UserRound className="size-4" />
+                Minha conta
+              </Link>
             </DropdownMenuItem>
             <DropdownMenuItem
               onSelect={logout}

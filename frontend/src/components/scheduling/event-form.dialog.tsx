@@ -233,8 +233,7 @@ function EventForm({
           {editing ? "Editar evento" : "Novo evento na agenda"}
         </DialogTitle>
         <DialogDescription>
-          Horários no fuso {timeZone}. O backend valida janela, conflitos e
-          disponibilidade.
+          Horários no fuso {timeZone}. Janela, conflitos e disponibilidade são conferidos ao salvar.
         </DialogDescription>
       </DialogHeader>
 
@@ -302,7 +301,7 @@ function EventForm({
             ))}
           </datalist>
           <p className="text-xs text-muted-foreground">
-            Texto livre — o backend valida o formato, não uma lista.
+            Texto livre: apenas o formato é conferido.
           </p>
         </div>
 
@@ -369,7 +368,7 @@ function EventForm({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="event-unit">Unidade</Label>
+          <Label htmlFor="event-unit">Organização</Label>
           <Select
             value={form.businessUnitId || "__none__"}
             onValueChange={(value) =>
@@ -377,10 +376,10 @@ function EventForm({
             }
           >
             <SelectTrigger id="event-unit">
-              <SelectValue placeholder="Sem unidade" />
+              <SelectValue placeholder="Sem organização" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="__none__">Sem unidade</SelectItem>
+              <SelectItem value="__none__">Sem organização</SelectItem>
               {session.businessUnits.map((unit) => (
                 <SelectItem key={unit.id} value={unit.id}>
                   {unit.tradeName ?? unit.legalName}
@@ -551,7 +550,7 @@ function RecurrenceFields({
           ) : null}
 
           <p className="text-xs text-muted-foreground sm:col-span-3">
-            As ocorrências são geradas pelo backend a partir desta regra.
+            As ocorrências são geradas a partir desta regra.
           </p>
         </div>
       ) : null}

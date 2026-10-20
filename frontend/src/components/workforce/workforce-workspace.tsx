@@ -11,55 +11,83 @@
  * quem faz parte, com que papel, em que unidade, e o que cada um tem para
  * fazer.
  *
- * ## Oito abas, e de onde vem cada uma
+ * ## Seis abas, e de onde vem cada uma
  *
  * ```
- * GET /organizations/current/members    usuários e técnicos (paginado)
- * GET /organizations/current/roles      papéis e permissões
- * GET /identity/invitations             convites (paginado)
+ * GET /organizations/current/members    usuários (paginado)
  * GET /workforce/specialties            catálogo de especialidades
  * GET /workforce/certifications         habilitações e vencimentos
  * GET /workforce/teams                  equipes
- * GET /workforce/locations              últimas posições reportadas
  * GET /scheduling/availability          escalas — já existia
  * GET /operations?assignedUserId=       carga por pessoa
- * GET /artifact-executions?responsibleUserId=
- * GET /scheduling/events?userId=
  * ```
+ *
+ * ## O que saiu, e por quê
+ *
+ * Profissionais, Localização, Convites, Papéis e Inteligência. Eram onze abas
+ * numa linha: a barra quebrava e ninguém achava Usuários, que é o motivo de a
+ * tela existir.
+ *
+ * **Profissionais** mostrava ofício, credencial e assinatura — e não duplicava
+ * Técnicos, que mostra papel de acesso e carga. O dado continua inteiro em
+ * "Perfil profissional", dentro de cada membro; o que a remoção custa é a visão
+ * de elenco — ver de uma vez quem são os Responsáveis Técnicos. Vale registrar,
+ * porque é a única das cinco que levou informação junto.
+ *
+ * **Papéis** oferecia compor permissões à mão, e agora os papéis de técnico
+ * nascem prontos com a organização — quem precisa de um sob medida ainda tem o
+ * endpoint. **Convites** virou o caminho secundário desde que o owner cadastra
+ * a pessoa direto, com senha temporária. **Localização** e **Inteligência** eram
+ * leitura sem decisão associada; a de Inteligência era uma ausência declarada.
  *
  * **Escalas não ganharam modelo novo.** `SchedulingAvailability` já tinha tudo
  * — tipo, dia, horário, fuso e vigência — e é o que o motor de agenda consulta
  * ao detectar conflito. Um modelo paralelo divergiria na primeira folga
  * cadastrada só num deles.
  *
- * Cada aba tem `TabBoundary` próprio: uma falha em Papéis não derruba
+ * Cada aba tem `TabBoundary` próprio: uma falha em Escalas não derruba
  * Usuários.
  */
-import { UsersRound } from "lucide-react";
-
 import { ContentContainer } from "@/components/layout/page-primitives";
-import { PanelFrame } from "@/components/panels";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TabBoundary } from "@/workspace";
 import { WorkforceKpis } from "./workforce-kpis";
+import { useSectionFromUrl } from "@/hooks/use-section-from-url";
 import { CertificationsTab } from "./tabs/certifications.tab";
-import { InvitationsTab } from "./tabs/invitations.tab";
-import { LocationsTab } from "./tabs/locations.tab";
 import { MembersTab } from "./tabs/members.tab";
-import { RolesTab } from "./tabs/roles.tab";
 import { ShiftsTab } from "./tabs/shifts.tab";
 import { SpecialtiesTab } from "./tabs/specialties.tab";
 import { TeamsTab } from "./tabs/teams.tab";
 import { TechniciansTab } from "./tabs/technicians.tab";
 
+/** Os apelidos das seções, na ordem em que aparecem. */
+const SECOES = [
+  "usuarios",
+  "tecnicos",
+  "equipes",
+  "especialidades",
+  "certificacoes",
+  "escalas",
+] as const;
+
 export function WorkforceWorkspace() {
+  /*
+   * A aba aberta vive no endereço.
+   *
+   * Era `defaultValue`: a página abria sempre em Usuários, e um link para a aba
+   * Técnicos — o que a página de comissão de um técnico usa para voltar — caía
+   * na primeira aba. Com a seção no endereço, a volta chega onde saiu, e a aba
+   * pode ser guardada nos favoritos.
+   */
+  const section = useSectionFromUrl(SECOES);
+
   return (
     <ContentContainer size="wide" className="space-y-6">
       <TabBoundary id="workforce-kpis" label="os indicadores">
         <WorkforceKpis />
       </TabBoundary>
 
-      <Tabs defaultValue="usuarios" className="space-y-5">
+      <Tabs value={section.current} onValueChange={section.go}>
         <TabsList>
           <TabsTrigger value="usuarios">Usuários</TabsTrigger>
           <TabsTrigger value="tecnicos">Técnicos</TabsTrigger>
@@ -67,10 +95,6 @@ export function WorkforceWorkspace() {
           <TabsTrigger value="especialidades">Especialidades</TabsTrigger>
           <TabsTrigger value="certificacoes">Certificações</TabsTrigger>
           <TabsTrigger value="escalas">Escalas</TabsTrigger>
-          <TabsTrigger value="mapa">Localização</TabsTrigger>
-          <TabsTrigger value="convites">Convites</TabsTrigger>
-          <TabsTrigger value="papeis">Papéis</TabsTrigger>
-          <TabsTrigger value="inteligencia">Inteligência</TabsTrigger>
         </TabsList>
 
         <TabsContent value="usuarios">
@@ -108,66 +132,7 @@ export function WorkforceWorkspace() {
             <ShiftsTab />
           </TabBoundary>
         </TabsContent>
-
-        <TabsContent value="mapa">
-          <TabBoundary id="workforce-locations" label="a localização">
-            <LocationsTab />
-          </TabBoundary>
-        </TabsContent>
-
-        <TabsContent value="convites">
-          <TabBoundary id="workforce-invitations" label="os convites">
-            <InvitationsTab />
-          </TabBoundary>
-        </TabsContent>
-
-        <TabsContent value="papeis">
-          <TabBoundary id="workforce-roles" label="os papéis">
-            <RolesTab />
-          </TabBoundary>
-        </TabsContent>
-
-        <TabsContent value="inteligencia">
-          <TabBoundary id="workforce-intelligence" label="a inteligência">
-            <IntelligenceTab />
-          </TabBoundary>
-        </TabsContent>
       </Tabs>
     </ContentContainer>
-  );
-}
-
-/**
- * Orbit Intelligence — a ausência, declarada.
- *
- * `AiExecutionQueryDto` aceita `operationId` e `customerId`; **não aceita
- * `userId`** — verificado: `400 property userId should not exist`. Não há
- * execução de IA vinculada a uma pessoa.
- *
- * Mostrar aqui a IA da organização sugeriria que a análise é sobre a equipe, e
- * análise sobre pessoas é a que menos pode ser inventada.
- */
-function IntelligenceTab() {
-  return (
-    <PanelFrame
-      panelId="workforce-intelligence"
-      title="Orbit Intelligence"
-      description="Análises sobre a equipe"
-    >
-      <div className="flex min-h-32 flex-col items-center justify-center gap-3 text-center">
-        <UsersRound className="size-6 text-muted-foreground" aria-hidden />
-        <div className="max-w-lg space-y-2">
-          <p className="text-sm font-medium">Não há IA vinculada à equipe</p>
-          <p className="text-sm text-muted-foreground">
-            As execuções de IA aceitam operação e cliente como escopo, mas não
-            uma pessoa. Quando o contrato aceitar, esta aba passa a consumi-lo.
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Nenhuma análise é gerada aqui. Conclusão automática sobre o
-            desempenho de alguém é a que menos pode ser inventada.
-          </p>
-        </div>
-      </div>
-    </PanelFrame>
   );
 }

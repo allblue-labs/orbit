@@ -10,8 +10,12 @@
  *
  * - **E-mail** — é a chave de login (`@unique`) e o destino de recuperação de
  *   senha. Trocá-lo é mudar a identidade da conta, e o contrato não o aceita.
- * - **Foto** — `avatarUrl` é publicado na leitura mas recusado no `PATCH`, e
- *   não há endpoint de upload. A ausência é declarada, não escondida.
+ * ## O que mora ao lado
+ *
+ * **Foto** e **assinatura** são arquivos, não campos de formulário: têm upload
+ * próprio, validação de conteúdo e ciclo de vida separado. Ficam em painéis
+ * vizinhos nesta mesma aba porque são da pessoa — mas não entram no `PATCH`,
+ * que continua aceitando exatamente os seis campos acima.
  */
 import { useState } from "react";
 import { Mail, ShieldCheck } from "lucide-react";
@@ -26,8 +30,10 @@ import {
   useProfile,
   useUpdateProfile,
 } from "@/hooks/profile/use-profile";
-import { formatDateTime } from "@/lib/formatters";
+import { formatDateTime, initialsOf } from "@/lib/formatters";
 import { PROFILE_LIMITS, type UserProfile } from "@/types/settings";
+import { AvatarSection } from "./avatar.section";
+import { SignatureSection } from "./signature.section";
 
 export function PersonalDataTab() {
   const query = useProfile();
@@ -39,7 +45,30 @@ export function PersonalDataTab() {
     );
   }
 
-  return <Form key={query.data.updatedAt} profile={query.data} />;
+  return (
+    <div className="space-y-6">
+      {/*
+        Duas colunas: o que se digita à esquerda, quem você é à direita.
+
+        A foto ficava numa faixa abaixo do formulário, e a página pedia rolagem
+        para mostrar três blocos que cabem lado a lado. Aqui ela acompanha a
+        altura da coluna esquerda inteira — dados em cima, identidade embaixo —,
+        que é como a pessoa lê a própria conta: o retrato ao lado do cadastro.
+
+        Em telas estreitas a grade vira uma coluna só e a ordem do DOM vale: o
+        formulário primeiro, porque é o que se veio fazer.
+      */}
+      <div className="grid items-stretch gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <Form key={query.data.updatedAt} profile={query.data} />
+        <AvatarSection
+          initials={initialsOf(query.data.displayName)}
+          className="h-full"
+        />
+      </div>
+
+      <SignatureSection />
+    </div>
+  );
 }
 
 function Form({ profile }: { profile: UserProfile }) {
@@ -61,7 +90,7 @@ function Form({ profile }: { profile: UserProfile }) {
   };
 
   return (
-    <form onSubmit={submit} className="max-w-2xl space-y-6">
+    <form onSubmit={submit} className="flex h-full flex-col gap-6">
       <section className="glass-panel space-y-4 rounded-xl p-5">
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
@@ -123,7 +152,12 @@ function Form({ profile }: { profile: UserProfile }) {
       </section>
 
       <section className="space-y-3 rounded-xl border border-border p-5">
-        <h3 className="text-sm font-medium">Identidade da conta</h3>
+        {/*
+          * Cada bloco de "Minha conta" é uma seção logo abaixo do título da
+          * página, então o nível é `h2`. Eram `h3`, e quem navega por
+          * cabeçalhos pulava um degrau que não existia.
+          */}
+        <h2 className="text-sm font-medium">Identidade da conta</h2>
 
         <dl className="grid gap-4 sm:grid-cols-2">
           <div>
@@ -153,10 +187,6 @@ function Form({ profile }: { profile: UserProfile }) {
         <p className="text-xs text-muted-foreground">
           O e-mail é a chave de login e o destino da recuperação de senha —
           trocá-lo é mudar a identidade da conta, e o contrato não o aceita.
-        </p>
-        <p className="text-xs text-muted-foreground">
-          Foto de perfil ainda não é editável: o campo é publicado na leitura,
-          mas o backend não aceita escrevê-lo e não há upload de imagem.
         </p>
       </section>
     </form>
