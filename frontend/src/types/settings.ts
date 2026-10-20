@@ -39,6 +39,7 @@ export type DeviceSession = IdentityDeviceSessionReadModel;
  * mas escrito só internamente — não há upload de foto.
  */
 export interface UpdateProfileInput {
+  dismissWelcome?: true;
   firstName?: string;
   lastName?: string;
   displayName?: string;

@@ -219,6 +219,12 @@ export class ChangePasswordDto {
 }
 
 export class UpdateProfileDto {
+  /** Dismiss the welcome guide without changing any account configuration. */
+  @ApiPropertyOptional({ enum: [true] })
+  @IsOptional()
+  @IsIn([true])
+  dismissWelcome?: true;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

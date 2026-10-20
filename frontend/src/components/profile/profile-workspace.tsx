@@ -28,6 +28,7 @@ import { ContextTab } from "./context.tab";
 import { PersonalDataTab } from "./personal-data.tab";
 import { PreferencesTab } from "./preferences.tab";
 import { SecurityTab } from "./security.tab";
+import { WelcomeSetupButton } from "./welcome-setup";
 
 /** Os apelidos das seções, na ordem em que aparecem. */
 const SECOES = ["dados", "seguranca", "preferencias", "contexto"] as const;
@@ -37,6 +38,9 @@ export function ProfileWorkspace() {
 
   return (
     <ContentContainer size="wide" className="space-y-6">
+      <div className="flex justify-end">
+        <WelcomeSetupButton />
+      </div>
       <Tabs value={section.current} onValueChange={section.go}>
         {/*
           Rotulada porque não é a única lista de abas da página: a seção de

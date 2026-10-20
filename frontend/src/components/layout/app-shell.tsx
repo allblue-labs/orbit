@@ -3,8 +3,12 @@
 import { useState, type ReactNode } from "react";
 import { Sidebar, type NavItem } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
-import { CommandPalette, useCommandPalette } from "@/components/navigation/command-palette";
+import {
+  CommandPalette,
+  useCommandPalette,
+} from "@/components/navigation/command-palette";
 import { SubscriptionExpiredNotice } from "@/components/billing/subscription-expired.notice";
+import { WelcomeSetup } from "@/components/profile/welcome-setup";
 
 /**
  * Application shell: sidebar + topbar + command palette + main content slot.
@@ -46,6 +50,7 @@ export function AppShell({
         e descobrisse o estado só ao receber um erro ao salvar.
       */}
       <SubscriptionExpiredNotice />
+      <WelcomeSetup />
     </div>
   );
 }

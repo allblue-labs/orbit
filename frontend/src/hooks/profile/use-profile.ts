@@ -156,6 +156,14 @@ function useProfileInvalidation() {
   };
 }
 
+/** Dismissing the guide does not overwrite cached photo or MFA state with a PATCH projection. */
+export function useDismissWelcome() {
+  const invalidate = useProfileInvalidation();
+  return useApiMutation(() => profileService.update({ dismissWelcome: true }), {
+    onSuccess: invalidate,
+  });
+}
+
 export function useEnableMfa() {
   const invalidate = useProfileInvalidation();
   return useApiMutation(

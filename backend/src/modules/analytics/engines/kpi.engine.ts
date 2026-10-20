@@ -35,6 +35,14 @@ export class KpiEngine {
     const activeCustomers = snapshot.customers.filter(
       (customer) => customer.status === 'ACTIVE',
     ).length;
+    const samples = {
+      OPERATIONS: snapshot.operations.length,
+      PMOC: snapshot.pmocs.length,
+      EQUIPMENT: snapshot.assets.length,
+      TECHNICIANS: snapshot.operations.length,
+      CONTRACTS: snapshot.customers.length,
+      ENVIRONMENT: 0,
+    };
     const indicators: AnalyticsKpi[] = [
       this.kpi(
         'operations.total',
@@ -132,7 +140,10 @@ export class KpiEngine {
       generatedAt: new Date().toISOString(),
       period: this.period(snapshot),
       availability: [],
-      indicators,
+      indicators: indicators.map((indicator) => ({
+        ...indicator,
+        sampleSize: samples[indicator.domain],
+      })),
     };
   }
 
@@ -147,9 +158,7 @@ export class KpiEngine {
     return {
       total: operations.filter((op) => !CANCELLED.has(op.status)).length,
       completionRate: percent(completed.length, operations.length),
-      slaCompliance: eligible.length
-        ? percent(withinSla, eligible.length)
-        : 100,
+      slaCompliance: eligible.length ? percent(withinSla, eligible.length) : 0,
     };
   }
 

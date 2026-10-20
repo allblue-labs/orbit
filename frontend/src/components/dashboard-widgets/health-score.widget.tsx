@@ -15,6 +15,9 @@ import { PanelFrame, PanelState } from "@/components/panels";
 
 export function HealthScoreWidget({ widget, analytics }: WidgetProps) {
   const status = analytics.health.data?.status;
+  const hasData = analytics.health.data?.dimensions.some(
+    (dimension) => dimension.hasData !== false,
+  );
 
   return (
     <PanelFrame
@@ -22,7 +25,7 @@ export function HealthScoreWidget({ widget, analytics }: WidgetProps) {
       title={widget.title}
       description={widget.description}
       actions={
-        status ? (
+        status && hasData ? (
           <span
             className={cn(
               "rounded-md px-2 py-1 text-xs font-medium",
@@ -39,10 +42,16 @@ export function HealthScoreWidget({ widget, analytics }: WidgetProps) {
           <div className="space-y-5">
             <div className="flex items-baseline gap-2">
               <span className="font-display text-4xl font-semibold tracking-tight">
-                {Math.round(data.score)}
+                {hasData ? Math.round(data.score) : "—"}
               </span>
               <span className="text-sm text-muted-foreground">/ 100</span>
             </div>
+            {!hasData ? (
+              <p className="text-sm text-muted-foreground">
+                Seu índice aparecerá conforme você registrar atividades na
+                plataforma.
+              </p>
+            ) : null}
             <div className="space-y-3">
               {data.dimensions.map((dimension) => (
                 <DimensionRow key={dimension.id} dimension={dimension} />
@@ -65,12 +74,16 @@ function DimensionRow({ dimension }: { dimension: HealthDimension }) {
             peso {Math.round(dimension.weight * 100)}%
           </span>
           <span className="font-mono text-xs">
-            {Math.round(dimension.score)}
+            {dimension.hasData === false ? "—" : Math.round(dimension.score)}
           </span>
         </span>
       </div>
       <Progress value={dimension.score} aria-label={dimension.label} />
-      {dimension.drivers.length > 0 ? (
+      {dimension.hasData === false ? (
+        <p className="text-xs text-muted-foreground">
+          Ainda sem dados para avaliar.
+        </p>
+      ) : dimension.drivers.length > 0 ? (
         <p className="text-xs text-muted-foreground">
           {dimension.drivers.join(" · ")}
         </p>

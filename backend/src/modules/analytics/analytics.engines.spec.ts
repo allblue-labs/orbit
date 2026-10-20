@@ -96,4 +96,70 @@ describe('Analytics engines', () => {
     expect(health.score).toBeLessThanOrEqual(100);
     expect(health.dimensions).toHaveLength(5);
   });
+
+  it('does not invent health for an empty organization', () => {
+    const empty = new KpiEngine().execute({
+      ...snapshot,
+      operations: [],
+      previousOperations: [],
+      pmocs: [],
+      assets: [],
+      customers: [],
+    });
+    expect(empty.indicators.every((indicator) => indicator.value === 0)).toBe(
+      true,
+    );
+    const health = new HealthEngine().execute(empty, environment);
+    expect(health.score).toBe(0);
+    expect(
+      health.dimensions.every(
+        (dimension) => !dimension.hasData && dimension.score === 0,
+      ),
+    ).toBe(true);
+  });
+
+  it('does not grant SLA compliance before an operation can be evaluated', () => {
+    const kpis = new KpiEngine().execute({
+      ...snapshot,
+      operations: [snapshot.operations[1]],
+    });
+    expect(
+      kpis.indicators.find((item) => item.id === 'operations.sla_compliance')
+        ?.value,
+    ).toBe(0);
+  });
+
+  it('excludes empty domains from the score without hiding measured failures', () => {
+    const kpis = new KpiEngine().execute({
+      ...snapshot,
+      operations: [],
+      previousOperations: [],
+      pmocs: [],
+      assets: [],
+      customers: [{ status: 'ACTIVE' }],
+    });
+    const engine = new HealthEngine();
+    const health = engine.execute(kpis, environment);
+    expect(health.score).toBe(85);
+    expect(
+      engine.score(
+        health.dimensions.filter((item) => item.domain !== 'CONTRACTS'),
+      ),
+    ).toBe(0);
+
+    const failed = engine.execute(
+      new KpiEngine().execute({
+        ...snapshot,
+        operations: [],
+        previousOperations: [],
+        pmocs: [],
+        customers: [],
+        assets: [{ status: 'MAINTENANCE' }],
+      }),
+      environment,
+    );
+    expect(
+      failed.dimensions.find((item) => item.domain === 'EQUIPMENT'),
+    ).toMatchObject({ hasData: true, score: 0 });
+  });
 });

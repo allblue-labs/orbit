@@ -42,6 +42,8 @@ export type AnalyticsKpi = {
   changePercent: number;
   source: string;
   dataQuality: 'OBSERVED' | 'DERIVED' | 'PROXY' | 'MOCK';
+  /** Number of source records; zero means there is nothing to evaluate. */
+  sampleSize?: number;
 };
 
 export type KpiReadModel = {
@@ -76,6 +78,7 @@ export type HealthDimension = {
   weight: number;
   status: AnalyticsStatus;
   drivers: string[];
+  hasData?: boolean;
 };
 export type AnalyticsHealthReadModel = {
   generatedAt: string;
