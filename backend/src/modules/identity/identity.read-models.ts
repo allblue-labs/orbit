@@ -31,6 +31,8 @@ export interface IdentityProfileReadModel {
   /** A senha atual é provisória e precisa ser trocada antes de usar o sistema. */
   mustChangePassword: boolean;
   createdAt: string;
+  /** Persisted when the welcome guide is completed or skipped. */
+  welcomeDismissedAt?: string | null;
   updatedAt: string;
 }
 

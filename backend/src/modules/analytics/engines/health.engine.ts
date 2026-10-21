@@ -13,7 +13,7 @@ export class HealthEngine {
     kpis: KpiReadModel,
     environment: EnvironmentalImpactReadModel,
   ): AnalyticsHealthReadModel {
-    const value = (id: string, fallback = 100) =>
+    const value = (id: string, fallback = 0) =>
       kpis.indicators.find((item) => item.id === id)?.value ?? fallback;
     const dimensions: HealthDimension[] = [
       this.dimension(
@@ -49,17 +49,20 @@ export class HealthEngine {
         'contracts',
         'CONTRACTS',
         'Contratos',
-        value('contracts.active_proxy') > 0 ? 85 : 50,
+        value('contracts.active_proxy') > 0 ? 85 : 0,
         0.15,
         ['carteira ativa (proxy)'],
       ),
     ];
-    const score = round(
-      dimensions.reduce(
-        (sum, dimension) => sum + dimension.score * dimension.weight,
-        0,
-      ),
-    );
+    for (const dimension of dimensions) {
+      dimension.hasData = kpis.indicators.some(
+        (indicator) =>
+          indicator.domain === dimension.domain &&
+          (indicator.sampleSize ?? 0) > 0,
+      );
+      if (!dimension.hasData) dimension.score = 0;
+    }
+    const score = this.score(dimensions);
     return {
       generatedAt: new Date().toISOString(),
       score,
@@ -67,6 +70,23 @@ export class HealthEngine {
       availability: [],
       dimensions,
     };
+  }
+
+  /** Only measured dimensions participate in the consolidated score. */
+  score(dimensions: HealthDimension[]): number {
+    const measured = dimensions.filter((dimension) => dimension.hasData);
+    const weight = measured.reduce(
+      (sum, dimension) => sum + dimension.weight,
+      0,
+    );
+    return weight
+      ? round(
+          measured.reduce(
+            (sum, dimension) => sum + dimension.score * dimension.weight,
+            0,
+          ) / weight,
+        )
+      : 0;
   }
 
   private dimension(

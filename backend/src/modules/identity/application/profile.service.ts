@@ -60,6 +60,7 @@ export class ProfileService {
        * disparava — lia `mustChangePassword` de um perfil que não o continha.
        */
       mustChangePassword: user.credential?.mustChangePassword ?? false,
+      welcomeDismissedAt: user.welcomeDismissedAt ?? null,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };
@@ -85,8 +86,14 @@ export class ProfileService {
   }
 
   async update(userId: string, input: UpdateProfileDto) {
-    await this.requireUser(userId);
-    return this.repository.updateProfile(userId, input);
+    const user = await this.requireUser(userId);
+    const { dismissWelcome, ...data } = input;
+    return this.repository.updateProfile(userId, {
+      ...data,
+      ...(dismissWelcome
+        ? { welcomeDismissedAt: user.welcomeDismissedAt ?? new Date() }
+        : {}),
+    });
   }
 
   /**

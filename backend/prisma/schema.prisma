@@ -30,6 +30,7 @@ model User {
   status              String    @default("PENDING_VERIFICATION") @db.VarChar(40)
   emailVerifiedAt     DateTime? @map("email_verified_at") @db.Timestamptz(3)
   lastAuthenticatedAt DateTime? @map("last_authenticated_at") @db.Timestamptz(3)
+  welcomeDismissedAt  DateTime? @map("welcome_dismissed_at") @db.Timestamptz(3)
   createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt           DateTime? @map("deleted_at") @db.Timestamptz(3)

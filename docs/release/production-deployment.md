@@ -24,6 +24,13 @@ saída interpolada pode materializar segredos no terminal ou no CI.
    smoke local isolado. O mesmo `FRONTEND_ORIGIN` é injetado no frontend: ele é
    a autoridade da validação same-origin do BFF e não pode ser inferido do host
    interno do container ou do reverse proxy.
+7. Com `STORAGE_PROVIDER=LOCAL`, configure `STORAGE_LOCAL_PUBLIC_URL` com a URL
+   HTTPS pública da API, incluindo `/api/v1` (por exemplo,
+   `https://orbit.example.com/api/v1`). O padrão `localhost` do Compose é para
+   desenvolvimento: em um link aberto por outra máquina, ele aponta para essa
+   máquina. No Nginx, encaminhe `/api/v1/` para a API e deixe `/api/auth/`,
+   `/api/orbit/` e `/api/cep/` no Next.js. O frontend encaminha imagens do
+   storage local pelo BFF; links externos e clientes mobile usam a URL pública.
 
 ## Build reproduzível e provenance
 

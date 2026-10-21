@@ -492,21 +492,24 @@ const DEFINITIONS: readonly ActionDefinition[] = [
     },
   }),
   /**
-   * Editar membro e trocar papel não existem em contrato.
+   * Agora existe: `PATCH /organizations/current/team/members/:userId`.
    *
-   * Não há `PATCH /organizations/current/members/:id`, e `roleId` só é
-   * informado no convite. `available: false` declara a ausência em vez de
-   * esconder a ação — quando a rota existir, vira `true` e nada mais muda.
+   * A ação estava `available: false` com a justificativa de que nome e e-mail
+   * são do perfil de cada pessoa. Isso valia para quem se cadastrou sozinho — e
+   * não para quem o owner cadastrou digitando os dados, que é o caminho da
+   * equipe de campo. Lá o erro de digitação não tinha conserto: o nome errado
+   * saía em todo documento, e o e-mail errado tirava da pessoa o próprio fluxo
+   * público de recuperar senha.
+   *
+   * Foto, telefone e senha continuam só com ela, em `identity/me`.
    */
   define({
     id: "team-member.update",
     entity: "team-member",
-    label: "Editar membro",
+    label: "Editar usuário",
     icon: Pencil,
     category: "edit",
-    available: false,
-    unavailableReason:
-      "Nome, e-mail e foto pertencem ao perfil de cada pessoa, e só ela pode alterá-los.",
+    permission: "organization.members.update",
   }),
   define({
     id: "team-member.change-role",
@@ -516,7 +519,7 @@ const DEFINITIONS: readonly ActionDefinition[] = [
     category: "workflow",
     available: false,
     unavailableReason:
-      "Não há rota para alterar o papel de um membro. O papel é definido no convite e só muda por lá.",
+      "O papel muda junto com as permissões e o escopo, em \u201cPapel e situa\u00e7\u00e3o\u201d — trocá-lo sozinho deixaria o acesso personalizado apontando para o papel antigo.",
   }),
   define({
     id: "team-member.deactivate",
@@ -526,7 +529,7 @@ const DEFINITIONS: readonly ActionDefinition[] = [
     category: "workflow",
     available: false,
     unavailableReason:
-      "A coluna de situação da associação existe e é publicada, mas nenhuma rota a escreve.",
+      "A situação da associação é alterada em \u201cPapel e situa\u00e7\u00e3o\u201d, junto com o resto do acesso.",
   }),
 
   /* ---------------------------------------------------------------- */

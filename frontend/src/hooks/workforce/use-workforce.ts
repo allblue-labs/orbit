@@ -51,6 +51,7 @@ import type {
   UpdateRoleInput,
   UpdateSpecialtyInput,
   UpdateTeamInput,
+  UpdateTeamMemberInput,
   CreateTeamMemberInput,
 } from "@/types/workforce";
 
@@ -469,6 +470,25 @@ export function useCreateTeamMember() {
   return useApiMutation(
     (input: CreateTeamMemberInput) => workforceService.createTeamMember(input),
     { onSuccess: invalidate },
+  );
+}
+
+/**
+ * Corrige nome e e-mail de quem a organização cadastrou.
+ *
+ * Invalida a mesma coisa que `useUpdateMember`: o nome aparece na listagem, na
+ * página da pessoa e em tudo que a nomeia.
+ */
+export function useUpdateTeamMember(userId: string) {
+  const invalidate = useMemberInvalidation();
+  return useApiMutation(
+    (input: UpdateTeamMemberInput) =>
+      workforceService.updateTeamMember(userId, input),
+    {
+      onSuccess: invalidate,
+      scope: { id: `member:${userId}` },
+      notify: "Dados do usuário atualizados.",
+    },
   );
 }
 

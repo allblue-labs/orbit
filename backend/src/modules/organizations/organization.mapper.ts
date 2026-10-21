@@ -79,6 +79,8 @@ interface MemberSource {
   user: {
     id: string;
     displayName: string;
+    firstName: string;
+    lastName: string;
     email: string;
     avatarUrl: string | null;
     status: string;
@@ -209,6 +211,8 @@ export class OrganizationReadModelMapper {
     return {
       userId: source.userId,
       displayName: source.user.displayName,
+      firstName: source.user.firstName,
+      lastName: source.user.lastName,
       email: source.user.email,
       avatarUrl: source.user.avatarUrl,
       /** Status da associação, não da conta: quem saiu não recebe trabalho. */

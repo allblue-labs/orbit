@@ -6,7 +6,13 @@
  * hydration, `key` faltando, input que troca de controlado para não
  * controlado — passa despercebido em navegação manual e reprova aqui.
  */
-import { expect, type ConsoleMessage, type Page, type Request } from "@playwright/test";
+import {
+  expect,
+  type ConsoleMessage,
+  type Page,
+  type Request,
+} from "@playwright/test";
+import type { SessionState } from "../src/types/session";
 
 export const OWNER = {
   email: process.env.ORBIT_OWNER_EMAIL ?? "owner@orbit.local",
@@ -43,7 +49,8 @@ export function record(page: Page): Recorder {
   const failedRequests: string[] = [];
   const reactWarnings: string[] = [];
 
-  const relevant = (text: string) => !IGNORED.some((pattern) => pattern.test(text));
+  const relevant = (text: string) =>
+    !IGNORED.some((pattern) => pattern.test(text));
 
   page.on("console", (message: ConsoleMessage) => {
     const text = message.text();
@@ -55,7 +62,8 @@ export function record(page: Page): Recorder {
   page.on("requestfailed", (request: Request) => {
     const failure = request.failure()?.errorText ?? "";
     /** Cancelamento é comportamento esperado — o app aborta o que ficou velho. */
-    if (failure.includes("ERR_ABORTED") || failure.includes("net::ERR_ABORTED")) return;
+    if (failure.includes("ERR_ABORTED") || failure.includes("net::ERR_ABORTED"))
+      return;
     if (!relevant(request.url())) return;
     failedRequests.push(`${request.method()} ${request.url()} — ${failure}`);
   });
@@ -76,8 +84,28 @@ export async function login(page: Page): Promise<void> {
   await page.goto("/login");
   await page.getByLabel(/e-?mail/i).fill(OWNER.email);
   await page.getByLabel(/senha/i).first().fill(OWNER.password);
-  await page.getByRole("button", { name: "Entrar", exact: true }).click();
+  const [response] = await Promise.all([
+    page.waitForResponse(async (response) => {
+      if (!response.url().endsWith("/api/auth/session") || !response.ok())
+        return false;
+      const state = (await response.json()).data as SessionState;
+      return state.authenticated;
+    }),
+    page.getByRole("button", { name: "Entrar", exact: true }).click(),
+  ]);
   await page.waitForURL(/\/(dashboard|)$/, { timeout: 30_000 });
+  const state = (await response.json()).data as SessionState;
+  // Other journeys start after welcome; the guide has its own browser coverage.
+  if (
+    state.authenticated &&
+    state.subscriptionActive &&
+    !state.requiresPasswordChange &&
+    !state.user.welcomeDismissedAt
+  ) {
+    const guide = page.getByRole("dialog", { name: "Seu espaço começa aqui" });
+    await guide.getByRole("button", { name: "Pular e fazer depois" }).click();
+    await expect(guide).toHaveCount(0);
+  }
 }
 
 /** A página parou de buscar? Evita asserção sobre esqueleto. */

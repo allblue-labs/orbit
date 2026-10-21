@@ -63,14 +63,7 @@ export class AnalyticsService implements AnalyticsReadPort {
     const dimensions = rawHealth.dimensions.filter((item) =>
       access.domains.has(item.domain),
     );
-    const totalWeight = dimensions.reduce((sum, item) => sum + item.weight, 0);
-    const healthScore = totalWeight
-      ? Math.round(
-          (dimensions.reduce((sum, item) => sum + item.score * item.weight, 0) /
-            totalWeight) *
-            100,
-        ) / 100
-      : 0;
+    const healthScore = this.healthEngine.score(dimensions);
     const health = {
       ...rawHealth,
       score: healthScore,

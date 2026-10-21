@@ -253,6 +253,82 @@ export class TeamService {
     };
   }
 
+  /**
+   * Corrige nome e e-mail de quem a organização cadastrou.
+   *
+   * ## Por que a organização pode, se o perfil é da pessoa
+   *
+   * `createMember` existe porque boa parte de uma equipe de campo não conclui um
+   * cadastro sozinha: quem digitou o nome e o e-mail foi o owner. Um erro de
+   * digitação ali deixava a pessoa com o nome errado em todo documento emitido —
+   * e com um e-mail que ninguém lê, portanto sem o caminho público de recuperar
+   * senha para se corrigir. O perfil continua sendo dela: foto, telefone e senha
+   * só ela altera, em `identity/me`.
+   *
+   * ## O dono fica fora
+   *
+   * Mesma razão de `issuePasswordLink`: quem administrasse a organização poderia
+   * apontar o e-mail do dono para um endereço próprio e, com o fluxo público de
+   * recuperação, assumir a conta. O dono corrige os próprios dados no perfil.
+   */
+  async updateMemberIdentity(
+    actor: TeamActor,
+    userId: string,
+    input: { email?: string; firstName?: string; lastName?: string },
+  ) {
+    if (
+      input.email === undefined &&
+      input.firstName === undefined &&
+      input.lastName === undefined
+    ) {
+      throw new ValidationException('Nothing to update');
+    }
+
+    const membro = await this.team.findMember(actor.organizationId, userId);
+    if (!membro) throw new EntityNotFoundException('Member', userId);
+    await this.assertMemberInActorScope(actor, userId);
+
+    const organizacao = await this.organizations.findCurrent(
+      actor.organizationId,
+    );
+    if (organizacao?.ownerUserId === userId) {
+      throw new ValidationException(
+        'The organization owner updates their own name and e-mail in the profile',
+      );
+    }
+
+    const email = input.email?.trim();
+    const resultado = await this.team.updateMemberIdentity({
+      organizationId: actor.organizationId,
+      userId,
+      actorId: actor.userId,
+      email,
+      normalizedEmail: email?.toLowerCase(),
+      firstName: input.firstName?.trim(),
+      lastName: input.lastName?.trim(),
+    });
+
+    if ('missing' in resultado)
+      throw new EntityNotFoundException('Member', userId);
+    if ('conflict' in resultado) {
+      /** Mesma frase do cadastro: dizer em qual organização o e-mail já existe
+          contaria a quem edita onde aquela pessoa também trabalha. */
+      throw new ConflictException('This e-mail already has an Orbit account');
+    }
+
+    const atualizado = await this.team.findMember(actor.organizationId, userId);
+    if (!atualizado) throw new EntityNotFoundException('Member', userId);
+    const unitMemberships = (
+      await this.organizations.listBusinessUnitMemberships(actor.organizationId)
+    ).filter((item) => item.userId === userId);
+
+    return {
+      member: atualizado,
+      ownerUserId: organizacao?.ownerUserId ?? '',
+      unitMemberships,
+    };
+  }
+
   async removeMember(actor: TeamActor, userId: string) {
     const organizacao = await this.organizations.findCurrent(
       actor.organizationId,

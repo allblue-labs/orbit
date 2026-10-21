@@ -214,7 +214,7 @@ export function MembersTab() {
                 <TableRow>
                   <TableHead>Pessoa</TableHead>
                   <TableHead>Papel</TableHead>
-                  <TableHead>Unidades</TableHead>
+                  <TableHead>Organizações</TableHead>
                   <TableHead>Situação</TableHead>
                   <TableHead>Desde</TableHead>
                   <TableHead className="text-right">Ação</TableHead>
@@ -337,6 +337,9 @@ export function MembersTab() {
         onOpenChange={(open) => {
           if (!open) setEditing(null);
         }}
+        onResetPassword={
+          editing ? () => passwordLink.mutate(editing.userId) : undefined
+        }
       />
     </div>
   );
@@ -386,13 +389,15 @@ function MemberRowActions({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
+        {/* "Editar usuário" é o que se procura para arrumar um cadastro — o
+            diálogo abre com os dados da pessoa e o acesso dela, nessa ordem. */}
         <DropdownMenuItem onSelect={onEdit}>
           <Pencil className="size-4" />
-          Papel e situação
+          Editar usuário
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={onPasswordLink}>
           <KeyRound className="size-4" />
-          Gerar link de senha
+          Redefinir senha
         </DropdownMenuItem>
         <DropdownMenuItem
           onSelect={onDismiss}

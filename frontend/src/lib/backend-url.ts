@@ -14,8 +14,11 @@
  * vira `/api/orbit/x`. Esta função é essa tradução, num lugar só — qualquer
  * `<img src>` ou download que receba caminho do backend passa por aqui.
  *
- * URL absoluta é devolvida intacta: o endereço assinado do Storage já vem com
- * host próprio e não passa pelo proxy.
+ * O storage LOCAL também passa pelo BFF: sua URL absoluta pode conter
+ * localhost, um host do Docker ou HTTP atrás do TLS do proxy. A assinatura
+ * local cobre o objeto, a operação e a expiração, e continua válida quando
+ * a mesma query é encaminhada pela nossa origem. URLs externas (S3/MinIO)
+ * conservam o host e o caminho que participam da assinatura do provider.
  */
 import { BFF_BASE_PATH } from "./env";
 
@@ -26,8 +29,23 @@ export function browserUrlFor(url: string): string {
   const valor = url.trim();
   if (valor === "") return valor;
 
-  /* Absoluto — inclusive `blob:` e `data:` — não é caminho de backend. */
+  /* Só a rota e os parâmetros próprios do storage LOCAL permitem descartar
+     o host. Reescrever qualquer URL externa quebraria assinaturas S3/MinIO. */
   if (/^[a-z][a-z0-9+.-]*:/i.test(valor) || valor.startsWith("//")) {
+    try {
+      const parsed = new URL(valor.startsWith("//") ? `https:${valor}` : valor);
+      const localStorage =
+        ["http:", "https:"].includes(parsed.protocol) &&
+        parsed.pathname === `${API_PREFIX}/storage/objects` &&
+        ["bucket", "key", "operation", "expires", "signature"].every((key) =>
+          parsed.searchParams.has(key),
+        );
+      if (localStorage) {
+        return `${BFF_BASE_PATH}/storage/objects${parsed.search}${parsed.hash}`;
+      }
+    } catch {
+      // O helper não transforma um endereço inválido em erro de renderização.
+    }
     return valor;
   }
 

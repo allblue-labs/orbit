@@ -27,6 +27,7 @@ interface ProfileSource {
   mfaEnabled?: boolean;
   mfaFactors?: readonly unknown[];
   mustChangePassword?: boolean;
+  welcomeDismissedAt?: NullableDateValue;
 }
 
 interface DeviceSessionSource {
@@ -70,6 +71,7 @@ export class IdentityReadModelMapper {
       mfaEnabled: source.mfaEnabled ?? Boolean(source.mfaFactors?.length),
       mustChangePassword: source.mustChangePassword ?? false,
       createdAt: this.date(source.createdAt),
+      welcomeDismissedAt: this.nullableDate(source.welcomeDismissedAt ?? null),
       updatedAt: this.date(source.updatedAt),
     };
   }
