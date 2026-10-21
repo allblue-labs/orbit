@@ -261,7 +261,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('VALOR DO ATENDIMENTO'), findsOneWidget);
-    expect(find.text('Orçamento vinculado não informado'), findsOneWidget);
+    expect(find.text('Valor do atendimento não informado'), findsOneWidget);
   });
 }
 
