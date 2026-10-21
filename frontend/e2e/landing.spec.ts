@@ -26,7 +26,9 @@ const ETAPAS = [
   "O documento sai pronto",
 ] as const;
 
-test("a página conta a cadeia de um atendimento, na ordem", async ({ page }) => {
+test("a página conta a cadeia de um atendimento, na ordem", async ({
+  page,
+}) => {
   const recorder = record(page);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/");
@@ -45,6 +47,46 @@ test("a página conta a cadeia de um atendimento, na ordem", async ({ page }) =>
   await expect(etapas.getByRole("listitem")).toHaveText(
     ETAPAS.map((titulo) => new RegExp(titulo)),
   );
+
+  const mobile = page.getByRole("region", {
+    name: "O Orbit também vai a campo",
+    exact: true,
+  });
+  await expect(mobile).toContainText("é nele que todo o atendimento acontece");
+  await expect(mobile).toContainText(
+    "Fotos, checklists e informações ficam registrados",
+  );
+  for (const [store, href] of [
+    [
+      "Google Play",
+      process.env.ORBIT_MOBILE_PLAY_STORE_URL ||
+        "https://example.com/orbit/android",
+    ],
+    [
+      "App Store",
+      process.env.ORBIT_MOBILE_APP_STORE_URL || "https://example.com/orbit/ios",
+    ],
+  ]) {
+    const link = mobile.getByRole("link", {
+      name: `Abrir Orbit Mobile na ${store} (nova aba)`,
+      exact: true,
+    });
+    await expect(link).toHaveAttribute("href", href);
+    await expect(link).toHaveAttribute("target", "_blank");
+    await expect(link).toHaveAttribute("rel", "noopener noreferrer");
+  }
+  expect(
+    await mobile.evaluate(
+      (section) =>
+        section.parentElement?.lastElementChild === section &&
+        section.parentElement.nextElementSibling?.tagName === "FOOTER",
+    ),
+  ).toBe(true);
+  await expect(
+    page
+      .getByRole("contentinfo")
+      .getByRole("link", { name: "App mobile", exact: true }),
+  ).toHaveAttribute("href", "#app-mobile");
 
   assertClean(recorder, "landing");
 });
@@ -146,5 +188,10 @@ for (const largura of [375, 768, 1440]) {
       () => document.documentElement.scrollWidth > window.innerWidth + 1,
     );
     expect(vazou).toBe(false);
+    await page
+      .locator("#app-mobile")
+      .screenshot({
+        path: test.info().outputPath(`landing-mobile-app-${largura}.png`),
+      });
   });
 }

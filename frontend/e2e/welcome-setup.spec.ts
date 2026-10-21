@@ -179,7 +179,7 @@ test("first visit can be skipped, stays dismissed after reload and can be reopen
   expect(errors).toEqual([]);
 });
 
-test("reuses photo, signature and MFA controls in a mobile wizard", async ({
+test("reuses account controls and ends with the mobile app on a small screen", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -202,16 +202,116 @@ test("reuses photo, signature and MFA controls in a mobile wizard", async ({
   await expect(
     guide.getByRole("button", { name: "Configurar", exact: true }),
   ).toBeVisible();
+  await expect(guide.getByText("Passo 3 de 4", { exact: true })).toBeVisible();
+  await expect(
+    guide.getByRole("button", { name: "Concluir", exact: true }),
+  ).toHaveCount(0);
+  await guide.getByRole("button", { name: "Continuar", exact: true }).click();
+  await expect(
+    guide.getByRole("heading", {
+      name: "O Orbit também vai a campo",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(guide.getByText("Passo 4 de 4", { exact: true })).toBeVisible();
+  await expect(guide).toContainText("é nele que todo o atendimento acontece");
+  await expect(guide).toContainText(
+    "Fotos, checklists e informações ficam registrados",
+  );
+  const playStore = guide.getByRole("link", {
+    name: "Abrir Orbit Mobile na Google Play (nova aba)",
+    exact: true,
+  });
+  const appStore = guide.getByRole("link", {
+    name: "Abrir Orbit Mobile na App Store (nova aba)",
+    exact: true,
+  });
+  await expect(playStore).toHaveAttribute(
+    "href",
+    process.env.ORBIT_MOBILE_PLAY_STORE_URL ||
+      "https://example.com/orbit/android",
+  );
+  await expect(appStore).toHaveAttribute(
+    "href",
+    process.env.ORBIT_MOBILE_APP_STORE_URL || "https://example.com/orbit/ios",
+  );
+  for (const link of [playStore, appStore]) {
+    await expect(link).toHaveAttribute("target", "_blank");
+    await expect(link).toHaveAttribute("rel", "noopener noreferrer");
+  }
+  expect(patches).toEqual([]);
+  await guide.getByRole("button", { name: "Voltar", exact: true }).click();
+  await expect(
+    guide.getByRole("heading", {
+      name: "Autenticação em dois fatores",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await guide.getByRole("button", { name: "Continuar", exact: true }).click();
+  await expect(
+    guide.getByRole("heading", {
+      name: "O Orbit também vai a campo",
+      exact: true,
+    }),
+  ).toBeVisible();
   const bounds = await guide.boundingBox();
   expect(bounds!.x).toBeGreaterThanOrEqual(0);
   expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390);
   expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(844);
+  expect(
+    await guide.evaluate(
+      (element) => element.scrollWidth <= element.clientWidth,
+    ),
+  ).toBe(true);
   await guide.screenshot({
     path: test.info().outputPath("welcome-mobile.png"),
   });
   await guide.getByRole("button", { name: "Concluir", exact: true }).click();
   await expect(guide).toHaveCount(0);
   expect(patches).toEqual([{ dismissWelcome: true }]);
+  await page.reload();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
+test("the mobile app introduction can be revisited and skipped on desktop", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const patches = await newAccount(page, { dismissed: true });
+  await page.goto("/perfil");
+  await page
+    .getByRole("button", { name: "Configuração guiada", exact: true })
+    .click();
+  const guide = page.getByRole("dialog");
+  await guide
+    .getByRole("button", { name: "Vamos começar", exact: true })
+    .click();
+  for (let step = 0; step < 3; step++) {
+    await guide.getByRole("button", { name: "Continuar", exact: true }).click();
+  }
+  await expect(
+    guide.getByRole("heading", {
+      name: "O Orbit também vai a campo",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    guide.getByRole("link", { name: /Abrir Orbit Mobile na Google Play/ }),
+  ).toBeVisible();
+  await expect(
+    guide.getByRole("link", { name: /Abrir Orbit Mobile na App Store/ }),
+  ).toBeVisible();
+  expect(patches).toEqual([]);
+  await guide.screenshot({
+    path: test.info().outputPath("welcome-mobile-app-desktop.png"),
+  });
+  await guide
+    .getByRole("button", { name: "Pular e fazer depois", exact: true })
+    .click();
+  await expect(guide).toHaveCount(0);
+  expect(patches).toEqual([{ dismissWelcome: true }]);
+  expect(errors).toEqual([]);
 });
 
 test("a failed save keeps the guide open and allows retry", async ({
