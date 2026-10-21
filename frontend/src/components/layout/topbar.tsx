@@ -17,6 +17,7 @@ import { initialsOf } from "@/lib/formatters";
 import { ROUTES } from "@/lib/routes";
 import { useOptionalSession } from "@/providers";
 import { cn } from "@/lib/utils";
+import { browserUrlFor } from "@/lib/backend-url";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -73,10 +74,10 @@ export function Topbar({
       )}
     >
       {/*
-        * Aqui havia um botão "Abrir menu" sem `onClick`. Abaixo de `lg` a barra
-        * lateral é `hidden`, então quem entrasse pelo tablet ficava sem
-        * navegação alguma. Agora o botão é o gatilho da gaveta.
-        */}
+       * Aqui havia um botão "Abrir menu" sem `onClick`. Abaixo de `lg` a barra
+       * lateral é `hidden`, então quem entrasse pelo tablet ficava sem
+       * navegação alguma. Agora o botão é o gatilho da gaveta.
+       */}
       <MobileNav navigation={navigation} activeLabel={activeLabel} />
       <div className="lg:hidden">
         <OrbitLogo variant="mark" />
@@ -128,9 +129,7 @@ export function Topbar({
               aria-label={pessoa ? `Conta de ${pessoa}` : "Minha conta"}
             >
               <Avatar className="size-8 ring-1 ring-border">
-                {foto ? (
-                  <AvatarImage src={foto} alt="" />
-                ) : null}
+                {foto ? <AvatarImage src={browserUrlFor(foto)} alt="" /> : null}
                 <AvatarFallback className="bg-gradient-orbit text-xs font-semibold text-primary-foreground">
                   {iniciais}
                 </AvatarFallback>

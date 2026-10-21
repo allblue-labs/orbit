@@ -19,10 +19,39 @@ describe("browserUrlFor", () => {
   });
 
   it("não mexe em URL absoluta", () => {
-    /* O endereço assinado do Storage tem host próprio e não passa pelo proxy. */
+    /* Endereços externos que não são a rota do storage local ficam intactos. */
     const assinada = "http://localhost:6001/api/v1/files/abc?signature=x";
 
     expect(browserUrlFor(assinada)).toBe(assinada);
+  });
+
+  it.each([
+    "http://localhost:6001",
+    "http://api:5001",
+    "https://orbit.example.com",
+    "//internal-api:5001",
+  ])(
+    "encaminha a foto do storage local pela origem do frontend: %s",
+    (origin) => {
+      const query =
+        "?bucket=orbit-artifacts&key=avatars%2Ffoto%20perfil.png&operation=download&expires=2000000000&signature=abc123&filename=Foto%20de%20perfil.png";
+      expect(browserUrlFor(`${origin}/api/v1/storage/objects${query}`)).toBe(
+        `/api/orbit/storage/objects${query}`,
+      );
+    },
+  );
+
+  it("preserva URLs assinadas de object stores externos", () => {
+    const s3 =
+      "https://bucket.s3.amazonaws.com/avatar.png?X-Amz-Signature=abc&X-Amz-Expires=300";
+    expect(browserUrlFor(s3)).toBe(s3);
+    const external =
+      "https://cdn.example.com/api/v1/storage/objects?X-Amz-Signature=abc";
+    expect(browserUrlFor(external)).toBe(external);
+  });
+
+  it("não transforma uma URL absoluta inválida em erro de renderização", () => {
+    expect(browserUrlFor("http://[invalid")).toBe("http://[invalid");
   });
 
   it("não mexe em blob nem data URI", () => {

@@ -3,7 +3,11 @@ import { expect, test, type Page } from "@playwright/test";
 /** UI-only fixtures: the navigation cookie and all API responses are synthetic. */
 async function newAccount(
   page: Page,
-  options: { dismissed?: boolean; failDismissal?: boolean } = {},
+  options: {
+    dismissed?: boolean;
+    failDismissal?: boolean;
+    avatarUrl?: string;
+  } = {},
 ) {
   const profile = {
     id: "welcome-user",
@@ -85,7 +89,12 @@ async function newAccount(
       }
       data = profile;
     } else if (path.endsWith("/identity/me/avatar")) {
-      data = { available: false, url: null, expiresAt: null, updatedAt: null };
+      data = {
+        available: Boolean(options.avatarUrl),
+        url: options.avatarUrl ?? null,
+        expiresAt: null,
+        updatedAt: null,
+      };
     } else if (path.endsWith("/identity/me/signature")) {
       data = {
         signatureAvailable: false,
@@ -237,4 +246,47 @@ test("an empty account shows unmeasured health instead of scores or a critical b
   await expect(health.getByText("—", { exact: true })).toHaveCount(3);
   await expect(health).not.toContainText(/crític/i);
   expect(errors).toEqual([]);
+});
+
+test("the profile photo and topbar load through the frontend when storage points to localhost", async ({
+  page,
+}) => {
+  const query =
+    "?bucket=orbit-artifacts&key=avatars%2Fowner.png&operation=download&expires=2000000000&signature=abc123";
+  await newAccount(page, {
+    dismissed: true,
+    avatarUrl: `http://localhost:6001/api/v1/storage/objects${query}`,
+  });
+  const imageRequests: string[] = [];
+  await page.route("**/api/orbit/storage/objects?**", async (route) => {
+    imageRequests.push(new URL(route.request().url()).search);
+    await route.fulfill({
+      contentType: "application/octet-stream",
+      headers: {
+        "X-Content-Type-Options": "nosniff",
+        "Content-Disposition": 'attachment; filename="profile.png"',
+      },
+      body: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+        "base64",
+      ),
+    });
+  });
+  await page.goto("/perfil");
+  const image = page.getByTestId("profile-avatar-preview").locator("img");
+  await expect(image).toHaveAttribute(
+    "src",
+    `/api/orbit/storage/objects${query}`,
+  );
+  await expect
+    .poll(() =>
+      image.evaluate((image) => (image as HTMLImageElement).naturalWidth),
+    )
+    .toBeGreaterThan(0);
+  // Radix only renders the topbar <img> after loading succeeds.
+  await expect(
+    page.locator(`header img[src^="/api/orbit/storage/objects"]`),
+  ).toHaveCount(1);
+  expect(imageRequests.length).toBeGreaterThan(0);
+  expect(imageRequests.every((search) => search === query)).toBe(true);
 });

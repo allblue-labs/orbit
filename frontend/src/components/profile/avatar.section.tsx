@@ -22,6 +22,7 @@ import { Trash2, Upload, UserRound } from "lucide-react";
 import { AvatarCropDialog } from "@/components/profile/avatar-crop.dialog";
 import { MutationError } from "@/components/artifact-studio/mutation-error";
 import { cn } from "@/lib/utils";
+import { browserUrlFor } from "@/lib/backend-url";
 import { PanelFrame, PanelState, toPanelQuery } from "@/components/panels";
 import { Button } from "@/components/ui/button";
 import {
@@ -111,7 +112,7 @@ export function AvatarSection({
                  */
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={avatar.url}
+                  src={browserUrlFor(avatar.url)}
                   alt="Sua foto de perfil"
                   className="size-full object-cover"
                 />
