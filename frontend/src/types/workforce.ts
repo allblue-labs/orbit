@@ -323,6 +323,20 @@ export interface CreateTeamMemberInput {
 }
 
 /**
+ * `PATCH /organizations/current/team/members/:userId`.
+ *
+ * Corrige o que a organização digitou no cadastro. Separado de
+ * `UpdateMemberInput`, que é papel, situação e permissões: são a mesma
+ * autorização e decisões de gravidade diferente, e o servidor as mantém em duas
+ * rotas por isso.
+ */
+export interface UpdateTeamMemberInput {
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+}
+
+/**
  * A resposta do cadastro.
  *
  * `temporaryPassword` existe **só aqui**. Nenhuma consulta a devolve e não há

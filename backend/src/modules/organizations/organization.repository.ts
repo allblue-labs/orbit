@@ -40,6 +40,8 @@ const ROLE_VIEW = {
 const memberUserView = {
   id: true,
   displayName: true,
+  firstName: true,
+  lastName: true,
   email: true,
   avatarUrl: true,
   status: true,

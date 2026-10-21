@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  Patch,
   Post,
   Req,
 } from '@nestjs/common';
@@ -15,7 +16,7 @@ import { ParseUUIDv7Pipe } from '../../../pipes';
 import type { IdentityRequest } from '../../identity/infrastructure/jwt-authentication.guard';
 import { RequiresActivePlan } from '../../subscription-plans/plan-access';
 import { OrganizationReadModelMapper } from '../organization.mapper';
-import { CreateTeamMemberDto } from './team.dto';
+import { CreateTeamMemberDto, UpdateTeamMemberDto } from './team.dto';
 import { TeamService, type TeamActor } from './team.service';
 
 /**
@@ -62,6 +63,35 @@ export class TeamController {
        */
       temporaryPassword,
     };
+  }
+
+  /**
+   * Corrige nome e e-mail de quem foi cadastrado aqui.
+   *
+   * Fica ao lado de `POST members` por ser o mesmo assunto — o cadastro que a
+   * organização digitou — e separada de `PATCH current/members/:userId`, que é
+   * papel, situação e permissões. São autorizações de mesmo nome e decisões de
+   * gravidade diferente, e um corpo só obrigaria a pedir a maior para fazer a
+   * menor.
+   */
+  @Patch('members/:userId')
+  @RequiresActivePlan()
+  @Permissions('organization.members.update')
+  @ApiOperation({
+    summary: 'Corrige nome e e-mail de alguém cadastrado pela organização',
+  })
+  async update(
+    @Req() request: IdentityRequest,
+    @Param('userId', ParseUUIDv7Pipe) userId: string,
+    @Body() input: UpdateTeamMemberDto,
+  ) {
+    const { member, ownerUserId, unitMemberships } =
+      await this.team.updateMemberIdentity(this.actor(request), userId, input);
+    return this.readModels.member(
+      member,
+      ownerUserId,
+      unitMemberships.map((item) => item.businessUnit),
+    );
   }
 
   @Post('members/:userId/password-link')

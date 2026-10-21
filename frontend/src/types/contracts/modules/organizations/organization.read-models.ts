@@ -66,6 +66,16 @@ export interface OrganizationPlanReadModel {
 export interface OrganizationMemberReadModel {
   userId: string;
   displayName: string;
+  /**
+   * As duas partes do nome, separadas.
+   *
+   * `displayName` é a junção delas e continua sendo o que as telas exibem. Estas
+   * existem porque a correção do cadastro edita cada parte: repartir
+   * `displayName` de volta adivinharia onde o primeiro nome termina, e erraria
+   * em todo nome composto.
+   */
+  firstName: string;
+  lastName: string;
   email: string;
   avatarUrl: string | null;
   status: string;

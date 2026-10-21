@@ -48,6 +48,7 @@ import type {
   UpdateRoleInput,
   UpdateSpecialtyInput,
   UpdateTeamInput,
+  UpdateTeamMemberInput,
   CreateTeamMemberInput,
   CreatedTeamMember,
   TeamPasswordLink,
@@ -109,6 +110,22 @@ export const workforceService = {
       `${ORG_PATH}/team/members`,
       input,
       options,
+    ),
+
+  /**
+   * Corrige nome e e-mail de quem a organização cadastrou.
+   *
+   * Rota de `team`, e não de `members`: `updateMember` acima é papel, situação
+   * e permissões. O servidor separa as duas, e juntá-las aqui obrigaria a mandar
+   * acesso para arrumar um nome.
+   */
+  updateTeamMember: (
+    userId: string,
+    input: UpdateTeamMemberInput,
+  ): Promise<TeamMember> =>
+    apiClient.patch<TeamMember>(
+      path(`${ORG_PATH}/team/members`, userId),
+      input,
     ),
 
   /** Um link de definição de senha, para o owner repassar. */

@@ -99,6 +99,8 @@ describe('assinatura do membro', () => {
       user: {
         id: 'user-1',
         displayName: 'Marcos Tavares',
+        firstName: 'Marcos',
+        lastName: 'Tavares',
         email: 'marcos@exemplo.com',
         avatarUrl: null,
         status: 'ACTIVE',

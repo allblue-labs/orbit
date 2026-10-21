@@ -168,6 +168,11 @@ export class TeamRepository {
             select: {
               id: true,
               displayName: true,
+              /* O formulário de correção edita as duas partes separadas, e não
+                 o `displayName` — reparti-lo de volta adivinharia onde o nome
+                 termina. */
+              firstName: true,
+              lastName: true,
               email: true,
               avatarUrl: true,
               status: true,
@@ -185,6 +190,94 @@ export class TeamRepository {
         },
       }),
     );
+  }
+
+  /**
+   * Corrige nome e e-mail de quem a organização cadastrou.
+   *
+   * ## O e-mail é único no Orbit inteiro
+   *
+   * `normalizedEmail` tem índice único global, e a verificação acontece **dentro
+   * da transação**: conferir antes abriria a janela em que duas correções
+   * simultâneas escolhem o mesmo endereço e a segunda estoura como erro de banco
+   * — `conflict` existe para que a recusa chegue como regra, e não como falha.
+   *
+   * `displayName` é recomposto aqui porque é dado derivado: deixá-lo parado
+   * exibiria o nome antigo em todo documento emitido depois da correção.
+   */
+  updateMemberIdentity(input: {
+    organizationId: string;
+    userId: string;
+    actorId: string;
+    email?: string;
+    normalizedEmail?: string;
+    firstName?: string;
+    lastName?: string;
+  }) {
+    return this.prisma.$transaction(async (transaction) => {
+      await this.setLocal(
+        transaction,
+        'app.organization_id',
+        input.organizationId,
+      );
+
+      const atual = await transaction.user.findUnique({
+        where: { id: input.userId },
+        select: { firstName: true, lastName: true, normalizedEmail: true },
+      });
+      if (!atual) return { missing: true as const };
+
+      /* A comparação com o e-mail atual é o que torna "reenviar o mesmo
+         endereço" diferente de "pedir o endereço de outra pessoa": sem ela,
+         salvar o formulário sem mexer no e-mail devolveria conflito com a
+         própria pessoa. */
+      if (
+        input.normalizedEmail &&
+        input.normalizedEmail !== atual.normalizedEmail
+      ) {
+        const existente = await transaction.user.findUnique({
+          where: { normalizedEmail: input.normalizedEmail },
+          select: { id: true },
+        });
+        if (existente) return { conflict: 'EMAIL_TAKEN' as const };
+      }
+
+      const firstName = input.firstName ?? atual.firstName;
+      const lastName = input.lastName ?? atual.lastName;
+
+      await transaction.user.update({
+        where: { id: input.userId },
+        data: {
+          firstName,
+          lastName,
+          displayName: `${firstName} ${lastName}`.trim(),
+          ...(input.email && input.normalizedEmail
+            ? { email: input.email, normalizedEmail: input.normalizedEmail }
+            : {}),
+        },
+      });
+
+      await transaction.auditLog.create({
+        data: {
+          organizationId: input.organizationId,
+          userId: input.actorId,
+          action: 'ORGANIZATION_MEMBER_IDENTITY_UPDATED',
+          entityType: 'USER',
+          entityId: input.userId,
+          metadata: {
+            targetUserId: input.userId,
+            /** Quais campos mudaram — nunca o valor antigo do e-mail. */
+            nameChanged:
+              firstName !== atual.firstName || lastName !== atual.lastName,
+            emailChanged:
+              input.normalizedEmail !== undefined &&
+              input.normalizedEmail !== atual.normalizedEmail,
+          },
+        },
+      });
+
+      return { updated: true as const };
+    });
   }
 
   /**

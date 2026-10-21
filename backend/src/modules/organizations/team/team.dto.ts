@@ -78,3 +78,40 @@ export class CreateTeamMemberDto {
   @IsIn([...ROLE_SURFACES], { each: true })
   allowedSurfaces?: string[];
 }
+
+/**
+ * Correção dos dados de quem foi cadastrado pela organização.
+ *
+ * Os mesmos três campos que o owner informou em `CreateTeamMemberDto`, e nada
+ * além deles: papel, situação, unidades e permissões continuam em
+ * `PATCH /organizations/current/members/:userId`, que é decisão de acesso — e
+ * misturar as duas num corpo só faria um erro de digitação no nome exigir a
+ * autorização de reescrever permissões.
+ *
+ * Todos opcionais, e ao menos um exigido pelo serviço: um corpo vazio não é
+ * "nenhuma mudança", é uma chamada que o cliente não quis fazer.
+ */
+export class UpdateTeamMemberDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(normalizeEmail)
+  @IsEmail()
+  @MaxLength(255)
+  email?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  firstName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  lastName?: string;
+}
