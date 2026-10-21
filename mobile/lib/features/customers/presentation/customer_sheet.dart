@@ -143,6 +143,38 @@ class _Folha extends ConsumerWidget {
                 label: const Text('Ver documentos'),
               ),
 
+              /// Abrir um atendimento para este cliente.
+              ///
+              /// Leva ao mesmo roteiro do botão da fila, com **este** cliente
+              /// já escolhido — e sem o caminho de cadastrar outro: quem
+              /// acabou de abrir a folha de alguém não quer criar um terceiro.
+              if (session?.hasPermission('operations.create') ?? false) ...[
+                const SizedBox(height: OrbitSpacing.lg),
+                Text(
+                  'Atendimento',
+                  style: OrbitType.sectionTitle.copyWith(color: palette.ink),
+                ),
+                const SizedBox(height: OrbitSpacing.xs),
+                Text(
+                  'Abrir uma ordem agora, estando no local.',
+                  style: OrbitType.caption.copyWith(color: palette.inkSubtle),
+                ),
+                const SizedBox(height: OrbitSpacing.ms),
+                FilledButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    context.push(
+                      OrbitRoutes.walkIn(
+                        customerId: cliente.id,
+                        customerName: cliente.name,
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Iniciar um atendimento'),
+                ),
+              ],
+
               /// Orçamento é ação de gestão: só aparece com `quotes.manage`.
               if (session?.hasPermission('quotes.manage') ?? false) ...[
                 const SizedBox(height: OrbitSpacing.lg),

@@ -25,6 +25,8 @@ import { ArtifactManifestModule } from '../artifact-manifests/artifact-manifest.
 import { MobileFieldArtifactController } from './mobile-field-artifact.controller';
 import { MobileFieldArtifactRepository } from './mobile-field-artifact.repository';
 import { MobileFieldArtifactService } from './mobile-field-artifact.service';
+import { MobileWalkInRepository } from './mobile-walk-in.repository';
+import { MobileWalkInService } from './mobile-walk-in.service';
 
 @Module({
   imports: [
@@ -56,6 +58,8 @@ import { MobileFieldArtifactService } from './mobile-field-artifact.service';
     MobileOfflineSyncService,
     MobileSyncCleanupProcessor,
     MobileEvidenceRepository,
+    MobileWalkInRepository,
+    MobileWalkInService,
     MobileEvidenceService,
     MobileEvidenceCleanupProcessor,
     MobileFieldArtifactRepository,

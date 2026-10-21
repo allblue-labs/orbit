@@ -51,8 +51,24 @@ class _CaptureSheetState extends ConsumerState<_CaptureSheet> {
   ({Uint8List bytes, String filename, EvidenceSource source})? _picked;
 
   EvidenceCategory _category = EvidenceCategory.general;
+
+  /// A legenda, opcional.
+  ///
+  /// O registro fotográfico do documento imprime uma legenda sob cada imagem, e
+  /// o que ia para lá era o rótulo da **categoria**: três fotos de "Depois"
+  /// saíam com a mesma frase embaixo das três. Opcional porque foto sem legenda
+  /// continua sendo prova — e exigir texto transformaria registrar em redigir,
+  /// de luva, no telhado.
+  final _legenda = TextEditingController();
+
   String? _problem;
   bool _saving = false;
+
+  @override
+  void dispose() {
+    _legenda.dispose();
+    super.dispose();
+  }
 
   Future<void> _choose(Future<CapturedFile?> Function() pick) async {
     setState(() => _problem = null);
@@ -110,6 +126,7 @@ class _CaptureSheetState extends ConsumerState<_CaptureSheet> {
         scope: scope,
         target: widget.target,
         category: _category,
+        caption: _legenda.text,
         source: picked.source,
       );
 
@@ -228,6 +245,27 @@ class _CaptureSheetState extends ConsumerState<_CaptureSheet> {
                       onSelected: (_) => setState(() => _category = category),
                     ),
                 ],
+              ),
+              const SizedBox(height: OrbitSpacing.md),
+
+              const Text(
+                'Legenda (opcional)',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: OrbitColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 4),
+              TextField(
+                controller: _legenda,
+                maxLength: 500,
+                maxLines: 2,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: const InputDecoration(
+                  hintText: 'Evaporadora após limpeza química',
+                  isDense: true,
+                  counterText: '',
+                ),
               ),
               const SizedBox(height: OrbitSpacing.md),
 

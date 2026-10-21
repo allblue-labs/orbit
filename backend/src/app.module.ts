@@ -37,6 +37,7 @@ import { RvtModule } from './modules/rvt/rvt.module';
 import { MobileFieldModule } from './modules/mobile-field/mobile-field.module';
 import { CustomerPortalModule } from './modules/customer-portal/customer-portal.module';
 import { CustomerServiceRequestModule } from './modules/customer-service-requests/customer-service-request.module';
+import { LookupModule } from './modules/lookups/lookup.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { PermissionGuard, RoleGuard, SurfaceGuard } from './guards';
 import { JwtAuthenticationGuard } from './modules/identity/infrastructure/jwt-authentication.guard';
@@ -87,6 +88,7 @@ import {
     CustomerPortalModule,
     CustomerServiceRequestModule,
     BillingModule,
+    LookupModule,
   ],
   controllers: [AppController],
   providers: [

@@ -4644,6 +4644,34 @@ model RvtExecutionEvidence {
   @@map("rvt_execution_evidence")
 }
 
+/// Idempotência do atendimento avulso aberto em campo.
+///
+/// O comando cria **três** coisas de naturezas diferentes — cliente,
+/// equipamentos e ordem — e a resposta pode se perder na volta, que é o caso
+/// normal com a rede oscilando na calçada. Sem isto, "tentar de novo"
+/// cadastraria o cliente outra vez e abriria a segunda ordem para o mesmo
+/// serviço.
+model OperationWalkInCommand {
+  id             String @id @default(uuid(7)) @db.Uuid
+  organizationId String @map("organization_id") @db.Uuid
+  businessUnitId String @map("business_unit_id") @db.Uuid
+  actorId        String @map("actor_id") @db.Uuid
+  idempotencyKey String @map("idempotency_key") @db.VarChar(160)
+  payloadHash    String @map("payload_hash") @db.Char(64)
+  operationId    String @map("operation_id") @db.Uuid
+  customerId     String @map("customer_id") @db.Uuid
+
+  /// Quantos equipamentos o comando criou. Zero é legítimo: a ordem pode abrir
+  /// antes de os aparelhos serem identificados.
+  createdAssetCount Int @default(0) @map("created_asset_count")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([organizationId, actorId, idempotencyKey])
+  @@index([organizationId, businessUnitId, createdAt])
+  @@map("operation_walk_in_commands")
+}
+
 model RvtAdHocCommand {
   id              String   @id @default(uuid(7)) @db.Uuid
   organizationId  String   @map("organization_id") @db.Uuid
