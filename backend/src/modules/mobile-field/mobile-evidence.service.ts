@@ -71,6 +71,10 @@ export class MobileEvidenceService {
       declaredSize: input.declaredSize,
       category: input.category ?? 'GENERAL',
       source: input.source ?? 'CAMERA',
+      /* No hash: reenviar a mesma chave com outra legenda é payload diferente,
+         e o servidor precisa dizer `IDEMPOTENCY_MISMATCH` em vez de ignorar a
+         legenda nova em silêncio. */
+      caption: input.caption ?? null,
       capturedAt: input.capturedAt?.toISOString() ?? null,
       localMediaId: input.localMediaId ?? null,
       expectedSha256: input.expectedSha256?.toLowerCase() ?? null,
@@ -129,6 +133,7 @@ export class MobileEvidenceService {
         localMediaId: input.localMediaId ?? null,
         category: input.category ?? 'GENERAL',
         source: input.source ?? 'CAMERA',
+        caption: input.caption?.trim() || null,
         capturedAt: input.capturedAt ?? null,
         expectedSha256: input.expectedSha256?.toLowerCase() ?? null,
         expiresAt,
@@ -281,7 +286,9 @@ export class MobileEvidenceService {
       this.targetType(evidence),
       this.targetId(evidence),
     );
-    if (!access.context || access.denied)
+    /* Ver a imagem é leitura, como a lista: exigir o portão de escrita aqui
+       tirava do dono a prévia das fotos do próprio atendimento concluído. */
+    if (!access.context || !access.readable)
       throw new EntityNotFoundException('Evidência', evidenceId);
     const signed = await this.files.sign(evidence.storageFile, operation);
     return {
@@ -347,6 +354,7 @@ export class MobileEvidenceService {
       id: value.id,
       target: { type: this.targetType(value), id: this.targetId(value) },
       category: value.category as FieldEvidenceReadModel['category'],
+      caption: value.caption,
       filename: value.fileName,
       mimeType: value.mimeType,
       sizeBytes: value.sizeBytes.toString(),

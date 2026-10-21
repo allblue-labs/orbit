@@ -130,6 +130,8 @@ export interface OperationListItemReadModel {
    * vinculado, e sem orçamento não há o que mostrar mesmo ligado.
    */
   amountVisibleInField: boolean;
+  /** Manual service value as a decimal string; null uses the linked quote. */
+  manualAmount?: string | null;
   code: string;
   /**
    * O número da Ordem de Serviço — contagem própria, por organização.

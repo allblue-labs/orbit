@@ -40,6 +40,14 @@ export interface FieldEvidenceReadModel {
   id: string;
   target: { type: FieldEvidenceTarget; id: string };
   category: EvidenceCategory;
+  /**
+   * O que o técnico escreveu sobre esta imagem, quando escreveu.
+   *
+   * `null` é "não legendou" — e é o caso normal. O registro fotográfico do
+   * documento imprimia o rótulo da categoria no lugar, então três fotos de
+   * "Depois" saíam com a mesma frase.
+   */
+  caption: string | null;
   filename: string;
   mimeType: string;
   sizeBytes: string;

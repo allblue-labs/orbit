@@ -544,10 +544,19 @@ export class RvtService {
       this.mapError(e);
     }
   }
+  /**
+   * Emite o documento do RVT.
+   *
+   * `renderer` omitido é o caminho normal: quem escolhe o motor é o produto, em
+   * `defaultRendererFor`. O padrão aqui era `'pdf.default'` — o desenho pobre —,
+   * e nenhum chamador passava outro valor, então o laudo de visita técnica saía
+   * como lista de pares rótulo/valor enquanto o relatório gerencial, no mesmo
+   * sistema, saía com timbre.
+   */
   async render(
     id: string,
     actor: RvtActor,
-    renderer: 'html.default' | 'pdf.default' = 'pdf.default',
+    renderer?: 'pdf.premium' | 'html.default' | 'pdf.default',
   ) {
     const generated = await this.generateArtifact(id, actor);
     return this.rendering.request(

@@ -90,6 +90,8 @@ export interface OperationQuery {
  * do servidor.
  */
 export interface CreateOperationInput {
+  /** Optional manual service value. Null restores the linked quote value. */
+  manualAmount?: number | null;
   businessUnitId: string;
   customerId?: string;
   /** Os equipamentos atendidos — era `assetId`, um só. */

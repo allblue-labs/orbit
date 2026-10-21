@@ -105,6 +105,7 @@ export class OperationService {
               customerId: input.customerId ?? references.assetCustomerId,
               customerAddressId: input.customerAddressId,
               sector: input.sector,
+              manualAmount: input.manualAmount,
               code: input.code.trim().toUpperCase(),
               kind: input.kind,
               title: input.title,
@@ -186,6 +187,7 @@ export class OperationService {
             ? { connect: { id: input.customerAddressId } }
             : undefined,
           sector: input.sector,
+          manualAmount: input.manualAmount,
           code: input.code?.trim().toUpperCase(),
           kind: input.kind,
           title: input.title,

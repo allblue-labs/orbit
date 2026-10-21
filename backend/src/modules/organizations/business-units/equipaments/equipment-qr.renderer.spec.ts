@@ -1,5 +1,6 @@
 import jsQR from 'jsqr';
 import { PNG } from 'pngjs';
+import sharp from 'sharp';
 import { EquipmentQrRenderer } from './equipment-qr.renderer';
 
 jest.setTimeout(30_000);
@@ -31,4 +32,30 @@ describe('EquipmentQrRenderer', () => {
     const pdf = await renderer.render(input, 'pdf');
     expect(pdf.bytes.subarray(0, 5).toString()).toBe('%PDF-');
   });
+
+  it.each([
+    ['STANDARD', 'svg'],
+    ['STANDARD', 'png'],
+    ['SMALL', 'svg'],
+    ['SMALL', 'png'],
+  ] as const)(
+    'keeps the %s %s label readable at the displayed preview size',
+    async (preset, format) => {
+      const rendered = await renderer.render(
+        { ...input, preset, brandingName: 'Organização de teste' },
+        format,
+      );
+      const { data, info } = await sharp(rendered.bytes)
+        .resize({ width: 264 })
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+      const decoded = jsQR(
+        new Uint8ClampedArray(data),
+        info.width,
+        info.height,
+      );
+      expect(decoded?.data).toBe(input.url);
+    },
+  );
 });

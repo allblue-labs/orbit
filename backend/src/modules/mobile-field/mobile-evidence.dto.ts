@@ -68,6 +68,19 @@ export class CreateFieldEvidenceUploadDto {
   @IsIn(FIELD_EVIDENCE_SOURCES)
   source?: (typeof FIELD_EVIDENCE_SOURCES)[number];
 
+  /**
+   * O que o técnico quis dizer sobre esta imagem.
+   *
+   * Opcional: foto sem legenda continua sendo prova, e exigir texto
+   * transformaria registrar uma evidência em redigir, de luva, em campo.
+   */
+  @ApiPropertyOptional({ maxLength: 500 })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(500)
+  caption?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Date)

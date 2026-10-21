@@ -20,6 +20,7 @@ import { useApiQuery } from "@/hooks/api/use-api-query";
 import { CACHE } from "@/hooks/api/cache-policy";
 import { useActiveScope } from "@/providers/use-active-scope";
 import { artifactExecutionsService } from "@/services/artifact-executions.service";
+import { customersService } from "@/services/customers.service";
 import {
   checklistTemplatesService,
   operationChecklistsService,
@@ -194,11 +195,19 @@ function assignmentKeys(id: string) {
 }
 
 export function useCreateOperation() {
+  const queryClient = useQueryClient();
   return useApiMutation(
     (input: CreateOperationInput) => operationsService.create(input),
     {
       invalidate: [queryKeys.module("operations")],
       notify: "Atendimento criado",
+      onSuccess: async (_operation, input) => {
+        if (input.customerId) {
+          await queryClient.invalidateQueries({
+            queryKey: customersService.keys.detail(input.customerId),
+          });
+        }
+      },
     },
   );
 }
@@ -226,7 +235,10 @@ export function useChangeOperationStatus(id: string) {
   return useApiMutation(
     (input: ChangeOperationStatusInput) =>
       operationsService.changeStatus(id, input),
-    { invalidate: affectedKeys(id), notify: "Situação do atendimento atualizada" },
+    {
+      invalidate: affectedKeys(id),
+      notify: "Situação do atendimento atualizada",
+    },
   );
 }
 

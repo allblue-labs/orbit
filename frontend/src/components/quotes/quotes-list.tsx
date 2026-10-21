@@ -157,7 +157,7 @@ export function QuotesList({
           noun="orçamento"
           note="Ordenado do mais recente"
         />
-        {create.allowed && !compact ? (
+        {create.allowed ? (
           <Button size="sm" onClick={() => setFormOpen(true)}>
             <Plus className="size-4" />
             {create.label}
@@ -284,7 +284,7 @@ export function QuotesList({
           title: vazio.title,
           description: vazio.description,
           action:
-            create.allowed && !compact && vazio.offersCreate ? (
+            create.allowed && vazio.offersCreate ? (
               <Button size="sm" onClick={() => setFormOpen(true)}>
                 <Plus className="size-4" />
                 {create.label}
@@ -378,6 +378,7 @@ export function QuotesList({
         open={formOpen}
         onOpenChange={setFormOpen}
         customerId={customerId}
+        onCreated={customerId ? () => list.setPage(1) : undefined}
       />
 
       <QuoteDetailSheet

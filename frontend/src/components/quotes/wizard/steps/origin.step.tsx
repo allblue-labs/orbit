@@ -33,9 +33,11 @@ const RECENT_LIMIT = 15;
 export function OriginStep({
   draft,
   onChange,
+  customerId,
 }: {
   draft: QuoteDraft;
   onChange: (patch: Partial<QuoteDraft>) => void;
+  customerId?: string;
 }) {
   return (
     <div className="space-y-5">
@@ -63,6 +65,7 @@ export function OriginStep({
 
       {draft.origin === "OPERATION" ? (
         <OperationChooser
+          customerId={customerId}
           selected={draft.operationId}
           onSelect={(operationId) => onChange({ operationId })}
         />
@@ -126,11 +129,14 @@ function OriginCard({
 function OperationChooser({
   selected,
   onSelect,
+  customerId,
 }: {
   selected: string | null;
   onSelect: (operationId: string) => void;
+  customerId?: string;
 }) {
   const query = useOperationsList({
+    customerId,
     status: "COMPLETED",
     page: 1,
     limit: RECENT_LIMIT,

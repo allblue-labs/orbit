@@ -12,7 +12,6 @@ import { MobileSignatureService } from './mobile-signature.service';
 import type { CustomerAcknowledgementInputDto } from './mobile-signature.dto';
 import type {
   FieldOperationChecklistUpdateDto,
-  FieldOperationMaterialDto,
   FieldOperationNoteDto,
 } from './mobile-field-operation.dto';
 import type { OfflineCommandEnvelopeDto } from './mobile-offline-sync.dto';
@@ -483,8 +482,24 @@ export class MobileOfflineSyncService {
             complete: command.payload.complete,
           } as FieldOperationChecklistUpdateDto,
         );
-      case 'OPERATION_ADD_MATERIAL':
-        this.assertString(command.payload, 'catalogItemId');
+      case 'OPERATION_ADD_MATERIAL': {
+        /**
+         * Produto do catálogo **ou** descrição — não os dois obrigatórios.
+         *
+         * `assertString(payload, 'catalogItemId')` exigia o produto, e por isso
+         * o material avulso registrado offline era recusado na volta da rede: o
+         * técnico anotava a abraçadeira no telhado e perdia o registro quando o
+         * sinal voltava, sem nada na tela dizendo por quê.
+         */
+        const catalogItemId = command.payload.catalogItemId;
+        const description = command.payload.description;
+        if (
+          typeof catalogItemId !== 'string' &&
+          (typeof description !== 'string' || description.trim().length === 0)
+        )
+          throw new ValidationException(
+            'Informe o produto do catálogo ou a descrição do material',
+          );
         if (
           typeof command.payload.quantity !== 'number' ||
           command.payload.quantity <= 0
@@ -492,11 +507,25 @@ export class MobileOfflineSyncService {
           throw new ValidationException('Quantidade de material inválida');
         return this.operations.registerMaterial(actor, command.aggregateId, {
           ...base,
-          catalogItemId: command.payload.catalogItemId,
+          catalogItemId:
+            typeof catalogItemId === 'string' ? catalogItemId : undefined,
+          description:
+            typeof description === 'string' ? description : undefined,
+          unit:
+            typeof command.payload.unit === 'string'
+              ? command.payload.unit
+              : undefined,
           quantity: command.payload.quantity,
-          reason: command.payload.reason,
-          notes: command.payload.notes,
-        } as FieldOperationMaterialDto);
+          reason:
+            typeof command.payload.reason === 'string'
+              ? command.payload.reason
+              : undefined,
+          notes:
+            typeof command.payload.notes === 'string'
+              ? command.payload.notes
+              : undefined,
+        });
+      }
       case 'CUSTOMER_ACKNOWLEDGEMENT':
         this.assertString(command.payload, 'signerName');
         this.assertString(command.payload, 'contentHash');

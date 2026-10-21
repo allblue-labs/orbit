@@ -215,7 +215,7 @@ function Body({
         </div>
 
         <div className="space-y-2 sm:col-span-2">
-          <Label htmlFor="address-notes">Acesso</Label>
+          <Label htmlFor="address-notes">Ponto de referência e acesso</Label>
           <Textarea
             id="address-notes"
             value={notes}

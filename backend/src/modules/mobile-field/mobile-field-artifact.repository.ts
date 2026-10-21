@@ -203,6 +203,28 @@ export class MobileFieldArtifactRepository {
                 },
               },
             },
+            /**
+             * Os materiais do atendimento, previstos e aplicados.
+             *
+             * O documento congelava `inventoryMovements`, que só conhece item
+             * de catálogo: material avulso — a abraçadeira comprada na esquina —
+             * não tinha onde existir, e o previsto na abertura da ordem também
+             * não. Esta é a lista que o relatório imprime.
+             */
+            materials: {
+              where: { deletedAt: null },
+              orderBy: [
+                { origin: 'asc' as const },
+                { createdAt: 'asc' as const },
+              ],
+              select: {
+                origin: true,
+                description: true,
+                unit: true,
+                quantity: true,
+                notes: true,
+              },
+            },
             fieldEvidence: {
               where: { status: 'FINALIZED' },
               orderBy: [

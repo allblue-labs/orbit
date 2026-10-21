@@ -519,6 +519,19 @@ export class MobileFieldService {
        você ver" sem afirmar nada sobre o valor. */
     if (!operation?.amountVisibleInField) return {};
 
+    if (
+      operation.manualAmount !== null &&
+      operation.manualAmount !== undefined
+    ) {
+      return {
+        financialSummary: {
+          currency: 'BRL',
+          approvedAmount: operation.manualAmount.toString(),
+          paymentStatus: null,
+        },
+      };
+    }
+
     /**
      * Liberado e sem orçamento: o campo **existe**, com valor nulo.
      *

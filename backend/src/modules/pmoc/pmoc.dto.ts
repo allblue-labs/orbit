@@ -430,12 +430,20 @@ export class AddPmocEquipmentEvidenceDto {
 }
 
 export class GeneratePmocEquipmentArtifactDto {
-  @ApiPropertyOptional({ example: 'pdf.default', default: 'pdf.default' })
+  /**
+   * Qual motor desenha. **Omitir é o caminho normal**: o produto escolhe, em
+   * `defaultRendererFor`.
+   *
+   * O valor padrão era `'pdf.default'` e não havia como não enviá-lo: o campo
+   * nascia preenchido, então o PMOC saía sempre no desenho genérico mesmo com o
+   * compositor dedicado registrado ao lado.
+   */
+  @ApiPropertyOptional({ example: 'pdf.premium' })
   @IsOptional()
   @Transform(trim)
   @IsString()
   @Matches(/^[a-z][a-z0-9._-]*$/)
-  renderer = 'pdf.default';
+  renderer?: string;
 }
 
 export class PmocPlanQueryDto {

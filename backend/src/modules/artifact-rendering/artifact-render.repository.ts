@@ -207,6 +207,33 @@ export class ArtifactRenderRepository {
                   postalCode: true,
                 },
               },
+              /**
+               * As fotos do atendimento.
+               *
+               * A montagem da entrada lia evidência **só** do PMOC: para uma
+               * ordem de serviço emitida pela web, `input.evidence` chegava
+               * vazia e a seção "Registro fotográfico" — que o compositor já
+               * sabia desenhar — nunca aparecia. As fotos existiam, estavam
+               * finalizadas, e o documento saía sem elas.
+               *
+               * `FINALIZED` apenas: um upload em trânsito não é prova.
+               */
+              fieldEvidence: {
+                where: { status: 'FINALIZED' },
+                orderBy: [
+                  { capturedAt: 'asc' as const },
+                  { id: 'asc' as const },
+                ],
+                select: {
+                  id: true,
+                  category: true,
+                  caption: true,
+                  fileName: true,
+                  mimeType: true,
+                  sha256: true,
+                  storageFile: true,
+                },
+              },
               assets: {
                 orderBy: { createdAt: 'asc' as const },
                 select: {

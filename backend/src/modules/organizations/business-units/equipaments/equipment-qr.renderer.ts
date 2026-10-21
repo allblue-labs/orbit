@@ -68,9 +68,6 @@ export class EquipmentQrRenderer {
       margin: 2,
       width: qrSize,
     });
-    const qrContent = qrSvg
-      .replace(/^<svg[^>]*>/, '')
-      .replace(/<\/svg>\s*$/, '');
     const logo = this.safeLogo(input.logoUrl);
     const logoMarkup = logo
       ? `<image x="${width / 2 - 40}" y="20" width="80" height="48" preserveAspectRatio="xMidYMid meet" href="${xml(logo.dataUrl)}"/>`
@@ -78,11 +75,17 @@ export class EquipmentQrRenderer {
         ? `<text x="${width / 2}" y="48" text-anchor="middle" font-family="Arial,sans-serif" font-size="18" font-weight="700">${xml(input.brandingName.slice(0, 40))}</text>`
         : '';
     const qrY = logoMarkup ? 76 : 24;
+    // The QR paths use module coordinates, not pixels. Preserve their native
+    // viewBox while positioning the nested SVG inside the printable label.
+    const positionedQr = qrSvg.replace(
+      /^<svg\b/,
+      `<svg x="${(width - qrSize) / 2}" y="${qrY}"`,
+    );
     return [
       `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="Etiqueta QR do equipamento ${xml(input.code)}">`,
       '<rect width="100%" height="100%" rx="18" fill="#fff" stroke="#18212f" stroke-width="3"/>',
       logoMarkup,
-      `<svg x="${(width - qrSize) / 2}" y="${qrY}" width="${qrSize}" height="${qrSize}" viewBox="0 0 ${qrSize} ${qrSize}">${qrContent}</svg>`,
+      positionedQr,
       `<text x="${width / 2}" y="${qrY + qrSize + 38}" text-anchor="middle" font-family="Arial,sans-serif" font-size="18" fill="#435064">Equipamento</text>`,
       `<text x="${width / 2}" y="${qrY + qrSize + 76}" text-anchor="middle" font-family="Arial,sans-serif" font-size="30" font-weight="700" fill="#101828">${xml(input.code)}</text>`,
       `<text x="${width / 2}" y="${qrY + qrSize + 108}" text-anchor="middle" font-family="Arial,sans-serif" font-size="16" fill="#435064">${xml(input.name.slice(0, 48))}</text>`,

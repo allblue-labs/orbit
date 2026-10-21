@@ -70,10 +70,13 @@ export function QuoteWizardDialog({
   onOpenChange,
   /** Cliente já decidido — quando o wizard abre de dentro do cliente. */
   customerId,
+  onCreated,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   customerId?: string;
+  /** Embedded creation stays with the caller; standalone creation opens the quote. */
+  onCreated?: (quoteId: string) => void;
 }) {
   /* Desmontar ao fechar zera o rascunho: reabrir depois de desistir deve
      começar do começo, não continuar um formulário que a pessoa abandonou. */
@@ -82,7 +85,11 @@ export function QuoteWizardDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-3xl">
-        <Body onOpenChange={onOpenChange} fixedCustomerId={customerId} />
+        <Body
+          onOpenChange={onOpenChange}
+          fixedCustomerId={customerId}
+          onCreated={onCreated}
+        />
       </DialogContent>
     </Dialog>
   );
@@ -91,9 +98,11 @@ export function QuoteWizardDialog({
 function Body({
   onOpenChange,
   fixedCustomerId,
+  onCreated,
 }: {
   onOpenChange: (open: boolean) => void;
   fixedCustomerId?: string;
+  onCreated?: (quoteId: string) => void;
 }) {
   const session = useSession();
   const router = useRouter();
@@ -167,6 +176,10 @@ function Body({
 
   const finish = (quoteId: string) => {
     onOpenChange(false);
+    if (onCreated) {
+      onCreated(quoteId);
+      return;
+    }
     const href = entityHref("quote", quoteId);
     if (href) router.push(href);
   };
@@ -201,7 +214,11 @@ function Body({
 
       <div className="py-4">
         {step === "origem" ? (
-          <OriginStep draft={draft} onChange={patch} />
+          <OriginStep
+            draft={draft}
+            onChange={patch}
+            customerId={fixedCustomerId}
+          />
         ) : step === "dados" ? (
           <GeneralStep
             draft={{
@@ -276,7 +293,7 @@ function Body({
               ) : (
                 <ArrowRight className="size-4" />
               )}
-              Copiar e abrir
+              {onCreated ? "Criar orçamento" : "Copiar e abrir"}
             </Button>
           ) : step === "resumo" ? (
             <Button

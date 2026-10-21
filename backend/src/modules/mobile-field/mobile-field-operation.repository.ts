@@ -10,6 +10,7 @@ import {
 import { RlsTransaction } from '../../database';
 import { DomainEventEmitter } from '../automations/domain-event.emitter';
 import { OperationStateMachine } from '../operations/operation-state-machine';
+import { generateUuidV7 } from '../../utils';
 
 export interface FieldTransitionInput {
   operationId: string;
@@ -316,6 +317,7 @@ export class MobileFieldOperationRepository {
     payloadHash: string;
     note: string;
     visibility: string;
+    kind: string;
   }) {
     return this.rls.run(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`field-operation:${input.operationId}`}))`;
@@ -383,6 +385,7 @@ export class MobileFieldOperationRepository {
             payloadHash: input.payloadHash,
             note: input.note,
             visibility: input.visibility,
+            kind: input.kind,
           },
         },
       });
@@ -527,6 +530,106 @@ export class MobileFieldOperationRepository {
         include: { user: { select: { id: true, displayName: true } } },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: limit + 1,
+      }),
+    );
+  }
+
+  /**
+   * Os materiais do atendimento: previstos na abertura e aplicados em campo.
+   *
+   * Uma leitura só, com a origem distinguindo os dois. A etapa de materiais do
+   * roteiro precisa das duas listas ao mesmo tempo — "estava previsto isto" e
+   * "foi aplicado aquilo" —, e duas consultas dariam duas versões da mesma
+   * resposta em instantes diferentes.
+   */
+  operationMaterials(organizationId: string, operationId: string) {
+    return this.rls.run((tx) =>
+      tx.operationMaterial.findMany({
+        where: { organizationId, operationId, deletedAt: null },
+        orderBy: [{ origin: 'asc' }, { createdAt: 'asc' }],
+        select: {
+          id: true,
+          origin: true,
+          catalogItemId: true,
+          inventoryMovementId: true,
+          description: true,
+          unit: true,
+          quantity: true,
+          notes: true,
+          createdAt: true,
+          createdBy: { select: { id: true, displayName: true } },
+        },
+      }),
+    );
+  }
+
+  /** A linha já criada por este comando, se houve. */
+  operationMaterialByCommand(organizationId: string, commandId: string) {
+    return this.rls.run((tx) =>
+      tx.operationMaterial.findFirst({
+        where: { organizationId, commandId },
+        select: {
+          id: true,
+          operationId: true,
+          origin: true,
+          catalogItemId: true,
+          inventoryMovementId: true,
+          description: true,
+          unit: true,
+          quantity: true,
+          notes: true,
+        },
+      }),
+    );
+  }
+
+  /**
+   * Registra um material aplicado.
+   *
+   * `commandId` carrega a idempotência: o mesmo comando reenviado quando a rede
+   * volta encontra a linha e devolve a que existe, em vez de somar o material
+   * duas vezes no relatório.
+   */
+  createOperationMaterial(input: {
+    organizationId: string;
+    businessUnitId: string;
+    operationId: string;
+    actorId: string;
+    commandId: string;
+    catalogItemId: string | null;
+    inventoryMovementId: string | null;
+    description: string;
+    unit: string;
+    quantity: number;
+    notes: string | null;
+  }) {
+    return this.rls.run((tx) =>
+      tx.operationMaterial.create({
+        data: {
+          id: generateUuidV7(),
+          organizationId: input.organizationId,
+          businessUnitId: input.businessUnitId,
+          operationId: input.operationId,
+          origin: 'APPLIED',
+          catalogItemId: input.catalogItemId,
+          inventoryMovementId: input.inventoryMovementId,
+          description: input.description,
+          unit: input.unit,
+          quantity: input.quantity,
+          notes: input.notes,
+          commandId: input.commandId,
+          createdById: input.actorId,
+        },
+        select: {
+          id: true,
+          origin: true,
+          catalogItemId: true,
+          inventoryMovementId: true,
+          description: true,
+          unit: true,
+          quantity: true,
+          notes: true,
+        },
       }),
     );
   }
