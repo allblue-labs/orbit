@@ -48,6 +48,7 @@ final class LocalMedia {
     required this.source,
     required this.state,
     required this.idempotencyKey,
+    this.caption,
     this.uploadId,
     this.attempts = 0,
     this.lastAttemptAt,
@@ -79,6 +80,13 @@ final class LocalMedia {
 
   final DateTime capturedAt;
   final EvidenceCategory category;
+
+  /// A legenda declarada na captura.
+  ///
+  /// Viaja com a intenção de upload porque a captura é offline-first: o aparelho
+  /// sem rede não tem como fazer uma segunda chamada só para legendar, e a
+  /// legenda é o que o registro fotográfico do documento imprime sob a foto.
+  final String? caption;
   final EvidenceSource source;
   final LocalMediaState state;
 
@@ -122,6 +130,7 @@ final class LocalMedia {
     sha256: sha256,
     capturedAt: capturedAt,
     category: category,
+    caption: caption,
     source: source,
     state: state ?? this.state,
     idempotencyKey: idempotencyKey,
@@ -145,6 +154,7 @@ final class LocalMedia {
     'sha256': sha256,
     'capturedAt': capturedAt.toUtc().toIso8601String(),
     'category': evidenceCategoryWire(category),
+    if (caption != null) 'caption': caption,
     'source': evidenceSourceWire(source),
     'state': state.name,
     'idempotencyKey': idempotencyKey,
@@ -170,6 +180,7 @@ final class LocalMedia {
     sha256: json['sha256']! as String,
     capturedAt: DateTime.parse(json['capturedAt']! as String),
     category: evidenceCategoryFromWire(json['category']! as String),
+    caption: json['caption'] as String?,
     source: evidenceSourceFromWire(json['source']! as String),
 
     /// O que estava em voo volta para a fila — a idempotência cobre o resto.

@@ -132,6 +132,7 @@ final class EvidenceUploadIntentRequest {
     required this.declaredSize,
     required this.idempotencyKey,
     this.category,
+    this.caption,
     this.source,
     this.capturedAt,
     this.localMediaId,
@@ -149,6 +150,13 @@ final class EvidenceUploadIntentRequest {
   final String idempotencyKey;
 
   final EvidenceCategory? category;
+
+  /// A legenda que o técnico escreveu na captura.
+  ///
+  /// Entra no hash do payload: reenviar a mesma chave com outra legenda é
+  /// payload diferente, e o servidor responde `IDEMPOTENCY_MISMATCH` em vez de
+  /// descartar a legenda nova em silêncio.
+  final String? caption;
   final EvidenceSource? source;
   final DateTime? capturedAt;
 
@@ -168,6 +176,7 @@ final class EvidenceUploadIntentRequest {
     'declaredSize': declaredSize,
     'idempotencyKey': idempotencyKey,
     if (category != null) 'category': evidenceCategoryWire(category!),
+    if (caption != null) 'caption': caption,
     if (source != null) 'source': evidenceSourceWire(source!),
     if (capturedAt != null) 'capturedAt': capturedAt!.toUtc().toIso8601String(),
     if (localMediaId != null) 'localMediaId': localMediaId,
@@ -248,6 +257,7 @@ final class FieldEvidence {
     required this.id,
     required this.target,
     required this.category,
+    required this.caption,
     required this.filename,
     required this.mimeType,
     required this.sizeBytes,
@@ -264,6 +274,13 @@ final class FieldEvidence {
   final String id;
   final FieldEvidenceTargetRef target;
   final EvidenceCategory category;
+
+  /// O que o técnico escreveu sobre esta imagem.
+  ///
+  /// `null` é "não legendou", e é o caso normal. O registro fotográfico do
+  /// documento imprimia o rótulo da categoria no lugar, então três fotos de
+  /// "Depois" saíam com a mesma frase embaixo das três.
+  final String? caption;
   final String filename;
   final String mimeType;
 
@@ -288,6 +305,7 @@ final class FieldEvidence {
       Map<String, Object?>.from(json['target']! as Map<Object?, Object?>),
     ),
     category: evidenceCategoryFromWire(json['category']! as String),
+    caption: json['caption'] as String?,
     filename: json['filename']! as String,
     mimeType: json['mimeType']! as String,
     sizeBytes: int.tryParse('${json['sizeBytes']}') ?? 0,

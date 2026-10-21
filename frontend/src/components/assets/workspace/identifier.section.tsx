@@ -76,8 +76,8 @@ export function IdentifierSection({ asset }: { asset: Asset }) {
       }
     >
       {qr.isPending ? (
-        <div className="flex gap-4">
-          <Skeleton className="size-36 rounded-lg" />
+        <div className="flex flex-wrap gap-4">
+          <Skeleton className="aspect-[13/17] w-full max-w-72 shrink-0 rounded-lg" />
           <div className="flex-1 space-y-2">
             <Skeleton className="h-4 w-40" />
             <Skeleton className="h-4 w-56" />
@@ -103,7 +103,7 @@ export function IdentifierSection({ asset }: { asset: Asset }) {
         <div className="flex flex-wrap items-start gap-5">
           <LabelPreview equipmentId={asset.id} name={asset.name} />
 
-          <div className="min-w-0 flex-1 space-y-4">
+          <div className="min-w-0 flex-1 basis-64 space-y-4">
             <dl className="space-y-1 text-sm">
               <div className="flex flex-wrap gap-x-2">
                 <dt className="text-muted-foreground">Criada em:</dt>
@@ -175,22 +175,27 @@ function LabelPreview({
 
   if (failed) {
     return (
-      <div className="flex size-36 items-center justify-center rounded-lg border border-border">
+      <div className="flex aspect-[13/17] w-full max-w-72 shrink-0 items-center justify-center rounded-lg border border-border">
         <QrCode className="size-6 text-muted-foreground" aria-hidden />
       </div>
     );
   }
 
-  if (!source) return <Skeleton className="size-36 rounded-lg" />;
+  if (!source)
+    return (
+      <Skeleton className="aspect-[13/17] w-full max-w-72 shrink-0 rounded-lg" />
+    );
 
   return (
-    <div className="rounded-lg bg-white p-2">
+    <div className="w-full max-w-72 shrink-0 rounded-lg bg-white p-3">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={source}
         /** O texto alternativo nomeia o equipamento — nunca o token. */
         alt={`Etiqueta QR do equipamento ${name}`}
-        className="size-32 object-contain"
+        width={520}
+        height={680}
+        className="block h-auto w-full"
       />
     </div>
   );

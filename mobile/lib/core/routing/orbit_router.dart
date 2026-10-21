@@ -20,6 +20,7 @@ import '../../features/field/presentation/field_dashboard_screen.dart';
 import '../../features/field/presentation/operation_execution_screen.dart';
 import '../../features/field/presentation/work_item_detail_screen.dart';
 import '../../features/field/presentation/work_queue_screen.dart';
+import '../../features/walk_in/presentation/walk_in_screen.dart';
 import '../../features/signature/presentation/customer_acknowledgement_screen.dart';
 import '../../features/signature/presentation/my_signature_screen.dart';
 import '../../features/sync/presentation/sync_center_screen.dart';
@@ -101,6 +102,22 @@ abstract final class OrbitRoutes {
   /// que os comandos do MB-02 endereçam — não o id composto do item.
   static String operationExecution(String operationId) =>
       '$workQueue/execucao/$operationId';
+
+  /// Abrir um atendimento estando no local.
+  ///
+  /// `customerId` opcional: vindo da folha do cliente, o roteiro já começa com
+  /// ele escolhido e não oferece o caminho de cadastrar outro. O nome viaja
+  /// junto para a etapa poder dizer de quem é o atendimento sem esperar uma
+  /// consulta.
+  static String walkIn({String? customerId, String? customerName}) {
+    final query = <String, String>{
+      if (customerId != null) 'cliente': customerId,
+      if (customerName != null) 'nome': customerName,
+    };
+    final base = '$workQueue/avulso';
+    if (query.isEmpty) return base;
+    return Uri(path: base, queryParameters: query).toString();
+  }
 
   /// A fila local: o que ainda não chegou ao servidor.
   static const syncCenter = '/perfil/sincronizacao';
@@ -242,8 +259,16 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: OrbitRoutes.workQueue,
             builder: (context, state) => const WorkQueueScreen(),
             routes: [
-              /// Antes de `:id`, senão o caminho de execução seria lido como
-              /// um id de item.
+              /// Antes de `:id`, senão o caminho seria lido como um id de
+              /// item — e `avulso` viraria um item inexistente.
+              GoRoute(
+                path: 'avulso',
+                parentNavigatorKey: _rootNavigatorKey,
+                builder: (context, state) => WalkInScreen(
+                  customerId: state.uri.queryParameters['cliente'],
+                  customerName: state.uri.queryParameters['nome'],
+                ),
+              ),
               GoRoute(
                 path: 'execucao/:operationId',
                 parentNavigatorKey: _rootNavigatorKey,

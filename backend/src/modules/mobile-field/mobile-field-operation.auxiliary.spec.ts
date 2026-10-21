@@ -95,15 +95,26 @@ function servico(
   const repository = {
     preparation: jest.fn().mockResolvedValue(source),
     isFieldActor: jest.fn().mockResolvedValue(true),
+    operationMaterials: jest.fn().mockResolvedValue([]),
   };
   const signatures = {
     context: jest.fn().mockResolvedValue({ signature: { id: 'assinatura' } }),
+  };
+  /* A autoridade de evidências aceita o auxiliar: `assigned` conta responsável
+   **e** auxiliar, porque a foto é prova do que aquela pessoa viu. */
+  const evidence = {
+    authorizeTarget: jest.fn().mockResolvedValue({
+      context: { type: 'OPERATION', id: operationId },
+      denied: false,
+      readable: true,
+    }),
   };
 
   return new MobileFieldOperationService(
     repository as never,
     {} as never,
     signatures as never,
+    evidence as never,
   );
 }
 
@@ -154,6 +165,23 @@ describe('auxiliar é somente leitura no atendimento', () => {
         'DOWNLOAD_DOCUMENT',
       ]),
     );
+  });
+
+  /**
+   * Anexar não é executar.
+   *
+   * O auxiliar não inicia, não conclui e não responde checklist — mas registra
+   * a foto do que ele viu, e a autoridade de evidências sempre aceitou isso
+   * (`assigned` conta auxiliar). O que faltava era a ação chegar ao contrato:
+   * sem ela a etapa de evidências não mostrava captura para ninguém.
+   */
+  it('anexa evidência, que é prova do que ele presenciou', async () => {
+    const { allowedActions, evidencePolicy } = await acoesDe(
+      'IN_PROGRESS',
+      auxiliarId,
+    );
+    expect(allowedActions).toContain('ADD_EVIDENCE');
+    expect(evidencePolicy.uploadEnabled).toBe(true);
   });
 
   it('o motivo do bloqueio é o papel no atendimento, não a permissão', async () => {

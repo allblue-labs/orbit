@@ -12,6 +12,12 @@
  * Sem cliente escolhido não há o que listar, e a tela diz isso.
  */
 import Link from "next/link";
+import { useState } from "react";
+import { MapPin, Pencil, Plus } from "lucide-react";
+import { useAction } from "@/actions";
+import { CustomerAddressFormDialog } from "@/components/customers/workspace/tabs/address-form.dialog";
+import { Button } from "@/components/ui/button";
+import type { CustomerAddress } from "@/types/customers";
 
 import { Label } from "@/components/ui/label";
 import {
@@ -39,9 +45,13 @@ export function OperationAddressField({
 }) {
   const addresses = useCustomerAddresses(customerId || null, true);
   const lista = addresses.data ?? [];
+  const manage = useAction("customer.update");
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<CustomerAddress | null>(null);
+  const selected = lista.find((address) => address.id === value);
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <Label htmlFor="operation-address">Endereço do atendimento</Label>
 
       {!customerId ? (
@@ -81,13 +91,78 @@ export function OperationAddressField({
             </SelectContent>
           </Select>
 
-          {/* O endereço inteiro, para conferir antes de mandar alguém. */}
-          <p className="text-xs text-muted-foreground">
-            {lista.find((endereco) => endereco.id === value)?.summary ??
-              "Escolha para onde o técnico vai."}
-          </p>
+          {selected ? (
+            <div className="space-y-3 rounded-xl border border-border bg-muted/30 p-4">
+              <p className="flex items-start gap-2 text-sm">
+                <MapPin
+                  className="mt-0.5 size-4 shrink-0 text-primary"
+                  aria-hidden
+                />
+                {selected.summary}
+              </p>
+              <dl className="grid gap-3 text-sm sm:grid-cols-2">
+                <div>
+                  <dt className="text-xs text-muted-foreground">Complemento</dt>
+                  <dd className="mt-1">
+                    {selected.complement || "Não informado"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">
+                    Ponto de referência e acesso
+                  </dt>
+                  <dd className="mt-1 whitespace-pre-wrap">
+                    {selected.notes || "Não informado"}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Escolha para onde o técnico vai.
+            </p>
+          )}
         </>
       )}
+      {customerId && manage.allowed ? (
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setEditing(null);
+              setOpen(true);
+            }}
+          >
+            <Plus className="size-4" aria-hidden />
+            Novo endereço
+          </Button>
+          {selected ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setEditing(selected);
+                setOpen(true);
+              }}
+            >
+              <Pencil className="size-4" aria-hidden />
+              Editar endereço e acesso
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+      {customerId ? (
+        <CustomerAddressFormDialog
+          customerId={customerId}
+          address={editing}
+          open={open}
+          onOpenChange={setOpen}
+          onSaved={(address) => onChange(address.id)}
+        />
+      ) : null}
     </div>
   );
 }

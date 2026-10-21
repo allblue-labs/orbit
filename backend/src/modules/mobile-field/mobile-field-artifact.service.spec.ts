@@ -126,9 +126,9 @@ describe('MobileFieldArtifactService', () => {
       return { service, repository };
     }
 
-    const nota = (note: string, visibility: string) => ({
+    const nota = (note: string, visibility: string, kind?: string) => ({
       action: 'FIELD_NOTE_ADDED',
-      details: { note, visibility },
+      details: { note, visibility, ...(kind ? { kind } : {}) },
       createdAt: new Date('2026-09-29T12:30:00.000Z'),
     });
 
@@ -145,6 +145,66 @@ describe('MobileFieldArtifactService', () => {
       ][];
       return calls[0]?.[0]?.snapshot?.metadata?.executionNotes;
     };
+
+    const pedidosDoSnapshot = (freeze: jest.Mock): unknown => {
+      const calls = freeze.mock.calls as [
+        { snapshot: { metadata?: { customerRequests?: unknown } } },
+      ][];
+      return calls[0]?.[0]?.snapshot?.metadata?.customerRequests;
+    };
+
+    /**
+     * O que foi constatado e o que foi pedido saem em blocos diferentes.
+     *
+     * O documento imprime "Observações da execução" e "Solicitações do
+     * cliente" separados, porque são as duas perguntas de quem lê a OS: o que
+     * foi feito, e o que sobrou. Num campo só, a pendência se perdia no meio do
+     * relato — e é dela que sai o próximo atendimento.
+     */
+    it('separa observação de solicitação', async () => {
+      const { service, repository } = bancada([
+        nota('Gás recarregado.', 'CUSTOMER_VISIBLE', 'OBSERVATION'),
+        nota(
+          'Cliente pediu orçamento do compressor.',
+          'CUSTOMER_VISIBLE',
+          'REQUEST',
+        ),
+      ]);
+
+      await congelar(service);
+
+      expect(notasDoSnapshot(repository.freeze)).toBe('Gás recarregado.');
+      expect(pedidosDoSnapshot(repository.freeze)).toBe(
+        'Cliente pediu orçamento do compressor.',
+      );
+    });
+
+    /**
+     * Nota gravada antes de `kind` existir continua sendo observação.
+     *
+     * Sem este padrão, texto de documentos já emitidos migraria para o bloco de
+     * pendências na próxima reemissão — mudando um papel que o cliente assinou.
+     */
+    it('nota sem natureza declarada é observação', async () => {
+      const { service, repository } = bancada([
+        nota('Constatação antiga.', 'CUSTOMER_VISIBLE'),
+      ]);
+
+      await congelar(service);
+
+      expect(notasDoSnapshot(repository.freeze)).toBe('Constatação antiga.');
+      expect(pedidosDoSnapshot(repository.freeze)).toBeNull();
+    });
+
+    it('solicitação interna não sai no documento do cliente', async () => {
+      const { service, repository } = bancada([
+        nota('Cobrar visita extra.', 'INTERNAL', 'REQUEST'),
+      ]);
+
+      await congelar(service);
+
+      expect(pedidosDoSnapshot(repository.freeze)).toBeNull();
+    });
 
     it('leva as observações visíveis ao cliente', async () => {
       const { service, repository } = bancada([
@@ -220,6 +280,72 @@ describe('MobileFieldArtifactService', () => {
   });
 });
 
+/**
+ * Qual motor desenha o relatório emitido em campo.
+ *
+ * ## O defeito
+ *
+ * `render` mandava `renderer: input.renderer ?? 'pdf.default'`. Como o
+ * aplicativo não escolhe motor, o `??` resolvia **sempre** para `pdf.default` —
+ * o desenho genérico de pares rótulo/valor. O mesmo documento pedido pela web
+ * saía por `pdf.premium`, com timbre, tabela de equipamentos e registro
+ * fotográfico; o que o cliente recebia em campo, não.
+ *
+ * O padrão é decisão do produto (`defaultRendererFor`), e `request` já o aplica
+ * quando o campo chega ausente. O conserto é não carimbar nada aqui.
+ */
+describe('motor de desenho do relatório de campo', () => {
+  function bancada(renderStatus: string) {
+    const rendering = { request: jest.fn().mockResolvedValue({}) };
+    const repository = {
+      get: jest.fn().mockResolvedValue(artifact(renderStatus)),
+      source: jest.fn().mockResolvedValue(operacao(87)),
+      existing: jest.fn().mockResolvedValue(null),
+    };
+    const service = new MobileFieldArtifactService(
+      repository as never,
+      rendering as never,
+      {} as never,
+    );
+    return { service, rendering };
+  }
+
+  const pedir = (
+    service: MobileFieldArtifactService,
+    renderer?: 'pdf.premium' | 'pdf.default' | 'html.default',
+  ) =>
+    service.render(actor, '01900000-0000-7000-8000-000000000010', {
+      renderer,
+    });
+
+  it('não escolhe motor: deixa o padrão do produto valer', async () => {
+    const { service, rendering } = bancada('NOT_RENDERED');
+
+    await pedir(service);
+
+    const [, , input] = rendering.request.mock.calls[0] as [
+      unknown,
+      unknown,
+      { renderer?: string },
+    ];
+    expect(input.renderer).toBeUndefined();
+  });
+
+  /* Pedir um motor específico continua funcionando — é assim que se compara a
+     saída de dois deles. */
+  it('respeita o motor quando alguém pede um', async () => {
+    const { service, rendering } = bancada('NOT_RENDERED');
+
+    await pedir(service, 'pdf.premium');
+
+    expect(rendering.request).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ renderer: 'pdf.premium' }),
+    );
+  });
+});
+
 function artifact(renderStatus: string): any {
   return {
     id: '01900000-0000-7000-8000-000000000010',
@@ -256,6 +382,7 @@ function operacao(serviceOrderNumber: number | null): any {
       history: [],
       checklistExecutions: [],
       inventoryMovements: [],
+      materials: [],
       fieldEvidence: [],
       fieldEvidenceUploads: [],
       customer: null,

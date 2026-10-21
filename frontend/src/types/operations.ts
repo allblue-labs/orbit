@@ -90,6 +90,8 @@ export interface OperationQuery {
  * do servidor.
  */
 export interface CreateOperationInput {
+  /** Optional manual service value. Null restores the linked quote value. */
+  manualAmount?: number | null;
   businessUnitId: string;
   customerId?: string;
   /** Os equipamentos atendidos — era `assetId`, um só. */
@@ -101,8 +103,8 @@ export interface CreateOperationInput {
   /**
    * O técnico em campo pode ver quanto este atendimento vale?
    *
-   * Governa a visibilidade, não o número: o valor é o total do orçamento
-   * vinculado. Omitido é `false` — liberar é um ato consciente.
+   * Exibe o valor manual ou o total do orçamento vinculado.
+   * Omitido é `false` — liberar é um ato consciente.
    */
   amountVisibleInField?: boolean;
   code: string;
@@ -110,8 +112,8 @@ export interface CreateOperationInput {
   title: string;
   description?: string;
   priority?: OperationPriority;
-  scheduledStart?: string;
-  scheduledEnd?: string;
+  scheduledStart?: string | null;
+  scheduledEnd?: string | null;
 
   /**
    * Quem executa, e quem acompanha.

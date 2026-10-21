@@ -79,6 +79,20 @@ export class RateLimitException extends BaseException {
   }
 }
 
+/**
+ * Um serviço de terceiro está fora — e isso não é defeito nosso.
+ *
+ * Distinto de `InfrastructureException` (500) de propósito: 503 diz "tente de
+ * novo ou siga sem isto", e é a resposta certa para uma consulta de
+ * conveniência. Um 500 faria o cliente tratar a queda do ViaCEP como falha do
+ * Orbit, e o técnico em campo concluiria que não dá para cadastrar.
+ */
+export class ServiceUnavailableException extends BaseException {
+  constructor(message: string, code = 'SERVICE_UNAVAILABLE') {
+    super({ code, message }, HttpStatus.SERVICE_UNAVAILABLE);
+  }
+}
+
 export class InfrastructureException extends BaseException {
   readonly internalCategory?: string;
   override readonly cause: unknown;

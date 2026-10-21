@@ -557,9 +557,44 @@ describe('o valor do atendimento em campo', () => {
     } as never);
   }
 
+  it.each(['1250.50', '0'])(
+    'prioriza o valor manual %s sem inventar status de pagamento',
+    async (manualAmount) => {
+      const contexto = await servico({
+        amountVisibleInField: true,
+        manualAmount,
+        quote: { total: '8000.00', status: 'APPROVED' },
+      }).fieldContext(actor, CANONICO);
+      expect(contexto.financialSummary).toEqual({
+        currency: 'BRL',
+        approvedAmount: manualAmount,
+        paymentStatus: null,
+      });
+    },
+  );
+
+  it('omite também o valor manual quando não há liberação', async () => {
+    const contexto = await servico({
+      amountVisibleInField: false,
+      manualAmount: '500',
+      quote: null,
+    }).fieldContext(actor, CANONICO);
+    expect(contexto.financialSummary).toBeUndefined();
+  });
+
+  it('publica o valor manual sem exigir orçamento', async () => {
+    const contexto = await servico({
+      amountVisibleInField: true,
+      manualAmount: '500',
+      quote: null,
+    }).fieldContext(actor, CANONICO);
+    expect(contexto.financialSummary?.approvedAmount).toBe('500');
+  });
+
   it('liberado, publica o total do orçamento vinculado', async () => {
     const service = servico({
       amountVisibleInField: true,
+      manualAmount: null,
       quote: { total: '8000.00', status: 'APPROVED' },
     });
 

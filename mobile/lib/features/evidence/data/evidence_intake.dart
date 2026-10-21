@@ -87,6 +87,7 @@ Future<LocalMedia> intakeEvidence({
   required EvidenceSource source,
   DateTime? capturedAt,
   String? localMediaId,
+  String? caption,
 }) async {
   final id = localMediaId ?? newLocalMediaId();
   final path = await files.persist(id, extensionForMime(mimeType), bytes);
@@ -102,6 +103,7 @@ Future<LocalMedia> intakeEvidence({
     sha256: sha256OfBytes(bytes),
     capturedAt: capturedAt ?? DateTime.now().toUtc(),
     category: category,
+    caption: caption?.trim().isEmpty ?? true ? null : caption!.trim(),
     source: source,
     state: LocalMediaState.pending,
 

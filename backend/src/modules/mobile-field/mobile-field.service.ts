@@ -496,14 +496,8 @@ export class MobileFieldService {
    * ao aplicativo "este atendimento não tem valor", que é uma afirmação diferente de
    * "não cabe a você ver" — e a tela mostraria "R$ 0,00" num serviço de oito mil.
    *
-   * ## O número é do orçamento
-   *
-   * `Quote.total`, do orçamento vinculado à operação. A operação não guarda valor
-   * próprio de propósito: dois campos de dinheiro para o mesmo serviço divergem no
-   * primeiro reajuste, e o que o cliente assinou é o orçamento.
-   *
-   * Sem orçamento vinculado não há valor a mostrar, mesmo com a chave ligada — e
-   * isso também é omissão, não zero.
+   * O valor manual tem prioridade, inclusive quando é zero. Sem valor manual,
+   * usa o total do orçamento vinculado. Sem ambos, publica valor nulo.
    */
   private async financialSummary(
     actor: MobileFieldActor,
@@ -518,6 +512,19 @@ export class MobileFieldService {
     /* Não liberado: o campo não existe. É a única forma de dizer "não cabe a
        você ver" sem afirmar nada sobre o valor. */
     if (!operation?.amountVisibleInField) return {};
+
+    if (
+      operation.manualAmount !== null &&
+      operation.manualAmount !== undefined
+    ) {
+      return {
+        financialSummary: {
+          currency: 'BRL',
+          approvedAmount: operation.manualAmount.toString(),
+          paymentStatus: null,
+        },
+      };
+    }
 
     /**
      * Liberado e sem orçamento: o campo **existe**, com valor nulo.

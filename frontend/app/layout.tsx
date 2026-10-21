@@ -4,6 +4,7 @@ import { IBM_Plex_Mono, Inter, Space_Grotesk } from "next/font/google";
 import type { ReactNode } from "react";
 import "./globals.css";
 import { Providers } from "./providers";
+import { MobileAppLinksProvider } from "@/components/mobile/mobile-app-links.provider";
 import {
   parseSidebarCookie,
   SIDEBAR_COOKIE,
@@ -65,9 +66,7 @@ export default async function RootLayout({
    */
   const store = await cookies();
   const theme = parseThemeCookie(store.get(THEME_COOKIE)?.value);
-  const sidebarCollapsed = parseSidebarCookie(
-    store.get(SIDEBAR_COOKIE)?.value,
-  );
+  const sidebarCollapsed = parseSidebarCookie(store.get(SIDEBAR_COOKIE)?.value);
   /* Pela mesma razão: saber antes de pintar evita o aviso de assinatura
      aparecer e sumir na frente de quem já o fechou. */
   const avisoDispensado = avisoFoiDispensado(store.get(AVISO_COOKIE)?.value);
@@ -90,18 +89,23 @@ export default async function RootLayout({
       suppressHydrationWarning
     >
       <head>
-        <script
-          dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }}
-        />
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
       </head>
       <body>
-        <Providers
-          sidebarCollapsed={sidebarCollapsed}
-          theme={theme}
-          avisoAssinaturaDispensado={avisoDispensado}
+        <MobileAppLinksProvider
+          links={{
+            playStore: process.env.ORBIT_MOBILE_PLAY_STORE_URL,
+            appStore: process.env.ORBIT_MOBILE_APP_STORE_URL,
+          }}
         >
-          {children}
-        </Providers>
+          <Providers
+            sidebarCollapsed={sidebarCollapsed}
+            theme={theme}
+            avisoAssinaturaDispensado={avisoDispensado}
+          >
+            {children}
+          </Providers>
+        </MobileAppLinksProvider>
       </body>
     </html>
   );

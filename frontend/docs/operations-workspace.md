@@ -233,3 +233,27 @@ npm run typecheck   # sem erros
 npm run lint        # sem erros
 npm run build       # 17 rotas
 ```
+
+
+## Criação por etapas e valor manual
+
+O `OperationFormDialog` cria em cinco etapas: cliente e local; serviço e
+equipamentos; agenda e equipe; valores e checklist; revisão. A criação só é
+enviada na confirmação final. Voltar mantém os dados e cancelar descarta o
+rascunho. A edição continua agrupada numa única tela.
+
+Complemento e ponto de referência são dados de `CustomerAddress`. O wizard
+reutiliza `CustomerAddressFormDialog` para cadastrar ou editar o endereço sem
+sair do atendimento. Salvar nesse diálogo atualiza o cadastro compartilhado do
+cliente imediatamente, mesmo se a operação for cancelada depois.
+
+`manualAmount` aceita número não negativo com até duas casas decimais. Na leitura,
+o decimal é serializado como string. Zero é um valor explícito; `null` remove a
+preferência e restaura o total do orçamento vinculado. O valor manual não altera
+o orçamento nem registra um recebimento. `amountVisibleInField` continua
+controlando a exibição no aplicativo; quando habilitado, o valor manual tem
+prioridade sobre o orçamento. O status de pagamento fica nulo para valor manual.
+
+A publicação requer a migration `20261021140000_operation_manual_amount` antes
+de iniciar a API atualizada, além do rebuild da API e do frontend. A migration
+acrescenta uma coluna decimal opcional e uma restrição para impedir negativos.

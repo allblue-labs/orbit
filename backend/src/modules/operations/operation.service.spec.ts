@@ -27,6 +27,7 @@ describe('OperationService', () => {
     findCustomer: jest.fn(),
     findAsset: jest.fn(),
     create: jest.fn(),
+    update: jest.fn(),
     changeStatus: jest.fn(),
     replaceResponsibleFieldTechnician: jest.fn(),
     addAuxiliaryTechnician: jest.fn(),
@@ -122,6 +123,76 @@ describe('OperationService', () => {
       expect.any(Object),
       [],
       [],
+    );
+  });
+
+  it.each([0, 1250.5, null])(
+    'persiste o valor manual %s na criação',
+    async (manualAmount) => {
+      repository.create.mockResolvedValue({ id: 'operation-id' });
+      await service.create('organization-id', 'actor-id', {
+        businessUnitId: 'unit-id',
+        code: 'OS-VALUE',
+        kind: OperationKind.MAINTENANCE,
+        title: 'Visita',
+        manualAmount,
+      });
+      expect(repository.create).toHaveBeenCalledWith(
+        expect.objectContaining({ manualAmount }),
+        'actor-id',
+        expect.any(Object),
+        [],
+        [],
+      );
+    },
+  );
+
+  it.each([0, 250.5, null, undefined])(
+    'atualiza ou limpa o valor manual sem confundir zero com ausência: %s',
+    async (manualAmount) => {
+      repository.find.mockResolvedValue({
+        id: 'operation-id',
+        businessUnitId: 'unit-id',
+        customerId: null,
+        customerAddressId: null,
+        assets: [],
+        scheduledStart: null,
+        scheduledEnd: null,
+      });
+      repository.update.mockResolvedValue({ id: 'operation-id' });
+      await service.update('operation-id', 'organization-id', 'actor-id', {
+        manualAmount,
+      });
+      expect(repository.update).toHaveBeenCalledWith(
+        'operation-id',
+        expect.objectContaining({ manualAmount }),
+        'actor-id',
+        expect.any(Object),
+      );
+    },
+  );
+
+  it('permite remover o término anterior ao reagendar uma operação', async () => {
+    repository.find.mockResolvedValue({
+      id: 'operation-id',
+      businessUnitId: 'unit-id',
+      customerId: null,
+      customerAddressId: null,
+      assets: [],
+      scheduledStart: new Date('2026-10-20T09:00:00Z'),
+      scheduledEnd: new Date('2026-10-20T10:00:00Z'),
+    });
+    repository.update.mockResolvedValue({ id: 'operation-id' });
+    const scheduledStart = new Date('2026-10-22T09:00:00Z');
+    await service.update('operation-id', 'organization-id', 'actor-id', {
+      scheduledStart,
+      scheduledEnd: null,
+    });
+    expect(repository.update).toHaveBeenCalledWith(
+      'operation-id',
+      expect.objectContaining({ scheduledStart, scheduledEnd: null }),
+      'actor-id',
+      expect.any(Object),
     );
   });
 

@@ -183,6 +183,9 @@ services:
       PORT: 3000
       HOSTNAME: 0.0.0.0
       ORBIT_API_URL: http://api:5001/api/v1
+      # Links públicos do app mobile, configuráveis sem rebuild da imagem.
+      ORBIT_MOBILE_PLAY_STORE_URL: ${ORBIT_MOBILE_PLAY_STORE_URL:-https://example.com/orbit/android}
+      ORBIT_MOBILE_APP_STORE_URL: ${ORBIT_MOBILE_APP_STORE_URL:-https://example.com/orbit/ios}
       # Origem pública canônica usada pela proteção same-origin do BFF. Não é
       # inferida do host interno do container/reverse proxy.
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:?FRONTEND_ORIGIN is required}

@@ -9,6 +9,7 @@ import {
   IsDate,
   IsIn,
   IsInt,
+  IsNumber,
   IsObject,
   IsOptional,
   IsString,
@@ -111,6 +112,14 @@ export class OperationQueryDto {
 }
 
 export class CreateOperationDto {
+  /** Explicit manual value; null restores the linked quote as the source. */
+  @ApiPropertyOptional({ nullable: true, minimum: 0, maximum: 999999999999.99 })
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2, allowNaN: false, allowInfinity: false })
+  @Min(0)
+  @Max(999999999999.99)
+  manualAmount?: number | null;
+
   @ApiProperty()
   @IsUUIDv7()
   businessUnitId!: string;
@@ -157,8 +166,8 @@ export class CreateOperationDto {
    * não é informação que todo técnico precise ter na mão dentro da casa dele. Ligar
    * é um ato consciente, por atendimento.
    *
-   * O número não vem daqui: é o total do orçamento vinculado. Este campo governa a
-   * visibilidade, e sem orçamento não há o que mostrar mesmo ligado.
+   * Este campo governa apenas a visibilidade. O número é o valor manual,
+   * quando informado, ou o total do orçamento vinculado.
    */
   @ApiPropertyOptional({ default: false })
   @IsOptional()
@@ -197,13 +206,13 @@ export class CreateOperationDto {
   @IsOptional()
   @Type(() => Date)
   @IsDate()
-  scheduledStart?: Date;
+  scheduledStart?: Date | null;
 
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Date)
   @IsDate()
-  scheduledEnd?: Date;
+  scheduledEnd?: Date | null;
 
   @ApiPropertyOptional()
   @IsOptional()

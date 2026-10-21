@@ -120,10 +120,11 @@ export interface OperationListItemReadModel {
   /**
    * O técnico em campo vê quanto este atendimento vale?
    *
-   * Governa a visibilidade, não o número: o valor é o total do orçamento
-   * vinculado, e sem orçamento não há o que mostrar mesmo ligado.
+   * Exibe o valor manual ou, se ausente, o total do orçamento vinculado.
    */
   amountVisibleInField: boolean;
+  /** Manual service value as a decimal string; null uses the linked quote. */
+  manualAmount?: string | null;
   code: string;
   /**
    * O número da Ordem de Serviço — contagem própria, por organização.

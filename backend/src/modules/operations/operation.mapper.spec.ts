@@ -22,6 +22,7 @@ describe('OperationReadModelMapper', () => {
       customerAddressId: null,
       sector: null,
       amountVisibleInField: false,
+      manualAmount: { toString: () => '1250.50' },
       code: 'ORB-1',
       serviceOrderNumber: 87,
       kind: 'MAINTENANCE',
@@ -47,6 +48,7 @@ describe('OperationReadModelMapper', () => {
       attachments: [attachment],
     });
 
+    expect(result.manualAmount).toBe('1250.50');
     expect(result.createdAt).toBe('2026-01-01T00:00:00.000Z');
     expect(result.transitions).toEqual([
       'SCHEDULED',

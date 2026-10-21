@@ -161,7 +161,25 @@ export class RenderInputFactory {
       ...(source.pmocEquipmentExecution?.fieldEvidence ?? []).map((item) => ({
         id: item.id,
         kind: item.category,
-        caption: null,
+        caption: item.caption,
+        fileName: item.fileName,
+        mimeType: item.mimeType,
+        sha256: item.sha256,
+        storageFile: item.storageFile,
+      })),
+      /**
+       * As fotos do atendimento.
+       *
+       * Este ramo não existia. A lista só olhava o PMOC, então a ordem de
+       * serviço emitida pela web chegava ao compositor sem evidência nenhuma —
+       * e a seção "Registro fotográfico", que ele sabe desenhar, não aparecia.
+       * O caminho do aplicativo passava por outro lugar (o snapshot congelado)
+       * e por isso o defeito ficou invisível por tabela.
+       */
+      ...(source.operation?.fieldEvidence ?? []).map((item) => ({
+        id: item.id,
+        kind: item.category,
+        caption: item.caption,
         fileName: item.fileName,
         mimeType: item.mimeType,
         sha256: item.sha256,

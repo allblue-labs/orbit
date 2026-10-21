@@ -9,6 +9,7 @@ import {
   ConflictException,
   EntityNotFoundException,
   ForbiddenException,
+  ValidationException,
 } from '../../exceptions';
 import { InventoryService } from '../inventory/inventory.service';
 import { OperationStateMachine } from '../operations/operation-state-machine';
@@ -27,6 +28,7 @@ import type {
   FieldOperationExecutionPreparationReadModel,
   FieldOperationTimelineReadModel,
 } from './mobile-field-operation.read-models';
+import { MobileEvidenceRepository } from './mobile-evidence.repository';
 import { MobileSignatureRepository } from './mobile-signature.repository';
 import { formatServiceOrderNumber } from '../operations/service-order-number';
 
@@ -41,6 +43,7 @@ export class MobileFieldOperationService {
     private readonly repository: MobileFieldOperationRepository,
     private readonly inventory: InventoryService,
     private readonly signatures: MobileSignatureRepository,
+    private readonly evidence: MobileEvidenceRepository,
   ) {}
 
   async preparation(
@@ -49,8 +52,44 @@ export class MobileFieldOperationService {
   ): Promise<FieldOperationExecutionPreparationReadModel> {
     const started = performance.now();
     const source = await this.requireVisible(actor, operationId);
-    const allowedActions = this.actions(source, actor);
+    /**
+     * Quem decide se dá para anexar é a autoridade de evidências — a mesma que
+     * o upload consulta.
+     *
+     * Antes `ADD_EVIDENCE` simplesmente **não existia** nesta lista: a etapa
+     * Evidências do roteiro lia `allowedActions` para decidir se mostrava a
+     * captura, e a resposta era sempre não. O passo abria sem nenhuma forma de
+     * registrar foto — e, com a lista recusada por 404, só com a frase "este
+     * registro não está disponível".
+     *
+     * Deduzir aqui com status e permissão produziria um botão que o upload
+     * recusaria depois, em outra tela, depois de a pessoa ter tirado a foto.
+     */
+    const evidenceAuthority = await this.evidence.authorizeTarget(
+      actor,
+      'OPERATION',
+      operationId,
+    );
+    const canAttachEvidence = Boolean(
+      evidenceAuthority.context && !evidenceAuthority.denied,
+    );
+    const allowedActions = this.actions(source, actor, canAttachEvidence);
     const blockers = this.blockers(source, actor);
+
+    /*
+     * Dois caminhos para material, duas autoridades.
+     *
+     * Catálogo move saldo e exige `inventory.manage`; avulso não move nada e
+     * exige `operations.update`. A política publicava só o primeiro, e por isso
+     * respondia "não prevê registro de materiais" ao técnico que só executa.
+     */
+    const emAndamento = source.status === OperationStatus.IN_PROGRESS;
+    const podeCatalogo = emAndamento && this.has(actor, 'inventory.manage');
+    const podeAvulso = emAndamento && this.has(actor, 'operations.update');
+    const materiais = await this.repository.operationMaterials(
+      actor.organizationId,
+      operationId,
+    );
     const signatureContext = await this.signatures.context(
       actor.organizationId,
       actor.id,
@@ -114,17 +153,31 @@ export class MobileFieldOperationService {
         this.checklist(item),
       ),
       materialPolicy: {
-        enabled:
-          source.status === OperationStatus.IN_PROGRESS &&
-          this.has(actor, 'inventory.manage'),
+        enabled: podeCatalogo || podeAvulso,
         allowedActions: allowedActions.includes('REGISTER_MATERIAL')
           ? ['REGISTER_MATERIAL']
           : [],
         requiresAvailableStock: true,
         idempotencyRequired: true,
+        catalogEnabled: podeCatalogo,
+        freeFormEnabled: podeAvulso,
       },
+      materials: materiais.map((item) => ({
+        id: item.id,
+        origin: item.origin as 'PLANNED' | 'APPLIED',
+        description: item.description,
+        unit: item.unit,
+        quantity: item.quantity.toString(),
+        notes: item.notes,
+        catalogItemId: item.catalogItemId,
+        registeredBy: item.createdBy
+          ? { id: item.createdBy.id, name: item.createdBy.displayName }
+          : null,
+        registeredAt: item.createdAt.toISOString(),
+      })),
       evidencePolicy: {
-        uploadEnabled: false,
+        /* O mesmo booleano da ação: a política e o botão não podem divergir. */
+        uploadEnabled: canAttachEvidence,
         acceptedKinds: ['PHOTO', 'VIDEO', 'DOCUMENT'],
         base64Accepted: false,
       },
@@ -215,6 +268,7 @@ export class MobileFieldOperationService {
       payloadHash: this.hash(input),
       note: input.note,
       visibility: input.visibility ?? 'INTERNAL',
+      kind: input.kind ?? 'OBSERVATION',
     });
   }
 
@@ -246,12 +300,44 @@ export class MobileFieldOperationService {
     };
   }
 
+  /**
+   * Registra um material aplicado no atendimento.
+   *
+   * ## Dois materiais, duas autoridades
+   *
+   * Com produto de catálogo o registro **move saldo**, e por isso exige
+   * `inventory.manage`: é operação de almoxarifado. Sem produto é material
+   * avulso — a abraçadeira, o metro de fita comprado na esquina —, que não tem
+   * saldo a mover e exige `operations.update`, a autoridade de registrar o que
+   * aconteceu no atendimento.
+   *
+   * Antes só o primeiro caso existia, e `catalogItemId` era obrigatório. O
+   * técnico com permissão de executar e sem permissão de estoque não conseguia
+   * registrar material nenhum — e a etapa do roteiro dizia que "este
+   * atendimento não prevê registro de materiais", que era verdade sobre a
+   * permissão e mentira sobre o atendimento.
+   *
+   * ## A linha é o que o relatório imprime
+   *
+   * O movimento de estoque continua existindo quando há produto, e fica
+   * referenciado pela linha. Separados porque um avulso tem linha e não tem
+   * movimento — e porque um movimento estornado não deve apagar do relatório o
+   * que de fato foi aplicado.
+   */
   async registerMaterial(
     actor: MobileFieldActor,
     operationId: string,
     input: FieldOperationMaterialDto,
   ) {
-    this.requirePermission(actor, 'inventory.manage');
+    const descricao = input.description?.trim() ?? '';
+    if (!input.catalogItemId && !descricao)
+      throw new ValidationException(
+        'Informe o produto do catálogo ou a descrição do material',
+      );
+    this.requirePermission(
+      actor,
+      input.catalogItemId ? 'inventory.manage' : 'operations.update',
+    );
     const operation = await this.requireVisible(actor, operationId);
     if (operation.status !== OperationStatus.IN_PROGRESS)
       throw new ForbiddenException(
@@ -261,6 +347,42 @@ export class MobileFieldOperationService {
       throw new ConflictException(
         'Versão desatualizada; recarregue o atendimento',
       );
+
+    /* O reenvio do mesmo comando encontra a linha e devolve a que existe: sem
+       isto, a volta da rede somava o material duas vezes no relatório. */
+    const registrada = await this.repository.operationMaterialByCommand(
+      actor.organizationId,
+      input.commandId,
+    );
+    if (registrada) {
+      if (
+        registrada.operationId !== operationId ||
+        registrada.catalogItemId !== (input.catalogItemId ?? null) ||
+        Number(registrada.quantity.toString()) !== input.quantity
+      )
+        throw new ConflictException(
+          'Idempotency key reused with a different material payload',
+        );
+      return this.materialResult(registrada, operationId, true);
+    }
+
+    if (!input.catalogItemId) {
+      const linha = await this.repository.createOperationMaterial({
+        organizationId: actor.organizationId,
+        businessUnitId: operation.businessUnitId,
+        operationId,
+        actorId: actor.id,
+        commandId: input.commandId,
+        catalogItemId: null,
+        inventoryMovementId: null,
+        description: descricao,
+        unit: input.unit?.trim() || 'UN',
+        quantity: input.quantity,
+        notes: input.notes?.trim() || null,
+      });
+      return this.materialResult(linha, operationId, false);
+    }
+
     const existing = await this.repository.materialByCommand(
       actor.organizationId,
       input.commandId,
@@ -301,13 +423,55 @@ export class MobileFieldOperationService {
         input.commandId,
       ));
     if (!resolved) throw new EntityNotFoundException('InventoryMovement');
-    return {
-      movementId: resolved.id,
+
+    /* A linha do relatório, com o nome copiado do produto: o documento é
+       congelado, e renomear o produto depois não reescreve uma OS assinada. */
+    const linha = await this.repository.createOperationMaterial({
+      organizationId: actor.organizationId,
+      businessUnitId: operation.businessUnitId,
       operationId,
+      actorId: actor.id,
+      commandId: input.commandId,
       catalogItemId: input.catalogItemId,
-      quantity: resolved.quantity.toString(),
+      inventoryMovementId: resolved.id,
+      /* A descrição vem do aplicativo, que já mostrou o nome do produto na
+         escolha. Sem ela, um rótulo honesto em vez de uma segunda consulta ao
+         catálogo só para copiar um nome. */
+      description: descricao || 'Material do catálogo',
+      unit: input.unit?.trim() || 'UN',
+      quantity: input.quantity,
+      notes: input.notes?.trim() || null,
+    });
+
+    return {
+      ...this.materialResult(linha, operationId, Boolean(existing)),
+      movementId: resolved.id,
       balanceAfter: resolved.balanceAfter.toString(),
-      idempotentReplay: Boolean(existing || !movement),
+    };
+  }
+
+  private materialResult(
+    linha: {
+      id: string;
+      catalogItemId: string | null;
+      inventoryMovementId: string | null;
+      description: string;
+      unit: string;
+      quantity: { toString(): string };
+    },
+    operationId: string,
+    idempotentReplay: boolean,
+  ) {
+    return {
+      id: linha.id,
+      operationId,
+      movementId: linha.inventoryMovementId,
+      catalogItemId: linha.catalogItemId,
+      description: linha.description,
+      unit: linha.unit,
+      quantity: linha.quantity.toString(),
+      balanceAfter: null as string | null,
+      idempotentReplay,
     };
   }
 
@@ -403,9 +567,20 @@ export class MobileFieldOperationService {
   private actions(
     source: any,
     actor: MobileFieldActor,
+    canAttachEvidence = false,
   ): FieldOperationAllowedAction[] {
     const actions: FieldOperationAllowedAction[] = ['VIEW'];
     if (source.location || source.customer?.address) actions.push('OPEN_ROUTE');
+
+    /**
+     * Anexar vem antes do corte do auxiliar, e de propósito.
+     *
+     * A autoridade de evidências aceita o auxiliar — `assigned` conta
+     * responsável **e** auxiliar, porque a foto é prova do que aquela pessoa
+     * viu. Colocar isto depois do corte o excluiria de registrar o que ele
+     * mesmo presenciou.
+     */
+    if (canAttachEvidence) actions.push('ADD_EVIDENCE');
 
     /**
      * O auxiliar para por aqui — mais o que for leitura, logo abaixo.
@@ -419,8 +594,11 @@ export class MobileFieldOperationService {
       if (this.has(actor, 'operations.status.update'))
         actions.push('RESUME', 'COMPLETE');
       if (this.has(actor, 'operations.update'))
-        actions.push('UPDATE_CHECKLIST', 'ADD_NOTE');
-      if (this.has(actor, 'inventory.manage'))
+        /* `REGISTER_MATERIAL` entrou aqui: material avulso não move saldo, e
+           exigir `inventory.manage` para descrever uma abraçadeira deixava o
+           técnico que só executa sem nenhuma forma de registrar o que aplicou. */
+        actions.push('UPDATE_CHECKLIST', 'ADD_NOTE', 'REGISTER_MATERIAL');
+      else if (this.has(actor, 'inventory.manage'))
         actions.push('REGISTER_MATERIAL');
     } else if (
       !auxiliary &&
@@ -527,8 +705,8 @@ export class MobileFieldOperationService {
       if (this.has(actor, 'operations.status.update'))
         actions.push('RESUME', 'COMPLETE');
       if (this.has(actor, 'operations.update'))
-        actions.push('UPDATE_CHECKLIST', 'ADD_NOTE');
-      if (this.has(actor, 'inventory.manage'))
+        actions.push('UPDATE_CHECKLIST', 'ADD_NOTE', 'REGISTER_MATERIAL');
+      else if (this.has(actor, 'inventory.manage'))
         actions.push('REGISTER_MATERIAL');
     }
     return actions;

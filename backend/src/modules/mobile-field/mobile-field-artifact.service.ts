@@ -149,7 +149,17 @@ export class MobileFieldArtifactService {
       artifact.artifactExecutionId,
       { organizationId: actor.organizationId, actorId: actor.id },
       {
-        renderer: input.renderer ?? 'pdf.default',
+        /**
+         * Omitido, quem escolhe é o produto — `defaultRendererFor`.
+         *
+         * Aqui estava `?? 'pdf.default'`, e por isso o relatório emitido pelo
+         * aplicativo saía como lista de pares rótulo/valor enquanto o mesmo
+         * documento, pedido pela web, saía com timbre, tabela e registro
+         * fotográfico. O padrão do produto é `pdf.premium`; passar uma string
+         * fixa aqui o anulava, e o campo era justamente onde o documento é
+         * entregue ao cliente.
+         */
+        renderer: input.renderer,
         metadata: {
           source: 'MOBILE_FIELD',
           fieldArtifactId: artifact.id,
@@ -405,11 +415,21 @@ export class MobileFieldArtifactService {
             })),
           },
         ),
-        this.section('materiais', 'Materiais utilizados', 5, {
-          Materiais: operation.inventoryMovements.map((item) => ({
-            produto: item.catalogItem.name,
+        /**
+         * Materiais: a lista do atendimento, não os movimentos de estoque.
+         *
+         * Era `inventoryMovements`, que só conhece item de catálogo. Material
+         * avulso e material previsto não apareciam — e material avulso é o que
+         * mais sai em campo. `origem` viaja junto porque o documento distingue
+         * "estava previsto" de "foi aplicado", que é o que o cliente confere.
+         */
+        this.section('materiais', 'Materiais', 5, {
+          Materiais: operation.materials.map((item) => ({
+            descricao: item.description,
             quantidade: item.quantity.toString(),
-            unidade: item.catalogItem.unit,
+            unidade: item.unit,
+            origem: item.origin,
+            observacao: item.notes,
           })),
         }),
       ],
@@ -431,7 +451,21 @@ export class MobileFieldArtifactService {
         ? this.acknowledgement(source.acknowledgement)
         : null,
       metadata: {
-        executionNotes: this.customerVisibleNotes(operation.history),
+        executionNotes: this.customerVisibleNotes(
+          operation.history,
+          'OBSERVATION',
+        ),
+        /**
+         * O que o cliente pediu, ou o que ficou pendente.
+         *
+         * Sai separado de `executionNotes` porque o documento as imprime em
+         * dois blocos — "Observações da execução" e "Pendências" —, e são as
+         * duas perguntas de quem lê a OS: o que foi feito, e o que sobrou.
+         */
+        customerRequests: this.customerVisibleNotes(
+          operation.history,
+          'REQUEST',
+        ),
       },
       frozenAt: new Date().toISOString(),
     };
@@ -459,11 +493,15 @@ export class MobileFieldArtifactService {
    */
   private customerVisibleNotes(
     history: readonly { action: string; details: unknown }[],
+    kind: 'OBSERVATION' | 'REQUEST',
   ): string | null {
     const notas = history
       .filter((entry) => entry.action === 'FIELD_NOTE_ADDED')
       .map((entry) => this.record(entry.details))
       .filter((details) => details.visibility === 'CUSTOMER_VISIBLE')
+      /* Nota anterior ao campo existir não tem `kind`, e era observação: tratá-la
+         como pendência moveria texto de documentos já emitidos para outro bloco. */
+      .filter((details) => (details.kind ?? 'OBSERVATION') === kind)
       .map((details) =>
         typeof details.note === 'string' ? details.note.trim() : '',
       )
@@ -678,6 +716,7 @@ export class MobileFieldArtifactService {
     sha256: string;
     mimeType: string;
     category: string;
+    caption: string | null;
     fileName: string;
     capturedAt: Date | null;
   }) {
@@ -687,6 +726,9 @@ export class MobileFieldArtifactService {
       sha256: item.sha256,
       mimeType: item.mimeType,
       category: item.category,
+      /* Congelada junto com o resto: o documento emitido mostra a legenda que
+         existia no momento da emissão, como todo dado dele. */
+      caption: item.caption,
       fileName: item.fileName,
       capturedAt: item.capturedAt?.toISOString() ?? null,
     };

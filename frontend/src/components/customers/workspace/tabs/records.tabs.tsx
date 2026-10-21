@@ -11,7 +11,13 @@
  * renderização vêm dos registries que já os apresentam em outras telas.
  */
 import Link from "next/link";
-import { ArrowRight, ClipboardCheck, FileStack, Workflow } from "lucide-react";
+import {
+  ArrowRight,
+  ClipboardCheck,
+  FileStack,
+  Plus,
+  Workflow,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -29,6 +35,9 @@ import {
 } from "@/components/artifact-executions/execution-badges";
 import { DocumentViewer } from "@/components/documents/document-viewer";
 import { UserReference } from "@/components/identity/user-reference";
+import { OperationFormDialog } from "@/components/operations/operation-form.dialog";
+import { useSchedulingTimeZone } from "@/components/scheduling/use-scheduling-timezone";
+import { useAction } from "@/actions";
 import { EntityBadge, entityHref } from "@/entities";
 import {
   useCustomerExecutionsList,
@@ -50,7 +59,16 @@ import { useState } from "react";
 /* Operações                                                           */
 /* ------------------------------------------------------------------ */
 
-export function OperationsTab({ customerId }: { customerId: string }) {
+export function OperationsTab({
+  customerId,
+  customerLabel,
+}: {
+  customerId: string;
+  customerLabel: string;
+}) {
+  const create = useAction("operation.create");
+  const { timeZone } = useSchedulingTimeZone();
+  const [formOpen, setFormOpen] = useState(false);
   const list = useListController<OperationQuery>({ limit: 10 });
   const query = useCustomerOperationsList(customerId, list.query);
 
@@ -67,7 +85,15 @@ export function OperationsTab({ customerId }: { customerId: string }) {
           placeholder="Código, título ou descrição"
           className="min-w-64 flex-1"
         />
-        <ResultSummary meta={meta} noun="operação" gender="f" />
+        <div className="flex flex-wrap items-center gap-3">
+          <ResultSummary meta={meta} noun="operação" gender="f" />
+          {create.allowed ? (
+            <Button size="sm" onClick={() => setFormOpen(true)}>
+              <Plus className="size-4" aria-hidden />
+              {create.label}
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       <ListState
@@ -81,6 +107,12 @@ export function OperationsTab({ customerId }: { customerId: string }) {
           title: "Nenhuma operação para este cliente",
           description:
             "As ordens de serviço aparecem aqui assim que forem criadas com este cliente vinculado.",
+          action: create.allowed ? (
+            <Button size="sm" onClick={() => setFormOpen(true)}>
+              <Plus className="size-4" aria-hidden />
+              {create.label}
+            </Button>
+          ) : undefined,
         }}
       >
         {(rows) => (
@@ -165,6 +197,13 @@ export function OperationsTab({ customerId }: { customerId: string }) {
         onPrevious={list.previousPage}
         onNext={list.nextPage}
         isFetching={query.isFetching}
+      />
+      <OperationFormDialog
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        editing={null}
+        timeZone={timeZone}
+        prefill={{ customerId, customerLabel }}
       />
     </div>
   );

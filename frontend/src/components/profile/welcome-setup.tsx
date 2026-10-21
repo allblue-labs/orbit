@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
   ArrowLeft,
@@ -10,6 +10,7 @@ import {
   PenLine,
   ShieldCheck,
   Sparkles,
+  Smartphone,
 } from "lucide-react";
 
 import { MutationError } from "@/components/artifact-studio/mutation-error";
@@ -29,6 +30,8 @@ import { useSession } from "@/providers/session-provider";
 import { AvatarSection } from "./avatar.section";
 import { SignatureSection } from "./signature.section";
 import { MfaSection } from "./mfa.section";
+import { MOBILE_APP_INTRO } from "@/components/mobile/orbit-mobile-presentation";
+import { WelcomeMobileStep } from "./welcome-mobile.step";
 
 const STEPS = [
   {
@@ -58,6 +61,11 @@ const STEPS = [
     description:
       "Ative a autenticação em dois fatores para proteger sua conta com um código além da senha.",
     icon: ShieldCheck,
+  },
+  {
+    ...MOBILE_APP_INTRO,
+    label: "App mobile",
+    icon: Smartphone,
   },
 ] as const;
 
@@ -99,9 +107,15 @@ function WelcomeWizard({ onClose }: { onClose?: () => void }) {
   const reducedMotion = useReducedMotion();
   const [step, setStep] = useState(0);
   const [closed, setClosed] = useState(false);
+  const bodyRef = useRef<HTMLDivElement>(null);
   const current = STEPS[step];
   const Icon = current.icon;
   const last = step === STEPS.length - 1;
+
+  const goToStep = (next: number) => {
+    bodyRef.current?.scrollTo({ top: 0 });
+    setStep(next);
+  };
 
   const dismiss = () => {
     if (update.isPending) return;
@@ -136,7 +150,9 @@ function WelcomeWizard({ onClose }: { onClose?: () => void }) {
           <OrbitLogo className="relative mb-6 h-7" />
           <p className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-widest text-primary">
             <Icon className="size-4" aria-hidden />
-            {step === 0 ? "Bem-vindo ao Orbit" : `Passo ${step} de 3`}
+            {step === 0
+              ? "Bem-vindo ao Orbit"
+              : `Passo ${step} de ${STEPS.length - 1}`}
           </p>
           <DialogTitle className="relative font-display text-2xl font-semibold tracking-tight sm:text-3xl">
             {current.title}
@@ -175,7 +191,10 @@ function WelcomeWizard({ onClose }: { onClose?: () => void }) {
           </ol>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-6 sm:px-8">
+        <div
+          ref={bodyRef}
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-6 sm:px-8"
+        >
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={step}
@@ -199,7 +218,7 @@ function WelcomeWizard({ onClose }: { onClose?: () => void }) {
                       "que bom ter você aqui"}
                     !
                   </p>
-                  <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="grid gap-3 sm:grid-cols-2">
                     {STEPS.slice(1).map((item) => (
                       <div
                         key={item.label}
@@ -232,6 +251,8 @@ function WelcomeWizard({ onClose }: { onClose?: () => void }) {
                 />
               ) : step === 2 ? (
                 <SignatureSection />
+              ) : last ? (
+                <WelcomeMobileStep />
               ) : profile.isPending ? (
                 <PanelLoading rows={3} />
               ) : profile.error || !profile.data ? (
@@ -260,14 +281,14 @@ function WelcomeWizard({ onClose }: { onClose?: () => void }) {
                 size="sm"
                 className="mr-auto sm:mr-0"
                 disabled={update.isPending}
-                onClick={() => setStep(step - 1)}
+                onClick={() => goToStep(step - 1)}
               >
                 <ArrowLeft className="size-4" aria-hidden /> Voltar
               </Button>
             ) : null}
             <Button
               disabled={update.isPending}
-              onClick={() => (last ? dismiss() : setStep(step + 1))}
+              onClick={() => (last ? dismiss() : goToStep(step + 1))}
             >
               {last ? "Concluir" : step === 0 ? "Vamos começar" : "Continuar"}
               {last ? (

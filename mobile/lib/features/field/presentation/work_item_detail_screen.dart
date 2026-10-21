@@ -488,7 +488,7 @@ String? _contatoLegivel(MobileContactSummaryContract? contato) {
 /// escrever "valor não informado" ali afirmaria que não há valor — quando
 /// normalmente há, e só não foi liberado para quem está em campo.
 ///
-/// O que aparece é o terceiro estado: liberado e **sem orçamento vinculado**.
+/// O que aparece é o terceiro estado: liberado e **sem valor manual nem orçamento vinculado**.
 /// Esse sim é falta de cadastro, e a frase diz qual — era o caso que fazia o
 /// dono ligar a chave, não ver nada e achar que a liberação não funcionava.
 class _Valor extends StatelessWidget {
@@ -504,7 +504,7 @@ class _Valor extends StatelessWidget {
     return _Bloco(
       titulo: 'Valor do atendimento',
       child: valor == null
-          ? const _NaoInformado(rotulo: 'Orçamento vinculado')
+          ? const _NaoInformado(rotulo: 'Valor do atendimento')
           : Text(
               OrbitFormat.currency(valor),
               style: OrbitType.sectionTitle.copyWith(color: palette.ink),

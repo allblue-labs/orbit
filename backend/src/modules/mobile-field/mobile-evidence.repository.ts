@@ -27,6 +27,17 @@ type TargetContext = {
    * execução) e `mutable`.
    */
   permissions: readonly string[];
+  /**
+   * Quais permissões servem para **ver** o que já foi anexado.
+   *
+   * Separadas de `permissions` porque ler e anexar não são a mesma decisão. O
+   * portão era um só: `list` recusava com 404 tudo o que `denied` recusava — e
+   * `denied` inclui `mutable` e `assigned`. O efeito era que ninguém conseguia
+   * **reler** as evidências de um atendimento concluído, e quem não executava
+   * aquele atendimento recebia "este registro não está disponível" no lugar da
+   * lista. Eram duas perguntas diferentes respondidas pela mesma tranca.
+   */
+  readPermissions: readonly string[];
 };
 
 export interface CreateEvidenceIntentData {
@@ -38,6 +49,7 @@ export interface CreateEvidenceIntentData {
   localMediaId: string | null;
   category: string;
   source: string;
+  caption: string | null;
   capturedAt: Date | null;
   expectedSha256: string | null;
   expiresAt: Date;
@@ -72,7 +84,11 @@ export class MobileEvidenceRepository {
     actor: MobileFieldActor,
     type: FieldEvidenceTarget,
     id: string,
-  ): Promise<{ context: TargetContext | null; denied: boolean }> {
+  ): Promise<{
+    context: TargetContext | null;
+    denied: boolean;
+    readable: boolean;
+  }> {
     return this.rls.run(async (tx) => {
       const permissions = await this.permissions(
         tx,
@@ -90,7 +106,7 @@ export class MobileEvidenceRepository {
         select: { id: true },
       });
       const target = await this.target(tx, actor, type, id);
-      if (!target) return { context: null, denied: false };
+      if (!target) return { context: null, denied: false, readable: false };
       const membership = await tx.businessUnitMembership.findFirst({
         where: {
           organizationId: actor.organizationId,
@@ -106,8 +122,23 @@ export class MobileEvidenceRepository {
         target.permissions.some((permission) =>
           permissions.includes(permission),
         );
+      /**
+       * Ler exige o alvo, o vínculo com a unidade e uma permissão de leitura.
+       *
+       * E só. Não exige perfil de campo ativo, não exige ser quem executa, e não
+       * exige que o atendimento ainda esteja aberto: olhar a foto que já é prova
+       * de um serviço entregue é leitura, e barrá-la escondia do dono o próprio
+       * acervo dele.
+       */
+      const readable =
+        Boolean(membership) &&
+        (permissions.includes('*') ||
+          target.readPermissions.some((permission) =>
+            permissions.includes(permission),
+          ));
       return {
         context: target,
+        readable,
         denied:
           !profile ||
           !membership ||
@@ -134,6 +165,7 @@ export class MobileEvidenceRepository {
           localMediaId: input.localMediaId,
           category: input.category,
           source: input.source,
+          caption: input.caption,
           capturedAt: input.capturedAt,
           expectedSha256: input.expectedSha256,
           expiresAt: input.expiresAt,
@@ -289,6 +321,9 @@ export class MobileEvidenceRepository {
           storageFileId: upload.storageFileId,
           category: upload.category,
           source: upload.source,
+          /* A legenda declarada na captura vira legenda da evidência: é o mesmo
+             texto, materializado quando a prova passa a existir. */
+          caption: upload.caption,
           fileName: upload.storageFile.fileName,
           mimeType: verified.mimeType,
           sizeBytes: verified.sizeBytes,
@@ -351,7 +386,7 @@ export class MobileEvidenceRepository {
     limit: number,
   ) {
     const access = await this.authorizeTarget(actor, type, id);
-    if (!access.context || access.denied) return null;
+    if (!access.context || !access.readable) return null;
     return this.rls.run((tx) =>
       tx.fieldEvidence.findMany({
         where: {
@@ -486,6 +521,7 @@ export class MobileEvidenceRepository {
               value.auxiliaryTechnicians.length > 0,
             mutable: ['OPEN', 'IN_PROGRESS'].includes(value.status),
             permissions: ['operations.update'],
+            readPermissions: ['operations.read', 'operations.update'],
           }
         : null;
     }
@@ -524,6 +560,7 @@ export class MobileEvidenceRepository {
             mutable: value.status === 'IN_PROGRESS',
             /* Gerenciar o contrato, ou executá-lo em campo. */
             permissions: ['pmoc.manage', 'pmoc.execute'],
+            readPermissions: ['pmoc.read', 'pmoc.manage', 'pmoc.execute'],
           }
         : null;
     }
@@ -562,6 +599,7 @@ export class MobileEvidenceRepository {
             Boolean(auxiliary),
           mutable: value.status === 'IN_PROGRESS',
           permissions: ['rvt.execute'],
+          readPermissions: ['rvt.read', 'rvt.execute'],
         }
       : null;
   }

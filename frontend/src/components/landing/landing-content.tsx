@@ -49,6 +49,10 @@ import { motion } from "motion/react";
 import { AllblueSignature } from "@/components/brand/allblue-signature";
 import { OrbitLogo } from "@/components/brand/orbit-logo";
 import { PricingPlans } from "@/components/pricing/pricing-plans";
+import {
+  MOBILE_APP_INTRO,
+  OrbitMobilePresentation,
+} from "@/components/mobile/orbit-mobile-presentation";
 import { Button } from "@/components/ui/button";
 import { ROUTES } from "@/lib/routes";
 import type { PlanCatalog } from "@/types/billing";
@@ -102,17 +106,20 @@ const modulos = [
   {
     icon: CalendarClock,
     nome: "PMOC e visitas técnicas",
-    texto: "Planos recorrentes que abrem as próprias ocorrências e cobram prazo.",
+    texto:
+      "Planos recorrentes que abrem as próprias ocorrências e cobram prazo.",
   },
   {
     icon: Users,
     nome: "Clientes e equipamentos",
-    texto: "O parque instalado pertence a quem contratou, com QR Code em campo.",
+    texto:
+      "O parque instalado pertence a quem contratou, com QR Code em campo.",
   },
   {
     icon: Receipt,
     nome: "Orçamentos",
-    texto: "Do catálogo de serviços à aprovação do cliente, virando atendimento.",
+    texto:
+      "Do catálogo de serviços à aprovação do cliente, virando atendimento.",
   },
   {
     icon: Wallet,
@@ -122,7 +129,8 @@ const modulos = [
   {
     icon: FileText,
     nome: "Documentos e relatórios",
-    texto: "O que foi emitido, o retrato do período e os modelos que definem os dois.",
+    texto:
+      "O que foi emitido, o retrato do período e os modelos que definem os dois.",
   },
 ] as const;
 
@@ -286,6 +294,7 @@ const COLUNAS: {
     itens: [
       { rotulo: "Como funciona", href: "#operacao" },
       { rotulo: "Módulos", href: "#modulos" },
+      { rotulo: "App mobile", href: "#app-mobile" },
       { rotulo: "Planos e preços", href: ROUTES.plans },
       { rotulo: "A plataforma", href: "/plataforma" },
     ],
@@ -451,10 +460,7 @@ export function LandingContent({ catalog }: { catalog: PlanCatalog }) {
         {/* ------------------------------------------------------------ */}
         {/* A cadeia do atendimento                                       */}
         {/* ------------------------------------------------------------ */}
-        <section
-          id="operacao"
-          className="border-y border-border bg-muted/30"
-        >
+        <section id="operacao" className="border-y border-border bg-muted/30">
           <div className="mx-auto w-full max-w-6xl px-4 py-20 sm:px-6">
             <div className="max-w-2xl">
               <h2 className="font-display text-3xl font-bold tracking-tight text-foreground">
@@ -491,10 +497,7 @@ export function LandingContent({ catalog }: { catalog: PlanCatalog }) {
                     <span className="font-mono text-xs text-muted-foreground">
                       {String(indice + 1).padStart(2, "0")}
                     </span>
-                    <etapa.icon
-                      className="size-4 text-primary"
-                      aria-hidden
-                    />
+                    <etapa.icon className="size-4 text-primary" aria-hidden />
                   </div>
                   <h3 className="mt-3 text-sm font-semibold text-foreground">
                     {etapa.titulo}
@@ -603,10 +606,7 @@ export function LandingContent({ catalog }: { catalog: PlanCatalog }) {
         {/* ------------------------------------------------------------ */}
         {/* Módulos                                                       */}
         {/* ------------------------------------------------------------ */}
-        <section
-          id="modulos"
-          className="border-y border-border bg-muted/30"
-        >
+        <section id="modulos" className="border-y border-border bg-muted/30">
           <div className="mx-auto w-full max-w-6xl px-4 py-20 sm:px-6">
             <div className="max-w-2xl">
               <h2 className="font-display text-3xl font-bold tracking-tight text-foreground">
@@ -694,6 +694,30 @@ export function LandingContent({ catalog }: { catalog: PlanCatalog }) {
               </Link>
             </Button>
           </div>
+        </section>
+        <section
+          id="app-mobile"
+          aria-labelledby="app-mobile-title"
+          className="scroll-mt-20 border-t border-border bg-gradient-to-b from-primary/5 via-background to-background"
+        >
+          <motion.div
+            {...aparecer}
+            transition={{ duration: 0.35 }}
+            className="mx-auto w-full max-w-6xl px-4 py-20 sm:px-6"
+          >
+            <div className="mb-10 max-w-2xl">
+              <h2
+                id="app-mobile-title"
+                className="font-display text-3xl font-bold tracking-tight text-foreground sm:text-4xl"
+              >
+                {MOBILE_APP_INTRO.title}
+              </h2>
+              <p className="mt-3 leading-relaxed text-muted-foreground">
+                {MOBILE_APP_INTRO.description}
+              </p>
+            </div>
+            <OrbitMobilePresentation variant="landing" />
+          </motion.div>
         </section>
       </main>
 

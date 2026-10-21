@@ -105,6 +105,7 @@ export class OperationService {
               customerId: input.customerId ?? references.assetCustomerId,
               customerAddressId: input.customerAddressId,
               sector: input.sector,
+              manualAmount: input.manualAmount,
               code: input.code.trim().toUpperCase(),
               kind: input.kind,
               title: input.title,
@@ -162,8 +163,12 @@ export class OperationService {
     const customerAddressId =
       input.customerAddressId ?? current.customerAddressId ?? undefined;
     this.validateSchedule(
-      input.scheduledStart ?? current.scheduledStart ?? undefined,
-      input.scheduledEnd ?? current.scheduledEnd ?? undefined,
+      input.scheduledStart === undefined
+        ? current.scheduledStart
+        : input.scheduledStart,
+      input.scheduledEnd === undefined
+        ? current.scheduledEnd
+        : input.scheduledEnd,
     );
     await this.validateReferences(
       organizationId,
@@ -186,6 +191,7 @@ export class OperationService {
             ? { connect: { id: input.customerAddressId } }
             : undefined,
           sector: input.sector,
+          manualAmount: input.manualAmount,
           code: input.code?.trim().toUpperCase(),
           kind: input.kind,
           title: input.title,
@@ -856,7 +862,7 @@ export class OperationService {
     return { assetCustomerId: [...donos][0] };
   }
 
-  private validateSchedule(start?: Date, end?: Date) {
+  private validateSchedule(start?: Date | null, end?: Date | null) {
     if (start && end && end.getTime() < start.getTime()) {
       throw new ValidationException(
         'Scheduled end cannot precede scheduled start',

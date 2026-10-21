@@ -276,7 +276,10 @@ function WorkspaceBody({
 
         <TabsContent value="operacoes">
           <TabBoundary id="customer-operations" label="as operações">
-            <OperationsTab customerId={customer.id} />
+            <OperationsTab
+              customerId={customer.id}
+              customerLabel={customer.tradeName ?? customer.legalName}
+            />
           </TabBoundary>
         </TabsContent>
 

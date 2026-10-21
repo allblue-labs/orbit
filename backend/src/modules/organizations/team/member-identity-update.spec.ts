@@ -30,10 +30,12 @@ describe('correção de identidade de um membro', () => {
     const tx = {
       $queryRawUnsafe: jest.fn().mockResolvedValue([]),
       user: {
-        findUnique: jest.fn(
-          ({ where }: { where: { id?: string; normalizedEmail?: string } }) =>
-            Promise.resolve(where.id ? atual : null),
-        ),
+        /* O tipo é a união das duas consultas que o método faz: a pessoa, pelo
+           id, e o dono do e-mail, pelo índice único. */
+        findUnique: jest.fn<
+          Promise<Record<string, unknown> | null>,
+          [{ where: { id?: string; normalizedEmail?: string } }]
+        >(({ where }) => Promise.resolve(where.id ? atual : null)),
         /* Tipado para que o teste possa olhar **quais chaves** chegaram:
            `toHaveBeenCalledWith` ignora chave com valor `undefined`, e é
            exatamente a diferença entre "não mexa no e-mail" e "apague-o". */

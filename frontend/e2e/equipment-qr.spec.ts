@@ -143,6 +143,26 @@ test("a etiqueta exibida é a do backend, e o token não aparece na tela", async
   await expect(label).toBeVisible();
   expect(await label.getAttribute("src")).toMatch(/^blob:/);
 
+  // Decode the pixels the user sees, not just the full-size download.
+  for (const width of [1440, 375]) {
+    await page.setViewportSize({ width, height: 900 });
+    const bounds = await label.boundingBox();
+    expect(
+      bounds?.width,
+      `prévia legível em ${width}px`,
+    ).toBeGreaterThanOrEqual(224);
+    const payload = await decodePayload(await label.screenshot());
+    expect(new URL(payload).pathname).toMatch(/^\/q\/[A-Za-z0-9_-]{43}$/);
+    const overflow = await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth,
+    );
+    expect(overflow, `sem rolagem lateral em ${width}px`).toBeLessThanOrEqual(
+      0,
+    );
+  }
+
   /**
    * O resumo administrativo não devolve o token, e a tela não o inventa: nada
    * de 43 caracteres opacos no corpo da página.

@@ -1,8 +1,5 @@
 import { PlanCapability } from './catalog/plan-catalog.types';
-import {
-  ProductAccessService,
-  ProductFeature,
-} from './product-access';
+import { ProductAccessService, ProductFeature } from './product-access';
 import type { EntitlementService } from './entitlements/entitlement.service';
 
 describe('ProductAccessService', () => {

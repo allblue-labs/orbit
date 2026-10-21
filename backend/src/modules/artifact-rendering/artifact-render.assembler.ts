@@ -238,7 +238,17 @@ export class ArtifactRenderAssembler {
       return {
         id: text(item.id, `evidencia_${index + 1}`),
         kind: this.evidenceLabel(text(item.category, 'GENERAL')),
-        caption: this.evidenceLabel(text(item.category, 'GENERAL')),
+        /**
+         * A legenda do técnico, e o rótulo da categoria só na falta dela.
+         *
+         * Aqui ficava o rótulo da categoria sempre — três fotos de "Depois"
+         * saíam com "Depois" escrito embaixo das três, e a legenda deixava de
+         * dizer qualquer coisa. Snapshot antigo não tem o campo e continua
+         * imprimindo o rótulo, como antes.
+         */
+        caption:
+          text(item.caption) ||
+          this.evidenceLabel(text(item.category, 'GENERAL')),
         fileName: text(item.fileName, asset?.fileName ?? 'evidencia'),
         mimeType: text(
           item.mimeType,

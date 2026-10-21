@@ -14,10 +14,17 @@ export class FieldArtifactSourceQueryDto {
 export class PrepareFieldArtifactDto extends FieldArtifactSourceQueryDto {}
 
 export class RenderFieldArtifactDto {
-  @ApiPropertyOptional({ enum: ['pdf.default', 'html.default'] })
+  /**
+   * Qual motor desenha. **Omitir é o caminho normal**: o produto escolhe.
+   *
+   * `pdf.premium` entrou na lista porque ele não estava — pedir o motor premium
+   * do aplicativo era recusado pela validação, e o único valor aceito para PDF
+   * era justamente o desenho pobre.
+   */
+  @ApiPropertyOptional({ enum: ['pdf.premium', 'pdf.default', 'html.default'] })
   @IsOptional()
-  @IsIn(['pdf.default', 'html.default'])
-  renderer?: 'pdf.default' | 'html.default';
+  @IsIn(['pdf.premium', 'pdf.default', 'html.default'])
+  renderer?: 'pdf.premium' | 'pdf.default' | 'html.default';
 }
 
 export class FieldArtifactAccessQueryDto {

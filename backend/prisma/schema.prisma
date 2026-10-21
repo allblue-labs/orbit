@@ -125,6 +125,7 @@ model User {
   @@map("users")
   operationCancellationsRequested OperationCancellationRequest[] @relation("OperationCancellationRequestedBy")
   operationCancellationsResolved  OperationCancellationRequest[] @relation("OperationCancellationResolvedBy")
+  operationMaterialsCreated       OperationMaterial[]           @relation("OperationMaterialCreatedBy")
 }
 
 model Credential {
@@ -352,6 +353,7 @@ model Organization {
   @@index([planId, subscriptionStatus])
   @@map("organizations")
   operationCancellationRequests OperationCancellationRequest[]
+  operationMaterials            OperationMaterial[]
 }
 
 model BusinessUnit {
@@ -438,6 +440,7 @@ model BusinessUnit {
   @@index([organizationId, isPrimary])
   @@map("business_units")
   operationCancellationRequests OperationCancellationRequest[]
+  operationMaterials            OperationMaterial[]
 }
 
 model OrganizationMembership {
@@ -1342,6 +1345,7 @@ model Product {
   quoteItems         QuoteItem[]
   inventoryMovements InventoryMovement[]
   inventoryBalances  InventoryBalance[]
+  operationMaterials OperationMaterial[]
 
   @@unique([organizationId, sku])
   @@index([organizationId, kind, status, deletedAt])
@@ -1521,11 +1525,10 @@ model Operation {
   /// e revelá-lo retroativamente em todo atendimento que já existe seria decidir isso
   /// pelo dono. Ligar é um ato por atendimento, na tela que o configura.
   ///
-  /// O valor em si não mora aqui: é o total do orçamento vinculado
-  /// (`Quote.operationId`). Esta coluna governa a **visibilidade**, não o número —
-  /// um segundo campo de dinheiro na operação divergiria do orçamento no primeiro
-  /// reajuste.
+  /// O valor manual tem precedência; sem ele, usa-se o orçamento vinculado.
   amountVisibleInField Boolean @default(false) @map("amount_visible_in_field")
+  /// Valor combinado diretamente para este atendimento. Nulo usa o orçamento.
+  manualAmount Decimal? @map("manual_amount") @db.Decimal(14, 2)
   startedByUserId   String?   @map("started_by_user_id") @db.Uuid
   completedByUserId String?   @map("completed_by_user_id") @db.Uuid
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -1576,6 +1579,7 @@ model Operation {
   @@index([organizationId, authorizedAt])
   @@map("operations")
   cancellationRequests OperationCancellationRequest[]
+  materials            OperationMaterial[]
 }
 
 // -----------------------------------------------------------------------------
@@ -2164,6 +2168,11 @@ model FieldEvidenceUpload {
   localMediaId             String?   @map("local_media_id") @db.VarChar(160)
   category                 String    @default("GENERAL") @db.VarChar(30)
   source                   String    @default("CAMERA") @db.VarChar(20)
+  /// A legenda declarada na captura, materializada na evidência ao finalizar.
+  ///
+  /// Viaja com a intenção porque a captura é offline-first: o aparelho sem rede
+  /// não tem como fazer uma segunda chamada só para legendar.
+  caption                  String?   @db.VarChar(500)
   capturedAt               DateTime? @map("captured_at") @db.Timestamptz(3)
   expectedSha256           String?   @map("expected_sha256") @db.Char(64)
   status                   String    @default("PENDING_UPLOAD") @db.VarChar(30)
@@ -2212,6 +2221,12 @@ model FieldEvidence {
   storageFileId            String    @unique @map("storage_file_id") @db.Uuid
   category                 String    @db.VarChar(30)
   source                   String    @db.VarChar(20)
+  /// O que o técnico quis dizer sobre esta imagem.
+  ///
+  /// O registro fotográfico imprimia o rótulo da **categoria** como legenda, e
+  /// três fotos de "Depois" saíam com a mesma frase. Opcional: foto sem legenda
+  /// continua sendo prova, e exigir texto transformaria registrar em redigir.
+  caption                  String?   @db.VarChar(500)
   fileName                 String    @map("file_name") @db.VarChar(255)
   mimeType                 String    @map("mime_type") @db.VarChar(160)
   sizeBytes                BigInt    @map("size_bytes")
@@ -3828,6 +3843,14 @@ model InventoryMovement {
   operation    Operation?   @relation(fields: [operationId], references: [id], onDelete: SetNull)
   createdBy    User         @relation("InventoryMovementActor", fields: [createdById], references: [id], onDelete: Restrict)
 
+  /// A linha de material do atendimento que este movimento originou.
+  ///
+  /// Lista no Prisma, **uma** no banco: a garantia é um índice único parcial
+  /// (`om_movement_unique`, só onde a coluna não é nula), que o Prisma não sabe
+  /// declarar. Material avulso não tem movimento, e um único na coluna inteira
+  /// faria o segundo avulso colidir com o primeiro.
+  operationMaterials OperationMaterial[]
+
   @@index([organizationId, businessUnitId, catalogItemId, createdAt])
   @@index([organizationId, type, createdAt])
   @@index([organizationId, operationId])
@@ -4621,6 +4644,34 @@ model RvtExecutionEvidence {
   @@map("rvt_execution_evidence")
 }
 
+/// Idempotência do atendimento avulso aberto em campo.
+///
+/// O comando cria **três** coisas de naturezas diferentes — cliente,
+/// equipamentos e ordem — e a resposta pode se perder na volta, que é o caso
+/// normal com a rede oscilando na calçada. Sem isto, "tentar de novo"
+/// cadastraria o cliente outra vez e abriria a segunda ordem para o mesmo
+/// serviço.
+model OperationWalkInCommand {
+  id             String @id @default(uuid(7)) @db.Uuid
+  organizationId String @map("organization_id") @db.Uuid
+  businessUnitId String @map("business_unit_id") @db.Uuid
+  actorId        String @map("actor_id") @db.Uuid
+  idempotencyKey String @map("idempotency_key") @db.VarChar(160)
+  payloadHash    String @map("payload_hash") @db.Char(64)
+  operationId    String @map("operation_id") @db.Uuid
+  customerId     String @map("customer_id") @db.Uuid
+
+  /// Quantos equipamentos o comando criou. Zero é legítimo: a ordem pode abrir
+  /// antes de os aparelhos serem identificados.
+  createdAssetCount Int @default(0) @map("created_asset_count")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([organizationId, actorId, idempotencyKey])
+  @@index([organizationId, businessUnitId, createdAt])
+  @@map("operation_walk_in_commands")
+}
+
 model RvtAdHocCommand {
   id              String   @id @default(uuid(7)) @db.Uuid
   organizationId  String   @map("organization_id") @db.Uuid
@@ -4639,4 +4690,60 @@ model RvtAdHocCommand {
   @@unique([organizationId, actorId, idempotencyKey])
   @@index([organizationId, businessUnitId, createdAt])
   @@map("rvt_ad_hoc_commands")
+}
+
+/// Os materiais de um atendimento: previstos na abertura, aplicados em campo.
+///
+/// Material aplicado existia só como `InventoryMovement`, que exige produto de
+/// catálogo porque move saldo. Ficavam de fora os dois casos que o campo pede:
+/// o **previsto** (antes de existir movimento) e o **avulso** — a abraçadeira
+/// comprada na esquina, que não tem produto cadastrado, não move saldo, e sai no
+/// relatório porque foi cobrada.
+///
+/// A linha é o que o documento imprime; o movimento é o que o saldo sofre.
+model OperationMaterial {
+  id             String @id @default(uuid(7)) @db.Uuid
+  organizationId String @map("organization_id") @db.Uuid
+  businessUnitId String @map("business_unit_id") @db.Uuid
+  operationId    String @map("operation_id") @db.Uuid
+
+  /// `PLANNED` nasce com a ordem; `APPLIED` é registrado em campo.
+  origin String @db.VarChar(20)
+
+  /// Nulo é material avulso: descrição livre, sem saldo a mover.
+  catalogItemId       String? @map("catalog_item_id") @db.Uuid
+  inventoryMovementId String? @map("inventory_movement_id") @db.Uuid
+
+  /// Copiada mesmo vindo do catálogo: o documento é congelado, e renomear o
+  /// produto depois não deve reescrever uma OS já assinada.
+  description String  @db.VarChar(255)
+  unit        String  @default("UN") @db.VarChar(20)
+  quantity    Decimal @db.Decimal(14, 3)
+  notes       String? @db.VarChar(500)
+
+  /// A chave de idempotência do comando que criou a linha.
+  ///
+  /// A captura em campo é offline-first: o mesmo registro volta quando a rede
+  /// volta, e sem isto o material entrava duas vezes no relatório. Nula em
+  /// material previsto, que nasce na abertura da ordem.
+  ///
+  /// A unicidade é um índice parcial no banco (`om_command_unique`), por causa
+  /// dos nulos.
+  commandId   String? @map("command_id") @db.VarChar(160)
+
+  createdById String?   @map("created_by_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  businessUnit      BusinessUnit       @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
+  operation         Operation          @relation(fields: [operationId], references: [id], onDelete: Cascade)
+  catalogItem       Product?           @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
+  inventoryMovement InventoryMovement? @relation(fields: [inventoryMovementId], references: [id], onDelete: SetNull)
+  createdBy         User?              @relation("OperationMaterialCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([operationId, origin, createdAt])
+  @@index([organizationId, businessUnitId, createdAt])
+  @@map("operation_materials")
 }

@@ -12,9 +12,12 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:go_router/go_router.dart';
+
 import '../../../app/providers.dart';
 import '../../../core/design/orbit_primitives.dart';
 import '../../../core/presentation/field_registry.dart';
+import '../../../core/routing/orbit_router.dart';
 import '../../../core/theme/orbit_theme.dart';
 import '../../../core/widgets/section_states.dart';
 import '../application/field_providers.dart';
@@ -62,8 +65,31 @@ class _WorkQueueScreenState extends ConsumerState<WorkQueueScreen> {
     final filter = ref.watch(workQueueFilterProvider);
     final session = ref.watch(sessionProvider);
 
+    /// Quem abre atendimento é quem pode criar operação.
+    ///
+    /// A permissão é do servidor — o comando a exige de novo. Esconder o botão
+    /// de quem ele recusaria evita oferecer um caminho que termina em negativa
+    /// depois do formulário inteiro preenchido.
+    final podeAbrir = session?.hasPermission('operations.create') ?? false;
+
     return Scaffold(
       backgroundColor: context.orbit.background,
+
+      /// A ação que a fila não tinha.
+      ///
+      /// A lista responde "o que me foi atribuído". Estar na porta de alguém
+      /// sem ordem aberta — metade do dia de uma equipe de campo — não tinha
+      /// caminho nenhum: o trabalho acontecia e não existia no sistema.
+      ///
+      /// Flutuante, e não dentro da lista: a lista rola, e uma ação que some ao
+      /// rolar é uma ação que ninguém encontra na terceira tela de itens.
+      floatingActionButton: podeAbrir
+          ? FloatingActionButton.extended(
+              onPressed: () => context.push(OrbitRoutes.walkIn()),
+              icon: const Icon(Icons.add),
+              label: const Text('Iniciar um atendimento'),
+            )
+          : null,
       body: Column(
         children: [
           WorkQueueFilterBar(

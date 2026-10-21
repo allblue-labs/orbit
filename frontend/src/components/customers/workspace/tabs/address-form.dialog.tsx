@@ -37,12 +37,14 @@ export function CustomerAddressFormDialog({
   address,
   open,
   onOpenChange,
+  onSaved,
 }: {
   customerId: string;
   /** `null` cria; preenchido edita. */
   address: CustomerAddress | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onSaved?: (address: CustomerAddress) => void;
 }) {
   if (!open) return null;
 
@@ -55,6 +57,7 @@ export function CustomerAddressFormDialog({
           customerId={customerId}
           address={address}
           onOpenChange={onOpenChange}
+          onSaved={onSaved}
         />
       </DialogContent>
     </Dialog>
@@ -65,10 +68,12 @@ function Body({
   customerId,
   address,
   onOpenChange,
+  onSaved,
 }: {
   customerId: string;
   address: CustomerAddress | null;
   onOpenChange: (open: boolean) => void;
+  onSaved?: (address: CustomerAddress) => void;
 }) {
   const create = useCreateCustomerAddress(customerId);
   const update = useUpdateCustomerAddress(customerId);
@@ -109,7 +114,10 @@ function Body({
       notes: opcional(notes),
       isPrimary,
     };
-    const fechar = () => onOpenChange(false);
+    const fechar = (saved: CustomerAddress) => {
+      onSaved?.(saved);
+      onOpenChange(false);
+    };
 
     if (address) {
       update.mutate({ id: address.id, input: payload }, { onSuccess: fechar });
@@ -131,7 +139,8 @@ function Body({
         </DialogTitle>
         <DialogDescription>
           Para onde o técnico vai. O endereço fiscal do cliente continua no
-          cadastro dele.
+          cadastro dele. As alterações são salvas no cadastro de endereços do
+          cliente.
         </DialogDescription>
       </DialogHeader>
 
@@ -215,7 +224,7 @@ function Body({
         </div>
 
         <div className="space-y-2 sm:col-span-2">
-          <Label htmlFor="address-notes">Acesso</Label>
+          <Label htmlFor="address-notes">Ponto de referência e acesso</Label>
           <Textarea
             id="address-notes"
             value={notes}

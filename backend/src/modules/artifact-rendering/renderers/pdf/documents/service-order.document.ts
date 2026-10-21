@@ -61,6 +61,14 @@ const COLUNAS_DO_EQUIPAMENTO: readonly TableColumn[] = [
   { header: 'Capacidade', weight: 1.8, align: 'right' },
 ];
 
+const COLUNAS_DO_MATERIAL: readonly TableColumn[] = [
+  { header: 'Item', weight: 0.7, align: 'center' },
+  { header: 'Material', weight: 4.2 },
+  { header: 'Qtd.', weight: 1, align: 'right' },
+  { header: 'Un.', weight: 0.8, align: 'center' },
+  { header: 'Origem', weight: 1.6, align: 'center' },
+];
+
 const COLUNAS_DA_LINHA_DO_TEMPO: readonly TableColumn[] = [
   { header: 'Etapa', weight: 2 },
   { header: 'Quando', weight: 2.4 },
@@ -230,7 +238,8 @@ function execucao(
 ): void {
   const procedimentos = valorDoCampo(input, 'procedimentos');
   const materiais = valorDoCampo(input, 'materiais');
-  if (!procedimentos && !materiais) return;
+  const lista = listaDeMateriais(input);
+  if (!procedimentos && !materiais && lista.length === 0) return;
 
   sectionTitle(document, 'Execução', theme);
   if (procedimentos) {
@@ -238,9 +247,80 @@ function execucao(
       title: 'Procedimentos realizados',
     });
   }
-  if (materiais) {
+  if (lista.length > 0) {
+    tabelaDeMateriais(document, lista, theme);
+  } else if (materiais) {
+    /* Texto livre: é como o template oficial registra materiais quando quem
+       preencheu a OS digitou em vez de registrar item por item. */
     noteBlock(document, materiais, theme, { title: 'Materiais aplicados' });
   }
+}
+
+interface LinhaDeMaterial {
+  descricao: string;
+  quantidade: string;
+  unidade: string;
+  origem: string;
+}
+
+/**
+ * Os materiais registrados item por item.
+ *
+ * ## Por que não é `valorDoCampo('materiais')`
+ *
+ * A OS congelada em campo guarda os materiais como **lista**, num campo cujo id
+ * é gerado (`materiais_1`) dentro da seção `materiais`. `valorDoCampo` procura
+ * um campo de id `materiais`, que só existe no template preenchido à mão — então
+ * a lista do aplicativo nunca era encontrada, e os materiais do atendimento não
+ * saíam no documento. Pior: por não estarem na lista de campos próprios, caíam
+ * em "Outras informações registradas" como um objeto serializado.
+ */
+function listaDeMateriais(input: RenderInput): LinhaDeMaterial[] {
+  const secao = input.sections.find((item) => item.id === 'materiais');
+  const bruto = secao?.fields.find((item) => Array.isArray(item.value))?.value;
+  if (!Array.isArray(bruto)) return [];
+
+  return bruto
+    .filter((item): item is Record<string, unknown> => isRecord(item))
+    .map((item) => ({
+      descricao: textoDe(item.descricao) || textoDe(item.produto),
+      quantidade: textoDe(item.quantidade),
+      unidade: textoDe(item.unidade) || 'UN',
+      origem: textoDe(item.origem) === 'PLANNED' ? 'Previsto' : 'Aplicado',
+    }))
+    .filter((item) => item.descricao.length > 0);
+}
+
+function tabelaDeMateriais(
+  document: Doc,
+  lista: readonly LinhaDeMaterial[],
+  theme: DocumentTheme,
+): void {
+  table(
+    document,
+    COLUNAS_DO_MATERIAL,
+    lista.map((item, indice) => [
+      String(indice + 1).padStart(2, '0'),
+      item.descricao,
+      item.quantidade,
+      item.unidade,
+      item.origem,
+    ]),
+    theme,
+    { continuationLabel: '(continuação)' },
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function textoDe(value: unknown): string {
+  return typeof value === 'string'
+    ? value.trim()
+    : typeof value === 'number'
+      ? String(value)
+      : '';
 }
 
 function checklist(
@@ -332,6 +412,10 @@ function respostasLivres(
   const itens: DefinitionItem[] = [...input.sections]
     .sort((esquerda, direita) => esquerda.order - direita.order)
     .filter((secao) => !verificacao.has(secao.id))
+    /* A seção de materiais sai em tabela própria. Sem este corte, a mesma lista
+       reaparecia aqui como objeto serializado — `[object Object]` repetido tantas
+       vezes quantos materiais houvesse. */
+    .filter((secao) => secao.id !== 'materiais')
     .flatMap((secao) =>
       [...secao.fields]
         .filter((campo) => !campo.hidden && !CAMPOS_PROPRIOS.has(campo.id))
@@ -389,11 +473,26 @@ function pendencias(
   const texto = valorDoCampo(input, 'pendencias');
   const observacoes = input.metadata.executionNotes;
   const notas = typeof observacoes === 'string' ? observacoes.trim() : '';
-  if (!texto && !notas) return;
+  /**
+   * O que o cliente pediu em campo.
+   *
+   * Chega como `customerRequests` porque é outra natureza de texto: o técnico
+   * marca a nota como pedido, e o pedido é o que justifica o próximo
+   * atendimento. Emendado nas observações, virava um parágrafo onde ninguém
+   * achava a pendência.
+   */
+  const pedidos = input.metadata.customerRequests;
+  const solicitacoes = typeof pedidos === 'string' ? pedidos.trim() : '';
+  if (!texto && !notas && !solicitacoes) return;
 
   sectionTitle(document, 'Pendências e observações', theme);
   if (texto) {
     noteBlock(document, texto, theme, { title: 'Pendências' });
+  }
+  if (solicitacoes) {
+    noteBlock(document, solicitacoes, theme, {
+      title: 'Solicitações do cliente',
+    });
   }
   if (notas) {
     noteBlock(document, notas, theme, { title: 'Observações da execução' });

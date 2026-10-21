@@ -202,6 +202,7 @@ class MediaUploadController extends StateNotifier<MediaSyncState> {
           declaredSize: media.sizeBytes,
           idempotencyKey: media.idempotencyKey,
           category: media.category,
+          caption: media.caption,
           source: media.source,
           capturedAt: media.capturedAt,
           localMediaId: media.localMediaId,

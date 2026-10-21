@@ -123,6 +123,7 @@ export class MobileFieldRepository {
         where: { id: operationId, organizationId, deletedAt: null },
         select: {
           amountVisibleInField: true,
+          manualAmount: true,
           quote: { select: { total: true, status: true } },
         },
       }),
