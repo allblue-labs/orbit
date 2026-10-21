@@ -1,19 +1,4 @@
-/**
- * O formulário de atendimento: cliente, endereço, setor e equipamentos.
- *
- * ## O que se prova
- *
- * Que o campo "Unidade" saiu — ele pedia a unidade de negócio, que é de quem
- * atende e não de onde o serviço acontece, e vinha do escopo ativo de qualquer
- * jeito. No lugar dele o formulário pergunta o que descreve o atendimento:
- * para qual cliente, em qual endereço dele, em que setor, e sobre quais
- * equipamentos.
- *
- * Prova também que os equipamentos são **do cliente escolhido** e que dá para
- * marcar mais de um. Antes era um só, escolhido num catálogo da organização
- * inteira — dava para anexar o equipamento de outro cliente e só descobrir na
- * recusa do servidor.
- */
+/** Cliente, endereço e equipamentos são preservados entre as etapas. */
 import { expect, test } from "@playwright/test";
 
 import { bff, scenarioId } from "./provision";
@@ -64,16 +49,16 @@ test("cliente, endereço, setor e vários equipamentos", async ({ page }) => {
 
   await page.goto("/operacoes");
   await settled(page);
-  await page.getByRole("button", { name: /Nova opera/i }).first().click();
+  await page
+    .getByRole("button", { name: /Nova opera/i })
+    .first()
+    .click();
 
   /** "Unidade" saiu: ela é de quem atende, não de onde o serviço acontece. */
   await expect(page.locator("#operation-unit")).toHaveCount(0);
 
   /** Sem cliente, os dois campos dependentes dizem o que falta. */
   await expect(page.getByText("Escolha o cliente primeiro.")).toBeVisible();
-  await expect(
-    page.getByText(/os equipamentos são os dele/),
-  ).toBeVisible();
 
   await page.locator("#operation-customer").click();
   /** O seletor pagina no servidor: sem buscar, o recém-criado não está na 1ª página. */
@@ -88,6 +73,7 @@ test("cliente, endereço, setor e vários equipamentos", async ({ page }) => {
   await expect(page.getByText(/Rua da Aurora, 100/)).toBeVisible();
 
   await page.locator("#operation-sector").fill("Auditório");
+  await page.getByRole("button", { name: "Continuar", exact: true }).click();
 
   /**
    * Os dois equipamentos do cliente, e só eles.
@@ -120,6 +106,8 @@ test("cliente, endereço, setor e vários equipamentos", async ({ page }) => {
       new URL(response.url()).pathname.endsWith("/operations") &&
       response.request().method() === "POST",
   );
+  for (let step = 0; step < 3; step++)
+    await page.getByRole("button", { name: "Continuar", exact: true }).click();
   await page.getByRole("button", { name: "Criar operação" }).click();
   const corpo = await (await criacao).json();
   const criada = corpo.data ?? corpo;
@@ -131,7 +119,9 @@ test("cliente, endereço, setor e vários equipamentos", async ({ page }) => {
   expect(criada.sector).toBe("Auditório");
   expect(criada.customerAddress?.label).toBe(`Matriz ${marca}`);
   expect(
-    (criada.assets ?? []).map((equipamento: { name: string }) => equipamento.name).sort(),
+    (criada.assets ?? [])
+      .map((equipamento: { name: string }) => equipamento.name)
+      .sort(),
   ).toEqual([`Split A ${marca}`, `Split B ${marca}`]);
 
   assertClean(recorder, "formulário de atendimento");

@@ -206,13 +206,13 @@ export class CreateOperationDto {
   @IsOptional()
   @Type(() => Date)
   @IsDate()
-  scheduledStart?: Date;
+  scheduledStart?: Date | null;
 
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Date)
   @IsDate()
-  scheduledEnd?: Date;
+  scheduledEnd?: Date | null;
 
   @ApiPropertyOptional()
   @IsOptional()

@@ -40,11 +40,21 @@ export function DetailsSection({ query }: { query: PanelQuery<Operation> }) {
               */}
               {operation.serviceOrderCode ? (
                 <Field label="Ordem de serviço">
-                  <span className="font-mono">{operation.serviceOrderCode}</span>
+                  <span className="font-mono">
+                    {operation.serviceOrderCode}
+                  </span>
                 </Field>
               ) : null}
               <Field label="Código">
                 <span className="font-mono">{operation.code}</span>
+              </Field>
+              <Field label="Valor manual">
+                {operation.manualAmount != null
+                  ? new Intl.NumberFormat("pt-BR", {
+                      style: "currency",
+                      currency: "BRL",
+                    }).format(Number(operation.manualAmount))
+                  : "Usar orçamento vinculado"}
               </Field>
               <Field label="Tipo">{operationKindLabel(operation.kind)}</Field>
               <Field label="Prioridade">

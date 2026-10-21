@@ -103,8 +103,8 @@ export interface CreateOperationInput {
   /**
    * O técnico em campo pode ver quanto este atendimento vale?
    *
-   * Governa a visibilidade, não o número: o valor é o total do orçamento
-   * vinculado. Omitido é `false` — liberar é um ato consciente.
+   * Exibe o valor manual ou o total do orçamento vinculado.
+   * Omitido é `false` — liberar é um ato consciente.
    */
   amountVisibleInField?: boolean;
   code: string;
@@ -112,8 +112,8 @@ export interface CreateOperationInput {
   title: string;
   description?: string;
   priority?: OperationPriority;
-  scheduledStart?: string;
-  scheduledEnd?: string;
+  scheduledStart?: string | null;
+  scheduledEnd?: string | null;
 
   /**
    * Quem executa, e quem acompanha.

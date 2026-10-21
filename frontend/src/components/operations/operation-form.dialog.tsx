@@ -29,6 +29,7 @@
  * indisponibilidade em vez de sumir sem explicação.
  */
 import { useState } from "react";
+import { motion, useReducedMotion } from "motion/react";
 
 import { MutationError } from "@/components/artifact-studio/mutation-error";
 import { Button } from "@/components/ui/button";
@@ -56,12 +57,13 @@ import { schedulingReferencesService } from "@/services/scheduling-references.se
 import {
   useAddOperationAuxiliary,
   useCreateOperation,
+  useChecklistTemplateForKind,
   useRemoveOperationAuxiliary,
   useReplaceOperationResponsible,
   useUpdateOperation,
 } from "@/hooks/operations/use-operations";
-import { instantFromZoned, zonedParts } from "@/lib/scheduling";
-import { X } from "lucide-react";
+import { zonedParts } from "@/lib/scheduling";
+import { ArrowLeft, ArrowRight, Check, X } from "lucide-react";
 
 import { useStartOperationChecklist } from "@/hooks/operations/use-operations";
 import {
@@ -74,7 +76,6 @@ import { OperationKind, OperationPriority } from "@/types/contracts";
 import {
   OPERATION_LIMITS,
   type CreateOperationInput,
-  type ChecklistItem,
   type OperationListItem,
 } from "@/types/operations";
 import { operationKindLabel, operationPriorityLabel } from "./operation-badges";
@@ -87,28 +88,14 @@ import { OperationEquipmentField } from "./operation-equipment.field";
 /** `Select` não aceita item de valor vazio; este é o "ninguém ainda". */
 const SEM_RESPONSAVEL = "__none__";
 
-interface FormState {
-  businessUnitId: string;
-  code: string;
-  kind: string;
-  title: string;
-  description: string;
-  priority: string;
-  startLocal: string;
-  customerId: string;
-  /** Os equipamentos atendidos — era um só. */
-  assetIds: string[];
-  /** Para onde o técnico vai: um endereço cadastrado do cliente. */
-  customerAddressId: string;
-  /** O ponto exato dentro do endereço. Opcional. */
-  sector: string;
-  /** O técnico em campo pode ver quanto este atendimento vale? */
-  amountVisibleInField: boolean;
-  responsibleId: string;
-  auxiliaryIds: string[];
-  /// Itens acrescentados só para este atendimento.
-  checklistExtras: ChecklistItem[];
-}
+import { OperationReviewStep } from "./operation-review.step";
+import {
+  OPERATION_STEPS,
+  operationStepIssues,
+  operationInstant as toInstant,
+  parseOperationAmount,
+  type OperationFormState as FormState,
+} from "./operation-wizard.model";
 
 /**
  * Contexto que já se conhece antes de abrir o formulário.
@@ -146,7 +133,7 @@ export function OperationFormDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="flex max-h-[92dvh] flex-col overflow-hidden sm:max-w-3xl">
         {open ? (
           <OperationForm
             editing={editing}
@@ -253,18 +240,20 @@ function OperationForm({
     }
   };
 
-  /** O modelo de checklist do tipo escolhido, quando existe. */
-  const [checklistTemplateId, setChecklistTemplateId] = useState<string | null>(
-    null,
+  const [step, setStep] = useState(0);
+  const reducedMotion = useReducedMotion();
+  const templateQuery = useChecklistTemplateForKind(
+    editing ? null : (form.kind as OperationKind),
   );
-
-  const valid =
-    form.businessUnitId.length > 0 &&
-    form.code.trim().length >= OPERATION_LIMITS.codeMinLength &&
-    form.title.trim().length >= OPERATION_LIMITS.titleMinLength &&
-    form.kind.length > 0;
+  const checklistTemplateId = templateQuery.template?.id ?? null;
+  const issues = operationStepIssues(editing ? 4 : step, form, timeZone);
+  const valid = operationStepIssues(4, form, timeZone).length === 0;
+  const pending = mutation.isPending || equipePendente;
+  const checklistLoading = !editing && templateQuery.isPending;
 
   const submit = () => {
+    if (!valid || pending || (!editing && (step !== 4 || checklistLoading)))
+      return;
     if (editing) {
       /*
        * Salvar a edição é duas coisas, nesta ordem.
@@ -276,7 +265,11 @@ function OperationForm({
        */
       update.mutate(buildPayload(form, timeZone, "editar"), {
         onSuccess: () => {
-          void aplicarEquipe().then(onClose);
+          void aplicarEquipe()
+            .then(onClose)
+            .catch(() => {
+              /* O erro aparece em erroDeEquipe. */
+            });
         },
       });
       return;
@@ -304,106 +297,9 @@ function OperationForm({
     });
   };
 
-  return (
-    <>
-      <DialogHeader>
-        <DialogTitle>
-          {editing ? `Editar ${editing.code}` : "Nova operação"}
-        </DialogTitle>
-        <DialogDescription>
-          Horários no fuso {timeZone}. A situação inicial e as mudanças
-          possíveis seguem as regras do atendimento.
-        </DialogDescription>
-      </DialogHeader>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2 sm:col-span-2">
-          <Label htmlFor="operation-title">Título</Label>
-          <Input
-            id="operation-title"
-            value={form.title}
-            maxLength={OPERATION_LIMITS.titleMaxLength}
-            onChange={(event) => edit({ title: event.target.value })}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="operation-code">Código</Label>
-          <Input
-            id="operation-code"
-            value={form.code}
-            maxLength={OPERATION_LIMITS.codeMaxLength}
-            onChange={(event) => edit({ code: event.target.value })}
-            className="font-mono text-sm"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="operation-kind">Tipo</Label>
-          <Select
-            value={form.kind}
-            onValueChange={(value) => edit({ kind: value })}
-          >
-            <SelectTrigger id="operation-kind">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {Object.values(OperationKind).map((kind) => (
-                <SelectItem key={kind} value={kind}>
-                  {operationKindLabel(kind)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="operation-priority">Prioridade</Label>
-          <Select
-            value={form.priority}
-            onValueChange={(value) => edit({ priority: value })}
-          >
-            <SelectTrigger id="operation-priority">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {Object.values(OperationPriority).map((priority) => (
-                <SelectItem key={priority} value={priority}>
-                  {operationPriorityLabel(priority)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/*
-          Só o começo.
-
-          "Fim previsto" saiu: quem agenda sabe quando o técnico chega, não
-          quando termina — a duração depende do que for encontrado no local.
-          Um campo que pede uma previsão que ninguém tem produz dado que
-          ninguém confere. O contrato mantém `scheduledEnd` opcional; o
-          formulário deixa de pedi-lo.
-        */}
-        <div className="space-y-2">
-          <Label htmlFor="operation-start">Início previsto</Label>
-          <Input
-            id="operation-start"
-            type="datetime-local"
-            value={form.startLocal}
-            onChange={(event) => edit({ startLocal: event.target.value })}
-          />
-        </div>
-
-        {/*
-          O cliente comanda o resto.
-
-          A unidade de negócio saiu do formulário: ela é de quem atende, não de
-          onde o serviço acontece, e vinha do escopo ativo de qualquer jeito —
-          um seletor que quase ninguém tinha motivo para mexer ocupava o lugar
-          do campo que realmente importa. Trocar de cliente limpa endereço e
-          equipamentos, porque os dois pertencem a ele.
-        */}
+  const groups = [
+    <div key="local" className="grid gap-4 sm:grid-cols-2">
+      <div className="sm:col-span-2">
         <ReferencePicker
           id="operation-customer"
           label="Cliente"
@@ -427,134 +323,369 @@ function OperationForm({
             setLabels((current) => ({ ...current, customer: label }));
           }}
         />
+      </div>
 
+      <div className="sm:col-span-2">
         <OperationAddressField
           customerId={form.customerId}
           value={form.customerAddressId}
           onChange={(customerAddressId) => edit({ customerAddressId })}
         />
+      </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="operation-sector">Setor</Label>
-          <Input
-            id="operation-sector"
-            value={form.sector}
-            onChange={(event) => edit({ sector: event.target.value })}
-            placeholder="Auditório, Sala 2, Cozinha…"
-            maxLength={120}
-          />
-          <p className="text-xs text-muted-foreground">
-            Opcional — o ponto exato dentro do endereço.
-          </p>
-        </div>
+      <div className="space-y-2">
+        <Label htmlFor="operation-sector">Setor</Label>
+        <Input
+          id="operation-sector"
+          value={form.sector}
+          onChange={(event) => edit({ sector: event.target.value })}
+          placeholder="Auditório, Sala 2, Cozinha…"
+          maxLength={120}
+        />
+        <p className="text-xs text-muted-foreground">
+          Opcional — o ponto exato dentro do endereço.
+        </p>
+      </div>
+    </div>,
+    <div key="service" className="grid gap-4 sm:grid-cols-2">
+      <div className="space-y-2 sm:col-span-2">
+        <Label htmlFor="operation-title">Título</Label>
+        <Input
+          id="operation-title"
+          value={form.title}
+          maxLength={OPERATION_LIMITS.titleMaxLength}
+          onChange={(event) => edit({ title: event.target.value })}
+        />
+      </div>
 
-        {/*
-          A liberação do valor para quem está em campo.
+      <div className="space-y-2">
+        <Label htmlFor="operation-code">Código</Label>
+        <Input
+          id="operation-code"
+          value={form.code}
+          maxLength={OPERATION_LIMITS.codeMaxLength}
+          onChange={(event) => edit({ code: event.target.value })}
+          className="font-mono text-sm"
+        />
+      </div>
 
-          Fica junto do que descreve o atendimento, e não numa aba de
-          configurações: é uma decisão por atendimento, tomada no mesmo
-          momento em que se escolhe quem vai e para onde.
+      <div className="space-y-2">
+        <Label htmlFor="operation-kind">Tipo</Label>
+        <Select
+          value={form.kind}
+          onValueChange={(value) => edit({ kind: value, checklistExtras: [] })}
+        >
+          <SelectTrigger id="operation-kind">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.values(OperationKind).map((kind) => (
+              <SelectItem key={kind} value={kind}>
+                {operationKindLabel(kind)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
-          O número não é digitado aqui — ele é o total do orçamento vinculado.
-          Este campo decide quem o vê, e o texto abaixo diz isso para que
-          ninguém procure onde preencher o valor.
-        */}
-        <div className="sm:col-span-2">
-          <div className="flex items-start gap-3 rounded-lg border border-border p-3">
-            <Checkbox
-              id="operation-amount-visible"
-              checked={form.amountVisibleInField}
-              onCheckedChange={(checked) =>
-                edit({ amountVisibleInField: checked === true })
-              }
-            />
-            <div className="space-y-1">
-              <Label
-                htmlFor="operation-amount-visible"
-                className="cursor-pointer"
-              >
-                Mostrar o valor ao técnico em campo
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                Exibe no aplicativo o total do orçamento vinculado a este
-                atendimento. Sem orçamento, não há valor a mostrar.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="sm:col-span-2">
-          <OperationEquipmentField
-            customerId={form.customerId}
-            selectedIds={form.assetIds}
-            onChange={(assetIds) => edit({ assetIds: [...assetIds] })}
-          />
-        </div>
-
-        {/*
-          Quem executa e quem acompanha.
-
-          Os dois campos existem no contrato desde sempre e nenhuma tela os
-          enviava: o atendimento nascia sem dono, e atribuir exigia abrir a
-          operação depois de criada.
-        */}
-        <div className="sm:col-span-2">
-          <TechnicianAssignment
-            businessUnitId={form.businessUnitId}
-            /* O que está gravado, para a tela avisar o que não dá para desfazer. */
-            persistedResponsibleId={editing?.responsibleFieldTechnicianId ?? ""}
-            responsibleId={form.responsibleId}
-            auxiliaryIds={form.auxiliaryIds}
-            onChange={(patch) => edit(patch)}
-          />
-        </div>
-
-        {/*
-          O checklist entra pelo tipo, e só na criação.
-
-          Numa operação que já existe o checklist já foi iniciado (ou
-          deliberadamente não foi): oferecer o campo aqui prometeria trocar
-          um roteiro que pode já ter respostas.
-        */}
-        {!editing ? (
-          <div className="sm:col-span-2">
-            <OperationChecklistField
-              kind={(form.kind || null) as OperationKind | null}
-              extras={form.checklistExtras}
-              onChangeExtras={(items) => edit({ checklistExtras: [...items] })}
-              onTemplateChange={setChecklistTemplateId}
-            />
-          </div>
-        ) : null}
-
+      <div className="space-y-2 sm:col-span-2">
+        <Label htmlFor="operation-description">Descrição</Label>
+        <Textarea
+          id="operation-description"
+          rows={3}
+          value={form.description}
+          onChange={(event) => edit({ description: event.target.value })}
+        />
+      </div>
+      <div className="sm:col-span-2">
+        <OperationEquipmentField
+          customerId={form.customerId}
+          selectedIds={form.assetIds}
+          onChange={(assetIds) => edit({ assetIds: [...assetIds] })}
+        />
+      </div>
+    </div>,
+    <div key="schedule" className="grid gap-4 sm:grid-cols-2">
+      {session.businessUnits.length > 1 || !form.businessUnitId ? (
         <div className="space-y-2 sm:col-span-2">
-          <Label htmlFor="operation-description">Descrição</Label>
-          <Textarea
-            id="operation-description"
-            rows={3}
-            value={form.description}
-            onChange={(event) => edit({ description: event.target.value })}
+          <Label htmlFor="operation-unit">Unidade responsável</Label>
+          <Select
+            value={form.businessUnitId}
+            onValueChange={(value) =>
+              edit({
+                businessUnitId: value,
+                responsibleId: "",
+                auxiliaryIds: [],
+              })
+            }
+            disabled={Boolean(editing)}
+          >
+            <SelectTrigger id="operation-unit">
+              <SelectValue placeholder="Selecione a unidade" />
+            </SelectTrigger>
+            <SelectContent>
+              {session.businessUnits.map((unit) => (
+                <SelectItem key={unit.id} value={unit.id}>
+                  {unit.tradeName ?? unit.legalName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
+      <div className="space-y-2">
+        <Label htmlFor="operation-start">Início previsto</Label>
+        <Input
+          id="operation-start"
+          type="datetime-local"
+          value={form.startLocal}
+          onChange={(event) => edit({ startLocal: event.target.value })}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="operation-end">Término previsto</Label>
+        <Input
+          id="operation-end"
+          type="datetime-local"
+          value={form.endLocal}
+          min={form.startLocal || undefined}
+          onChange={(event) => edit({ endLocal: event.target.value })}
+        />
+        <p className="text-xs text-muted-foreground">
+          Opcional. Horários no fuso {timeZone}.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="operation-priority">Prioridade</Label>
+        <Select
+          value={form.priority}
+          onValueChange={(value) => edit({ priority: value })}
+        >
+          <SelectTrigger id="operation-priority">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.values(OperationPriority).map((priority) => (
+              <SelectItem key={priority} value={priority}>
+                {operationPriorityLabel(priority)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="sm:col-span-2">
+        <TechnicianAssignment
+          businessUnitId={form.businessUnitId}
+          /* O que está gravado, para a tela avisar o que não dá para desfazer. */
+          persistedResponsibleId={editing?.responsibleFieldTechnicianId ?? ""}
+          responsibleId={form.responsibleId}
+          auxiliaryIds={form.auxiliaryIds}
+          onChange={(patch) => edit(patch)}
+        />
+      </div>
+    </div>,
+    <div key="values" className="grid gap-4 sm:grid-cols-2">
+      <div className="space-y-2 sm:col-span-2">
+        <Label htmlFor="operation-amount">Valor manual (R$)</Label>
+        <Input
+          id="operation-amount"
+          inputMode="decimal"
+          value={form.manualAmount}
+          placeholder="0,00"
+          onChange={(event) => edit({ manualAmount: event.target.value })}
+        />
+        <p className="text-xs text-muted-foreground">
+          Opcional. O valor manual tem prioridade sobre o orçamento vinculado.
+          Deixe vazio para usar o orçamento; zero indica atendimento sem
+          cobrança.
+        </p>
+      </div>
+      <div className="sm:col-span-2">
+        <div className="flex items-start gap-3 rounded-lg border border-border p-3">
+          <Checkbox
+            id="operation-amount-visible"
+            checked={form.amountVisibleInField}
+            onCheckedChange={(checked) =>
+              edit({ amountVisibleInField: checked === true })
+            }
           />
+          <div className="space-y-1">
+            <Label
+              htmlFor="operation-amount-visible"
+              className="cursor-pointer"
+            >
+              Mostrar o valor ao técnico em campo
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Exibe o valor manual ou, se estiver vazio, o total do orçamento
+              vinculado.
+            </p>
+          </div>
         </div>
       </div>
 
-      <MutationError error={mutation.error ?? erroDeEquipe} />
+      {!editing ? (
+        <div className="sm:col-span-2">
+          <OperationChecklistField
+            kind={(form.kind || null) as OperationKind | null}
+            extras={form.checklistExtras}
+            onChangeExtras={(items) => edit({ checklistExtras: [...items] })}
+          />
+        </div>
+      ) : null}
+    </div>,
+  ];
 
-      <DialogFooter>
-        <Button variant="ghost" onClick={onClose}>
-          Cancelar
-        </Button>
-        <Button
-          onClick={submit}
-          disabled={!valid || mutation.isPending || equipePendente}
-        >
-          {mutation.isPending || equipePendente
-            ? "Salvando…"
-            : editing
-              ? "Salvar alterações"
-              : "Criar operação"}
-        </Button>
-      </DialogFooter>
+  return (
+    <>
+      <DialogHeader className="shrink-0 pr-6">
+        <DialogTitle>
+          {editing ? `Editar ${editing.code}` : "Nova operação"}
+        </DialogTitle>
+        <DialogDescription>
+          {editing
+            ? `Atualize os dados do atendimento. Horários no fuso ${timeZone}.`
+            : "Prepare o atendimento por etapas e confirme os dados ao final."}
+        </DialogDescription>
+      </DialogHeader>
+      {!editing ? (
+        <nav aria-label="Etapas da operação" className="shrink-0">
+          <ol className="flex gap-1.5">
+            {OPERATION_STEPS.map((item, index) => (
+              <li key={item.title} className="min-w-0 flex-1">
+                <button
+                  type="button"
+                  aria-label={`${index + 1}. ${item.title}`}
+                  aria-current={step === index ? "step" : undefined}
+                  disabled={index >= step || pending}
+                  onClick={() => setStep(index)}
+                  className="w-full rounded-lg text-left disabled:cursor-default"
+                >
+                  <span
+                    className={`mb-2 block h-1 rounded-full ${index <= step ? "bg-primary" : "bg-muted"}`}
+                  />
+                  <span
+                    className={`hidden text-xs sm:block ${step === index ? "font-semibold text-foreground" : "text-muted-foreground"}`}
+                  >
+                    {item.title}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ol>
+          <div className="mt-4" aria-live="polite">
+            <p className="text-xs font-medium text-primary">
+              Etapa {step + 1} de {OPERATION_STEPS.length}
+            </p>
+            <h2 className="mt-1 text-lg font-semibold">
+              {OPERATION_STEPS[step].title}
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {OPERATION_STEPS[step].description}
+            </p>
+          </div>
+        </nav>
+      ) : null}
+      <div
+        key={editing ? "editing" : step}
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-1 pr-1"
+        aria-busy={pending}
+      >
+        {editing ? (
+          <div className="space-y-6">
+            {groups.map((group, index) => (
+              <section
+                key={group.key}
+                className="space-y-4 border-b pb-5 last:border-0"
+              >
+                <h2 className="font-semibold">
+                  {OPERATION_STEPS[index].title}
+                </h2>
+                {group}
+              </section>
+            ))}
+          </div>
+        ) : (
+          <motion.div
+            key={step}
+            initial={reducedMotion ? false : { opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.18 }}
+          >
+            {step < 4 ? (
+              groups[step]
+            ) : (
+              <OperationReviewStep
+                form={form}
+                customerLabel={labels.customer}
+                timeZone={timeZone}
+                unitLabel={
+                  session.businessUnits.find(
+                    (unit) => unit.id === form.businessUnitId,
+                  )?.tradeName ??
+                  session.businessUnits.find(
+                    (unit) => unit.id === form.businessUnitId,
+                  )?.legalName ??
+                  "Unidade selecionada"
+                }
+                hasChecklist={Boolean(checklistTemplateId)}
+              />
+            )}
+          </motion.div>
+        )}
+      </div>
+      <div className="shrink-0 space-y-3 border-t pt-3">
+        {issues.length ? (
+          <p role="status" className="text-xs text-muted-foreground">
+            {issues[0]}
+          </p>
+        ) : null}
+        <MutationError error={mutation.error ?? erroDeEquipe} />
+        <DialogFooter className="gap-2 sm:justify-between">
+          <Button variant="ghost" onClick={onClose} disabled={pending}>
+            Cancelar
+          </Button>
+          <div className="flex justify-end gap-2">
+            {!editing && step > 0 ? (
+              <Button
+                variant="outline"
+                onClick={() => setStep(step - 1)}
+                disabled={pending}
+              >
+                <ArrowLeft className="size-4" aria-hidden />
+                Voltar
+              </Button>
+            ) : null}
+            {!editing && step < 4 ? (
+              <Button
+                onClick={() => setStep(step + 1)}
+                disabled={issues.length > 0 || (step === 3 && checklistLoading)}
+              >
+                Continuar
+                <ArrowRight className="size-4" aria-hidden />
+              </Button>
+            ) : (
+              <Button
+                onClick={submit}
+                disabled={!valid || pending || checklistLoading}
+              >
+                {pending ? (
+                  "Salvando…"
+                ) : editing ? (
+                  "Salvar alterações"
+                ) : (
+                  <>
+                    <Check className="size-4" aria-hidden />
+                    Criar operação
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
+        </DialogFooter>
+      </div>
     </>
   );
 }
@@ -585,17 +716,6 @@ function toLocalInput(iso: string | null, timeZone: string): string {
   return `${parts.year}-${pad(parts.month)}-${pad(parts.day)}T${pad(parts.hour)}:${pad(parts.minute)}`;
 }
 
-function toInstant(local: string, timeZone: string): string | undefined {
-  if (!local) return undefined;
-  const [date, time] = local.split("T");
-  const [year, month, day] = date.split("-").map(Number);
-  const [hour, minute] = (time ?? "00:00").split(":").map(Number);
-  return instantFromZoned(
-    { year, month, day, hour, minute },
-    timeZone,
-  ).toISOString();
-}
-
 function initialState(
   editing: OperationListItem | null,
   activeUnitId: string | null,
@@ -612,6 +732,8 @@ function initialState(
       description: editing.description ?? "",
       priority: editing.priority,
       startLocal: toLocalInput(editing.scheduledStart, timeZone),
+      endLocal: toLocalInput(editing.scheduledEnd, timeZone),
+      manualAmount: editing.manualAmount?.replace(".", ",") ?? "",
       checklistExtras: [],
       responsibleId: editing.responsibleFieldTechnicianId ?? "",
       /// A atribuição carrega `userId`; o `user` aninhado é só para exibir.
@@ -647,6 +769,8 @@ function initialState(
      * o domínio recusa.
      */
     startLocal: "",
+    endLocal: "",
+    manualAmount: "",
     responsibleId: "",
     auxiliaryIds: [],
     checklistExtras: [],
@@ -686,7 +810,13 @@ function buildPayload(
     title: form.title.trim(),
     description: form.description.trim() || undefined,
     priority: form.priority as CreateOperationInput["priority"],
-    scheduledStart: toInstant(form.startLocal, timeZone),
+    scheduledStart:
+      toInstant(form.startLocal, timeZone) ??
+      (modo === "editar" ? null : undefined),
+    scheduledEnd:
+      toInstant(form.endLocal, timeZone) ??
+      (modo === "editar" ? null : undefined),
+    manualAmount: parseOperationAmount(form.manualAmount),
     ...(modo === "criar"
       ? {
           responsibleFieldTechnicianId: form.responsibleId || undefined,

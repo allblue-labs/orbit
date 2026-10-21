@@ -25,7 +25,11 @@ test("o checklist do tipo entra na execução, com o item extra junto", async ({
     .getByRole("button", { name: /Nova opera/i })
     .first()
     .click();
-  await expect(page.locator("#operation-title")).toBeVisible();
+  await page.getByRole("button", { name: "Continuar", exact: true }).click();
+  const titulo = `E2E checklist ${Date.now()}`;
+  await page.locator("#operation-title").fill(titulo);
+  await page.getByRole("button", { name: "Continuar", exact: true }).click();
+  await page.getByRole("button", { name: "Continuar", exact: true }).click();
 
   /// O tipo padrão do formulário é Manutenção, que é o que tem modelo.
   await expect(page.getByText("Limpeza dos filtros")).toBeVisible();
@@ -33,9 +37,6 @@ test("o checklist do tipo entra na execução, com o item extra junto", async ({
   /// Herdado é leitura: não há campo para editar o rótulo.
   const itemHerdado = page.getByText("Limpeza dos filtros");
   await expect(itemHerdado).not.toHaveAttribute("contenteditable", "true");
-
-  const titulo = `E2E checklist ${Date.now()}`;
-  await page.locator("#operation-title").fill(titulo);
 
   await page
     .locator("#operation-checklist-extra")
@@ -47,6 +48,7 @@ test("o checklist do tipo entra na execução, com o item extra junto", async ({
   const criada = page.waitForResponse(
     (r) => r.url().includes("/checklists") && r.request().method() === "POST",
   );
+  await page.getByRole("button", { name: "Continuar", exact: true }).click();
   await page.getByRole("button", { name: "Criar operação" }).click();
 
   const corpo = await (await criada).json();
@@ -80,9 +82,13 @@ test("o modelo não muda por causa do extra de um atendimento", async ({
     .getByRole("button", { name: /Nova opera/i })
     .first()
     .click();
+  await page.getByRole("button", { name: "Continuar", exact: true }).click();
+  await page.locator("#operation-title").fill("Conferir modelo padrão");
+  await page.getByRole("button", { name: "Continuar", exact: true }).click();
+  await page.getByRole("button", { name: "Continuar", exact: true }).click();
   await expect(page.getByText("Limpeza dos filtros")).toBeVisible();
 
-  await expect(
-    page.getByText("Conferir vazamento no duto novo"),
-  ).toHaveCount(0);
+  await expect(page.getByText("Conferir vazamento no duto novo")).toHaveCount(
+    0,
+  );
 });

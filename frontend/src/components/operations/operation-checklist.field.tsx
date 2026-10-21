@@ -22,6 +22,7 @@
 import { useState } from "react";
 import { ClipboardList, Plus, X } from "lucide-react";
 
+import { MutationError } from "@/components/artifact-studio/mutation-error";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,30 +41,20 @@ export function OperationChecklistField({
   kind,
   extras,
   onChangeExtras,
-  onTemplateChange,
 }: {
   kind: OperationKind | null;
   extras: readonly ChecklistItem[];
   onChangeExtras: (items: readonly ChecklistItem[]) => void;
-  /** O modelo encontrado, para quem cria saber o que anexar. */
-  onTemplateChange: (templateId: string | null) => void;
 }) {
-  const { template, isPending } = useChecklistTemplateForKind(kind);
+  const { template, isPending, error, refetch } =
+    useChecklistTemplateForKind(kind);
   const [rascunho, setRascunho] = useState("");
-
-  /// Avisa quem monta o payload assim que o modelo muda de identidade.
-  const idAtual = template?.id ?? null;
-  const [ultimoId, setUltimoId] = useState<string | null>(null);
-  if (idAtual !== ultimoId) {
-    setUltimoId(idAtual);
-    onTemplateChange(idAtual);
-  }
 
   if (!kind) return null;
 
   const acrescentar = () => {
     const label = rascunho.trim();
-    if (!label) return;
+    if (!label || !template) return;
     onChangeExtras([
       ...extras,
       { key: chaveExtra(extras.length), label, type: "BOOLEAN" },
@@ -83,6 +74,19 @@ export function OperationChecklistField({
         ) : null}
       </div>
 
+      {error ? (
+        <div className="space-y-2">
+          <MutationError error={error} />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void refetch()}
+          >
+            Tentar carregar checklist
+          </Button>
+        </div>
+      ) : null}
       {isPending ? (
         <Skeleton className="h-16 rounded-md" />
       ) : !template ? (
@@ -157,6 +161,7 @@ export function OperationChecklistField({
             value={rascunho}
             maxLength={220}
             placeholder="Ex.: conferir vazamento no duto novo"
+            disabled={!template}
             onChange={(event) => setRascunho(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter") {
@@ -169,7 +174,7 @@ export function OperationChecklistField({
             type="button"
             variant="outline"
             onClick={acrescentar}
-            disabled={!rascunho.trim()}
+            disabled={!template || !rascunho.trim()}
           >
             <Plus className="size-4" />
             Adicionar

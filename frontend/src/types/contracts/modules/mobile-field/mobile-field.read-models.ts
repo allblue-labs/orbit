@@ -262,12 +262,11 @@ export interface MobileFieldContextReadModel {
    * Quanto o atendimento vale, quando o dono liberou.
    *
    * Ausente significa "não cabe a esta pessoa ver" — não "zero". A liberação é por
-   * atendimento (`operations.amount_visible_in_field`), e o número é o total do
-   * orçamento vinculado: não há um segundo campo de dinheiro na operação que pudesse
-   * divergir dele.
+   * atendimento (`operations.amount_visible_in_field`). O valor manual tem
+   * prioridade; quando ausente, usa o total do orçamento vinculado.
    *
    * Presente com `approvedAmount: null` é o terceiro estado: **liberado, e sem
-   * orçamento vinculado**. Ele existe porque os dois casos vinham omitidos juntos, e
+   * valor manual e sem orçamento vinculado**. Ele existe porque os dois casos vinham omitidos juntos, e
    * o dono ligava a chave, não via nada e concluía que a liberação não funcionava.
    *
    * O campo existia neste contrato e no aplicativo desde o início, e **nada o
