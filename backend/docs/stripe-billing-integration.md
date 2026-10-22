@@ -57,7 +57,8 @@ nunca os valores.
 1. crie os quatro produtos (um por plano do catálogo);
 2. crie os **doze** preços — quatro planos × três periodicidades — em `BRL`,
    recorrentes, com os valores da tabela abaixo;
-3. registre os identificadores nas variáveis `STRIPE_PRICE_<PLANO>_<PERIODICIDADE>`;
+3. registre os **Price IDs** (`price_...`), nunca Product IDs (`prod_...`), nas
+   variáveis `STRIPE_PRICE_<PLANO>_<PERIODICIDADE>`;
 4. configure o **Customer Portal**: métodos de pagamento, faturas, dados de
    cobrança e cancelamento. O cancelamento do portal deve ser _ao fim do
    período_, para não divergir da política do Orbit;
@@ -65,7 +66,7 @@ nunca os valores.
    `POST https://<api>/api/v1/billing/webhooks/stripe`;
 6. selecione **apenas** os eventos da lista abaixo — nunca `*`;
 7. guarde o _signing secret_ em `STRIPE_WEBHOOK_SECRET`;
-8. configure `STRIPE_ENABLED=true`;
+8. mantenha `BILLING_EVENTS_WORKER_ENABLED=true` e configure `STRIPE_ENABLED=true`;
 9. confira em `GET /api/v1/billing/readiness`.
 
 ### Preços esperados (centavos, BRL)
@@ -78,15 +79,90 @@ nunca os valores.
 | Empresarial Ilimitado       | 69.990 |   386.340 | 699.900 |
 
 `verifyPriceCatalog()` confere cada um contra o catálogo do Orbit: existência,
-atividade, moeda, periodicidade e **valor**. Divergência não inicia contratação
+atividade, modo teste/produção, moeda, periodicidade e **valor**. O checkout e a
+troca de plano conferem o preço de destino pela API antes da escrita no Stripe.
+Divergência não inicia contratação
 — e a aplicação **não corrige o painel**: se lá diz 699,90 e aqui diz 599,00,
 quem está errado é uma configuração, e adivinhar qual seria pior do que recusar.
 
 ### Modo de teste e modo de produção
 
-O modo é deduzido do prefixo da chave (`sk_live_` → `LIVE`). É verificação de
-sanidade, não autoridade: serve para recusar a mistura clássica de preço de
-teste com chave de produção antes de ela virar cobrança errada.
+O modo é deduzido do prefixo da chave (`sk_live_` ou `rk_live_` → `LIVE`). A
+configuração aceita chaves secretas e restritas de conta, rejeita chaves
+publicáveis e rejeita preços repetidos entre planos/periodicidades. Chaves
+restritas precisam das permissões usadas por este adaptador: leitura de preços,
+assinaturas, faturas, pagamentos de faturas, reembolsos e disputas; e escrita de
+customers, Checkout Sessions, sessões do Billing Portal, assinaturas e schedules.
+
+O texto de um Price ID não indica seu modo. A conferência usa o campo
+`price.livemode` da API e a existência do preço no ambiente da chave.
+
+### Conferência sem criar cobranças
+
+Depois de preencher as envs, no diretório `backend`:
+
+```sh
+npm run billing:check:dev
+npm run billing:check:dev -- --remote
+```
+
+O primeiro comando confere os formatos, as doze associações, os segredos e as
+URLs, inclusive quando `STRIPE_ENABLED=false`. O segundo também faz GET dos
+doze preços no Stripe e os compara ao catálogo. Não cria clientes, assinaturas
+ou pagamentos. As mensagens não imprimem credenciais. Uma divergência encerra
+com código 1. A conferência local não comprova que a chave é válida na conta,
+que o webhook foi cadastrado ou que o portal foi configurado.
+
+Na imagem publicada, que contém o script compilado:
+
+```sh
+docker compose exec api npm run billing:check -- --remote
+```
+
+As envs desse comando são as que o container recebeu ao ser criado. Alterar
+apenas o arquivo `.env` não atualiza um container existente.
+
+### Onde copiar cada configuração no painel
+
+1. Selecione **Sandbox/teste** ou **Live** no Stripe. Produtos, preços, chave e
+   webhook precisam pertencer ao mesmo ambiente e à mesma conta.
+2. Em **Developers / Workbench → API keys**, copie uma chave de API secreta de
+   conta (`sk_...`) ou restrita com permissões adequadas (`rk_...`) para
+   `STRIPE_SECRET_KEY`. A chave publicável `pk_...` não atende a esta integração.
+3. Em **Product catalog**, abra cada produto e depois seu preço recorrente.
+   Copie o identificador do **preço**. Para `MONTHLY`, use cobrança a cada 1 mês;
+   para `SEMIANNUAL`, um período personalizado a cada 6 meses; para `ANNUAL`, a
+   cada 1 ano (ou 12 meses). O preço semestral/anual é o total do período, não o
+   equivalente mensal. Os produtos existentes podem ser reaproveitados.
+4. Em **Workbench → Webhooks → Create destination**, escolha eventos da própria
+   conta, no formato snapshot/v1, e os 19 eventos da seção abaixo. Use a versão
+   da API compatível com `STRIPE_API_VERSION` (`2026-08-26.dahlia`) e um endpoint
+   HTTPS público. No domínio usado pelo Orbit nesta implantação:
+   `https://orbit.allblue-labs.com/api/v1/billing/webhooks/stripe`.
+   O Nginx deve encaminhar esse caminho para a API preservando URI e corpo.
+   Na página da destination, revele o **Signing secret** (`whsec_...`) e copie
+   para `STRIPE_WEBHOOK_SECRET`. O segredo exibido pelo `stripe listen` local é
+   diferente do segredo da destination cadastrada no painel.
+5. Em **Settings → Billing → Customer portal**, salve a configuração de métodos
+   de pagamento, faturas e cancelamento no fim do período. Trocas de plano pelo
+   portal exigem cadastrar os produtos/preços permitidos; podem permanecer
+   desativadas enquanto as trocas são feitas pelo Orbit.
+6. As três envs de retorno são URLs do **Orbit**, escolhidas por quem implanta,
+   não credenciais copiadas do Stripe. Uma rota existente para as três é:
+   `https://orbit.allblue-labs.com/configuracoes?secao=assinatura`.
+   Use-a em `BILLING_CHECKOUT_SUCCESS_URL`, `BILLING_CHECKOUT_CANCEL_URL` e
+   `BILLING_PORTAL_RETURN_URL`. O retorno não ativa a assinatura: é o webhook
+   processado que confirma o estado.
+7. Depois da configuração, publique a API atualizada e recrie seu container com
+   as envs corrigidas e `STRIPE_ENABLED=true`. Em **Webhooks → destination →
+   Event deliveries**, confira as respostas HTTP 200. Confira também os logs
+   `billing-inbox-drained` e o estado em **Configurações → Plano e assinatura**:
+   HTTP 200 confirma o recebimento; o worker ainda precisa processar o evento.
+
+Referências: [API keys](https://docs.stripe.com/keys),
+[produtos e preços](https://docs.stripe.com/products-prices/manage-prices),
+[destinations no Workbench](https://docs.stripe.com/workbench/event-destinations),
+[Customer Portal](https://docs.stripe.com/customer-management/integrate-customer-portal).
 
 ## Eventos consumidos
 

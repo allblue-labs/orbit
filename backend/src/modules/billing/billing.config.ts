@@ -187,25 +187,37 @@ export class BillingConfig {
       );
     }
 
-    /**
-     * O modo, deduzido do prefixo da chave.
-     *
-     * Verificação de sanidade, não autoridade: o prefixo diz a intenção, e é o
-     * bastante para recusar a mistura clássica de preço de teste com chave de
-     * produção antes de ela virar cobrança errada.
-     */
-    const mode = secretKey.startsWith('sk_live_')
-      ? BillingMode.LIVE
-      : BillingMode.TEST;
-
-    const testePorPreco = [...prices.values()].filter((id) =>
-      id.startsWith('price_test_'),
-    );
-    if (mode === BillingMode.LIVE && testePorPreco.length > 0) {
+    if (!/^(sk|rk)_(test|live)_[A-Za-z0-9_]+$/.test(secretKey)) {
       throw new InfrastructureException(
-        'Billing is enabled in live mode with test price identifiers configured',
+        'STRIPE_SECRET_KEY must be an account secret or restricted API key (sk_test_, sk_live_, rk_test_ or rk_live_)',
       );
     }
+    if (!/^whsec_[A-Za-z0-9_]+$/.test(webhookSecret)) {
+      throw new InfrastructureException(
+        'STRIPE_WEBHOOK_SECRET must be a webhook signing secret (whsec_)',
+      );
+    }
+    const seen = new Set<string>();
+    for (const [entry, price] of prices) {
+      const [plan, interval] = entry.split(':');
+      const envKey = `STRIPE_PRICE_${plan}_${interval}`;
+      if (!/^price_[A-Za-z0-9_]+$/.test(price)) {
+        throw new InfrastructureException(
+          `${envKey} must contain a Price ID (price_), not a Product ID (prod_)`,
+        );
+      }
+      if (seen.has(price)) {
+        throw new InfrastructureException(
+          `${envKey} duplicates another price mapping`,
+        );
+      }
+      seen.add(price);
+    }
+
+    /** Price IDs don't encode their mode; price.livemode is checked via the API. */
+    const mode = /^(sk|rk)_live_/.test(secretKey)
+      ? BillingMode.LIVE
+      : BillingMode.TEST;
 
     this.assertUrlSegura(checkoutSuccessUrl, 'BILLING_CHECKOUT_SUCCESS_URL');
     this.assertUrlSegura(checkoutCancelUrl, 'BILLING_CHECKOUT_CANCEL_URL');
@@ -246,7 +258,12 @@ export class BillingConfig {
     } catch {
       throw new InfrastructureException(`${chave} is not a valid absolute URL`);
     }
-    if (url.protocol !== 'https:' && url.hostname !== 'localhost') {
+    const local = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+    if (
+      url.username ||
+      url.password ||
+      (url.protocol !== 'https:' && !(url.protocol === 'http:' && local))
+    ) {
       throw new InfrastructureException(
         `${chave} must use https outside localhost`,
       );
