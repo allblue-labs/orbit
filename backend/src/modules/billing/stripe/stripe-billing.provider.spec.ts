@@ -1,8 +1,10 @@
+import Stripe from 'stripe';
 import {
   BillingInterval,
   PlanCode,
 } from '../../subscription-plans/catalog/plan-catalog.types';
 import { BillingMode } from '../billing.types';
+import { BillingConfigurationInvalidException } from '../billing.errors';
 import { StripeBillingProvider } from './stripe-billing.provider';
 
 describe('StripeBillingProvider subscription commands', () => {
@@ -32,6 +34,7 @@ describe('StripeBillingProvider subscription commands', () => {
     const config = {
       enabled: true,
       secretKey: 'sk_test_unit_only',
+      webhookSecret: 'whsec_unit_only',
       mode: BillingMode.TEST,
       priceId: jest.fn().mockReturnValue('price_target'),
     };
@@ -67,6 +70,24 @@ describe('StripeBillingProvider subscription commands', () => {
       update: jest.fn().mockResolvedValue({ id: 'sub_sched_1' }),
       release: jest.fn().mockResolvedValue({ id: 'sub_sched_1' }),
     };
+    const price = {
+      id: 'price_target',
+      active: true,
+      livemode: false,
+      currency: 'brl',
+      unit_amount: 24990,
+      recurring: { interval: 'month', interval_count: 1 },
+    };
+    const prices = { retrieve: jest.fn().mockResolvedValue(price) };
+    const checkout = {
+      sessions: {
+        create: jest.fn().mockResolvedValue({
+          id: 'cs_unit',
+          url: 'https://checkout.stripe.test/c/unit',
+          expires_at: 1_793_836_800,
+        }),
+      },
+    };
     const invoices = { retrieve: jest.fn() };
     const refunds = { retrieve: jest.fn() };
     const disputes = { retrieve: jest.fn() };
@@ -74,6 +95,9 @@ describe('StripeBillingProvider subscription commands', () => {
     const provider = new StripeBillingProvider(config as never);
     Object.defineProperty(provider, 'client', {
       value: {
+        prices,
+        webhooks: Stripe.webhooks,
+        checkout,
         subscriptions,
         subscriptionSchedules,
         invoices,
@@ -84,6 +108,10 @@ describe('StripeBillingProvider subscription commands', () => {
     });
     return {
       provider,
+      price,
+      config,
+      prices,
+      checkout,
       subscriptions,
       subscriptionSchedules,
       invoices,
@@ -101,6 +129,120 @@ describe('StripeBillingProvider subscription commands', () => {
     billingInterval: BillingInterval.MONTHLY,
     idempotencyKey: 'orbit:change-plan:stable',
   } as const;
+
+  it('verifica o webhook sobre os bytes originais e publica apenas a referência do evento', () => {
+    const { provider } = setup();
+    const payload = JSON.stringify({
+      id: 'evt_unit',
+      type: 'customer.subscription.updated',
+      api_version: '2026-08-26.dahlia',
+      created: Math.floor(Date.now() / 1000),
+      data: { object: { id: 'sub_unit' } },
+    });
+    const signature = Stripe.webhooks.generateTestHeaderString({
+      payload,
+      secret: 'whsec_unit_only',
+    });
+    expect(
+      provider.verifyWebhook(Buffer.from(payload), signature),
+    ).toMatchObject({
+      providerEventId: 'evt_unit',
+      subscriptionId: 'sub_unit',
+      type: 'customer.subscription.updated',
+    });
+    expect(() =>
+      provider.verifyWebhook(
+        Buffer.from(payload.replace('sub_unit', 'sub_alterada')),
+        signature,
+      ),
+    ).toThrow(/signature verification failed/);
+  });
+
+  it('recusa assinatura de outro segredo de webhook', () => {
+    const { provider } = setup();
+    const payload = JSON.stringify({
+      id: 'evt_unit',
+      type: 'customer.subscription.updated',
+      data: { object: { id: 'sub_unit' } },
+    });
+    const signature = Stripe.webhooks.generateTestHeaderString({
+      payload,
+      secret: 'whsec_outro',
+    });
+    expect(() =>
+      provider.verifyWebhook(Buffer.from(payload), signature),
+    ).toThrow(/signature verification failed/);
+  });
+
+  const checkoutInput = {
+    checkoutAttemptId: 'attempt_1',
+    organizationId: 'org_1',
+    subscriptionId: 'local_sub_1',
+    providerCustomerId: 'cus_test_1',
+    planCode: PlanCode.PROFESSIONAL_INTELLIGENCE,
+    billingInterval: BillingInterval.MONTHLY,
+    trialDays: null,
+    idempotencyKey: 'checkout-stable',
+  };
+
+  it('confere o preço antes de criar checkout e mantém a chave de idempotência', async () => {
+    const { provider, prices, checkout } = setup();
+    await provider.createCheckoutSession(checkoutInput);
+    expect(prices.retrieve).toHaveBeenCalledWith('price_target');
+    expect(checkout.sessions.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: 'subscription',
+        line_items: [{ price: 'price_target', quantity: 1 }],
+      }),
+      { idempotencyKey: 'checkout-stable' },
+    );
+    expect(prices.retrieve.mock.invocationCallOrder[0]).toBeLessThan(
+      checkout.sessions.create.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it.each([
+    { unit_amount: 1 },
+    { currency: 'usd' },
+    { active: false },
+    { livemode: true },
+    { recurring: null },
+    { recurring: { interval: 'month', interval_count: 6 } },
+  ])(
+    'recusa preço divergente antes de checkout ou troca de plano: %j',
+    async (patch) => {
+      const {
+        provider,
+        price,
+        prices,
+        checkout,
+        subscriptions,
+        subscriptionSchedules,
+      } = setup();
+      prices.retrieve.mockResolvedValue({ ...price, ...patch });
+      await expect(
+        provider.createCheckoutSession(checkoutInput),
+      ).rejects.toBeInstanceOf(BillingConfigurationInvalidException);
+      await expect(
+        provider.changePlan({ ...input, timing: 'IMMEDIATE' }),
+      ).rejects.toBeInstanceOf(BillingConfigurationInvalidException);
+      await expect(
+        provider.changePlan({ ...input, timing: 'PERIOD_END' }),
+      ).rejects.toBeInstanceOf(BillingConfigurationInvalidException);
+      expect(checkout.sessions.create).not.toHaveBeenCalled();
+      expect(subscriptions.update).not.toHaveBeenCalled();
+      expect(subscriptionSchedules.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it('não cria checkout quando não consegue verificar o preço', async () => {
+    const { provider, prices, checkout } = setup();
+    prices.retrieve.mockRejectedValue(new Error('unavailable'));
+    await expect(
+      provider.createCheckoutSession(checkoutInput),
+    ).rejects.toBeDefined();
+    expect(checkout.sessions.create).not.toHaveBeenCalled();
+  });
 
   it('cobra upgrade imediatamente e recusa estado incomplete', async () => {
     const { provider, subscriptions } = setup();
@@ -121,7 +263,15 @@ describe('StripeBillingProvider subscription commands', () => {
   });
 
   it('preserva o preço atual e agenda downgrade para o fim do período', async () => {
-    const { provider, subscriptionSchedules } = setup();
+    const { provider, prices, subscriptionSchedules } = setup();
+    prices.retrieve.mockResolvedValue({
+      id: 'price_target',
+      active: true,
+      livemode: false,
+      currency: 'brl',
+      unit_amount: 59900,
+      recurring: { interval: 'year', interval_count: 1 },
+    });
 
     const result = await provider.changePlan({
       ...input,

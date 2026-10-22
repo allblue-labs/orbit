@@ -117,6 +117,7 @@ export class StripeBillingProvider implements BillingProvider {
   ): Promise<CheckoutSession> {
     const stripe = this.require();
     const priceId = this.priceOrFail(request.planCode, request.billingInterval);
+    await this.assertPrice(request.planCode, request.billingInterval, priceId);
 
     const session = await this.chamar('createCheckoutSession', () =>
       stripe.checkout.sessions.create(
@@ -345,6 +346,7 @@ export class StripeBillingProvider implements BillingProvider {
   }): Promise<ProviderPlanChange> {
     const stripe = this.require();
     const priceId = this.priceOrFail(input.planCode, input.billingInterval);
+    await this.assertPrice(input.planCode, input.billingInterval, priceId);
     const atual = await this.chamar('retrieveSubscription', () =>
       stripe.subscriptions.retrieve(input.providerSubscriptionId),
     );
@@ -656,11 +658,32 @@ export class StripeBillingProvider implements BillingProvider {
   /* Internos                                                          */
   /* ---------------------------------------------------------------- */
 
+  private async assertPrice(
+    planCode: PlanCodeType,
+    interval: BillingIntervalType,
+    priceId: string,
+  ): Promise<void> {
+    const price = await this.chamar('retrievePrice', () =>
+      this.require().prices.retrieve(priceId),
+    );
+    const problem = this.problemaDePreco(
+      price,
+      planDefinition(planCode).prices[interval]!.amountMinor,
+      BILLING_INTERVAL_MONTHS[interval] ?? 1,
+    );
+    if (problem)
+      throw new BillingConfigurationInvalidException(
+        `${planCode}:${interval}: ${problem}`,
+      );
+  }
+
   private problemaDePreco(
     price: Stripe.Price,
     esperadoMinor: number,
     mesesEsperados: number,
   ): string | null {
+    if (price.livemode !== (this.config.mode === 'LIVE'))
+      return 'price mode does not match the API key';
     if (!price.active) return 'price is inactive';
     if (price.currency !== 'brl') return `currency is ${price.currency}`;
     if (price.unit_amount !== esperadoMinor) {

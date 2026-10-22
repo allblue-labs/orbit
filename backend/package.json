@@ -9,6 +9,8 @@
     "contracts:guard": "ts-node scripts/check-contract-boundaries.ts",
     "lint:public-errors": "ts-node scripts/check-public-error-contract.ts",
     "build": "nest build",
+    "billing:check": "node dist/src/scripts/check-stripe-config.js",
+    "billing:check:dev": "ts-node src/scripts/check-stripe-config.ts",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",

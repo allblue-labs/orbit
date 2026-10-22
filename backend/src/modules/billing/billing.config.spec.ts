@@ -100,13 +100,61 @@ describe('configuração de cobrança', () => {
       }
     });
 
-    it('recusa misturar chave de produção com preço de teste', () => {
-      const valores = completa({
-        STRIPE_SECRET_KEY: 'sk_live_exemplo',
-        [priceEnvKey(PlanCode.ESSENTIAL, BillingInterval.MONTHLY)]:
-          'price_test_essencial',
-      });
-      expect(() => ambiente(valores)).toThrow(/live mode/);
+    it.each(['prod_nao_e_preco', 'valor_invalido'])(
+      'recusa o formato incorreto de preço %s sem expor seu valor',
+      (value) => {
+        const key = priceEnvKey(PlanCode.ESSENTIAL, BillingInterval.MONTHLY);
+        expect(() => ambiente(completa({ [key]: value }))).toThrow(key);
+        try {
+          ambiente(completa({ [key]: value }));
+        } catch (error) {
+          expect((error as Error).message).not.toContain(value);
+        }
+      },
+    );
+
+    it.each([
+      'pk_live_nao_e_segredo',
+      'valor_invalido',
+      'sk_org_nao_suportada',
+    ])('recusa chave de API de tipo incorreto %s', (value) => {
+      expect(() => ambiente(completa({ STRIPE_SECRET_KEY: value }))).toThrow(
+        /STRIPE_SECRET_KEY/,
+      );
+    });
+
+    it('recusa segredo de webhook com prefixo incorreto', () => {
+      expect(() =>
+        ambiente(completa({ STRIPE_WEBHOOK_SECRET: 'sk_test_nao_e_webhook' })),
+      ).toThrow(/STRIPE_WEBHOOK_SECRET/);
+    });
+
+    it('recusa repetir um preço em planos ou periodicidades diferentes', () => {
+      expect(() =>
+        ambiente(
+          completa({
+            STRIPE_PRICE_ESSENTIAL_ANNUAL: 'price_ESSENTIAL_MONTHLY',
+          }),
+        ),
+      ).toThrow(/duplicates another price mapping/);
+    });
+
+    it('não tenta inferir o modo pelo texto do Price ID', () => {
+      expect(
+        ambiente(
+          completa({
+            STRIPE_SECRET_KEY: 'sk_live_exemplo',
+            STRIPE_PRICE_ESSENTIAL_MONTHLY: 'price_test_exemplo',
+          }),
+        ).mode,
+      ).toBe('LIVE');
+    });
+
+    it.each([
+      ['rk_live_exemplo', 'LIVE'],
+      ['rk_test_exemplo', 'TEST'],
+    ])('aceita chave restrita %s com modo correto', (key, mode) => {
+      expect(ambiente(completa({ STRIPE_SECRET_KEY: key })).mode).toBe(mode);
     });
 
     it('deduz o modo pelo prefixo da chave', () => {
@@ -131,6 +179,16 @@ describe('configuração de cobrança', () => {
           completa({ BILLING_PORTAL_RETURN_URL: 'http://exemplo.com/volta' }),
         ),
       ).toThrow(/https/);
+    });
+
+    it.each([
+      'ftp://localhost/retorno',
+      'javascript://localhost/retorno',
+      'https://usuario:senha@exemplo.com/retorno',
+    ])('recusa esquema ou credenciais em URL %s', (url) => {
+      expect(() =>
+        ambiente(completa({ BILLING_PORTAL_RETURN_URL: url })),
+      ).toThrow(InfrastructureException);
     });
 
     it('aceita http em localhost, para desenvolvimento', () => {
