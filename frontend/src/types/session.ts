@@ -159,6 +159,7 @@ export interface RegisterInput {
   stateCode: string;
   primarySegment?: string;
   planKey?: string;
+  billingInterval?: "MONTHLY" | "SEMIANNUAL" | "ANNUAL";
   businessUnitType?: BusinessUnitType;
   client?: IdentityClient;
   deviceId?: string;

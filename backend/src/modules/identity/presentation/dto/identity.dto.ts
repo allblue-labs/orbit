@@ -13,6 +13,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { BusinessUnitType, InvitationStatus } from '../../../../contracts';
+import { BillingInterval } from '../../../subscription-plans/catalog/plan-catalog.types';
 import {
   detectBrazilianDocumentType,
   normalizeBrazilianDocument,
@@ -143,6 +144,14 @@ export class RegisterOrganizationDto {
   @MinLength(2)
   @MaxLength(40)
   planKey = 'STARTER';
+
+  @ApiPropertyOptional({
+    enum: Object.values(BillingInterval),
+    default: BillingInterval.MONTHLY,
+  })
+  @IsOptional()
+  @IsIn(Object.values(BillingInterval))
+  billingInterval?: BillingInterval = BillingInterval.MONTHLY;
 
   @ApiPropertyOptional({ default: BusinessUnitType.HEADQUARTERS })
   @IsOptional()

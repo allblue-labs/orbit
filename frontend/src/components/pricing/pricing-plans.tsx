@@ -248,7 +248,9 @@ function PublicPlanCard({
         prometeria um atalho que o produto não tem.
       */}
       <Button asChild className="w-full">
-        <Link href={`${ROUTES.register}?plano=${plano.code}`}>
+        <Link
+          href={`${ROUTES.register}?plano=${encodeURIComponent(plano.code)}&periodicidade=${encodeURIComponent(intervalo)}`}
+        >
           {ofereceAvaliacao(plano) ? "Testar grátis" : "Começar agora"}
         </Link>
       </Button>
