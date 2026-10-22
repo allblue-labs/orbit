@@ -11,6 +11,8 @@
     "build": "nest build",
     "billing:check": "node dist/src/scripts/check-stripe-config.js",
     "billing:check:dev": "ts-node src/scripts/check-stripe-config.ts",
+    "repair:pending-registration": "node dist/src/scripts/repair-pending-registration.js",
+    "repair:pending-registration:dev": "ts-node src/scripts/repair-pending-registration.ts",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",

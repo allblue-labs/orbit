@@ -39,7 +39,14 @@ import {
   ofereceAvaliacao,
   ordenarPlanos,
 } from "@/components/pricing/pricing-catalog";
-import type { PlanCatalog, PlanCatalogEntry } from "@/types/billing";
+import {
+  BILLING_INTERVALS,
+  BILLING_INTERVAL_LABELS,
+  type BillingIntervalCode,
+  type PlanCatalog,
+  type PlanCatalogEntry,
+} from "@/types/billing";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   detectBrazilianDocumentType,
   formatBrazilianDocument,
@@ -66,6 +73,7 @@ const schema = z
     street: z.string().min(2, "Informe o endereço"),
     stateCode: z.string().length(2, "Use a sigla do estado"),
     planKey: z.string().min(1, "Escolha um plano para continuar"),
+    billingInterval: z.enum(BILLING_INTERVALS),
     terms: z.boolean().refine(Boolean, "Aceite os termos para continuar"),
   })
   .refine((data) => data.password === data.confirmPassword, {
@@ -87,13 +95,17 @@ const steps = [
     description: "Identidade do workspace",
     icon: Building2,
   },
-  { title: "Organização principal", description: "Base da operação", icon: MapPin },
+  {
+    title: "Organização principal",
+    description: "Base da operação",
+    icon: MapPin,
+  },
 ];
 
 const LAST_STEP = steps.length - 1;
 
 const fieldsByStep: (keyof FormValues)[][] = [
-  ["planKey"],
+  ["planKey", "billingInterval"],
   ["firstName", "lastName", "email", "password", "confirmPassword"],
   ["organizationName", "legalName", "documentNumber", "primarySegment"],
   ["city", "street", "stateCode", "terms"],
@@ -139,11 +151,15 @@ function PlanStep({
   catalog,
   selected,
   onSelect,
+  billingInterval,
+  onIntervalChange,
   error,
 }: {
   catalog: PlanCatalog;
   selected: string;
   onSelect: (planKey: string) => void;
+  billingInterval: BillingIntervalCode;
+  onIntervalChange: (interval: BillingIntervalCode) => void;
   error?: string;
 }) {
   const planos = ordenarPlanos(catalog.plans);
@@ -161,19 +177,35 @@ function PlanStep({
 
   return (
     <div className="space-y-4">
+      <Tabs
+        value={billingInterval}
+        onValueChange={(value) =>
+          onIntervalChange(value as BillingIntervalCode)
+        }
+      >
+        <TabsList aria-label="Periodicidade da cobrança">
+          {BILLING_INTERVALS.map((interval) => (
+            <TabsTrigger key={interval} value={interval}>
+              {BILLING_INTERVAL_LABELS[interval]}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
       <div className="grid gap-4 sm:grid-cols-2">
         {planos.map((plano) => (
           <PlanCard
             key={plano.code}
             plano={plano}
+            billingInterval={billingInterval}
             ativo={plano.code === selected}
             onSelect={() => onSelect(plano.code)}
           />
         ))}
       </div>
       <p className="text-xs text-muted-foreground">
-        A cobrança começa depois da avaliação. Você pode trocar de plano a
-        qualquer momento pela área de assinatura.
+        O Essencial oferece avaliação para empresas elegíveis. Os demais planos
+        exigem pagamento para liberar o acesso. Você pode trocar de plano pela
+        área de assinatura.
       </p>
       <FieldError message={error} />
     </div>
@@ -182,14 +214,16 @@ function PlanStep({
 
 function PlanCard({
   plano,
+  billingInterval,
   ativo,
   onSelect,
 }: {
   plano: PlanCatalogEntry;
+  billingInterval: BillingIntervalCode;
   ativo: boolean;
   onSelect: () => void;
 }) {
-  const mensal = plano.prices.MONTHLY;
+  const preco = plano.prices[billingInterval];
   const comAvaliacao = ofereceAvaliacao(plano);
 
   return (
@@ -215,9 +249,13 @@ function PlanCard({
       </div>
 
       <p className="mt-4 font-display text-2xl font-bold">
-        {mensal ? formatCentavos(mensal.amountMinor) : "Sob consulta"}
+        {preco ? formatCentavos(preco.amountMinor) : "Sob consulta"}
         <span className="ml-1 text-xs font-normal text-muted-foreground">
-          /mês
+          {billingInterval === "MONTHLY"
+            ? "/mês"
+            : billingInterval === "SEMIANNUAL"
+              ? "/semestre"
+              : "/ano"}
         </span>
       </p>
 
@@ -254,9 +292,15 @@ function PlanCard({
   );
 }
 
-export function SignupContent({ catalog }: { catalog: PlanCatalog }) {
+export function SignupContent({
+  catalog,
+  initialSelection = { planKey: "", billingInterval: "MONTHLY" },
+}: {
+  catalog: PlanCatalog;
+  initialSelection?: { planKey: string; billingInterval: BillingIntervalCode };
+}) {
   const createAccount = useRegister();
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState(initialSelection.planKey ? 1 : 0);
   /** O CEP não faz parte do cadastro; só preenche o endereço da matriz. */
   const [cep, setCep] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -272,11 +316,14 @@ export function SignupContent({ catalog }: { catalog: PlanCatalog }) {
     defaultValues: {
       primarySegment: "Serviços",
       stateCode: "PE",
-      planKey: "",
+      planKey: initialSelection.planKey,
+      billingInterval: initialSelection.billingInterval,
       terms: false,
     },
   });
   const selectedPlan = useWatch({ control, name: "planKey" });
+  const billingInterval = useWatch({ control, name: "billingInterval" });
+  const plan = catalog.plans.find((entry) => entry.code === selectedPlan);
   const documentNumber = useWatch({ control, name: "documentNumber" });
   const termsAccepted = useWatch({ control, name: "terms" });
 
@@ -445,10 +492,52 @@ export function SignupContent({ catalog }: { catalog: PlanCatalog }) {
                   </p>
                 </div>
 
+                {step > 0 && plan ? (
+                  <div
+                    className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4"
+                    aria-label="Plano selecionado"
+                  >
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        Plano selecionado
+                      </p>
+                      <p className="mt-1 text-sm font-semibold">
+                        {plan.label} ·{" "}
+                        {BILLING_INTERVAL_LABELS[billingInterval]}
+                      </p>
+                      <p className="mt-1 text-sm">
+                        {formatCentavos(
+                          plan.prices[billingInterval]!.amountMinor,
+                        )}{" "}
+                        {billingInterval === "MONTHLY"
+                          ? "por mês"
+                          : billingInterval === "SEMIANNUAL"
+                            ? "por semestre"
+                            : "por ano"}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setStep(0)}
+                      disabled={isSubmitting}
+                    >
+                      Alterar plano
+                    </Button>
+                  </div>
+                ) : null}
+
                 {step === 0 && (
                   <PlanStep
                     catalog={catalog}
-                selected={selectedPlan}
+                    selected={selectedPlan}
+                    billingInterval={billingInterval}
+                    onIntervalChange={(interval) =>
+                      setValue("billingInterval", interval, {
+                        shouldValidate: true,
+                      })
+                    }
                     onSelect={(planKey) =>
                       setValue("planKey", planKey, { shouldValidate: true })
                     }

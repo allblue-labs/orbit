@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { SignupContent } from "@/components/auth/signup-content";
 import { carregarCatalogoPublico } from "@/components/pricing/pricing-catalog";
+import { signupPlanSelection } from "@/lib/signup-plan-selection";
 
 export const metadata: Metadata = {
   title: "Criar organização — Orbit",
@@ -27,7 +28,26 @@ export const metadata: Metadata = {
  */
 export const dynamic = "force-dynamic";
 
-export default async function CadastroPage() {
+export default async function CadastroPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    plano?: string | string[];
+    periodicidade?: string | string[];
+  }>;
+}) {
   const catalog = await carregarCatalogoPublico();
-  return <SignupContent catalog={catalog} />;
+  const query = await searchParams;
+  const selection = signupPlanSelection(
+    catalog,
+    query.plano,
+    query.periodicidade,
+  );
+  return (
+    <SignupContent
+      key={`${selection.planKey}:${selection.billingInterval}`}
+      catalog={catalog}
+      initialSelection={selection}
+    />
+  );
 }

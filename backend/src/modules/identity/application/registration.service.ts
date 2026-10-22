@@ -44,6 +44,7 @@ export class RegistrationService {
       await this.subscriptions.provision({
         organizationId: created.organizationId,
         planKey: normalized.planKey,
+        billingInterval: normalized.billingInterval,
         legalDocument: normalized.documentNumber,
       });
       return this.authentication.login(
