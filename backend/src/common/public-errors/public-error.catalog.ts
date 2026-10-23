@@ -96,6 +96,11 @@ const entries = [
     'Sua assinatura está vencida. Escolha um plano para voltar a usar o Orbit.',
   ],
   [
+    'SUBSCRIPTION_PAYMENT_REQUIRED',
+    HttpStatus.PAYMENT_REQUIRED,
+    'Conclua o pagamento do plano para liberar o acesso ao Orbit.',
+  ],
+  [
     'ENTITY_NOT_FOUND',
     HttpStatus.NOT_FOUND,
     'O recurso solicitado não foi encontrado.',

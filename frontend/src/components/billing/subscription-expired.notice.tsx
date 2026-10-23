@@ -43,17 +43,14 @@ import {
 import { useSession } from "@/providers/session-provider";
 import { ROUTE_ASSINATURA, dataDeVencimento } from "./subscription-access";
 import { useAvisoDeAssinatura } from "./subscription-notice-provider";
+import { expiredSubscriptionNotice } from "./billing-session";
 
 export function SubscriptionExpiredNotice() {
   const session = useSession();
   const { dispensado, dispensar } = useAvisoDeAssinatura();
-  const vencida = session.isAuthenticated && !session.subscriptionActive;
-  const aguardandoPagamento =
-    session.entitlements?.subscriptionStatus === "PENDING_PAYMENT";
-
-  if (!vencida || aguardandoPagamento) return null;
-
-  const venceuEm = dataDeVencimento(session.subscriptionEndsAt);
+  const notice = expiredSubscriptionNotice(session.session);
+  if (!notice) return null;
+  const venceuEm = dataDeVencimento(notice.end);
 
   return (
     <Dialog
@@ -65,7 +62,7 @@ export function SubscriptionExpiredNotice() {
           <div className="mb-2 flex size-10 items-center justify-center rounded-xl bg-warning/12 text-warning">
             <CalendarX2 className="size-5" aria-hidden />
           </div>
-          <DialogTitle>Sua avaliação gratuita terminou</DialogTitle>
+          <DialogTitle>{notice.title}</DialogTitle>
           <DialogDescription>
             {venceuEm
               ? `O período de acesso foi até ${venceuEm}. Escolha um plano para voltar a registrar atendimentos.`

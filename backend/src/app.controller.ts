@@ -12,6 +12,18 @@ export class AppController {
     return this.appService.getHello();
   }
 
+  @Get('release')
+  @Public()
+  @Header('Cache-Control', 'no-store')
+  release() {
+    return {
+      service: 'orbit-api',
+      billingFlow: 'checkout-required-v2',
+      commit: process.env.ORBIT_COMMIT_SHA ?? 'unknown',
+      builtAt: process.env.ORBIT_BUILD_TIME ?? 'unknown',
+    };
+  }
+
   @Get('health/live')
   @Public()
   @Header('Cache-Control', 'no-store')

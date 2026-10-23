@@ -8,6 +8,7 @@ import {
   OWNER_ROLE_KEY,
 } from '../../organizations/team-roles';
 import { RVT_MAINTENANCE_TYPE_SEEDS } from '../../rvt/rvt-maintenance-types.seed';
+import { isKnownPlan } from '../../subscription-plans/catalog/plan-registry';
 
 export type TenantProvisioningOptions = {
   actorUserId?: string;
@@ -79,10 +80,14 @@ export class RegistrationRepository {
           displayName: input.organizationName.trim(),
           primarySegment: input.primarySegment,
           status: options.organizationStatus ?? 'ACTIVE',
-          subscriptionStatus: options.subscriptionStatus ?? 'TRIALING',
+          subscriptionStatus:
+            options.subscriptionStatus ??
+            (isKnownPlan(plan.key) ? 'PENDING_PAYMENT' : 'TRIALING'),
           subscriptionStartedAt: now,
           currentPeriodStart: now,
-          currentPeriodEnd: options.currentPeriodEnd ?? trialEndsAt,
+          currentPeriodEnd:
+            options.currentPeriodEnd ??
+            (isKnownPlan(plan.key) ? null : trialEndsAt),
           externalCustomerId: options.externalCustomerId,
           externalSubscriptionId: options.externalSubscriptionId,
         },
@@ -173,7 +178,9 @@ export class RegistrationRepository {
               ownerUserId: userId,
               planKey: plan.key,
               status: options.organizationStatus ?? 'ACTIVE',
-              subscriptionStatus: options.subscriptionStatus ?? 'TRIALING',
+              subscriptionStatus:
+                options.subscriptionStatus ??
+                (isKnownPlan(plan.key) ? 'PENDING_PAYMENT' : 'TRIALING'),
             },
           },
         });

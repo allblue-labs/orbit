@@ -81,7 +81,7 @@ export function useChangePlan() {
     Awaited<ReturnType<typeof billingService.changePlan>>,
     ChangePlanInput
   >((input) => billingService.changePlan(input), {
-    invalidate: [billingService.keys.module()],
+    // Abrir a confirmação não altera o plano. Não aguarda refetch antes de navegar.
   });
 }
 

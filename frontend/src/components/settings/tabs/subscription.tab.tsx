@@ -19,7 +19,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AlertTriangle, Loader2 } from "lucide-react";
-import { toast } from "sonner";
+import { MutationError } from "@/components/artifact-studio/mutation-error";
 import { useSession } from "@/providers/session-provider";
 import { Button } from "@/components/ui/button";
 import {
@@ -76,6 +76,7 @@ export function SubscriptionSettingsTab() {
   const desfazerTroca = useCancelScheduledChange();
 
   const [confirmacao, setConfirmacao] = useState<Confirmacao | null>(null);
+  const [actionError, setActionError] = useState<unknown>(null);
 
   /**
    * Trava de mesmo tique.
@@ -88,13 +89,11 @@ export function SubscriptionSettingsTab() {
   const proteger = useCallback(async (acao: () => Promise<unknown>) => {
     if (emVoo.current) return;
     emVoo.current = true;
+    setActionError(null);
     try {
       await acao();
     } catch (error) {
-      toast.error("Não foi possível concluir a solicitação", {
-        description:
-          error instanceof Error ? error.message : "Tente novamente.",
-      });
+      setActionError(error);
     } finally {
       emVoo.current = false;
     }
@@ -180,7 +179,8 @@ export function SubscriptionSettingsTab() {
 
   const executarConfirmacao = () =>
     void proteger(async () => {
-      if (!confirmacao || !assinatura) return;
+      if (!confirmacao || !assinatura)
+        throw new Error("Atualize a página e selecione o plano novamente.");
       if (confirmacao.tipo === "CANCELAR") {
         await cancelar.mutateAsync({ expectedVersion: assinatura.version });
       } else {
@@ -202,6 +202,7 @@ export function SubscriptionSettingsTab() {
 
   return (
     <div className="space-y-6">
+      {!confirmacao ? <MutationError error={actionError} /> : null}
       {assinatura?.status === "PENDING_PAYMENT" ? (
         <div
           role="status"
@@ -256,38 +257,45 @@ export function SubscriptionSettingsTab() {
 
       <BillingBanner overview={dados} />
 
-      <CurrentSubscriptionCard
-        overview={dados}
-        onCancelRenewal={() => setConfirmacao({ tipo: "CANCELAR" })}
-        onKeepSubscription={() =>
-          void proteger(async () => {
-            if (!assinatura) return;
-            await manter.mutateAsync({ expectedVersion: assinatura.version });
-          })
-        }
-        onCancelScheduledChange={() =>
-          void proteger(async () => {
-            if (!assinatura) return;
-            await desfazerTroca.mutateAsync({
-              expectedVersion: assinatura.version,
-            });
-          })
-        }
-        onOpenPortal={abrirPortal}
-        portalPending={portal.isPending}
-        commandPending={comandoPendente}
-      />
+      {assinatura?.status !== "PENDING_PAYMENT" ? (
+        <>
+          <CurrentSubscriptionCard
+            overview={dados}
+            onCancelRenewal={() => setConfirmacao({ tipo: "CANCELAR" })}
+            onKeepSubscription={() =>
+              void proteger(async () => {
+                if (!assinatura) return;
+                await manter.mutateAsync({
+                  expectedVersion: assinatura.version,
+                });
+              })
+            }
+            onCancelScheduledChange={() =>
+              void proteger(async () => {
+                if (!assinatura) return;
+                await desfazerTroca.mutateAsync({
+                  expectedVersion: assinatura.version,
+                });
+              })
+            }
+            onOpenPortal={abrirPortal}
+            portalPending={portal.isPending}
+            commandPending={comandoPendente}
+          />
 
-      <PlanUsageSection entitlements={dados.entitlements} />
+          <PlanUsageSection entitlements={dados.entitlements} />
 
-      <BillingInvoiceHistory invoices={dados.invoices} />
+          <BillingInvoiceHistory invoices={dados.invoices} />
+        </>
+      ) : null}
 
       <PlanCatalogSection
         overview={dados}
         onSubscribe={iniciarCheckout}
-        onChangePlan={(planCode, intervalo) =>
-          setConfirmacao({ tipo: "TROCAR", planCode, intervalo })
-        }
+        onChangePlan={(planCode, intervalo) => {
+          setActionError(null);
+          setConfirmacao({ tipo: "TROCAR", planCode, intervalo });
+        }}
         pending={checkout.isPending || comandoPendente}
       />
 
@@ -295,6 +303,7 @@ export function SubscriptionSettingsTab() {
         confirmacao={confirmacao}
         overview={dados}
         pending={comandoPendente}
+        error={actionError}
         onCancel={() => setConfirmacao(null)}
         onConfirm={executarConfirmacao}
       />
@@ -344,12 +353,14 @@ function ConfirmacaoDialog({
   confirmacao,
   overview,
   pending,
+  error,
   onCancel,
   onConfirm,
 }: {
   confirmacao: Confirmacao | null;
   overview: NonNullable<ReturnType<typeof useBillingOverview>["data"]>;
   pending: boolean;
+  error: unknown;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
@@ -358,7 +369,10 @@ function ConfirmacaoDialog({
 
   if (confirmacao.tipo === "CANCELAR") {
     return (
-      <AlertDialog open onOpenChange={(aberto) => !aberto && onCancel()}>
+      <AlertDialog
+        open
+        onOpenChange={(aberto) => !aberto && !pending && onCancel()}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Cancelar a renovação?</AlertDialogTitle>
@@ -369,6 +383,7 @@ function ConfirmacaoDialog({
               corre.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <MutationError error={error} />
           <AlertDialogFooter>
             <AlertDialogCancel disabled={pending}>Voltar</AlertDialogCancel>
             <AlertDialogAction onClick={onConfirm} disabled={pending}>
@@ -389,7 +404,10 @@ function ConfirmacaoDialog({
   );
 
   return (
-    <AlertDialog open onOpenChange={(aberto) => !aberto && onCancel()}>
+    <AlertDialog
+      open
+      onOpenChange={(aberto) => !aberto && !pending && onCancel()}
+    >
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>
@@ -429,17 +447,12 @@ function ConfirmacaoDialog({
             continuam como estão.
           </p>
         ) : null}
+        <MutationError error={error} />
         <AlertDialogFooter>
           <AlertDialogCancel disabled={pending}>Voltar</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={(event) => {
-              event.preventDefault();
-              onConfirm();
-            }}
-            disabled={pending}
-          >
+          <Button type="button" onClick={onConfirm} disabled={pending}>
             {pending ? "Abrindo pagamento…" : "Continuar para o pagamento"}
-          </AlertDialogAction>
+          </Button>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

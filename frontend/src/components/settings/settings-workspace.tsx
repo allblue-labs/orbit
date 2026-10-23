@@ -26,6 +26,8 @@ import { ContentContainer } from "@/components/layout/page-primitives";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TabBoundary } from "@/workspace";
 import { useSectionFromUrl } from "@/hooks/use-section-from-url";
+import { useSession } from "@/providers/session-provider";
+import { requiresInitialPayment } from "@/components/billing/billing-session";
 import { AutomationsSettingsTab } from "./tabs/automations.tab";
 import { DocumentsSettingsTab } from "./tabs/documents.tab";
 import { FinancialSettingsTab } from "./tabs/financial.tab";
@@ -74,6 +76,14 @@ const SECOES = TODAS_AS_SECOES.filter((secao) => !OCULTAS.includes(secao));
 
 export function SettingsWorkspace() {
   const section = useSectionFromUrl(SECOES);
+  const session = useSession();
+  if (requiresInitialPayment(session.session)) {
+    return (
+      <ContentContainer size="wide">
+        <SubscriptionSettingsTab />
+      </ContentContainer>
+    );
+  }
   const visivel = (secao: (typeof TODAS_AS_SECOES)[number]) =>
     !OCULTAS.includes(secao);
 

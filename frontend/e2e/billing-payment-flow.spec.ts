@@ -84,6 +84,9 @@ async function fixture(
     signup?: boolean;
     checkoutFails?: boolean;
     changeFails?: boolean;
+    malformedChange?: boolean;
+    entitlementsUnavailable?: boolean;
+    stallOverviewAfterChange?: boolean;
   } = {},
 ) {
   let registered = !options.signup;
@@ -117,10 +120,15 @@ async function fixture(
           organization: { id: "billing-org", displayName: "Minha empresa" },
           businessUnits: [],
           organizations: [],
-          entitlements: {
-            capabilities: ["*"],
-            subscriptionStatus: data.subscription?.status,
-          },
+          subscription: data.subscription,
+          subscriptionStatus: data.subscription?.status,
+          subscriptionTrialEndsAt: data.subscription?.trial?.endsAt ?? null,
+          entitlements: options.entitlementsUnavailable
+            ? null
+            : {
+                capabilities: ["*"],
+                subscriptionStatus: data.subscription?.status,
+              },
           productAccess: null,
           isPlatformAdmin: false,
           subscriptionActive: data.subscription?.status !== "PENDING_PAYMENT",
@@ -171,8 +179,15 @@ async function fixture(
       await cookie();
       result = { authenticated: true };
     } else if (path === "/api/auth/session") result = session();
-    else if (path === "/api/orbit/billing/overview") result = data;
-    else if (
+    else if (path === "/api/orbit/billing/overview") {
+      if (
+        options.stallOverviewAfterChange &&
+        writes.some((write) => write.path.endsWith("/change-plan"))
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 10000));
+      }
+      result = data;
+    } else if (
       path.endsWith("/checkout-session") ||
       path.endsWith("/change-plan")
     ) {
@@ -193,12 +208,15 @@ async function fixture(
         });
         return;
       }
-      result = {
-        url: path.endsWith("/change-plan")
-          ? "https://billing.stripe.test/confirm"
-          : "https://checkout.stripe.test/pay",
-        expiresAt: null,
-      };
+      result =
+        options.malformedChange && path.endsWith("/change-plan")
+          ? { status: "ACTIVE", planCode: "PROFESSIONAL" }
+          : {
+              url: path.endsWith("/change-plan")
+                ? "https://billing.stripe.test/confirm"
+                : "https://checkout.stripe.test/pay",
+              expiresAt: null,
+            };
     } else if (path.endsWith("/identity/me")) result = profile;
     else if (path.includes("notifications"))
       result = { unread: 0, data: [], meta: { page: 1, total: 0 } };
@@ -330,9 +348,7 @@ test("API failure remains visible and keeps the confirmation available for retry
     .getByRole("alertdialog")
     .getByRole("button", { name: "Continuar para o pagamento" })
     .click();
-  await expect(
-    page.getByText("Não foi possível concluir a solicitação"),
-  ).toBeVisible();
+  await expect(page.getByRole("alertdialog").getByRole("alert")).toBeVisible();
   await expect(page.getByRole("alertdialog")).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Continuar para o pagamento" }),
@@ -419,5 +435,75 @@ test("paying for another Essential billing interval also requires explicit trial
     planCode: "ESSENTIAL",
     billingInterval: "ANNUAL",
     acknowledgeTrialEnd: true,
+  });
+});
+
+test("pending first payment redirects dashboard access to billing and never displays a future expiry", async ({
+  page,
+}) => {
+  await fixture(page, {
+    status: "PENDING_PAYMENT",
+    entitlementsUnavailable: true,
+  });
+  await page.goto("/dashboard");
+  await expect(page).toHaveURL(/configuracoes\?secao=assinatura/);
+  await expect(
+    page.getByRole("button", {
+      name: "Continuar para o pagamento",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(page.getByText("Sua avaliação gratuita terminou")).toHaveCount(
+    0,
+  );
+  await expect(page.getByText(/O período de acesso foi até/)).toHaveCount(0);
+  await expect(page.getByText("Próxima renovação")).toHaveCount(0);
+  await page.goto("/clientes");
+  await expect(page).toHaveURL(/configuracoes\?secao=assinatura/);
+  await expect(
+    page.getByRole("button", {
+      name: "Continuar para o pagamento",
+      exact: true,
+    }),
+  ).toBeVisible();
+});
+
+test("a legacy 200 without payment URL stays in the modal with an explicit error", async ({
+  page,
+}) => {
+  await fixture(page, { malformedChange: true });
+  await page.goto("/configuracoes?secao=assinatura");
+  await page
+    .getByRole("article", { name: "Profissional", exact: true })
+    .getByRole("button", { name: "Migrar para este" })
+    .click();
+  const dialog = page.getByRole("alertdialog");
+  await dialog
+    .getByRole("button", { name: "Continuar para o pagamento" })
+    .click();
+  await expect(dialog.getByRole("alert")).toContainText(
+    "O pagamento não retornou um endereço válido",
+  );
+  await expect(page).toHaveURL(/configuracoes\?secao=assinatura/);
+  await expect(
+    dialog.getByRole("button", { name: "Continuar para o pagamento" }),
+  ).toBeEnabled();
+});
+
+test("successful payment redirect does not wait for a billing overview refresh", async ({
+  page,
+}) => {
+  await fixture(page, { stallOverviewAfterChange: true });
+  await page.goto("/configuracoes?secao=assinatura");
+  await page
+    .getByRole("article", { name: "Profissional", exact: true })
+    .getByRole("button", { name: "Migrar para este" })
+    .click();
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Continuar para o pagamento" })
+    .click();
+  await expect(page).toHaveURL("https://billing.stripe.test/confirm", {
+    timeout: 5000,
   });
 });

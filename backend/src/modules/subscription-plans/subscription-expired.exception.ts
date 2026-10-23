@@ -1,6 +1,18 @@
 import { HttpStatus } from '@nestjs/common';
 import { BaseException } from '../../exceptions';
 
+export class SubscriptionPaymentRequiredException extends BaseException {
+  constructor() {
+    super(
+      {
+        code: 'SUBSCRIPTION_PAYMENT_REQUIRED',
+        message: 'Conclua o pagamento do plano para liberar o acesso ao Orbit.',
+      },
+      HttpStatus.PAYMENT_REQUIRED,
+    );
+  }
+}
+
 /**
  * A assinatura não autoriza mais usar o produto.
  *

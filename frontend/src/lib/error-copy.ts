@@ -10,6 +10,7 @@ export function errorCopy(error: unknown): string {
   if (!(error instanceof ApiError)) {
     return "Não foi possível concluir a operação.";
   }
+  if (error.code === "BILLING_REDIRECT_MISSING") return error.message;
 
   if (error.kind === "timeout") {
     return "A operação demorou mais que o esperado. Tente novamente.";

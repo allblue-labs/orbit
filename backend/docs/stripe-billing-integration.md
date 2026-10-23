@@ -483,3 +483,9 @@ assento, cobrança por uso medido, cobrança de excedente de IA, automação de
 resposta a contestações e PIX recorrente — este último porque suporte a
 assinatura recorrente com PIX precisa ser comprovado antes de ser prometido, e
 não foi.
+
+## Diagnóstico do código publicado
+
+Quando as flags de produção estão corretas, confira também os artefatos servidos.
+Veja [evidência de produção e publicação verificável](stripe-production-rollout.md).
+O verificador usa somente HTTP público e não considera envs locais.

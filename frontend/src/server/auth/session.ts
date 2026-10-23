@@ -30,7 +30,8 @@ import {
   clearSessionCookies,
   writeSessionCookies,
 } from "./cookies";
-import { assinaturaVigente } from "@/components/billing/subscription-status";
+import { sessionSubscriptionState } from "./subscription-state";
+import type { OrganizationSubscription } from "@/types/billing";
 import { claimList, decodeAccessToken, expiresAtIso, isExpired } from "./jwt";
 import { refreshTokens } from "./refresh";
 
@@ -108,49 +109,62 @@ export async function buildSessionState(
      * tenant. Um Platform Administrator não pertence a nenhuma organização,
      * então essas chamadas nem são disparadas para ele.
      */
-    const [user, access, organization, entitlements, productAccess] =
-      await Promise.all([
-        backendJson<SessionUser & { mustChangePassword?: boolean }>({
-          path: "/identity/me",
-          accessToken,
-          retries: 0,
-        }),
-        backendJson<SessionAccess>({
-          path: "/identity/me/access",
-          accessToken,
-          retries: 0,
-        }),
-        claims.organizationId
-          ? tolerate(
-              backendJson<SessionOrganization>({
-                path: "/organizations/current",
-                accessToken,
-                retries: 0,
-              }),
-            )
-          : null,
-        claims.organizationId
-          ? tolerate(
-              backendJson<SessionEntitlements>({
-                path: "/organizations/current/subscription",
-                accessToken,
-                retries: 0,
-              }),
-            )
-          : null,
-        claims.organizationId
-          ? tolerate(
-              backendJson<SessionProductAccess>({
-                path: "/organizations/current/product-access",
-                accessToken,
-                retries: 0,
-              }),
-            )
-          : null,
-      ]);
+    const [
+      user,
+      access,
+      organization,
+      entitlements,
+      productAccess,
+      subscription,
+    ] = await Promise.all([
+      backendJson<SessionUser & { mustChangePassword?: boolean }>({
+        path: "/identity/me",
+        accessToken,
+        retries: 0,
+      }),
+      backendJson<SessionAccess>({
+        path: "/identity/me/access",
+        accessToken,
+        retries: 0,
+      }),
+      claims.organizationId
+        ? tolerate(
+            backendJson<SessionOrganization>({
+              path: "/organizations/current",
+              accessToken,
+              retries: 0,
+            }),
+          )
+        : null,
+      claims.organizationId
+        ? tolerate(
+            backendJson<SessionEntitlements>({
+              path: "/organizations/current/subscription",
+              accessToken,
+              retries: 0,
+            }),
+          )
+        : null,
+      claims.organizationId
+        ? tolerate(
+            backendJson<SessionProductAccess>({
+              path: "/organizations/current/product-access",
+              accessToken,
+              retries: 0,
+            }),
+          )
+        : null,
+      claims.organizationId
+        ? tolerate(
+            backendJson<OrganizationSubscription>({
+              path: "/organizations/current/subscription-details",
+              accessToken,
+              retries: 0,
+            }),
+          )
+        : null,
+    ]);
 
-    const subscriptionStatus =
-      entitlements?.subscriptionStatus ?? organization?.subscriptionStatus;
     const roles = claimList(access.roles);
     const isPlatformAdmin = roles.includes(PLATFORM_ADMIN_ROLE);
     const unitIds = claimList(access.unitIds);
@@ -192,18 +206,12 @@ export async function buildSessionState(
        * `assinaturaVigente`. Sem sessão de organização, quem responde é o
        * papel de plataforma.
        */
-      subscriptionActive: subscriptionStatus
-        ? assinaturaVigente(
-            subscriptionStatus,
-            entitlements?.currentPeriodEnd ??
-              organization?.currentPeriodEnd ??
-              null,
-          )
-        : isPlatformAdmin,
-      subscriptionEndsAt:
-        entitlements?.currentPeriodEnd ??
-        organization?.currentPeriodEnd ??
-        null,
+      ...sessionSubscriptionState({
+        subscription,
+        entitlements,
+        organization,
+        isPlatformAdmin,
+      }),
       requiresPasswordChange: user.mustChangePassword === true,
     };
     return session;

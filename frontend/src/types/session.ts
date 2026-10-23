@@ -5,6 +5,7 @@
  * O que o cliente recebe é apenas o estado derivado da sessão.
  */
 import type { BusinessUnitType } from "./contracts";
+import type { OrganizationSubscription } from "./billing";
 import type {
   IdentityProfileReadModel,
   IdentitySessionReadModel,
@@ -93,6 +94,10 @@ export interface SessionOrganizationRef {
 }
 
 export interface AuthenticatedSession {
+  /** Contrato comercial canônico; campos opcionais aceitam sessões anteriores ao deploy. */
+  subscription?: OrganizationSubscription | null;
+  subscriptionStatus?: string | null;
+  subscriptionTrialEndsAt?: string | null;
   authenticated: true;
   user: SessionUser;
   scope: SessionScope;

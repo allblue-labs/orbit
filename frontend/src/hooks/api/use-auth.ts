@@ -21,6 +21,7 @@ import { authService, type AuthResult } from "@/services/auth.service";
 import { billingService } from "@/services/billing.service";
 import { ROUTE_ASSINATURA } from "@/components/billing/subscription-access";
 import { rememberBillingTarget } from "@/components/billing/billing-redirect";
+import { requiresInitialPayment } from "@/components/billing/billing-session";
 import type {
   AcceptInvitationInput,
   ForgotPasswordInput,
@@ -54,11 +55,12 @@ function useAuthenticatedRedirect(redirectTo?: string) {
       queryFn: () => authService.session(),
       staleTime: 0,
     });
-    const destination =
-      redirectTo ??
-      homeRouteFor({
-        isPlatformAdmin: state.authenticated && state.isPlatformAdmin,
-      });
+    const destination = requiresInitialPayment(state)
+      ? ROUTE_ASSINATURA
+      : (redirectTo ??
+        homeRouteFor({
+          isPlatformAdmin: state.authenticated && state.isPlatformAdmin,
+        }));
     router.replace(destination);
     router.refresh();
   }, [queryClient, redirectTo, router]);
@@ -81,7 +83,7 @@ export function useRegister(options: AuthNavigationOptions = {}) {
   return useApiMutation<AuthResult, RegisterInput>(
     (input) => authService.register(input),
     {
-      onSuccess: async () => {
+      onSuccess: async (_result, input) => {
         // O cadastro já foi gravado. Uma falha de cobrança deve permitir retomar
         // o pagamento em Configurações, sem reenviar e duplicar o cadastro.
         try {
@@ -105,7 +107,18 @@ export function useRegister(options: AuthNavigationOptions = {}) {
             window.location.assign(session.url);
             return;
           }
-          await redirect();
+          if (
+            input.planKey === "ESSENTIAL" &&
+            subscription?.planCode === "ESSENTIAL" &&
+            subscription.status === "TRIALING"
+          ) {
+            await redirect();
+            return;
+          }
+          router.replace(
+            `${ROUTE_ASSINATURA}&cadastro=concluido&pagamento=pendente`,
+          );
+          router.refresh();
         } catch {
           router.replace(
             `${ROUTE_ASSINATURA}&cadastro=concluido&pagamento=pendente`,

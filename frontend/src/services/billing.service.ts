@@ -6,6 +6,7 @@
  * se o comando é permitido.
  */
 import { apiClient } from "@/api/client";
+import { requireBillingRedirect } from "@/components/billing/billing-redirect";
 import { queryKeys, type QueryKey } from "@/api/query-keys";
 import type { RequestOptions } from "@/types/api";
 import type {
@@ -39,10 +40,14 @@ export const billingService = {
   createCheckout: (
     input: CreateCheckoutInput,
   ): Promise<CheckoutSessionResult> =>
-    apiClient.post<CheckoutSessionResult>("/billing/checkout-session", input),
+    apiClient
+      .post<CheckoutSessionResult>("/billing/checkout-session", input)
+      .then(requireBillingRedirect),
 
   openPortal: (): Promise<BillingPortalResult> =>
-    apiClient.post<BillingPortalResult>("/billing/portal-session", {}),
+    apiClient
+      .post<BillingPortalResult>("/billing/portal-session", {})
+      .then(requireBillingRedirect),
 
   cancelRenewal: (
     input: SubscriptionVersionInput,
@@ -61,10 +66,12 @@ export const billingService = {
     ),
 
   changePlan: (input: ChangePlanInput): Promise<BillingPortalResult> =>
-    apiClient.post<BillingPortalResult>(
-      "/organizations/current/subscription/change-plan",
-      input,
-    ),
+    apiClient
+      .post<BillingPortalResult>(
+        "/organizations/current/subscription/change-plan",
+        input,
+      )
+      .then(requireBillingRedirect),
 
   cancelScheduledChange: (
     input: SubscriptionVersionInput,
