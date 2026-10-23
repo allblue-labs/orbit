@@ -163,6 +163,7 @@ export interface ChangePlanInput {
   expectedVersion: number;
   planCode: string;
   billingInterval?: string;
+  acknowledgeTrialEnd?: boolean;
 }
 
 export interface SubscriptionVersionInput {

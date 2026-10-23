@@ -344,7 +344,7 @@ export function SignupContent({
         client: "WEB",
         businessUnitType: "HEADQUARTERS",
       });
-      toast.success("Sua organização está pronta");
+      toast.success("Cadastro concluído");
     } catch (error) {
       toast.error("Não foi possível concluir o cadastro", {
         description:

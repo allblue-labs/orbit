@@ -212,7 +212,7 @@ export function CurrentSubscriptionCard({
           </p>
         ) : null}
 
-        {subscription.trial?.endsAt ? (
+        {subscription.status === "TRIALING" && subscription.trial?.endsAt ? (
           <p className="flex items-center gap-2 text-sm">
             <CalendarClock
               className="size-4 text-muted-foreground"

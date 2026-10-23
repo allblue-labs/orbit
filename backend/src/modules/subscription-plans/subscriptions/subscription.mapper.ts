@@ -80,7 +80,7 @@ export class SubscriptionMapper {
     linha: SubscriptionRow & { effectiveStatus: SubscriptionStatus },
   ): string[] {
     if (linha.effectiveStatus === SubscriptionStatus.PENDING_PAYMENT) {
-      return [SubscriptionAction.SUBSCRIBE];
+      return [SubscriptionAction.SUBSCRIBE, SubscriptionAction.CHANGE_PLAN];
     }
     if (isTerminal(linha.effectiveStatus)) {
       return [SubscriptionAction.SUBSCRIBE];

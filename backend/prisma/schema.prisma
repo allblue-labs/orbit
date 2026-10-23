@@ -814,8 +814,10 @@ model BillingCheckoutAttempt {
   provider String @db.VarChar(20)
   mode     String @db.VarChar(10)
 
-  planCode        String @map("plan_code") @db.VarChar(60)
-  billingInterval String @map("billing_interval") @db.VarChar(20)
+  planCode            String  @map("plan_code") @db.VarChar(60)
+  billingInterval     String  @map("billing_interval") @db.VarChar(20)
+  subscriptionVersion Int?    @map("subscription_version")
+  endsTrial           Boolean @default(false) @map("ends_trial")
 
   /// `CREATING` · `OPEN` · `COMPLETED` · `EXPIRED` · `FAILED`.
   status String @default("CREATING") @db.VarChar(20)

@@ -23,6 +23,7 @@ describe('BillingService checkout intent', () => {
 
   const currentSubscription = () => ({
     id: subscriptionId,
+    version: 1,
     organizationId,
     planCode: PlanCode.PROFESSIONAL,
     billingInterval: BillingInterval.MONTHLY,
@@ -40,6 +41,8 @@ describe('BillingService checkout intent', () => {
     mode: BillingMode.TEST,
     planCode: PlanCode.PROFESSIONAL,
     billingInterval: BillingInterval.MONTHLY,
+    subscriptionVersion: 1,
+    endsTrial: false,
     status: 'CREATING',
     idempotencyKey: 'orbit:checkout-attempt:stable',
     providerSessionId: null,
@@ -196,12 +199,16 @@ describe('BillingService checkout intent', () => {
     ) => {
       const setCancelAtPeriodEnd = jest.fn().mockResolvedValue(providerResult);
       const changePlan = jest.fn();
+      const createPlanChangeSession = jest
+        .fn()
+        .mockResolvedValue({ url: 'https://billing.stripe.test/confirm' });
       const provider = {
         name: BillingProviderName.STRIPE,
         mode: BillingMode.TEST,
         isEnabled: jest.fn().mockReturnValue(true),
         setCancelAtPeriodEnd,
         changePlan,
+        createPlanChangeSession,
         retrieveSubscription: jest.fn().mockResolvedValue(providerResult),
       } as unknown as BillingProvider;
       const subscriptions = {
@@ -220,6 +227,7 @@ describe('BillingService checkout intent', () => {
         subscriptions,
         setCancelAtPeriodEnd,
         changePlan,
+        createPlanChangeSession,
       };
     };
 
@@ -264,70 +272,92 @@ describe('BillingService checkout intent', () => {
       expect(setCancelAtPeriodEnd).not.toHaveBeenCalled();
     });
 
-    it('agenda downgrade no período confirmado pelo provedor', async () => {
-      const { service, subscriptions, changePlan } = commandSetup();
-      const effectiveAt = new Date('2026-11-01T00:00:00.000Z');
-      changePlan.mockResolvedValue({
-        subscription: providerSubscription(),
-        scheduled: true,
-        effectiveAt,
-        providerScheduleId: 'sub_sched_test',
-      });
+    it.each([PlanCode.ESSENTIAL, PlanCode.PROFESSIONAL_INTELLIGENCE])(
+      'abre confirmação Stripe para %s sem alterar direitos',
+      async (planCode) => {
+        const { service, subscriptions, createPlanChangeSession, changePlan } =
+          commandSetup();
+        await expect(
+          service.changeSubscriptionPlan({
+            organizationId,
+            expectedVersion: 7,
+            planCode,
+            billingInterval: BillingInterval.MONTHLY,
+          }),
+        ).resolves.toEqual({ url: 'https://billing.stripe.test/confirm' });
+        expect(createPlanChangeSession).toHaveBeenCalledWith({
+          providerCustomerId: 'cus_test_authority',
+          providerSubscriptionId: 'sub_test_authority',
+          planCode,
+          billingInterval: BillingInterval.MONTHLY,
+        });
+        expect(changePlan).not.toHaveBeenCalled();
+        expect(subscriptions.applyProviderPlan).not.toHaveBeenCalled();
+        expect(subscriptions.scheduleProviderPlanChange).not.toHaveBeenCalled();
+      },
+    );
 
-      await service.changeSubscriptionPlan({
-        organizationId,
-        expectedVersion: 7,
-        planCode: PlanCode.ESSENTIAL,
-        billingInterval: BillingInterval.MONTHLY,
-      });
-
-      expect(changePlan).toHaveBeenCalledWith(
-        expect.objectContaining({
-          timing: 'PERIOD_END',
+    it('recusa troca de teste sem confirmação explícita antes de chamar Stripe', async () => {
+      const { service, createPlanChangeSession } = commandSetup(
+        linkedSubscription({
+          planCode: PlanCode.ESSENTIAL,
+          effectiveStatus: SubscriptionStatus.TRIALING,
+        }),
+      );
+      await expect(
+        service.changeSubscriptionPlan({
           organizationId,
-          subscriptionId,
+          expectedVersion: 7,
+          planCode: PlanCode.PROFESSIONAL,
         }),
-      );
-      expect(subscriptions.scheduleProviderPlanChange).toHaveBeenCalledWith(
-        organizationId,
-        7,
-        PlanCode.ESSENTIAL,
-        BillingInterval.MONTHLY,
-        effectiveAt,
-      );
-      expect(subscriptions.applyProviderPlan).not.toHaveBeenCalled();
-    });
-
-    it('libera upgrade somente com preço e período confirmados', async () => {
-      const { service, subscriptions, changePlan } = commandSetup();
-      const confirmed = providerSubscription({
-        providerPriceId: 'price_professional_intelligence',
-      });
-      changePlan.mockResolvedValue({
-        subscription: confirmed,
-        scheduled: false,
-        effectiveAt: confirmed.currentPeriodStart,
-        providerScheduleId: null,
-      });
-
-      await service.changeSubscriptionPlan({
-        organizationId,
-        expectedVersion: 7,
-        planCode: PlanCode.PROFESSIONAL_INTELLIGENCE,
-        billingInterval: BillingInterval.MONTHLY,
-      });
-
-      expect(changePlan).toHaveBeenCalledWith(
-        expect.objectContaining({ timing: 'IMMEDIATE' }),
-      );
-      expect(subscriptions.applyProviderPlan).toHaveBeenCalledWith(
-        organizationId,
-        7,
-        expect.objectContaining({
-          planCode: PlanCode.PROFESSIONAL_INTELLIGENCE,
-          activate: true,
-        }),
-      );
+      ).rejects.toMatchObject({ code: 'BILLING_COMMAND_NOT_ALLOWED' });
+      expect(createPlanChangeSession).not.toHaveBeenCalled();
     });
   });
+
+  it.each([
+    [PlanCode.PROFESSIONAL, BillingInterval.MONTHLY],
+    [PlanCode.ESSENTIAL, BillingInterval.ANNUAL],
+  ] as const)(
+    'trial para %s/%s abre checkout sem dias gratuitos e preserva assinatura até pagar',
+    async (planCode, billingInterval) => {
+      const { service, subscriptions, repository, createCheckoutSession } =
+        setup();
+      subscriptions.requireCurrent.mockResolvedValue({
+        ...currentSubscription(),
+        planCode: PlanCode.ESSENTIAL,
+        effectiveStatus: SubscriptionStatus.TRIALING,
+        trialEndsAt: new Date(Date.now() + 20 * 86400000),
+      });
+      repository.beginCheckoutAttempt.mockResolvedValue({
+        attempt: {
+          ...checkoutAttempt(),
+          planCode,
+          billingInterval,
+          endsTrial: true,
+        },
+        created: true,
+      });
+      await service.changeSubscriptionPlan({
+        organizationId,
+        expectedVersion: 1,
+        planCode,
+        billingInterval,
+        acknowledgeTrialEnd: true,
+      });
+      expect(createCheckoutSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          planCode,
+          billingInterval,
+          trialDays: null,
+        }),
+      );
+      expect(repository.beginCheckoutAttempt).toHaveBeenCalledWith(
+        expect.objectContaining({
+          endsTrial: true,
+          subscriptionVersion: 1,
+        }),
+      );
+    },
+  );
 });

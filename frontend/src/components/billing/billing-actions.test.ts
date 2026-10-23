@@ -102,8 +102,7 @@ describe("ações de cobrança", () => {
     );
     expect(acoes.canSubscribe).toBe(false);
     expect(acoes.canOpenBillingPortal).toBe(false);
-    /** E o resto da página continua funcionando. */
-    expect(acoes.canChangePlan).toBe(true);
+    expect(acoes.canChangePlan).toBe(false);
   });
 
   it("provedor configurado mas sem autorização não oferece contratar", () => {

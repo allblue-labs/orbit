@@ -48,7 +48,9 @@ export function derivarAcoes(overview: BillingOverview): BillingActions {
       overview.billing.configured &&
       overview.billing.canCheckout &&
       daCobranca.has(SubscriptionAction.START_CHECKOUT),
-    canChangePlan: daAssinatura.has(SubscriptionAction.CHANGE_PLAN),
+    canChangePlan:
+      overview.billing.configured &&
+      daAssinatura.has(SubscriptionAction.CHANGE_PLAN),
     canCancelRenewal: daAssinatura.has(SubscriptionAction.CANCEL_AT_PERIOD_END),
     canKeepSubscription: daAssinatura.has(SubscriptionAction.KEEP_SUBSCRIPTION),
     canOpenBillingPortal:

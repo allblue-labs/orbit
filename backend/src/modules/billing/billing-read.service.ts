@@ -159,7 +159,9 @@ export class BillingReadService {
     );
 
     const podeContratar =
-      assinatura === null || allowsInitialCheckout(assinatura.effectiveStatus);
+      assinatura !== null &&
+      !assinatura.providerSubscriptionId &&
+      allowsInitialCheckout(assinatura.effectiveStatus);
     /** Sem cliente no provedor não há portal para abrir — ele nasce no checkout. */
     const podeAbrirPortal = cliente !== null;
 

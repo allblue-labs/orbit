@@ -36,6 +36,8 @@ export interface BillingCheckoutAttemptRow {
   mode: string;
   planCode: string;
   billingInterval: string;
+  subscriptionVersion: number | null;
+  endsTrial: boolean;
   status: string;
   idempotencyKey: string;
   providerSessionId: string | null;
@@ -140,25 +142,17 @@ export class BillingRepository {
     providerCustomerId: string;
   }): Promise<BillingCustomerRow> {
     return this.rls.run(async (tx) => {
-      try {
-        return await tx.billingCustomer.create({
-          data: { id: generateUuidV7(), ...input },
-        });
-      } catch (error) {
-        if (
-          error instanceof Prisma.PrismaClientKnownRequestError &&
-          error.code === 'P2002'
-        ) {
-          return tx.billingCustomer.findFirstOrThrow({
-            where: {
-              organizationId: input.organizationId,
-              provider: input.provider,
-              mode: input.mode,
-            },
-          });
-        }
-        throw error;
-      }
+      await tx.billingCustomer.createMany({
+        data: [{ id: generateUuidV7(), ...input }],
+        skipDuplicates: true,
+      });
+      return tx.billingCustomer.findFirstOrThrow({
+        where: {
+          organizationId: input.organizationId,
+          provider: input.provider,
+          mode: input.mode,
+        },
+      });
     });
   }
 
@@ -177,32 +171,27 @@ export class BillingRepository {
     mode: BillingMode;
     planCode: string;
     billingInterval: string;
+    subscriptionVersion: number;
+    endsTrial: boolean;
     idempotencyKey: string;
   }): Promise<{ attempt: BillingCheckoutAttemptRow; created: boolean }> {
     return this.rls.run(async (tx) => {
-      try {
-        const attempt = await tx.billingCheckoutAttempt.create({
-          data: { ...input, status: 'CREATING' },
-        });
-        return { attempt, created: true };
-      } catch (error) {
-        if (
-          error instanceof Prisma.PrismaClientKnownRequestError &&
-          error.code === 'P2002'
-        ) {
-          const attempt = await tx.billingCheckoutAttempt.findFirst({
-            where: {
-              organizationId: input.organizationId,
-              provider: input.provider,
-              mode: input.mode,
-              status: { in: ['CREATING', 'OPEN'] },
-            },
-            orderBy: { createdAt: 'desc' },
-          });
-          if (attempt) return { attempt, created: false };
-        }
-        throw error;
-      }
+      // Serializa a intenção antes do INSERT: P2002 abortaria esta transação
+      // no PostgreSQL, impedindo a leitura de recuperação no mesmo bloco.
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${input.organizationId}, 0))::text`;
+      const existing = await tx.billingCheckoutAttempt.findFirst({
+        where: {
+          organizationId: input.organizationId,
+          provider: input.provider,
+          mode: input.mode,
+          status: { in: ['CREATING', 'OPEN'] },
+        },
+      });
+      if (existing) return { attempt: existing, created: false };
+      const attempt = await tx.billingCheckoutAttempt.create({
+        data: { ...input, status: 'CREATING' },
+      });
+      return { attempt, created: true };
     });
   }
 

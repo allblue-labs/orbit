@@ -19,6 +19,9 @@
  * inúteis, não substituem os guards do NestJS.
  */
 import type { ReactNode } from "react";
+import { usePathname } from "next/navigation";
+import { requiresInitialPayment } from "@/components/billing/billing-session";
+import { ROUTE_ASSINATURA } from "@/components/billing/subscription-access";
 
 import { useLogout } from "@/hooks/api/use-auth";
 import { useSession } from "@/providers/session-provider";
@@ -60,6 +63,7 @@ export function RequireAuth({
   fallback,
   requireOrganization = true,
 }: GuardProps & { requireOrganization?: boolean }) {
+  const pathname = usePathname();
   return (
     <SessionGate
       fallback={fallback ?? <OrganizationRequired />}
@@ -82,6 +86,13 @@ export function RequireAuth({
         }
         if (requireOrganization && !session.scope.organizationId) {
           return { kind: "block" };
+        }
+        if (
+          requiresInitialPayment(session.session) &&
+          pathname !== ROUTES.settings &&
+          pathname !== ROUTES.profile
+        ) {
+          return { kind: "redirect", to: ROUTE_ASSINATURA };
         }
         return ALLOW;
       }}

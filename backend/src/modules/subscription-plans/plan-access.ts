@@ -16,7 +16,10 @@ import type { IdentityRequest } from '../identity/infrastructure/jwt-authenticat
 import type { AuthenticatedIdentity } from '../identity/domain/identity.types';
 import type { OrganizationEntitlements } from './subscription-plan.service';
 import { SubscriptionPlanService } from './subscription-plan.service';
-import { SubscriptionExpiredException } from './subscription-expired.exception';
+import {
+  SubscriptionExpiredException,
+  SubscriptionPaymentRequiredException,
+} from './subscription-expired.exception';
 
 export const REQUIRED_PLAN_KEY = 'subscription:required-plan';
 export const REQUIRED_CAPABILITIES_KEY = 'subscription:required-capabilities';
@@ -187,6 +190,12 @@ export class ActivePlanGuard extends PlanMetadataGuard implements CanActivate {
       ActivePlanGuard.name,
     );
     if (this.plans.grantsAccess(entitlements)) return true;
+
+    // Acesso somente de leitura preserva o histórico de quem já teve acesso.
+    // Uma contratação inicial ainda não paga não concede acesso ao produto.
+    if (entitlements.subscriptionStatus === 'PENDING_PAYMENT') {
+      throw new SubscriptionPaymentRequiredException();
+    }
 
     /* Verbo ausente conta como escrita: o lado seguro do erro. */
     const metodo = context.switchToHttp().getRequest<IdentityRequest>().method;

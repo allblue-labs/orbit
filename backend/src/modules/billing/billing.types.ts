@@ -48,6 +48,7 @@ export type ProviderBillingState =
 
 /** O retrato normalizado de uma assinatura no provedor. */
 export interface ProviderSubscription {
+  readonly latestInvoiceId?: string | null;
   readonly providerSubscriptionId: string;
   readonly providerCustomerId: string;
   readonly providerPriceId: string | null;
@@ -229,6 +230,15 @@ export interface BillingProvider {
   retrieveCheckoutSession(
     providerSessionId: string,
   ): Promise<ProviderCheckoutSession>;
+
+  expireCheckoutSession(providerSessionId: string): Promise<void>;
+
+  createPlanChangeSession(input: {
+    providerCustomerId: string;
+    providerSubscriptionId: string;
+    planCode: PlanCode;
+    billingInterval: BillingInterval;
+  }): Promise<BillingPortalSession>;
 
   createBillingPortalSession(input: {
     providerCustomerId: string;
