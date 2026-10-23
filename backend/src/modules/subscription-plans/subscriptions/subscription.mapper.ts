@@ -31,7 +31,10 @@ export const SubscriptionAction = {
 @Injectable()
 export class SubscriptionMapper {
   details(
-    linha: SubscriptionRow & { effectiveStatus: SubscriptionStatus },
+    linha: SubscriptionRow & {
+      effectiveStatus: SubscriptionStatus;
+      dataPurgedAt?: Date | null;
+    },
     at: Date = new Date(),
   ): OrganizationSubscriptionReadModel {
     const janela = monthlyWindow(linha.billingAnchorAt, at);
@@ -54,6 +57,8 @@ export class SubscriptionMapper {
       },
       trial: this.trial(linha),
       cancelAtPeriodEnd: linha.cancelAtPeriodEnd,
+      dataRetentionEndsAt: linha.dataRetentionEndsAt?.toISOString() ?? null,
+      dataPurgedAt: linha.dataPurgedAt?.toISOString() ?? null,
       pendingChange: linha.pendingPlanCode
         ? {
             planCode: linha.pendingPlanCode,

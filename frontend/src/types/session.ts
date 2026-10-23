@@ -151,6 +151,9 @@ export interface LoginInput {
 
 /** Espelha `RegisterOrganizationDto`. */
 export interface RegisterInput {
+  acceptTerms?: boolean;
+  termsVersion?: string;
+  privacyVersion?: string;
   email: string;
   firstName: string;
   lastName: string;

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { LEGAL_DOCUMENT_VERSION } from "../src/types/contracts/modules/legal/legal.read-models";
 
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/auth/session", (route) =>
@@ -106,6 +107,7 @@ test("the registration request preserves the paid plan and billing interval", as
   await page.locator("#documentNumber").fill("52998224725");
   await page.getByRole("button", { name: "Continuar", exact: true }).click();
   await page.getByLabel("Cidade", { exact: true }).fill("Recife");
+  await page.getByLabel("UF", { exact: true }).fill("PE");
   await page
     .getByLabel("Endereço da matriz", { exact: true })
     .fill("Rua da Aurora, 100");
@@ -118,6 +120,9 @@ test("the registration request preserves the paid plan and billing interval", as
     billingInterval: "ANNUAL",
     city: "Recife",
     documentNumber: "52998224725",
+    acceptTerms: true,
+    termsVersion: LEGAL_DOCUMENT_VERSION,
+    privacyVersion: LEGAL_DOCUMENT_VERSION,
   });
 });
 

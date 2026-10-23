@@ -151,8 +151,9 @@ apenas o arquivo `.env` não atualiza um container existente.
    diferente do segredo da destination cadastrada no painel.
 5. Em **Settings → Billing → Customer portal**, salve a configuração de métodos
    de pagamento, faturas e cancelamento no fim do período. Trocas de plano pelo
-   portal devem estar **ativadas**, pois o Orbit agora abre a confirmação
-   hospedada (`subscription_update_confirm`). Publique os quatro produtos e os
+   portal padrão devem estar **ativadas** para confirmar saída de teste
+   (`subscription_update_confirm`). Planos pagos usam schedules e o portal
+   geral do Orbit utiliza outra configuração, sem troca imediata. Publique os quatro produtos e os
    doze preços. Em ajustes proporcionais, escolha faturar/cobrar imediatamente
    (`always_invoice`); mantenha a mudança imediata, sem agendamento de redução,
    e o encerramento do teste na troca (`trial_update_behavior=end_trial`).
@@ -341,27 +342,45 @@ reconciliação.
   servidor publicou. Se a abertura falhar, o cadastro fica preservado e a tela
   de assinatura oferece **Continuar para o pagamento**.
 - `POST /organizations/current/subscription/change-plan` aceita versão, plano,
-  periodicidade e a confirmação opcional `acknowledgeTrialEnd`; retorna
-  `{ url }`. O frontend deve navegar para essa URL. Uma resposta bem-sucedida
-  não significa que o plano foi alterado.
-- Sem vínculo Stripe e em teste/pagamento pendente, a mudança cria uma intenção
-  de Checkout para o destino. Mantém plano, limites e teste atuais enquanto o
-  usuário não paga. A intenção registra a versão de origem e se encerra o teste.
-- Uma sessão aberta para o mesmo destino é reutilizada. Mudar a escolha expira
-  primeiro a sessão anterior no Stripe, impedindo que ambas sejam pagas.
-- Com vínculo, abre a confirmação `subscription_update_confirm` do Customer
-  Portal, na **assinatura existente**. A API não atualiza itens nem cobra o
-  cartão antes da confirmação hospedada. O Stripe apresenta valores e créditos;
-  mudanças passam a seguir a configuração de cobrança imediata do portal.
+  periodicidade e `acknowledgeTrialEnd`. Responde `{kind: "TRIAL_STARTED", endsAt}`
+  para teste, `{kind: "SCHEDULED", effectiveAt}` para troca na renovação, ou
+  `{url}` para contratação com confirmação de pagamento. O frontend atualiza
+  assinatura/sessão nos dois primeiros casos e navega somente no terceiro.
+- Em `PENDING_PAYMENT`, sem pagamento anterior e sem teste utilizado, escolher
+  Essencial inicia 30 dias gratuitos. Usa o documento canônico da unidade
+  principal, o histórico da organização e HMAC global. Concessão e mudança de
+  assinatura são atômicas. Expira checkout anterior no Stripe primeiro;
+  checkout concluído aguarda reconciliação e não é tratado como abandono.
+- Planos pagos `ACTIVE`, tanto upgrade quanto downgrade ou periodicidade,
+  usam Subscription Schedule sem prorrateio: preserva o preço/período atual
+  e muda somente na renovação. Nenhuma cobrança ou alteração de direitos é
+  antecipada. O agendamento pode ser desfeito.
 - A reconciliação exige preço conhecido, customer/subscription correspondentes
-  e fatura canônica `PAID` sem saldo antes de conceder um plano pago alterado.
-  `active` isoladamente, o redirect e HTTP 200 não provam o pagamento.
-- A volta ao Orbit acompanha o **plano/periodicidade escolhidos**, mesmo quando
-  o plano anterior já estava `ACTIVE`, e atualiza também o cache da sessão.
-- Cancelar renovação e manter assinatura continuam sincronizando o Stripe
-  antes do estado local. Schedules criados pelo fluxo anterior continuam
-  podendo ser desfeitos pelo comando existente; um schedule deve ser desfeito
-  antes de abrir nova troca no portal.
+  e fatura `PAID` sem saldo, com linha do preço/período da renovação. Fatura
+  antiga, `active`, redirects e HTTP 200 não comprovam o novo pagamento.
+  O relógio não aplica sozinho mudanças geridas pelo Stripe.
+- O portal geral cria/reutiliza configuração própria para dados de cobrança,
+  faturas e métodos de pagamento, sem troca de plano ou cancelamento. Esses
+  comandos passam pelo Orbit. A configuração padrão de confirmação hospedada
+  continua necessária apenas para saída antecipada de teste com vínculo Stripe.
+
+### Adequação de limites em 48 horas
+
+Aplique `20261023180000_plan_limit_adjustment_window` antes de publicar a API.
+A migration adiciona data de redução e snapshot anterior sem modificar dados
+existentes. A data parte do início real do novo período: replay não estende
+prazo. A interface mostra os limites novos e excedentes desde a renovação;
+durante 48 horas, as cotas anteriores ainda valem no enforcement.
+
+Depois, os novos tetos bloqueiam criação/consumo excedente; ações de operação
+e campo afetadas pelo excesso de equipe, clientes, equipamentos ou unidades
+ficam bloqueadas. Consultas, gestão da assinatura e desativação/arquivamento
+para adequação permanecem disponíveis. A cada tentativa, contagens canônicas
+e relógio são verificados: não depende de um worker para bloquear e libera
+quando os excedentes são resolvidos. O aviso global informa prazo e recursos.
+Cotas mensais se renovam pela janela de uso; não se apaga histórico para zerar
+consumo. **A adequação de limites nunca exclui dados automaticamente.** A exclusão
+após cancelamento tem uma política própria, descrita abaixo.
 
 ### Saída antecipada do teste
 

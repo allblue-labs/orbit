@@ -1,3 +1,4 @@
+import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
  * Assinatura vencida: o que para e o que continua.
  *
@@ -78,6 +79,7 @@ describe('Subscription expiry (e2e)', () => {
     const registro = await http()
       .post('/api/v1/identity/register')
       .send({
+        ...REGISTRATION_LEGAL_ACCEPTANCE,
         email: `subscriptions.expiry.${sufixo}@orbit.local`,
         firstName: 'Dona',
         lastName: 'Conta',

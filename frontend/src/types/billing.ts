@@ -67,6 +67,8 @@ export interface OrganizationSubscription {
   usagePeriod: SubscriptionPeriod;
   trial: SubscriptionTrial | null;
   cancelAtPeriodEnd: boolean;
+  dataRetentionEndsAt?: string | null;
+  dataPurgedAt?: string | null;
   pendingChange: PendingPlanChange | null;
   allowedActions: readonly string[];
 }
@@ -87,12 +89,19 @@ export interface OrganizationEntitlementsView {
   window: SubscriptionPeriod;
   allocation: readonly ResourceEntitlement[];
   usage: readonly ResourceEntitlement[];
+  limitAdjustment?: {
+    effectiveAt: string;
+    deadline: string;
+    blocked: boolean;
+    resources: readonly ResourceEntitlement[];
+  } | null;
 }
 
 export interface BillingReadiness {
   configured: boolean;
   mode: string | null;
   canCheckout: boolean;
+  canStartEssentialTrial?: boolean;
   canOpenBillingPortal: boolean;
   allowedActions: readonly string[];
 }
@@ -136,9 +145,13 @@ export interface BillingOverview {
   billing: BillingReadiness;
   /** Histórico financeiro canônico, sem IDs internos do provedor. */
   invoices: readonly BillingInvoice[];
+  dataRetentionEndsAt?: string | null;
+  dataPurgeStartedAt?: string | null;
+  dataPurgedAt?: string | null;
 }
 
 export interface CheckoutSessionResult {
+  subscriptionId?: string;
   url: string;
   expiresAt: string | null;
 }
@@ -244,3 +257,12 @@ export const SubscriptionAction = {
   START_CHECKOUT: "START_CHECKOUT",
   OPEN_BILLING_PORTAL: "OPEN_BILLING_PORTAL",
 } as const;
+
+export type ChangePlanResult =
+  | BillingPortalResult
+  | { kind: "TRIAL_STARTED"; endsAt: string }
+  | { kind: "SCHEDULED"; effectiveAt: string };
+
+export interface CancelSubscriptionInput extends SubscriptionVersionInput {
+  acknowledgeDataDeletion: true;
+}

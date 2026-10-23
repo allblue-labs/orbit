@@ -63,6 +63,7 @@ import type {
   OrganizationEntitlementsReadModel,
   PlanCatalogReadModel,
 } from '../subscription-plan.read-models';
+import { adjustmentDeadline, duringAdjustment } from './limit-adjustment';
 import { monthlyWindow, type UsageWindow } from './usage-window';
 
 export interface UsageConsumption {
@@ -118,7 +119,10 @@ export class EntitlementService {
    * perfil declarado na linha do plano, ou legado explícito. Quem chama recebe
    * direitos, não um `planId` (§24).
    */
-  async resolve(organizationId: string): Promise<EffectiveEntitlements> {
+  async resolve(
+    organizationId: string,
+    includeAdjustment = true,
+  ): Promise<EffectiveEntitlements> {
     const assinatura = await this.subscriptions.currentOrNull(organizationId);
     if (assinatura) {
       /**
@@ -127,10 +131,11 @@ export class EntitlementService {
        * e o que fica bloqueado é criar mais.
        */
       const vencida =
+        !assinatura.providerSubscriptionId &&
         assinatura.pendingEffectiveAt !== null &&
         assinatura.pendingEffectiveAt <= new Date() &&
         assinatura.pendingEntitlementsSnapshot !== null;
-      return fromSubscription(
+      const current = fromSubscription(
         vencida ? assinatura.pendingPlanCode! : assinatura.planCode,
         vencida ? assinatura.pendingPlanCode! : assinatura.planCode,
         vencida
@@ -138,6 +143,9 @@ export class EntitlementService {
           : assinatura.entitlementsSnapshot,
         grantsProductAccess(assinatura.effectiveStatus),
       );
+      return includeAdjustment
+        ? duringAdjustment(current, assinatura)
+        : current;
     }
     /**
      * Sem assinatura, somente a origem antiga responde com acesso.
@@ -207,7 +215,7 @@ export class EntitlementService {
   async describe(
     organizationId: string,
   ): Promise<OrganizationEntitlementsReadModel> {
-    const direitos = await this.resolve(organizationId);
+    const direitos = await this.resolve(organizationId, false);
     const janela = await this.getCurrentWindow(organizationId);
     const alocacao = await Promise.all(
       Object.values(AllocationResource).map(async (recurso) =>
@@ -227,7 +235,23 @@ export class EntitlementService {
         ),
       ),
     );
-    return this.mapper.entitlements(direitos, janela, alocacao, uso);
+    const subscription = await this.subscriptions.currentOrNull(organizationId);
+    const deadline = subscription ? adjustmentDeadline(subscription) : null;
+    const exceeded = [...alocacao, ...uso].filter(
+      (r) => !r.limit.unlimited && r.current > r.limit.value,
+    );
+    return {
+      ...this.mapper.entitlements(direitos, janela, alocacao, uso),
+      limitAdjustment:
+        deadline && exceeded.length
+          ? {
+              effectiveAt: subscription!.limitsChangedAt!.toISOString(),
+              deadline: deadline.toISOString(),
+              blocked: new Date() >= deadline,
+              resources: exceeded,
+            }
+          : null,
+    };
   }
 
   /** O catálogo comercial congelado, igual para toda organização. */
@@ -248,6 +272,47 @@ export class EntitlementService {
       direitos.accessGranted && direitos.capabilities.has(capability);
     this.metrics.capability(capability, permitido ? 'ALLOWED' : 'DENIED');
     return permitido;
+  }
+
+  async assertWithinAdjustedAllocation(
+    organizationId: string,
+    capability: PlanCapability,
+  ): Promise<void> {
+    const subscription = await this.subscriptions.currentOrNull(organizationId);
+    const deadline = subscription ? adjustmentDeadline(subscription) : null;
+    if (!deadline || new Date() < deadline) return;
+    const resources: Partial<
+      Record<PlanCapability, readonly AllocationResource[]>
+    > = {
+      CUSTOMERS: [AllocationResource.ACTIVE_CUSTOMERS],
+      EQUIPMENT: [AllocationResource.ACTIVE_EQUIPMENT],
+      OPERATIONS: [
+        AllocationResource.ACTIVE_CUSTOMERS,
+        AllocationResource.ACTIVE_EQUIPMENT,
+        AllocationResource.FIELD_TECHNICIANS,
+        AllocationResource.PLATFORM_USERS,
+        AllocationResource.BUSINESS_UNITS,
+      ],
+      FIELD_OPERATIONS: [
+        AllocationResource.FIELD_TECHNICIANS,
+        AllocationResource.AUXILIARY_TECHNICIANS,
+      ],
+    };
+    const rights = await this.resolve(organizationId, false);
+    for (const resource of resources[capability] ?? []) {
+      const limit = this.limiteDe(rights, resource);
+      if (limit.kind === 'UNLIMITED') continue;
+      const current = await this.repository.countAllocation(
+        organizationId,
+        resource,
+      );
+      if (current > limit.value)
+        throw new PlanAllocationLimitReachedException(
+          resource,
+          current,
+          limit.value,
+        );
+    }
   }
 
   /** Recusa fechada: capacidade ausente é ausência de direito (§128). */
@@ -462,7 +527,24 @@ export class EntitlementService {
         `organization ${organizationId} has no resolvable plan`,
       );
     }
-    const direitos = this.direitosDe(plano);
+    const subscription = await this.subscriptions.currentOrNull(
+      organizationId,
+      new Date(),
+      transaction,
+    );
+    const direitos = subscription
+      ? duringAdjustment(
+          fromSubscription(
+            subscription.planCode,
+            subscription.planCode,
+            subscription.entitlementsSnapshot,
+            grantsProductAccess(subscription.effectiveStatus),
+          ),
+          subscription,
+        )
+      : this.direitosDe(plano);
+    if (!direitos.accessGranted)
+      throw new SubscriptionNotActiveException(direitos.planCode);
     const limite = this.limiteDe(direitos, resource);
     if (limite.kind === 'UNLIMITED') {
       this.metrics.limit(resource, 'ALLOWED');

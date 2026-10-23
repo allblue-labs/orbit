@@ -1,3 +1,4 @@
+import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
  * Estresse de concorrência sobre o contexto de RLS.
  *
@@ -102,6 +103,7 @@ describe('Concorrência e contexto RLS (e2e)', () => {
     const registration = await http()
       .post('/api/v1/identity/register')
       .send({
+        ...REGISTRATION_LEGAL_ACCEPTANCE,
         email,
         firstName: 'Conc',
         lastName: 'E2E',

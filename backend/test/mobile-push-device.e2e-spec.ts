@@ -1,3 +1,4 @@
+import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return */
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
@@ -271,6 +272,7 @@ describe('Mobile Push & Device Registry (e2e)', () => {
     const response = await api()
       .post('/api/v1/identity/register')
       .send({
+        ...REGISTRATION_LEGAL_ACCEPTANCE,
         email,
         firstName: 'Push',
         lastName: label,

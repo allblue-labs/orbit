@@ -7,6 +7,8 @@
  * simulacro que só existe em desenvolvimento e diverge do que roda em
  * produção.
  */
+import { SubscriptionDataRetentionService } from './retention/subscription-data-retention.service';
+import { SubscriptionDataRetentionWorker } from './retention/subscription-data-retention.worker';
 import { Module } from '@nestjs/common';
 import { SubscriptionPlansModule } from '../subscription-plans/subscription-plans.module';
 import { BillingConfig } from './billing.config';
@@ -27,6 +29,8 @@ import { SubscriptionBillingController } from './subscription-billing.controller
   controllers: [BillingController, SubscriptionBillingController],
   providers: [
     BillingConfig,
+    SubscriptionDataRetentionService,
+    SubscriptionDataRetentionWorker,
     BillingRepository,
     BillingCheckoutFulfillmentService,
     BillingEventWorker,

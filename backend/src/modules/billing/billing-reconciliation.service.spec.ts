@@ -119,6 +119,26 @@ describe('BillingReconciliationService durable inbox', () => {
     expect(repository.finishClaimedEvent).not.toHaveBeenCalled();
   });
 
+  it('does not apply an old subscription event to a new purchase', async () => {
+    const { service, provider, repository, subscriptions } = setup();
+    (provider.retrieveSubscription as jest.Mock).mockResolvedValue({
+      state: ProviderBillingState.ENDED,
+      providerCustomerId: 'cus_test_1',
+    });
+    repository.findSubscriptionByProviderId.mockResolvedValue({
+      id: 'old_subscription',
+      organizationId: 'org_1',
+      providerCustomerId: 'cus_test_1',
+    });
+    subscriptions.currentOrNull.mockResolvedValue({
+      id: 'new_subscription',
+      organizationId: 'org_1',
+    });
+    await service.reconcileProviderSubscription('sub_test_1', null);
+    expect(subscriptions.syncProviderSnapshot).not.toHaveBeenCalled();
+    expect(subscriptions.applyProviderPlan).not.toHaveBeenCalled();
+  });
+
   it('manda correlação de checkout inválida para dead-letter', async () => {
     const claimed = event({
       eventType: 'checkout.session.completed',
@@ -167,8 +187,8 @@ describe('BillingReconciliationService durable inbox', () => {
       event(),
       target,
     );
-    const start = new Date('2026-10-01T00:00:00.000Z');
-    const end = new Date('2027-10-01T00:00:00.000Z');
+    const start = new Date('2026-11-01T00:00:00.000Z');
+    const end = new Date('2027-11-01T00:00:00.000Z');
     (provider.retrieveSubscription as jest.Mock).mockResolvedValue({
       providerSubscriptionId: 'sub_test_1',
       providerCustomerId: 'cus_test_1',
@@ -183,6 +203,7 @@ describe('BillingReconciliationService durable inbox', () => {
       providerUpdatedAt: new Date(),
     });
     repository.findSubscriptionByProviderId.mockResolvedValue({
+      id: '01900000-0000-7000-8000-000000000098',
       organizationId: '01900000-0000-7000-8000-000000000099',
       providerCustomerId: 'cus_test_1',
     });
@@ -202,6 +223,14 @@ describe('BillingReconciliationService durable inbox', () => {
       providerSubscriptionId: 'sub_test_1',
       providerCustomerId: 'cus_test_1',
       status: ProviderInvoiceStatus.PAID,
+      subscriptionLines: [
+        {
+          priceId: 'price_target',
+          subscriptionId: 'sub_test_1',
+          periodStart: start,
+          periodEnd: end,
+        },
+      ],
       amountRemainingMinor: 0,
     });
     await service.reconcileProviderSubscription('sub_test_1', 'evt_test_1');
@@ -245,6 +274,7 @@ describe('BillingReconciliationService durable inbox', () => {
         amountRemainingMinor: 0,
       });
       repository.findSubscriptionByProviderId.mockResolvedValue({
+        id: 'local_1',
         organizationId: 'org_1',
         providerCustomerId: 'cus_test_1',
       });

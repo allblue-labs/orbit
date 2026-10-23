@@ -252,4 +252,20 @@ describe('consulta de CNPJ', () => {
       ServiceUnavailableException,
     );
   });
+
+  /**
+   * Limite do provedor é caso próprio.
+   *
+   * A BrasilAPI responde 429 com frequência na faixa gratuita — reproduzi isso
+   * consultando de dentro do container. A mensagem genérica de
+   * indisponibilidade mandaria a pessoa digitar tudo à mão; esperar alguns
+   * instantes resolve, e é isso que ela precisa ouvir.
+   */
+  it('429 do provedor diz para tentar em instantes', async () => {
+    responderCom(429, {});
+
+    await expect(service.company(CNPJ)).rejects.toMatchObject({
+      code: 'LOOKUP_THROTTLED',
+    });
+  });
 });

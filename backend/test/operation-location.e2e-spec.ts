@@ -1,3 +1,4 @@
+import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
  * Endereço de atendimento, setor e equipamentos por ordem.
  *
@@ -89,6 +90,7 @@ describe('Service address, sector and operation equipment (e2e)', () => {
     const registro = await http()
       .post('/api/v1/identity/register')
       .send({
+        ...REGISTRATION_LEGAL_ACCEPTANCE,
         email: `location.${suffix}@orbit.local`,
         firstName: 'Local',
         lastName: 'E2E',

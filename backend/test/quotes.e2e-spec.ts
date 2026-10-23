@@ -1,3 +1,4 @@
+import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
  * E2E do Commercial Engine.
  *
@@ -97,6 +98,7 @@ describe('Quotes (e2e)', () => {
     const registration = await http()
       .post('/api/v1/identity/register')
       .send({
+        ...REGISTRATION_LEGAL_ACCEPTANCE,
         email: `quotes.${label}.${suffix}@orbit.local`,
         firstName: 'Quote',
         lastName: 'E2E',

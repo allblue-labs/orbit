@@ -85,12 +85,18 @@ describe('BillingService checkout intent', () => {
       openCheckoutAttempt: jest.fn().mockResolvedValue(undefined),
     };
     const subscriptions = {
+      currentOrNull: jest
+        .fn()
+        .mockImplementation(
+          async () => (await subscriptions.requireCurrent()) as unknown,
+        ),
       requireCurrent: jest.fn().mockResolvedValue(currentSubscription()),
     };
     const service = new BillingService(
       provider,
       repository as never,
       subscriptions as never,
+      { canStartPendingTrial: jest.fn().mockResolvedValue(false) } as never,
     );
     return {
       service,
@@ -100,6 +106,78 @@ describe('BillingService checkout intent', () => {
       createCheckoutSession,
     };
   };
+
+  it('libera 30 dias ao escolher Essencial sem pagamento ou teste anterior', async () => {
+    const provider = {
+      isEnabled: () => true,
+      createCheckoutSession: jest.fn(),
+    };
+    const subscriptions = {
+      requireCurrent: jest.fn().mockResolvedValue(currentSubscription()),
+    };
+    const trials = {
+      canStartPendingTrial: jest.fn().mockResolvedValue(true),
+      startPendingTrial: jest
+        .fn()
+        .mockResolvedValue({ trialEndsAt: new Date('2026-11-22T00:00:00Z') }),
+    };
+    const repository = { activeCheckout: jest.fn().mockResolvedValue(null) };
+    const service = new BillingService(
+      provider as never,
+      repository as never,
+      subscriptions as never,
+      trials as never,
+    );
+    await expect(
+      service.changeSubscriptionPlan({
+        organizationId,
+        expectedVersion: 1,
+        planCode: PlanCode.ESSENTIAL,
+      }),
+    ).resolves.toEqual({
+      kind: 'TRIAL_STARTED',
+      endsAt: '2026-11-22T00:00:00.000Z',
+    });
+    expect(provider.createCheckoutSession).not.toHaveBeenCalled();
+    expect(trials.startPendingTrial).toHaveBeenCalledWith(
+      organizationId,
+      1,
+      BillingInterval.MONTHLY,
+    );
+  });
+
+  it('não concede teste quando um checkout já foi concluído e aguarda webhook', async () => {
+    const provider = {
+      isEnabled: () => true,
+      retrieveCheckoutSession: jest
+        .fn()
+        .mockResolvedValue({ state: 'COMPLETE' }),
+    };
+    const trials = {
+      canStartPendingTrial: jest.fn().mockResolvedValue(true),
+      startPendingTrial: jest.fn(),
+    };
+    const service = new BillingService(
+      provider as never,
+      {
+        activeCheckout: jest
+          .fn()
+          .mockResolvedValue({ providerSessionId: 'cs_complete' }),
+      } as never,
+      {
+        requireCurrent: jest.fn().mockResolvedValue(currentSubscription()),
+      } as never,
+      trials as never,
+    );
+    await expect(
+      service.changeSubscriptionPlan({
+        organizationId,
+        expectedVersion: 1,
+        planCode: PlanCode.ESSENTIAL,
+      }),
+    ).rejects.toBeInstanceOf(BillingCheckoutNotAllowedException);
+    expect(trials.startPendingTrial).not.toHaveBeenCalled();
+  });
 
   it('persiste a intenção antes de abrir a sessão no provedor', async () => {
     const { service, repository, createCheckoutSession } = setup();
@@ -198,7 +276,11 @@ describe('BillingService checkout intent', () => {
       providerResult = providerSubscription(),
     ) => {
       const setCancelAtPeriodEnd = jest.fn().mockResolvedValue(providerResult);
-      const changePlan = jest.fn();
+      const changePlan = jest.fn().mockResolvedValue({
+        subscription: providerResult,
+        scheduled: true,
+        effectiveAt: new Date('2026-11-01T00:00:00.000Z'),
+      });
       const createPlanChangeSession = jest
         .fn()
         .mockResolvedValue({ url: 'https://billing.stripe.test/confirm' });
@@ -222,6 +304,7 @@ describe('BillingService checkout intent', () => {
           provider,
           {} as never,
           subscriptions as never,
+          { canStartPendingTrial: jest.fn().mockResolvedValue(false) } as never,
         ),
         provider,
         subscriptions,
@@ -237,7 +320,7 @@ describe('BillingService checkout intent', () => {
         providerSubscription({ cancelAtPeriodEnd: true }),
       );
 
-      await service.cancelSubscription(organizationId, 7);
+      await service.cancelSubscription(organizationId, 7, true);
 
       expect(setCancelAtPeriodEnd).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -247,6 +330,28 @@ describe('BillingService checkout intent', () => {
       );
       expect(setCancelAtPeriodEnd.mock.invocationCallOrder[0]!).toBeLessThan(
         subscriptions.applyProviderCancellation.mock.invocationCallOrder[0]!,
+      );
+      expect(subscriptions.applyProviderCancellation).toHaveBeenCalledWith(
+        organizationId,
+        7,
+        true,
+        true,
+      );
+    });
+
+    it('releases a scheduled change before disabling renewal, retaining the current paid period', async () => {
+      const { service, provider, setCancelAtPeriodEnd } = commandSetup(
+        linkedSubscription({ pendingPlanCode: 'ESSENTIAL' }),
+        providerSubscription({ cancelAtPeriodEnd: true }),
+      );
+      const release = jest.fn().mockResolvedValue(providerSubscription());
+      provider.cancelScheduledPlanChange = release;
+      await service.cancelSubscription(organizationId, 7, true);
+      expect(release).toHaveBeenCalledWith(
+        expect.objectContaining({ organizationId, subscriptionId }),
+      );
+      expect(release.mock.invocationCallOrder[0]).toBeLessThan(
+        setCancelAtPeriodEnd.mock.invocationCallOrder[0],
       );
     });
 
@@ -273,7 +378,7 @@ describe('BillingService checkout intent', () => {
     });
 
     it.each([PlanCode.ESSENTIAL, PlanCode.PROFESSIONAL_INTELLIGENCE])(
-      'abre confirmação Stripe para %s sem alterar direitos',
+      'agenda %s na renovação, sem cobrança imediata nem antecipação de direitos',
       async (planCode) => {
         const { service, subscriptions, createPlanChangeSession, changePlan } =
           commandSetup();
@@ -284,16 +389,22 @@ describe('BillingService checkout intent', () => {
             planCode,
             billingInterval: BillingInterval.MONTHLY,
           }),
-        ).resolves.toEqual({ url: 'https://billing.stripe.test/confirm' });
-        expect(createPlanChangeSession).toHaveBeenCalledWith({
-          providerCustomerId: 'cus_test_authority',
-          providerSubscriptionId: 'sub_test_authority',
-          planCode,
-          billingInterval: BillingInterval.MONTHLY,
+        ).resolves.toEqual({
+          kind: 'SCHEDULED',
+          effectiveAt: '2026-11-01T00:00:00.000Z',
         });
-        expect(changePlan).not.toHaveBeenCalled();
+        expect(changePlan).toHaveBeenCalledWith(
+          expect.objectContaining({ timing: 'PERIOD_END', planCode }),
+        );
+        expect(createPlanChangeSession).not.toHaveBeenCalled();
         expect(subscriptions.applyProviderPlan).not.toHaveBeenCalled();
-        expect(subscriptions.scheduleProviderPlanChange).not.toHaveBeenCalled();
+        expect(subscriptions.scheduleProviderPlanChange).toHaveBeenCalledWith(
+          organizationId,
+          7,
+          planCode,
+          BillingInterval.MONTHLY,
+          new Date('2026-11-01T00:00:00.000Z'),
+        );
       },
     );
 

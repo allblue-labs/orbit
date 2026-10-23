@@ -1,3 +1,4 @@
+import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
@@ -138,6 +139,7 @@ describe('Mobile Field read projection (e2e)', () => {
     const response = await api()
       .post('/api/v1/identity/register')
       .send({
+        ...REGISTRATION_LEGAL_ACCEPTANCE,
         email: `mobile.field.${label}.${suffix}@orbit.local`,
         firstName: 'Mobile',
         lastName: label,

@@ -255,8 +255,25 @@ function LoginView() {
         </div>
 
         <p className="text-center text-xs text-muted-foreground">
-          Ao continuar você concorda com os Termos de Uso e a Política de
-          Privacidade.
+          Consulte os{" "}
+          <Link
+            href="/legal/termos"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline"
+          >
+            Termos de Uso
+          </Link>{" "}
+          e a{" "}
+          <Link
+            href="/legal/privacidade"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline"
+          >
+            Política de Privacidade
+          </Link>
+          .
         </p>
       </div>
 

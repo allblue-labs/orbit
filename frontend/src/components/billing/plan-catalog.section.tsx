@@ -79,7 +79,11 @@ export function PlanCatalogSection({
    * quatro cartões apareciam com o mesmo peso, sem dizer em qual ela está.
    * `entitlements.planCode` é a autoridade sobre o que vale hoje.
    */
-  const planoVigente = subscription?.planCode ?? entitlements.planCode;
+  const encerrada =
+    subscription?.status === "CANCELED" || subscription?.status === "EXPIRED";
+  const planoVigente = encerrada
+    ? null
+    : (subscription?.planCode ?? entitlements.planCode);
 
   /**
    * A ordem do catálogo é a ordem de preço, do menor para o maior.
@@ -146,7 +150,7 @@ export function PlanCatalogSection({
             }
             podeContratar={acoes.canSubscribe}
             podeTrocar={acoes.canChangePlan}
-            temAssinatura={subscription !== null}
+            temAssinatura={subscription !== null && !encerrada}
             pending={pending}
             onSubscribe={() => onSubscribe(plano.code, intervalo)}
             onChangePlan={() => onChangePlan(plano.code, intervalo)}

@@ -365,7 +365,8 @@ export class BillingReconciliationService {
       const atual = await this.subscriptions.currentOrNull(
         local.organizationId,
       );
-      if (!atual) return;
+      // Um evento antigo não pode encerrar a nova contratação da organização.
+      if (!atual || atual.id !== local.id) return;
       await this.aplicar(atual, provedor, providerEventId);
     });
   }
@@ -535,7 +536,17 @@ export class BillingReconciliationService {
           invoice.providerSubscriptionId !== provedor.providerSubscriptionId ||
           invoice.providerCustomerId !== provedor.providerCustomerId ||
           invoice.status !== ProviderInvoiceStatus.PAID ||
-          invoice.amountRemainingMinor !== 0
+          invoice.amountRemainingMinor !== 0 ||
+          !invoice.subscriptionLines?.some(
+            (line) =>
+              line.subscriptionId === provedor.providerSubscriptionId &&
+              line.priceId === provedor.providerPriceId &&
+              provedor.currentPeriodStart &&
+              provedor.currentPeriodEnd &&
+              line.periodStart.getTime() ===
+                provedor.currentPeriodStart.getTime() &&
+              line.periodEnd.getTime() === provedor.currentPeriodEnd.getTime(),
+          )
         ) {
           throw new Error('BILLING_PLAN_PAYMENT_NOT_CONFIRMED');
         }

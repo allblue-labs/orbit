@@ -70,8 +70,10 @@ export class SubscriptionPlanRepository {
             externalSubscriptionId: true,
             plan: true,
             subscriptions: {
-              where: { endedAt: null },
-              orderBy: { startedAt: 'desc' },
+              orderBy: [
+                { endedAt: { sort: 'desc', nulls: 'first' } },
+                { startedAt: 'desc' },
+              ],
               take: 1,
             },
           },
@@ -121,8 +123,10 @@ export class SubscriptionPlanRepository {
           externalSubscriptionId: true,
           plan: true,
           subscriptions: {
-            where: { endedAt: null },
-            orderBy: { startedAt: 'desc' },
+            orderBy: [
+              { endedAt: { sort: 'desc', nulls: 'first' } },
+              { startedAt: 'desc' },
+            ],
             take: 1,
           },
         },

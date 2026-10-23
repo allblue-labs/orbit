@@ -34,6 +34,9 @@ export interface SubscriptionRow {
   pendingCatalogVersion: number | null;
   pendingEntitlementsSnapshot: Prisma.JsonValue | null;
   pendingEffectiveAt: Date | null;
+  dataRetentionEndsAt?: Date | null;
+  limitsChangedAt?: Date | null;
+  previousEntitlementsSnapshot?: Prisma.JsonValue | null;
   startedAt: Date;
   endedAt: Date | null;
   version: number;
@@ -89,6 +92,27 @@ export class SubscriptionRepository {
     return transaction ? trabalho(transaction) : this.rls.run(trabalho);
   }
 
+  dataState(organizationId: string) {
+    return this.rls.run((tx) =>
+      tx.organization.findUniqueOrThrow({
+        where: { id: organizationId },
+        select: { dataPurgedAt: true },
+      }),
+    );
+  }
+
+  findLatest(
+    organizationId: string,
+    transaction?: PrismaTransactionClient,
+  ): Promise<SubscriptionRow | null> {
+    const work = (tx: PrismaTransactionClient) =>
+      tx.organizationSubscription.findFirst({
+        where: { organizationId },
+        orderBy: [{ startedAt: 'desc' }, { id: 'desc' }],
+      });
+    return transaction ? work(transaction) : this.rls.run(work);
+  }
+
   create(
     data: Omit<
       SubscriptionRow,
@@ -101,6 +125,7 @@ export class SubscriptionRepository {
       | 'providerStatus'
       | 'providerLastEventId'
       | 'providerUpdatedAt'
+      | 'previousEntitlementsSnapshot'
     >,
     transaction?: PrismaTransactionClient,
   ): Promise<SubscriptionRow> {
@@ -141,7 +166,25 @@ export class SubscriptionRepository {
         },
       });
       if (count === 0) return null;
-      return tx.organizationSubscription.findUniqueOrThrow({ where: { id } });
+      const updated = await tx.organizationSubscription.findUniqueOrThrow({
+        where: { id },
+      });
+      if (data.status === 'ACTIVE') {
+        await tx.organizationSubscription.updateMany({
+          where: {
+            organizationId: updated.organizationId,
+            id: { not: id },
+            dataRetentionEndsAt: { not: null },
+          },
+          data: { dataRetentionEndsAt: null },
+        });
+        // Uma nova contratação inicia outra base operacional após uma exclusão concluída.
+        await tx.organization.updateMany({
+          where: { id: updated.organizationId, dataPurgedAt: { not: null } },
+          data: { dataPurgeStartedAt: null, dataPurgedAt: null },
+        });
+      }
+      return updated;
     };
     return transaction ? trabalho(transaction) : this.rls.run(trabalho);
   }
@@ -308,6 +351,129 @@ export class SubscriptionRepository {
       SELECT app_trial_fingerprint_consumed(${fingerprint}) AS consumed
     `;
     return linhas[0]?.consumed === true;
+  }
+
+  async trialCandidate(organizationId: string) {
+    return this.rls.run(async (tx) => {
+      const document = await tx.businessUnit.findFirst({
+        where: { organizationId, isPrimary: true, deletedAt: null },
+        select: { documentNumber: true },
+      });
+      const paid = await tx.billingInvoiceTransition.findFirst({
+        where: { organizationId, amountPaidMinor: { gt: 0 } },
+        select: { id: true },
+      });
+      const history = await tx.organizationSubscription.findFirst({
+        where: {
+          organizationId,
+          OR: [
+            { trialStartsAt: { not: null } },
+            { status: 'ACTIVE' },
+            { providerSubscriptionId: { not: null } },
+          ],
+        },
+        select: { id: true },
+      });
+      return {
+        document: document?.documentNumber ?? null,
+        eligible: !paid && !history,
+      };
+    });
+  }
+
+  async startPendingTrial(input: {
+    organizationId: string;
+    expectedVersion: number;
+    fingerprint: string;
+    billingInterval: string;
+    startsAt: Date;
+    endsAt: Date;
+    snapshot: Prisma.InputJsonValue;
+    catalogVersion: number;
+  }) {
+    return this.runAsOrganization(input.organizationId, async (tx) => {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${input.organizationId}, 0))::text`;
+      const current = await this.findCurrent(input.organizationId, tx);
+      if (
+        !current ||
+        current.version !== input.expectedVersion ||
+        current.status !== 'PENDING_PAYMENT' ||
+        current.providerSubscriptionId
+      ) {
+        throw new Error('TRIAL_SUBSCRIPTION_CHANGED');
+      }
+      const paid = await tx.billingInvoiceTransition.findFirst({
+        where: {
+          organizationId: input.organizationId,
+          amountPaidMinor: { gt: 0 },
+        },
+        select: { id: true },
+      });
+      const history = await tx.organizationSubscription.findFirst({
+        where: {
+          organizationId: input.organizationId,
+          OR: [
+            { trialStartsAt: { not: null } },
+            { status: 'ACTIVE' },
+            { providerSubscriptionId: { not: null } },
+          ],
+        },
+        select: { id: true },
+      });
+      const checkout = await tx.billingCheckoutAttempt.findFirst({
+        where: {
+          organizationId: input.organizationId,
+          status: { in: ['CREATING', 'OPEN'] },
+        },
+        select: { id: true },
+      });
+      if (paid || history || checkout) throw new Error('TRIAL_NOT_AVAILABLE');
+      const grant = await tx.subscriptionTrialGrant.createMany({
+        data: [
+          {
+            id: generateUuidV7(),
+            organizationId: input.organizationId,
+            planCode: 'ESSENTIAL',
+            legalDocumentFingerprint: input.fingerprint,
+            startsAt: input.startsAt,
+            endsAt: input.endsAt,
+            status: 'GRANTED',
+            riskDecision: 'ALLOW',
+            convertedSubscriptionId: current.id,
+          },
+        ],
+        skipDuplicates: true,
+      });
+      if (grant.count !== 1) throw new Error('TRIAL_NOT_AVAILABLE');
+      const updated = await this.updateIfVersion(
+        current.id,
+        input.expectedVersion,
+        {
+          status: 'TRIALING',
+          planCode: 'ESSENTIAL',
+          billingInterval: input.billingInterval,
+          catalogVersion: input.catalogVersion,
+          entitlementsSnapshot: input.snapshot,
+          trialStartsAt: input.startsAt,
+          trialEndsAt: input.endsAt,
+          billingAnchorAt: input.startsAt,
+          currentPeriodStart: input.startsAt,
+          currentPeriodEnd: input.endsAt,
+          pendingPlanCode: null,
+          pendingBillingInterval: null,
+          pendingCatalogVersion: null,
+          pendingEntitlementsSnapshot: Prisma.DbNull,
+          pendingEffectiveAt: null,
+          graceStartsAt: null,
+          graceEndsAt: null,
+          cancelAtPeriodEnd: false,
+          canceledAt: null,
+        },
+        tx,
+      );
+      if (!updated) throw new Error('TRIAL_SUBSCRIPTION_CHANGED');
+      return updated;
+    });
   }
 
   findTrialGrant(organizationId: string) {

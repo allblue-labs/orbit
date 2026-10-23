@@ -1,3 +1,4 @@
+import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
  * Integração de cobrança — contra o banco de verdade, sem cobrar ninguém.
  *
@@ -359,6 +360,7 @@ describe('Stripe billing integration and webhook reconciliation (e2e)', () => {
     const resposta = await http()
       .post('/api/v1/identity/register')
       .send({
+        ...REGISTRATION_LEGAL_ACCEPTANCE,
         email,
         firstName: 'Cobranca',
         lastName: rotulo,

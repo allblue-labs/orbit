@@ -1,3 +1,4 @@
+import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
  * Assinatura, períodos e elegibilidade de avaliação — contra o banco de verdade.
  *
@@ -114,6 +115,7 @@ describe('Subscription lifecycle, billing periods and trial (e2e)', () => {
     const resposta = await http()
       .post('/api/v1/identity/register')
       .send({
+        ...REGISTRATION_LEGAL_ACCEPTANCE,
         email,
         firstName: 'Assinatura',
         lastName: rotulo,

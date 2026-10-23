@@ -67,6 +67,7 @@ export class StripeBillingProvider implements BillingProvider {
 
   private readonly logger = new Logger(StripeBillingProvider.name);
   private readonly client: Stripe | null;
+  private accountPortalConfiguration: Promise<string> | null = null;
 
   constructor(private readonly config: BillingConfig) {
     this.client = config.enabled
@@ -221,14 +222,57 @@ export class StripeBillingProvider implements BillingProvider {
     providerCustomerId: string;
   }): Promise<BillingPortalSession> {
     const stripe = this.require();
+    const configuration = await this.billingAdministrationConfiguration(stripe);
     const session = await this.chamar('createBillingPortalSession', () =>
       stripe.billingPortal.sessions.create({
         customer: input.providerCustomerId,
+        configuration,
         return_url: this.config.portalReturnUrl,
         locale: 'pt-BR',
       }),
     );
     return { url: session.url };
+  }
+
+  private billingAdministrationConfiguration(stripe: Stripe): Promise<string> {
+    this.accountPortalConfiguration ??= this.chamar(
+      'billingAdministrationConfiguration',
+      async () => {
+        const configurations = await stripe.billingPortal.configurations.list({
+          active: true,
+          limit: 100,
+        });
+        const existing = configurations.data.find(
+          (c) =>
+            c.metadata?.['orbitPurpose'] === 'billing-administration-v1' &&
+            !c.features.subscription_update.enabled &&
+            !c.features.subscription_cancel.enabled,
+        );
+        if (existing) return existing.id;
+        const configuration = await stripe.billingPortal.configurations.create(
+          {
+            metadata: { orbitPurpose: 'billing-administration-v1' },
+            default_return_url: this.config.portalReturnUrl,
+            features: {
+              customer_update: {
+                enabled: true,
+                allowed_updates: ['email', 'address', 'tax_id'],
+              },
+              invoice_history: { enabled: true },
+              payment_method_update: { enabled: true },
+              subscription_update: { enabled: false },
+              subscription_cancel: { enabled: false },
+            },
+          },
+          { idempotencyKey: `orbit:billing-administration-v1:${this.mode}` },
+        );
+        return configuration.id;
+      },
+    ).catch((error) => {
+      this.accountPortalConfiguration = null;
+      throw error;
+    });
+    return this.accountPortalConfiguration;
   }
 
   async expireCheckoutSession(providerSessionId: string): Promise<void> {
@@ -530,6 +574,20 @@ export class StripeBillingProvider implements BillingProvider {
     }
 
     const effectiveAtSeconds = item.current_period_end;
+    if (effectiveAtSeconds <= Math.floor(Date.now() / 1000))
+      throw new BillingCommandNotAllowedException('paid period already ended');
+    const phase = schedule.phases?.find(
+      (p) =>
+        p.start_date <= Math.floor(Date.now() / 1000) &&
+        p.end_date >= effectiveAtSeconds,
+    );
+    const discounts = phase?.discounts.map((d) =>
+      d.discount
+        ? { discount: this.idDoObjeto(d.discount)! }
+        : d.promotion_code
+          ? { promotion_code: this.idDoObjeto(d.promotion_code)! }
+          : { coupon: this.idDoObjeto(d.coupon)! },
+    );
     const months = BILLING_INTERVAL_MONTHS[input.billingInterval] ?? 1;
     await this.chamar('updatePlanSchedule', () =>
       stripe.subscriptionSchedules.update(
@@ -545,7 +603,14 @@ export class StripeBillingProvider implements BillingProvider {
           proration_behavior: 'none',
           phases: [
             {
-              start_date: schedule.current_phase?.start_date ?? 'now',
+              start_date:
+                schedule.current_phase?.start_date ?? item.current_period_start,
+              ...(discounts ? { discounts } : {}),
+              ...(phase?.default_tax_rates
+                ? {
+                    default_tax_rates: phase.default_tax_rates.map((t) => t.id),
+                  }
+                : {}),
               end_date: effectiveAtSeconds,
               items: [
                 {
@@ -557,6 +622,7 @@ export class StripeBillingProvider implements BillingProvider {
             },
             {
               start_date: effectiveAtSeconds,
+              billing_cycle_anchor: 'phase_start',
               duration: { interval: 'month', interval_count: months },
               items: [{ price: targetPriceId, quantity: item.quantity ?? 1 }],
               metadata: {
@@ -906,6 +972,13 @@ export class StripeBillingProvider implements BillingProvider {
       collectionMethod: invoice.collection_method,
       hostedInvoiceUrl: this.providerUrl(invoice.hosted_invoice_url ?? null),
       invoicePdfUrl: this.providerUrl(invoice.invoice_pdf ?? null),
+      subscriptionLines: (invoice.lines?.data ?? []).map((line) => ({
+        priceId: this.idDoObjeto(line.pricing?.price_details?.price),
+        subscriptionId:
+          line.parent?.subscription_item_details?.subscription ?? null,
+        periodStart: new Date(line.period.start * 1000),
+        periodEnd: new Date(line.period.end * 1000),
+      })),
       periodStart: new Date(invoice.period_start * 1000),
       periodEnd: new Date(invoice.period_end * 1000),
       dueAt: at(invoice.due_date),

@@ -17,6 +17,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { ConflictException } from '../../exceptions';
 import { generateUuidV7 } from '../../utils';
+import { TrialEligibilityService } from '../subscription-plans/subscriptions/trial-eligibility.service';
 import { SubscriptionService } from '../subscription-plans/subscriptions/subscription.service';
 import {
   TRIAL_DAYS,
@@ -51,6 +52,7 @@ export class BillingService {
     @Inject(BILLING_PROVIDER) private readonly provider: BillingProvider,
     private readonly repository: BillingRepository,
     private readonly subscriptions: SubscriptionService,
+    private readonly trials: TrialEligibilityService,
   ) {}
 
   isEnabled(): boolean {
@@ -106,9 +108,20 @@ export class BillingService {
     acknowledgeTrialEnd?: boolean;
   }): Promise<CheckoutSession> {
     this.assertEnabled();
-    const assinatura = await this.subscriptions.requireCurrent(
+    const existing = await this.subscriptions.currentOrNull(
       input.organizationId,
     );
+    const assinatura =
+      !existing ||
+      [SubscriptionStatus.CANCELED, SubscriptionStatus.EXPIRED].includes(
+        existing.effectiveStatus,
+      )
+        ? await this.subscriptions.preparePaidReturn(
+            input.organizationId,
+            input.planCode,
+            input.billingInterval,
+          )
+        : existing;
     if (!allowsInitialCheckout(assinatura.effectiveStatus)) {
       throw new BillingCheckoutNotAllowedException(
         `subscription status ${assinatura.effectiveStatus}`,
@@ -186,6 +199,7 @@ export class BillingService {
           currentSession.url
         ) {
           return {
+            subscriptionId: assinatura.id,
             providerSessionId: currentSession.providerSessionId,
             url: currentSession.url,
             expiresAt: currentSession.expiresAt,
@@ -232,7 +246,7 @@ export class BillingService {
         providerSessionId: session.providerSessionId,
         expiresAt: session.expiresAt,
       });
-      return session;
+      return { ...session, subscriptionId: assinatura.id };
     }
 
     throw new BillingCheckoutNotAllowedException(
@@ -254,6 +268,7 @@ export class BillingService {
   async cancelSubscription(
     organizationId: string,
     expectedVersion: number,
+    acknowledgeDataDeletion = false,
   ): Promise<void> {
     const assinatura = await this.requireExpected(
       organizationId,
@@ -263,12 +278,25 @@ export class BillingService {
       await this.subscriptions.cancelAtPeriodEnd(
         organizationId,
         expectedVersion,
+        acknowledgeDataDeletion,
       );
       return;
     }
 
     this.assertEnabled();
     await this.assertProviderTarget(assinatura);
+    if (assinatura.pendingPlanCode) {
+      const released = await this.provider.cancelScheduledPlanChange({
+        providerSubscriptionId: assinatura.providerSubscriptionId,
+        organizationId,
+        subscriptionId: assinatura.id,
+        idempotencyKey: this.chave(
+          'cancel-change-before-cancellation',
+          `${assinatura.id}:${expectedVersion}`,
+        ),
+      });
+      this.assertProviderOwnership(assinatura, released);
+    }
     const provedor = await this.provider.setCancelAtPeriodEnd({
       providerSubscriptionId: assinatura.providerSubscriptionId,
       cancelAtPeriodEnd: true,
@@ -287,6 +315,7 @@ export class BillingService {
       organizationId,
       expectedVersion,
       true,
+      acknowledgeDataDeletion,
     );
   }
 
@@ -336,8 +365,8 @@ export class BillingService {
   /**
    * Troca comercial com autoridade financeira externa.
    *
-   * A confirmação hospedada apresenta a cobrança antes da mudança. O retorno
-   * traz somente a URL; a reconciliação financeira libera os direitos.
+   * Teste inédito começa localmente; planos pagos são agendados na renovação.
+   * A confirmação hospedada é usada para contratar ou encerrar uma avaliação.
    */
   async changeSubscriptionPlan(input: {
     organizationId: string;
@@ -345,7 +374,11 @@ export class BillingService {
     planCode: PlanCodeType;
     billingInterval?: BillingIntervalType;
     acknowledgeTrialEnd?: boolean;
-  }): Promise<{ url: string }> {
+  }): Promise<
+    | { url: string }
+    | { kind: 'TRIAL_STARTED'; endsAt: string }
+    | { kind: 'SCHEDULED'; effectiveAt: string }
+  > {
     this.assertEnabled();
     const assinatura = await this.requireExpected(
       input.organizationId,
@@ -363,6 +396,45 @@ export class BillingService {
     ) {
       throw new BillingCommandNotAllowedException('no change requested');
     }
+    if (
+      assinatura.effectiveStatus === SubscriptionStatus.PENDING_PAYMENT &&
+      !assinatura.providerSubscriptionId &&
+      input.planCode === PlanCode.ESSENTIAL &&
+      (await this.trials.canStartPendingTrial(input.organizationId))
+    ) {
+      const attempt = await this.repository.activeCheckout(
+        input.organizationId,
+      );
+      if (attempt) {
+        if (!attempt.providerSessionId)
+          throw new BillingCheckoutNotAllowedException(
+            'checkout is being created',
+          );
+        const session = await this.provider.retrieveCheckoutSession(
+          attempt.providerSessionId,
+        );
+        if (session.state === ProviderCheckoutState.COMPLETE)
+          throw new BillingCheckoutNotAllowedException(
+            'payment is awaiting reconciliation',
+          );
+        if (session.state === ProviderCheckoutState.OPEN)
+          await this.provider.expireCheckoutSession(attempt.providerSessionId);
+        else if (session.state !== ProviderCheckoutState.EXPIRED)
+          throw new BillingCheckoutNotAllowedException(
+            'unknown checkout state',
+          );
+        await this.repository.expireCheckoutAttempt(attempt.id);
+      }
+      const trial = await this.trials.startPendingTrial(
+        input.organizationId,
+        input.expectedVersion,
+        targetInterval,
+      );
+      return {
+        kind: 'TRIAL_STARTED',
+        endsAt: trial.trialEndsAt!.toISOString(),
+      };
+    }
     const endsTrial =
       assinatura.effectiveStatus === SubscriptionStatus.TRIALING;
     if (endsTrial && input.acknowledgeTrialEnd !== true) {
@@ -378,6 +450,40 @@ export class BillingService {
       });
     }
     await this.assertProviderTarget(assinatura);
+    if (assinatura.effectiveStatus === SubscriptionStatus.ACTIVE) {
+      if (assinatura.cancelAtPeriodEnd)
+        throw new BillingCommandNotAllowedException(
+          'resume renewal before scheduling a change',
+        );
+      const change = await this.provider.changePlan({
+        providerSubscriptionId: assinatura.providerSubscriptionId,
+        organizationId: input.organizationId,
+        subscriptionId: assinatura.id,
+        planCode: input.planCode,
+        billingInterval: targetInterval,
+        timing: 'PERIOD_END',
+        idempotencyKey: this.chave(
+          'schedule-plan-change',
+          `${assinatura.id}:${input.expectedVersion}:${input.planCode}:${targetInterval}`,
+        ),
+      });
+      this.assertProviderOwnership(assinatura, change.subscription);
+      if (!change.scheduled || !change.effectiveAt)
+        throw new BillingCommandNotAllowedException(
+          'provider did not schedule the change',
+        );
+      await this.subscriptions.scheduleProviderPlanChange(
+        input.organizationId,
+        input.expectedVersion,
+        input.planCode,
+        targetInterval,
+        change.effectiveAt,
+      );
+      return {
+        kind: 'SCHEDULED',
+        effectiveAt: change.effectiveAt.toISOString(),
+      };
+    }
     // Apenas abre a confirmação hospedada. O webhook verifica o pagamento
     // antes de aplicar qualquer mudança aos direitos da organização.
     return this.provider.createPlanChangeSession({

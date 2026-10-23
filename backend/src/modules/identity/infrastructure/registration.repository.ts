@@ -1,3 +1,5 @@
+import type { SessionMetadata } from '../domain/identity.types';
+import { legalDocument } from '../../legal/legal-documents';
 import { Injectable } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../database';
@@ -30,6 +32,7 @@ export class RegistrationRepository {
     passwordHash: string,
     slug: string,
     options: TenantProvisioningOptions = {},
+    metadata?: SessionMetadata,
   ) {
     const userId = generateUuidV7();
     const organizationId = generateUuidV7();
@@ -92,6 +95,24 @@ export class RegistrationRepository {
           externalSubscriptionId: options.externalSubscriptionId,
         },
       });
+      if (input.acceptTerms && input.termsVersion && input.privacyVersion) {
+        await transaction.organizationLegalAcceptance.create({
+          data: {
+            id: generateUuidV7(),
+            organizationId,
+            userId,
+            termsVersion: input.termsVersion,
+            privacyVersion: input.privacyVersion,
+            acceptedAt: now,
+            ipAddress: metadata?.ipAddress?.slice(0, 80) ?? null,
+            userAgent: metadata?.userAgent?.slice(0, 512) ?? null,
+            documentsSnapshot: {
+              terms: legalDocument('termos'),
+              privacy: legalDocument('privacidade'),
+            } as unknown as Prisma.InputJsonValue,
+          },
+        });
+      }
       const ownerRole = await transaction.role.create({
         data: {
           organizationId,

@@ -1,3 +1,4 @@
+import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
  * E2E do Rendering Engine.
  *
@@ -94,6 +95,7 @@ describe('Artifact Rendering (e2e)', () => {
     const registration = await http()
       .post('/api/v1/identity/register')
       .send({
+        ...REGISTRATION_LEGAL_ACCEPTANCE,
         email: `render.e2e.${suffix}@orbit.local`,
         firstName: 'Render',
         lastName: 'E2E',

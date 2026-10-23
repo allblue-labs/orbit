@@ -37,6 +37,8 @@ export interface OrganizationSubscriptionReadModel {
   usagePeriod: SubscriptionPeriodReadModel;
   trial: SubscriptionTrialReadModel | null;
   cancelAtPeriodEnd: boolean;
+  dataRetentionEndsAt?: string | null;
+  dataPurgedAt?: string | null;
   pendingChange: PendingPlanChangeReadModel | null;
   /** O que o servidor aceita agora. O cliente não deduz ação. */
   allowedActions: readonly string[];

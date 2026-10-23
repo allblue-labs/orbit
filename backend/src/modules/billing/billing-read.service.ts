@@ -9,6 +9,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { EntitlementService } from '../subscription-plans/entitlements/entitlement.service';
 import { SubscriptionMapper } from '../subscription-plans/subscriptions/subscription.mapper';
+import { TrialEligibilityService } from '../subscription-plans/subscriptions/trial-eligibility.service';
 import { SubscriptionService } from '../subscription-plans/subscriptions/subscription.service';
 import type { OrganizationSubscriptionReadModel } from '../subscription-plans/subscriptions/subscription.read-models';
 import type {
@@ -35,6 +36,9 @@ export interface BillingOverviewReadModel {
   entitlements: OrganizationEntitlementsReadModel;
   billing: BillingReadinessReadModel;
   invoices: readonly BillingInvoiceReadModel[];
+  dataPurgedAt?: string | null;
+  dataPurgeStartedAt?: string | null;
+  dataRetentionEndsAt?: string | null;
 }
 
 export interface BillingInvoiceReadModel {
@@ -73,6 +77,7 @@ export interface BillingReadinessReadModel {
   /** `TEST` ou `LIVE`, e só fora de produção interessa a quem opera. */
   mode: string | null;
   canCheckout: boolean;
+  canStartEssentialTrial?: boolean;
   canOpenBillingPortal: boolean;
   allowedActions: readonly string[];
 }
@@ -85,6 +90,7 @@ export class BillingReadService {
     private readonly subscriptions: SubscriptionService,
     private readonly entitlements: EntitlementService,
     private readonly subscriptionMapper: SubscriptionMapper,
+    private readonly trials: TrialEligibilityService,
   ) {}
 
   /**
@@ -95,8 +101,13 @@ export class BillingReadService {
    * organização anterior à PR-PL-02 continua funcionando pelo caminho legado.
    */
   async overview(organizationId: string): Promise<BillingOverviewReadModel> {
-    const assinatura = await this.subscriptions.currentOrNull(organizationId);
+    const assinatura = await this.subscriptions.currentOrLast(organizationId);
+    const retention = await this.repository.retentionState(organizationId);
     return {
+      dataRetentionEndsAt:
+        retention.subscriptions[0]?.dataRetentionEndsAt?.toISOString() ?? null,
+      dataPurgedAt: retention.dataPurgedAt?.toISOString() ?? null,
+      dataPurgeStartedAt: retention.dataPurgeStartedAt?.toISOString() ?? null,
       catalog: this.entitlements.catalog(),
       subscription: assinatura
         ? this.subscriptionMapper.details(assinatura)
@@ -151,7 +162,7 @@ export class BillingReadService {
       };
     }
 
-    const assinatura = await this.subscriptions.currentOrNull(organizationId);
+    const assinatura = await this.subscriptions.currentOrLast(organizationId);
     const cliente = await this.repository.findCustomer(
       organizationId,
       this.provider.name,
@@ -160,8 +171,9 @@ export class BillingReadService {
 
     const podeContratar =
       assinatura !== null &&
-      !assinatura.providerSubscriptionId &&
-      allowsInitialCheckout(assinatura.effectiveStatus);
+      ((!assinatura.providerSubscriptionId &&
+        allowsInitialCheckout(assinatura.effectiveStatus)) ||
+        ['CANCELED', 'EXPIRED'].includes(assinatura.effectiveStatus));
     /** Sem cliente no provedor não há portal para abrir — ele nasce no checkout. */
     const podeAbrirPortal = cliente !== null;
 
@@ -169,6 +181,10 @@ export class BillingReadService {
       configured: true,
       mode: this.provider.mode,
       canCheckout: podeContratar,
+      canStartEssentialTrial:
+        assinatura?.effectiveStatus === 'PENDING_PAYMENT' &&
+        !assinatura.providerSubscriptionId &&
+        (await this.trials.canStartPendingTrial(organizationId)),
       canOpenBillingPortal: podeAbrirPortal,
       allowedActions: [
         ...(podeContratar ? ['START_CHECKOUT'] : []),

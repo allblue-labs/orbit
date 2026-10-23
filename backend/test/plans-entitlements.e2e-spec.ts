@@ -1,3 +1,4 @@
+import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
  * Planos, direitos e cotas mensais — contra o banco de verdade.
  *
@@ -155,6 +156,7 @@ describe('Plans, entitlements and monthly usage limits (e2e)', () => {
     const response = await http()
       .post('/api/v1/identity/register')
       .send({
+        ...REGISTRATION_LEGAL_ACCEPTANCE,
         email,
         firstName: 'Cota',
         lastName: label,

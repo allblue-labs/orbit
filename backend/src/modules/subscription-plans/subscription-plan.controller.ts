@@ -100,7 +100,8 @@ export class SubscriptionPlanController {
   @Permissions('usage.read')
   async currentSubscription(@Req() request: IdentityRequest) {
     return this.subscriptionMapper.details(
-      await this.subscriptions.requireCurrent(this.organizationId(request)),
+      (await this.subscriptions.currentOrLast(this.organizationId(request))) ??
+        (await this.subscriptions.requireCurrent(this.organizationId(request))),
     );
   }
 

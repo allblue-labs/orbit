@@ -1,3 +1,4 @@
+import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument */
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
@@ -97,6 +98,7 @@ describe('Customer Portal identity & security boundary (e2e)', () => {
     const registration = await api()
       .post('/api/v1/identity/register')
       .send({
+        ...REGISTRATION_LEGAL_ACCEPTANCE,
         email,
         firstName: 'Portal',
         lastName: 'Owner',
@@ -200,6 +202,7 @@ describe('Customer Portal identity & security boundary (e2e)', () => {
     const registration = await api()
       .post('/api/v1/identity/register')
       .send({
+        ...REGISTRATION_LEGAL_ACCEPTANCE,
         email: ownerEmail,
         firstName: 'Portal',
         lastName: 'Owner B',

@@ -87,11 +87,34 @@ async function fixture(
     malformedChange?: boolean;
     entitlementsUnavailable?: boolean;
     stallOverviewAfterChange?: boolean;
+    trialEligible?: boolean;
+    overLimit?: boolean;
+    cancelFails?: boolean;
   } = {},
 ) {
   let registered = !options.signup;
   const writes: { path: string; body: Record<string, unknown> }[] = [];
   const data = overview(options.status);
+  if (options.status === "ACTIVE")
+    data.subscription!.allowedActions = [
+      ...data.subscription!.allowedActions,
+      "CANCEL_AT_PERIOD_END",
+    ];
+  data.billing.canStartEssentialTrial = options.trialEligible;
+  if (options.overLimit)
+    data.entitlements.limitAdjustment = {
+      effectiveAt: period.start,
+      deadline: period.end,
+      blocked: false,
+      resources: [
+        {
+          resource: "PLATFORM_USERS",
+          current: 10,
+          limit: { unlimited: false, value: 5 },
+          remaining: 0,
+        },
+      ],
+    };
   const profile = {
     id: "billing-user",
     email: "owner@example.test",
@@ -169,6 +192,10 @@ async function fixture(
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     let result: unknown = {};
+    const body =
+      route.request().method() === "POST"
+        ? (route.request().postDataJSON() as Record<string, unknown>)
+        : {};
     if (route.request().method() === "POST")
       writes.push({
         path,
@@ -208,16 +235,64 @@ async function fixture(
         });
         return;
       }
-      result =
-        options.malformedChange && path.endsWith("/change-plan")
-          ? { status: "ACTIVE", planCode: "PROFESSIONAL" }
-          : {
-              url: path.endsWith("/change-plan")
-                ? "https://billing.stripe.test/confirm"
-                : "https://checkout.stripe.test/pay",
-              expiresAt: null,
-            };
-    } else if (path.endsWith("/identity/me")) result = profile;
+      if (
+        path.endsWith("/change-plan") &&
+        !options.malformedChange &&
+        data.subscription?.status === "ACTIVE"
+      ) {
+        data.subscription.pendingChange = {
+          planCode: String(body.planCode),
+          billingInterval: String(body.billingInterval),
+          effectiveAt: period.end,
+        };
+        result = { kind: "SCHEDULED", effectiveAt: period.end };
+      } else if (
+        path.endsWith("/change-plan") &&
+        options.trialEligible &&
+        data.subscription &&
+        body.planCode === "ESSENTIAL"
+      ) {
+        data.subscription.status = "TRIALING";
+        data.subscription.planCode = "ESSENTIAL";
+        data.subscription.trial = {
+          eligible: false,
+          trialDays: 30,
+          startsAt: period.start,
+          endsAt: period.end,
+        };
+        result = { kind: "TRIAL_STARTED", endsAt: period.end };
+      } else
+        result =
+          options.malformedChange && path.endsWith("/change-plan")
+            ? { status: "ACTIVE", planCode: "PROFESSIONAL" }
+            : {
+                url: path.endsWith("/change-plan")
+                  ? "https://billing.stripe.test/confirm"
+                  : "https://checkout.stripe.test/pay",
+                expiresAt: null,
+              };
+    } else if (path.endsWith("/cancel")) {
+      if (options.cancelFails) {
+        await route.fulfill({
+          status: 503,
+          json: {
+            success: false,
+            error: {
+              code: "BILLING_PROVIDER_UNAVAILABLE",
+              message: "Não foi possível cancelar. Tente novamente.",
+            },
+          },
+        });
+        return;
+      }
+      data.subscription!.cancelAtPeriodEnd = true;
+      data.dataRetentionEndsAt = new Date(
+        new Date(period.end).getTime() + 30 * 86400000,
+      ).toISOString();
+      result = data.subscription;
+    } else if (path.endsWith("/organizations/current/entitlements"))
+      result = data.entitlements;
+    else if (path.endsWith("/identity/me")) result = profile;
     else if (path.includes("notifications"))
       result = { unread: 0, data: [], meta: { page: 1, total: 0 } };
     await route.fulfill({ json: { success: true, data: result } });
@@ -245,12 +320,106 @@ async function fillSignup(page: Page, planCode = "PROFESSIONAL") {
   await page.locator("#documentNumber").fill("52998224725");
   await page.getByRole("button", { name: "Continuar", exact: true }).click();
   await page.getByLabel("Cidade", { exact: true }).fill("Recife");
+  await page.getByLabel("UF", { exact: true }).fill("PE");
   await page
     .getByLabel("Endereço da matriz", { exact: true })
     .fill("Rua da Aurora, 100");
   await page.locator("#terms").check();
   await page.getByRole("button", { name: /Criar/ }).click();
 }
+
+test("canceling renewal explains automatic deletion and preserves the paid plan", async ({
+  page,
+}) => {
+  const { writes, data } = await fixture(page, { status: "ACTIVE" });
+  await page.goto("/configuracoes?secao=assinatura");
+  await page
+    .getByRole("button", { name: "Cancelar renovação", exact: true })
+    .click();
+  const dialog = page.getByRole("alertdialog");
+  await expect(dialog).toContainText("30 dias");
+  await expect(dialog).toContainText("excluídos automaticamente");
+  expect(writes).toEqual([]);
+  await dialog
+    .getByRole("button", { name: "Cancelar renovação", exact: true })
+    .click();
+  await expect(
+    page.getByText("Renovação cancelada; seu período continua disponível", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  expect(writes[0].body).toMatchObject({
+    expectedVersion: 3,
+    acknowledgeDataDeletion: true,
+  });
+  expect(data.subscription?.status).toBe("ACTIVE");
+  expect(data.subscription?.planCode).toBe("ESSENTIAL");
+});
+
+test("provider cancellation errors remain visible for retry", async ({
+  page,
+}) => {
+  const { writes } = await fixture(page, {
+    status: "ACTIVE",
+    cancelFails: true,
+  });
+  await page.goto("/configuracoes?secao=assinatura");
+  await page
+    .getByRole("button", { name: "Cancelar renovação", exact: true })
+    .click();
+  const dialog = page.getByRole("alertdialog");
+  await dialog
+    .getByRole("button", { name: "Cancelar renovação", exact: true })
+    .click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("alert")).toBeVisible();
+  await expect.poll(() => writes.length).toBe(1);
+});
+
+test("ended subscriptions offer a new checkout for the same organization", async ({
+  page,
+}) => {
+  const { data, writes } = await fixture(page, { status: "CANCELED" });
+  data.subscription!.billingPeriod = {
+    start: new Date(Date.now() - 60 * 86400000).toISOString(),
+    end: new Date(Date.now() - 86400000).toISOString(),
+  };
+  data.subscription!.cancelAtPeriodEnd = true;
+  data.dataRetentionEndsAt = new Date(Date.now() + 29 * 86400000).toISOString();
+  await page.goto("/configuracoes?secao=assinatura");
+  await expect(
+    page.getByText("Escolha um plano para continuar com seus dados", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  const expired = page.getByRole("dialog");
+  if (await expired.isVisible())
+    await expired.getByRole("button", { name: "Agora não" }).click();
+  await page
+    .getByRole("article", { name: "Essencial", exact: true })
+    .getByRole("button", { name: /Assinar/ })
+    .click();
+  await expect(page).toHaveURL("https://checkout.stripe.test/pay");
+  expect(writes[0].path).toContain("checkout-session");
+});
+
+test("settings makes both legal documents readable after login", async ({
+  page,
+}) => {
+  await fixture(page, { status: "ACTIVE" });
+  await page.goto("/configuracoes?secao=termos");
+  await page
+    .getByRole("button", { name: "Ler Política de Privacidade", exact: true })
+    .click();
+  await expect(
+    page
+      .frameLocator('iframe[title="Política de Privacidade"]')
+      .getByRole("heading", {
+        name: "Política de Privacidade do Orbit",
+        exact: true,
+      }),
+  ).toBeVisible();
+});
 
 test("paid signup opens Stripe after creating the account exactly once", async ({
   page,
@@ -395,7 +564,7 @@ test("Essential trial signup enters the app without opening a paid checkout", as
   expect(writes.map((write) => write.path)).toEqual(["/api/auth/register"]);
 });
 
-test("active customer confirms the change in Stripe before the current plan changes", async ({
+test("active customer schedules the change at renewal and keeps the paid plan", async ({
   page,
 }) => {
   const { writes, data } = await fixture(page, { status: "ACTIVE" });
@@ -405,12 +574,17 @@ test("active customer confirms the change in Stripe before the current plan chan
     .getByRole("button", { name: "Migrar para este" })
     .click();
   const dialog = page.getByRole("alertdialog");
-  await expect(dialog).toContainText("conferir os valores");
+  await expect(dialog).toContainText(
+    "novo valor será cobrado somente na renovação",
+  );
   await expect(dialog).not.toContainText("dias gratuitos restantes");
   await dialog
-    .getByRole("button", { name: "Continuar para o pagamento" })
+    .getByRole("button", { name: "Agendar mudança na renovação" })
     .click();
-  await expect(page).toHaveURL("https://billing.stripe.test/confirm");
+  await expect(
+    page.getByRole("status").filter({ hasText: "Troca agendada para" }),
+  ).toBeVisible();
+  await expect(page).toHaveURL(/configuracoes/);
   expect(writes[0].body.acknowledgeTrialEnd).toBe(false);
   expect(data.subscription?.planCode).toBe("ESSENTIAL");
 });
@@ -506,4 +680,63 @@ test("successful payment redirect does not wait for a billing overview refresh",
   await expect(page).toHaveURL("https://billing.stripe.test/confirm", {
     timeout: 5000,
   });
+});
+
+test("pending Professional can start the unused Essential trial without Stripe navigation", async ({
+  page,
+}) => {
+  const { writes, data } = await fixture(page, {
+    status: "PENDING_PAYMENT",
+    trialEligible: true,
+  });
+  await page.goto("/configuracoes?secao=assinatura");
+  await page
+    .getByRole("article", { name: "Essencial", exact: true })
+    .getByRole("button", { name: "Mudar para este" })
+    .click();
+  const dialog = page.getByRole("alertdialog");
+  await expect(dialog).toContainText("30 dias gratuitos");
+  await dialog.getByRole("button", { name: "Começar 30 dias grátis" }).click();
+  await expect(
+    page.getByText("Seu teste gratuito no Essencial começou", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Período de teste", { exact: true }),
+  ).toBeVisible();
+  await expect(page).toHaveURL(/configuracoes/);
+  expect(writes.some((w) => w.path.endsWith("/checkout-session"))).toBe(false);
+  expect(data.subscription?.status).toBe("TRIALING");
+});
+
+test("Essential without trial eligibility requires payment and never offers free days", async ({
+  page,
+}) => {
+  await fixture(page, { status: "PENDING_PAYMENT", trialEligible: false });
+  await page.goto("/configuracoes?secao=assinatura");
+  await page
+    .getByRole("article", { name: "Essencial", exact: true })
+    .getByRole("button", { name: "Mudar para este" })
+    .click();
+  const dialog = page.getByRole("alertdialog");
+  await expect(
+    dialog.getByRole("button", { name: "Começar 30 dias grátis" }),
+  ).toHaveCount(0);
+  await dialog
+    .getByRole("button", { name: "Continuar para o pagamento" })
+    .click();
+  await expect(page).toHaveURL("https://billing.stripe.test/confirm");
+});
+
+test("the downgrade adjustment notice appears in the shell and preserves data", async ({
+  page,
+}) => {
+  await fixture(page, { status: "ACTIVE", overLimit: true });
+  await page.goto("/configuracoes?secao=assinatura");
+  const notice = page
+    .getByRole("alert")
+    .filter({ hasText: "ajuste os recursos excedentes" });
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText("48 horas");
+  await expect(notice).toContainText("10 em uso / 5 permitidos");
+  await expect(notice).toContainText("não exclui seus dados automaticamente");
 });

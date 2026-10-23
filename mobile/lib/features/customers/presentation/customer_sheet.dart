@@ -143,38 +143,6 @@ class _Folha extends ConsumerWidget {
                 label: const Text('Ver documentos'),
               ),
 
-              /// Abrir um atendimento para este cliente.
-              ///
-              /// Leva ao mesmo roteiro do botão da fila, com **este** cliente
-              /// já escolhido — e sem o caminho de cadastrar outro: quem
-              /// acabou de abrir a folha de alguém não quer criar um terceiro.
-              if (session?.hasPermission('operations.create') ?? false) ...[
-                const SizedBox(height: OrbitSpacing.lg),
-                Text(
-                  'Atendimento',
-                  style: OrbitType.sectionTitle.copyWith(color: palette.ink),
-                ),
-                const SizedBox(height: OrbitSpacing.xs),
-                Text(
-                  'Abrir uma ordem agora, estando no local.',
-                  style: OrbitType.caption.copyWith(color: palette.inkSubtle),
-                ),
-                const SizedBox(height: OrbitSpacing.ms),
-                FilledButton.icon(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    context.push(
-                      OrbitRoutes.walkIn(
-                        customerId: cliente.id,
-                        customerName: cliente.name,
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Iniciar um atendimento'),
-                ),
-              ],
-
               /// Orçamento é ação de gestão: só aparece com `quotes.manage`.
               if (session?.hasPermission('quotes.manage') ?? false) ...[
                 const SizedBox(height: OrbitSpacing.lg),
@@ -223,23 +191,58 @@ class _Folha extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(width: OrbitSpacing.ms),
-                Expanded(
-                  flex: 2,
-                  child: FilledButton.icon(
-                    onPressed: cliente.openCount == 0
-                        ? null
-                        : () {
-                            Navigator.of(context).pop();
-                            _abrirHistorico(context, ref);
-                          },
-                    icon: const Icon(Icons.play_arrow_rounded, size: 19),
-                    label: Text(
-                      cliente.openCount == 0
-                          ? 'Nada em aberto'
-                          : 'Ir para os atendimentos',
+
+                /// Abrir um atendimento para **este** cliente.
+                ///
+                /// ## O que estava aqui antes
+                ///
+                /// "Ir para os atendimentos", que chamava `_abrirHistorico` —
+                /// exatamente a mesma ação do botão "Histórico" ao lado. Os
+                /// dois levavam à fila filtrada por este cliente, e um deles
+                /// ainda ficava desabilitado quando não havia nada em aberto:
+                /// a posição de ação principal da folha era ocupada por uma
+                /// duplicata que, metade das vezes, não fazia nada.
+                ///
+                /// Agora ela leva ao roteiro avulso com este cliente já
+                /// escolhido — e sem o caminho de cadastrar outro: quem abriu
+                /// a folha de alguém não quer criar um terceiro.
+                if (session?.hasPermission('operations.create') ?? false)
+                  Expanded(
+                    flex: 2,
+                    child: FilledButton.icon(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        context.push(
+                          OrbitRoutes.walkIn(
+                            customerId: cliente.id,
+                            customerName: cliente.name,
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.add, size: 19),
+                      label: const Text('Iniciar um atendimento'),
+                    ),
+                  )
+                else
+                  /// Sem permissão de abrir ordem, a fila filtrada volta a ser
+                  /// a ação principal: é o que resta de útil aqui.
+                  Expanded(
+                    flex: 2,
+                    child: FilledButton.icon(
+                      onPressed: cliente.openCount == 0
+                          ? null
+                          : () {
+                              Navigator.of(context).pop();
+                              _abrirHistorico(context, ref);
+                            },
+                      icon: const Icon(Icons.play_arrow_rounded, size: 19),
+                      label: Text(
+                        cliente.openCount == 0
+                            ? 'Nada em aberto'
+                            : 'Ir para os atendimentos',
+                      ),
                     ),
                   ),
-                ),
               ],
             ),
           ),

@@ -11,6 +11,7 @@ import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService, RlsTransaction } from '../../database';
 import type { PrismaTransactionClient } from '../../database/prisma.types';
+import { ConflictException } from '../../exceptions';
 import { generateUuidV7 } from '../../utils';
 import type {
   BillingMode,
@@ -116,6 +117,32 @@ export class BillingRepository {
     return organizacao?.displayName ?? organizationId;
   }
 
+  retentionState(organizationId: string) {
+    return this.rls.run((tx) =>
+      tx.organization.findUniqueOrThrow({
+        where: { id: organizationId },
+        select: {
+          dataPurgeStartedAt: true,
+          dataPurgedAt: true,
+          subscriptions: {
+            where: { dataRetentionEndsAt: { not: null } },
+            orderBy: { dataRetentionEndsAt: 'asc' },
+            take: 1,
+            select: { dataRetentionEndsAt: true },
+          },
+        },
+      }),
+    );
+  }
+
+  activeCheckout(organizationId: string) {
+    return this.rls.run((tx) =>
+      tx.billingCheckoutAttempt.findFirst({
+        where: { organizationId, status: { in: ['CREATING', 'OPEN'] } },
+      }),
+    );
+  }
+
   findCustomer(
     organizationId: string,
     provider: BillingProviderName,
@@ -179,6 +206,28 @@ export class BillingRepository {
       // Serializa a intenção antes do INSERT: P2002 abortaria esta transação
       // no PostgreSQL, impedindo a leitura de recuperação no mesmo bloco.
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${input.organizationId}, 0))::text`;
+      const organization = await tx.organization.findUniqueOrThrow({
+        where: { id: input.organizationId },
+        select: { dataPurgeStartedAt: true, dataPurgedAt: true },
+      });
+      if (organization.dataPurgeStartedAt && !organization.dataPurgedAt)
+        throw new ConflictException('Data deletion is in progress', 'CONFLICT');
+      const subscription = await tx.organizationSubscription.findFirst({
+        where: {
+          id: input.subscriptionId,
+          organizationId: input.organizationId,
+          version: input.subscriptionVersion,
+          endedAt: null,
+          providerSubscriptionId: null,
+          status: { in: ['PENDING_PAYMENT', 'TRIALING'] },
+        },
+        select: { id: true },
+      });
+      if (!subscription)
+        throw new ConflictException(
+          'Subscription changed; reload before checkout',
+          'CONFLICT',
+        );
       const existing = await tx.billingCheckoutAttempt.findFirst({
         where: {
           organizationId: input.organizationId,

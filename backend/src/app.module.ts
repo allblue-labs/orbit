@@ -1,5 +1,6 @@
 import './configure-environment';
 import { Module } from '@nestjs/common';
+import { LegalModule } from './modules/legal/legal.module';
 import { APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -53,6 +54,7 @@ import {
 
 @Module({
   imports: [
+    LegalModule,
     FoundationModule,
     PrismaModule,
     IdentityModule,

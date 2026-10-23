@@ -8,6 +8,7 @@ import {
   useCommandPalette,
 } from "@/components/navigation/command-palette";
 import { SubscriptionExpiredNotice } from "@/components/billing/subscription-expired.notice";
+import { LimitAdjustmentNotice } from "@/components/billing/limit-adjustment-notice";
 import { WelcomeSetup } from "@/components/profile/welcome-setup";
 
 /**
@@ -38,6 +39,7 @@ export function AppShell({
           activeLabel={activeLabel}
           breadcrumb={breadcrumb}
         />
+        <LimitAdjustmentNotice />
         <main className="flex-1">{children}</main>
       </div>
       <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />

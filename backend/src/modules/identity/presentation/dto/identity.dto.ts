@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsEmail,
   IsIn,
   IsInt,
@@ -59,6 +60,21 @@ export class LoginDto {
 }
 
 export class RegisterOrganizationDto {
+  @ApiProperty()
+  @IsOptional()
+  @IsBoolean()
+  acceptTerms?: boolean;
+  @ApiProperty()
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  termsVersion?: string;
+  @ApiProperty()
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  privacyVersion?: string;
+
   @ApiProperty()
   @Transform(normalizeEmail)
   @IsEmail()

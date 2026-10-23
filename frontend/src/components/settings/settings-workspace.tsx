@@ -22,6 +22,7 @@
  * (`GeneralSection`, `IntegrationsSection`, `CalendarSetup`,
  * `OperationAuthorizationSection`); nenhuma foi reescrita.
  */
+import { LegalDocumentsPanel } from "@/components/legal/legal-documents-panel";
 import { ContentContainer } from "@/components/layout/page-primitives";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TabBoundary } from "@/workspace";
@@ -51,6 +52,7 @@ const TODAS_AS_SECOES = [
   "automacoes",
   "seguranca",
   "integracoes",
+  "termos",
 ] as const;
 
 /**
@@ -81,6 +83,9 @@ export function SettingsWorkspace() {
     return (
       <ContentContainer size="wide">
         <SubscriptionSettingsTab />
+        <div className="mt-8">
+          <LegalDocumentsPanel />
+        </div>
       </ContentContainer>
     );
   }
@@ -100,6 +105,7 @@ export function SettingsWorkspace() {
           <TabsTrigger value="notificacoes">Notificações</TabsTrigger>
           <TabsTrigger value="automacoes">Automações</TabsTrigger>
           <TabsTrigger value="seguranca">Segurança</TabsTrigger>
+          <TabsTrigger value="termos">Termos e privacidade</TabsTrigger>
           {visivel("integracoes") ? (
             <TabsTrigger value="integracoes">Integrações</TabsTrigger>
           ) : null}
@@ -162,6 +168,9 @@ export function SettingsWorkspace() {
           </TabBoundary>
         </TabsContent>
 
+        <TabsContent value="termos">
+          <LegalDocumentsPanel />
+        </TabsContent>
         {visivel("integracoes") ? (
           <TabsContent value="integracoes">
             <TabBoundary id="settings-integrations" label="as integrações">
