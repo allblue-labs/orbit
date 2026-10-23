@@ -88,6 +88,8 @@ describe('ActivePlanGuard initial payment', () => {
     const guard = new ActivePlanGuard(
       reflector as unknown as Reflector,
       plans as unknown as SubscriptionPlanService,
+      {} as never,
+      {} as never,
     );
     const request = {
       method,
@@ -116,5 +118,100 @@ describe('ActivePlanGuard initial payment', () => {
   it('keeps read access to the history of an expired subscription', async () => {
     const { guard, context } = make('EXPIRED', 'GET');
     await expect(guard.canActivate(context)).resolves.toBe(true);
+  });
+});
+
+describe('ActivePlanGuard adequação sem remoção de dados', () => {
+  const make = (
+    method: string,
+    capability: string,
+    controllerPath = 'operations',
+    handlerPath = '',
+  ) => {
+    const controller = () => null;
+    const handler = () => null;
+    const reflector = {
+      getAllAndOverride: (key: string, targets: unknown[]) => {
+        if (key === ACTIVE_PLAN_KEY) return true;
+        if (key === REQUIRED_CAPABILITIES_KEY)
+          return capability ? [capability] : [];
+        if (key === 'path')
+          return targets[0] === controller ? controllerPath : handlerPath;
+        return false;
+      },
+    };
+    const quotas = {
+      assertWithinAdjustedAllocation: jest
+        .fn()
+        .mockRejectedValue(new ForbiddenException('Quota adjustment required')),
+    };
+    const contexts = {
+      run: (_ctx: unknown, work: () => Promise<unknown>) => work(),
+    };
+    const guard = new ActivePlanGuard(
+      reflector as never,
+      {
+        getEntitlements: jest.fn().mockResolvedValue({}),
+        grantsAccess: () => true,
+      } as never,
+      quotas as never,
+      contexts as never,
+    );
+    const context = {
+      getHandler: () => handler,
+      getClass: () => controller,
+      switchToHttp: () => ({
+        getRequest: () => ({
+          method,
+          identity: { id: 'owner', organizationId: 'org', businessUnitIds: [] },
+        }),
+      }),
+    } as unknown as ExecutionContext;
+    return { guard, context, quotas };
+  };
+  it.each(['GET', 'HEAD', 'DELETE'])(
+    'mantém %s disponível para consulta e adequação',
+    async (method) => {
+      const { guard, context, quotas } = make(method, 'operations.manage');
+      await expect(guard.canActivate(context)).resolves.toBe(true);
+      expect(quotas.assertWithinAdjustedAllocation).not.toHaveBeenCalled();
+    },
+  );
+  it('preserva atualização cadastral e desativação de clientes para regularizar', async () => {
+    const { guard, context, quotas } = make(
+      'PATCH',
+      'crm.manage',
+      'organizations/current/customers',
+    );
+    await expect(guard.canActivate(context)).resolves.toBe(true);
+    expect(quotas.assertWithinAdjustedAllocation).not.toHaveBeenCalled();
+  });
+  it.each(['POST', 'PATCH'])(
+    'bloqueia %s operacional com excedente após o prazo',
+    async (method) => {
+      const { guard, context, quotas } = make(method, 'operations.manage');
+      await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(quotas.assertWithinAdjustedAllocation).toHaveBeenCalledWith(
+        'org',
+        'OPERATIONS',
+      );
+    },
+  );
+  it('inclui comandos mobile que não declaram capabilities legadas', async () => {
+    const { guard, context, quotas } = make(
+      'POST',
+      '',
+      'mobile/field/operations',
+      ':operationId/commands/start',
+    );
+    await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    expect(quotas.assertWithinAdjustedAllocation).toHaveBeenCalledWith(
+      'org',
+      'OPERATIONS',
+    );
   });
 });

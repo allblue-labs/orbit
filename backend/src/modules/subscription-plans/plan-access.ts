@@ -6,8 +6,13 @@ import {
   Logger,
   SetMetadata,
 } from '@nestjs/common';
+import { RequestContext, RequestContextStorage } from '../../context';
+import { generateUuidV7 } from '../../utils';
+import { EntitlementService } from './entitlements/entitlement.service';
+import { PlanCapability } from './catalog/plan-catalog.types';
 import { redactSensitivePath } from '../../common/redact-sensitive-path';
 import { Reflector } from '@nestjs/core';
+import { PATH_METADATA } from '@nestjs/common/constants';
 import type { UUID } from '../../contracts';
 import { PUBLIC_KEY } from '../../decorators';
 import { ForbiddenException } from '../../exceptions';
@@ -160,7 +165,12 @@ const METODOS_DE_LEITURA: ReadonlySet<string> = new Set([
 
 @Injectable()
 export class ActivePlanGuard extends PlanMetadataGuard implements CanActivate {
-  constructor(reflector: Reflector, plans: SubscriptionPlanService) {
+  constructor(
+    reflector: Reflector,
+    plans: SubscriptionPlanService,
+    private readonly quotas: EntitlementService,
+    private readonly contexts: RequestContextStorage,
+  ) {
     super(reflector, plans);
   }
 
@@ -189,7 +199,10 @@ export class ActivePlanGuard extends PlanMetadataGuard implements CanActivate {
       context,
       ActivePlanGuard.name,
     );
-    if (this.plans.grantsAccess(entitlements)) return true;
+    if (this.plans.grantsAccess(entitlements)) {
+      await this.checkAdjustment(context);
+      return true;
+    }
 
     // Acesso somente de leitura preserva o histórico de quem já teve acesso.
     // Uma contratação inicial ainda não paga não concede acesso ao produto.
@@ -202,6 +215,84 @@ export class ActivePlanGuard extends PlanMetadataGuard implements CanActivate {
     if (METODOS_DE_LEITURA.has((metodo ?? '').toUpperCase())) return true;
 
     throw new SubscriptionExpiredException();
+  }
+
+  private async checkAdjustment(context: ExecutionContext): Promise<void> {
+    const request = context.switchToHttp().getRequest<IdentityRequest>();
+    if (!['POST', 'PUT', 'PATCH'].includes(request.method)) return;
+    const required =
+      this.reflector.getAllAndOverride<readonly string[]>(
+        REQUIRED_CAPABILITIES_KEY,
+        [context.getHandler(), context.getClass()],
+      ) ?? [];
+    const mapping: Record<string, PlanCapability> = {
+      crm: PlanCapability.CUSTOMERS,
+      assets: PlanCapability.EQUIPMENT,
+      operations: PlanCapability.OPERATIONS,
+      field: PlanCapability.FIELD_OPERATIONS,
+    };
+    const capabilities = [
+      ...new Set(
+        required
+          .map((r) => mapping[r.split('.')[0]!])
+          .filter((c): c is PlanCapability => !!c),
+      ),
+    ];
+    const controllerPath = this.reflector.getAllAndOverride<string>(
+      PATH_METADATA,
+      [context.getClass()],
+    );
+    const handlerPath = this.reflector.getAllAndOverride<string>(
+      PATH_METADATA,
+      [context.getHandler()],
+    );
+    if (
+      typeof controllerPath === 'string' &&
+      controllerPath.startsWith('mobile/field') &&
+      !(
+        typeof handlerPath === 'string' &&
+        (handlerPath.startsWith('me/') || handlerPath === 'sync/pull')
+      )
+    ) {
+      capabilities.push(
+        PlanCapability.OPERATIONS,
+        PlanCapability.FIELD_OPERATIONS,
+      );
+    }
+    // Alterações cadastrais e desativações precisam continuar disponíveis para adequação.
+    const checked =
+      request.method === 'POST'
+        ? capabilities
+        : capabilities.filter(
+            (c) =>
+              c === PlanCapability.OPERATIONS ||
+              c === PlanCapability.FIELD_OPERATIONS,
+          );
+    if (!checked.length) return;
+    const identity = this.identity(context);
+    await this.contexts.run(
+      new RequestContext({
+        requestId: generateUuidV7(),
+        actorType: 'INTERNAL_USER',
+        userId: identity.id,
+        organizationId: identity.organizationId,
+        businessUnitId: identity.businessUnitId,
+        businessUnitIds: identity.businessUnitIds ?? [],
+        roles: identity.roles ?? [],
+        permissions: identity.permissions ?? [],
+        isOrganizationOwner: identity.isOrganizationOwner,
+        ip: request.ip ?? null,
+        userAgent: null,
+        locale: 'pt-BR',
+      }),
+      async () => {
+        for (const capability of checked)
+          await this.quotas.assertWithinAdjustedAllocation(
+            identity.organizationId,
+            capability,
+          );
+      },
+    );
   }
 }
 

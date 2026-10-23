@@ -1,3 +1,4 @@
+import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
  * E2E do domínio PMOC.
  *
@@ -172,6 +173,7 @@ describe('PMOC (e2e)', () => {
     const registration = await http()
       .post('/api/v1/identity/register')
       .send({
+        ...REGISTRATION_LEGAL_ACCEPTANCE,
         email,
         firstName: 'Pmoc',
         lastName: 'E2E',

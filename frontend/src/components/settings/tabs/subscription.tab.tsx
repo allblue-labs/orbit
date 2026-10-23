@@ -35,7 +35,6 @@ import { PlanUsageSection } from "@/components/billing/plan-usage.section";
 import { PanelError, PanelLoading } from "@/components/panels";
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -53,6 +52,7 @@ import {
   useOpenBillingPortal,
 } from "@/hooks/billing/use-billing";
 import { formatDate } from "@/lib/formatters";
+import { notifySuccess } from "@/lib/notify";
 import { diasAte } from "@/components/billing/billing-format";
 import { BILLING_INTERVAL_LABELS } from "@/types/billing";
 
@@ -77,6 +77,7 @@ export function SubscriptionSettingsTab() {
 
   const [confirmacao, setConfirmacao] = useState<Confirmacao | null>(null);
   const [actionError, setActionError] = useState<unknown>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   /**
    * Trava de mesmo tique.
@@ -163,7 +164,7 @@ export function SubscriptionSettingsTab() {
       });
       if (assinatura)
         rememberBillingTarget({
-          subscriptionId: assinatura.id,
+          subscriptionId: sessao.subscriptionId ?? assinatura.id,
           planCode,
           billingInterval: intervalo,
         });
@@ -182,7 +183,10 @@ export function SubscriptionSettingsTab() {
       if (!confirmacao || !assinatura)
         throw new Error("Atualize a página e selecione o plano novamente.");
       if (confirmacao.tipo === "CANCELAR") {
-        await cancelar.mutateAsync({ expectedVersion: assinatura.version });
+        await cancelar.mutateAsync({
+          expectedVersion: assinatura.version,
+          acknowledgeDataDeletion: true,
+        });
       } else {
         const sessao = await trocar.mutateAsync({
           expectedVersion: assinatura.version,
@@ -190,6 +194,23 @@ export function SubscriptionSettingsTab() {
           billingInterval: confirmacao.intervalo,
           acknowledgeTrialEnd: assinatura.status === "TRIALING",
         });
+        if ("kind" in sessao) {
+          setActionMessage(
+            sessao.kind === "TRIAL_STARTED"
+              ? `Seu teste gratuito no Essencial começou e vai até ${formatDate(sessao.endsAt)}. Nenhuma cobrança foi realizada.`
+              : `Troca agendada para ${formatDate(sessao.effectiveAt)}. Seu plano e seus créditos atuais continuam até essa data.`,
+          );
+          if (sessao.kind === "TRIAL_STARTED")
+            notifySuccess(
+              "Seu teste gratuito no Essencial começou",
+              `Você tem acesso gratuito até ${formatDate(sessao.endsAt)}. Nenhuma cobrança foi realizada.`,
+            );
+          clearBillingTarget();
+          await overview.refetch();
+          await refreshSession();
+          setConfirmacao(null);
+          return;
+        }
         rememberBillingTarget({
           subscriptionId: assinatura.id,
           planCode: confirmacao.planCode,
@@ -203,6 +224,14 @@ export function SubscriptionSettingsTab() {
   return (
     <div className="space-y-6">
       {!confirmacao ? <MutationError error={actionError} /> : null}
+      {actionMessage ? (
+        <p
+          role="status"
+          className="rounded-lg border border-primary/25 bg-primary/5 p-4 text-sm"
+        >
+          {actionMessage}
+        </p>
+      ) : null}
       {assinatura?.status === "PENDING_PAYMENT" ? (
         <div
           role="status"
@@ -255,6 +284,7 @@ export function SubscriptionSettingsTab() {
         </p>
       ) : null}
 
+      <RetentionBanner overview={dados} />
       <BillingBanner overview={dados} />
 
       {assinatura?.status !== "PENDING_PAYMENT" ? (
@@ -318,6 +348,58 @@ export function SubscriptionSettingsTab() {
  * um selo pequeno no cartão não daria conta. Erro do provedor não vira texto
  * técnico: o código público já traz a mensagem certa.
  */
+function RetentionBanner({
+  overview,
+}: {
+  overview: NonNullable<ReturnType<typeof useBillingOverview>["data"]>;
+}) {
+  const subscription = overview.subscription;
+  const deadline =
+    overview.dataRetentionEndsAt ?? subscription?.dataRetentionEndsAt;
+  const active =
+    subscription?.status === "ACTIVE" || subscription?.status === "TRIALING";
+  if (overview.dataPurgedAt && !active)
+    return (
+      <div
+        role="status"
+        className="rounded-xl border border-border bg-muted/40 p-4 text-sm"
+      >
+        <p className="font-semibold">
+          Os dados operacionais anteriores foram excluídos
+        </p>
+        <p className="mt-1 text-muted-foreground">
+          O prazo de retorno terminou. Uma nova contratação começa com a base
+          operacional vazia. Os registros mínimos de conta, aceite e cobrança
+          permanecem separados.
+        </p>
+      </div>
+    );
+  if (!deadline) return null;
+  return (
+    <div
+      role="status"
+      className="space-y-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm"
+    >
+      <p className="font-semibold">
+        {active
+          ? "Renovação cancelada; seu período continua disponível"
+          : "Escolha um plano para continuar com seus dados"}
+      </p>
+      <p>
+        {active
+          ? `Seu plano e seus limites continuam até ${formatDate(subscription!.billingPeriod.end)}. Não haverá renovação automática.`
+          : "O acesso operacional terminou. Você pode recontratar e continuar com a mesma organização."}
+      </p>
+      <p>
+        Os dados operacionais serão mantidos por 30 dias após o fim do acesso,
+        até <strong>{new Date(deadline).toLocaleString("pt-BR")}</strong>. Sem
+        pagamento de uma nova contratação até esse prazo, serão excluídos
+        automaticamente. Apenas abrir o pagamento não preserva os dados.
+      </p>
+    </div>
+  );
+}
+
 function BillingBanner({
   overview,
 }: {
@@ -380,15 +462,17 @@ function ConfirmacaoDialog({
               Sua assinatura continuará ativa até{" "}
               {formatDate(assinatura.billingPeriod.end)}. Depois dessa data, ela
               não será renovada. Você pode voltar atrás enquanto o período
-              corre.
+              corre. Os dados operacionais serão mantidos por 30 dias após o fim
+              do acesso. Sem recontratação, serão excluídos automaticamente ao
+              final desse prazo.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <MutationError error={error} />
           <AlertDialogFooter>
             <AlertDialogCancel disabled={pending}>Voltar</AlertDialogCancel>
-            <AlertDialogAction onClick={onConfirm} disabled={pending}>
+            <Button type="button" onClick={onConfirm} disabled={pending}>
               Cancelar renovação
-            </AlertDialogAction>
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -399,6 +483,11 @@ function ConfirmacaoDialog({
     (item) => item.code === confirmacao.planCode,
   );
   const encerraTeste = assinatura.status === "TRIALING";
+  const iniciaTeste =
+    assinatura.status === "PENDING_PAYMENT" &&
+    confirmacao.planCode === "ESSENTIAL" &&
+    overview.billing.canStartEssentialTrial === true;
+  const agendada = assinatura.status === "ACTIVE";
   const diasRestantes = diasAte(
     assinatura.trial?.endsAt ?? assinatura.billingPeriod.end,
   );
@@ -414,7 +503,22 @@ function ConfirmacaoDialog({
             Mudar para {destino?.label ?? "outro plano"}?
           </AlertDialogTitle>
           <AlertDialogDescription>
-            {encerraTeste ? (
+            {iniciaTeste ? (
+              <>
+                Você tem direito a 30 dias gratuitos no Essencial. O teste
+                começa agora, sem pagamento e sem perder dias. Ao final, será
+                necessário contratar para continuar.
+              </>
+            ) : agendada ? (
+              <>
+                Seu plano, créditos e limites atuais continuam até{" "}
+                {formatDate(assinatura.billingPeriod.end)}. O novo valor será
+                cobrado somente na renovação, quando os novos limites entram em
+                vigor. Se houver excedentes, você terá 48 horas para
+                regularizar. Depois, os recursos afetados serão bloqueados até a
+                adequação. Seus dados serão preservados.
+              </>
+            ) : encerraTeste ? (
               <>
                 O teste gratuito de 30 dias está disponível apenas no Essencial.
                 Ao concluir o pagamento de {destino?.label ?? "outro plano"},
@@ -451,7 +555,13 @@ function ConfirmacaoDialog({
         <AlertDialogFooter>
           <AlertDialogCancel disabled={pending}>Voltar</AlertDialogCancel>
           <Button type="button" onClick={onConfirm} disabled={pending}>
-            {pending ? "Abrindo pagamento…" : "Continuar para o pagamento"}
+            {pending
+              ? "Processando…"
+              : iniciaTeste
+                ? "Começar 30 dias grátis"
+                : agendada
+                  ? "Agendar mudança na renovação"
+                  : "Continuar para o pagamento"}
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>

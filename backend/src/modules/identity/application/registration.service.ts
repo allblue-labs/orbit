@@ -1,3 +1,4 @@
+import { LEGAL_DOCUMENT_VERSION } from '../../../contracts/modules/legal/legal.read-models';
 import { Inject, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { IHashProvider } from '../../../contracts';
@@ -20,6 +21,15 @@ export class RegistrationService {
   ) {}
 
   async register(input: RegisterOrganizationDto, metadata: SessionMetadata) {
+    if (
+      input.acceptTerms !== true ||
+      input.termsVersion !== LEGAL_DOCUMENT_VERSION ||
+      input.privacyVersion !== LEGAL_DOCUMENT_VERSION
+    ) {
+      throw new ValidationException(
+        'The current Terms of Use and Privacy Policy must be accepted',
+      );
+    }
     const normalized = {
       ...input,
       email: input.email.trim().toLowerCase(),
@@ -32,6 +42,8 @@ export class RegistrationService {
         normalized,
         await this.hashes.hash(input.password),
         slug,
+        {},
+        metadata,
       );
       if (!created) throw new ValidationException('Invalid plan');
       /**

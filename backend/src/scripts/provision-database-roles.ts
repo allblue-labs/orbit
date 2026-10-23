@@ -191,6 +191,7 @@ async function provision(): Promise<void> {
       'plan_usage_events',
       'subscription_trial_grants',
       'organization_subscriptions',
+      'organization_legal_acceptances',
       'billing_customers',
       /**
        * A caixa de entrada guarda que um evento já foi processado. Apagá-la
@@ -209,12 +210,15 @@ async function provision(): Promise<void> {
       );
     }
 
-    /** O razão de uso não é corrigido nem por `UPDATE`: só acrescido. */
+    /** Razão de uso e comprovantes de aceite são somente acrescidos. */
     await admin.query(
       `DO $$
          BEGIN
            IF to_regclass('public.plan_usage_events') IS NOT NULL THEN
              EXECUTE 'REVOKE UPDATE ON TABLE public.plan_usage_events FROM ${role}';
+           END IF;
+           IF to_regclass('public.organization_legal_acceptances') IS NOT NULL THEN
+             EXECUTE 'REVOKE UPDATE ON TABLE public.organization_legal_acceptances FROM ${role}';
            END IF;
          END $$`,
     );

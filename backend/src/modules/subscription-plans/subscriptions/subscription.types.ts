@@ -81,7 +81,7 @@ export function allowsInitialCheckout(status: SubscriptionStatus): boolean {
 const TRANSICOES: Readonly<
   Record<SubscriptionStatus, readonly SubscriptionStatus[]>
 > = {
-  PENDING_PAYMENT: ['ACTIVE', 'CANCELED', 'EXPIRED'],
+  PENDING_PAYMENT: ['TRIALING', 'ACTIVE', 'CANCELED', 'EXPIRED'],
   TRIALING: ['ACTIVE', 'CANCELED', 'EXPIRED'],
   ACTIVE: ['PAST_DUE', 'GRACE_PERIOD', 'SUSPENDED', 'CANCELED', 'EXPIRED'],
   PAST_DUE: ['ACTIVE', 'GRACE_PERIOD', 'SUSPENDED', 'CANCELED'],

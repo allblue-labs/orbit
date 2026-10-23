@@ -21,6 +21,7 @@ import type {
   ChangePlanInput,
   CreateCheckoutInput,
   SubscriptionVersionInput,
+  CancelSubscriptionInput,
 } from "@/types/billing";
 
 /**
@@ -61,7 +62,7 @@ export function useOpenBillingPortal() {
 export function useCancelRenewal() {
   return useApiMutation<
     Awaited<ReturnType<typeof billingService.cancelRenewal>>,
-    SubscriptionVersionInput
+    CancelSubscriptionInput
   >((input) => billingService.cancelRenewal(input), {
     invalidate: [billingService.keys.module()],
   });

@@ -51,6 +51,9 @@ export function SubscriptionExpiredNotice() {
   const notice = expiredSubscriptionNotice(session.session);
   if (!notice) return null;
   const venceuEm = dataDeVencimento(notice.end);
+  const purged =
+    session.session.authenticated &&
+    !!session.session.subscription?.dataPurgedAt;
 
   return (
     <Dialog
@@ -77,14 +80,38 @@ export function SubscriptionExpiredNotice() {
           primeiro impulso é ligar para o suporte perguntando por eles.
         */}
         <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm">
-          <p className="font-medium">Enquanto isso, você continua podendo:</p>
-          <ul className="mt-2 space-y-1 text-muted-foreground">
-            <li>· consultar clientes, atendimentos e o histórico;</li>
-            <li>· baixar os documentos e relatórios já emitidos.</li>
-          </ul>
-          <p className="mt-2 text-muted-foreground">
-            O que fica pausado é criar e alterar registros.
-          </p>
+          {purged ? (
+            <p className="font-medium">
+              O prazo de 30 dias terminou e os dados operacionais anteriores
+              foram excluídos. Você pode contratar um plano para começar com uma
+              base vazia.
+            </p>
+          ) : (
+            <>
+              <p className="font-medium">
+                Enquanto isso, você continua podendo:
+              </p>
+              <ul className="mt-2 space-y-1 text-muted-foreground">
+                <li>· consultar clientes, atendimentos e o histórico;</li>
+                <li>· baixar os documentos e relatórios já emitidos.</li>
+              </ul>
+              <p className="mt-2 text-muted-foreground">
+                O que fica pausado é criar e alterar registros.
+              </p>
+            </>
+          )}
+          {session.session.authenticated &&
+          session.session.subscription?.dataRetentionEndsAt ? (
+            <p className="mt-3 font-medium">
+              Os dados operacionais serão mantidos por 30 dias após o fim do
+              acesso, até{" "}
+              {dataDeVencimento(
+                session.session.subscription.dataRetentionEndsAt,
+              )}
+              . Sem recontratação, serão excluídos automaticamente ao final
+              desse prazo.
+            </p>
+          ) : null}
         </div>
 
         <DialogFooter>

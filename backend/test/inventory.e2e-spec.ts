@@ -1,3 +1,4 @@
+import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
  * E2E do Inventory Engine.
  *
@@ -101,6 +102,7 @@ describe('Inventory (e2e)', () => {
     const registration = await http()
       .post('/api/v1/identity/register')
       .send({
+        ...REGISTRATION_LEGAL_ACCEPTANCE,
         email: `inv.${label}.${suffix}@orbit.local`,
         firstName: 'Inv',
         lastName: 'E2E',

@@ -135,9 +135,23 @@ describe('projeção do estado da assinatura', () => {
   });
 
   describe('mudança programada', () => {
+    it('aguarda confirmação financeira de planos geridos pelo Stripe mesmo após o vencimento', () => {
+      expect(
+        project(
+          {
+            ...base,
+            providerManaged: true,
+            pendingEffectiveAt: iso('2026-10-15T00:00:00.000Z'),
+          },
+          iso('2026-10-16T00:00:00.000Z'),
+        ).pendingApplied,
+      ).toBe(false);
+    });
+
     it('só vale a partir da data marcada', () => {
       const comPendencia = {
         ...base,
+        providerManaged: false,
         pendingEffectiveAt: iso('2026-10-15T00:00:00.000Z'),
       };
       expect(

@@ -1,3 +1,4 @@
+import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
  * Cadastro de pessoas da equipe, senha temporária e recuperação de senha.
  *
@@ -97,6 +98,7 @@ describe('Team members, temporary password and recovery (e2e)', () => {
     const response = await http()
       .post('/api/v1/identity/register')
       .send({
+        ...REGISTRATION_LEGAL_ACCEPTANCE,
         email,
         firstName: 'Team',
         lastName: label,

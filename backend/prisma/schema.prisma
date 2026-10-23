@@ -120,12 +120,12 @@ model User {
   commissionCancellationsReceived    CommissionCancellation[]       @relation("CommissionCancellationUser")
   commissionCancellationsMade        CommissionCancellation[]       @relation("CommissionCancelledBy")
   commissionCancellationsRevoked     CommissionCancellation[]       @relation("CommissionCancellationRevokedBy")
+  operationCancellationsRequested    OperationCancellationRequest[] @relation("OperationCancellationRequestedBy")
+  operationCancellationsResolved     OperationCancellationRequest[] @relation("OperationCancellationResolvedBy")
+  operationMaterialsCreated          OperationMaterial[]            @relation("OperationMaterialCreatedBy")
 
   @@index([status, deletedAt])
   @@map("users")
-  operationCancellationsRequested OperationCancellationRequest[] @relation("OperationCancellationRequestedBy")
-  operationCancellationsResolved  OperationCancellationRequest[] @relation("OperationCancellationResolvedBy")
-  operationMaterialsCreated       OperationMaterial[]           @relation("OperationMaterialCreatedBy")
 }
 
 model Credential {
@@ -245,6 +245,8 @@ model Organization {
   /// que não tenha logo próprio — e é a única marca que existe para quem opera
   /// com uma unidade só.
   logoUrl                String?   @map("logo_url") @db.Text
+  dataPurgeStartedAt     DateTime? @map("data_purge_started_at") @db.Timestamptz(3)
+  dataPurgedAt           DateTime? @map("data_purged_at") @db.Timestamptz(3)
   settings               Json?     @db.JsonB
   createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt              DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -258,6 +260,7 @@ model Organization {
   usages                        PlanUsage[]
   usageEvents                   PlanUsageEvent[]
   subscriptions                 OrganizationSubscription[]
+  legalAcceptances              OrganizationLegalAcceptance[]
   trialGrants                   SubscriptionTrialGrant[]
   billingCustomers              BillingCustomer[]
   billingCheckoutAttempts       BillingCheckoutAttempt[]
@@ -337,23 +340,23 @@ model Organization {
   customerServiceRequests       CustomerServiceRequest[]
   customerServiceRequestEvents  CustomerServiceRequestEvent[]
 
-  pmocCodeSequences       PmocCodeSequence[]
-  serviceOrderSequence    ServiceOrderSequence?
-  productSkuSequences     ProductSkuSequence[]
-  assetInternalCodes      AssetInternalCodeSequence?
-  receiptSequence         ReceiptSequence?
-  pmocUnits               PmocUnit[]
-  rvtMaintenanceTypes     RvtMaintenanceType[]
-  commissionPolicy        CommissionPolicy?
-  commissionPayments      CommissionPayment[]
-  commissionPaymentItems  CommissionPaymentItem[]
-  commissionCancellations CommissionCancellation[]
+  pmocCodeSequences             PmocCodeSequence[]
+  serviceOrderSequence          ServiceOrderSequence?
+  productSkuSequences           ProductSkuSequence[]
+  assetInternalCodes            AssetInternalCodeSequence?
+  receiptSequence               ReceiptSequence?
+  pmocUnits                     PmocUnit[]
+  rvtMaintenanceTypes           RvtMaintenanceType[]
+  commissionPolicy              CommissionPolicy?
+  commissionPayments            CommissionPayment[]
+  commissionPaymentItems        CommissionPaymentItem[]
+  commissionCancellations       CommissionCancellation[]
+  operationCancellationRequests OperationCancellationRequest[]
+  operationMaterials            OperationMaterial[]
 
   @@index([ownerUserId, status])
   @@index([planId, subscriptionStatus])
   @@map("organizations")
-  operationCancellationRequests OperationCancellationRequest[]
-  operationMaterials            OperationMaterial[]
 }
 
 model BusinessUnit {
@@ -427,20 +430,20 @@ model BusinessUnit {
 
   automationRules AutomationRule[]
 
-  managementReports       ManagementReport[]
-  pmocPlans               PmocPlan[]
-  fieldEvidenceUploads    FieldEvidenceUpload[]
-  fieldEvidence           FieldEvidence[]
-  customerServiceRequests CustomerServiceRequest[]
-  commissionPayments      CommissionPayment[]
+  managementReports             ManagementReport[]
+  pmocPlans                     PmocPlan[]
+  fieldEvidenceUploads          FieldEvidenceUpload[]
+  fieldEvidence                 FieldEvidence[]
+  customerServiceRequests       CustomerServiceRequest[]
+  commissionPayments            CommissionPayment[]
+  operationCancellationRequests OperationCancellationRequest[]
+  operationMaterials            OperationMaterial[]
 
   @@unique([organizationId, slug])
   @@unique([organizationId, documentType, documentNumber])
   @@index([organizationId, status, deletedAt])
   @@index([organizationId, isPrimary])
   @@map("business_units")
-  operationCancellationRequests OperationCancellationRequest[]
-  operationMaterials            OperationMaterial[]
 }
 
 model OrganizationMembership {
@@ -675,16 +678,21 @@ model OrganizationSubscription {
   cancelAtPeriodEnd Boolean   @default(false) @map("cancel_at_period_end")
   canceledAt        DateTime? @map("canceled_at") @db.Timestamptz(3)
 
+  dataRetentionEndsAt DateTime? @map("data_retention_ends_at") @db.Timestamptz(3)
+
   graceStartsAt DateTime? @map("grace_starts_at") @db.Timestamptz(3)
   graceEndsAt   DateTime? @map("grace_ends_at") @db.Timestamptz(3)
 
-  /// Mudança programada. Rebaixar vale no próximo período; subir vale agora e
-  /// não passa por aqui.
+  /// Toda troca de plano pago vale na renovação, preservando o período atual.
   pendingPlanCode             String?   @map("pending_plan_code") @db.VarChar(60)
   pendingBillingInterval      String?   @map("pending_billing_interval") @db.VarChar(20)
   pendingCatalogVersion       Int?      @map("pending_catalog_version")
   pendingEntitlementsSnapshot Json?     @map("pending_entitlements_snapshot") @db.JsonB
   pendingEffectiveAt          DateTime? @map("pending_effective_at") @db.Timestamptz(3)
+
+  /// Prazo de adequação após redução de limites. Nunca remove dados.
+  limitsChangedAt              DateTime? @map("limits_changed_at") @db.Timestamptz(3)
+  previousEntitlementsSnapshot Json?     @map("previous_entitlements_snapshot") @db.JsonB
 
   startedAt DateTime  @default(now()) @map("started_at") @db.Timestamptz(3)
   /// Preenchido quando a assinatura deixa de ser a corrente. Histórico fica.
@@ -1517,8 +1525,8 @@ model Operation {
   /// Nulo é o estado de quem nunca precisou disso — e é por isso que a
   /// migração marca como autorizado tudo o que já existia: ligar a chave não
   /// pode esconder retroativamente o trabalho do dia.
-  authorizedAt      DateTime? @map("authorized_at") @db.Timestamptz(3)
-  authorizedById    String?   @map("authorized_by_id") @db.Uuid
+  authorizedAt   DateTime? @map("authorized_at") @db.Timestamptz(3)
+  authorizedById String?   @map("authorized_by_id") @db.Uuid
 
   /// O técnico em campo pode ver quanto este atendimento vale?
   ///
@@ -1528,14 +1536,14 @@ model Operation {
   /// pelo dono. Ligar é um ato por atendimento, na tela que o configura.
   ///
   /// O valor manual tem precedência; sem ele, usa-se o orçamento vinculado.
-  amountVisibleInField Boolean @default(false) @map("amount_visible_in_field")
+  amountVisibleInField Boolean   @default(false) @map("amount_visible_in_field")
   /// Valor combinado diretamente para este atendimento. Nulo usa o orçamento.
-  manualAmount Decimal? @map("manual_amount") @db.Decimal(14, 2)
-  startedByUserId   String?   @map("started_by_user_id") @db.Uuid
-  completedByUserId String?   @map("completed_by_user_id") @db.Uuid
-  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
-  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(3)
+  manualAmount         Decimal?  @map("manual_amount") @db.Decimal(14, 2)
+  startedByUserId      String?   @map("started_by_user_id") @db.Uuid
+  completedByUserId    String?   @map("completed_by_user_id") @db.Uuid
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt            DateTime? @map("deleted_at") @db.Timestamptz(3)
 
   organization               Organization                   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   businessUnit               BusinessUnit                   @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
@@ -1568,6 +1576,8 @@ model Operation {
   pmocEquipmentExecution  PmocEquipmentExecution?
   commissionItems         CommissionPaymentItem[]
   commissionCancellations CommissionCancellation[]
+  cancellationRequests    OperationCancellationRequest[]
+  materials               OperationMaterial[]
 
   @@index([organizationId, code])
   @@index([organizationId, businessUnitId, status, scheduledStart])
@@ -1580,8 +1590,6 @@ model Operation {
   /// A fila do técnico filtra por autorização quando a organização a exige.
   @@index([organizationId, authorizedAt])
   @@map("operations")
-  cancellationRequests OperationCancellationRequest[]
-  materials            OperationMaterial[]
 }
 
 // -----------------------------------------------------------------------------
@@ -2145,7 +2153,7 @@ model StorageFile {
   memberCertifications   MemberCertification[]
   professionalSignatures UserSignature[]
   pmocSignatureLinks     PmocPlanSignatureLink[]
-  userAvatars            User[]                @relation("UserAvatarFile")
+  userAvatars            User[]                  @relation("UserAvatarFile")
   fieldEvidenceUploads   FieldEvidenceUpload[]
   fieldEvidence          FieldEvidence[]
 
@@ -2240,15 +2248,15 @@ model FieldEvidence {
   status                   String    @default("FINALIZED") @db.VarChar(20)
   createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  organization           Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  businessUnit           BusinessUnit            @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
-  upload                 FieldEvidenceUpload     @relation(fields: [uploadId], references: [id], onDelete: Restrict)
-  operation              Operation?              @relation(fields: [operationId], references: [id], onDelete: Restrict)
+  organization           Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  businessUnit           BusinessUnit                  @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
+  upload                 FieldEvidenceUpload           @relation(fields: [uploadId], references: [id], onDelete: Restrict)
+  operation              Operation?                    @relation(fields: [operationId], references: [id], onDelete: Restrict)
   cancellationRequest    OperationCancellationRequest? @relation(fields: [cancellationRequestId], references: [id], onDelete: SetNull)
-  pmocEquipmentExecution PmocEquipmentExecution? @relation(fields: [pmocEquipmentExecutionId], references: [id], onDelete: Restrict)
-  rvtExecution           RvtExecution?           @relation(fields: [rvtExecutionId], references: [id], onDelete: Restrict)
-  storageFile            StorageFile             @relation(fields: [storageFileId], references: [id], onDelete: Restrict)
-  capturedBy             User                    @relation("FieldEvidenceCapturedBy", fields: [capturedByUserId], references: [id], onDelete: Restrict)
+  pmocEquipmentExecution PmocEquipmentExecution?       @relation(fields: [pmocEquipmentExecutionId], references: [id], onDelete: Restrict)
+  rvtExecution           RvtExecution?                 @relation(fields: [rvtExecutionId], references: [id], onDelete: Restrict)
+  storageFile            StorageFile                   @relation(fields: [storageFileId], references: [id], onDelete: Restrict)
+  capturedBy             User                          @relation("FieldEvidenceCapturedBy", fields: [capturedByUserId], references: [id], onDelete: Restrict)
 
   @@index([organizationId, businessUnitId, createdAt])
   @@index([operationId, createdAt])
@@ -4273,15 +4281,15 @@ model PmocPlanSignatureLink {
   revokedAt      DateTime? @map("revoked_at") @db.Timestamptz(3)
 
   /// Quando o contratante assinou. Nulo enquanto o link está pendente.
-  signedAt DateTime? @map("signed_at") @db.Timestamptz(3)
+  signedAt        DateTime? @map("signed_at") @db.Timestamptz(3)
   /// Quem declarou assinar — nome e documento são digitados por ele.
-  signerName     String? @map("signer_name") @db.VarChar(180)
-  signerDocument String? @map("signer_document") @db.VarChar(40)
-  signerEmail    String? @map("signer_email") @db.VarChar(180)
+  signerName      String?   @map("signer_name") @db.VarChar(180)
+  signerDocument  String?   @map("signer_document") @db.VarChar(40)
+  signerEmail     String?   @map("signer_email") @db.VarChar(180)
   /// Evidência de onde veio o aceite. Não identifica ninguém sozinha, e é o que
   /// sobra para contestar uma assinatura meses depois.
-  signedIp        String? @map("signed_ip") @db.VarChar(64)
-  signedUserAgent String? @map("signed_user_agent") @db.VarChar(400)
+  signedIp        String?   @map("signed_ip") @db.VarChar(64)
+  signedUserAgent String?   @map("signed_user_agent") @db.VarChar(400)
 
   /// A imagem da assinatura, no storage — como as assinaturas profissionais.
   signatureFileId String? @map("signature_file_id") @db.Uuid
@@ -4731,7 +4739,7 @@ model OperationMaterial {
   ///
   /// A unicidade é um índice parcial no banco (`om_command_unique`), por causa
   /// dos nulos.
-  commandId   String? @map("command_id") @db.VarChar(160)
+  commandId String? @map("command_id") @db.VarChar(160)
 
   createdById String?   @map("created_by_id") @db.Uuid
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -4748,4 +4756,37 @@ model OperationMaterial {
   @@index([operationId, origin, createdAt])
   @@index([organizationId, businessUnitId, createdAt])
   @@map("operation_materials")
+}
+
+/// Registro da manifestação expressa no cadastro; conservado separado da operação.
+model OrganizationLegalAcceptance {
+  id                String       @id @default(uuid(7)) @db.Uuid
+  organizationId    String       @map("organization_id") @db.Uuid
+  userId            String       @map("user_id") @db.Uuid
+  termsVersion      String       @map("terms_version") @db.VarChar(40)
+  privacyVersion    String       @map("privacy_version") @db.VarChar(40)
+  acceptedAt        DateTime     @default(now()) @map("accepted_at") @db.Timestamptz(3)
+  ipAddress         String?      @map("ip_address") @db.VarChar(80)
+  userAgent         String?      @map("user_agent") @db.VarChar(512)
+  documentsSnapshot Json         @map("documents_snapshot") @db.JsonB
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, userId, acceptedAt], map: "organization_legal_acceptances_lookup_idx")
+  @@map("organization_legal_acceptances")
+}
+
+/// Outbox: remoção de arquivo é repetida até o storage confirmar a exclusão.
+model StorageDeletionJob {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  provider       String   @db.VarChar(40)
+  bucket         String   @db.VarChar(160)
+  objectKey      String   @map("object_key") @db.VarChar(1024)
+  attempts       Int      @default(0)
+  nextAttemptAt  DateTime @default(now()) @map("next_attempt_at") @db.Timestamptz(3)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([provider, bucket, objectKey])
+  @@index([nextAttemptAt], map: "storage_deletion_jobs_due_idx")
+  @@map("storage_deletion_jobs")
 }

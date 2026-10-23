@@ -1,3 +1,4 @@
+import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
  * E2E de Row Level Security — com o papel restrito, contra o Postgres.
  *
@@ -163,6 +164,7 @@ describe('Row Level Security (e2e)', () => {
     const registration = await http()
       .post('/api/v1/identity/register')
       .send({
+        ...REGISTRATION_LEGAL_ACCEPTANCE,
         email,
         firstName: 'Rls',
         lastName: 'E2E',

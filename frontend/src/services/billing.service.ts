@@ -13,10 +13,12 @@ import type {
   BillingOverview,
   BillingPortalResult,
   ChangePlanInput,
+  ChangePlanResult,
   CheckoutSessionResult,
   CreateCheckoutInput,
   OrganizationSubscription,
   SubscriptionVersionInput,
+  CancelSubscriptionInput,
 } from "@/types/billing";
 
 const RESOURCE = "billing";
@@ -50,7 +52,7 @@ export const billingService = {
       .then(requireBillingRedirect),
 
   cancelRenewal: (
-    input: SubscriptionVersionInput,
+    input: CancelSubscriptionInput,
   ): Promise<OrganizationSubscription> =>
     apiClient.post<OrganizationSubscription>(
       "/organizations/current/subscription/cancel",
@@ -65,13 +67,20 @@ export const billingService = {
       input,
     ),
 
-  changePlan: (input: ChangePlanInput): Promise<BillingPortalResult> =>
+  changePlan: (input: ChangePlanInput): Promise<ChangePlanResult> =>
     apiClient
-      .post<BillingPortalResult>(
+      .post<ChangePlanResult>(
         "/organizations/current/subscription/change-plan",
         input,
       )
-      .then(requireBillingRedirect),
+      .then((result) => {
+        if (
+          "kind" in result &&
+          (result.kind === "TRIAL_STARTED" || result.kind === "SCHEDULED")
+        )
+          return result;
+        return requireBillingRedirect(result as BillingPortalResult);
+      }),
 
   cancelScheduledChange: (
     input: SubscriptionVersionInput,

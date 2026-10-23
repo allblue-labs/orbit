@@ -109,6 +109,7 @@ describe('StripeBillingProvider subscription commands', () => {
     const billingPortal = {
       configurations: {
         list: jest.fn().mockResolvedValue({ data: [portalConfiguration] }),
+        create: jest.fn().mockResolvedValue({ id: 'bpc_orbit_administration' }),
       },
       sessions: {
         create: jest
@@ -160,6 +161,29 @@ describe('StripeBillingProvider subscription commands', () => {
     billingInterval: BillingInterval.MONTHLY,
     idempotencyKey: 'orbit:change-plan:stable',
   } as const;
+
+  it('portal geral não oferece troca imediata e reutiliza configuração restrita', async () => {
+    const { provider, billingPortal } = setup();
+    await provider.createBillingPortalSession({
+      providerCustomerId: 'cus_test_1',
+    });
+    await provider.createBillingPortalSession({
+      providerCustomerId: 'cus_test_1',
+    });
+    expect(billingPortal.configurations.create).toHaveBeenCalledTimes(1);
+    expect(billingPortal.configurations.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        features: expect.objectContaining({
+          subscription_update: { enabled: false },
+          subscription_cancel: { enabled: false },
+        }) as unknown,
+      }),
+      expect.anything(),
+    );
+    expect(billingPortal.sessions.create).toHaveBeenCalledWith(
+      expect.objectContaining({ configuration: 'bpc_orbit_administration' }),
+    );
+  });
 
   it('abre confirmação da assinatura existente sem cobrar ou alterar itens antes da visita', async () => {
     const { provider, billingPortal, subscriptions, config } = setup();

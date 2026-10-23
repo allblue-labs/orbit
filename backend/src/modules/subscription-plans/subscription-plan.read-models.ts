@@ -57,4 +57,10 @@ export interface OrganizationEntitlementsReadModel {
   window: { start: string; end: string };
   allocation: readonly ResourceEntitlementReadModel[];
   usage: readonly ResourceEntitlementReadModel[];
+  limitAdjustment?: {
+    effectiveAt: string;
+    deadline: string;
+    blocked: boolean;
+    resources: readonly ResourceEntitlementReadModel[];
+  } | null;
 }

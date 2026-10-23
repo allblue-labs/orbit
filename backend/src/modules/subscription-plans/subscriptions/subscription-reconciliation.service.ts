@@ -20,6 +20,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../database';
 import type { PrismaTransactionClient } from '../../../database/prisma.types';
+import { fromSubscription } from '../entitlements/effective-entitlements';
+import { isReduction } from '../entitlements/limit-adjustment';
 import { project } from './subscription.projection';
 import type { SubscriptionRow } from './subscription.repository';
 import { SubscriptionStatus, isTerminal } from './subscription.types';
@@ -167,6 +169,24 @@ export class SubscriptionReconciliationService {
 
     /** A mudança programada virou o plano vigente. Nada é apagado. */
     if (projetado.pendingApplied && linha.pendingPlanCode) {
+      const reduced = isReduction(
+        fromSubscription(
+          linha.planCode,
+          linha.planCode,
+          linha.entitlementsSnapshot,
+          true,
+        ),
+        fromSubscription(
+          linha.pendingPlanCode,
+          linha.pendingPlanCode,
+          linha.pendingEntitlementsSnapshot,
+          true,
+        ),
+      );
+      data.limitsChangedAt = reduced ? linha.pendingEffectiveAt : null;
+      data.previousEntitlementsSnapshot = reduced
+        ? (linha.entitlementsSnapshot as Prisma.InputJsonValue)
+        : Prisma.DbNull;
       data.planCode = linha.pendingPlanCode;
       data.catalogVersion = linha.pendingCatalogVersion ?? undefined;
       data.entitlementsSnapshot =

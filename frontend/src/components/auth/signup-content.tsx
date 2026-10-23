@@ -25,6 +25,8 @@ import { OrbitLogo } from "@/components/brand/orbit-logo";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { PostalCodeField } from "@/components/address/postal-code-field";
+import { LegalDocumentsPanel } from "@/components/legal/legal-documents-panel";
+import { LEGAL_DOCUMENT_VERSION } from "@/types/contracts/modules/legal/legal.read-models";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -315,7 +317,7 @@ export function SignupContent({
     resolver: zodResolver(schema),
     defaultValues: {
       primarySegment: "Serviços",
-      stateCode: "PE",
+      stateCode: "",
       planKey: initialSelection.planKey,
       billingInterval: initialSelection.billingInterval,
       terms: false,
@@ -338,6 +340,9 @@ export function SignupContent({
     try {
       await createAccount.mutateAsync({
         ...payload,
+        acceptTerms: values.terms,
+        termsVersion: LEGAL_DOCUMENT_VERSION,
+        privacyVersion: LEGAL_DOCUMENT_VERSION,
         stateCode: payload.stateCode.toUpperCase(),
         documentNumber: normalizeBrazilianDocument(payload.documentNumber),
         documentType: detectBrazilianDocumentType(payload.documentNumber)!,
@@ -709,6 +714,9 @@ export function SignupContent({
                       <Input id="street" {...register("street")} />
                       <FieldError message={errors.street?.message} />
                     </div>
+                    <div className="sm:col-span-2">
+                      <LegalDocumentsPanel compact />
+                    </div>
                     <div className="rounded-xl border border-border bg-muted/40 p-4 sm:col-span-2">
                       <div className="flex items-start gap-3">
                         <Checkbox
@@ -724,8 +732,8 @@ export function SignupContent({
                           htmlFor="terms"
                           className="text-sm font-normal leading-relaxed"
                         >
-                          Concordo com os Termos de Uso e a Política de
-                          Privacidade do Orbit.
+                          Aceito os Termos de Uso e declaro que li a Política de
+                          Privacidade do Orbit, versão {LEGAL_DOCUMENT_VERSION}.
                         </Label>
                       </div>
                       <FieldError message={errors.terms?.message} />

@@ -15,6 +15,14 @@ const nextConfig = {
           },
         ],
       },
+      {
+        // Os documentos são lidos no modal do próprio cadastro.
+        source: "/legal/:path*",
+        headers: [
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Content-Security-Policy", value: "frame-ancestors 'self'" },
+        ],
+      },
     ];
   },
 };

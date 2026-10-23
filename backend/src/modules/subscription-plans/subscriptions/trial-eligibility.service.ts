@@ -28,6 +28,10 @@ import {
   PlanCode,
   type PlanCode as PlanCodeType,
 } from '../catalog/plan-catalog.types';
+import { snapshotOf } from './subscription.snapshot';
+import { planDefinition } from '../catalog/plan-registry';
+import { CATALOG_VERSION } from '../catalog/plan-catalog.types';
+import { ConflictException } from '../../../exceptions';
 import { TrialNotEligibleException } from './subscription.errors';
 import { SubscriptionRepository } from './subscription.repository';
 import { TrialFingerprintService } from './trial-fingerprint';
@@ -98,6 +102,52 @@ export class TrialEligibilityService {
       trialDays: TRIAL_DAYS,
       internalReason: consumida ? 'fingerprint already consumed' : null,
     };
+  }
+
+  async canStartPendingTrial(organizationId: string): Promise<boolean> {
+    const candidate = await this.repository.trialCandidate(organizationId);
+    return (
+      candidate.eligible &&
+      !!candidate.document &&
+      !(await this.hasConsumedTrial(candidate.document))
+    );
+  }
+
+  async startPendingTrial(
+    organizationId: string,
+    expectedVersion: number,
+    billingInterval: string,
+  ) {
+    const candidate = await this.repository.trialCandidate(organizationId);
+    if (!candidate.eligible || !candidate.document)
+      throw new TrialNotEligibleException('trial unavailable');
+    const startsAt = new Date();
+    try {
+      return await this.repository.startPendingTrial({
+        organizationId,
+        expectedVersion,
+        billingInterval,
+        startsAt,
+        endsAt: new Date(startsAt.getTime() + TRIAL_DAYS * DIA_MS),
+        fingerprint: this.fingerprints.fingerprint(candidate.document),
+        snapshot: snapshotOf(
+          planDefinition(PlanCode.ESSENTIAL),
+        ) as unknown as Prisma.InputJsonValue,
+        catalogVersion: CATALOG_VERSION,
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message === 'TRIAL_NOT_AVAILABLE')
+        throw new TrialNotEligibleException('trial unavailable');
+      if (
+        error instanceof Error &&
+        error.message === 'TRIAL_SUBSCRIPTION_CHANGED'
+      )
+        throw new ConflictException(
+          'Subscription changed; reload before trying again',
+          'CONFLICT',
+        );
+      throw error;
+    }
   }
 
   async hasConsumedTrial(legalDocument: string): Promise<boolean> {

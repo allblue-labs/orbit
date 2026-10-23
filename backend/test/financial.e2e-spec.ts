@@ -1,3 +1,4 @@
+import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
  * E2E do Financeiro.
  *
@@ -77,6 +78,7 @@ describe('Financial (e2e)', () => {
     const registration = await http()
       .post('/api/v1/identity/register')
       .send({
+        ...REGISTRATION_LEGAL_ACCEPTANCE,
         email: `financial.${label}.${suffix}@orbit.local`,
         firstName: 'Financeiro',
         lastName: 'E2E',

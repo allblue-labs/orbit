@@ -119,6 +119,10 @@ class _WorkQueueScreenState extends ConsumerState<WorkQueueScreen> {
                   state: state,
                   scroll: _scroll,
                   currentUserId: session?.user.id,
+                  /* O botão flutuante cobre o fim da lista se ela não reservar
+                     a altura dele: o último atendimento ficaria debaixo de
+                     "Iniciar um atendimento". */
+                  reserveFloatingAction: podeAbrir,
                 ),
               ),
             ),
@@ -134,11 +138,15 @@ class _Queue extends StatelessWidget {
     required this.state,
     required this.scroll,
     required this.currentUserId,
+    this.reserveFloatingAction = false,
   });
 
   final WorkQueueState state;
   final ScrollController scroll;
   final String? currentUserId;
+
+  /// Reservar, no fim da lista, a altura do botão flutuante.
+  final bool reserveFloatingAction;
 
   @override
   Widget build(BuildContext context) {
@@ -156,11 +164,12 @@ class _Queue extends StatelessWidget {
 
     return ListView.builder(
       controller: scroll,
-      padding: const EdgeInsets.fromLTRB(
+      padding: EdgeInsets.fromLTRB(
         OrbitSpacing.gutter,
         OrbitSpacing.md,
         OrbitSpacing.gutter,
-        OrbitSpacing.xl,
+        /* A altura do botão flutuante mais folga, quando ele existe. */
+        reserveFloatingAction ? OrbitSpacing.xl3 + OrbitSpacing.lg : OrbitSpacing.xl,
       ),
 
       /// +1 pelo rodapé, +1 pelo aviso de lista local quando ele existe.

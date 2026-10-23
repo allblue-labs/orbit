@@ -5,9 +5,9 @@
  * de pagamento — quando existir, na PR-PL-03 — traduzirá os eventos dele para
  * estes comandos; ele não é a autoridade, é uma fonte de fatos financeiros.
  *
- * ## Subir vale agora, descer vale depois
+ * ## Mudanças em planos pagos valem na renovação
  *
- * Subir de plano entrega o que foi comprado imediatamente. Descer só vale no
+ * Toda troca de plano pago só vale no
  * próximo período: tirar capacidade e teto no meio de uma operação em campo
  * quebraria o trabalho de quem está no telhado com o aplicativo aberto, e por
  * um motivo administrativo.
@@ -30,6 +30,9 @@ import {
 } from '../catalog/plan-catalog.types';
 import { planDefinition } from '../catalog/plan-registry';
 import { anchoredPeriod } from '../entitlements/anchored-period';
+import { fromSubscription } from '../entitlements/effective-entitlements';
+import { isReduction } from '../entitlements/limit-adjustment';
+import { retentionDeadline } from './subscription-retention';
 import { snapshotOf } from './subscription.snapshot';
 import {
   PlanChangeNotAllowedException,
@@ -89,20 +92,131 @@ export class SubscriptionService {
   async currentOrNull(
     organizationId: string,
     at: Date = new Date(),
+    transaction?: PrismaTransactionClient,
   ): Promise<
     (SubscriptionRow & { effectiveStatus: SubscriptionStatus }) | null
   > {
-    const linha = await this.repository.findCurrent(organizationId);
+    const linha = await this.repository.findCurrent(
+      organizationId,
+      transaction,
+    );
     if (!linha) return null;
     const projetado = project(this.estado(linha), at);
+    let effective = linha;
+    if (
+      projetado.pendingApplied &&
+      linha.pendingPlanCode &&
+      linha.pendingEntitlementsSnapshot
+    ) {
+      const reduced = isReduction(
+        fromSubscription(
+          linha.planCode,
+          linha.planCode,
+          linha.entitlementsSnapshot,
+          true,
+        ),
+        fromSubscription(
+          linha.pendingPlanCode,
+          linha.pendingPlanCode,
+          linha.pendingEntitlementsSnapshot,
+          true,
+        ),
+      );
+      effective = {
+        ...linha,
+        planCode: linha.pendingPlanCode,
+        billingInterval: linha.pendingBillingInterval ?? linha.billingInterval,
+        catalogVersion: linha.pendingCatalogVersion ?? linha.catalogVersion,
+        entitlementsSnapshot: linha.pendingEntitlementsSnapshot,
+        limitsChangedAt: reduced ? linha.pendingEffectiveAt : null,
+        previousEntitlementsSnapshot: reduced
+          ? linha.entitlementsSnapshot
+          : null,
+        pendingPlanCode: null,
+        pendingBillingInterval: null,
+        pendingCatalogVersion: null,
+        pendingEntitlementsSnapshot: null,
+        pendingEffectiveAt: null,
+      };
+    }
     return {
-      ...linha,
+      ...effective,
       currentPeriodStart: projetado.currentPeriodStart,
       currentPeriodEnd: projetado.currentPeriodEnd,
       graceStartsAt: projetado.graceStartsAt,
       graceEndsAt: projetado.graceEndsAt,
       effectiveStatus: projetado.status,
     };
+  }
+
+  async currentOrLast(organizationId: string, at: Date = new Date()) {
+    const current = await this.currentOrNull(organizationId, at);
+    const dataState = await this.repository.dataState(organizationId);
+    if (current) return { ...current, ...dataState };
+    const last = await this.repository.findLatest(organizationId);
+    return last
+      ? {
+          ...last,
+          ...dataState,
+          effectiveStatus: isTerminal(last.status)
+            ? last.status
+            : SubscriptionStatus.EXPIRED,
+        }
+      : null;
+  }
+
+  /** Nova contratação preserva o tenant e nunca concede outra avaliação. */
+  async preparePaidReturn(
+    organizationId: string,
+    planCode: PlanCode,
+    billingInterval: BillingInterval,
+  ) {
+    await this.repository.runAsOrganization(organizationId, async (tx) => {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${organizationId}, 0))::text`;
+      const organization = await tx.organization.findUniqueOrThrow({
+        where: { id: organizationId },
+        select: { dataPurgeStartedAt: true, dataPurgedAt: true },
+      });
+      if (organization.dataPurgeStartedAt && !organization.dataPurgedAt)
+        throw new ConflictException('Data deletion is in progress', 'CONFLICT');
+      const current = await this.repository.findCurrent(organizationId, tx);
+      if (current) {
+        const projected = project(this.estado(current), new Date());
+        if (
+          ![SubscriptionStatus.CANCELED, SubscriptionStatus.EXPIRED].includes(
+            projected.status,
+          )
+        )
+          return;
+        await this.repository.updateIfVersion(
+          current.id,
+          current.version,
+          { status: projected.status, endedAt: new Date() },
+          tx,
+        );
+      } else {
+        const last = await this.repository.findLatest(organizationId, tx);
+        if (
+          !last ||
+          ![SubscriptionStatus.CANCELED, SubscriptionStatus.EXPIRED].includes(
+            last.status,
+          )
+        )
+          throw new PlanChangeNotAllowedException(
+            'no ended subscription to restart',
+          );
+      }
+      await this.create(
+        {
+          organizationId,
+          planCode,
+          billingInterval,
+          access: { kind: 'PAYMENT_REQUIRED' },
+        },
+        tx,
+      );
+    });
+    return this.requireCurrent(organizationId);
   }
 
   async requireCurrent(organizationId: string, at: Date = new Date()) {
@@ -182,7 +296,11 @@ export class SubscriptionService {
    * acesso e recebe esse tempo. Não há devolução nem cálculo proporcional aqui
    * — isso é decisão financeira, e não existe provedor financeiro nesta etapa.
    */
-  async cancelAtPeriodEnd(organizationId: string, expectedVersion: number) {
+  async cancelAtPeriodEnd(
+    organizationId: string,
+    expectedVersion: number,
+    acknowledgeDataDeletion = false,
+  ) {
     return this.comando(organizationId, expectedVersion, (atual) => {
       if (isTerminal(atual.effectiveStatus)) {
         throw new SubscriptionInvalidTransitionException(
@@ -190,7 +308,23 @@ export class SubscriptionService {
           SubscriptionStatus.CANCELED,
         );
       }
-      return { cancelAtPeriodEnd: true, canceledAt: new Date() };
+      return {
+        cancelAtPeriodEnd: true,
+        canceledAt: new Date(),
+        dataRetentionEndsAt: acknowledgeDataDeletion
+          ? retentionDeadline(
+              atual.effectiveStatus === SubscriptionStatus.TRIALING &&
+                atual.trialEndsAt
+                ? atual.trialEndsAt
+                : atual.currentPeriodEnd,
+            )
+          : (atual.dataRetentionEndsAt ?? null),
+        pendingPlanCode: null,
+        pendingBillingInterval: null,
+        pendingCatalogVersion: null,
+        pendingEntitlementsSnapshot: Prisma.DbNull,
+        pendingEffectiveAt: null,
+      };
     });
   }
 
@@ -206,16 +340,18 @@ export class SubscriptionService {
           SubscriptionStatus.ACTIVE,
         );
       }
-      return { cancelAtPeriodEnd: false, canceledAt: null };
+      return {
+        cancelAtPeriodEnd: false,
+        canceledAt: null,
+        dataRetentionEndsAt: null,
+      };
     });
   }
 
   /**
    * Troca de plano.
    *
-   * Subir vale na hora; descer entra na fila do próximo período. Quem decide
-   * qual é qual é o preço de tabela mensal do catálogo — é a única ordenação
-   * comercial que existe entre os planos, e ela não depende de nome.
+   * Toda troca preserva o período contratado; o destino vale na renovação.
    */
   async changePlan(
     organizationId: string,
@@ -238,10 +374,6 @@ export class SubscriptionService {
       if (mesmoPlano && mesmoIntervalo) {
         throw new PlanChangeNotAllowedException('no change requested');
       }
-
-      const subida =
-        destino.prices[BillingInterval.MONTHLY]!.amountMinor >
-        origem.prices[BillingInterval.MONTHLY]!.amountMinor;
 
       /**
        * Durante a avaliação, **nenhuma** troca é imediata.
@@ -270,30 +402,6 @@ export class SubscriptionService {
           /* O fim da avaliação, não o do período de cobrança: é ele que marca
              o instante em que o gratuito acaba. */
           pendingEffectiveAt: atual.trialEndsAt ?? atual.currentPeriodEnd,
-        };
-      }
-
-      if (subida) {
-        /** Imediato: o cliente comprou mais e recebe agora. */
-        const periodo = anchoredPeriod(
-          atual.billingAnchorAt,
-          BILLING_INTERVAL_MONTHS[intervalo] ?? 1,
-          new Date(),
-        );
-        return {
-          planCode: destino.code,
-          catalogVersion: CATALOG_VERSION,
-          entitlementsSnapshot: snapshotOf(
-            destino,
-          ) as unknown as Prisma.InputJsonValue,
-          billingInterval: intervalo,
-          currentPeriodStart: periodo.start,
-          currentPeriodEnd: periodo.end,
-          pendingPlanCode: null,
-          pendingBillingInterval: null,
-          pendingCatalogVersion: null,
-          pendingEntitlementsSnapshot: Prisma.DbNull,
-          pendingEffectiveAt: null,
         };
       }
 
@@ -458,7 +566,37 @@ export class SubscriptionService {
       const contractedChanged =
         atual.planCode !== destino.code ||
         atual.billingInterval !== input.billingInterval;
+      if (
+        contractedChanged &&
+        atual.effectiveStatus === SubscriptionStatus.ACTIVE &&
+        input.period.start < atual.currentPeriodEnd
+      ) {
+        throw new PlanChangeNotAllowedException(
+          'paid plan changes take effect only at renewal',
+        );
+      }
+      const previous = fromSubscription(
+        atual.planCode,
+        atual.planCode,
+        atual.entitlementsSnapshot,
+        true,
+      );
+      const next = fromSubscription(
+        destino.code,
+        destino.label,
+        snapshotOf(destino),
+        true,
+      );
+      const reduced = contractedChanged && isReduction(previous, next);
       return {
+        ...(contractedChanged
+          ? {
+              limitsChangedAt: reduced ? input.period.start : null,
+              previousEntitlementsSnapshot: reduced
+                ? (atual.entitlementsSnapshot as Prisma.InputJsonValue)
+                : Prisma.DbNull,
+            }
+          : {}),
         ...(contractedChanged
           ? {
               planCode: destino.code,
@@ -484,14 +622,29 @@ export class SubscriptionService {
         graceStartsAt: null,
         graceEndsAt: null,
         cancelAtPeriodEnd: input.cancelAtPeriodEnd,
+        ...(!input.cancelAtPeriodEnd
+          ? { dataRetentionEndsAt: null }
+          : atual.dataRetentionEndsAt
+            ? {
+                dataRetentionEndsAt: retentionDeadline(
+                  !input.activate && atual.trialEndsAt
+                    ? atual.trialEndsAt
+                    : input.period.end,
+                ),
+              }
+            : {}),
         canceledAt: input.cancelAtPeriodEnd
           ? (atual.canceledAt ?? new Date())
           : null,
-        pendingPlanCode: null,
-        pendingBillingInterval: null,
-        pendingCatalogVersion: null,
-        pendingEntitlementsSnapshot: Prisma.DbNull,
-        pendingEffectiveAt: null,
+        ...(contractedChanged
+          ? {
+              pendingPlanCode: null,
+              pendingBillingInterval: null,
+              pendingCatalogVersion: null,
+              pendingEntitlementsSnapshot: Prisma.DbNull,
+              pendingEffectiveAt: null,
+            }
+          : {}),
       };
     });
   }
@@ -501,6 +654,7 @@ export class SubscriptionService {
     organizationId: string,
     expectedVersion: number,
     cancelAtPeriodEnd: boolean,
+    acknowledgeDataDeletion = false,
   ) {
     return this.comando(organizationId, expectedVersion, (atual) => {
       if (isTerminal(atual.effectiveStatus)) {
@@ -512,6 +666,25 @@ export class SubscriptionService {
       return {
         cancelAtPeriodEnd,
         canceledAt: cancelAtPeriodEnd ? (atual.canceledAt ?? new Date()) : null,
+        dataRetentionEndsAt: !cancelAtPeriodEnd
+          ? null
+          : acknowledgeDataDeletion
+            ? retentionDeadline(
+                atual.effectiveStatus === SubscriptionStatus.TRIALING &&
+                  atual.trialEndsAt
+                  ? atual.trialEndsAt
+                  : atual.currentPeriodEnd,
+              )
+            : (atual.dataRetentionEndsAt ?? null),
+        ...(cancelAtPeriodEnd
+          ? {
+              pendingPlanCode: null,
+              pendingBillingInterval: null,
+              pendingCatalogVersion: null,
+              pendingEntitlementsSnapshot: Prisma.DbNull,
+              pendingEffectiveAt: null,
+            }
+          : {}),
       };
     });
   }

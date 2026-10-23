@@ -11,6 +11,7 @@ import { Permissions } from '../../decorators';
 import { ForbiddenException } from '../../exceptions';
 import type { IdentityRequest } from '../identity/infrastructure/jwt-authentication.guard';
 import {
+  CancelSubscriptionDto,
   ChangeSubscriptionPlanDto,
   SubscriptionVersionDto,
 } from '../subscription-plans/subscriptions/subscription.dto';
@@ -31,12 +32,13 @@ export class SubscriptionBillingController {
   @Permissions('subscription.manage')
   async cancel(
     @Req() request: IdentityRequest,
-    @Body() input: SubscriptionVersionDto,
+    @Body() input: CancelSubscriptionDto,
   ) {
     const organizationId = this.organizationId(request);
     await this.billing.cancelSubscription(
       organizationId,
       input.expectedVersion,
+      input.acknowledgeDataDeletion === true,
     );
     return this.details(organizationId);
   }

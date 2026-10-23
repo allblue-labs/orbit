@@ -1,5 +1,6 @@
 import { RegistrationRepository } from './registration.repository';
 import type { RegisterOrganizationDto } from '../presentation/dto/identity.dto';
+import { LEGAL_DOCUMENT_VERSION } from '../../../contracts/modules/legal/legal.read-models';
 
 it.each([
   'ESSENTIAL',
@@ -27,6 +28,7 @@ it.each([
       businessUnit: { create },
       organizationMembership: { create },
       businessUnitMembership: { create },
+      organizationLegalAcceptance: { create },
     };
     const prisma = {
       $transaction: jest.fn((work: (tx: unknown) => unknown) =>
@@ -44,11 +46,39 @@ it.each([
       city: 'Recife',
       street: 'Rua do Sol',
       stateCode: 'PE',
+      acceptTerms: true,
+      termsVersion: LEGAL_DOCUMENT_VERSION,
+      privacyVersion: LEGAL_DOCUMENT_VERSION,
     } as RegisterOrganizationDto;
-    await repository.register(input, 'test-hash', 'empresa');
+    await repository.register(
+      input,
+      'test-hash',
+      'empresa',
+      {},
+      { client: 'WEB', ipAddress: '192.0.2.1', userAgent: 'Orbit test' },
+    );
     expect(organization.create.mock.calls[0]?.[0].data).toMatchObject({
       subscriptionStatus: 'PENDING_PAYMENT',
       currentPeriodEnd: null,
     });
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          termsVersion: LEGAL_DOCUMENT_VERSION,
+          privacyVersion: LEGAL_DOCUMENT_VERSION,
+          ipAddress: '192.0.2.1',
+          userAgent: 'Orbit test',
+          acceptedAt: expect.any(Date) as unknown,
+          documentsSnapshot: expect.objectContaining({
+            terms: expect.objectContaining({
+              version: LEGAL_DOCUMENT_VERSION,
+            }) as unknown,
+            privacy: expect.objectContaining({
+              version: LEGAL_DOCUMENT_VERSION,
+            }) as unknown,
+          }) as unknown,
+        }) as unknown,
+      }),
+    );
   },
 );

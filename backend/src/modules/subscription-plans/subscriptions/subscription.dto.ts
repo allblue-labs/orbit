@@ -15,6 +15,13 @@ export class SubscriptionVersionDto {
   expectedVersion!: number;
 }
 
+export class CancelSubscriptionDto extends SubscriptionVersionDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  acknowledgeDataDeletion?: boolean;
+}
+
 export class ChangeSubscriptionPlanDto extends SubscriptionVersionDto {
   @ApiPropertyOptional({
     description: 'Confirma a perda dos dias de teste ao pagar o novo plano',

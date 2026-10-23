@@ -122,7 +122,9 @@ export function project(
   }
 
   const pendingApplied =
-    state.pendingEffectiveAt !== null && state.pendingEffectiveAt <= at;
+    !state.providerManaged &&
+    state.pendingEffectiveAt !== null &&
+    state.pendingEffectiveAt <= at;
 
   return {
     status,

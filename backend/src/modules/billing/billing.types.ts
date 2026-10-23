@@ -112,6 +112,12 @@ export interface ProviderInvoice {
   readonly collectionMethod: string;
   readonly hostedInvoiceUrl: string | null;
   readonly invoicePdfUrl: string | null;
+  readonly subscriptionLines?: readonly {
+    priceId: string | null;
+    subscriptionId: string | null;
+    periodStart: Date;
+    periodEnd: Date;
+  }[];
   readonly periodStart: Date;
   readonly periodEnd: Date;
   readonly dueAt: Date | null;
@@ -156,6 +162,7 @@ export interface CheckoutSessionRequest {
 }
 
 export interface CheckoutSession {
+  readonly subscriptionId?: string;
   readonly providerSessionId: string;
   readonly url: string;
   readonly expiresAt: Date | null;
@@ -262,7 +269,7 @@ export interface BillingProvider {
     subscriptionId: string;
     planCode: PlanCode;
     billingInterval: BillingInterval;
-    /** `IMMEDIATE` para subir; `PERIOD_END` para descer. */
+    /** Planos pagos usam `PERIOD_END`; `IMMEDIATE` é reservado à conversão de teste. */
     timing: 'IMMEDIATE' | 'PERIOD_END';
     idempotencyKey: string;
   }): Promise<ProviderPlanChange>;

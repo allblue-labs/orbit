@@ -1,3 +1,4 @@
+import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
  * Autorização da atribuição.
  *
@@ -115,6 +116,7 @@ describe('Operation assignment authorization (e2e)', () => {
     const registro = await http()
       .post('/api/v1/identity/register')
       .send({
+        ...REGISTRATION_LEGAL_ACCEPTANCE,
         email: `auto.${sufixo}@orbit.local`,
         firstName: 'Dona',
         lastName: 'Operacao',
