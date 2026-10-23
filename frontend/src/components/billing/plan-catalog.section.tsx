@@ -27,7 +27,11 @@ import {
   type PlanCatalogEntry,
 } from "@/types/billing";
 import { derivarAcoes } from "./billing-actions";
-import { equivalenteMensal, formatCentavos, formatLimite } from "./billing-format";
+import {
+  equivalenteMensal,
+  formatCentavos,
+  formatLimite,
+} from "./billing-format";
 
 /** Os limites que cabem num cartão. A lista completa fica no bloco de uso. */
 const DESTAQUES = [
@@ -130,6 +134,7 @@ export function PlanCatalogSection({
             plano={plano}
             intervalo={intervalo}
             atual={plano.code === planoVigente}
+            mesmaPeriodicidade={intervalo === subscription?.billingInterval}
             posicao={
               posicaoVigente < 0
                 ? "indefinida"
@@ -156,6 +161,7 @@ function PlanCard({
   plano,
   intervalo,
   atual,
+  mesmaPeriodicidade,
   posicao,
   podeContratar,
   podeTrocar,
@@ -167,6 +173,7 @@ function PlanCard({
   plano: PlanCatalogEntry;
   intervalo: string;
   atual: boolean;
+  mesmaPeriodicidade: boolean;
   /** Onde este plano está em relação ao vigente. */
   posicao: "atual" | "acima" | "abaixo" | "indefinida";
   podeContratar: boolean;
@@ -196,7 +203,9 @@ function PlanCard({
     >
       <header className="space-y-1">
         <div className="flex items-start justify-between gap-2">
-          <h3 className="font-display text-base font-semibold">{plano.label}</h3>
+          <h3 className="font-display text-base font-semibold">
+            {plano.label}
+          </h3>
           {atual ? (
             <Badge variant="secondary">Seu plano</Badge>
           ) : posicao === "acima" ? (
@@ -235,7 +244,10 @@ function PlanCard({
 
       <ul className="space-y-1.5 text-sm">
         {DESTAQUES.map((recurso) => (
-          <li key={recurso} className="flex items-baseline justify-between gap-2">
+          <li
+            key={recurso}
+            className="flex items-baseline justify-between gap-2"
+          >
             <span className="text-muted-foreground">
               {ROTULOS_CURTOS[recurso]}
             </span>
@@ -247,7 +259,10 @@ function PlanCard({
           </li>
         ))}
         {DESTAQUES_DE_USO.map((recurso) => (
-          <li key={recurso} className="flex items-baseline justify-between gap-2">
+          <li
+            key={recurso}
+            className="flex items-baseline justify-between gap-2"
+          >
             <span className="text-muted-foreground">
               {ROTULOS_CURTOS[recurso]}
             </span>
@@ -275,7 +290,16 @@ function PlanCard({
       </p>
 
       <div className="mt-auto pt-1">
-        {atual ? (
+        {atual && mesmaPeriodicidade && podeContratar ? (
+          <Button
+            size="sm"
+            className="w-full"
+            onClick={onSubscribe}
+            disabled={pending}
+          >
+            Continuar pagamento
+          </Button>
+        ) : atual && mesmaPeriodicidade ? (
           <Button variant="outline" size="sm" className="w-full" disabled>
             Plano atual
           </Button>
@@ -287,7 +311,11 @@ function PlanCard({
               onClick={onChangePlan}
               disabled={pending}
             >
-              {posicao === "acima" ? "Migrar para este" : "Mudar para este"}
+              {atual
+                ? "Alterar periodicidade"
+                : posicao === "acima"
+                  ? "Migrar para este"
+                  : "Mudar para este"}
             </Button>
           ) : null
         ) : podeContratar ? (

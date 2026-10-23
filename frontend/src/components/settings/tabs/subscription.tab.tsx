@@ -19,6 +19,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AlertTriangle, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { useSession } from "@/providers/session-provider";
+import { Button } from "@/components/ui/button";
+import {
+  clearBillingTarget,
+  readBillingTarget,
+  rememberBillingTarget,
+} from "@/components/billing/billing-redirect";
 
 import { CurrentSubscriptionCard } from "@/components/billing/current-subscription.card";
 import { BillingInvoiceHistory } from "@/components/billing/billing-invoice-history";
@@ -45,6 +53,7 @@ import {
   useOpenBillingPortal,
 } from "@/hooks/billing/use-billing";
 import { formatDate } from "@/lib/formatters";
+import { diasAte } from "@/components/billing/billing-format";
 import { BILLING_INTERVAL_LABELS } from "@/types/billing";
 
 /** Quantas vezes reconsultar depois de voltar do provedor, e de quanto em quanto. */
@@ -57,6 +66,7 @@ type Confirmacao =
 
 export function SubscriptionSettingsTab() {
   const params = useSearchParams();
+  const { refresh: refreshSession } = useSession();
   const overview = useBillingOverview();
   const checkout = useCreateCheckout();
   const portal = useOpenBillingPortal();
@@ -80,6 +90,11 @@ export function SubscriptionSettingsTab() {
     emVoo.current = true;
     try {
       await acao();
+    } catch (error) {
+      toast.error("Não foi possível concluir a solicitação", {
+        description:
+          error instanceof Error ? error.message : "Tente novamente.",
+      });
     } finally {
       emVoo.current = false;
     }
@@ -94,19 +109,33 @@ export function SubscriptionSettingsTab() {
    */
   const voltouDoCheckout = params.get("assinatura") === "sucesso";
   const [reconsultas, setReconsultas] = useState(0);
+  const [destinoEsperado] = useState(readBillingTarget);
+  const assinaturaRecebida = overview.data?.subscription;
+  const confirmou =
+    assinaturaRecebida?.status === "ACTIVE" &&
+    (!destinoEsperado ||
+      (assinaturaRecebida.id === destinoEsperado.subscriptionId &&
+        assinaturaRecebida.planCode === destinoEsperado.planCode &&
+        assinaturaRecebida.billingInterval ===
+          destinoEsperado.billingInterval));
   const aguardandoConfirmacao =
-    voltouDoCheckout &&
-    reconsultas < TENTATIVAS_APOS_CHECKOUT &&
-    overview.data?.subscription?.status !== "ACTIVE";
+    voltouDoCheckout && reconsultas < TENTATIVAS_APOS_CHECKOUT && !confirmou;
 
   useEffect(() => {
     if (!aguardandoConfirmacao) return;
     const timer = setTimeout(() => {
       setReconsultas((atual) => atual + 1);
-      void overview.refetch();
+      void overview.refetch().then(() => refreshSession());
     }, INTERVALO_DE_RECONSULTA_MS);
     return () => clearTimeout(timer);
-  }, [aguardandoConfirmacao, reconsultas, overview]);
+  }, [aguardandoConfirmacao, reconsultas, overview, refreshSession]);
+
+  useEffect(() => {
+    if (voltouDoCheckout && confirmou) {
+      clearBillingTarget();
+      void refreshSession();
+    }
+  }, [voltouDoCheckout, confirmou, refreshSession]);
 
   if (overview.isPending) return <PanelLoading rows={6} />;
   if (overview.error) {
@@ -133,6 +162,12 @@ export function SubscriptionSettingsTab() {
         planCode,
         billingInterval: intervalo,
       });
+      if (assinatura)
+        rememberBillingTarget({
+          subscriptionId: assinatura.id,
+          planCode,
+          billingInterval: intervalo,
+        });
       /** A URL é a que o servidor devolveu. O cliente não monta endereço. */
       window.location.assign(sessao.url);
     });
@@ -149,21 +184,73 @@ export function SubscriptionSettingsTab() {
       if (confirmacao.tipo === "CANCELAR") {
         await cancelar.mutateAsync({ expectedVersion: assinatura.version });
       } else {
-        await trocar.mutateAsync({
+        const sessao = await trocar.mutateAsync({
           expectedVersion: assinatura.version,
           planCode: confirmacao.planCode,
           billingInterval: confirmacao.intervalo,
+          acknowledgeTrialEnd: assinatura.status === "TRIALING",
         });
+        rememberBillingTarget({
+          subscriptionId: assinatura.id,
+          planCode: confirmacao.planCode,
+          billingInterval: confirmacao.intervalo,
+        });
+        window.location.assign(sessao.url);
       }
       setConfirmacao(null);
     });
 
   return (
     <div className="space-y-6">
+      {assinatura?.status === "PENDING_PAYMENT" ? (
+        <div
+          role="status"
+          className="space-y-3 rounded-lg border border-primary/25 bg-primary/5 p-4 text-sm"
+        >
+          <p className="font-medium">
+            Seu cadastro está concluído. Falta finalizar o pagamento.
+          </p>
+          <p className="text-muted-foreground">
+            O plano será liberado após a confirmação do Stripe. Você pode
+            retomar o pagamento abaixo ou escolher outro plano.
+          </p>
+          {dados.billing.canCheckout ? (
+            <Button
+              onClick={() =>
+                iniciarCheckout(assinatura.planCode, assinatura.billingInterval)
+              }
+              disabled={checkout.isPending || comandoPendente}
+            >
+              {checkout.isPending
+                ? "Abrindo pagamento…"
+                : "Continuar para o pagamento"}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
       {aguardandoConfirmacao ? (
         <p className="flex items-center gap-2 rounded-md border border-border bg-muted/40 p-3 text-sm">
           <Loader2 className="size-4 animate-spin" aria-hidden />
           Estamos confirmando sua assinatura. Isso pode levar alguns instantes.
+        </p>
+      ) : null}
+      {voltouDoCheckout && !confirmou && !aguardandoConfirmacao ? (
+        <p
+          role="status"
+          className="rounded-md border border-border p-3 text-sm"
+        >
+          Ainda aguardamos a confirmação do pagamento. Seu plano será atualizado
+          assim que o Stripe confirmar.{" "}
+          <button
+            type="button"
+            className="underline"
+            onClick={() => {
+              setReconsultas(0);
+              void overview.refetch();
+            }}
+          >
+            Verificar novamente
+          </button>
         </p>
       ) : null}
 
@@ -296,18 +383,10 @@ function ConfirmacaoDialog({
   const destino = overview.catalog.plans.find(
     (item) => item.code === confirmacao.planCode,
   );
-  const atual = overview.catalog.plans.find(
-    (item) => item.code === assinatura.planCode,
+  const encerraTeste = assinatura.status === "TRIALING";
+  const diasRestantes = diasAte(
+    assinatura.trial?.endsAt ?? assinatura.billingPeriod.end,
   );
-  /**
-   * Subir ou descer, decidido pelo preço de tabela **publicado**.
-   *
-   * É só para escolher a explicação. Quem decide se a mudança é imediata ou
-   * programada é o servidor, e a tela não muda nada por conta disso.
-   */
-  const subindo =
-    (destino?.prices.MONTHLY?.amountMinor ?? 0) >
-    (atual?.prices.MONTHLY?.amountMinor ?? 0);
 
   return (
     <AlertDialog open onOpenChange={(aberto) => !aberto && onCancel()}>
@@ -317,16 +396,19 @@ function ConfirmacaoDialog({
             Mudar para {destino?.label ?? "outro plano"}?
           </AlertDialogTitle>
           <AlertDialogDescription>
-            {subindo ? (
+            {encerraTeste ? (
               <>
-                A mudança vale imediatamente. A diferença de cobrança é
-                calculada pelo provedor de pagamento.
+                O teste gratuito de 30 dias está disponível apenas no Essencial.
+                Ao concluir o pagamento de {destino?.label ?? "outro plano"},
+                seu teste termina e você perde os {diasRestantes} dias gratuitos
+                restantes, sem transferência para o novo plano. A cobrança
+                começa agora.
               </>
             ) : (
               <>
-                A mudança será aplicada no próximo período de cobrança, em{" "}
-                {formatDate(assinatura.billingPeriod.end)}. Até lá, nada muda —
-                e nenhum recurso é removido.
+                Você será direcionado ao Stripe para conferir os valores,
+                eventuais créditos e confirmar a mudança. O novo plano será
+                liberado após a confirmação do pagamento.
               </>
             )}
             {confirmacao.intervalo !== assinatura.billingInterval ? (
@@ -341,10 +423,22 @@ function ConfirmacaoDialog({
             ) : null}
           </AlertDialogDescription>
         </AlertDialogHeader>
+        {encerraTeste ? (
+          <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
+            Se desistir ou cancelar o pagamento, seu plano e os dias de teste
+            continuam como estão.
+          </p>
+        ) : null}
         <AlertDialogFooter>
           <AlertDialogCancel disabled={pending}>Voltar</AlertDialogCancel>
-          <AlertDialogAction onClick={onConfirm} disabled={pending}>
-            Confirmar mudança
+          <AlertDialogAction
+            onClick={(event) => {
+              event.preventDefault();
+              onConfirm();
+            }}
+            disabled={pending}
+          >
+            {pending ? "Abrindo pagamento…" : "Continuar para o pagamento"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

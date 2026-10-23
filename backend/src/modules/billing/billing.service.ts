@@ -17,15 +17,14 @@ import { Inject, Injectable } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { ConflictException } from '../../exceptions';
 import { generateUuidV7 } from '../../utils';
-import { planDefinition } from '../subscription-plans/catalog/plan-registry';
 import { SubscriptionService } from '../subscription-plans/subscriptions/subscription.service';
 import {
   TRIAL_DAYS,
+  allowsPlanChange,
   allowsInitialCheckout,
   SubscriptionStatus,
 } from '../subscription-plans/subscriptions/subscription.types';
 import {
-  BillingInterval,
   PlanCode,
   type BillingInterval as BillingIntervalType,
   type PlanCode as PlanCodeType,
@@ -41,7 +40,6 @@ import {
 } from './billing.repository';
 import {
   BILLING_PROVIDER,
-  ProviderBillingState,
   ProviderCheckoutState,
   type BillingProvider,
   type CheckoutSession,
@@ -103,6 +101,9 @@ export class BillingService {
     organizationId: string;
     planCode: PlanCodeType;
     billingInterval: BillingIntervalType;
+    /** Somente o comando autenticado de troca autoriza um destino diferente. */
+    changePlan?: boolean;
+    acknowledgeTrialEnd?: boolean;
   }): Promise<CheckoutSession> {
     this.assertEnabled();
     const assinatura = await this.subscriptions.requireCurrent(
@@ -119,11 +120,21 @@ export class BillingService {
       );
     }
     if (
-      assinatura.planCode !== input.planCode ||
-      assinatura.billingInterval !== input.billingInterval
+      !input.changePlan &&
+      (assinatura.planCode !== input.planCode ||
+        assinatura.billingInterval !== input.billingInterval)
     ) {
       throw new BillingCheckoutNotAllowedException(
         'checkout must match the current subscription',
+      );
+    }
+
+    const endsTrial =
+      assinatura.effectiveStatus === SubscriptionStatus.TRIALING &&
+      (input.planCode !== PlanCode.ESSENTIAL || input.changePlan === true);
+    if (endsTrial && input.acknowledgeTrialEnd !== true) {
+      throw new BillingCommandNotAllowedException(
+        'trial termination must be acknowledged before checkout',
       );
     }
 
@@ -141,19 +152,11 @@ export class BillingService {
         planCode: input.planCode,
         billingInterval: input.billingInterval,
         idempotencyKey: this.chave('checkout-attempt', attemptId),
+        subscriptionVersion: assinatura.version,
+        endsTrial,
       });
 
-      if (
-        attempt.subscriptionId !== assinatura.id ||
-        attempt.planCode !== input.planCode ||
-        attempt.billingInterval !== input.billingInterval ||
-        attempt.billingCustomerId !== customer.id
-      ) {
-        throw new BillingCheckoutNotAllowedException(
-          'another checkout is already in progress',
-        );
-      }
-
+      // Uma sessão expirada pode ser substituída, inclusive por outro plano.
       if (attempt.providerSessionId) {
         const currentSession = await this.provider.retrieveCheckoutSession(
           attempt.providerSessionId,
@@ -167,6 +170,44 @@ export class BillingService {
             'checkout is already complete and awaiting reconciliation',
           );
         }
+        if (currentSession.state !== ProviderCheckoutState.OPEN) {
+          throw new BillingCheckoutNotAllowedException(
+            'unknown checkout state',
+          );
+        }
+        if (
+          attempt.subscriptionId === assinatura.id &&
+          attempt.planCode === input.planCode &&
+          attempt.billingInterval === input.billingInterval &&
+          attempt.billingCustomerId === customer.id &&
+          (attempt.subscriptionVersion == null ||
+            attempt.subscriptionVersion === assinatura.version) &&
+          attempt.endsTrial === endsTrial &&
+          currentSession.url
+        ) {
+          return {
+            providerSessionId: currentSession.providerSessionId,
+            url: currentSession.url,
+            expiresAt: currentSession.expiresAt,
+          };
+        }
+        // Expirar no Stripe primeiro impede duas assinaturas ao trocar de escolha.
+        await this.provider.expireCheckoutSession(attempt.providerSessionId);
+        await this.repository.expireCheckoutAttempt(attempt.id);
+        continue;
+      }
+      if (
+        attempt.subscriptionId !== assinatura.id ||
+        attempt.planCode !== input.planCode ||
+        attempt.billingInterval !== input.billingInterval ||
+        attempt.billingCustomerId !== customer.id ||
+        (attempt.subscriptionVersion != null &&
+          attempt.subscriptionVersion !== assinatura.version) ||
+        attempt.endsTrial !== endsTrial
+      ) {
+        throw new BillingCheckoutNotAllowedException(
+          'another checkout is being created',
+        );
       }
 
       /**
@@ -180,7 +221,9 @@ export class BillingService {
         providerCustomerId: customer.providerCustomerId,
         planCode: input.planCode,
         billingInterval: input.billingInterval,
-        trialDays: this.diasDeAvaliacao(assinatura, input.planCode),
+        trialDays: endsTrial
+          ? null
+          : this.diasDeAvaliacao(assinatura, input.planCode),
         subscriptionId: assinatura.id,
         idempotencyKey: attempt.idempotencyKey,
       });
@@ -293,101 +336,56 @@ export class BillingService {
   /**
    * Troca comercial com autoridade financeira externa.
    *
-   * Upgrade é cobrado e confirmado antes de liberar direitos. Downgrade é
-   * agendado no período do provedor e só então aparece como pendência local.
+   * A confirmação hospedada apresenta a cobrança antes da mudança. O retorno
+   * traz somente a URL; a reconciliação financeira libera os direitos.
    */
   async changeSubscriptionPlan(input: {
     organizationId: string;
     expectedVersion: number;
     planCode: PlanCodeType;
     billingInterval?: BillingIntervalType;
-  }): Promise<void> {
+    acknowledgeTrialEnd?: boolean;
+  }): Promise<{ url: string }> {
+    this.assertEnabled();
     const assinatura = await this.requireExpected(
       input.organizationId,
       input.expectedVersion,
     );
     const targetInterval = input.billingInterval ?? assinatura.billingInterval;
+    if (!allowsPlanChange(assinatura.effectiveStatus)) {
+      throw new BillingCommandNotAllowedException(
+        'subscription status does not allow a plan change',
+      );
+    }
     if (
       assinatura.planCode === input.planCode &&
       assinatura.billingInterval === targetInterval
     ) {
       throw new BillingCommandNotAllowedException('no change requested');
     }
-    if (!assinatura.providerSubscriptionId) {
-      await this.subscriptions.changePlan(
-        input.organizationId,
-        input.expectedVersion,
-        input.planCode,
-        targetInterval,
+    const endsTrial =
+      assinatura.effectiveStatus === SubscriptionStatus.TRIALING;
+    if (endsTrial && input.acknowledgeTrialEnd !== true) {
+      throw new BillingCommandNotAllowedException(
+        'trial termination must be acknowledged',
       );
-      return;
     }
-
-    this.assertEnabled();
+    if (!assinatura.providerSubscriptionId) {
+      return this.createCheckoutSession({
+        ...input,
+        billingInterval: targetInterval,
+        changePlan: true,
+      });
+    }
     await this.assertProviderTarget(assinatura);
-    const origem = planDefinition(assinatura.planCode);
-    const destino = planDefinition(input.planCode);
-    const timing =
-      destino.prices[BillingInterval.MONTHLY]!.amountMinor >
-      origem.prices[BillingInterval.MONTHLY]!.amountMinor
-        ? 'IMMEDIATE'
-        : 'PERIOD_END';
-    const alteracao = await this.provider.changePlan({
+    // Apenas abre a confirmação hospedada. O webhook verifica o pagamento
+    // antes de aplicar qualquer mudança aos direitos da organização.
+    return this.provider.createPlanChangeSession({
+      providerCustomerId: assinatura.providerCustomerId!,
       providerSubscriptionId: assinatura.providerSubscriptionId,
-      organizationId: input.organizationId,
-      subscriptionId: assinatura.id,
       planCode: input.planCode,
       billingInterval: targetInterval,
-      timing,
-      idempotencyKey: this.chave(
-        'change-plan',
-        `${assinatura.id}:${input.expectedVersion}:${input.planCode}:${targetInterval}`,
-      ),
     });
-    this.assertProviderOwnership(assinatura, alteracao.subscription);
-
-    if (timing === 'PERIOD_END') {
-      if (!alteracao.scheduled) {
-        throw new BillingCommandNotAllowedException(
-          'provider did not schedule plan change',
-        );
-      }
-      await this.subscriptions.scheduleProviderPlanChange(
-        input.organizationId,
-        input.expectedVersion,
-        input.planCode,
-        targetInterval,
-        alteracao.effectiveAt,
-      );
-      return;
-    }
-
-    const provedor = alteracao.subscription;
-    if (
-      alteracao.scheduled ||
-      (provedor.state !== ProviderBillingState.ACTIVE &&
-        provedor.state !== ProviderBillingState.TRIALING) ||
-      !provedor.currentPeriodStart ||
-      !provedor.currentPeriodEnd
-    ) {
-      throw new BillingCommandNotAllowedException(
-        'provider did not confirm immediate plan change',
-      );
-    }
-    await this.subscriptions.applyProviderPlan(
-      input.organizationId,
-      input.expectedVersion,
-      {
-        planCode: input.planCode,
-        billingInterval: targetInterval,
-        period: {
-          start: provedor.currentPeriodStart,
-          end: provedor.currentPeriodEnd,
-        },
-        activate: provedor.state === ProviderBillingState.ACTIVE,
-        cancelAtPeriodEnd: provedor.cancelAtPeriodEnd,
-      },
-    );
   }
 
   async cancelScheduledPlanChange(

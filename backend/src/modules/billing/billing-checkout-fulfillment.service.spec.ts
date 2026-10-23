@@ -49,6 +49,8 @@ describe('BillingCheckoutFulfillmentService', () => {
     mode: BillingMode.TEST,
     planCode: PlanCode.PROFESSIONAL,
     billingInterval: BillingInterval.MONTHLY,
+    subscriptionVersion: null,
+    endsTrial: false,
     status: 'OPEN',
     idempotencyKey: 'orbit:checkout-attempt:key',
     providerSessionId,
@@ -87,6 +89,8 @@ describe('BillingCheckoutFulfillmentService', () => {
         expect(contexts.get()?.organizationId).toBe(organizationId);
         return Promise.resolve({
           id: subscriptionId,
+          version: 1,
+          providerSubscriptionId: null,
           organizationId,
           planCode: PlanCode.PROFESSIONAL,
           billingInterval: BillingInterval.MONTHLY,
@@ -115,6 +119,7 @@ describe('BillingCheckoutFulfillmentService', () => {
       providerSubscriptionId,
     );
     expect(subscriptions.linkProvider).toHaveBeenCalledWith(subscriptionId, {
+      expectedVersion: 1,
       provider: BillingProviderName.STRIPE,
       providerSubscriptionId,
       providerCustomerId,
@@ -170,5 +175,95 @@ describe('BillingCheckoutFulfillmentService', () => {
     );
     expect(subscriptions.linkProvider).not.toHaveBeenCalled();
     expect(repository.completeCheckoutAttempt).not.toHaveBeenCalled();
+  });
+  it.each(['unpaid', 'no_payment_required'])(
+    'troca fora do Essencial exige pagamento: %s',
+    async (paymentStatus) => {
+      const { service, provider, repository, subscriptions } = setup();
+      (provider.retrieveCheckoutSession as jest.Mock).mockResolvedValue({
+        ...canonicalSession(),
+        paymentStatus,
+      });
+      repository.findCheckoutAttemptForFulfillment.mockResolvedValue({
+        ...attempt(),
+        subscriptionVersion: 3,
+        endsTrial: true,
+      });
+      subscriptions.requireCurrent.mockResolvedValue({
+        id: subscriptionId,
+        version: 3,
+        planCode: PlanCode.ESSENTIAL,
+        billingInterval: BillingInterval.MONTHLY,
+        effectiveStatus: SubscriptionStatus.TRIALING,
+        providerSubscriptionId: null,
+      });
+      await expect(service.fulfill(providerSessionId)).rejects.toBeInstanceOf(
+        BillingCheckoutAwaitingPaymentError,
+      );
+      expect(subscriptions.linkProvider).not.toHaveBeenCalled();
+    },
+  );
+
+  it('aceita a contratação paga de outro plano sem exigir troca local antecipada', async () => {
+    const { service, repository, subscriptions } = setup();
+    repository.findCheckoutAttemptForFulfillment.mockResolvedValue({
+      ...attempt(),
+      subscriptionVersion: 3,
+      endsTrial: true,
+    });
+    subscriptions.requireCurrent.mockResolvedValue({
+      id: subscriptionId,
+      version: 3,
+      planCode: PlanCode.ESSENTIAL,
+      billingInterval: BillingInterval.MONTHLY,
+      effectiveStatus: SubscriptionStatus.TRIALING,
+      providerSubscriptionId: null,
+    });
+    await expect(service.fulfill(providerSessionId)).resolves.toBe(
+      providerSubscriptionId,
+    );
+    expect(subscriptions.linkProvider).toHaveBeenCalledTimes(1);
+  });
+
+  it('não repete o início da contratação quando o webhook é reentregue após ativação', async () => {
+    const { service, repository, subscriptions } = setup();
+    repository.findCheckoutAttemptForFulfillment.mockResolvedValue({
+      ...attempt(),
+      subscriptionVersion: 3,
+      endsTrial: true,
+      status: 'COMPLETED',
+    });
+    subscriptions.requireCurrent.mockResolvedValue({
+      id: subscriptionId,
+      version: 4,
+      planCode: PlanCode.PROFESSIONAL,
+      billingInterval: BillingInterval.MONTHLY,
+      effectiveStatus: SubscriptionStatus.ACTIVE,
+      providerSubscriptionId,
+    });
+    await expect(service.fulfill(providerSessionId)).resolves.toBe(
+      providerSubscriptionId,
+    );
+  });
+
+  it('recusa intenção antiga quando outro comando alterou a assinatura', async () => {
+    const { service, repository, subscriptions } = setup();
+    repository.findCheckoutAttemptForFulfillment.mockResolvedValue({
+      ...attempt(),
+      subscriptionVersion: 3,
+      endsTrial: false,
+    });
+    subscriptions.requireCurrent.mockResolvedValue({
+      id: subscriptionId,
+      version: 4,
+      planCode: PlanCode.PROFESSIONAL,
+      billingInterval: BillingInterval.MONTHLY,
+      effectiveStatus: SubscriptionStatus.PENDING_PAYMENT,
+      providerSubscriptionId: null,
+    });
+    await expect(service.fulfill(providerSessionId)).rejects.toThrow(
+      'CHECKOUT_STALE_SUBSCRIPTION',
+    );
+    expect(subscriptions.linkProvider).not.toHaveBeenCalled();
   });
 });

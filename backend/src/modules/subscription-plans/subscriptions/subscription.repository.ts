@@ -184,12 +184,20 @@ export class SubscriptionRepository {
       providerCustomerId: string;
       providerPriceId: string | null;
       providerStatus: string;
+      expectedVersion?: number;
     },
   ): Promise<boolean> {
     return this.rls.run(async (tx) => {
+      const { expectedVersion, ...providerLink } = link;
       const { count } = await tx.organizationSubscription.updateMany({
-        where: { id, providerSubscriptionId: null },
-        data: { ...link, providerUpdatedAt: new Date() },
+        where: {
+          id,
+          providerSubscriptionId: null,
+          ...(expectedVersion === undefined
+            ? {}
+            : { version: expectedVersion }),
+        },
+        data: { ...providerLink, providerUpdatedAt: new Date() },
       });
       if (count === 1) return true;
 

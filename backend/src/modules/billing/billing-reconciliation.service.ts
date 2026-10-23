@@ -41,6 +41,7 @@ import {
   BILLING_PROVIDER,
   ProviderFinancialAdjustmentType,
   ProviderBillingState,
+  ProviderInvoiceStatus,
   type BillingProvider,
   type ProviderSubscription,
 } from './billing.types';
@@ -510,6 +511,35 @@ export class BillingReconciliationService {
       (provedor.state === ProviderBillingState.ACTIVE ||
         provedor.state === ProviderBillingState.TRIALING)
     ) {
+      if (
+        provedor.state === ProviderBillingState.TRIALING &&
+        catalogEntry.planCode !== 'ESSENTIAL'
+      ) {
+        throw new Error('BILLING_TRIAL_PLAN_NOT_ALLOWED');
+      }
+      const contractedChange =
+        atual.planCode !== catalogEntry.planCode ||
+        atual.billingInterval !== catalogEntry.billingInterval;
+      // ACTIVE sozinho não prova que a fatura de uma alteração foi paga.
+      if (
+        provedor.state === ProviderBillingState.ACTIVE &&
+        (contractedChange ||
+          atual.effectiveStatus !== SubscriptionStatus.ACTIVE)
+      ) {
+        if (!provedor.latestInvoiceId)
+          throw new Error('BILLING_PLAN_PAYMENT_NOT_CONFIRMED');
+        const invoice = await this.provider.retrieveInvoice(
+          provedor.latestInvoiceId,
+        );
+        if (
+          invoice.providerSubscriptionId !== provedor.providerSubscriptionId ||
+          invoice.providerCustomerId !== provedor.providerCustomerId ||
+          invoice.status !== ProviderInvoiceStatus.PAID ||
+          invoice.amountRemainingMinor !== 0
+        ) {
+          throw new Error('BILLING_PLAN_PAYMENT_NOT_CONFIRMED');
+        }
+      }
       if (!provedor.currentPeriodStart || !provedor.currentPeriodEnd) {
         throw new Error('BILLING_PROVIDER_PERIOD_MISSING');
       }

@@ -146,6 +146,14 @@ class ProvedorDeTeste implements BillingProvider {
     });
   }
 
+  expireCheckoutSession(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  createPlanChangeSession() {
+    return Promise.resolve({ url: 'https://billing.stripe.test/p/confirm' });
+  }
+
   createBillingPortalSession() {
     return Promise.resolve({ url: 'https://billing.stripe.test/p/session' });
   }

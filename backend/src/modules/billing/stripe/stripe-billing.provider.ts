@@ -231,6 +231,81 @@ export class StripeBillingProvider implements BillingProvider {
     return { url: session.url };
   }
 
+  async expireCheckoutSession(providerSessionId: string): Promise<void> {
+    await this.chamar('expireCheckoutSession', () =>
+      this.require().checkout.sessions.expire(providerSessionId),
+    );
+  }
+
+  async createPlanChangeSession(input: {
+    providerCustomerId: string;
+    providerSubscriptionId: string;
+    planCode: PlanCodeType;
+    billingInterval: BillingIntervalType;
+  }): Promise<BillingPortalSession> {
+    const stripe = this.require();
+    const priceId = this.priceOrFail(input.planCode, input.billingInterval);
+    await this.assertPrice(input.planCode, input.billingInterval, priceId);
+    const subscription = await this.chamar('retrieveSubscription', () =>
+      stripe.subscriptions.retrieve(input.providerSubscriptionId),
+    );
+    const item = subscription.items.data[0];
+    if (
+      this.idDoObjeto(subscription.customer) !== input.providerCustomerId ||
+      !item ||
+      subscription.items.data.length !== 1 ||
+      subscription.schedule
+    ) {
+      throw new BillingCommandNotAllowedException(
+        'subscription cannot enter the plan confirmation flow',
+      );
+    }
+    const configurations = await this.chamar(
+      'retrievePortalConfiguration',
+      () =>
+        stripe.billingPortal.configurations.list({
+          is_default: true,
+          limit: 1,
+        }),
+    );
+    const configuration = configurations.data[0];
+    const updates = configuration?.features.subscription_update;
+    if (
+      !configuration?.active ||
+      !updates?.enabled ||
+      !updates.default_allowed_updates.includes('price') ||
+      updates.proration_behavior !== 'always_invoice' ||
+      updates.schedule_at_period_end.conditions.length > 0 ||
+      !updates.products?.some((product) => product.prices.includes(priceId)) ||
+      (subscription.status === 'trialing' &&
+        updates.trial_update_behavior !== 'end_trial')
+    ) {
+      throw new BillingConfigurationInvalidException(
+        'enable portal price updates, publish the selected price, invoice prorations immediately and end trials on paid plan changes',
+      );
+    }
+    const session = await this.chamar('createPlanChangeSession', () =>
+      stripe.billingPortal.sessions.create({
+        customer: input.providerCustomerId,
+        configuration: configuration.id,
+        return_url: this.config.portalReturnUrl,
+        locale: 'pt-BR',
+        flow_data: {
+          type: 'subscription_update_confirm',
+          subscription_update_confirm: {
+            subscription: subscription.id,
+            items: [{ id: item.id, price: priceId, quantity: 1 }],
+          },
+          after_completion: {
+            type: 'redirect',
+            redirect: { return_url: this.config.checkoutSuccessUrl },
+          },
+        },
+      }),
+    );
+    return { url: session.url };
+  }
+
   private idDoObjeto(
     value: string | { id: string } | null | undefined,
   ): string | null {
@@ -654,6 +729,59 @@ export class StripeBillingProvider implements BillingProvider {
     return resultados;
   }
 
+  /** Diagnóstico somente de leitura, sem expor IDs da conta. */
+  async verifyPlanChangePortal(): Promise<{
+    valid: boolean;
+    problem: string | null;
+  }> {
+    const configurations = await this.chamar(
+      'retrievePortalConfiguration',
+      () =>
+        this.require().billingPortal.configurations.list({
+          is_default: true,
+          limit: 1,
+        }),
+    );
+    const configuration = configurations.data[0];
+    const updates = configuration?.features.subscription_update;
+    if (
+      !configuration?.active ||
+      !updates?.enabled ||
+      !updates.default_allowed_updates.includes('price')
+    ) {
+      return {
+        valid: false,
+        problem: 'Ative a troca de planos no portal padrão do Stripe.',
+      };
+    }
+    if (
+      updates.proration_behavior !== 'always_invoice' ||
+      updates.trial_update_behavior !== 'end_trial' ||
+      updates.schedule_at_period_end.conditions.length > 0
+    ) {
+      return {
+        valid: false,
+        problem:
+          'Configure cobrança imediata dos ajustes, fim do teste ao mudar de plano e alterações imediatas.',
+      };
+    }
+    const allowed = new Set(
+      updates.products?.flatMap((product) => product.prices) ?? [],
+    );
+    for (const plan of Object.values(PlanCode)) {
+      for (const interval of Object.values(BillingInterval)) {
+        const price = this.config.priceId(plan, interval);
+        if (!price || !allowed.has(price)) {
+          return {
+            valid: false,
+            problem: `Publique o preço de ${plan}/${interval} no portal padrão.`,
+          };
+        }
+      }
+    }
+    return { valid: true, problem: null };
+  }
+
   /* ---------------------------------------------------------------- */
   /* Internos                                                          */
   /* ---------------------------------------------------------------- */
@@ -706,6 +834,7 @@ export class StripeBillingProvider implements BillingProvider {
   private normalizar(assinatura: Stripe.Subscription): ProviderSubscription {
     const item = assinatura.items.data[0];
     return {
+      latestInvoiceId: this.idDoObjeto(assinatura.latest_invoice),
       providerSubscriptionId: assinatura.id,
       providerCustomerId:
         typeof assinatura.customer === 'string'

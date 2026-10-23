@@ -36,6 +36,10 @@ describe('StripeBillingProvider subscription commands', () => {
       secretKey: 'sk_test_unit_only',
       webhookSecret: 'whsec_unit_only',
       mode: BillingMode.TEST,
+      portalReturnUrl:
+        'https://orbit.example.test/configuracoes?secao=assinatura',
+      checkoutSuccessUrl:
+        'https://orbit.example.test/configuracoes?secao=assinatura&assinatura=sucesso',
       priceId: jest.fn().mockReturnValue('price_target'),
     };
     const subscriptions = {
@@ -88,6 +92,30 @@ describe('StripeBillingProvider subscription commands', () => {
         }),
       },
     };
+    const portalConfiguration = {
+      id: 'bpc_unit',
+      active: true,
+      features: {
+        subscription_update: {
+          enabled: true,
+          default_allowed_updates: ['price'],
+          proration_behavior: 'always_invoice',
+          trial_update_behavior: 'end_trial',
+          schedule_at_period_end: { conditions: [] },
+          products: [{ product: 'prod_unit', prices: ['price_target'] }],
+        },
+      },
+    };
+    const billingPortal = {
+      configurations: {
+        list: jest.fn().mockResolvedValue({ data: [portalConfiguration] }),
+      },
+      sessions: {
+        create: jest
+          .fn()
+          .mockResolvedValue({ url: 'https://billing.stripe.test/confirm' }),
+      },
+    };
     const invoices = { retrieve: jest.fn() };
     const refunds = { retrieve: jest.fn() };
     const disputes = { retrieve: jest.fn() };
@@ -96,6 +124,7 @@ describe('StripeBillingProvider subscription commands', () => {
     Object.defineProperty(provider, 'client', {
       value: {
         prices,
+        billingPortal,
         webhooks: Stripe.webhooks,
         checkout,
         subscriptions,
@@ -108,6 +137,8 @@ describe('StripeBillingProvider subscription commands', () => {
     });
     return {
       provider,
+      billingPortal,
+      portalConfiguration,
       price,
       config,
       prices,
@@ -129,6 +160,68 @@ describe('StripeBillingProvider subscription commands', () => {
     billingInterval: BillingInterval.MONTHLY,
     idempotencyKey: 'orbit:change-plan:stable',
   } as const;
+
+  it('abre confirmação da assinatura existente sem cobrar ou alterar itens antes da visita', async () => {
+    const { provider, billingPortal, subscriptions, config } = setup();
+    await expect(
+      provider.createPlanChangeSession({
+        providerCustomerId: 'cus_test_1',
+        providerSubscriptionId: 'sub_test_1',
+        planCode: PlanCode.PROFESSIONAL_INTELLIGENCE,
+        billingInterval: BillingInterval.MONTHLY,
+      }),
+    ).resolves.toEqual({ url: 'https://billing.stripe.test/confirm' });
+    expect(billingPortal.sessions.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customer: 'cus_test_1',
+        flow_data: {
+          type: 'subscription_update_confirm',
+          subscription_update_confirm: {
+            subscription: 'sub_test_1',
+            items: [{ id: 'si_test_1', price: 'price_target', quantity: 1 }],
+          },
+          after_completion: {
+            type: 'redirect',
+            redirect: { return_url: config.checkoutSuccessUrl },
+          },
+        },
+      }),
+    );
+    expect(subscriptions.update).not.toHaveBeenCalled();
+  });
+
+  it('recusa configuração que manteria dias grátis em plano não elegível', async () => {
+    const { provider, subscriptions, billingPortal, portalConfiguration } =
+      setup();
+    subscriptions.retrieve.mockResolvedValue(current({ status: 'trialing' }));
+    portalConfiguration.features.subscription_update.trial_update_behavior =
+      'continue_trial';
+    await expect(
+      provider.createPlanChangeSession({
+        providerCustomerId: 'cus_test_1',
+        providerSubscriptionId: 'sub_test_1',
+        planCode: PlanCode.PROFESSIONAL_INTELLIGENCE,
+        billingInterval: BillingInterval.MONTHLY,
+      }),
+    ).rejects.toBeInstanceOf(BillingConfigurationInvalidException);
+    expect(billingPortal.sessions.create).not.toHaveBeenCalled();
+    expect(subscriptions.update).not.toHaveBeenCalled();
+  });
+
+  it('recusa portal sem cobrança imediata dos ajustes', async () => {
+    const { provider, billingPortal, portalConfiguration } = setup();
+    portalConfiguration.features.subscription_update.proration_behavior =
+      'none';
+    await expect(
+      provider.createPlanChangeSession({
+        providerCustomerId: 'cus_test_1',
+        providerSubscriptionId: 'sub_test_1',
+        planCode: PlanCode.PROFESSIONAL_INTELLIGENCE,
+        billingInterval: BillingInterval.MONTHLY,
+      }),
+    ).rejects.toBeInstanceOf(BillingConfigurationInvalidException);
+    expect(billingPortal.sessions.create).not.toHaveBeenCalled();
+  });
 
   it('verifica o webhook sobre os bytes originais e publica apenas a referência do evento', () => {
     const { provider } = setup();

@@ -60,8 +60,8 @@ export const billingService = {
       input,
     ),
 
-  changePlan: (input: ChangePlanInput): Promise<OrganizationSubscription> =>
-    apiClient.post<OrganizationSubscription>(
+  changePlan: (input: ChangePlanInput): Promise<BillingPortalResult> =>
+    apiClient.post<BillingPortalResult>(
       "/organizations/current/subscription/change-plan",
       input,
     ),

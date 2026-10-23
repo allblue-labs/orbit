@@ -48,8 +48,10 @@ export function SubscriptionExpiredNotice() {
   const session = useSession();
   const { dispensado, dispensar } = useAvisoDeAssinatura();
   const vencida = session.isAuthenticated && !session.subscriptionActive;
+  const aguardandoPagamento =
+    session.entitlements?.subscriptionStatus === "PENDING_PAYMENT";
 
-  if (!vencida) return null;
+  if (!vencida || aguardandoPagamento) return null;
 
   const venceuEm = dataDeVencimento(session.subscriptionEndsAt);
 

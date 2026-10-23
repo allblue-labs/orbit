@@ -173,6 +173,7 @@ describe('BillingReconciliationService durable inbox', () => {
       providerSubscriptionId: 'sub_test_1',
       providerCustomerId: 'cus_test_1',
       providerPriceId: 'price_target',
+      latestInvoiceId: 'in_paid',
       state: ProviderBillingState.ACTIVE,
       rawStatus: 'active',
       currentPeriodStart: start,
@@ -197,6 +198,12 @@ describe('BillingReconciliationService durable inbox', () => {
       cancelAtPeriodEnd: false,
     });
 
+    (provider.retrieveInvoice as jest.Mock).mockResolvedValue({
+      providerSubscriptionId: 'sub_test_1',
+      providerCustomerId: 'cus_test_1',
+      status: ProviderInvoiceStatus.PAID,
+      amountRemainingMinor: 0,
+    });
     await service.reconcileProviderSubscription('sub_test_1', 'evt_test_1');
 
     expect(subscriptions.applyProviderPlan).toHaveBeenCalledWith(
@@ -211,6 +218,50 @@ describe('BillingReconciliationService durable inbox', () => {
       },
     );
   });
+
+  it.each(['OPEN', 'WRONG_CUSTOMER', 'NO_INVOICE'])(
+    'não libera plano alterado sem pagamento comprovado: %s',
+    async (scenario) => {
+      const { service, provider, repository, subscriptions } = setup(event(), {
+        planCode: PlanCode.PROFESSIONAL_INTELLIGENCE,
+        billingInterval: BillingInterval.ANNUAL,
+      });
+      (provider.retrieveSubscription as jest.Mock).mockResolvedValue({
+        providerSubscriptionId: 'sub_test_1',
+        providerCustomerId: 'cus_test_1',
+        providerPriceId: 'price_target',
+        latestInvoiceId: scenario === 'NO_INVOICE' ? null : 'in_unpaid',
+        state: ProviderBillingState.ACTIVE,
+        rawStatus: 'active',
+      });
+      (provider.retrieveInvoice as jest.Mock).mockResolvedValue({
+        providerSubscriptionId: 'sub_test_1',
+        providerCustomerId:
+          scenario === 'WRONG_CUSTOMER' ? 'cus_other' : 'cus_test_1',
+        status:
+          scenario === 'OPEN'
+            ? ProviderInvoiceStatus.OPEN
+            : ProviderInvoiceStatus.PAID,
+        amountRemainingMinor: 0,
+      });
+      repository.findSubscriptionByProviderId.mockResolvedValue({
+        organizationId: 'org_1',
+        providerCustomerId: 'cus_test_1',
+      });
+      subscriptions.currentOrNull.mockResolvedValue({
+        id: 'local_1',
+        organizationId: 'org_1',
+        version: 3,
+        effectiveStatus: SubscriptionStatus.ACTIVE,
+        planCode: PlanCode.ESSENTIAL,
+        billingInterval: BillingInterval.MONTHLY,
+      });
+      await expect(
+        service.reconcileProviderSubscription('sub_test_1', 'evt_1'),
+      ).rejects.toThrow('BILLING_PLAN_PAYMENT_NOT_CONFIRMED');
+      expect(subscriptions.applyProviderPlan).not.toHaveBeenCalled();
+    },
+  );
 
   it('materializa a fatura canônica sem persistir payload do webhook', async () => {
     const { service, provider, repository } = setup();

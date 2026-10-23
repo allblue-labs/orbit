@@ -470,7 +470,15 @@ export class SubscriptionService {
               billingAnchorAt: input.period.start,
             }
           : {}),
-        ...(input.activate ? { status: SubscriptionStatus.ACTIVE } : {}),
+        ...(input.activate
+          ? {
+              status: SubscriptionStatus.ACTIVE,
+              // Preserva o início histórico e encerra os dias gratuitos na conversão.
+              ...(atual.status === SubscriptionStatus.TRIALING
+                ? { trialEndsAt: input.period.start }
+                : {}),
+            }
+          : {}),
         currentPeriodStart: input.period.start,
         currentPeriodEnd: input.period.end,
         graceStartsAt: null,
@@ -568,6 +576,7 @@ export class SubscriptionService {
       providerCustomerId: string;
       providerPriceId: string | null;
       providerStatus: string;
+      expectedVersion?: number;
     },
   ): Promise<void> {
     const linked = await this.repository.linkProvider(id, link);

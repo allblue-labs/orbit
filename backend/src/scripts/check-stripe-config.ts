@@ -26,13 +26,27 @@ async function main(): Promise<void> {
     );
     return;
   }
-  const results = await new StripeBillingProvider(config).verifyPriceCatalog();
+  const provider = new StripeBillingProvider(config);
+  const results = await provider.verifyPriceCatalog();
   for (const result of results) {
     console.log(
       `${result.planCode}/${result.billingInterval}: ${result.valid ? 'OK' : result.problem}`,
     );
   }
   if (results.some((result) => !result.valid)) process.exitCode = 1;
+  const portal = await provider.verifyPlanChangePortal();
+  console.log(
+    `Portal para troca de planos: ${portal.valid ? 'OK' : portal.problem}`,
+  );
+  if (!portal.valid) process.exitCode = 1;
+  if (
+    enabled &&
+    process.env.BILLING_EVENTS_WORKER_ENABLED?.trim() === 'false'
+  ) {
+    console.log(
+      'BILLING_EVENTS_WORKER_ENABLED=false: é necessário um worker separado ativo para confirmar pagamentos.',
+    );
+  }
 }
 
 void main().catch((error: unknown) => {

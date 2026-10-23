@@ -59,13 +59,13 @@ export class SubscriptionBillingController {
     @Body() input: ChangeSubscriptionPlanDto,
   ) {
     const organizationId = this.organizationId(request);
-    await this.billing.changeSubscriptionPlan({
+    return this.billing.changeSubscriptionPlan({
       organizationId,
       expectedVersion: input.expectedVersion,
       planCode: input.planCode,
       billingInterval: input.billingInterval,
+      acknowledgeTrialEnd: input.acknowledgeTrialEnd,
     });
-    return this.details(organizationId);
   }
 
   @Post('cancel-scheduled-change')

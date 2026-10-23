@@ -15,7 +15,8 @@ comerciais vinculados passam pela fronteira do provedor:
 Stripe → webhook assinado / reconciliação → adaptador
        → comando do Orbit → OrganizationSubscription → EntitlementService
 
-usuário → comando autenticado → Stripe confirma → OrganizationSubscription
+usuário → comando autenticado → URL do Checkout/Portal → confirmação no Stripe
+        → webhook/reconciliação → OrganizationSubscription
 ```
 
 Registrado em `docs/adr/ADR-007`. O que esta PR acrescenta é o tradutor; a
@@ -60,8 +61,10 @@ nunca os valores.
 3. registre os **Price IDs** (`price_...`), nunca Product IDs (`prod_...`), nas
    variáveis `STRIPE_PRICE_<PLANO>_<PERIODICIDADE>`;
 4. configure o **Customer Portal**: métodos de pagamento, faturas, dados de
-   cobrança e cancelamento. O cancelamento do portal deve ser _ao fim do
-   período_, para não divergir da política do Orbit;
+   cobrança e cancelamento. Habilite **trocas de plano**, publique os 12 preços,
+   configure os ajustes para cobrança imediata (`always_invoice`), alterações
+   imediatas e fim do teste ao mudar (`end_trial`). O cancelamento continua
+   _ao fim do período_;
 5. crie a _webhook destination_ apontando para
    `POST https://<api>/api/v1/billing/webhooks/stripe`;
 6. selecione **apenas** os eventos da lista abaixo — nunca `*`;
@@ -91,7 +94,8 @@ O modo é deduzido do prefixo da chave (`sk_live_` ou `rk_live_` → `LIVE`). A
 configuração aceita chaves secretas e restritas de conta, rejeita chaves
 publicáveis e rejeita preços repetidos entre planos/periodicidades. Chaves
 restritas precisam das permissões usadas por este adaptador: leitura de preços,
-assinaturas, faturas, pagamentos de faturas, reembolsos e disputas; e escrita de
+assinaturas, faturas, pagamentos de faturas, reembolsos, disputas e configurações
+do Billing Portal; e escrita de
 customers, Checkout Sessions, sessões do Billing Portal, assinaturas e schedules.
 
 O texto de um Price ID não indica seu modo. A conferência usa o campo
@@ -108,10 +112,12 @@ npm run billing:check:dev -- --remote
 
 O primeiro comando confere os formatos, as doze associações, os segredos e as
 URLs, inclusive quando `STRIPE_ENABLED=false`. O segundo também faz GET dos
-doze preços no Stripe e os compara ao catálogo. Não cria clientes, assinaturas
+doze preços no Stripe, compara ao catálogo e confere a configuração padrão do
+Customer Portal. Não cria clientes, assinaturas
 ou pagamentos. As mensagens não imprimem credenciais. Uma divergência encerra
 com código 1. A conferência local não comprova que a chave é válida na conta,
-que o webhook foi cadastrado ou que o portal foi configurado.
+que o webhook foi cadastrado. A verificação remota também exige os preços e
+as regras de troca publicados no portal padrão.
 
 Na imagem publicada, que contém o script compilado:
 
@@ -145,13 +151,18 @@ apenas o arquivo `.env` não atualiza um container existente.
    diferente do segredo da destination cadastrada no painel.
 5. Em **Settings → Billing → Customer portal**, salve a configuração de métodos
    de pagamento, faturas e cancelamento no fim do período. Trocas de plano pelo
-   portal exigem cadastrar os produtos/preços permitidos; podem permanecer
-   desativadas enquanto as trocas são feitas pelo Orbit.
+   portal devem estar **ativadas**, pois o Orbit agora abre a confirmação
+   hospedada (`subscription_update_confirm`). Publique os quatro produtos e os
+   doze preços. Em ajustes proporcionais, escolha faturar/cobrar imediatamente
+   (`always_invoice`); mantenha a mudança imediata, sem agendamento de redução,
+   e o encerramento do teste na troca (`trial_update_behavior=end_trial`).
+   `npm run billing:check:dev -- --remote` confere essas regras sem modificar a conta.
 6. As três envs de retorno são URLs do **Orbit**, escolhidas por quem implanta,
    não credenciais copiadas do Stripe. Uma rota existente para as três é:
    `https://orbit.allblue-labs.com/configuracoes?secao=assinatura`.
-   Use-a em `BILLING_CHECKOUT_SUCCESS_URL`, `BILLING_CHECKOUT_CANCEL_URL` e
-   `BILLING_PORTAL_RETURN_URL`. O retorno não ativa a assinatura: é o webhook
+   Use-a em `BILLING_CHECKOUT_CANCEL_URL` e `BILLING_PORTAL_RETURN_URL`. Para
+   `BILLING_CHECKOUT_SUCCESS_URL`, acrescente `&assinatura=sucesso`, para a tela
+   acompanhar a confirmação. O retorno não ativa a assinatura: é o webhook
    processado que confirma o estado.
 7. Depois da configuração, publique a API atualizada e recrie seu container com
    as envs corrigidas e `STRIPE_ENABLED=true`. Em **Webhooks → destination →
@@ -323,32 +334,77 @@ silenciosamente ignorado. Ignorar em silêncio ensina que tentar não custa nada
 quem ativa é o estado verificado chegando por webhook assinado ou por
 reconciliação.
 
-## Comandos depois da contratação
+## Cadastro e troca de plano com pagamento
 
-Uma assinatura com `providerSubscriptionId` não é alterada primeiro no banco.
-O fluxo é deliberadamente provider-first:
+- Um novo cadastro sem avaliação nasce `PENDING_PAYMENT`. Após receber a sessão
+  autenticada, o frontend abre o Checkout com o plano e a periodicidade que o
+  servidor publicou. Se a abertura falhar, o cadastro fica preservado e a tela
+  de assinatura oferece **Continuar para o pagamento**.
+- `POST /organizations/current/subscription/change-plan` aceita versão, plano,
+  periodicidade e a confirmação opcional `acknowledgeTrialEnd`; retorna
+  `{ url }`. O frontend deve navegar para essa URL. Uma resposta bem-sucedida
+  não significa que o plano foi alterado.
+- Sem vínculo Stripe e em teste/pagamento pendente, a mudança cria uma intenção
+  de Checkout para o destino. Mantém plano, limites e teste atuais enquanto o
+  usuário não paga. A intenção registra a versão de origem e se encerra o teste.
+- Uma sessão aberta para o mesmo destino é reutilizada. Mudar a escolha expira
+  primeiro a sessão anterior no Stripe, impedindo que ambas sejam pagas.
+- Com vínculo, abre a confirmação `subscription_update_confirm` do Customer
+  Portal, na **assinatura existente**. A API não atualiza itens nem cobra o
+  cartão antes da confirmação hospedada. O Stripe apresenta valores e créditos;
+  mudanças passam a seguir a configuração de cobrança imediata do portal.
+- A reconciliação exige preço conhecido, customer/subscription correspondentes
+  e fatura canônica `PAID` sem saldo antes de conceder um plano pago alterado.
+  `active` isoladamente, o redirect e HTTP 200 não provam o pagamento.
+- A volta ao Orbit acompanha o **plano/periodicidade escolhidos**, mesmo quando
+  o plano anterior já estava `ACTIVE`, e atualiza também o cache da sessão.
+- Cancelar renovação e manter assinatura continuam sincronizando o Stripe
+  antes do estado local. Schedules criados pelo fluxo anterior continuam
+  podendo ser desfeitos pelo comando existente; um schedule deve ser desfeito
+  antes de abrir nova troca no portal.
 
-```text
-versão local válida → conferir customer/subscription no Stripe
-                    → executar comando idempotente
-                    → validar resposta canônica
-                    → refletir localmente com OCC
+### Saída antecipada do teste
+
+Apenas o Essencial recebe os 30 dias. Antes de migrar para outro plano, o modal
+informa os dias restantes, que a cobrança começa ao contratar e que os dias não
+serão transferidos. A API exige `acknowledgeTrialEnd=true`. Alterar a periodicidade durante o teste
+também é uma contratação paga antecipada, com o mesmo aviso e confirmação. O Checkout do novo
+plano não recebe `trial_period_days`. Para assinaturas já ligadas, a configuração
+do portal precisa encerrar o teste (`end_trial`).
+
+Ao confirmar o pagamento, a assinatura passa a `ACTIVE`, recebe o plano pago e
+encerra o prazo gratuito. Cancelar a navegação ou não pagar preserva o plano
+anterior. Nenhuma nova concessão de teste é criada e a memória antifraude não é
+apagada.
+
+### Publicação desta correção
+
+Aplique `20261022230000_checkout_plan_change_intent` antes de subir a API nova.
+A migration acrescenta `subscription_version` e `ends_trial` às tentativas,
+sem modificar assinaturas existentes. Sessões criadas anteriormente continuam
+aceitas apenas para o plano original.
+
+```sh
+docker compose build api migrate frontend
+docker compose run --rm migrate
+docker compose up -d --no-deps api frontend
+docker compose exec api npm run billing:check -- --remote
 ```
 
-- cancelamento e reativação escrevem `cancel_at_period_end` no Stripe antes de
-  mudar o estado local;
-- upgrade usa `always_invoice` e `error_if_incomplete`: a diferença é cobrada
-  agora e direitos novos não são concedidos quando o pagamento fica pendente;
-- downgrade usa um Subscription Schedule de duas fases. O preço atual é
-  preservado até `current_period_end`, e o preço novo começa exatamente ali;
-- desfazer um downgrade libera somente um schedule que possua os metadados da
-  mesma organização e assinatura Orbit;
-- o `price_id` canônico volta para `(planCode, billingInterval)` por igualdade
-  exata com o catálogo configurado. Preço desconhecido falha fechado.
+Configure `BILLING_EVENTS_WORKER_ENABLED=true` em pelo menos uma instância e
+mantenha `JOBS_WORKER_ENABLED` habilitado nela (o padrão é `true`). HTTP 200 no
+webhook com todos os workers desligados apenas acumula eventos na inbox.
+Ao editar envs, **recrie** o container; `restart` não aplica os novos valores.
 
-Assinaturas legadas ainda sem vínculo continuam usando os comandos locais. Isso
-preserva compatibilidade, mas uma assinatura já ligada jamais faz fallback
-local quando o Stripe está indisponível.
+Na auditoria somente de leitura de 22/10/2026, os 12 preços da conta Live foram
+validados. A troca estava desativada no portal padrão e o `.env` deste checkout
+mantinha o worker de cobrança desligado. A URL de sucesso também estava sem
+`assinatura=sucesso`; acrescente o parâmetro para acompanhar a confirmação no
+retorno. A configuração do servidor de produção precisa ser conferida separadamente.
+
+Referências: [confirmação hospedada de mudança](https://docs.stripe.com/customer-management/portal-deep-links),
+[configurar o portal](https://docs.stripe.com/customer-management/configure-portal),
+[tratamento de testes no portal](https://docs.stripe.com/customer-management#limitations).
 
 ### A avaliação continua sendo do Orbit
 
@@ -418,7 +474,7 @@ suíte dedicada exercita banco real, assinatura real, caixa de entrada real e
 reconciliação real — substituindo apenas as chamadas de rede.
 
 O sistema fica **pronto para produção, aguardando somente a configuração de
-segredos e dos doze identificadores de preço**.
+segredos, dos doze identificadores de preço, do portal de troca e do worker**.
 
 ## Fora de escopo
 
