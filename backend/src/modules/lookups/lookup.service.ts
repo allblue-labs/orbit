@@ -189,6 +189,23 @@ export class LookupService {
      */
     if (response.status === 404)
       throw new EntityNotFoundException('Consulta', scope);
+
+    /**
+     * Limite do provedor público.
+     *
+     * Distinto de "está fora do ar" porque a ação de quem leu é outra: aqui
+     * esperar alguns instantes resolve, e a mensagem genérica de
+     * indisponibilidade mandaria a pessoa digitar tudo à mão sem necessidade.
+     * A BrasilAPI responde 429 com frequência na faixa gratuita.
+     */
+    if (response.status === 429) {
+      this.logger.warn(JSON.stringify({ stage: 'lookup-throttled', scope }));
+      throw new ServiceUnavailableException(
+        'O serviço de consulta recebeu muitos pedidos agora. ' +
+          'Tente em alguns instantes ou preencha os dados manualmente.',
+        'LOOKUP_THROTTLED',
+      );
+    }
     if (!response.ok) {
       this.logger.warn(
         JSON.stringify({
