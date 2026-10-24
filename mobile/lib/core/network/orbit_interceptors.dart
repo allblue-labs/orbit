@@ -22,6 +22,8 @@ import 'session_authenticator.dart';
 
 /// Marca requisições que não devem levar token nem disparar renovação.
 const publicRequestKey = 'orbit.public';
+const sessionGenerationKey = 'orbit.sessionGeneration';
+const sessionLeaseKey = 'orbit.sessionLease';
 
 /// Cabeçalhos de contexto — os mesmos nomes usados pela aplicação web.
 abstract final class ContextHeaders {
@@ -79,17 +81,44 @@ class AuthInterceptor extends QueuedInterceptor {
   /// Cliente sem este interceptor, para reexecutar sem recursão.
   final Dio _retryClient;
 
+  bool _current(RequestOptions options) {
+    final generation = options.extra[sessionGenerationKey];
+    final lease = options.extra[sessionLeaseKey];
+    return (generation == null || generation == _authenticator.generation) &&
+        (lease is! bool Function() || lease());
+  }
+
+  DioException _changed(RequestOptions options) => DioException(
+    requestOptions: options,
+    type: DioExceptionType.cancel,
+    error: SessionAuthenticator.changed,
+  );
+
   @override
   Future<void> onRequest(
     RequestOptions options,
     RequestInterceptorHandler handler,
   ) async {
+    options.extra[sessionGenerationKey] ??= _authenticator.generation;
+    if (!_current(options)) return handler.reject(_changed(options));
     if (options.extra[publicRequestKey] == true) return handler.next(options);
     final tokens = await _storage.read();
+    if (!_current(options)) return handler.reject(_changed(options));
     if (tokens != null) {
       options.headers['authorization'] = 'Bearer ${tokens.accessToken}';
     }
     handler.next(options);
+  }
+
+  @override
+  void onResponse(
+    Response<dynamic> response,
+    ResponseInterceptorHandler handler,
+  ) {
+    if (!_current(response.requestOptions)) {
+      return handler.reject(_changed(response.requestOptions));
+    }
+    handler.next(response);
   }
 
   @override
@@ -98,6 +127,7 @@ class AuthInterceptor extends QueuedInterceptor {
     ErrorInterceptorHandler handler,
   ) async {
     final options = err.requestOptions;
+    if (!_current(options)) return handler.next(_changed(options));
     final isPublic = options.extra[publicRequestKey] == true;
     final alreadyRetried = options.extra['orbit.retried'] == true;
 
@@ -106,9 +136,11 @@ class AuthInterceptor extends QueuedInterceptor {
     }
 
     final tokens = await _storage.read();
+    if (!_current(options)) return handler.next(_changed(options));
     if (tokens == null) return handler.next(err);
 
     final renewed = await _authenticator.refresh(tokens.refreshToken);
+    if (!_current(options)) return handler.next(_changed(options));
     if (renewed == null) return handler.next(err);
 
     try {

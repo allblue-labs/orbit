@@ -65,12 +65,12 @@ class _WorkQueueScreenState extends ConsumerState<WorkQueueScreen> {
     final filter = ref.watch(workQueueFilterProvider);
     final session = ref.watch(sessionProvider);
 
-    /// Quem abre atendimento é quem pode criar operação.
+    /// O avulso tem uma permissão própria para quem atende em campo.
     ///
     /// A permissão é do servidor — o comando a exige de novo. Esconder o botão
     /// de quem ele recusaria evita oferecer um caminho que termina em negativa
     /// depois do formulário inteiro preenchido.
-    final podeAbrir = session?.hasPermission('operations.create') ?? false;
+    final podeAbrir = session?.canCreateWalkIn ?? false;
 
     return Scaffold(
       backgroundColor: context.orbit.background,
@@ -169,7 +169,9 @@ class _Queue extends StatelessWidget {
         OrbitSpacing.md,
         OrbitSpacing.gutter,
         /* A altura do botão flutuante mais folga, quando ele existe. */
-        reserveFloatingAction ? OrbitSpacing.xl3 + OrbitSpacing.lg : OrbitSpacing.xl,
+        reserveFloatingAction
+            ? OrbitSpacing.xl3 + OrbitSpacing.lg
+            : OrbitSpacing.xl,
       ),
 
       /// +1 pelo rodapé, +1 pelo aviso de lista local quando ele existe.

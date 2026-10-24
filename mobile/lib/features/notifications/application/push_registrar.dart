@@ -54,19 +54,25 @@ class PushRegistrar {
 
   /// O último token registrado, para não repetir o `POST` a cada abertura.
   String? _registrado;
+  bool _active = true;
+  int _generation = 0;
 
   /// Chamado quando há sessão.
   ///
   /// Idempotente: registrar o mesmo token duas vezes é uma requisição
   /// desperdiçada, e o aplicativo restaura a sessão a cada abertura.
   Future<void> start() async {
+    _active = true;
+    final generation = _generation;
     _refresh ??= _source.onTokenRefresh.listen(_registrar);
 
     if (!await _source.requestPermission()) {
       _logger.info('push_permission_denied');
       return;
     }
+    if (!_active || generation != _generation) return;
     final token = await _source.token();
+    if (!_active || generation != _generation) return;
     if (token == null) {
       _logger.info('push_token_unavailable');
       return;
@@ -75,21 +81,26 @@ class PushRegistrar {
   }
 
   Future<void> _registrar(String token) async {
-    if (token == _registrado) return;
+    if (!_active || token == _registrado) return;
+    final generation = _generation;
     try {
+      final id = await _deviceInstanceId();
+      final version = await _appVersion();
+      if (!_active || generation != _generation) return;
       await _repository.register(
         RegisterMobileDeviceRequest(
-          deviceInstanceId: await _deviceInstanceId(),
+          deviceInstanceId: id,
           platform: defaultTargetPlatform == TargetPlatform.iOS
               ? MobilePlatform.ios
               : MobilePlatform.android,
           pushProvider: _source.provider,
           pushToken: token,
-          appVersion: await _appVersion(),
+          appVersion: version,
           locale: PlatformDispatcher.instance.locale.toLanguageTag(),
           timezone: DateTime.now().timeZoneName,
         ),
       );
+      if (!_active || generation != _generation) return;
       _registrado = token;
       _logger.info('push_device_registered');
     } on Object catch (error) {
@@ -102,6 +113,8 @@ class PushRegistrar {
   /// Chamado no logout, **antes** de a sessão sumir: a chamada precisa do
   /// token de acesso que está prestes a ser descartado.
   Future<void> stop() async {
+    _active = false;
+    _generation++;
     await _refresh?.cancel();
     _refresh = null;
     final id = await _deviceInstanceId();
@@ -112,5 +125,14 @@ class PushRegistrar {
     } on Object catch (error) {
       _logger.error('push_device_revoke_failed', error: error);
     }
+  }
+
+  /// Stops callbacks even when credentials have already expired.
+  void dispose() {
+    _active = false;
+    _generation++;
+    unawaited(_refresh?.cancel());
+    _refresh = null;
+    _registrado = null;
   }
 }

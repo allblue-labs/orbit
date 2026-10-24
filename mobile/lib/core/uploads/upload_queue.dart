@@ -93,6 +93,7 @@ class UploadQueue {
   String? _currentTaskId;
   Future<void>? _processing;
   bool _loaded = false;
+  bool _disposed = false;
 
   /// Estado da fila, para a interface observar.
   ///
@@ -117,6 +118,7 @@ class UploadQueue {
   Future<void> restore() async {
     if (_loaded) return;
     final stored = await _store.load();
+    if (_disposed) return;
     _tasks = stored
         .map(
           (task) => task.status == UploadStatus.uploading
@@ -131,6 +133,7 @@ class UploadQueue {
 
   /// Enfileira um arquivo já copiado para o diretório da aplicação.
   Future<UploadTask> enqueue(UploadTask task) async {
+    if (_disposed) throw StateError('A sessão de envio foi encerrada.');
     _tasks = [..._tasks, task];
     await _persist();
     unawaited(process());
@@ -198,7 +201,7 @@ class UploadQueue {
   }
 
   Future<void> _drain() async {
-    while (true) {
+    while (!_disposed) {
       final now = DateTime.now();
       final next = _tasks.where((task) => task.isReady(now)).firstOrNull;
       if (next == null) break;
@@ -222,6 +225,7 @@ class UploadQueue {
     await _persist();
 
     try {
+      if (_disposed) return;
       await _executor(
         task,
         cancellation: signal,
@@ -234,6 +238,8 @@ class UploadQueue {
         },
       );
 
+      if (_disposed) return;
+
       _update(
         task.id,
         (current) =>
@@ -245,7 +251,13 @@ class UploadQueue {
         data: {'operationId': task.operationId},
       );
     } on Object catch (error) {
-      if (signal.isCancelled) {
+      if (_disposed) {
+        _update(
+          task.id,
+          (current) =>
+              current.copyWith(status: UploadStatus.pending, progress: 0),
+        );
+      } else if (signal.isCancelled) {
         _update(
           task.id,
           (current) => current.copyWith(status: UploadStatus.cancelled),
@@ -343,6 +355,8 @@ class UploadQueue {
   }
 
   Future<void> dispose() async {
+    _disposed = true;
+    _currentSignal?.cancel();
     await _connectivitySubscription?.cancel();
     await _controller.close();
   }

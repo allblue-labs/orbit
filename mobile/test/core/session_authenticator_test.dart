@@ -29,6 +29,64 @@ void main() {
     );
   });
 
+  for (final fails in [false, true]) {
+    test(
+      'refresh antigo ${fails ? 'falhando' : 'concluindo'} não altera a sessão nova',
+      () async {
+        final response = Completer<TokenPair>();
+        final authenticator = SessionAuthenticator(
+          storage: storage,
+          logger: logger,
+          refreshCall: (_) => response.future,
+        );
+        final expired = <void>[];
+        final subscription = authenticator.onExpired.listen(expired.add);
+        final old = authenticator.refresh('refresh-1');
+        await authenticator.clearSession();
+        await authenticator.storeTokens(
+          const TokenPair(
+            accessToken: 'access-B',
+            refreshToken: 'refresh-B',
+            expiresIn: 900,
+          ),
+          generation: authenticator.generation,
+        );
+        if (fails) {
+          response.completeError(StateError('old refresh rejected'));
+        } else {
+          response.complete(
+            const TokenPair(
+              accessToken: 'access-A-late',
+              refreshToken: 'refresh-A-late',
+              expiresIn: 900,
+            ),
+          );
+        }
+        expect(await old, isNull);
+        expect((await storage.read())?.accessToken, 'access-B');
+        expect(expired, isEmpty);
+        await subscription.cancel();
+      },
+    );
+  }
+
+  test('reset remove a janela de rotação da conta anterior', () async {
+    var calls = 0;
+    final authenticator = SessionAuthenticator(
+      storage: storage,
+      logger: logger,
+      refreshCall: (_) async => TokenPair(
+        accessToken: 'access-${++calls}',
+        refreshToken: 'new-$calls',
+        expiresIn: 900,
+      ),
+    );
+    await authenticator.refresh('refresh-1');
+    await authenticator.clearSession();
+    await authenticator.refresh('refresh-1');
+    expect(calls, 2);
+  });
+
   test('chamadas concorrentes compartilham uma única renovação', () async {
     var backendCalls = 0;
     final completer = Completer<TokenPair>();

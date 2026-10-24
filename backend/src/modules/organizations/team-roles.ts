@@ -4,6 +4,7 @@ export const ROLE_SURFACES = ['WEB', 'MOBILE', 'API'] as const;
 export type RoleSurface = (typeof ROLE_SURFACES)[number];
 export const DEFAULT_ROLE_SURFACES: readonly RoleSurface[] = ['WEB', 'MOBILE'];
 export const FIELD_ONLY_SURFACES: readonly RoleSurface[] = ['MOBILE'];
+export const WALK_IN_CREATE_PERMISSION = 'operations.walk_in.create';
 
 export interface PermissionDefinition {
   readonly code: string;
@@ -63,6 +64,10 @@ export const PERMISSION_GROUPS: readonly PermissionGroup[] = [
     permissions: [
       permission('operations.read', 'Visualizar atendimentos'),
       permission('operations.create', 'Criar atendimentos'),
+      permission(
+        WALK_IN_CREATE_PERMISSION,
+        'Iniciar atendimento avulso no app',
+      ),
       permission('operations.update', 'Editar atendimentos'),
       permission('operations.status.update', 'Alterar etapa do atendimento'),
       permission('operations.assign', 'Atribuir equipe'),
@@ -316,6 +321,7 @@ export const ASSIGNABLE_TEAM_ROLES: readonly TeamRoleSeed[] = [
       'Executa o serviço no cliente: atendimento, roteiro, evidências e materiais.',
     permissions: [
       ...FIELD_READ,
+      WALK_IN_CREATE_PERMISSION,
       'operations.update',
       'operations.status.update',
       'operations.attachments.create',

@@ -36,6 +36,26 @@ abstract interface class TokenStorage {
   Future<void> clear();
 }
 
+/// Reads cannot observe half of a token rotation or race a logout write.
+class SerializedTokenStorage implements TokenStorage {
+  SerializedTokenStorage(this._storage);
+  final TokenStorage _storage;
+  Future<void> _pending = Future.value();
+
+  Future<T> _run<T>(Future<T> Function() action) {
+    final result = _pending.then((_) => action());
+    _pending = result.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    return result;
+  }
+
+  @override
+  Future<TokenPair?> read() => _run(_storage.read);
+  @override
+  Future<void> write(TokenPair tokens) => _run(() => _storage.write(tokens));
+  @override
+  Future<void> clear() => _run(_storage.clear);
+}
+
 class SecureTokenStorage implements TokenStorage {
   SecureTokenStorage({FlutterSecureStorage? storage})
     : _storage =

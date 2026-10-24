@@ -6,6 +6,7 @@
 library;
 
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -86,6 +87,90 @@ void main() {
     expect(data['id'], 'op-1');
     expect(data['code'], 'OP-1');
   });
+
+  test(
+    '401 atrasado não reexecuta a requisição da conta anterior como o novo usuário',
+    () async {
+      final late = Completer<ResponseBody>();
+      final started = Completer<void>();
+      final storage = InMemoryTokenStorage(
+        const TokenPair(
+          accessToken: 'access-A',
+          refreshToken: 'refresh-A',
+          expiresIn: 900,
+        ),
+      );
+      final setup = build(
+        storage: storage,
+        onRequest: (_) {
+          started.complete();
+          return late.future;
+        },
+      );
+      final pending = setup.client.scoped().get<dynamic>('/private-A');
+      final assertion = expectLater(
+        pending,
+        throwsA(
+          isA<OrbitException>().having(
+            (e) => e.code,
+            'code',
+            'SESSION_CHANGED',
+          ),
+        ),
+      );
+      await started.future;
+      await setup.client.authenticator.clearSession();
+      await setup.client.authenticator.storeTokens(
+        const TokenPair(
+          accessToken: 'access-B',
+          refreshToken: 'refresh-B',
+          expiresIn: 900,
+        ),
+        generation: setup.client.authenticator.generation,
+      );
+      late.complete(
+        _json(
+          errorEnvelope(code: 'UNAUTHORIZED', message: 'Expired'),
+          status: 401,
+        ),
+      );
+      await assertion;
+      expect(setup.plain.requests, isEmpty);
+      expect((await storage.read())?.accessToken, 'access-B');
+    },
+  );
+
+  test(
+    'download assinado antigo é rejeitado depois de encerrar seu contexto',
+    () async {
+      final late = Completer<ResponseBody>();
+      final started = Completer<void>();
+      final setup = build(
+        onRequest: (_) {
+          started.complete();
+          return late.future;
+        },
+      );
+      final scoped = setup.client.scoped();
+      final pending = scoped.getBytes(
+        url: Uri.parse('https://storage.example.test/private-A.pdf'),
+      );
+      final assertion = expectLater(
+        pending,
+        throwsA(
+          isA<OrbitException>().having(
+            (e) => e.code,
+            'code',
+            'SESSION_CHANGED',
+          ),
+        ),
+      );
+      await started.future;
+      scoped.closeScope();
+      late.complete(ResponseBody.fromBytes([37, 80, 68, 70, 45], 200));
+      await assertion;
+    },
+  );
 
   test('traduz o envelope de erro para OrbitException', () async {
     final setup = build(

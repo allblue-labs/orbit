@@ -10,6 +10,9 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app/providers.dart';
+import 'app/session_runtime.dart';
+import 'core/storage/read_cache.dart';
+import 'features/artifact/data/document_file.dart';
 import 'core/routing/orbit_router.dart';
 import 'core/theme/orbit_theme.dart';
 import 'features/authentication/domain/session.dart';
@@ -31,6 +34,8 @@ Future<void> main() async {
 
   // A leitura das preferências é assíncrona; a árvore precisa dela pronta.
   final preferences = await SharedPreferences.getInstance();
+  await PreferencesReadCache.purgeLegacy(preferences);
+  await TemporaryDocumentFileStore().purge();
 
   runApp(
     ProviderScope(
@@ -49,6 +54,8 @@ class OrbitOperatorApp extends ConsumerStatefulWidget {
 
 class _OrbitOperatorAppState extends ConsumerState<OrbitOperatorApp> {
   StreamSubscription<String>? _avisosTocados;
+  SessionRuntime? _runtime;
+  Object? _runtimeIdentity;
 
   @override
   void initState() {
@@ -56,8 +63,6 @@ class _OrbitOperatorAppState extends ConsumerState<OrbitOperatorApp> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // Restaura a sessão guardada.
       ref.read(authControllerProvider.notifier).restore();
-      // Retoma evidências que ficaram pendentes de uma sessão anterior.
-      ref.read(uploadQueueProvider).restore();
     });
 
     /// Tocar num aviso abre o que ele é sobre.
@@ -74,6 +79,7 @@ class _OrbitOperatorAppState extends ConsumerState<OrbitOperatorApp> {
   @override
   void dispose() {
     _avisosTocados?.cancel();
+    _runtime?.dispose();
     super.dispose();
   }
 
@@ -82,36 +88,59 @@ class _OrbitOperatorAppState extends ConsumerState<OrbitOperatorApp> {
 
     /// Caminho desconhecido leva à caixa de avisos, nunca a um palpite: uma
     /// tela errada passa por defeito, quando só chegou um tipo novo de aviso.
-    ref.read(routerProvider).go(destino ?? OrbitRoutes.notifications);
-  }
-
-  /// Liga e desliga o registro conforme a sessão.
-  ///
-  /// O `revoke` do logout precisa acontecer **antes** de o token de acesso
-  /// ser descartado, e por isso mora no controlador de sessão, não aqui.
-  /// Aqui fica só o lado de entrar.
-  void _acompanharSessao() {
-    ref.listen<AuthState>(authControllerProvider, (anterior, atual) {
-      if (atual is AuthAuthenticated && anterior is! AuthAuthenticated) {
-        ref.read(pushRegistrarProvider).start();
-      }
-    });
+    _runtime?.container
+        .read(routerProvider)
+        .go(destino ?? OrbitRoutes.notifications);
   }
 
   @override
   Widget build(BuildContext context) {
-    _acompanharSessao();
+    final auth = ref.watch(authControllerProvider);
+    final session = auth is AuthAuthenticated ? auth.session : null;
+    final identity = (
+      auth.runtimeType,
+      session?.user.id,
+      session?.claims.sessionId,
+      session?.organizationId,
+      session?.businessUnitId,
+      session == null
+          ? null
+          : ref.read(apiClientProvider).authenticator.generation,
+    );
+    if (_runtime == null || identity != _runtimeIdentity) {
+      final previous = _runtime;
+      previous?.retire();
+      PaintingBinding.instance.imageCache.clear();
+      PaintingBinding.instance.imageCache.clearLiveImages();
+      _runtimeIdentity = identity;
+      _runtime = SessionRuntime(
+        root: ProviderScope.containerOf(context, listen: false),
+        session: session,
+      );
+      if (session != null) {
+        unawaited(_runtime!.container.read(pushRegistrarProvider).start());
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) => previous?.dispose());
+    }
 
-    return MaterialApp.router(
-      title: 'Orbit Operator',
-      debugShowCheckedModeBanner: false,
-      theme: OrbitTheme.light(),
+    return KeyedSubtree(
+      key: ValueKey(identity),
+      child: UncontrolledProviderScope(
+        container: _runtime!.container,
+        child: Consumer(
+          builder: (context, scopedRef, _) => MaterialApp.router(
+            title: 'Orbit Operator',
+            debugShowCheckedModeBanner: false,
+            theme: OrbitTheme.light(),
 
-      /// Só o claro nesta rodada. A paleta é uma `ThemeExtension`: ligar o
-      /// escuro no futuro é acrescentar uma segunda paleta aqui, sem tocar em
-      /// tela nenhuma.
-      themeMode: ThemeMode.light,
-      routerConfig: ref.watch(routerProvider),
+            /// Só o claro nesta rodada. A paleta é uma `ThemeExtension`: ligar o
+            /// escuro no futuro é acrescentar uma segunda paleta aqui, sem tocar em
+            /// tela nenhuma.
+            themeMode: ThemeMode.light,
+            routerConfig: scopedRef.watch(routerProvider),
+          ),
+        ),
+      ),
     );
   }
 }

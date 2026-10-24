@@ -138,9 +138,11 @@ class SignatureUploadController extends StateNotifier<SignatureUploadState> {
         mimeType: check.mimeType!,
         bytes: bytes,
       );
+      if (!mounted) return;
       state = const SignatureUploadState(phase: SignatureUploadPhase.done);
       onCompleted();
     } on Object catch (error) {
+      if (!mounted) return;
       state = SignatureUploadState(
         phase: SignatureUploadPhase.failed,
         error: error,

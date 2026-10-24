@@ -111,11 +111,14 @@ export class MobileFieldService {
     const [dashboard, documentos, compromissos, concluidos] = await Promise.all(
       [
         this.dashboard(actor),
-        this.repository.recentDocuments(
-          actor.organizationId,
-          actor.businessUnitIds,
-          RECENTES,
-        ),
+        this.has(actor, 'artifact_executions.read')
+          ? this.repository.recentDocuments(
+              actor.organizationId,
+              actor.businessUnitIds,
+              RECENTES,
+              actor,
+            )
+          : Promise.resolve([]),
         this.repository.recentAppointments(
           actor.organizationId,
           actor.businessUnitIds,
@@ -192,6 +195,7 @@ export class MobileFieldService {
         take: limit + 1,
         ...(cursor ? { cursorId: cursor.id } : {}),
       },
+      actor,
     );
 
     const hasNextPage = linhas.length > limit;
@@ -941,7 +945,9 @@ export class MobileFieldService {
   }
   private has(actor: MobileFieldActor, permission: string): boolean {
     return (
-      actor.permissions.includes('*') || actor.permissions.includes(permission)
+      actor.isOrganizationOwner === true ||
+      actor.permissions.includes('*') ||
+      actor.permissions.includes(permission)
     );
   }
 

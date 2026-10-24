@@ -75,6 +75,12 @@ class OrbitSession {
       permissions.contains(_wildcardPermission) ||
       permissions.contains(permission);
 
+  /// Creating an attendance in the field has its own permission. Existing
+  /// managers with general operation creation keep their authorized access.
+  bool get canCreateWalkIn =>
+      hasPermission('operations.walk_in.create') ||
+      hasPermission('operations.create');
+
   bool hasRole(String role) =>
       (isOwner && role != platformAdminRole) || roles.contains(role);
 

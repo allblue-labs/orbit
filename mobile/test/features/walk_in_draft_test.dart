@@ -273,4 +273,60 @@ void main() {
       });
     });
   });
+  group('novo cliente com equipamentos', () {
+    test('pede ao menos um equipamento antes de abrir o novo cadastro', () {
+      const draft = WalkInDraft(
+        origin: WalkInOrigin.fresh,
+        customer: WalkInCustomerDraft(
+          type: 'INDIVIDUAL',
+          legalName: 'Maria Souza',
+        ),
+      );
+      expect(draft.isReady, isFalse);
+      expect(
+        draft.blockedReason,
+        'Adicione ao menos um equipamento para o novo cliente.',
+      );
+    });
+    test('nomes do cliente e do equipamento bastam', () {
+      const draft = WalkInDraft(
+        origin: WalkInOrigin.fresh,
+        customer: WalkInCustomerDraft(
+          type: 'INDIVIDUAL',
+          legalName: 'Maria Souza',
+        ),
+        equipment: [WalkInEquipmentDraft(name: 'Split da sala')],
+      );
+      expect(draft.isReady, isTrue);
+      expect(draft.blockedReason, isNull);
+    });
+    test('pessoa física não envia nome fantasia deixado pelo cadastro PJ', () {
+      const customer = WalkInCustomerDraft(
+        type: 'INDIVIDUAL',
+        legalName: 'Maria',
+        tradeName: 'Empresa antiga',
+      );
+      expect(customer.toJson().containsKey('tradeName'), isFalse);
+    });
+    test('preserva identificação, datas civis e especificações opcionais', () {
+      final equipment = WalkInEquipmentDraft(
+        name: 'Split',
+        category: 'EQUIPMENT',
+        identifier: 'ET-1',
+        identifierType: 'INTERNAL_CODE',
+        installationAt: DateTime(2026, 10, 24),
+        warrantyUntil: DateTime(2027, 10, 24),
+        specifications: {'Capacidade': '12.000 BTU/h', 'Tensão': '220 V'},
+      );
+      expect(equipment.toJson(), {
+        'name': 'Split',
+        'category': 'EQUIPMENT',
+        'identifier': 'ET-1',
+        'identifierType': 'INTERNAL_CODE',
+        'installationAt': '2026-10-24T00:00:00.000Z',
+        'warrantyUntil': '2027-10-24T00:00:00.000Z',
+        'specifications': {'Capacidade': '12.000 BTU/h', 'Tensão': '220 V'},
+      });
+    });
+  });
 }

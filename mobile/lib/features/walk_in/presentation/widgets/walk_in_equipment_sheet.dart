@@ -38,22 +38,135 @@ class _Folha extends StatefulWidget {
   State<_Folha> createState() => _FolhaState();
 }
 
+class _TechnicalField {
+  final name = TextEditingController();
+  final value = TextEditingController();
+  void dispose() {
+    name.dispose();
+    value.dispose();
+  }
+}
+
 class _FolhaState extends State<_Folha> {
   final _nome = TextEditingController();
   final _marca = TextEditingController();
   final _modelo = TextEditingController();
   final _serie = TextEditingController();
   final _local = TextEditingController();
+  final _identificador = TextEditingController();
+  final _instalacao = TextEditingController();
+  final _garantia = TextEditingController();
+  final _specifications = <_TechnicalField>[];
+  String _categoria = 'EQUIPMENT';
+  String _tipoIdentificador = 'INTERNAL_CODE';
+  DateTime? _dataInstalacao;
+  DateTime? _dataGarantia;
+
+  static const _categorias = {
+    'EQUIPMENT': 'Equipamento',
+    'TOOL': 'Ferramenta',
+    'VEHICLE': 'Veículo',
+    'FACILITY': 'Instalação',
+    'OTHER': 'Outro',
+  };
+  static const _identificadores = {
+    'INTERNAL_CODE': 'Código interno',
+    'SERIAL_NUMBER': 'Número de série',
+    'QR_CODE': 'QR Code',
+    'BARCODE': 'Código de barras',
+    'NFC': 'NFC',
+    'RFID': 'RFID',
+    'CUSTOM': 'Outro',
+  };
 
   @override
   void dispose() {
-    for (final controller in [_nome, _marca, _modelo, _serie, _local]) {
+    for (final controller in [
+      _nome,
+      _marca,
+      _modelo,
+      _serie,
+      _local,
+      _identificador,
+      _instalacao,
+      _garantia,
+    ]) {
       controller.dispose();
+    }
+    for (final row in _specifications) {
+      row.dispose();
     }
     super.dispose();
   }
 
-  bool get _valido => _nome.text.trim().isNotEmpty;
+  bool get _specsValid {
+    final names = <String>{};
+    for (final row in _specifications) {
+      final name = row.name.text.trim(), value = row.value.text.trim();
+      if (name.isEmpty && value.isEmpty) continue;
+      if (name.isEmpty || value.isEmpty || !names.add(name.toLowerCase())) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool get _valido => _nome.text.trim().isNotEmpty && _specsValid;
+
+  Future<void> _date(bool installation) async {
+    final date = await showDatePicker(
+      context: context,
+      initialDate:
+          (installation ? _dataInstalacao : _dataGarantia) ?? DateTime.now(),
+      firstDate: DateTime(1970),
+      lastDate: DateTime(2100),
+      helpText: installation ? 'Data da instalação' : 'Garantia até',
+      cancelText: 'Cancelar',
+      confirmText: 'Confirmar',
+      fieldLabelText: 'Data',
+      fieldHintText: 'Selecione uma data',
+      errorFormatText: 'Informe uma data válida.',
+      errorInvalidText: 'Escolha uma data entre 1970 e 2100.',
+    );
+    if (date == null || !mounted) return;
+    setState(() {
+      final text =
+          '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+      if (installation) {
+        _dataInstalacao = date;
+        _instalacao.text = text;
+      } else {
+        _dataGarantia = date;
+        _garantia.text = text;
+      }
+    });
+  }
+
+  Widget _dateField(
+    String label,
+    TextEditingController controller,
+    bool installation,
+  ) => WalkInField(
+    label: label,
+    controller: controller,
+    readOnly: true,
+    hint: 'Opcional',
+    onTap: () => _date(installation),
+    suffix: controller.text.isEmpty
+        ? const Icon(Icons.calendar_today_outlined, size: 18)
+        : IconButton(
+            tooltip: 'Limpar $label',
+            icon: const Icon(Icons.close, size: 18),
+            onPressed: () => setState(() {
+              controller.clear();
+              if (installation) {
+                _dataInstalacao = null;
+              } else {
+                _dataGarantia = null;
+              }
+            }),
+          ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -75,42 +188,153 @@ class _FolhaState extends State<_Folha> {
           ),
           const SizedBox(height: OrbitSpacing.xs),
           Text(
-            'Só o nome é obrigatório. A placa com marca e número de série '
-            'costuma estar atrás da condensadora — e não vale subir no telhado '
-            'para abrir a ordem.',
+            'Somente o nome é obrigatório. As outras informações podem ser preenchidas depois.',
             style: OrbitType.caption.copyWith(color: palette.inkSubtle),
           ),
           const SizedBox(height: OrbitSpacing.ms),
-
           WalkInField(
-            label: 'Como chamar este aparelho',
+            label: 'Nome do equipamento',
             controller: _nome,
+            maxLength: 180,
             hint: 'Split do quarto, central da recepção',
             onChanged: (_) => setState(() {}),
           ),
+          DropdownButtonFormField<String>(
+            initialValue: _categoria,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Categoria'),
+            items: [
+              for (final entry in _categorias.entries)
+                DropdownMenuItem(value: entry.key, child: Text(entry.value)),
+            ],
+            onChanged: (value) =>
+                setState(() => _categoria = value ?? 'EQUIPMENT'),
+          ),
+          const SizedBox(height: OrbitSpacing.ms),
           WalkInField(
             label: 'Onde fica',
             controller: _local,
+            maxLength: 255,
             hint: 'Sala 2, cobertura, recepção',
           ),
-          WalkInField(label: 'Marca', controller: _marca),
-          WalkInField(label: 'Modelo', controller: _modelo),
+          WalkInField(label: 'Marca', controller: _marca, maxLength: 120),
+          WalkInField(label: 'Modelo', controller: _modelo, maxLength: 120),
           WalkInField(
             label: 'Número de série',
             controller: _serie,
+            maxLength: 120,
             textCapitalization: TextCapitalization.characters,
           ),
-
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: const Text('Identificação e detalhes técnicos'),
+            subtitle: const Text('Informações opcionais'),
+            children: [
+              DropdownButtonFormField<String>(
+                initialValue: _tipoIdentificador,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'Tipo de identificação',
+                ),
+                items: [
+                  for (final entry in _identificadores.entries)
+                    DropdownMenuItem(
+                      value: entry.key,
+                      child: Text(entry.value),
+                    ),
+                ],
+                onChanged: (value) => setState(
+                  () => _tipoIdentificador = value ?? 'INTERNAL_CODE',
+                ),
+              ),
+              const SizedBox(height: OrbitSpacing.ms),
+              WalkInField(
+                label: 'Identificador / etiqueta',
+                controller: _identificador,
+                maxLength: 180,
+              ),
+              Row(
+                children: [
+                  Expanded(child: _dateField('Instalação', _instalacao, true)),
+                  const SizedBox(width: OrbitSpacing.sm),
+                  Expanded(child: _dateField('Garantia até', _garantia, false)),
+                ],
+              ),
+              for (final row in _specifications)
+                Padding(
+                  key: ObjectKey(row),
+                  padding: const EdgeInsets.only(bottom: OrbitSpacing.sm),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: row.name,
+                              maxLength: 80,
+                              decoration: const InputDecoration(
+                                labelText: 'Informação técnica',
+                                hintText: 'Capacidade, tensão, fluido…',
+                              ),
+                              onChanged: (_) => setState(() {}),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Remover informação técnica',
+                            icon: const Icon(Icons.delete_outline),
+                            onPressed: () {
+                              setState(() => _specifications.remove(row));
+                              row.dispose();
+                            },
+                          ),
+                        ],
+                      ),
+                      TextField(
+                        controller: row.value,
+                        maxLength: 255,
+                        decoration: const InputDecoration(
+                          labelText: 'Valor',
+                          hintText: '12.000 BTU/h, 220 V…',
+                        ),
+                        onChanged: (_) => setState(() {}),
+                      ),
+                    ],
+                  ),
+                ),
+              if (!_specsValid)
+                Text(
+                  'Preencha o nome e o valor de cada informação, sem repetir os nomes.',
+                  style: OrbitType.caption.copyWith(color: palette.warning),
+                ),
+              TextButton.icon(
+                onPressed: () =>
+                    setState(() => _specifications.add(_TechnicalField())),
+                icon: const Icon(Icons.add),
+                label: const Text('Adicionar informação técnica'),
+              ),
+            ],
+          ),
           const SizedBox(height: OrbitSpacing.sm),
           FilledButton(
             onPressed: _valido
                 ? () => Navigator.of(context).pop(
                     WalkInEquipmentDraft(
                       name: _nome.text,
+                      category: _categoria,
                       manufacturer: _marca.text,
                       model: _modelo.text,
                       serialNumber: _serie.text,
                       location: _local.text,
+                      identifier: _identificador.text,
+                      identifierType: _tipoIdentificador,
+                      installationAt: _dataInstalacao,
+                      warrantyUntil: _dataGarantia,
+                      specifications: {
+                        for (final row in _specifications)
+                          if (row.name.text.trim().isNotEmpty &&
+                              row.value.text.trim().isNotEmpty)
+                            row.name.text.trim(): row.value.text.trim(),
+                      },
                     ),
                   )
                 : null,

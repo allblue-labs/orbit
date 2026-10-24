@@ -116,6 +116,13 @@ class MediaUploadController extends StateNotifier<MediaSyncState> {
   /// quem chama dispara sem esperar — uma foto de 10 MB não pode segurar a
   /// tela aberta.
   Future<LocalMedia> enqueue(LocalMedia media) async {
+    if (!mounted || scope.userId.isEmpty || !media.scope.matches(scope)) {
+      throw const OrbitException(
+        kind: OrbitErrorKind.unauthorized,
+        publicMessage: 'Entre novamente para registrar esta evidência.',
+        code: 'SESSION_CHANGED',
+      );
+    }
     await _queue.enqueue(media);
     await _refreshCounts();
     return media;
@@ -123,6 +130,9 @@ class MediaUploadController extends StateNotifier<MediaSyncState> {
 
   /// Processa a fila. Chamadas concorrentes recebem a mesma volta.
   Future<void> process({bool manual = false}) {
+    if (!mounted || scope.userId.isEmpty || scope.organizationId.isEmpty) {
+      return Future.value();
+    }
     final running = _inFlight;
     if (running != null) return running;
 
@@ -148,6 +158,7 @@ class MediaUploadController extends StateNotifier<MediaSyncState> {
       final attempted = <String>{};
       for (var round = 0; round < 50; round += 1) {
         final queue = await _queue.forScope(scope);
+        if (!mounted) return;
         final next = queue
             .where(
               (value) =>
@@ -159,18 +170,21 @@ class MediaUploadController extends StateNotifier<MediaSyncState> {
         await _send(next);
       }
 
+      if (!mounted) return;
       state = state.copyWith(
         phase: MediaSyncPhase.idle,
         clearProgress: true,
         clearError: true,
       );
     } on OrbitException catch (error) {
+      if (!mounted) return;
       state = state.copyWith(
         phase: error.isOffline ? MediaSyncPhase.offline : MediaSyncPhase.error,
         error: error.isOffline ? null : error,
         clearProgress: true,
       );
     } on Object catch (error) {
+      if (!mounted) return;
       state = state.copyWith(
         phase: MediaSyncPhase.error,
         error: error,
@@ -182,6 +196,7 @@ class MediaUploadController extends StateNotifier<MediaSyncState> {
 
   /// Uma mídia, do começo ao fim.
   Future<void> _send(LocalMedia media) async {
+    if (!mounted || !media.scope.matches(scope)) return;
     final now = DateTime.now().toUtc();
     await _queue.mark(
       media.localMediaId,
@@ -194,6 +209,7 @@ class MediaUploadController extends StateNotifier<MediaSyncState> {
     );
 
     try {
+      if (!mounted) return;
       final intent = await _repository.reserve(
         EvidenceUploadIntentRequest(
           target: media.target,
@@ -209,6 +225,7 @@ class MediaUploadController extends StateNotifier<MediaSyncState> {
           expectedSha256: media.sha256,
         ),
       );
+      if (!mounted) return;
 
       /// Já finalizada numa tentativa anterior: a evidência existe, e o que
       /// falta é só o app parar de guardar o arquivo.
@@ -251,7 +268,9 @@ class MediaUploadController extends StateNotifier<MediaSyncState> {
         url: intent.uploadUrl!,
         headers: intent.requiredHeaders,
         bytes: bytes,
-        onProgress: (value) => state = state.copyWith(progress: value),
+        onProgress: (value) {
+          if (mounted) state = state.copyWith(progress: value);
+        },
       );
 
       /// Bytes no storage. **Ainda não é evidência.**
@@ -266,6 +285,7 @@ class MediaUploadController extends StateNotifier<MediaSyncState> {
       );
       await _confirm(media, target: evidence.target);
     } on OrbitException catch (error) {
+      if (!mounted) return;
       await _handleFailure(media, error);
     }
   }
@@ -276,7 +296,7 @@ class MediaUploadController extends StateNotifier<MediaSyncState> {
     FieldEvidenceTargetRef? target,
   }) async {
     await _queue.remove(media.localMediaId);
-    onEvidenceConfirmed(target ?? media.target);
+    if (mounted) onEvidenceConfirmed(target ?? media.target);
   }
 
   /// O que fazer com uma recusa.
@@ -337,6 +357,7 @@ class MediaUploadController extends StateNotifier<MediaSyncState> {
 
   Future<void> _refreshCounts() async {
     final queue = await _queue.forScope(scope);
+    if (!mounted) return;
     state = state.copyWith(
       pending: queue.where((value) => value.isSendable).length,
       blocked: queue.where((value) => value.isBlocked).length,

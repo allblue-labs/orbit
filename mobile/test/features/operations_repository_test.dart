@@ -231,7 +231,7 @@ void main() {
 
     expect(
       timeline.events.single.label,
-      'Status alterado: Agendada → Em execução',
+      'Situação alterada de agendada para em execução',
     );
     expect(timeline.attachments.single.fileName, 'laudo.pdf');
   });

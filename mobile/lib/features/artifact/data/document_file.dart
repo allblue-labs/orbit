@@ -12,6 +12,7 @@ import 'dart:typed_data';
 import 'package:path_provider/path_provider.dart';
 
 import '../../../core/media/media_type.dart';
+import '../../../core/network/session_authenticator.dart';
 
 /// O que impede tratar estes bytes como documento.
 enum DocumentFileProblem { empty, notPdf }
@@ -62,13 +63,21 @@ abstract interface class DocumentFileStore {
 }
 
 class TemporaryDocumentFileStore implements DocumentFileStore {
+  TemporaryDocumentFileStore({this.scopeKey});
+
+  final String? scopeKey;
+  bool _closed = false;
   Directory? _directory;
+
+  void close() {
+    _closed = true;
+  }
 
   Future<Directory> _dir() async {
     final cached = _directory;
     if (cached != null) return cached;
     final directory = Directory(
-      '${(await getTemporaryDirectory()).path}/orbit-documentos',
+      '${(await getTemporaryDirectory()).path}/orbit-documentos${scopeKey == null ? '' : '/$scopeKey'}',
     );
     if (!await directory.exists()) await directory.create(recursive: true);
     return _directory = directory;
@@ -76,7 +85,13 @@ class TemporaryDocumentFileStore implements DocumentFileStore {
 
   @override
   Future<String> write(String fileName, List<int> bytes) async {
+    if (_closed) throw SessionAuthenticator.changed;
     final directory = await _dir();
+    if (_closed) throw SessionAuthenticator.changed;
+    fileName = fileName.split(RegExp(r'[/\\]')).last;
+    if (fileName.isEmpty || fileName == '.' || fileName == '..') {
+      throw const FormatException('Nome de documento inválido');
+    }
     final file = File('${directory.path}/$fileName');
 
     /// Temporário e rename, como no resto do app: um PDF pela metade no lugar
@@ -84,14 +99,22 @@ class TemporaryDocumentFileStore implements DocumentFileStore {
     final temporary = File('${file.path}.tmp');
     await temporary.writeAsBytes(bytes, flush: true);
     await temporary.rename(file.path);
+    if (_closed) {
+      await delete(file.path);
+      throw SessionAuthenticator.changed;
+    }
     return file.path;
   }
 
   @override
-  Future<bool> exists(String path) => File(path).exists();
+  Future<bool> exists(String path) async =>
+      !_closed &&
+      path.startsWith('${(await _dir()).path}/') &&
+      await File(path).exists();
 
   @override
   Future<void> delete(String path) async {
+    if (!path.startsWith('${(await _dir()).path}/')) return;
     final file = File(path);
     if (await file.exists()) await file.delete();
   }
@@ -102,6 +125,7 @@ class TemporaryDocumentFileStore implements DocumentFileStore {
     if (!await directory.exists()) return;
     await for (final entity in directory.list()) {
       if (entity is File) await entity.delete();
+      if (entity is Directory) await entity.delete(recursive: true);
     }
   }
 }

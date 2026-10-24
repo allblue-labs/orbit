@@ -95,6 +95,7 @@ class DocumentSharing {
         return;
       }
 
+      _downloader.checkSession();
       await SharePlus.instance.share(
         ShareParams(
           files: [XFile(caminho, mimeType: 'application/pdf')],

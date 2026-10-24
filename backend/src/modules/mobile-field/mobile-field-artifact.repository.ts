@@ -1,4 +1,9 @@
 import { Injectable } from '@nestjs/common';
+import {
+  canManageFieldDocuments,
+  fieldDocumentAccess,
+  fieldOperationAssignment,
+} from './field-document-access';
 import { Prisma } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import { RlsTransaction } from '../../database';
@@ -130,6 +135,7 @@ export class MobileFieldArtifactRepository {
             organizationId: actor.organizationId,
             businessUnitId: { in: [...actor.businessUnitIds] },
             deletedAt: null,
+            ...fieldOperationAssignment(actor),
           },
           include: {
             organization: { select: { id: true, displayName: true } },
@@ -280,6 +286,14 @@ export class MobileFieldArtifactRepository {
             id,
             organizationId: actor.organizationId,
             businessUnitId: { in: [...actor.businessUnitIds] },
+            ...(canManageFieldDocuments(actor)
+              ? {}
+              : {
+                  OR: [
+                    { responsibleFieldTechnicianId: actor.id },
+                    { technicalResponsibleUserId: actor.id },
+                  ],
+                }),
           },
           include: {
             occurrence: { include: { configuration: true } },
@@ -327,6 +341,9 @@ export class MobileFieldArtifactRepository {
           id,
           organizationId: actor.organizationId,
           businessUnitId: { in: [...actor.businessUnitIds] },
+          ...(canManageFieldDocuments(actor)
+            ? {}
+            : { responsibleFieldTechnicianId: actor.id }),
         },
         include: { artifactExecution: true },
       });
@@ -348,6 +365,7 @@ export class MobileFieldArtifactRepository {
           businessUnitId: { in: [...actor.businessUnitIds] },
           sourceType,
           sourceId,
+          ...fieldDocumentAccess(actor),
         },
         include: artifactInclude,
         orderBy: { snapshotVersion: 'desc' },
@@ -362,6 +380,7 @@ export class MobileFieldArtifactRepository {
           id,
           organizationId: actor.organizationId,
           businessUnitId: { in: [...actor.businessUnitIds] },
+          ...fieldDocumentAccess(actor),
         },
         include: artifactInclude,
       }),

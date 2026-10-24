@@ -157,6 +157,55 @@ build(
 }
 
 void main() {
+  for (final foreign in [
+    const CommandScope(
+      userId: 'u2',
+      organizationId: 'org1',
+      businessUnitId: 'bu1',
+    ),
+    const CommandScope(
+      userId: 'u1',
+      organizationId: 'org2',
+      businessUnitId: 'bu1',
+    ),
+    const CommandScope(
+      userId: 'u1',
+      organizationId: 'org1',
+      businessUnitId: 'bu2',
+    ),
+  ]) {
+    test('não consulta nem descarta comando de ${foreign.toJson()}', () async {
+      final harness = build(
+        Backend(onPush: (_) => [], onPull: (_) => pullPage()),
+      );
+      await harness.journal.enqueue(
+        PendingCommand(
+          envelope: envelope(99),
+          scope: foreign,
+          state: PendingCommandState.conflict,
+          enqueuedAt: DateTime.now().toUtc(),
+        ),
+      );
+      expect(
+        await harness.controller.outcomeOf(uuid(99)),
+        isA<CommandPendingOutcome>(),
+      );
+      await harness.controller.discard(uuid(99));
+      expect((await harness.journal.read()).commands, hasLength(1));
+      await harness.journal.resolve(
+        commandId: uuid(99),
+        scope: foreign,
+        result: OfflineCommandResult.fromJson(receipt(99, 'APPLIED')),
+        at: DateTime.now().toUtc(),
+      );
+      expect(
+        await harness.controller.outcomeOf(uuid(99)),
+        isA<CommandPendingOutcome>(),
+      );
+      harness.controller.dispose();
+    });
+  }
+
   group('push', () {
     test('cada comando recebe o seu próprio recibo', () async {
       /// O servidor responde ao que recebeu, não a uma lista fixa: é assim

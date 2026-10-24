@@ -179,75 +179,76 @@ class _Folha extends ConsumerWidget {
           ),
           child: SafeArea(
             top: false,
-            child: Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                      _abrirHistorico(context, ref);
-                    },
-                    child: const Text('Histórico'),
-                  ),
-                ),
-                const SizedBox(width: OrbitSpacing.ms),
-
-                /// Abrir um atendimento para **este** cliente.
-                ///
-                /// ## O que estava aqui antes
-                ///
-                /// "Ir para os atendimentos", que chamava `_abrirHistorico` —
-                /// exatamente a mesma ação do botão "Histórico" ao lado. Os
-                /// dois levavam à fila filtrada por este cliente, e um deles
-                /// ainda ficava desabilitado quando não havia nada em aberto:
-                /// a posição de ação principal da folha era ocupada por uma
-                /// duplicata que, metade das vezes, não fazia nada.
-                ///
-                /// Agora ela leva ao roteiro avulso com este cliente já
-                /// escolhido — e sem o caminho de cadastrar outro: quem abriu
-                /// a folha de alguém não quer criar um terceiro.
-                if (session?.hasPermission('operations.create') ?? false)
-                  Expanded(
-                    flex: 2,
-                    child: FilledButton.icon(
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                        context.push(
-                          OrbitRoutes.walkIn(
-                            customerId: cliente.id,
-                            customerName: cliente.name,
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.add, size: 19),
-                      label: const Text('Iniciar um atendimento'),
-                    ),
-                  )
-                else
-                  /// Sem permissão de abrir ordem, a fila filtrada volta a ser
-                  /// a ação principal: é o que resta de útil aqui.
-                  Expanded(
-                    flex: 2,
-                    child: FilledButton.icon(
-                      onPressed: cliente.openCount == 0
-                          ? null
-                          : () {
-                              Navigator.of(context).pop();
-                              _abrirHistorico(context, ref);
-                            },
-                      icon: const Icon(Icons.play_arrow_rounded, size: 19),
-                      label: Text(
-                        cliente.openCount == 0
-                            ? 'Nada em aberto'
-                            : 'Ir para os atendimentos',
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+            child: _acoes(context, ref, session?.canCreateWalkIn ?? false),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _acoes(BuildContext context, WidgetRef ref, bool podeAbrir) {
+    final router = GoRouter.of(context);
+    final history = OutlinedButton(
+      onPressed: () {
+        Navigator.of(context).pop();
+        _abrirHistorico(router, ref);
+      },
+      child: const Text('Histórico'),
+    );
+    final primary = podeAbrir
+        ? FilledButton.icon(
+            onPressed: () {
+              Navigator.of(context).pop();
+              router.push(
+                OrbitRoutes.walkIn(
+                  customerId: cliente.id,
+                  customerName: cliente.name,
+                ),
+              );
+            },
+            icon: const Icon(Icons.add, size: 19),
+            label: const Text(
+              'Iniciar um atendimento',
+              textAlign: TextAlign.center,
+            ),
+          )
+        : FilledButton.icon(
+            onPressed: cliente.openCount == 0
+                ? null
+                : () {
+                    Navigator.of(context).pop();
+                    _abrirHistorico(router, ref);
+                  },
+            icon: const Icon(Icons.play_arrow_rounded, size: 19),
+            label: Text(
+              cliente.openCount == 0
+                  ? 'Nada em aberto'
+                  : 'Ir para os atendimentos',
+              textAlign: TextAlign.center,
+            ),
+          );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 340 ||
+            MediaQuery.textScalerOf(context).scale(14) > 18) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              primary,
+              const SizedBox(height: OrbitSpacing.sm),
+              history,
+            ],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(child: history),
+            const SizedBox(width: OrbitSpacing.ms),
+            Expanded(flex: 2, child: primary),
+          ],
+        );
+      },
     );
   }
 
@@ -256,12 +257,12 @@ class _Folha extends ConsumerWidget {
   /// É o histórico e a lista de trabalho ao mesmo tempo: a tela de
   /// Atendimentos tem os recortes, e duplicar a lista aqui seria manter duas
   /// implementações do mesmo filtro.
-  void _abrirHistorico(BuildContext context, WidgetRef ref) {
+  void _abrirHistorico(GoRouter router, WidgetRef ref) {
     ref.read(workQueueFilterProvider.notifier).state = WorkQueueFilter(
       customerId: cliente.id,
       customerName: cliente.name,
     );
-    context.go(OrbitRoutes.workQueue);
+    router.go(OrbitRoutes.workQueue);
   }
 }
 
@@ -292,11 +293,15 @@ class _Dado extends StatelessWidget {
               style: OrbitType.caption.copyWith(color: palette.inkSubtle),
             ),
           ),
-          Text(
-            valor,
-            style: OrbitType.body.copyWith(
-              color: destaque ? palette.accentStrong : palette.ink,
-              fontWeight: destaque ? FontWeight.w600 : FontWeight.w400,
+          Flexible(
+            flex: 2,
+            child: Text(
+              valor,
+              textAlign: TextAlign.end,
+              style: OrbitType.body.copyWith(
+                color: destaque ? palette.accentStrong : palette.ink,
+                fontWeight: destaque ? FontWeight.w600 : FontWeight.w400,
+              ),
             ),
           ),
         ],

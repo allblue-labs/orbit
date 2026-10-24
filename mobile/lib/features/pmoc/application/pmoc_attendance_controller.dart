@@ -141,6 +141,7 @@ class PmocAttendanceController extends StateNotifier<PmocAttendanceState> {
         cycleId: target.cycleId,
         assetId: target.assetId,
       );
+      if (!mounted) return;
       state = state.copyWith(
         phase: PmocAttendancePhase.ready,
         preparation: preparation,
@@ -148,6 +149,7 @@ class PmocAttendanceController extends StateNotifier<PmocAttendanceState> {
         clearPending: true,
       );
     } catch (error) {
+      if (!mounted) return;
       state = state.copyWith(phase: PmocAttendancePhase.error, error: error);
     }
   }
@@ -179,7 +181,9 @@ class PmocAttendanceController extends StateNotifier<PmocAttendanceState> {
       );
       /* O fechamento do ciclo é resposta do servidor, e vale mostrar: o técnico
          acabou de fechar o período inteiro daquele contrato. */
-      state = state.copyWith(cycleCompleted: resultado.cycleCompleted);
+      if (mounted) {
+        state = state.copyWith(cycleCompleted: resultado.cycleCompleted);
+      }
       return resultado;
     });
   }
@@ -211,8 +215,10 @@ class PmocAttendanceController extends StateNotifier<PmocAttendanceState> {
     );
     try {
       await action();
+      if (!mounted) return;
       await load();
     } catch (error) {
+      if (!mounted) return;
       state = state.copyWith(
         phase: PmocAttendancePhase.ready,
         error: error,
@@ -222,13 +228,14 @@ class PmocAttendanceController extends StateNotifier<PmocAttendanceState> {
   }
 }
 
-final pmocAttendanceControllerProvider = StateNotifierProvider.family<
-  PmocAttendanceController,
-  PmocAttendanceState,
-  PmocAttendanceTarget
->(
-  (ref, target) => PmocAttendanceController(
-    repository: ref.watch(pmocRepositoryProvider),
-    target: target,
-  ),
-);
+final pmocAttendanceControllerProvider =
+    StateNotifierProvider.family<
+      PmocAttendanceController,
+      PmocAttendanceState,
+      PmocAttendanceTarget
+    >(
+      (ref, target) => PmocAttendanceController(
+        repository: ref.watch(pmocRepositoryProvider),
+        target: target,
+      ),
+    );

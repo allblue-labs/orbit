@@ -1,7 +1,7 @@
 import { Controller, Get, Param, Query, Req } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ForbiddenException } from '../../exceptions';
-import { Surfaces } from '../../decorators';
+import { Permissions, Surfaces } from '../../decorators';
 import type { IdentityRequest } from '../identity/infrastructure/jwt-authentication.guard';
 import { RequiresActivePlan } from '../subscription-plans/plan-access';
 import {
@@ -69,6 +69,7 @@ export class MobileFieldController {
   }
 
   @Get('documents')
+  @Permissions('artifact_executions.read')
   @ApiOperation({ summary: 'Documentos de campo emitidos, paginados' })
   documents(
     @Req() request: IdentityRequest,
@@ -92,6 +93,7 @@ export class MobileFieldController {
       organizationId: identity.organizationId,
       businessUnitIds: identity.businessUnitIds,
       permissions: identity.permissions,
+      isOrganizationOwner: identity.isOrganizationOwner,
     };
   }
 }

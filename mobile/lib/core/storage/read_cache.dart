@@ -38,14 +38,36 @@ abstract interface class ReadCache {
 }
 
 class PreferencesReadCache implements ReadCache {
-  PreferencesReadCache(this._preferences);
+  PreferencesReadCache(this._preferences, {String? namespace})
+    : _prefix = namespace == null
+          ? 'orbit.cache.'
+          : 'orbit.cache.v2.$namespace.';
 
-  static const _prefix = 'orbit.cache.';
+  final String _prefix;
+  bool _closed = false;
+
+  void close() => _closed = true;
+
+  /// Old versions did not record an owner: those entries cannot be migrated safely.
+  static Future<void> purgeLegacy(SharedPreferences preferences) async {
+    for (final key
+        in preferences
+            .getKeys()
+            .where(
+              (key) =>
+                  key.startsWith('orbit.cache.') &&
+                  !key.startsWith('orbit.cache.v2.'),
+            )
+            .toList()) {
+      await preferences.remove(key);
+    }
+  }
 
   final SharedPreferences _preferences;
 
   @override
   Future<CachedValue<Map<String, dynamic>>?> read(String key) async {
+    if (_closed) return null;
     final raw = _preferences.getString('$_prefix$key');
     if (raw == null) return null;
     try {
@@ -63,6 +85,7 @@ class PreferencesReadCache implements ReadCache {
 
   @override
   Future<void> write(String key, Map<String, dynamic> value) async {
+    if (_closed) return;
     await _preferences.setString(
       '$_prefix$key',
       jsonEncode({
