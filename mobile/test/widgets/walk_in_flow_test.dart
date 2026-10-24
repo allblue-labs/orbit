@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:orbit_operator/app/providers.dart';
 import 'package:orbit_operator/core/config/environment.dart';
 import 'package:orbit_operator/core/contracts/mobile_field_contracts.dart';
+import 'package:orbit_operator/core/contracts/session_contracts.dart';
 import 'package:orbit_operator/core/network/orbit_api_client.dart';
 import 'package:orbit_operator/core/observability/orbit_logger.dart';
 import 'package:orbit_operator/core/routing/orbit_router.dart';
@@ -132,6 +133,7 @@ Future<void> open(
     'customers.read',
   ],
   bool isOwner = false,
+  SessionAccess? access,
   double width = 390,
   double scale = 1,
 }) async {
@@ -201,7 +203,7 @@ Future<void> open(
             permissions: permissions,
             roles: isOwner ? const ['OWNER'] : const ['FIELD_TECHNICIAN'],
             isOrganizationOwner: isOwner,
-          ),
+          ).copyWith(access: access),
         ),
       ],
       child: MaterialApp.router(
@@ -250,6 +252,34 @@ Future<void> equipment(WidgetTester tester, String name) async {
 }
 
 void main() {
+  for (final initial in [OrbitRoutes.workQueue, '/clientes']) {
+    testWidgets(
+      'acesso atualizado exibe o botão em $initial com token antigo',
+      (tester) async {
+        await open(
+          tester,
+          Backend(),
+          initial: initial,
+          permissions: ['operations.read', 'customers.read'],
+          access: const SessionAccess(
+            roles: ['FIELD_TECHNICIAN'],
+            permissions: ['operations.walk_in.create', 'customers.read'],
+            surfaceAccess: ['MOBILE'],
+            unitIds: ['unit-1'],
+          ),
+        );
+        if (initial == '/clientes') await tap(tester, 'Abrir cliente');
+        await tap(tester, 'Iniciar um atendimento');
+        if (initial == '/clientes') {
+          expect(find.text('Criar avulso (novo cliente)'), findsNothing);
+        } else {
+          expect(find.text('Criar avulso (novo cliente)'), findsOneWidget);
+        }
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets('a fila abre o mesmo wizard pelo botão de iniciar atendimento', (
     tester,
   ) async {

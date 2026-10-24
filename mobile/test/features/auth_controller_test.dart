@@ -77,6 +77,17 @@ void main() {
 
   setUp(() {
     repository = _MockAuthRepository();
+    when(() => repository.loadAccess()).thenAnswer((_) async {
+      final claims = await repository.readClaims();
+      return SessionAccess(
+        isOwner: claims?.isOrganizationOwner ?? false,
+        roles: claims?.roles ?? const [],
+        permissions: claims?.permissions ?? const [],
+        unitIds: claims?.organizationId == null
+            ? const []
+            : const ['unit-1', 'unit-2'],
+      );
+    });
     when(() => repository.loadProfile()).thenAnswer((_) async => _user);
     when(
       () => repository.loadOrganization(),
@@ -116,6 +127,9 @@ void main() {
   });
 
   test('login autentica e deriva a sessão do token', () async {
+    when(() => repository.loadAccess()).thenAnswer(
+      (_) async => const SessionAccess(permissions: ['operations.read']),
+    );
     when(
       () => repository.login(
         email: any(named: 'email'),
@@ -226,6 +240,9 @@ void main() {
   );
 
   test('perfil de outra identidade não pode compor a sessão', () async {
+    when(
+      () => repository.loadAccess(),
+    ).thenAnswer((_) async => const SessionAccess());
     when(
       () => repository.login(
         email: any(named: 'email'),
@@ -444,6 +461,9 @@ void _trocaDeSenha() {
 
   setUp(() {
     repository = _MockAuthRepository();
+    when(() => repository.loadAccess()).thenAnswer(
+      (_) async => const SessionAccess(unitIds: ['unit-1', 'unit-2']),
+    );
     when(
       () => repository.loadOrganization(),
     ).thenAnswer((_) async => _organization);

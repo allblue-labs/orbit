@@ -235,7 +235,9 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   Future<OrbitSession> _composeSession(AccessTokenClaims claims) async {
-    // Perfil é obrigatório; organização e plano só existem para tenant.
+    // Perfil e acesso atual são obrigatórios. As permissões do token podem
+    // anteceder mudanças no papel; nunca substituem a consulta ao servidor.
+    // Organização e plano só existem para tenant.
     final results = await Future.wait([
       _repository.loadProfile(),
       if (claims.organizationId != null)
@@ -250,6 +252,7 @@ class AuthController extends StateNotifier<AuthState> {
         _repository.loadProductAccess()
       else
         Future<ProductAccess?>.value(),
+      _repository.loadAccess(),
     ]);
 
     final user = results[0]! as OrbitUser;
@@ -262,6 +265,7 @@ class AuthController extends StateNotifier<AuthState> {
     return OrbitSession(
       user: user,
       claims: claims,
+      access: results[4]! as SessionAccess,
       organization: results[1] as Organization?,
       entitlements: results[2] as Entitlements?,
       productAccess: results[3] as ProductAccess?,

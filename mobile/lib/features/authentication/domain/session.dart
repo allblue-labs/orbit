@@ -23,6 +23,7 @@ class OrbitSession {
   const OrbitSession({
     required this.user,
     required this.claims,
+    this.access,
     this.organization,
     this.entitlements,
     this.productAccess,
@@ -31,6 +32,7 @@ class OrbitSession {
 
   final OrbitUser user;
   final AccessTokenClaims claims;
+  final SessionAccess? access;
   final Organization? organization;
   final Entitlements? entitlements;
   final ProductAccess? productAccess;
@@ -40,7 +42,14 @@ class OrbitSession {
 
   String? get organizationId => claims.organizationId;
 
-  String? get businessUnitId => activeBusinessUnitId ?? claims.businessUnitId;
+  String? get businessUnitId {
+    final preferred = activeBusinessUnitId ?? claims.businessUnitId;
+    final units = access?.unitIds;
+    if (units == null) return preferred;
+    return units.contains(preferred)
+        ? preferred
+        : (units.isEmpty ? null : units.first);
+  }
 
   BusinessUnit? get businessUnit {
     final units = organization?.businessUnits ?? const <BusinessUnit>[];
@@ -51,8 +60,8 @@ class OrbitSession {
     return units.isEmpty ? null : units.first;
   }
 
-  List<String> get roles => claims.roles;
-  List<String> get permissions => claims.permissions;
+  List<String> get roles => access?.roles ?? claims.roles;
+  List<String> get permissions => access?.permissions ?? claims.permissions;
 
   /// Módulos habilitados pelo plano — o mesmo conjunto que o backend valida
   /// em `@Capabilities(...)`.
@@ -61,8 +70,8 @@ class OrbitSession {
       organization?.plan?.capabilities ??
       const [];
 
-  bool get isPlatformAdmin => claims.isPlatformAdmin;
-  bool get isOwner => claims.isOrganizationOwner;
+  bool get isPlatformAdmin => roles.contains(platformAdminRole);
+  bool get isOwner => access?.isOwner ?? claims.isOrganizationOwner;
 
   bool get hasActiveSubscription =>
       entitlements?.isActive ??
@@ -96,6 +105,7 @@ class OrbitSession {
 
   OrbitSession copyWith({
     OrbitUser? user,
+    SessionAccess? access,
     Organization? organization,
     Entitlements? entitlements,
     ProductAccess? productAccess,
@@ -103,6 +113,7 @@ class OrbitSession {
   }) => OrbitSession(
     user: user ?? this.user,
     claims: claims,
+    access: access ?? this.access,
     organization: organization ?? this.organization,
     entitlements: entitlements ?? this.entitlements,
     productAccess: productAccess ?? this.productAccess,

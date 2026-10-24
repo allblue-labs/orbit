@@ -6,6 +6,26 @@ Entrar, sair, expirar a sessão ou trocar a unidade substitui esse estado, inclu
 avatar, documentos, filtros, formulários e navegação. Atualizar o próprio perfil
 mantém a sessão atual.
 
+Login e restauração consultam `GET /identity/me/access` para obter o acesso
+efetivo resolvido no servidor. Permissões, papéis, propriedade e unidades dessa
+resposta prevalecem sobre o token armazenado, inclusive quando uma permissão foi
+revogada. A consulta é obrigatória: uma falha não restaura permissões antigas.
+A unidade do token só é mantida se continuar entre as unidades autorizadas.
+
+O botão “Iniciar um atendimento”, na fila e na ficha do cliente, exige
+`operations.walk_in.create` ou `operations.create` (ou autoridade de proprietário).
+O papel padrão Técnico Operacional recebe a primeira permissão. Para bancos
+existentes, a publicação precisa executar a migration
+`20261027120000_pr60_walk_in_field_permission`; alterar apenas a constante do
+catálogo ou reinstalar o aplicativo não atualiza os papéis persistidos. Acessos
+personalizados do membro continuam sendo respeitados e não são sobrescritos.
+
+A consulta `GET /scheduling/agenda` declara explicitamente a superfície MOBILE,
+além de WEB/API, e mantém as exigências de `scheduling.read` e do plano. As rotas
+de gestão da agenda continuam com suas superfícies e permissões próprias. Essa
+correção exige publicar a API junto com o mobile. O runbook de publicação está
+em `docs/release/production-deployment.md`, na raiz do repositório.
+
 O cache de leitura, os documentos temporários e a fila legada de anexos usam uma
 chave derivada de API, usuário, tenant e unidade. O encerramento invalida o cliente
 HTTP desse contexto, limpa imagens e cópias temporárias e descarta o cache de

@@ -72,6 +72,33 @@ class AccessTokenClaims {
   bool get isPlatformAdmin => roles.contains(platformAdminRole);
 }
 
+/// Acesso efetivo de `GET /identity/me/access`, resolvido no banco pelo servidor.
+/// O token identifica a sessão; suas permissões podem anteceder uma alteração
+/// do papel ou do acesso personalizado do membro.
+class SessionAccess {
+  const SessionAccess({
+    this.isOwner = false,
+    this.roles = const [],
+    this.permissions = const [],
+    this.surfaceAccess = const [],
+    this.unitIds = const [],
+  });
+
+  factory SessionAccess.fromJson(Map<String, dynamic> json) => SessionAccess(
+    isOwner: json['isOwner'] == true,
+    roles: _stringList(json['roles']),
+    permissions: _stringList(json['permissions']),
+    surfaceAccess: _stringList(json['surfaceAccess']),
+    unitIds: _stringList(json['unitIds']),
+  );
+
+  final bool isOwner;
+  final List<String> roles;
+  final List<String> permissions;
+  final List<String> surfaceAccess;
+  final List<String> unitIds;
+}
+
 /// Perfil de `GET /identity/me`.
 class OrbitUser {
   const OrbitUser({
@@ -106,10 +133,7 @@ class OrbitUser {
     firstName: json['firstName'] as String?,
     lastName: json['lastName'] as String?,
     phone: json['phone'] as String?,
-    avatarUrl: _enderecoResolvido(
-      json['avatarUrl'] as String?,
-      resolverUrl,
-    ),
+    avatarUrl: _enderecoResolvido(json['avatarUrl'] as String?, resolverUrl),
     locale: json['locale'] as String?,
     timezone: json['timezone'] as String?,
     status: json['status'] as String? ?? 'ACTIVE',
@@ -277,7 +301,6 @@ class ProductAccess {
 List<String> _stringList(Object? value) => value is List
     ? value.whereType<String>().toList(growable: false)
     : const <String>[];
-
 
 /// O endereço da foto, traduzido quando há tradutor.
 ///
