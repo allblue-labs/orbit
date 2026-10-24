@@ -34,7 +34,8 @@ import {
   useRegisterArtifactAttachment,
   useSaveArtifactResponse,
 } from "@/hooks/artifact-executions/use-artifact-executions";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { ROUTES } from "@/lib/routes";
 import { useSession } from "@/providers/session-provider";
 import type {
@@ -104,6 +105,7 @@ function WorkspaceBody({
   execution: ArtifactExecution;
   onRefresh: () => void;
 }) {
+  const { formatDateTime } = useDateFormatters();
   const session = useSession();
   const editability = useExecutionEditability(execution.id);
 

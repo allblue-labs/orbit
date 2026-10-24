@@ -19,7 +19,8 @@ import { PanelFrame, PanelState, toPanelQuery } from "@/components/panels";
 import { Badge } from "@/components/ui/badge";
 import { useOperation } from "@/hooks/operations/use-operations";
 import { UserReference } from "@/components/identity/user-reference";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { ROUTES } from "@/lib/routes";
 import type { ArtifactExecution } from "@/types/artifact-executions";
 import { RenderStatusBadge } from "../execution-badges";
@@ -29,6 +30,7 @@ export function OverviewSection({
 }: {
   execution: ArtifactExecution;
 }) {
+  const { formatDateTime } = useDateFormatters();
   return (
     <PanelFrame
       panelId="artifact-execution-overview"

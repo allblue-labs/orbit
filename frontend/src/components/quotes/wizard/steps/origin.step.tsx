@@ -23,7 +23,8 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useOperationsList } from "@/hooks/operations/use-operations";
-import { formatDate } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { cn } from "@/lib/utils";
 import type { QuoteDraft, QuoteOrigin } from "../quote-wizard.model";
 
@@ -135,6 +136,7 @@ function OperationChooser({
   onSelect: (operationId: string) => void;
   customerId?: string;
 }) {
+  const { formatDate } = useDateFormatters();
   const query = useOperationsList({
     customerId,
     status: "COMPLETED",

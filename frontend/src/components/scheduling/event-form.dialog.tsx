@@ -212,7 +212,33 @@ function EventForm({
     if (!payload) return;
 
     if (editing) {
-      update.mutate(payload, { onSuccess: onClose });
+      const recurrence = editing.recurrence;
+      const unchangedRecurrence =
+        recurrence &&
+        form.recurring &&
+        form.frequency === recurrence.frequency &&
+        (Number(form.interval) || 1) === recurrence.interval &&
+        (Number(form.count) || null) === recurrence.count &&
+        JSON.stringify([...form.byWeekday].sort()) ===
+          JSON.stringify([...recurrence.byWeekday].sort());
+      update.mutate(
+        {
+          ...payload,
+          // Changing display preference or editing a title must not rewrite the
+          // event's timezone or its existing recurrence rules and exceptions.
+          timezone: editing.timezone,
+          recurrence: unchangedRecurrence
+            ? undefined
+            : payload.recurrence
+              ? {
+                  ...payload.recurrence,
+                  timezone: recurrence?.timezone ?? timeZone,
+                }
+              : undefined,
+          clearRecurrence: Boolean(recurrence && !form.recurring) || undefined,
+        },
+        { onSuccess: onClose },
+      );
       return;
     }
     create.mutate(payload, { onSuccess: onClose });
@@ -233,7 +259,11 @@ function EventForm({
           {editing ? "Editar evento" : "Novo evento na agenda"}
         </DialogTitle>
         <DialogDescription>
-          Horários no fuso {timeZone}. Janela, conflitos e disponibilidade são conferidos ao salvar.
+          Horários no fuso {timeZone}. Janela, conflitos e disponibilidade são
+          conferidos ao salvar.
+          {editing?.recurrence && editing.recurrence.timezone !== timeZone
+            ? ` A repetição mantém o fuso de origem ${editing.recurrence.timezone}.`
+            : ""}
         </DialogDescription>
       </DialogHeader>
 

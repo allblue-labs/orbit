@@ -33,7 +33,8 @@ import {
 import { useWorkforceManagement } from "@/hooks/workforce/use-workforce-management";
 import { ManagementBlocked } from "../management-blocked";
 import type { MemberCertification } from "@/types/workforce";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import {
   FilterBar,
   FilterSelect,
@@ -58,6 +59,7 @@ const WINDOW_OPTIONS = [
 ];
 
 export function CertificationsTab() {
+  const { formatDateTime } = useDateFormatters();
   const list = useListController<CertificationFilters>();
   const workforce = useWorkforceManagement().workforce;
 

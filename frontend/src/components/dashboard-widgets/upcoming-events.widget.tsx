@@ -16,7 +16,8 @@ import { CalendarClock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Timeline } from "@/components/ui/timeline";
 import type { SchedulingOccurrenceReadModel } from "@/types/dashboard";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import type { WidgetProps } from "./widget-registry";
 import { PanelFrame, PanelState } from "@/components/panels";
 
@@ -43,6 +44,7 @@ const EVENT_STATUS_LABELS: Readonly<Record<string, string>> = {
 };
 
 export function UpcomingEventsWidget({ widget, scheduling }: WidgetProps) {
+  const { formatDateTime } = useDateFormatters();
   const total = scheduling.agenda.data?.summary.total;
 
   return (

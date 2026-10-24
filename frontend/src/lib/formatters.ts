@@ -6,60 +6,108 @@
  * responsabilidade do Metric Registry (`@/metrics`).
  */
 
-const dateTime = new Intl.DateTimeFormat("pt-BR", {
-  day: "2-digit",
-  month: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-});
+import { DEFAULT_TIMEZONE } from "@/lib/env";
 
-const dateOnly = new Intl.DateTimeFormat("pt-BR", {
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-});
+export type DateValue = string | Date | null | undefined;
 
-const shortDate = new Intl.DateTimeFormat("pt-BR", {
-  day: "2-digit",
-  month: "2-digit",
-});
-
-const timeOnly = new Intl.DateTimeFormat("pt-BR", {
-  hour: "2-digit",
-  minute: "2-digit",
-});
-
-function parse(timestamp: string | Date | null | undefined): Date | null {
+function parse(timestamp: DateValue): Date | null {
   if (!timestamp) return null;
   const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+const cache = new Map<string, ReturnType<typeof buildDateFormatters>>();
+
+function buildDateFormatters(timeZone: string) {
+  const dateTime = new Intl.DateTimeFormat("pt-BR", {
+    timeZone,
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const dateOnly = new Intl.DateTimeFormat("pt-BR", {
+    timeZone,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+  const shortDate = new Intl.DateTimeFormat("pt-BR", {
+    timeZone,
+    day: "2-digit",
+    month: "2-digit",
+  });
+  const timeOnly = new Intl.DateTimeFormat("pt-BR", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const civilDate = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "UTC",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+  return {
+    formatDateTime(timestamp: DateValue): string {
+      const date = parse(timestamp);
+      return date ? dateTime.format(date) : "—";
+    },
+    formatDate(timestamp: DateValue): string {
+      const date = parse(timestamp);
+      // YYYY-MM-DD is a civil date (due date, coverage), never an instant.
+      const formatter =
+        typeof timestamp === "string" && /^\d{4}-\d{2}-\d{2}$/.test(timestamp)
+          ? civilDate
+          : dateOnly;
+      return date ? formatter.format(date) : "—";
+    },
+    formatAxisDate(timestamp: string): string {
+      const date = parse(timestamp);
+      return date ? shortDate.format(date) : timestamp;
+    },
+    formatTime(timestamp: DateValue): string {
+      const date = parse(timestamp);
+      return date ? timeOnly.format(date) : "—";
+    },
+  };
+}
+
+/** Explicit, reusable formatters; safe for concurrent server requests. */
+export function createDateFormatters(timeZone: string) {
+  const cached = cache.get(timeZone);
+  if (cached) return cached;
+  const formatters = buildDateFormatters(timeZone);
+  cache.set(timeZone, formatters);
+  return formatters;
+}
+
 export function formatDateTime(
-  timestamp: string | Date | null | undefined,
+  timestamp: DateValue,
+  timeZone = DEFAULT_TIMEZONE,
 ): string {
-  const date = parse(timestamp);
-  return date ? dateTime.format(date) : "—";
+  return createDateFormatters(timeZone).formatDateTime(timestamp);
 }
 
 export function formatDate(
-  timestamp: string | Date | null | undefined,
+  timestamp: DateValue,
+  timeZone = DEFAULT_TIMEZONE,
 ): string {
-  const date = parse(timestamp);
-  return date ? dateOnly.format(date) : "—";
+  return createDateFormatters(timeZone).formatDate(timestamp);
 }
 
-/** Rótulo curto para eixos de gráfico. */
-export function formatAxisDate(timestamp: string): string {
-  const date = parse(timestamp);
-  return date ? shortDate.format(date) : timestamp;
+export function formatAxisDate(
+  timestamp: string,
+  timeZone = DEFAULT_TIMEZONE,
+): string {
+  return createDateFormatters(timeZone).formatAxisDate(timestamp);
 }
 
 export function formatTime(
-  timestamp: string | Date | null | undefined,
+  timestamp: DateValue,
+  timeZone = DEFAULT_TIMEZONE,
 ): string {
-  const date = parse(timestamp);
-  return date ? timeOnly.format(date) : "—";
+  return createDateFormatters(timeZone).formatTime(timestamp);
 }
 
 /** Percentual de confiança já produzido pelo backend (0–1). */

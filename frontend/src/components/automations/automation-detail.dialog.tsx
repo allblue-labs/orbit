@@ -27,7 +27,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useAutomationExecutions } from "@/hooks/automations/use-automations";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import type { AutomationCatalog, AutomationRule } from "@/types/automations";
 import type { ScopeUnit } from "./automation-fields";
 import {
@@ -50,6 +51,7 @@ export function AutomationDetailDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { formatDateTime } = useDateFormatters();
   if (!open) return null;
 
   return (
@@ -90,6 +92,7 @@ export function AutomationDetailDialog({
 }
 
 function ExecutionHistory({ ruleId }: { ruleId: string }) {
+  const { formatDateTime } = useDateFormatters();
   const executions = useAutomationExecutions({ ruleId, limit: 20 });
 
   return (
@@ -112,8 +115,9 @@ function ExecutionHistory({ ruleId }: { ruleId: string }) {
       ) : (executions.data?.data.length ?? 0) === 0 ? (
         <p className="rounded-lg border border-border p-3 text-sm text-muted-foreground">
           Ainda não aconteceu nada que casasse com esta regra. Uma regra
-          recém-criada só age sobre acontecimentos <strong>daqui para a
-          frente</strong> — eventos passados não são reavaliados.
+          recém-criada só age sobre acontecimentos{" "}
+          <strong>daqui para a frente</strong> — eventos passados não são
+          reavaliados.
         </p>
       ) : (
         <ul className="space-y-2">

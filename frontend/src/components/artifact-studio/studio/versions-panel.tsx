@@ -27,7 +27,8 @@ import {
   useCreateArtifactTemplateVersion,
 } from "@/hooks/artifact-templates/use-artifact-templates";
 import { serializeDocument, type StudioDocument } from "@/lib/artifact-studio";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import {
   ARTIFACT_LIMITS,
   type ArtifactTemplateVersion,
@@ -53,6 +54,7 @@ export function VersionsPanel({
   /** Traz a estrutura de uma versão anterior para o editor. */
   onLoadVersion: (version: ArtifactTemplateVersion) => void;
 }) {
+  const { formatDateTime } = useDateFormatters();
   const versions = useArtifactTemplateVersions(templateId);
   const publish = useCreateArtifactTemplateVersion(templateId);
   const [changeSummary, setChangeSummary] = useState("");

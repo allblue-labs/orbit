@@ -46,7 +46,8 @@ import {
   useTeamRoles,
 } from "@/hooks/workforce/use-workforce";
 import { useWorkforceManagement } from "@/hooks/workforce/use-workforce-management";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { teamMemberRoute } from "@/lib/routes";
 import type { TeamMember } from "@/types/workforce";
 import {
@@ -80,6 +81,7 @@ interface MemberFilters {
 }
 
 export function MembersTab() {
+  const { formatDateTime } = useDateFormatters();
   const list = useListController<MemberFilters>({ limit: 20 });
   const members = useTeamMembers({
     page: list.query.page,

@@ -41,7 +41,8 @@ import { lifecycleLabel } from "@/registry";
 import { Label } from "@/components/ui/label";
 import { useUpdateOrganization } from "@/hooks/organization/use-organization";
 import { OrganizationLogoField } from "./organization-logo.field";
-import { formatDate } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import {
   ORGANIZATION_LIMITS,
   type Organization,
@@ -55,6 +56,7 @@ export function GeneralSection({
   organization: Organization;
   canManage: boolean;
 }) {
+  const { formatDate } = useDateFormatters();
   const update = useUpdateOrganization();
   const [displayName, setDisplayName] = useState(organization.displayName);
   const [segment, setSegment] = useState(organization.primarySegment);
@@ -78,9 +80,7 @@ export function GeneralSection({
       title="Organização"
       description="Identidade, segmento e configurações"
       actions={
-        <Badge variant="secondary">
-          {lifecycleLabel(organization.status)}
-        </Badge>
+        <Badge variant="secondary">{lifecycleLabel(organization.status)}</Badge>
       }
     >
       <div className="space-y-5">

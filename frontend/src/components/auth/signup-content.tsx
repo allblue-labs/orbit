@@ -57,6 +57,8 @@ import {
 } from "@/lib/brazilian-document";
 import type { PostalAddress } from "@/lib/postal-code";
 import { cn } from "@/lib/utils";
+import { ApiError } from "@/lib/api-error";
+import { errorCopy } from "@/lib/error-copy";
 
 const schema = z
   .object({
@@ -84,6 +86,16 @@ const schema = z
   });
 
 type FormValues = z.infer<typeof schema>;
+const registrationConflicts: Readonly<
+  Record<string, { field: keyof FormValues; step: number }>
+> = {
+  REGISTRATION_DOCUMENT_ALREADY_EXISTS: { field: "documentNumber", step: 2 },
+  REGISTRATION_EMAIL_ALREADY_EXISTS: { field: "email", step: 1 },
+  REGISTRATION_ORGANIZATION_NAME_UNAVAILABLE: {
+    field: "organizationName",
+    step: 2,
+  },
+};
 
 const steps = [
   {
@@ -302,6 +314,10 @@ export function SignupContent({
   initialSelection?: { planKey: string; billingInterval: BillingIntervalCode };
 }) {
   const createAccount = useRegister();
+  const [registrationError, setRegistrationError] = useState<{
+    message: string;
+    canSignIn: boolean;
+  } | null>(null);
   const [step, setStep] = useState(initialSelection.planKey ? 1 : 0);
   /** O CEP não faz parte do cadastro; só preenche o endereço da matriz. */
   const [cep, setCep] = useState("");
@@ -311,6 +327,8 @@ export function SignupContent({
     handleSubmit,
     trigger,
     setValue,
+    setError,
+    clearErrors,
     control,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
@@ -330,12 +348,21 @@ export function SignupContent({
   const termsAccepted = useWatch({ control, name: "terms" });
 
   async function next() {
+    // O retorno do servidor pertence à tentativa anterior. Revalide os campos
+    // editados antes de avançar, sem prender o wizard a um erro antigo.
+    for (const field of fieldsByStep[step]) {
+      if (errors[field]?.type === "server") clearErrors(field);
+    }
     if (await trigger(fieldsByStep[step])) {
-      setStep((current) => Math.min(current + 1, LAST_STEP));
+      setRegistrationError(null);
+      setStep((current) =>
+        current === step ? Math.min(current + 1, LAST_STEP) : current,
+      );
     }
   }
 
   async function submit(values: FormValues) {
+    setRegistrationError(null);
     const { confirmPassword: _, terms: __, ...payload } = values;
     try {
       await createAccount.mutateAsync({
@@ -351,10 +378,21 @@ export function SignupContent({
       });
       toast.success("Cadastro concluído");
     } catch (error) {
-      toast.error("Não foi possível concluir o cadastro", {
-        description:
-          error instanceof Error ? error.message : "Tente novamente.",
+      const message = errorCopy(error);
+      const code = error instanceof ApiError ? error.code : "";
+      setRegistrationError({
+        message,
+        canSignIn: [
+          "REGISTRATION_DOCUMENT_ALREADY_EXISTS",
+          "REGISTRATION_EMAIL_ALREADY_EXISTS",
+          "REGISTRATION_USE_EXISTING_ACCOUNT",
+        ].includes(code),
       });
+      const conflict = registrationConflicts[code];
+      if (conflict) {
+        setError(conflict.field, { type: "server", message });
+        setStep(conflict.step);
+      }
     }
   }
 
@@ -449,7 +487,33 @@ export function SignupContent({
         </header>
 
         <div className="mx-auto flex w-full max-w-2xl flex-1 items-center py-10">
-          <form onSubmit={handleSubmit(submit)} className="w-full">
+          <form
+            onSubmit={(event) => {
+              if (step < LAST_STEP) {
+                event.preventDefault();
+                void next();
+                return;
+              }
+              void handleSubmit(submit)(event);
+            }}
+            className="w-full"
+          >
+            {registrationError ? (
+              <Alert variant="destructive" className="mb-6">
+                <AlertTitle>Não foi possível concluir o cadastro</AlertTitle>
+                <AlertDescription className="space-y-2">
+                  <p>{registrationError.message}</p>
+                  {registrationError.canSignIn ? (
+                    <Link
+                      href="/login"
+                      className="inline-block font-medium underline"
+                    >
+                      Entrar na minha conta
+                    </Link>
+                  ) : null}
+                </AlertDescription>
+              </Alert>
+            ) : null}
             <div className="mb-8 flex gap-2 lg:hidden">
               {steps.map((item, index) => (
                 <span
@@ -754,12 +818,17 @@ export function SignupContent({
                 Voltar
               </Button>
               {step < LAST_STEP ? (
-                <Button type="button" size="lg" onClick={next}>
+                <Button key="next-step" type="submit" size="lg">
                   Continuar
                   <ArrowRight className="size-4" />
                 </Button>
               ) : (
-                <Button type="submit" size="lg" disabled={isSubmitting}>
+                <Button
+                  key="submit-registration"
+                  type="submit"
+                  size="lg"
+                  disabled={isSubmitting}
+                >
                   {isSubmitting ? (
                     <Loader2 className="size-4 animate-spin" />
                   ) : (

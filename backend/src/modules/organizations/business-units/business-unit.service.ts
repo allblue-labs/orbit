@@ -68,7 +68,10 @@ export class BusinessUnitService {
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2002'
       ) {
-        throw new ConflictException('Business unit already exists');
+        throw new ConflictException(
+          'Business unit name already exists',
+          'BUSINESS_UNIT_NAME_ALREADY_EXISTS',
+        );
       }
       throw error;
     }
@@ -102,6 +105,7 @@ export class BusinessUnitService {
       ) {
         throw new ConflictException(
           'Business unit conflicts with an existing record',
+          'BUSINESS_UNIT_NAME_ALREADY_EXISTS',
         );
       }
       throw error;

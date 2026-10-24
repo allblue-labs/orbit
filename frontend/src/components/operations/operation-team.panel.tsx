@@ -42,7 +42,8 @@ import {
   useRemoveOperationAuxiliary,
   useReplaceOperationResponsible,
 } from "@/hooks/operations/use-operations";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { actionAuthority } from "@/registry";
 import type { Operation, OperationListItem } from "@/types/operations";
 
@@ -81,6 +82,7 @@ export function OperationTeamPanel({
 }: {
   operation: Operation | OperationListItem;
 }) {
+  const { formatDateTime } = useDateFormatters();
   const authority = actionAuthority(operation.allowedActions);
   const canManage = authority.permits("MANAGE_ASSIGNMENTS");
 

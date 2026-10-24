@@ -15,6 +15,7 @@
 import Link from "next/link";
 import { CalendarX2 } from "lucide-react";
 
+import { useTimeZone } from "@/hooks/use-timezone";
 import { useSession } from "@/providers/session-provider";
 import { ROUTE_ASSINATURA, dataDeVencimento } from "./subscription-access";
 import {
@@ -24,11 +25,12 @@ import {
 
 export function SubscriptionBadge() {
   const session = useSession();
+  const { timeZone } = useTimeZone();
   if (!session.isAuthenticated || session.subscriptionActive) return null;
 
   const pending = requiresInitialPayment(session.session);
   const notice = expiredSubscriptionNotice(session.session);
-  const venceuEm = notice ? dataDeVencimento(notice.end) : null;
+  const venceuEm = notice ? dataDeVencimento(notice.end, timeZone) : null;
   const label = pending
     ? "Pagamento pendente"
     : notice

@@ -7,6 +7,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsTimeZone,
   Length,
   Max,
   MaxLength,
@@ -284,6 +285,7 @@ export class UpdateProfileDto {
   @IsOptional()
   @IsString()
   @MaxLength(64)
+  @IsTimeZone()
   timezone?: string;
 }
 

@@ -23,12 +23,8 @@ import { MutationError } from "@/components/artifact-studio/mutation-error";
 import { Button } from "@/components/ui/button";
 import { useSetOperationAuthorization } from "@/hooks/operations/use-operations";
 import { useSession } from "@/providers/session-provider";
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import type { Operation } from "@/types/operations";
-
-const DATA_HORA = new Intl.DateTimeFormat("pt-BR", {
-  dateStyle: "short",
-  timeStyle: "short",
-});
 
 export function OperationAuthorizationPanel({
   operation,
@@ -39,6 +35,7 @@ export function OperationAuthorizationPanel({
   required: boolean;
 }) {
   const session = useSession();
+  const { formatDateTime } = useDateFormatters();
   const mutation = useSetOperationAuthorization(operation.id);
   const podeDecidir = session.hasPermission("operations.assign");
 
@@ -63,9 +60,7 @@ export function OperationAuthorizationPanel({
             ) : (
               <ShieldQuestion className="size-4 text-warning" aria-hidden />
             )}
-            {autorizado
-              ? "Atribuição autorizada"
-              : "Aguardando autorização"}
+            {autorizado ? "Atribuição autorizada" : "Aguardando autorização"}
           </p>
           <p className="text-xs text-muted-foreground">
             {autorizado
@@ -75,7 +70,7 @@ export function OperationAuthorizationPanel({
                     : ""
                 }${
                   operation.authorizedAt
-                    ? ` em ${DATA_HORA.format(new Date(operation.authorizedAt))}`
+                    ? ` em ${formatDateTime(operation.authorizedAt)}`
                     : ""
                 }.`
               : "Este atendimento não aparece na fila do aplicativo até ser autorizado."}

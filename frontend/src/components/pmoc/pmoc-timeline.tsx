@@ -13,11 +13,13 @@ import { History } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { usePmocTimeline } from "@/hooks/pmoc/use-pmoc";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import type { PmocTimelineItem } from "@/types/pmoc";
 import { ListState } from "@/workspace";
 
 export function PmocTimelinePanel({ planId }: { planId: string }) {
+  const { formatDateTime } = useDateFormatters();
   /** Cursor acumulado: a linha do tempo cresce, não troca de página. */
   const [cursor, setCursor] = useState<string | undefined>();
   const [items, setItems] = useState<PmocTimelineItem[]>([]);

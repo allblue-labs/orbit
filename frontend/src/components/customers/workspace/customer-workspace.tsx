@@ -51,7 +51,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useEntityAccess } from "@/entities";
 import { useCustomer } from "@/hooks/customers/use-customers";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { ROUTES } from "@/lib/routes";
 import { useSession } from "@/providers/session-provider";
 import { PRODUCT_CAPABILITY, PRODUCT_FEATURE } from "@/registry/product-access";
@@ -123,6 +124,7 @@ function WorkspaceBody({
   customer: Customer;
   onRefresh: () => void;
 }) {
+  const { formatDateTime } = useDateFormatters();
   const session = useSession();
   const { definition } = useEntityAccess("customer");
   const canReadIntelligence =

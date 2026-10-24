@@ -20,10 +20,12 @@ import { Building2, CalendarDays, MapPin, ShieldCheck } from "lucide-react";
 import { PanelFrame } from "@/components/panels";
 import { Badge } from "@/components/ui/badge";
 import { EntityBadge, EntityLink } from "@/entities";
-import { formatDate } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import type { Asset } from "@/types/assets";
 
 export function OverviewSection({ asset }: { asset: Asset }) {
+  const { formatDate } = useDateFormatters();
   return (
     <PanelFrame
       panelId="asset-overview"
@@ -121,6 +123,7 @@ export function OverviewSection({ asset }: { asset: Asset }) {
  * abre a tela. Quando o backend publicar o estado, ele entra aqui.
  */
 function WarrantyValue({ warrantyUntil }: { warrantyUntil: string | null }) {
+  const { formatDate } = useDateFormatters();
   if (!warrantyUntil) return <>—</>;
 
   return (

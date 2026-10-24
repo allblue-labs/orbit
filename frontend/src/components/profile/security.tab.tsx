@@ -38,13 +38,15 @@ import {
   useProfile,
   useRevokeSession,
 } from "@/hooks/profile/use-profile";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { useSession } from "@/providers/session-provider";
 import { PROFILE_LIMITS } from "@/types/settings";
 import { ListState } from "@/workspace";
 import { MfaSection } from "./mfa.section";
 
 export function SecurityTab() {
+  const { formatDateTime } = useDateFormatters();
   const profile = useProfile();
   const sessions = useDeviceSessions();
   const revoke = useRevokeSession();
@@ -126,7 +128,8 @@ export function SecurityTab() {
         </ListState>
 
         <p className="text-xs text-muted-foreground">
-          O histórico de acessos ainda não está disponível. O que existe de datado é quando cada dispositivo entrou.
+          O histórico de acessos ainda não está disponível. O que existe de
+          datado é quando cada dispositivo entrou.
         </p>
       </section>
 
@@ -193,10 +196,7 @@ function PasswordSection() {
   };
 
   return (
-    <form
-      onSubmit={submit}
-      className="glass-panel space-y-4 rounded-xl p-5"
-    >
+    <form onSubmit={submit} className="glass-panel space-y-4 rounded-xl p-5">
       <div className="space-y-1">
         <h2 className="flex items-center gap-2 text-sm font-medium">
           <KeyRound className="size-4 text-muted-foreground" aria-hidden />
@@ -267,11 +267,7 @@ function PasswordSection() {
         <Button
           type="submit"
           disabled={
-            !current ||
-            !next ||
-            mismatch ||
-            tooShort ||
-            change.isPending
+            !current || !next || mismatch || tooShort || change.isPending
           }
         >
           {change.isPending ? "Alterando…" : "Alterar senha"}

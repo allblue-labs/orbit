@@ -7,11 +7,13 @@ import { queryKeys } from "@/api/query-keys";
 import { useApiQuery } from "@/hooks/api/use-api-query";
 import { CACHE } from "@/hooks/api/cache-policy";
 import { useSession } from "@/providers/session-provider";
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import type { OrganizationEntitlementsView } from "@/types/billing";
 import { ROUTE_ASSINATURA } from "./subscription-access";
 import { rotuloDoRecurso } from "./billing-format";
 
 export function LimitAdjustmentNotice() {
+  const { formatDateTime } = useDateFormatters();
   const { isAuthenticated, organization, permissions, isOwner } = useSession();
   const canRead =
     isAuthenticated &&
@@ -30,7 +32,7 @@ export function LimitAdjustmentNotice() {
   );
   const adjustment = quotas.data?.limitAdjustment;
   if (!adjustment) return null;
-  const deadline = new Date(adjustment.deadline).toLocaleString("pt-BR");
+  const deadline = formatDateTime(adjustment.deadline);
   return (
     <aside
       role="alert"

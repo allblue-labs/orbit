@@ -28,7 +28,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { usePmocPlan } from "@/hooks/pmoc/use-pmoc";
-import { formatDate } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { ROUTES } from "@/lib/routes";
 import type { PmocPlan } from "@/types/pmoc";
 import { TabBoundary } from "@/workspace";
@@ -153,6 +154,7 @@ function PlanHeader({ plan }: { plan: PmocPlan }) {
 }
 
 function PlanOverview({ plan }: { plan: PmocPlan }) {
+  const { formatDate } = useDateFormatters();
   const fields: readonly { label: string; value: string }[] = [
     { label: "Cliente", value: plan.customer.name },
     /*

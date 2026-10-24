@@ -20,6 +20,9 @@
  */
 
 /** Quantos meses de história a linha mostra, contando o mês corrente. */
+import { DEFAULT_TIMEZONE } from "@/lib/env";
+import { zonedDateKey } from "@/lib/scheduling/timezone";
+
 export const HISTORY_MONTHS = 12;
 
 /** `2026-10-02T12:00:00.000Z` ou `2026-10-02` → `2026-10-02`. */
@@ -55,8 +58,9 @@ function firstDayMonthsBefore(day: string, months: number): string {
 export function historyWindow(
   to: string | undefined,
   now = new Date(),
+  timeZone = DEFAULT_TIMEZONE,
 ): { from: string; to: string } {
-  const fim = toDay(to) ?? now.toLocaleDateString("sv-SE");
+  const fim = toDay(to) ?? zonedDateKey(now, timeZone);
   return { from: firstDayMonthsBefore(fim, HISTORY_MONTHS - 1), to: fim };
 }
 

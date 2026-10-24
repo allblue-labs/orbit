@@ -51,7 +51,8 @@ import {
   useRevokeInvitation,
   useTeamInvitations,
 } from "@/hooks/workforce/use-workforce";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { InvitationStatus } from "@/types/contracts";
 import type { TeamInvitation } from "@/types/workforce";
 import {
@@ -219,6 +220,7 @@ function InvitationRow({
   onRevoke: () => void;
   busy: boolean;
 }) {
+  const { formatDateTime } = useDateFormatters();
   const resend = useAction("team-member.resend-invitation");
   const revoke = useAction("team-member.revoke-invitation");
 

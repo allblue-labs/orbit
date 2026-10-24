@@ -26,7 +26,8 @@ import {
   useIntegrations,
   useValidateIntegration,
 } from "@/hooks/organization/use-organization";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { ROUTES } from "@/lib/routes";
 import { lifecycleLabel } from "@/registry";
 import { cn } from "@/lib/utils";
@@ -74,7 +75,9 @@ export function IntegrationsSection({ canManage }: { canManage: boolean }) {
         <MutationError error={validate.error} />
 
         <p className="border-t border-border pt-3 text-xs text-muted-foreground">
-          As credenciais são conferidas, mas a sincronização de dados e o catálogo de provedores ainda não estão disponíveis. Os segredos ficam cifrados e não são publicados.
+          As credenciais são conferidas, mas a sincronização de dados e o
+          catálogo de provedores ainda não estão disponíveis. Os segredos ficam
+          cifrados e não são publicados.
         </p>
       </div>
     </PanelFrame>
@@ -92,6 +95,7 @@ function IntegrationRow({
   validating: boolean;
   onValidate: () => void;
 }) {
+  const { formatDateTime } = useDateFormatters();
   return (
     <li className="space-y-1 rounded-lg border border-border px-3 py-2">
       <div className="flex flex-wrap items-center gap-2">

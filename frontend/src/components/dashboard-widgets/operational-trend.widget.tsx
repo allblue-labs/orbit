@@ -24,7 +24,8 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import type { AnalyticsForecast, AnalyticsTrend } from "@/types/dashboard";
-import { formatAxisDate, formatConfidence } from "@/lib/formatters";
+import { formatConfidence } from "@/lib/formatters";
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import type { WidgetProps } from "./widget-registry";
 import { PanelChartFrame, PanelState } from "@/components/panels";
 
@@ -41,7 +42,10 @@ type ChartRow = Record<string, number | string>;
  *
  * Reorganização de forma, não cálculo: nenhum valor é somado ou estimado.
  */
-function toRows(series: readonly AnalyticsTrend[]): ChartRow[] {
+function toRows(
+  series: readonly AnalyticsTrend[],
+  formatAxisDate: (timestamp: string) => string,
+): ChartRow[] {
   const rows = new Map<string, ChartRow>();
   for (const item of series) {
     for (const point of item.points) {
@@ -59,6 +63,7 @@ function toRows(series: readonly AnalyticsTrend[]): ChartRow[] {
 }
 
 export function OperationalTrendWidget({ widget, analytics }: WidgetProps) {
+  const { formatAxisDate } = useDateFormatters();
   const forecasts = analytics.dashboard.data?.forecasts ?? [];
 
   return (
@@ -81,7 +86,7 @@ export function OperationalTrendWidget({ widget, analytics }: WidgetProps) {
         {(data) => (
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart
-              data={toRows(data.series)}
+              data={toRows(data.series, formatAxisDate)}
               margin={{ top: 8, right: 8, bottom: 0, left: -18 }}
             >
               <defs>

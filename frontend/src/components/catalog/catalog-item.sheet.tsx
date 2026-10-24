@@ -32,10 +32,16 @@ import {
 import { InventoryItemSection } from "@/components/inventory/inventory-item.section";
 import { useAction } from "@/actions";
 import { CATALOG_KIND_LABELS, EntityBadge } from "@/entities";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { ProductKind } from "@/types/contracts";
 import type { CatalogItem } from "@/types/catalog";
-import { CostLabel, DetailRow, PriceLabel, SkuLabel } from "./catalog-presentation";
+import {
+  CostLabel,
+  DetailRow,
+  PriceLabel,
+  SkuLabel,
+} from "./catalog-presentation";
 
 export function CatalogItemSheet({
   item,
@@ -62,6 +68,7 @@ function Body({
   item: CatalogItem;
   onEdit: (item: CatalogItem) => void;
 }) {
+  const { formatDateTime } = useDateFormatters();
   const edit = useAction("catalog-item.update");
   const isService = item.kind === ProductKind.SERVICE;
 
@@ -70,7 +77,11 @@ function Body({
       <SheetHeader>
         <SheetTitle className="flex flex-wrap items-center gap-2">
           {item.name}
-          <EntityBadge entity="catalog-item" group="status" value={item.status} />
+          <EntityBadge
+            entity="catalog-item"
+            group="status"
+            value={item.status}
+          />
         </SheetTitle>
         <SheetDescription>
           {CATALOG_KIND_LABELS[item.kind] ?? item.kind} · atualizado em{" "}

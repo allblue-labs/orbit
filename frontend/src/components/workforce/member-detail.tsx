@@ -45,7 +45,8 @@ import {
   useMemberSchedule,
   useTeamMember,
 } from "@/hooks/workforce/use-workforce";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { ROUTES } from "@/lib/routes";
 import { sectionHref } from "@/lib/section-navigation";
 import { useSession } from "@/providers/session-provider";
@@ -83,6 +84,7 @@ export function MemberDetail({ userId }: { userId: string }) {
 }
 
 function Body({ member }: { member: TeamMember }) {
+  const { formatDateTime } = useDateFormatters();
   const session = useSession();
   const catalog = useAccessCatalog();
   const permissionLabels = new Map(
@@ -206,6 +208,7 @@ function Body({ member }: { member: TeamMember }) {
  * nenhuma rota é montada à mão.
  */
 function RelatedSection({ userId }: { userId: string }) {
+  const { formatDateTime } = useDateFormatters();
   const operations = useMemberOperations(userId);
   const executions = useMemberExecutions(userId);
   const schedule = useMemberSchedule(userId);

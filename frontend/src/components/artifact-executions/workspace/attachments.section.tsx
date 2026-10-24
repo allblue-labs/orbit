@@ -37,7 +37,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatBytes, formatDateTime } from "@/lib/formatters";
+import { formatBytes } from "@/lib/formatters";
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import {
   ARTIFACT_ATTACHMENT_KINDS,
   ARTIFACT_EXECUTION_LIMITS,
@@ -66,6 +67,7 @@ export function AttachmentsSection({
   error: unknown;
   onRegister: (input: RegisterArtifactAttachmentInput) => void;
 }) {
+  const { formatDateTime } = useDateFormatters();
   const [open, setOpen] = useState(false);
 
   return (
@@ -137,8 +139,9 @@ export function AttachmentsSection({
         )}
 
         <p className="border-t border-border pt-3 text-xs text-muted-foreground">
-          Envio, download e pré-visualização de arquivos ainda não estão disponíveis nas execuções. O que
-          existe hoje é o registro do anexo a partir de uma chave já armazenada.
+          Envio, download e pré-visualização de arquivos ainda não estão
+          disponíveis nas execuções. O que existe hoje é o registro do anexo a
+          partir de uma chave já armazenada.
         </p>
       </div>
     </PanelFrame>

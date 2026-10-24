@@ -12,7 +12,8 @@ import { ClipboardCheck } from "lucide-react";
 import { PanelFrame, PanelState, type PanelQuery } from "@/components/panels";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { cn } from "@/lib/utils";
 import type { PaginatedResult } from "@/types/api";
 import type { ChecklistExecution } from "@/types/operations";
@@ -34,6 +35,7 @@ export function ChecklistsSection({
 }: {
   query: PanelQuery<PaginatedResult<ChecklistExecution>>;
 }) {
+  const { formatDateTime } = useDateFormatters();
   return (
     <PanelFrame
       panelId="operation-checklists"

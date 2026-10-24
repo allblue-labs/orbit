@@ -32,7 +32,8 @@ import {
   useCustomerSchedule,
   useRemoveContact,
 } from "@/hooks/customers/use-customers";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { MetricCard } from "@/workspace";
 import { ROUTES } from "@/lib/routes";
 import {
@@ -376,6 +377,7 @@ export function CustomerScheduleSection({
 }: {
   customerId: string;
 }) {
+  const { formatDateTime } = useDateFormatters();
   const query = useCustomerSchedule(customerId);
 
   return (
@@ -473,6 +475,7 @@ export function IntelligenceSection({
   customerId: string;
   enabled: boolean;
 }) {
+  const { formatDateTime } = useDateFormatters();
   const query = useCustomerIntelligence(customerId, enabled);
 
   if (!enabled) {

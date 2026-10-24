@@ -17,7 +17,8 @@ import { History } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useRvtTimeline } from "@/hooks/rvt/use-rvt";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import type { RvtTimelineItem } from "@/types/rvt";
 import { ListState } from "@/workspace";
 
@@ -26,6 +27,7 @@ export function RvtTimelinePanel({
 }: {
   configurationId: string;
 }) {
+  const { formatDateTime } = useDateFormatters();
   const [cursor, setCursor] = useState<string | undefined>();
   const [items, setItems] = useState<RvtTimelineItem[]>([]);
   const page = useRvtTimeline(configurationId, { cursor, limit: 20 });

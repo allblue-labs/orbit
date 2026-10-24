@@ -11,8 +11,12 @@ import {
 } from '../../organizations/team-roles';
 import { RVT_MAINTENANCE_TYPE_SEEDS } from '../../rvt/rvt-maintenance-types.seed';
 import { isKnownPlan } from '../../subscription-plans/catalog/plan-registry';
+import { ConflictException } from '../../../exceptions';
+import { normalizeBrazilianDocument } from '../../../utils';
 
 export type TenantProvisioningOptions = {
+  /** Definido somente pelo serviço público, nunca recebido do corpo HTTP. */
+  publicSignup?: boolean;
   actorUserId?: string;
   platformAdmin?: boolean;
   organizationStatus?: string;
@@ -46,6 +50,19 @@ export class RegistrationRepository {
         where: { key: input.planKey, isActive: true },
       });
       if (!plan) return null;
+
+      if (options.publicSignup) {
+        const document = normalizeBrazilianDocument(input.documentNumber);
+        const [reservation] = await transaction.$queryRaw<
+          { reserved: boolean }[]
+        >`
+          SELECT app_reserve_registration_document(${document}, ${organizationId}::uuid) AS reserved`;
+        if (!reservation?.reserved)
+          throw new ConflictException(
+            'Registration document already exists',
+            'REGISTRATION_DOCUMENT_ALREADY_EXISTS',
+          );
+      }
 
       await this.setLocal(
         transaction,

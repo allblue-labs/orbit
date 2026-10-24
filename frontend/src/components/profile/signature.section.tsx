@@ -42,13 +42,15 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSignature, useUploadSignature } from "@/hooks/profile/use-me-media";
 import { browserUrlFor } from "@/lib/backend-url";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import {
   ACCEPTED_IMAGE_TYPES,
   MAX_IMAGE_BYTES,
 } from "@/services/me-media.service";
 
 export function SignatureSection() {
+  const { formatDateTime } = useDateFormatters();
   const query = useSignature();
 
   return (

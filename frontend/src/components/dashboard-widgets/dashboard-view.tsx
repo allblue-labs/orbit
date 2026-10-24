@@ -37,13 +37,15 @@ import {
   DASHBOARD_RANGE_LABELS,
   type DashboardRangeKey,
 } from "@/types/dashboard";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { PanelError, toPanelQuery } from "@/components/panels";
 import { resolveWidgets, type WidgetDataSources } from "./widget-registry";
 import { PRODUCT_CAPABILITY, PRODUCT_FEATURE } from "@/registry/product-access";
 import { organizarPainel, type Colunas } from "./dashboard-layout";
 
 export function DashboardView() {
+  const { formatDateTime } = useDateFormatters();
   const [range, setRange] = useState<DashboardRangeKey>("30D");
   const session = useSession();
   const scope = useActiveScope();

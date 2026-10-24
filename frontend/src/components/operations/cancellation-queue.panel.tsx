@@ -40,7 +40,8 @@ import {
   useOperationCancellationRequests,
   useResolveOperationCancellation,
 } from "@/hooks/operations/use-operations";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import type {
   OperationCancellationDecision,
   OperationCancellationRequest,
@@ -92,7 +93,11 @@ const DESFECHOS: Readonly<
   },
 };
 
-export function CancellationQueuePanel({ enabled = true }: { enabled?: boolean }) {
+export function CancellationQueuePanel({
+  enabled = true,
+}: {
+  enabled?: boolean;
+}) {
   const fila = useOperationCancellationRequests("PENDING", enabled);
   const resolver = useResolveOperationCancellation();
 
@@ -109,7 +114,7 @@ export function CancellationQueuePanel({ enabled = true }: { enabled?: boolean }
     <PanelFrame
       panelId="operations-cancellation-queue"
       title="Pedidos de cancelamento"
-      description="O que o campo devolveu, esperando a sua decisão."
+      description="Solicitações enviadas pelos técnicos no app para avaliar o cancelamento de uma operação. O pedido não cancela a operação automaticamente."
     >
       <ListState
         isPending={fila.isPending}
@@ -118,7 +123,7 @@ export function CancellationQueuePanel({ enabled = true }: { enabled?: boolean }
         empty={{
           title: "Nenhum pedido em aberto",
           description:
-            "Quando alguém em campo não conseguir atender, o relato aparece aqui.",
+            "Quando um técnico solicitar o cancelamento pelo app, você poderá analisar o motivo e decidir como prosseguir.",
         }}
         onRetry={() => void fila.refetch()}
       >
@@ -184,6 +189,7 @@ function Linha({
   pedido: OperationCancellationRequest;
   onEscolher: (decision: OperationCancellationDecision) => void;
 }) {
+  const { formatDateTime } = useDateFormatters();
   return (
     <div className="rounded-lg border border-border p-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -222,29 +228,29 @@ function Linha({
       ) : null}
 
       <div className="mt-3 flex flex-wrap gap-2">
-        {(
-          Object.keys(DESFECHOS) as OperationCancellationDecision[]
-        ).map((decision) => {
-          const desfecho = DESFECHOS[decision];
-          const Icone = desfecho.icon;
-          return (
-            <Button
-              key={decision}
-              type="button"
-              size="sm"
-              variant={desfecho.destructive ? "outline" : "secondary"}
-              className={
-                desfecho.destructive
-                  ? "text-destructive hover:text-destructive"
-                  : undefined
-              }
-              onClick={() => onEscolher(decision)}
-            >
-              <Icone className="size-3.5" />
-              {desfecho.label}
-            </Button>
-          );
-        })}
+        {(Object.keys(DESFECHOS) as OperationCancellationDecision[]).map(
+          (decision) => {
+            const desfecho = DESFECHOS[decision];
+            const Icone = desfecho.icon;
+            return (
+              <Button
+                key={decision}
+                type="button"
+                size="sm"
+                variant={desfecho.destructive ? "outline" : "secondary"}
+                className={
+                  desfecho.destructive
+                    ? "text-destructive hover:text-destructive"
+                    : undefined
+                }
+                onClick={() => onEscolher(decision)}
+              >
+                <Icone className="size-3.5" />
+                {desfecho.label}
+              </Button>
+            );
+          },
+        )}
       </div>
     </div>
   );

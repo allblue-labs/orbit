@@ -44,7 +44,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { formatDate, formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { pmocContractService } from "@/services/pmoc-contract.service";
 import type { PmocPublicContract } from "@/types/pmoc";
 import {
@@ -86,8 +87,8 @@ export function PmocContractSigning({ token }: { token: string }) {
           <CircleAlert />
           <AlertTitle>Não encontramos este contrato</AlertTitle>
           <AlertDescription>
-            O link pode ter sido digitado incompleto. Confira o endereço que você
-            recebeu ou peça um novo a quem enviou.
+            O link pode ter sido digitado incompleto. Confira o endereço que
+            você recebeu ou peça um novo a quem enviou.
           </AlertDescription>
         </Alert>
       </Moldura>
@@ -104,6 +105,7 @@ function Conteudo({
   token: string;
   contrato: PmocPublicContract;
 }) {
+  const { formatDateTime } = useDateFormatters();
   /**
    * O estado depois de assinar sobrepõe o que veio na carga.
    *
@@ -147,8 +149,7 @@ function Conteudo({
             {/* A frase vem do servidor: expirado e substituído têm instruções
                 diferentes, e é ele que sabe qual dos dois aconteceu. */}
             <AlertDescription>
-              {contrato.reason ??
-                "Peça um novo link a quem enviou o contrato."}
+              {contrato.reason ?? "Peça um novo link a quem enviou o contrato."}
             </AlertDescription>
           </Alert>
         ) : null}
@@ -165,6 +166,7 @@ function Conteudo({
  * varredura, não de leitura corrida.
  */
 function ResumoDoContrato({ contrato }: { contrato: PmocPublicContract }) {
+  const { formatDate } = useDateFormatters();
   const { plan } = contrato;
 
   return (
@@ -266,6 +268,7 @@ function FormularioDeAssinatura({
   expiresAt: string;
   onAssinado: () => void;
 }) {
+  const { formatDateTime } = useDateFormatters();
   const padRef = useRef<SignaturePadHandle>(null);
   const [temTraco, setTemTraco] = useState(false);
   const [signerName, setSignerName] = useState("");

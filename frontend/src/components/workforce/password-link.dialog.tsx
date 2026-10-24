@@ -30,7 +30,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import type { TeamPasswordLink } from "@/types/workforce";
 
 export function PasswordLinkDialog({
@@ -44,6 +45,7 @@ export function PasswordLinkDialog({
   isPending: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { formatDateTime } = useDateFormatters();
   const aberto = isPending || Boolean(resultado) || Boolean(error);
   const [copiado, setCopiado] = useState(false);
 

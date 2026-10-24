@@ -12,7 +12,8 @@ import type { ReactNode } from "react";
 
 import { PanelFrame, PanelState, type PanelQuery } from "@/components/panels";
 import { Badge } from "@/components/ui/badge";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import type { Operation } from "@/types/operations";
 import {
   operationKindLabel,
@@ -201,6 +202,7 @@ export function RelationsSection({ query }: { query: PanelQuery<Operation> }) {
  * inventar o vínculo.
  */
 export function ScheduleSection({ query }: { query: PanelQuery<Operation> }) {
+  const { formatDateTime } = useDateFormatters();
   return (
     <PanelFrame
       panelId="operation-schedule"

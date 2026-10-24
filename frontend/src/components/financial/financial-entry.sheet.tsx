@@ -35,7 +35,8 @@ import {
 } from "@/components/ui/sheet";
 import { useAction } from "@/actions";
 import { EntityBadge, EntityLink } from "@/entities";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import {
   FINANCIAL_SOURCE_DESCRIPTIONS,
   type FinancialEntry,
@@ -82,6 +83,7 @@ function Body({
   onConfirm: (entry: FinancialEntry) => void;
   onCancel: (entry: FinancialEntry) => void;
 }) {
+  const { formatDateTime } = useDateFormatters();
   const edit = useAction("financial-entry.update");
   const confirm = useAction("financial-entry.confirm");
   const cancel = useAction("financial-entry.cancel");
@@ -193,9 +195,7 @@ function Body({
               <span className="text-muted-foreground">—</span>
             )}
           </Row>
-          {entry.notes ? (
-            <Row label="Observações">{entry.notes}</Row>
-          ) : null}
+          {entry.notes ? <Row label="Observações">{entry.notes}</Row> : null}
         </dl>
 
         <div className="space-y-3 border-t border-border pt-4 text-sm">
@@ -231,11 +231,7 @@ function Body({
               </Button>
             ) : null}
             {canEdit ? (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => onEdit(entry)}
-              >
+              <Button size="sm" variant="outline" onClick={() => onEdit(entry)}>
                 {edit.label}
               </Button>
             ) : null}

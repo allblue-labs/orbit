@@ -33,7 +33,8 @@ import {
 import { EntityLink } from "@/entities";
 import { useInventoryMovements } from "@/hooks/inventory/use-inventory";
 import { useActiveScope } from "@/providers/use-active-scope";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import {
   INVENTORY_TYPE_LABELS,
   type InventoryMovement,
@@ -228,6 +229,7 @@ function MovementRow({
   movement: InventoryMovement;
   hideItem: boolean;
 }) {
+  const { formatDateTime } = useDateFormatters();
   return (
     <TableRow>
       <TableCell className="text-muted-foreground">

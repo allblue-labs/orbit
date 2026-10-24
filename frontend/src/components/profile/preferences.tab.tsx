@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/select";
 import { PanelError, PanelLoading } from "@/components/panels";
 import { useProfile, useUpdateProfile } from "@/hooks/profile/use-profile";
+import { useTimeZone } from "@/hooks/use-timezone";
 import type { UserProfile } from "@/types/settings";
 
 /**
@@ -83,11 +84,10 @@ export function PreferencesTab() {
 
 function Form({ profile }: { profile: UserProfile }) {
   const update = useUpdateProfile();
+  const { timeZone } = useTimeZone();
 
   const [locale, setLocale] = useState(profile.locale ?? "pt-BR");
-  const [timezone, setTimezone] = useState(
-    profile.timezone ?? "America/Recife",
-  );
+  const [timezone, setTimezone] = useState(profile.timezone ?? timeZone);
 
   /** Um fuso salvo fora da lista não deve desaparecer do seletor. */
   const zones = TIMEZONES.includes(timezone)
@@ -140,7 +140,8 @@ function Form({ profile }: { profile: UserProfile }) {
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              O fuso não é só apresentação: ele define como janelas de agenda e escalas são interpretadas.
+              Usado para exibir horários em todo o Orbit e preencher novos
+              agendamentos. Compromissos existentes mantêm seus horários.
             </p>
           </div>
         </div>

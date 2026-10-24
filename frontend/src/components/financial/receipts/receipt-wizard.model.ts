@@ -14,6 +14,8 @@
  * a tela escolhendo permitiria emitir um recibo com o modelo de PMOC, e a unidade
  * porque é ela que faz o Financeiro reconhecer dinheiro.
  */
+import { DEFAULT_TIMEZONE } from "@/lib/env";
+import { zonedDateKey } from "@/lib/scheduling/timezone";
 import type { CreateReceiptInput, ReceiptSource } from "@/types/financial";
 
 /** De onde o recibo nasce. */
@@ -47,11 +49,14 @@ export const STEP_TITLES: Readonly<Record<ReceiptStep, string>> = {
 };
 
 /** Hoje, no formato que o campo de data usa. `sv-SE` dá `YYYY-MM-DD`. */
-export function today(now = new Date()): string {
-  return now.toLocaleDateString("sv-SE");
+export function today(now = new Date(), timeZone = DEFAULT_TIMEZONE): string {
+  return zonedDateKey(now, timeZone);
 }
 
-export function emptyDraft(now = new Date()): ReceiptDraft {
+export function emptyDraft(
+  now = new Date(),
+  timeZone = DEFAULT_TIMEZONE,
+): ReceiptDraft {
   return {
     /* Do zero é o padrão: recibo avulso — adiantamento, acerto, peça vendida no
        balcão — é tão comum quanto o de serviço executado, e exigir a escolha de um
@@ -63,7 +68,7 @@ export function emptyDraft(now = new Date()): ReceiptDraft {
     payerDocument: "",
     amount: "",
     /* Hoje, porque é quando se emite recibo: o dinheiro entrou agora. */
-    paidOn: today(now),
+    paidOn: today(now, timeZone),
     referring: "",
     paymentMethod: "",
     confirmed: false,
@@ -179,7 +184,9 @@ export function stepIssues(
   switch (step) {
     case "origem":
       if (draft.origin === "OPERATION" && !draft.operationId) {
-        issues.push("Escolha o atendimento concluído que originou o pagamento.");
+        issues.push(
+          "Escolha o atendimento concluído que originou o pagamento.",
+        );
       }
       break;
 

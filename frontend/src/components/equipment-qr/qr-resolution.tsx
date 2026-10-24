@@ -36,9 +36,10 @@ import {
   useQrResolution,
   useServiceOrderPreparation,
 } from "@/hooks/equipment-qr/use-equipment-qr";
-import { formatDate, formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { ROUTES } from "@/lib/routes";
-import { useSession } from "@/providers/session-provider";
+import { useTimeZone } from "@/hooks/use-timezone";
 import { fieldAction } from "@/registry";
 import type { EquipmentFieldDetails } from "@/types/equipment-qr";
 
@@ -140,6 +141,7 @@ function Field({ label, value }: { label: string; value: string }) {
 }
 
 function ContextPanel({ equipment }: { equipment: EquipmentFieldDetails }) {
+  const { formatDateTime, formatDate } = useDateFormatters();
   return (
     <section
       className="space-y-4 rounded-xl border border-border p-4"
@@ -319,7 +321,7 @@ function ServiceOrderPreparation({
   equipmentId: string;
   onClose: () => void;
 }) {
-  const session = useSession();
+  const { timeZone } = useTimeZone();
   const preparation = useServiceOrderPreparation(equipmentId);
 
   if (!preparation.data) return null;
@@ -328,7 +330,7 @@ function ServiceOrderPreparation({
     <OperationFormDialog
       open
       editing={null}
-      timeZone={session.user?.timezone ?? "America/Recife"}
+      timeZone={timeZone}
       prefill={{
         businessUnitId: preparation.data.businessUnitId,
         customerId: preparation.data.customer?.id ?? "",

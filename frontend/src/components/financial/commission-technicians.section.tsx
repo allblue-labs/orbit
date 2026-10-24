@@ -45,7 +45,8 @@ import {
 import { COMMISSION_PERIOD_LABELS } from "@/types/commissions";
 import type { CommissionSummary } from "@/types/commissions";
 import { FORMATTERS } from "@/metrics";
-import { formatDate } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { teamMemberRoute } from "@/lib/routes";
 
 export function CommissionTechniciansSection({
@@ -53,6 +54,7 @@ export function CommissionTechniciansSection({
 }: {
   canManage: boolean;
 }) {
+  const { formatDate } = useDateFormatters();
   const overview = useCommissionOverview();
   const pay = usePayCommissions();
   const [pagando, setPagando] = useState<string | null>(null);

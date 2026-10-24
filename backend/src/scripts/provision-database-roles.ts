@@ -223,6 +223,12 @@ async function provision(): Promise<void> {
          END $$`,
     );
 
+    await admin.query(`DO $$ BEGIN
+      IF to_regclass('public.account_document_registrations') IS NOT NULL THEN
+        EXECUTE 'REVOKE INSERT, UPDATE, DELETE ON TABLE public.account_document_registrations FROM ${role}';
+      END IF;
+    END $$`);
+
     const attributes = (
       await admin.query<RoleAttributes>(
         'SELECT rolsuper, rolbypassrls, rolcreatedb, rolcreaterole FROM pg_roles WHERE rolname = $1',

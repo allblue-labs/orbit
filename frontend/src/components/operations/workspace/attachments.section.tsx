@@ -20,7 +20,8 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useUpload } from "@/hooks/api/use-transfer";
 import { useRemoveOperationAttachment } from "@/hooks/operations/use-operations";
-import { formatBytes, formatDateTime } from "@/lib/formatters";
+import { formatBytes } from "@/lib/formatters";
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { useSession } from "@/providers/session-provider";
 import { operationsService } from "@/services/operations.service";
 import { saveBlob } from "@/api/transfer";
@@ -36,6 +37,7 @@ export function AttachmentsSection({
   operationId: string;
   query: PanelQuery<Operation>;
 }) {
+  const { formatDateTime } = useDateFormatters();
   const session = useSession();
   const inputRef = useRef<HTMLInputElement>(null);
   const [downloading, setDownloading] = useState<string | null>(null);

@@ -1,8 +1,9 @@
 import { LEGAL_DOCUMENT_VERSION } from '../../../contracts/modules/legal/legal.read-models';
 import { Inject, Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import type { IHashProvider } from '../../../contracts';
-import { ConflictException, ValidationException } from '../../../exceptions';
+import { ValidationException } from '../../../exceptions';
+import { registrationConflict } from './registration-conflicts';
+import { normalizeBrazilianDocument } from '../../../utils';
 import { SlugHelper } from '../../../helpers';
 import { HASH_PROVIDER } from '../../../providers';
 import { AuthenticationService } from './authentication.service';
@@ -33,6 +34,7 @@ export class RegistrationService {
     const normalized = {
       ...input,
       email: input.email.trim().toLowerCase(),
+      documentNumber: normalizeBrazilianDocument(input.documentNumber),
     };
     const slug = SlugHelper.create(input.organizationName);
     if (!slug) throw new ValidationException('Invalid organization name');
@@ -42,7 +44,7 @@ export class RegistrationService {
         normalized,
         await this.hashes.hash(input.password),
         slug,
-        {},
+        { publicSignup: true },
         metadata,
       );
       if (!created) throw new ValidationException('Invalid plan');
@@ -67,14 +69,8 @@ export class RegistrationService {
       );
     } catch (error) {
       if (error instanceof ValidationException) throw error;
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
-        throw new ConflictException(
-          'Email, organization or document is already registered',
-        );
-      }
+      const conflict = registrationConflict(error);
+      if (conflict) throw conflict;
       throw error;
     }
   }

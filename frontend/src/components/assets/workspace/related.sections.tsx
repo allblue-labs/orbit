@@ -18,10 +18,12 @@ import {
   useAssetOperations,
   useAssetSchedule,
 } from "@/hooks/assets/use-assets";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { ROUTES } from "@/lib/routes";
 
 export function AssetOperationsSection({ assetId }: { assetId: string }) {
+  const { formatDateTime } = useDateFormatters();
   const query = useAssetOperations(assetId);
 
   return (
@@ -51,6 +53,7 @@ export function AssetOperationsSection({ assetId }: { assetId: string }) {
 }
 
 export function AssetScheduleSection({ assetId }: { assetId: string }) {
+  const { formatDateTime } = useDateFormatters();
   const query = useAssetSchedule(assetId);
 
   return (

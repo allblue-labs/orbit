@@ -286,10 +286,12 @@ export class SchedulingService {
   async agenda(
     organizationId: string,
     query: AgendaQueryDto,
+    viewerId?: string,
   ): Promise<AgendaReadModel> {
     const timezone = await this.repository.agendaTimezone(
       organizationId,
       query.businessUnitId,
+      viewerId,
     );
     assertIanaTimezone(timezone);
     const range = localViewRange(query.view, query.date, timezone);
@@ -561,8 +563,13 @@ export class SchedulingService {
 
   async dashboardReadModel(
     organizationId: string,
+    viewerId?: string,
   ): Promise<DashboardSchedulingReadModel> {
-    const timezone = await this.repository.agendaTimezone(organizationId);
+    const timezone = await this.repository.agendaTimezone(
+      organizationId,
+      undefined,
+      viewerId,
+    );
     const today = civilDateKey(new Date(), timezone);
     const start = localViewRange(
       'DAY',

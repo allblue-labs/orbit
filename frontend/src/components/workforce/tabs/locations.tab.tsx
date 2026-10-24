@@ -34,7 +34,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useMemberLocations } from "@/hooks/workforce/use-workforce";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { cn } from "@/lib/utils";
 import {
   FilterBar,
@@ -59,10 +60,16 @@ const WINDOW_OPTIONS = [
 /** Uma posição de horas atrás não responde "onde ele está". */
 function freshness(ageMinutes: number): { label: string; className: string } {
   if (ageMinutes <= 15) {
-    return { label: "agora há pouco", className: "bg-emerald-500/15 text-emerald-400" };
+    return {
+      label: "agora há pouco",
+      className: "bg-emerald-500/15 text-emerald-400",
+    };
   }
   if (ageMinutes <= 60) {
-    return { label: `há ${ageMinutes} min`, className: "bg-amber-500/15 text-amber-400" };
+    return {
+      label: `há ${ageMinutes} min`,
+      className: "bg-amber-500/15 text-amber-400",
+    };
   }
   const hours = Math.round(ageMinutes / 60);
   return {
@@ -72,6 +79,7 @@ function freshness(ageMinutes: number): { label: string; className: string } {
 }
 
 export function LocationsTab() {
+  const { formatDateTime } = useDateFormatters();
   const list = useListController<LocationFilters>({
     initial: { withinMinutes: 240 },
   });
@@ -190,8 +198,9 @@ export function LocationsTab() {
 
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
         <Badge variant="outline">origem</Badge>
-        Cada posição traz de onde veio (aplicativo, web ou registro manual), e uma data no futuro não é aceita — um dispositivo com relógio adiantado não
-        envenena a ordenação.
+        Cada posição traz de onde veio (aplicativo, web ou registro manual), e
+        uma data no futuro não é aceita — um dispositivo com relógio adiantado
+        não envenena a ordenação.
       </div>
     </div>
   );

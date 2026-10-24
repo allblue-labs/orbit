@@ -30,12 +30,14 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { useActiveScope } from "@/providers/use-active-scope";
+import { useTimeZone } from "@/hooks/use-timezone";
 import { useSession } from "@/providers/session-provider";
 
 /** "Toda a organização" precisa de um valor real no `Select`. */
 const ALL_UNITS = "__all__";
 
 export function ContextTab() {
+  const { timeZone, origin } = useTimeZone();
   const session = useSession();
   const scope = useActiveScope();
 
@@ -48,6 +50,9 @@ export function ContextTab() {
         </h2>
 
         <dl className="grid gap-4 sm:grid-cols-2">
+          <Entry label="Fuso em uso">
+            {timeZone} · {origin}
+          </Entry>
           <Entry label="Nome">{session.organization?.displayName ?? "—"}</Entry>
           <Entry label="Plano">
             {session.entitlements ? (

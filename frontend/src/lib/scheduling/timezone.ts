@@ -129,6 +129,25 @@ export function instantFromZoned(
 }
 
 /** Meia-noite local do dia deste instante, como instante. */
+/** A datetime-local input carries wall time, not the device's timezone. */
+export function instantFromLocalInput(local: string, timeZone: string): Date {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(
+    local,
+  );
+  if (!match) return new Date(local);
+  return instantFromZoned(
+    {
+      year: Number(match[1]),
+      month: Number(match[2]),
+      day: Number(match[3]),
+      hour: Number(match[4]),
+      minute: Number(match[5]),
+      second: Number(match[6] ?? 0),
+    },
+    timeZone,
+  );
+}
+
 export function startOfZonedDay(instant: Date, timeZone: string): Date {
   const parts = zonedParts(instant, timeZone);
   return instantFromZoned(

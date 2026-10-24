@@ -29,7 +29,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { usePmocPlans } from "@/hooks/pmoc/use-pmoc";
-import { formatDate } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { ROUTES } from "@/lib/routes";
 import { PROFESSIONAL_ROLES } from "@/registry";
 import { PmocPlanRowActions } from "./pmoc-plan-row-actions";
@@ -52,6 +53,7 @@ const STATUS_OPTIONS = Object.entries(PLAN_STATUS).map(([value, entry]) => ({
 }));
 
 export function PmocList({ onCreate }: { onCreate: () => void }) {
+  const { formatDate } = useDateFormatters();
   const session = useSession();
   const canManage = session.hasPermission("pmoc.manage");
   const controller = useListController<PmocPlanQuery>();

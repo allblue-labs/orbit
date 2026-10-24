@@ -64,7 +64,9 @@ import {
   useStartPmocExecution,
 } from "@/hooks/pmoc/use-pmoc";
 import { executionBlockedLabel, knownBlockedReason } from "@/registry";
-import { formatDate } from "@/lib/formatters";
+
+import { useTimeZone } from "@/hooks/use-timezone";
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { cn } from "@/lib/utils";
 import type { PmocExecutionPreparation } from "@/types/pmoc";
 import {
@@ -189,6 +191,8 @@ function Attendance({
   preparation: PmocExecutionPreparation;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { formatDate } = useDateFormatters();
+  const { timeZone } = useTimeZone();
   const execution = preparation.existingExecution;
 
   const [draft, setDraft] = useState<AttendanceDraft>(() =>
@@ -220,7 +224,7 @@ function Attendance({
   const patch = (changes: Partial<AttendanceDraft>) =>
     setDraft((atual) => ({ ...atual, ...changes }));
 
-  const issues = stepIssues(step, draft, preparation);
+  const issues = stepIssues(step, draft, preparation, timeZone);
   const pending = start.isPending || complete.isPending || artifact.isPending;
   const finished = isFinished(preparation);
 
@@ -274,9 +278,7 @@ function Attendance({
         </ul>
       ) : null}
 
-      <MutationError
-        error={start.error ?? complete.error ?? artifact.error}
-      />
+      <MutationError error={start.error ?? complete.error ?? artifact.error} />
 
       <div className="flex items-center justify-between gap-2 border-t border-border pt-4">
         <Button
@@ -325,7 +327,7 @@ function Attendance({
             <Button
               type="button"
               disabled={issues.length > 0 || pending}
-              onClick={() => complete.mutate(completePayload(draft))}
+              onClick={() => complete.mutate(completePayload(draft, timeZone))}
             >
               {pending ? (
                 <Loader2 className="size-4 animate-spin" />
@@ -441,7 +443,9 @@ function AssignStep({
                 (pessoa) => pessoa.id !== draft.responsibleFieldTechnicianId,
               )
               .map((pessoa) => {
-                const marcado = draft.auxiliaryTechnicianIds.includes(pessoa.id);
+                const marcado = draft.auxiliaryTechnicianIds.includes(
+                  pessoa.id,
+                );
                 return (
                   <label
                     key={pessoa.id}
@@ -504,8 +508,8 @@ function ProcedureStep({
     <div className="space-y-4">
       {grupos.length === 0 ? (
         <p className="rounded-lg border border-border px-3 py-4 text-sm text-muted-foreground">
-          Este plano não declara roteiro. O relatório sai com o que for registrado
-          nas observações.
+          Este plano não declara roteiro. O relatório sai com o que for
+          registrado nas observações.
         </p>
       ) : (
         <div className="space-y-3">
@@ -544,8 +548,8 @@ function ProcedureStep({
         <span className="text-sm">
           Percorri o roteiro acima neste equipamento.
           <span className="mt-1 block text-xs text-muted-foreground">
-            As evidências fotográficas são anexadas no aplicativo de campo, onde a
-            câmera está. Aqui se registra a manutenção e se emite o relatório.
+            As evidências fotográficas são anexadas no aplicativo de campo, onde
+            a câmera está. Aqui se registra a manutenção e se emite o relatório.
           </span>
         </span>
       </label>
@@ -572,9 +576,9 @@ function CompleteStep({
           onChange={(event) => onChange({ performedAt: event.target.value })}
         />
         <p className="text-xs text-muted-foreground">
-          Em branco, vale <strong>agora</strong>, pelo relógio do servidor — a hora
-          da manutenção é registro legal, e o relógio do navegador pode estar
-          errado.
+          Em branco, vale <strong>agora</strong>, pelo relógio do servidor — a
+          hora da manutenção é registro legal, e o relógio do navegador pode
+          estar errado.
         </p>
       </div>
 
@@ -610,8 +614,8 @@ function IssueStep({
   if (!execution) {
     return (
       <p className="rounded-lg border border-border px-3 py-4 text-sm text-muted-foreground">
-        Nada foi aberto para este equipamento neste ciclo, e o servidor não liberou
-        a abertura agora.
+        Nada foi aberto para este equipamento neste ciclo, e o servidor não
+        liberou a abertura agora.
       </p>
     );
   }
@@ -645,8 +649,8 @@ function IssueStep({
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">
-          A manutenção está registrada. O relatório é a prova de conformidade que o
-          cliente guarda — sem ele, o trabalho existe e a prova não.
+          A manutenção está registrada. O relatório é a prova de conformidade
+          que o cliente guarda — sem ele, o trabalho existe e a prova não.
         </p>
       )}
     </div>
