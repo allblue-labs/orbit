@@ -17,7 +17,7 @@ import {
   ApiOkResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { Permissions } from '../../decorators';
+import { Permissions, Surfaces } from '../../decorators';
 import { ForbiddenException } from '../../exceptions';
 import { ParseUUIDv7Pipe } from '../../pipes';
 import type { IdentityRequest } from '../identity/infrastructure/jwt-authentication.guard';
@@ -209,6 +209,7 @@ export class SchedulingController {
   }
 
   @Get('agenda')
+  @Surfaces('WEB', 'MOBILE', 'API')
   @Capabilities('scheduling.read')
   @Permissions('scheduling.read')
   @ApiOperation({ summary: 'Return day, week or month agenda Read Model' })

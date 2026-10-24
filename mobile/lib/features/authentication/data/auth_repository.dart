@@ -1,15 +1,17 @@
 /// Repositório de autenticação e sessão.
 ///
 /// Fala com o NestJS diretamente (o BFF é da aplicação web) e compõe o estado
-/// de sessão a partir de três leituras reais:
+/// de sessão a partir das leituras reais:
 ///
 /// - `GET /identity/me` → perfil;
+/// - `GET /identity/me/access` → acesso efetivo atual;
 /// - `GET /organizations/current` → organização, plano e unidades;
-/// - `GET /organizations/current/subscription` → direitos do plano.
+/// - `GET /organizations/current/subscription` → direitos do plano;
+/// - `GET /organizations/current/product-access` → recursos do produto.
 ///
-/// As duas últimas não existem para o Platform Administrator (que não pertence
-/// a tenant algum) e `organizations/current` exige assinatura ativa — as duas
-/// falhas são toleradas para que a sessão exista mesmo assim.
+/// As consultas de organização não existem para o Platform Administrator (que
+/// não pertence a tenant algum). `organizations/current` exige assinatura ativa;
+/// suas falhas são toleradas para que a sessão exista mesmo assim.
 library;
 
 import 'dart:convert';
@@ -96,6 +98,11 @@ class AuthRepository {
     return OrbitUser.fromJson(data, resolverUrl: _client.resolveUrl);
   }
 
+  Future<SessionAccess> loadAccess() async {
+    final data = await _client.get<Map<String, dynamic>>('/identity/me/access');
+    return SessionAccess.fromJson(data);
+  }
+
   /// Troca a própria senha.
   ///
   /// Exige a senha atual — é o que separa este fluxo do link de recuperação,
@@ -166,7 +173,7 @@ class AuthRepository {
   /// Lê as claims do access token guardado.
   ///
   /// A assinatura é verificada pelo backend; aqui o payload serve apenas para
-  /// conhecer papéis, permissões e escopo sem uma ida à rede.
+  /// identificar a sessão e o escopo. O acesso efetivo vem de [loadAccess].
   Future<AccessTokenClaims?> readClaims() async {
     final tokens = await _storage.read();
     if (tokens == null) return null;
