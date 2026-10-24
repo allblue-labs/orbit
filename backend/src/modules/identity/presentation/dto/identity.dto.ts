@@ -11,6 +11,7 @@ import {
   Length,
   Max,
   MaxLength,
+  Matches,
   Min,
   MinLength,
 } from 'class-validator';
@@ -23,6 +24,10 @@ import {
 import { IsDocument, IsUUIDv7 } from '../../../../validators';
 import { ACCEPTED_IMAGE_MIME_TYPES } from '../../../storage/image-signature';
 import { AVATAR_MAX_BYTES } from '../../application/avatar.service';
+import {
+  PASSWORD_POLICY_MESSAGE,
+  PASSWORD_POLICY_REGEX,
+} from '../../domain/password-policy';
 
 const trim = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.trim() : value;
@@ -97,6 +102,7 @@ export class RegisterOrganizationDto {
   @IsString()
   @MinLength(12)
   @MaxLength(128)
+  @Matches(PASSWORD_POLICY_REGEX, { message: PASSWORD_POLICY_MESSAGE })
   password!: string;
 
   @ApiProperty()
@@ -218,6 +224,7 @@ export class ResetPasswordDto {
   @IsString()
   @MinLength(12)
   @MaxLength(128)
+  @Matches(PASSWORD_POLICY_REGEX, { message: PASSWORD_POLICY_MESSAGE })
   password!: string;
 }
 
@@ -241,6 +248,7 @@ export class ChangePasswordDto {
   @IsString()
   @MinLength(12)
   @MaxLength(128)
+  @Matches(PASSWORD_POLICY_REGEX, { message: PASSWORD_POLICY_MESSAGE })
   newPassword!: string;
 }
 
@@ -358,6 +366,7 @@ export class AcceptInvitationDto {
   @IsString()
   @MinLength(12)
   @MaxLength(128)
+  @Matches(PASSWORD_POLICY_REGEX, { message: PASSWORD_POLICY_MESSAGE })
   password!: string;
 }
 

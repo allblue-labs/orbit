@@ -57,8 +57,11 @@ import {
 } from "@/lib/brazilian-document";
 import type { PostalAddress } from "@/lib/postal-code";
 import { cn } from "@/lib/utils";
+
 import { ApiError } from "@/lib/api-error";
 import { errorCopy } from "@/lib/error-copy";
+import { passwordPolicyIssues } from "@/lib/password-policy";
+import { PasswordRequirements } from "./password-requirements";
 
 const TERMS_ACCEPTANCE_MESSAGE =
   "Para continuar, aceite os Termos de Uso e confirme a leitura da Política de Privacidade.";
@@ -69,7 +72,11 @@ const schema = z
     firstName: z.string().min(2, "Informe seu nome"),
     lastName: z.string().min(2, "Informe seu sobrenome"),
     email: z.string().email("Informe um e-mail válido"),
-    password: z.string().min(12, "Use pelo menos 12 caracteres"),
+    password: z.string().superRefine((password, context) => {
+      for (const issue of passwordPolicyIssues(password)) {
+        context.addIssue({ code: "custom", message: issue });
+      }
+    }),
     confirmPassword: z.string(),
     organizationName: z.string().min(2, "Informe o nome da organização"),
     legalName: z.string().min(2, "Informe a razão social"),
@@ -349,6 +356,8 @@ export function SignupContent({
   const billingInterval = useWatch({ control, name: "billingInterval" });
   const plan = catalog.plans.find((entry) => entry.code === selectedPlan);
   const documentNumber = useWatch({ control, name: "documentNumber" });
+  const termsAccepted = useWatch({ control, name: "terms" });
+  const password = useWatch({ control, name: "password" }) ?? "";
 
   async function next() {
     // O retorno do servidor pertence à tentativa anterior. Revalide os campos
@@ -678,6 +687,9 @@ export function SignupContent({
                             )}
                           </button>
                         </div>
+                        {name === "password" ? (
+                          <PasswordRequirements password={password} />
+                        ) : null}
                         <FieldError message={errors[name]?.message} />
                       </div>
                     ))}

@@ -137,7 +137,10 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                         decoration: InputDecoration(
                           labelText: 'Nova senha',
                           prefixIcon: const Icon(Icons.lock_outline),
-                          helperText: 'No mínimo $_tamanhoMinimo caracteres',
+                          helperText:
+                              'Mínimo de $_tamanhoMinimo caracteres, com '
+                              'letras maiúsculas e minúsculas, número e '
+                              'caractere especial.',
                           suffixIcon: IconButton(
                             onPressed: () =>
                                 setState(() => _obscure = !_obscure),
@@ -154,6 +157,18 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                         validator: (value) {
                           if (value == null || value.length < _tamanhoMinimo) {
                             return 'A senha tem no mínimo $_tamanhoMinimo caracteres';
+                          }
+                          if (!RegExp(r'[a-z]').hasMatch(value)) {
+                            return 'Inclua uma letra minúscula';
+                          }
+                          if (!RegExp(r'[A-Z]').hasMatch(value)) {
+                            return 'Inclua uma letra maiúscula';
+                          }
+                          if (!RegExp(r'\d').hasMatch(value)) {
+                            return 'Inclua um número';
+                          }
+                          if (!RegExp(r'[^A-Za-z0-9\s]').hasMatch(value)) {
+                            return 'Inclua um caractere especial';
                           }
                           if (value == _atual.text) {
                             return 'A nova senha precisa ser diferente da temporária';

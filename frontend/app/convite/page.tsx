@@ -23,9 +23,8 @@ import { Label } from "@/components/ui/label";
 import { SessionLoading } from "@/guards";
 import { useAcceptInvitation } from "@/hooks/api";
 import { ROUTES } from "@/lib/routes";
-
-/** Mínimo exigido por `AcceptInvitationDto` no backend. */
-const MIN_PASSWORD_LENGTH = 12;
+import { passwordPolicyIssues } from "@/lib/password-policy";
+import { PasswordRequirements } from "@/components/auth/password-requirements";
 
 export default function InvitationPage() {
   return (
@@ -46,13 +45,21 @@ function InvitationView() {
   const params = useSearchParams();
   const token = params.get("token") ?? "";
   const [showPassword, setShowPassword] = useState(false);
+  const [password, setPassword] = useState("");
   const acceptInvitation = useAcceptInvitation();
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const password = String(form.get("password") ?? "");
-    if (password !== String(form.get("confirmPassword") ?? "")) {
+    const submittedPassword = String(form.get("password") ?? "");
+    const issues = passwordPolicyIssues(submittedPassword);
+    if (issues.length > 0) {
+      toast.error("A senha ainda não atende aos requisitos", {
+        description: issues.join("; "),
+      });
+      return;
+    }
+    if (submittedPassword !== String(form.get("confirmPassword") ?? "")) {
       toast.error("As senhas não coincidem");
       return;
     }
@@ -61,7 +68,7 @@ function InvitationView() {
         token,
         firstName: String(form.get("firstName") ?? ""),
         lastName: String(form.get("lastName") ?? ""),
-        password,
+        password: submittedPassword,
       });
       toast.success("Convite aceito", {
         description: "Entre com seu e-mail e a senha que você acabou de criar.",
@@ -137,8 +144,8 @@ function InvitationView() {
                     name="password"
                     type={showPassword ? "text" : "password"}
                     autoComplete="new-password"
-                    minLength={MIN_PASSWORD_LENGTH}
                     required
+                    onChange={(event) => setPassword(event.target.value)}
                     placeholder="••••••••••••"
                     className="px-9"
                   />
@@ -157,9 +164,7 @@ function InvitationView() {
                     )}
                   </button>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Use pelo menos {MIN_PASSWORD_LENGTH} caracteres.
-                </p>
+                <PasswordRequirements password={password} />
               </div>
 
               <div className="space-y-2">
@@ -171,7 +176,6 @@ function InvitationView() {
                     name="confirmPassword"
                     type={showPassword ? "text" : "password"}
                     autoComplete="new-password"
-                    minLength={MIN_PASSWORD_LENGTH}
                     required
                     placeholder="••••••••••••"
                     className="pl-9"
