@@ -9,6 +9,7 @@ import {
 import type { MobileFieldActor } from './mobile-field.service';
 import type { CreateWalkInOperationDto } from './mobile-walk-in.dto';
 import { MobileWalkInRepository } from './mobile-walk-in.repository';
+import { WALK_IN_CREATE_PERMISSION } from '../organizations/team-roles';
 
 /**
  * Abrir um atendimento na hora, estando no local.
@@ -105,7 +106,18 @@ export class MobileWalkInService {
       throw new ValidationException(
         'Idempotency-Key deve conter de 8 a 160 caracteres seguros',
       );
-    this.requirePermission(actor, 'operations.create');
+    if (
+      !actor.isOrganizationOwner &&
+      !actor.permissions.some((permission) =>
+        ['*', 'operations.create', WALK_IN_CREATE_PERMISSION].includes(
+          permission,
+        ),
+      )
+    ) {
+      throw new ForbiddenException(
+        'Você não tem permissão para iniciar um atendimento avulso.',
+      );
+    }
 
     /* Exatamente um dos dois: aceitar os dois obrigaria o servidor a escolher
        qual vale, e qualquer escolha seria arbitrária. */

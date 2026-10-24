@@ -12,6 +12,13 @@
 import { MobileWalkInService } from './mobile-walk-in.service';
 import type { MobileFieldActor } from './mobile-field.service';
 import {
+  ASSIGNABLE_TEAM_ROLES,
+  FIELD_TECHNICIAN_ROLE_KEY,
+  ASSISTANT_TECHNICIAN_ROLE_KEY,
+  WALK_IN_CREATE_PERMISSION,
+} from '../organizations/team-roles';
+import { grantedAccessOf } from '../workforce/field-eligibility';
+import {
   ConflictException,
   EntityNotFoundException,
   ForbiddenException,
@@ -50,6 +57,53 @@ function bancada(permissions: readonly string[] = ['operations.create']) {
 const novoCliente = { legalName: 'Clima Norte LTDA' };
 
 describe('atendimento avulso', () => {
+  it('o perfil real de Técnico Operacional pode criar avulso sem criação geral', async () => {
+    const role = ASSIGNABLE_TEAM_ROLES.find(
+      (item) => item.key === FIELD_TECHNICIAN_ROLE_KEY,
+    )!;
+    expect(role.permissions).toContain(WALK_IN_CREATE_PERMISSION);
+    expect(role.permissions).not.toContain('operations.create');
+    const { service, repository, actor } = bancada(role.permissions);
+    await expect(
+      service.create(actor, CHAVE, { customer: novoCliente }),
+    ).resolves.toMatchObject({ operationId: ORDEM });
+    expect(repository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorId: TECNICO,
+        organizationId: ORG,
+        businessUnitId: UNIDADE,
+      }),
+    );
+  });
+
+  it('o perfil real de auxiliar continua sem criar atendimentos', async () => {
+    const role = ASSIGNABLE_TEAM_ROLES.find(
+      (item) => item.key === ASSISTANT_TECHNICIAN_ROLE_KEY,
+    )!;
+    const { service, repository, actor } = bancada(role.permissions);
+    await expect(
+      service.create(actor, CHAVE, { customer: novoCliente }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(repository.create).not.toHaveBeenCalled();
+  });
+
+  it('acesso personalizado sem criação avulsa continua substituindo o perfil padrão', async () => {
+    const role = ASSIGNABLE_TEAM_ROLES.find(
+      (item) => item.key === FIELD_TECHNICIAN_ROLE_KEY,
+    )!;
+    const access = grantedAccessOf({
+      usesCustomAccess: true,
+      customPermissions: ['operations.read', 'customers.read'],
+      customAllowedSurfaces: ['MOBILE'],
+      role,
+    });
+    const { service, repository, actor } = bancada(access.permissions);
+    await expect(
+      service.create(actor, CHAVE, { customer: novoCliente }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(repository.create).not.toHaveBeenCalled();
+  });
+
   it('abre a ordem e devolve o identificador para o roteiro seguir', async () => {
     const { service, actor } = bancada();
 

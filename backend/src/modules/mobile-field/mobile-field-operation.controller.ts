@@ -14,7 +14,10 @@ import { ForbiddenException } from '../../exceptions';
 import { Surfaces } from '../../decorators';
 import { ParseUUIDv7Pipe } from '../../pipes';
 import type { IdentityRequest } from '../identity/infrastructure/jwt-authentication.guard';
-import { RequiresActivePlan } from '../subscription-plans/plan-access';
+import {
+  Capabilities,
+  RequiresActivePlan,
+} from '../subscription-plans/plan-access';
 import {
   FieldOperationChecklistUpdateDto,
   FieldOperationCommandDto,
@@ -82,6 +85,7 @@ export class MobileFieldOperationController {
    * não pode abrir a segunda ordem.
    */
   @Post('walk-in')
+  @Capabilities('operations.manage')
   @ApiOperation({ summary: 'Abre um atendimento avulso a partir do campo' })
   createWalkIn(
     @Req() request: IdentityRequest,
