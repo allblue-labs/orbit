@@ -120,3 +120,73 @@ test("legal reading fits a mobile screen", async ({ page }) => {
     ),
   ).toBe(true);
 });
+
+test.describe("aceite obrigatório em português", () => {
+  // The app must show its Portuguese validation even in an English browser.
+  test.use({ locale: "en-US" });
+  const message =
+    "Para continuar, aceite os Termos de Uso e confirme a leitura da Política de Privacidade.";
+
+  for (const action of ["clique", "Enter"] as const) {
+    test(`avisa por ${action} e só envia o cadastro após o aceite`, async ({
+      page,
+    }) => {
+      const registrations: Record<string, unknown>[] = [];
+      const pageErrors: string[] = [];
+      page.on("pageerror", (error) => pageErrors.push(error.message));
+      await page.route("**/api/auth/register", async (route) => {
+        registrations.push(
+          route.request().postDataJSON() as Record<string, unknown>,
+        );
+        // Intercept the submission; this test must never create a real account.
+        await route.fulfill({
+          status: 503,
+          json: {
+            success: false,
+            error: {
+              code: "REGISTRATION_CONFLICT",
+              message: "Cadastro de teste interceptado.",
+            },
+          },
+        });
+      });
+      if (action === "Enter")
+        await page.setViewportSize({ width: 390, height: 844 });
+      await addressStep(page);
+      await page.getByLabel("Cidade", { exact: true }).fill("Salvador");
+      await page.getByLabel("UF", { exact: true }).fill("BA");
+      const street = page.getByLabel("Endereço da matriz", { exact: true });
+      await street.fill("Rua da Misericórdia, 100");
+      if (action === "Enter") await street.press("Enter");
+      else
+        await page
+          .getByRole("button", { name: "Criar organização", exact: true })
+          .click();
+
+      const terms = page.locator("#terms");
+      await expect(page.locator("#terms-error")).toHaveText(message);
+      await expect(page.locator("[data-sonner-toast]")).toContainText(message);
+      await expect(terms).toHaveAttribute("aria-invalid", "true");
+      await expect(terms).toHaveAttribute("aria-describedby", "terms-error");
+      await expect(terms).toBeFocused();
+      expect(registrations).toHaveLength(0);
+
+      await terms.check();
+      await expect(terms).toHaveAttribute("aria-invalid", "false");
+      await expect(page.locator("#terms-error")).toHaveCount(0);
+      await expect(page.locator("[data-sonner-toast]")).toHaveCount(0);
+      const submitted = page.waitForResponse(
+        (response) =>
+          response.url().endsWith("/api/auth/register") &&
+          response.request().method() === "POST",
+      );
+      await page
+        .getByRole("button", { name: "Criar organização", exact: true })
+        .click();
+      expect((await submitted).status()).toBe(503);
+      expect(registrations).toHaveLength(1);
+      expect(registrations[0].acceptTerms).toBe(true);
+      expect(pageErrors).toEqual([]);
+    });
+  }
+});

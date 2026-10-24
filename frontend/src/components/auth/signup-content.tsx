@@ -17,7 +17,7 @@ import {
   Sparkles,
   UserRound,
 } from "lucide-react";
-import { useForm, useWatch } from "react-hook-form";
+import { Controller, useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -60,6 +60,10 @@ import { cn } from "@/lib/utils";
 import { ApiError } from "@/lib/api-error";
 import { errorCopy } from "@/lib/error-copy";
 
+const TERMS_ACCEPTANCE_MESSAGE =
+  "Para continuar, aceite os Termos de Uso e confirme a leitura da Política de Privacidade.";
+const TERMS_TOAST_ID = "signup-terms-required";
+
 const schema = z
   .object({
     firstName: z.string().min(2, "Informe seu nome"),
@@ -78,7 +82,7 @@ const schema = z
     stateCode: z.string().length(2, "Use a sigla do estado"),
     planKey: z.string().min(1, "Escolha um plano para continuar"),
     billingInterval: z.enum(BILLING_INTERVALS),
-    terms: z.boolean().refine(Boolean, "Aceite os termos para continuar"),
+    terms: z.boolean().refine(Boolean, TERMS_ACCEPTANCE_MESSAGE),
   })
   .refine((data) => data.password === data.confirmPassword, {
     path: ["confirmPassword"],
@@ -345,7 +349,6 @@ export function SignupContent({
   const billingInterval = useWatch({ control, name: "billingInterval" });
   const plan = catalog.plans.find((entry) => entry.code === selectedPlan);
   const documentNumber = useWatch({ control, name: "documentNumber" });
-  const termsAccepted = useWatch({ control, name: "terms" });
 
   async function next() {
     // O retorno do servidor pertence à tentativa anterior. Revalide os campos
@@ -488,13 +491,18 @@ export function SignupContent({
 
         <div className="mx-auto flex w-full max-w-2xl flex-1 items-center py-10">
           <form
+            noValidate
             onSubmit={(event) => {
               if (step < LAST_STEP) {
                 event.preventDefault();
                 void next();
                 return;
               }
-              void handleSubmit(submit)(event);
+              void handleSubmit(submit, (validationErrors) => {
+                if (validationErrors.terms) {
+                  toast.error(TERMS_ACCEPTANCE_MESSAGE, { id: TERMS_TOAST_ID });
+                }
+              })(event);
             }}
             className="w-full"
           >
@@ -783,14 +791,27 @@ export function SignupContent({
                     </div>
                     <div className="rounded-xl border border-border bg-muted/40 p-4 sm:col-span-2">
                       <div className="flex items-start gap-3">
-                        <Checkbox
-                          id="terms"
-                          checked={termsAccepted}
-                          onCheckedChange={(checked) =>
-                            setValue("terms", checked === true, {
-                              shouldValidate: true,
-                            })
-                          }
+                        <Controller
+                          name="terms"
+                          control={control}
+                          render={({ field }) => (
+                            <Checkbox
+                              id="terms"
+                              name={field.name}
+                              ref={field.ref}
+                              checked={field.value}
+                              onBlur={field.onBlur}
+                              aria-invalid={Boolean(errors.terms)}
+                              aria-describedby={
+                                errors.terms ? "terms-error" : undefined
+                              }
+                              onCheckedChange={(checked) => {
+                                field.onChange(checked === true);
+                                if (checked === true)
+                                  toast.dismiss(TERMS_TOAST_ID);
+                              }}
+                            />
+                          )}
                         />
                         <Label
                           htmlFor="terms"
@@ -800,7 +821,15 @@ export function SignupContent({
                           Privacidade do Orbit, versão {LEGAL_DOCUMENT_VERSION}.
                         </Label>
                       </div>
-                      <FieldError message={errors.terms?.message} />
+                      {errors.terms ? (
+                        <p
+                          id="terms-error"
+                          role="alert"
+                          className="mt-2 text-xs text-destructive"
+                        >
+                          {errors.terms.message}
+                        </p>
+                      ) : null}
                     </div>
                   </div>
                 )}
