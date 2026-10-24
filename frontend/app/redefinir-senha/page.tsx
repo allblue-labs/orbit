@@ -24,9 +24,8 @@ import { useResetPassword } from "@/hooks/api";
 import { useChangePassword } from "@/hooks/profile/use-profile";
 import { ROUTES } from "@/lib/routes";
 import { useOptionalSession } from "@/providers";
-
-/** Mínimo exigido por `ResetPasswordDto` no backend. */
-const MIN_PASSWORD_LENGTH = 12;
+import { passwordPolicyIssues } from "@/lib/password-policy";
+import { PasswordRequirements } from "@/components/auth/password-requirements";
 
 export default function ResetPasswordPage() {
   return (
@@ -48,18 +47,26 @@ function ResetPasswordView() {
   const token = params.get("token") ?? "";
   const mandatory = params.get("motivo") === "obrigatorio";
   const [showPassword, setShowPassword] = useState(false);
+  const [password, setPassword] = useState("");
   const resetPassword = useResetPassword();
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const password = String(form.get("password") ?? "");
-    if (password !== String(form.get("confirmPassword") ?? "")) {
+    const submittedPassword = String(form.get("password") ?? "");
+    const issues = passwordPolicyIssues(submittedPassword);
+    if (issues.length > 0) {
+      toast.error("A senha ainda não atende aos requisitos", {
+        description: issues.join("; "),
+      });
+      return;
+    }
+    if (submittedPassword !== String(form.get("confirmPassword") ?? "")) {
       toast.error("As senhas não coincidem");
       return;
     }
     try {
-      await resetPassword.mutateAsync({ token, password });
+      await resetPassword.mutateAsync({ token, password: submittedPassword });
       toast.success("Senha atualizada", {
         description: "Entre novamente com a nova senha.",
       });
@@ -98,8 +105,8 @@ function ResetPasswordView() {
             {mandatory ? "Defina uma nova senha" : "Nova senha"}
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Use pelo menos {MIN_PASSWORD_LENGTH} caracteres. A nova senha vale
-            para todos os acessos da sua conta.
+            A nova senha vale para todos os acessos da sua conta. Atenda aos
+            requisitos abaixo.
           </p>
 
           {mandatory ? (
@@ -124,8 +131,8 @@ function ResetPasswordView() {
                     name="password"
                     type={showPassword ? "text" : "password"}
                     autoComplete="new-password"
-                    minLength={MIN_PASSWORD_LENGTH}
                     required
+                    onChange={(event) => setPassword(event.target.value)}
                     placeholder="••••••••••••"
                     className="px-9"
                   />
@@ -144,6 +151,7 @@ function ResetPasswordView() {
                     )}
                   </button>
                 </div>
+                <PasswordRequirements password={password} />
               </div>
 
               <div className="space-y-2">
@@ -155,7 +163,6 @@ function ResetPasswordView() {
                     name="confirmPassword"
                     type={showPassword ? "text" : "password"}
                     autoComplete="new-password"
-                    minLength={MIN_PASSWORD_LENGTH}
                     required
                     placeholder="••••••••••••"
                     className="pl-9"
@@ -206,11 +213,19 @@ function MissingTokenState({ mandatory }: { mandatory: boolean }) {
   const session = useOptionalSession();
   const changePassword = useChangePassword();
   const email = session?.user?.email;
+  const [newPassword, setNewPassword] = useState("");
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const newPassword = String(form.get("newPassword") ?? "");
+    const issues = passwordPolicyIssues(newPassword);
+    if (issues.length > 0) {
+      toast.error("A senha ainda não atende aos requisitos", {
+        description: issues.join("; "),
+      });
+      return;
+    }
     if (newPassword !== String(form.get("confirmPassword") ?? "")) {
       toast.error("As senhas não coincidem");
       return;
@@ -287,12 +302,13 @@ function MissingTokenState({ mandatory }: { mandatory: boolean }) {
             name="newPassword"
             type="password"
             autoComplete="new-password"
-            minLength={MIN_PASSWORD_LENGTH}
             required
+            onChange={(event) => setNewPassword(event.target.value)}
             placeholder="••••••••••••"
             className="px-9"
           />
         </div>
+        <PasswordRequirements password={newPassword} />
       </div>
 
       <div className="space-y-2">
@@ -304,7 +320,6 @@ function MissingTokenState({ mandatory }: { mandatory: boolean }) {
             name="confirmPassword"
             type="password"
             autoComplete="new-password"
-            minLength={MIN_PASSWORD_LENGTH}
             required
             placeholder="••••••••••••"
             className="pl-9"

@@ -91,9 +91,10 @@ export function SecuritySettingsTab() {
                 aria-hidden
               />
               <span>
-                <strong className="text-foreground">Senha</strong> — mínimo de
-                12 caracteres, exigido no cadastro, na recuperação e na troca.
-                Trocar a senha encerra as demais sessões.
+                <strong className="text-foreground">Senha</strong> — pelo menos
+                12 caracteres, com letras maiúsculas e minúsculas, número e
+                caractere especial; exigido no cadastro, na recuperação e na
+                troca. Trocar a senha encerra as demais sessões.
               </span>
             </li>
             <li className="flex items-start gap-2">

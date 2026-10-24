@@ -39,9 +39,11 @@ import {
   useRevokeSession,
 } from "@/hooks/profile/use-profile";
 import { formatDateTime } from "@/lib/formatters";
+import { passwordPolicyIssues } from "@/lib/password-policy";
 import { useSession } from "@/providers/session-provider";
 import { PROFILE_LIMITS } from "@/types/settings";
 import { ListState } from "@/workspace";
+import { PasswordRequirements } from "@/components/auth/password-requirements";
 import { MfaSection } from "./mfa.section";
 
 export function SecurityTab() {
@@ -160,8 +162,8 @@ function PasswordSection() {
    * erro de digitação — a única coisa que o servidor não teria como notar.
    */
   const mismatch = confirmation.length > 0 && next !== confirmation;
-  const tooShort =
-    next.length > 0 && next.length < PROFILE_LIMITS.passwordMinLength;
+  const passwordIssues = passwordPolicyIssues(next);
+  const passwordInvalid = next.length > 0 && passwordIssues.length > 0;
 
   /**
    * O envio espera confirmação.
@@ -232,11 +234,12 @@ function PasswordSection() {
             maxLength={PROFILE_LIMITS.passwordMaxLength}
             required
           />
-          {tooShort ? (
+          {passwordInvalid ? (
             <p className="text-xs text-destructive">
-              Mínimo de {PROFILE_LIMITS.passwordMinLength} caracteres.
+              A senha ainda não atende a todos os requisitos.
             </p>
           ) : null}
+          <PasswordRequirements password={next} />
         </div>
 
         <div className="space-y-2">
@@ -270,7 +273,7 @@ function PasswordSection() {
             !current ||
             !next ||
             mismatch ||
-            tooShort ||
+            passwordInvalid ||
             change.isPending
           }
         >
