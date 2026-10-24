@@ -71,6 +71,7 @@ void main() {
     when(
       () => repositorio.loadEntitlements(),
     ).thenAnswer((_) async => _direitos);
+    when(() => repositorio.loadProductAccess()).thenAnswer((_) async => null);
     when(
       () => repositorio.login(
         email: any(named: 'email'),
@@ -79,7 +80,10 @@ void main() {
       ),
     ).thenAnswer(
       (_) async => TokenPair(
-        accessToken: fakeAccessToken(permissions: const ['operations.read']),
+        accessToken: fakeAccessToken(
+          userId: 'user-tec',
+          permissions: const ['operations.read'],
+        ),
         refreshToken: 'refresh-1',
         expiresIn: 900,
       ),

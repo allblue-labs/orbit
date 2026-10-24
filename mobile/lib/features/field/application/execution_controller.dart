@@ -176,13 +176,16 @@ class ExecutionController extends StateNotifier<ExecutionState> {
   Future<void> load() async {
     try {
       final preparation = await _repository.preparation(operationId);
+      final pending = await _sync.commandsFor(operationId);
+      if (!mounted) return;
       state = ExecutionState(
         phase: ExecutionPhase.ready,
         preparation: preparation,
         lastReplay: state.lastReplay,
-        pendingCommands: await _sync.commandsFor(operationId),
+        pendingCommands: pending,
       );
     } on Object catch (error) {
+      if (!mounted) return;
       state = state.copyWith(phase: ExecutionPhase.error, error: error);
     }
   }
@@ -240,6 +243,7 @@ class ExecutionController extends StateNotifier<ExecutionState> {
     try {
       await _sync.enqueue(envelope);
       final outcome = await _sync.outcomeOf(envelope.commandId);
+      if (!mounted) return null;
 
       switch (outcome) {
         case CommandConfirmed():
@@ -247,6 +251,7 @@ class ExecutionController extends StateNotifier<ExecutionState> {
           /// Intenção cumprida: a próxima ganha chave nova.
           _intent = null;
           await load();
+          if (!mounted) return null;
           state = state.copyWith(
             clearPending: true,
             lastReplay:
@@ -259,6 +264,7 @@ class ExecutionController extends StateNotifier<ExecutionState> {
           /// sincronização" — nunca "concluído".
           _intent = null;
           await _refreshPending();
+          if (!mounted) return null;
           state = state.copyWith(
             phase: ExecutionPhase.ready,
             clearPending: true,
@@ -267,6 +273,7 @@ class ExecutionController extends StateNotifier<ExecutionState> {
         case CommandBlocked():
           _intent = null;
           await _refreshPending();
+          if (!mounted) return null;
           state = state.copyWith(
             phase: outcome.command.state == PendingCommandState.conflict
                 ? ExecutionPhase.conflict
@@ -287,6 +294,7 @@ class ExecutionController extends StateNotifier<ExecutionState> {
       }
       return outcome;
     } on Object catch (error) {
+      if (!mounted) return null;
       state = state.copyWith(
         phase: ExecutionPhase.error,
         error: error,
@@ -298,9 +306,9 @@ class ExecutionController extends StateNotifier<ExecutionState> {
 
   /// Relê as intenções pendentes deste atendimento.
   Future<void> _refreshPending() async {
-    state = state.copyWith(
-      pendingCommands: await _sync.commandsFor(operationId),
-    );
+    final pending = await _sync.commandsFor(operationId);
+    if (!mounted) return;
+    state = state.copyWith(pendingCommands: pending);
   }
 
   Future<void> start() => _run(

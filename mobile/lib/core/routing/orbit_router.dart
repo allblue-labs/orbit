@@ -134,10 +134,11 @@ abstract final class OrbitRoutes {
 }
 
 final routerProvider = Provider<GoRouter>((ref) {
+  final rootNavigatorKey = GlobalKey<NavigatorState>();
   final notifier = _AuthRefreshNotifier(ref);
   ref.onDispose(notifier.dispose);
 
-  return GoRouter(
+  final router = GoRouter(
     initialLocation: OrbitRoutes.splash,
     refreshListenable: notifier,
     redirect: (context, state) {
@@ -188,7 +189,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       /// aqui — irmã da splash e do login, não filha do `ShellRoute`.
       ///
       /// A tentativa anterior era declará-la dentro do shell com
-      /// `parentNavigatorKey: _rootNavigatorKey`. O `go_router` recusa: uma
+      /// `parentNavigatorKey: rootNavigatorKey`. O `go_router` recusa: uma
       /// sub-rota direta de um `ShellRoute` só aceita a chave do próprio shell
       /// ou nenhuma. A recusa é um `assert`, então o aplicativo **não abria** —
       /// e nenhum teste de widget percebeu, porque todos montam telas
@@ -208,9 +209,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       /// navegador raiz, e o `go_router` recusa a árvore inteira se carregar.
       GoRoute(
         path: OrbitRoutes.notifications,
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const NotificationsScreen(),
       ),
+
       /// O PMOC abre **por cima** do shell, como a caixa de avisos.
       ///
       /// Não é aba: as cinco estão ocupadas, e nenhuma delas vale trocar por
@@ -221,7 +223,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       /// abas convidando a sair no meio.
       GoRoute(
         path: OrbitRoutes.pmoc,
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const PmocPlansScreen(),
         routes: [
           GoRoute(
@@ -263,7 +265,7 @@ final routerProvider = Provider<GoRouter>((ref) {
               /// item — e `avulso` viraria um item inexistente.
               GoRoute(
                 path: 'avulso',
-                parentNavigatorKey: _rootNavigatorKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (context, state) => WalkInScreen(
                   customerId: state.uri.queryParameters['cliente'],
                   customerName: state.uri.queryParameters['nome'],
@@ -271,14 +273,14 @@ final routerProvider = Provider<GoRouter>((ref) {
               ),
               GoRoute(
                 path: 'execucao/:operationId',
-                parentNavigatorKey: _rootNavigatorKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (context, state) => OperationExecutionScreen(
                   operationId: state.pathParameters['operationId'] ?? '',
                 ),
                 routes: [
                   GoRoute(
                     path: 'aceite',
-                    parentNavigatorKey: _rootNavigatorKey,
+                    parentNavigatorKey: rootNavigatorKey,
                     builder: (context, state) => CustomerAcknowledgementScreen(
                       operationId: state.pathParameters['operationId'] ?? '',
                     ),
@@ -289,7 +291,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                 path: ':id',
 
                 /// Fora do shell: o contexto do item ocupa a tela inteira.
-                parentNavigatorKey: _rootNavigatorKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (context, state) => WorkItemDetailScreen(
                   workItemId: Uri.decodeComponent(
                     state.pathParameters['id'] ?? '',
@@ -305,7 +307,7 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: ':id',
                 // Fora do shell: o detalhe ocupa a tela inteira.
-                parentNavigatorKey: _rootNavigatorKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (context, state) => OperationDetailScreen(
                   operationId: state.pathParameters['id']!,
                 ),
@@ -330,12 +332,12 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: 'assinatura',
-                parentNavigatorKey: _rootNavigatorKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (context, state) => const MySignatureScreen(),
               ),
               GoRoute(
                 path: 'sincronizacao',
-                parentNavigatorKey: _rootNavigatorKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (context, state) => const SyncCenterScreen(),
               ),
 
@@ -344,7 +346,7 @@ final routerProvider = Provider<GoRouter>((ref) {
               /// mesma chave derruba o aplicativo na abertura.
               GoRoute(
                 path: 'configuracoes',
-                parentNavigatorKey: _rootNavigatorKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (context, state) => const SettingsScreen(),
               ),
             ],
@@ -352,14 +354,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         ],
       ),
     ],
-    navigatorKey: _rootNavigatorKey,
+    navigatorKey: rootNavigatorKey,
     errorBuilder: (context, state) => Scaffold(
       body: Center(child: Text('Rota não encontrada: ${state.uri}')),
     ),
   );
+  ref.onDispose(router.dispose);
+  return router;
 });
-
-final _rootNavigatorKey = GlobalKey<NavigatorState>();
 
 /// Faz o GoRouter reavaliar o `redirect` quando a sessão muda.
 class _AuthRefreshNotifier extends ChangeNotifier {

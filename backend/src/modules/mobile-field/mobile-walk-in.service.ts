@@ -69,12 +69,18 @@ export class MobileWalkInService {
   }
 
   /** Os equipamentos daquele cliente, para o técnico marcar os que vai atender. */
-  async customerAssets(actor: MobileFieldActor, customerId: string) {
+  async customerAssets(
+    actor: MobileFieldActor,
+    customerId: string,
+    businessUnitId?: string,
+  ) {
     this.requirePermission(actor, 'customers.read');
+    if (businessUnitId && !actor.businessUnitIds.includes(businessUnitId))
+      throw new ForbiddenException('Organização fora do seu escopo');
     const rows = await this.repository.customerAssets(
       actor.organizationId,
       customerId,
-      actor.businessUnitIds,
+      businessUnitId ? [businessUnitId] : actor.businessUnitIds,
     );
     return {
       items: rows.map((row) => ({
@@ -179,6 +185,7 @@ export class MobileWalkInService {
 
   private requirePermission(actor: MobileFieldActor, permission: string): void {
     if (
+      !actor.isOrganizationOwner &&
       !actor.permissions.includes('*') &&
       !actor.permissions.includes(permission)
     )
@@ -188,6 +195,7 @@ export class MobileWalkInService {
   /** O payload canônico: chave repetida com outro conteúdo é defeito, não reenvio. */
   private hash(value: unknown): string {
     const normalize = (item: unknown): unknown => {
+      if (item instanceof Date) return item.toISOString();
       if (Array.isArray(item)) return item.map(normalize);
       if (item && typeof item === 'object')
         return Object.fromEntries(

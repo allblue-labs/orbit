@@ -68,8 +68,10 @@ class _SyncTriggersState extends ConsumerState<SyncTriggers>
   /// nada: quem decide se dá para falar com o servidor é a resposta da API,
   /// e cada orquestrador já tem mutex e backoff próprios.
   Future<void> _sync() async {
+    if (!mounted) return;
     if (ref.read(commandScopeProvider) == null) return;
     await ref.read(syncControllerProvider.notifier).sync();
+    if (!mounted) return;
     await ref.read(mediaUploadControllerProvider.notifier).process();
   }
 

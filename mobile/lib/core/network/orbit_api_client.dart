@@ -111,6 +111,41 @@ class OrbitApiClient {
   }
 
   final Dio _dio;
+  int? _boundGeneration;
+  bool _closed = false;
+
+  /// Feature repositories keep this lease, never a client that can switch accounts.
+  OrbitApiClient scoped() => OrbitApiClient._(
+    dio: _dio,
+    authenticator: authenticator,
+    apiBase: _apiBase,
+  ).._boundGeneration = authenticator.generation;
+
+  void closeScope() => _closed = true;
+
+  void checkSession() {
+    if (_closed ||
+        (_boundGeneration != null &&
+            _boundGeneration != authenticator.generation)) {
+      throw SessionAuthenticator.changed;
+    }
+  }
+
+  void _checkGeneration(int generation) {
+    checkSession();
+    if (generation != authenticator.generation) {
+      throw SessionAuthenticator.changed;
+    }
+  }
+
+  Map<String, dynamic> _requestExtra(bool isPublic) => {
+    if (isPublic) publicRequestKey: true,
+    sessionGenerationKey: authenticator.generation,
+    sessionLeaseKey: () =>
+        !_closed &&
+        (_boundGeneration == null ||
+            _boundGeneration == authenticator.generation),
+  };
 
   /// Traduz um endereço entregue pelo servidor para um que este aparelho
   /// alcança. Ver [resolveBackendUrl].
@@ -167,18 +202,38 @@ class OrbitApiClient {
 
   Future<T> patch<T>(String path, {Object? body, CancelToken? cancelToken}) =>
       _send<T>(
-        () => _dio.patch<dynamic>(path, data: body, cancelToken: cancelToken),
+        () => _dio.patch<dynamic>(
+          path,
+          data: body,
+          cancelToken: cancelToken,
+          options: _options(false),
+        ),
       );
 
   /// `PUT` — usado onde o backend contratou substituição, como a atualização
   /// de checklist do MB-02, que recebe o mapa de respostas inteiro.
   Future<T> put<T>(String path, {Object? body, CancelToken? cancelToken}) =>
       _send<T>(
-        () => _dio.put<dynamic>(path, data: body, cancelToken: cancelToken),
+        () => _dio.put<dynamic>(
+          path,
+          data: body,
+          cancelToken: cancelToken,
+          options: _options(false),
+        ),
       );
 
-  Future<T> delete<T>(String path, {CancelToken? cancelToken}) =>
-      _send<T>(() => _dio.delete<dynamic>(path, cancelToken: cancelToken));
+  Future<T> delete<T>(
+    String path, {
+    CancelToken? cancelToken,
+    bool isPublic = false,
+    Map<String, String>? headers,
+  }) => _send<T>(
+    () => _dio.delete<dynamic>(
+      path,
+      cancelToken: cancelToken,
+      options: _options(isPublic, headers: headers),
+    ),
+  );
 
   /// Envia um arquivo em `multipart/form-data`.
   ///
@@ -193,6 +248,8 @@ class OrbitApiClient {
     CancelToken? cancelToken,
     void Function(double progress)? onProgress,
   }) async {
+    checkSession();
+    final generation = authenticator.generation;
     final form = FormData.fromMap({
       'file': await MultipartFile.fromFile(
         filePath,
@@ -200,12 +257,14 @@ class OrbitApiClient {
         contentType: DioMediaType.parse(mimeType),
       ),
     });
+    _checkGeneration(generation);
 
     return _send<T>(
       () => _dio.post<dynamic>(
         path,
         data: form,
         cancelToken: cancelToken,
+        options: _options(false),
         onSendProgress: (sent, total) {
           if (total > 0) onProgress?.call(sent / total);
         },
@@ -230,6 +289,8 @@ class OrbitApiClient {
     CancelToken? cancelToken,
     void Function(double progress)? onProgress,
   }) async {
+    checkSession();
+    final generation = authenticator.generation;
     try {
       await _dio.putUri<dynamic>(
         resolveBackendUrl(url, _apiBase),
@@ -242,10 +303,12 @@ class OrbitApiClient {
           headers: {...headers, Headers.contentLengthHeader: bytes.length},
 
           /// Sem interceptor de sessão: a URL assinada é a credencial.
-          extra: {publicRequestKey: true},
+          extra: _requestExtra(true),
         ),
       );
+      _checkGeneration(generation);
     } on DioException catch (error) {
+      _checkGeneration(generation);
       final mapped = error.error;
       if (mapped is OrbitException) throw mapped;
 
@@ -276,6 +339,8 @@ class OrbitApiClient {
     bool isPublic = true,
     void Function(double progress)? onProgress,
   }) async {
+    checkSession();
+    final generation = authenticator.generation;
     final boundedToken = cancellation?._token ?? cancelToken ?? CancelToken();
     try {
       final response = await _dio.getUri<List<int>>(
@@ -292,9 +357,10 @@ class OrbitApiClient {
           responseType: ResponseType.bytes,
 
           /// Sem interceptor de sessão: a URL assinada é a credencial.
-          extra: isPublic ? {publicRequestKey: true} : null,
+          extra: _requestExtra(isPublic),
         ),
       );
+      _checkGeneration(generation);
       if (maxBytes != null && (response.data?.length ?? 0) > maxBytes) {
         throw const OrbitException(
           kind: OrbitErrorKind.parse,
@@ -314,6 +380,7 @@ class OrbitApiClient {
         ),
       );
     } on DioException catch (error) {
+      _checkGeneration(generation);
       final mapped = error.error;
       if (mapped is OrbitException) throw mapped;
       throw OrbitException(
@@ -350,10 +417,8 @@ class OrbitApiClient {
     return name.isEmpty || name == '.' || name == '..' ? null : name;
   }
 
-  Options _options(bool isPublic, {Map<String, String>? headers}) => Options(
-    extra: isPublic ? {publicRequestKey: true} : null,
-    headers: headers,
-  );
+  Options _options(bool isPublic, {Map<String, String>? headers}) =>
+      Options(extra: _requestExtra(isPublic), headers: headers);
 
   /// Remove chaves nulas ou vazias — o `ValidationPipe` do backend usa
   /// `forbidNonWhitelisted` e rejeita parâmetros vazios.
@@ -369,10 +434,14 @@ class OrbitApiClient {
   }
 
   Future<T> _send<T>(Future<Response<dynamic>> Function() request) async {
+    checkSession();
+    final generation = authenticator.generation;
     try {
       final response = await request();
+      _checkGeneration(generation);
       return _unwrap(response.data) as T;
     } on DioException catch (error) {
+      _checkGeneration(generation);
       final mapped = error.error;
       if (mapped is OrbitException) throw mapped;
 

@@ -306,3 +306,54 @@ describe('atendimento avulso', () => {
     expect(repository.customers).toHaveBeenCalledWith(ORG, undefined, 50);
   });
 });
+
+describe('walk-in unit and owner access', () => {
+  it('limits equipment to the selected allowed unit', async () => {
+    const { service, repository, actor } = bancada(['customers.read']);
+    await service.customerAssets(actor, CLIENTE, UNIDADE);
+    expect(repository.customerAssets).toHaveBeenCalledWith(ORG, CLIENTE, [
+      UNIDADE,
+    ]);
+  });
+  it('rejects equipment requests outside the actor scope', async () => {
+    const { service, repository, actor } = bancada(['customers.read']);
+    await expect(
+      service.customerAssets(actor, CLIENTE, OUTRA_UNIDADE),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(repository.customerAssets).not.toHaveBeenCalled();
+  });
+  it('honors structural ownership without granting ordinary technicians new permissions', async () => {
+    const { service, repository, actor } = bancada([]);
+    await expect(
+      service.create({ ...actor, isOrganizationOwner: true }, CHAVE, {
+        customer: novoCliente,
+      }),
+    ).resolves.toMatchObject({ operationId: ORDEM });
+    expect(repository.create).toHaveBeenCalledTimes(1);
+    await expect(
+      service.create(actor, CHAVE, { customer: novoCliente }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+  it('includes equipment dates in the idempotency fingerprint', async () => {
+    const { service, repository, actor } = bancada();
+    await service.create(actor, CHAVE, {
+      customerId: CLIENTE,
+      equipment: [
+        { name: 'Split', installationAt: new Date('2026-10-24T00:00:00Z') },
+      ],
+    });
+    await service.create(actor, CHAVE, {
+      customerId: CLIENTE,
+      equipment: [
+        { name: 'Split', installationAt: new Date('2026-10-25T00:00:00Z') },
+      ],
+    });
+    const first = repository.create.mock.calls[0]?.[0] as {
+      payloadHash: string;
+    };
+    const second = repository.create.mock.calls[1]?.[0] as {
+      payloadHash: string;
+    };
+    expect(first.payloadHash).not.toBe(second.payloadHash);
+  });
+});

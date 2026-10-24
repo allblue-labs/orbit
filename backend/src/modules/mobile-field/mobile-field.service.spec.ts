@@ -8,10 +8,26 @@ const actor: MobileFieldActor = {
   id: '01900000-0000-7000-8000-000000000001',
   organizationId: '01900000-0000-7000-8000-000000000002',
   businessUnitIds: ['01900000-0000-7000-8000-000000000003'],
-  permissions: ['operations.read'],
+  permissions: ['operations.read', 'artifact_executions.read'],
 };
 
 describe('MobileFieldService', () => {
+  it('does not expose recent document metadata without document read permission', async () => {
+    const repository = {
+      project: jest.fn().mockResolvedValue(emptySource()),
+      recentDocuments: jest.fn().mockResolvedValue([documentRow('READY')]),
+      recentAppointments: jest.fn().mockResolvedValue([]),
+      recentlyCompleted: jest.fn().mockResolvedValue([]),
+    };
+    const service = new MobileFieldService(repository as never);
+    const home = await service.home({
+      ...actor,
+      permissions: ['operations.read'],
+    });
+    expect(home.recentDocuments).toEqual([]);
+    expect(repository.recentDocuments).not.toHaveBeenCalled();
+  });
+
   it('returns a valid empty dashboard', async () => {
     const repository = { project: jest.fn().mockResolvedValue(emptySource()) };
     const service = new MobileFieldService(repository as never);

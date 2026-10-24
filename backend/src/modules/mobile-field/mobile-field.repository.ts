@@ -2,6 +2,8 @@
 import { Injectable } from '@nestjs/common';
 import { RlsTransaction } from '../../database';
 import type { Prisma } from '@prisma/client';
+import { fieldDocumentAccess } from './field-document-access';
+import type { MobileFieldActor } from './mobile-field.service';
 import {
   fieldVisibilityFilter,
   requiresAssignmentAuthorization,
@@ -241,6 +243,7 @@ export class MobileFieldRepository {
     organizationId: string,
     businessUnitIds: readonly string[],
     take: number,
+    actor: MobileFieldActor,
   ) {
     if (businessUnitIds.length === 0) return Promise.resolve([]);
     return this.rls.run((tx) =>
@@ -248,6 +251,7 @@ export class MobileFieldRepository {
         where: {
           organizationId,
           businessUnitId: { in: [...businessUnitIds] },
+          ...fieldDocumentAccess(actor),
         },
         orderBy: { createdAt: 'desc' },
         take,
@@ -289,6 +293,7 @@ export class MobileFieldRepository {
       take: number;
       cursorId?: string;
     },
+    actor: MobileFieldActor,
   ) {
     if (businessUnitIds.length === 0) return Promise.resolve([]);
     const termo = options.search?.trim();
@@ -297,6 +302,7 @@ export class MobileFieldRepository {
         where: {
           organizationId,
           businessUnitId: { in: [...businessUnitIds] },
+          AND: [fieldDocumentAccess(actor)],
           ...(options.type ? { documentType: options.type } : {}),
 
           /// A janela é sobre a **emissão** do documento, que é a data que

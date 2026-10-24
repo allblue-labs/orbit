@@ -31,7 +31,6 @@ import '../../../core/routing/orbit_router.dart';
 import '../../../core/theme/orbit_theme.dart';
 import '../../authentication/domain/session.dart';
 import '../../notifications/application/notification_providers.dart';
-import '../../notifications/application/push_providers.dart';
 import '../../signature/application/signature_providers.dart';
 import '../../sync/application/sync_controller.dart';
 import '../../sync/application/sync_providers.dart';
@@ -573,14 +572,7 @@ Future<void> logout(BuildContext context, WidgetRef ref) async {
     if (confirmed != true) return;
   }
 
-  /// Desfaz o vínculo deste aparelho **antes** de a sessão sumir: a chamada
-  /// precisa do token de acesso que está prestes a ser descartado.
-  ///
-  /// Sem isto, quem sair da conta continua recebendo no celular os avisos de
-  /// trabalho de quem entrar depois — com nome de cliente na tela de
-  /// bloqueio, sem desbloquear nada.
-  await ref.read(pushRegistrarProvider).stop();
-
-  await ref.read(syncProjectionProvider).clear();
+  // Authentication owns device revocation and session data cleanup for every
+  // exit path, including the mandatory password-change screen.
   await ref.read(authControllerProvider.notifier).logout();
 }

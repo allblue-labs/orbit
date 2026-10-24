@@ -20,17 +20,52 @@ class AuthController extends StateNotifier<AuthState> {
     required AuthRepository repository,
     required SessionAuthenticator authenticator,
   }) : _repository = repository,
+       _authenticator = authenticator,
+       _parent = null,
        super(const AuthRestoring()) {
     // O autenticador avisa quando a renovação falhou de vez.
     _expiredSubscription = authenticator.onExpired.listen((_) {
+      if (!authenticator.isCurrentExpiration) return;
+      _operation++;
       state = const AuthUnauthenticated(
         reason: 'Sua sessão expirou. Entre novamente.',
       );
     });
   }
 
+  /// A fresh feature container observes auth without owning the root session.
+  AuthController.mirror(AuthController parent)
+    : _repository = parent._repository,
+      _authenticator = parent._authenticator,
+      _parent = parent,
+      super(parent.state) {
+    _mirrorKey = _sessionKey(parent.state);
+    _removeMirrorListener = parent.addListener((value) {
+      if (mounted) state = value;
+    }, fireImmediately: false);
+  }
+
   final AuthRepository _repository;
-  late final StreamSubscription<void> _expiredSubscription;
+  final SessionAuthenticator _authenticator;
+  final AuthController? _parent;
+  StreamSubscription<void>? _expiredSubscription;
+  void Function()? _removeMirrorListener;
+  int _operation = 0;
+  Object? _mirrorKey;
+
+  static Object? _sessionKey(AuthState value) => value is AuthAuthenticated
+      ? (
+          value.session.user.id,
+          value.session.organizationId,
+          value.session.businessUnitId,
+          value.session.claims.sessionId,
+        )
+      : value.runtimeType;
+
+  bool get _canDelegate =>
+      mounted && (_parent == null || _mirrorKey == _sessionKey(_parent.state));
+
+  bool _current(int operation) => mounted && operation == _operation;
 
   /// Restaura a sessão guardada ao abrir o app.
   ///
@@ -38,16 +73,21 @@ class AuthController extends StateNotifier<AuthState> {
   /// dispara a renovação pelo interceptor. Isso deixa a abertura rápida mesmo
   /// com rede ruim.
   Future<void> restore() async {
+    if (_parent case final parent?) return parent.restore();
+    final operation = ++_operation;
     try {
       // A leitura do armazenamento seguro entra no `try`: ela também pode
       // falhar, e falhar aqui deixava a splash girando pelo mesmo motivo.
       final claims = await _repository.readClaims();
+      if (!_current(operation)) return;
       if (claims == null) {
         state = const AuthUnauthenticated();
         return;
       }
-      state = AuthAuthenticated(await _composeSession(claims));
+      final session = await _composeSession(claims);
+      if (_current(operation)) state = AuthAuthenticated(session);
     } on OrbitException catch (error) {
+      if (!_current(operation)) return;
       if (error.isUnauthorized) {
         state = const AuthUnauthenticated(
           reason: 'Sua sessão expirou. Entre novamente.',
@@ -65,6 +105,7 @@ class AuthController extends StateNotifier<AuthState> {
       // não o token. Entrar de novo, ou uma rede que volte, resolve.
       state = AuthUnauthenticated(reason: error.publicMessage);
     } catch (_) {
+      if (!_current(operation)) return;
       // Nada justifica ficar preso na abertura: o que não se sabe explicar
       // ainda assim leva ao login, onde há o que fazer.
       state = const AuthUnauthenticated(
@@ -78,11 +119,17 @@ class AuthController extends StateNotifier<AuthState> {
     required String password,
     String? mfaCode,
   }) async {
+    if (_parent case final parent?) {
+      return parent.login(email: email, password: password, mfaCode: mfaCode);
+    }
+    final operation = ++_operation;
+    state = const AuthUnauthenticated();
     final tokens = await _repository.login(
       email: email,
       password: password,
       mfaCode: mfaCode,
     );
+    if (!_current(operation)) return;
     final claims = AuthRepository.decodeClaims(tokens.accessToken);
     if (claims == null) {
       throw const OrbitException(
@@ -91,12 +138,17 @@ class AuthController extends StateNotifier<AuthState> {
         code: 'PARSE',
       );
     }
-    state = AuthAuthenticated(await _composeSession(claims));
+    final session = await _composeSession(claims);
+    if (_current(operation)) state = AuthAuthenticated(session);
   }
 
   Future<void> logout() async {
-    await _repository.logout();
+    if (!_canDelegate) return;
+    if (_parent case final parent?) return parent.logout();
+    _operation++;
+    _authenticator.reset();
     state = const AuthUnauthenticated();
+    await _repository.logout();
   }
 
   /// Aplica os dados que a pessoa acabou de editar sobre si.
@@ -106,8 +158,12 @@ class AuthController extends StateNotifier<AuthState> {
   /// três requisições para atualizar um campo que já veio na resposta do
   /// `PATCH`.
   void applyUser(OrbitUser user) {
+    if (!_canDelegate) return;
+    if (_parent case final parent?) return parent.applyUser(user);
     final current = state;
-    if (current is! AuthAuthenticated) return;
+    if (current is! AuthAuthenticated || current.session.user.id != user.id) {
+      return;
+    }
     state = AuthAuthenticated(current.session.copyWith(user: user));
   }
 
@@ -116,10 +172,16 @@ class AuthController extends StateNotifier<AuthState> {
   /// Existe para o que **não** volta na resposta de um comando: o endereço
   /// da foto é assinado e temporário, e só o `GET /identity/me` o traz.
   Future<void> refreshProfile() async {
+    if (!_canDelegate) return;
+    if (_parent case final parent?) return parent.refreshProfile();
+    final operation = _operation;
     final current = state;
     if (current is! AuthAuthenticated) return;
     final user = await _repository.loadProfile();
-    state = AuthAuthenticated(current.session.copyWith(user: user));
+    if (!_current(operation) || state is! AuthAuthenticated) return;
+    if (user.id != current.session.user.id) throw SessionAuthenticator.changed;
+    final latest = state as AuthAuthenticated;
+    state = AuthAuthenticated(latest.session.copyWith(user: user));
   }
 
   /// Troca a própria senha e libera o aplicativo.
@@ -134,15 +196,25 @@ class AuthController extends StateNotifier<AuthState> {
     required String currentPassword,
     required String newPassword,
   }) async {
+    if (_parent case final parent?) {
+      if (!_canDelegate) return;
+      return parent.changePassword(
+        currentPassword: currentPassword,
+        newPassword: newPassword,
+      );
+    }
+    final operation = _operation;
     await _repository.changePassword(
       currentPassword: currentPassword,
       newPassword: newPassword,
     );
+    if (!_current(operation)) return;
     await refreshProfile();
   }
 
   /// Pede o link de redefinição de senha — a tela de login usa.
   Future<void> requestPasswordReset(String email) =>
+      _parent?.requestPasswordReset(email) ??
       _repository.requestPasswordReset(email);
 
   /// Troca a unidade ativa.
@@ -151,6 +223,10 @@ class AuthController extends StateNotifier<AuthState> {
   /// troca muda o que o app pede — sem alterar o escopo do token, que é do
   /// servidor.
   void selectBusinessUnit(String businessUnitId) {
+    if (!_canDelegate) return;
+    if (_parent case final parent?) {
+      return parent.selectBusinessUnit(businessUnitId);
+    }
     final current = state;
     if (current is! AuthAuthenticated) return;
     state = AuthAuthenticated(
@@ -176,8 +252,15 @@ class AuthController extends StateNotifier<AuthState> {
         Future<ProductAccess?>.value(),
     ]);
 
+    final user = results[0]! as OrbitUser;
+    final organization = results[1] as Organization?;
+    if (user.id != claims.userId ||
+        (organization != null && organization.id != claims.organizationId)) {
+      throw SessionAuthenticator.changed;
+    }
+
     return OrbitSession(
-      user: results[0]! as OrbitUser,
+      user: user,
       claims: claims,
       organization: results[1] as Organization?,
       entitlements: results[2] as Entitlements?,
@@ -187,7 +270,8 @@ class AuthController extends StateNotifier<AuthState> {
 
   @override
   void dispose() {
-    _expiredSubscription.cancel();
+    _removeMirrorListener?.call();
+    _expiredSubscription?.cancel();
     super.dispose();
   }
 }

@@ -11,6 +11,11 @@ final walkInRepositoryProvider = Provider<WalkInRepository>(
   (ref) => WalkInRepository(client: ref.watch(apiClientProvider)),
 );
 
+final walkInBusinessUnitIdProvider = Provider<String?>((ref) {
+  final session = ref.watch(sessionProvider);
+  return session?.businessUnitId ?? session?.businessUnit?.id;
+});
+
 /// A carteira, filtrada pelo servidor.
 ///
 /// `family` pela busca e `autoDispose` porque é consulta de um passo do
@@ -24,6 +29,10 @@ final walkInCustomersProvider = FutureProvider.autoDispose
 
 final walkInEquipmentProvider = FutureProvider.autoDispose
     .family<List<WalkInEquipmentContract>, String>(
-      (ref, customerId) =>
-          ref.watch(walkInRepositoryProvider).equipment(customerId),
+      (ref, customerId) => ref
+          .watch(walkInRepositoryProvider)
+          .equipment(
+            customerId,
+            businessUnitId: ref.watch(walkInBusinessUnitIdProvider),
+          ),
     );

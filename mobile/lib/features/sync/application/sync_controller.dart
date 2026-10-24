@@ -158,6 +158,13 @@ class SyncController extends StateNotifier<SyncState> {
   /// divergiria do offline com o tempo, e a divergência apareceria justamente
   /// no caso raro — que é o caso em que alguém está sem rede.
   Future<PendingCommand> enqueue(OfflineCommandEnvelope envelope) async {
+    if (!mounted || scope.userId.isEmpty || scope.organizationId.isEmpty) {
+      throw const OrbitException(
+        kind: OrbitErrorKind.unauthorized,
+        publicMessage: 'Entre novamente para registrar esta ação.',
+        code: 'SESSION_CHANGED',
+      );
+    }
     final command = PendingCommand(
       envelope: envelope,
       scope: scope,
@@ -172,6 +179,9 @@ class SyncController extends StateNotifier<SyncState> {
 
   /// Sincroniza. Concorrentes esperam a mesma volta.
   Future<void> sync({bool manual = false}) {
+    if (!mounted || scope.userId.isEmpty || scope.organizationId.isEmpty) {
+      return Future.value();
+    }
     final running = _inFlight;
     if (running != null) return running;
 
@@ -191,16 +201,21 @@ class SyncController extends StateNotifier<SyncState> {
     state = state.copyWith(phase: SyncPhase.syncing, clearError: true);
     try {
       await _journal.cleanup(DateTime.now().toUtc());
+      if (!mounted) return;
       final pushed = await _push();
+      if (!mounted) return;
       await _pull();
+      if (!mounted) return;
       state = state.copyWith(
         phase: SyncPhase.idle,
         lastSyncedAt: DateTime.now().toUtc(),
         clearError: true,
       );
       await _refreshCounts();
-      if (pushed) onReconciled();
+      if (mounted && pushed) onReconciled();
     } on OrbitException catch (error) {
+      if (!mounted) return;
+
       /// Sem rede não é erro de sincronização: é a condição normal do campo.
       state = state.copyWith(
         phase: error.isOffline ? SyncPhase.offline : SyncPhase.error,
@@ -208,6 +223,7 @@ class SyncController extends StateNotifier<SyncState> {
       );
       await _refreshCounts();
     } on Object catch (error) {
+      if (!mounted) return;
       state = state.copyWith(phase: SyncPhase.error, error: error);
       await _refreshCounts();
     }
@@ -227,6 +243,7 @@ class SyncController extends StateNotifier<SyncState> {
 
     for (var round = 0; round < 20; round += 1) {
       final snapshot = await _journal.read();
+      if (!mounted) return applied;
       final sendable = snapshot.commands
           .where(
             (value) =>
@@ -253,6 +270,7 @@ class SyncController extends StateNotifier<SyncState> {
 
       final MobileSyncPushResponse response;
       try {
+        if (!mounted) return applied;
         response = await _repository.push(
           sendable.map((value) => value.envelope).toList(),
         );
@@ -272,6 +290,8 @@ class SyncController extends StateNotifier<SyncState> {
         _backoffUntil = now.add(syncBackoff(attempts));
         rethrow;
       }
+
+      if (!mounted) return applied;
 
       final sent = {
         for (final command in sendable) command.envelope.commandId: command,
@@ -362,14 +382,17 @@ class SyncController extends StateNotifier<SyncState> {
   /// Puxa o delta e reconcilia a projeção.
   Future<void> _pull() async {
     var projection = await _projection.read();
+    if (!mounted) return;
     var cursor = projection.cursors[scopeKey];
 
     for (var page = 0; page < 50; page += 1) {
+      if (!mounted) return;
       final known = projection.workItems[scopeKey]?.keys.toList() ?? const [];
       final response = await _repository.pull(
         cursor: cursor,
         knownWorkItemIds: known,
       );
+      if (!mounted) return;
 
       if (response.fullResyncRequired || response.purgeRequired) {
         /// Recomeça a projeção — e só ela. A fila de comandos está noutro
@@ -415,7 +438,11 @@ class SyncController extends StateNotifier<SyncState> {
   Future<CommandOutcome> outcomeOf(String commandId) async {
     final snapshot = await _journal.read();
     final pending = snapshot.commands
-        .where((value) => value.envelope.commandId == commandId)
+        .where(
+          (value) =>
+              value.envelope.commandId == commandId &&
+              value.scope.matches(scope),
+        )
         .firstOrNull;
     if (pending != null) {
       return pending.isBlocking
@@ -423,7 +450,9 @@ class SyncController extends StateNotifier<SyncState> {
           : const CommandPendingOutcome();
     }
     final receipt = snapshot.receipts
-        .where((value) => value.commandId == commandId)
+        .where(
+          (value) => value.commandId == commandId && value.scope.matches(scope),
+        )
         .firstOrNull;
     return receipt == null
         ? const CommandPendingOutcome()
@@ -451,7 +480,11 @@ class SyncController extends StateNotifier<SyncState> {
   Future<void> discard(String commandId) async {
     final snapshot = await _journal.read();
     final command = snapshot.commands
-        .where((value) => value.envelope.commandId == commandId)
+        .where(
+          (value) =>
+              value.envelope.commandId == commandId &&
+              value.scope.matches(scope),
+        )
         .firstOrNull;
     if (command == null || !command.isBlocking) return;
     await _journal.discard(commandId);
@@ -461,6 +494,7 @@ class SyncController extends StateNotifier<SyncState> {
 
   Future<void> _refreshCounts() async {
     final snapshot = await _journal.read();
+    if (!mounted) return;
     final mine = snapshot.commands.where((value) => value.scope.matches(scope));
     state = state.copyWith(
       pending: mine.where((value) => value.isSendable).length,
@@ -479,7 +513,9 @@ class SyncController extends StateNotifier<SyncState> {
   /// Carrega a contagem inicial ao abrir o app.
   Future<void> restore() async {
     await _refreshCounts();
+    if (!mounted) return;
     final projection = await _projection.read();
+    if (!mounted) return;
     final last = projection.lastSyncedAt[scopeKey];
     if (last != null) {
       state = state.copyWith(lastSyncedAt: DateTime.tryParse(last));

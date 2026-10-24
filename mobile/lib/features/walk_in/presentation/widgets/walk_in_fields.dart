@@ -30,6 +30,9 @@ class WalkInField extends StatelessWidget {
     this.suffix,
     this.onChanged,
     this.helper,
+    this.maxLength,
+    this.readOnly = false,
+    this.onTap,
   });
 
   final String label;
@@ -41,6 +44,9 @@ class WalkInField extends StatelessWidget {
   final List<TextInputFormatter>? inputFormatters;
   final Widget? suffix;
   final ValueChanged<String>? onChanged;
+  final int? maxLength;
+  final bool readOnly;
+  final VoidCallback? onTap;
 
   /// Uma linha abaixo do campo, quando há algo a explicar.
   final String? helper;
@@ -59,11 +65,18 @@ class WalkInField extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           TextField(
+            key: ValueKey('walk-in.$label'),
             controller: controller,
             keyboardType: keyboardType,
             textCapitalization: textCapitalization,
             maxLines: maxLines,
-            inputFormatters: inputFormatters,
+            inputFormatters: [
+              ...?inputFormatters,
+              if (maxLength != null)
+                LengthLimitingTextInputFormatter(maxLength),
+            ],
+            readOnly: readOnly,
+            onTap: onTap,
             onChanged: onChanged,
             decoration: InputDecoration(
               hintText: hint,
@@ -113,7 +126,7 @@ class WalkInTypeToggle extends StatelessWidget {
             children: [
               Expanded(
                 child: WalkInChoiceTile(
-                  title: 'Empresa',
+                  title: 'Pessoa jurídica',
                   description: 'CNPJ',
                   selected: value == 'COMPANY',
                   onTap: () => onChanged('COMPANY'),

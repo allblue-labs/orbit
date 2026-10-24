@@ -30,9 +30,13 @@ class WalkInRepository {
         .toList(growable: false);
   }
 
-  Future<List<WalkInEquipmentContract>> equipment(String customerId) async {
+  Future<List<WalkInEquipmentContract>> equipment(
+    String customerId, {
+    String? businessUnitId,
+  }) async {
     final data = await _client.get<Map<String, dynamic>>(
       '/mobile/field/operations/walk-in/customers/$customerId/equipment',
+      query: {if (businessUnitId != null) 'businessUnitId': businessUnitId},
     );
     return (data['items'] as List<dynamic>? ?? const [])
         .whereType<Map<String, dynamic>>()

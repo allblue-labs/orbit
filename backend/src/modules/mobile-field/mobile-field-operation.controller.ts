@@ -63,8 +63,13 @@ export class MobileFieldOperationController {
   walkInCustomerAssets(
     @Req() request: IdentityRequest,
     @Param('customerId', ParseUUIDv7Pipe) customerId: string,
+    @Query('businessUnitId') businessUnitId?: string,
   ) {
-    return this.walkIn.customerAssets(this.actor(request), customerId);
+    return this.walkIn.customerAssets(
+      this.actor(request),
+      customerId,
+      businessUnitId,
+    );
   }
 
   /**
@@ -199,6 +204,7 @@ export class MobileFieldOperationController {
       organizationId: identity.organizationId,
       businessUnitIds: identity.businessUnitIds,
       permissions: identity.permissions,
+      isOrganizationOwner: identity.isOrganizationOwner,
     };
   }
 }

@@ -516,6 +516,17 @@ class _TimelineRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(entry.label, style: const TextStyle(fontSize: 13)),
+                if (entry.explanation case final explanation?)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4, bottom: 4),
+                    child: Text(
+                      explanation,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: OrbitColors.textSecondary,
+                      ),
+                    ),
+                  ),
                 Text(
                   [
                     entry.actorName ?? 'Sistema',

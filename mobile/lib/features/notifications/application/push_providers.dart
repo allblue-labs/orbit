@@ -22,8 +22,8 @@ final mobileDeviceRepositoryProvider = Provider<MobileDeviceRepository>(
   (ref) => MobileDeviceRepository(client: ref.watch(apiClientProvider)),
 );
 
-final pushRegistrarProvider = Provider<PushRegistrar>(
-  (ref) => PushRegistrar(
+final pushRegistrarProvider = Provider<PushRegistrar>((ref) {
+  final registrar = PushRegistrar(
     source: ref.watch(pushTokenSourceProvider),
     repository: ref.watch(mobileDeviceRepositoryProvider),
     logger: ref.watch(loggerProvider),
@@ -33,5 +33,7 @@ final pushRegistrarProvider = Provider<PushRegistrar>(
       final info = await PackageInfo.fromPlatform();
       return '${info.version}+${info.buildNumber}';
     },
-  ),
-);
+  );
+  ref.onDispose(registrar.dispose);
+  return registrar;
+});

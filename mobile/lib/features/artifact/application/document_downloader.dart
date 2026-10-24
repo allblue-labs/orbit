@@ -64,6 +64,8 @@ class DocumentDownloader {
   final ArtifactRepository _repository;
   final DocumentFileStore _files;
 
+  void checkSession() => _repository.checkSession();
+
   Stream<DownloadState> fetch({
     required String artifactId,
     required String fileName,
@@ -84,6 +86,7 @@ class DocumentDownloader {
     required Future<FieldArtifactAccess> Function() access,
     required String fileName,
   }) async* {
+    checkSession();
     yield const DownloadState(phase: DownloadPhase.requestingUrl);
     try {
       /// A URL é pedida agora e usada agora. Não vira estado.
@@ -114,6 +117,7 @@ class DocumentDownloader {
         result.fileName ?? fileName,
         result.bytes,
       );
+      checkSession();
       yield DownloadState(phase: DownloadPhase.availableLocally, path: path);
     } on Object catch (error) {
       /// O download falhou; o documento no servidor continua o que era.

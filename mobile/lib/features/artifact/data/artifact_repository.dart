@@ -9,6 +9,7 @@ import '../../../core/contracts/mobile_field_artifact_contracts.dart';
 import '../../../core/network/orbit_api_client.dart';
 
 class ArtifactRepository {
+  void checkSession() => _client.checkSession();
   const ArtifactRepository({required OrbitApiClient client}) : _client = client;
 
   final OrbitApiClient _client;

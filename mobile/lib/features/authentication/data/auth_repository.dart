@@ -17,17 +17,21 @@ import 'dart:convert';
 import '../../../core/contracts/session_contracts.dart';
 import '../../../core/errors/orbit_exception.dart';
 import '../../../core/network/orbit_api_client.dart';
+import '../../../core/network/session_authenticator.dart';
 import '../../../core/storage/token_storage.dart';
 
 class AuthRepository {
   const AuthRepository({
     required OrbitApiClient client,
     required TokenStorage storage,
+    Future<String> Function()? deviceInstanceId,
   }) : _client = client,
-       _storage = storage;
+       _storage = storage,
+       _deviceInstanceId = deviceInstanceId;
 
   final OrbitApiClient _client;
   final TokenStorage _storage;
+  final Future<String> Function()? _deviceInstanceId;
 
   /// Autentica e guarda o par de tokens no armazenamento seguro.
   Future<TokenPair> login({
@@ -35,6 +39,12 @@ class AuthRepository {
     required String password,
     String? mfaCode,
   }) async {
+    final clearing = _client.authenticator.clearSession();
+    final generation = _client.authenticator.generation;
+    await clearing;
+    if (generation != _client.authenticator.generation) {
+      throw SessionAuthenticator.changed;
+    }
     final data = await _client.post<Map<String, dynamic>>(
       '/identity/login',
       isPublic: true,
@@ -46,7 +56,7 @@ class AuthRepository {
       },
     );
     final tokens = TokenPair.fromJson(data);
-    await _storage.write(tokens);
+    await _client.authenticator.storeTokens(tokens, generation: generation);
     return tokens;
   }
 
@@ -54,18 +64,31 @@ class AuthRepository {
   ///
   /// A falha na revogação não impede o logout local: o usuário pediu para sair.
   Future<void> logout() async {
-    final tokens = await _storage.read();
+    final tokens = await _client.authenticator.clearSession();
     if (tokens != null) {
+      final deviceId = _deviceInstanceId;
+      if (deviceId != null) {
+        try {
+          await _client.delete<dynamic>(
+            '/mobile/devices/${Uri.encodeComponent(await deviceId())}',
+            isPublic: true,
+            headers: {'authorization': 'Bearer ${tokens.accessToken}'},
+          );
+        } on Object {
+          // Local credentials are already gone even if the device is offline.
+        }
+      }
       try {
         await _client.post<dynamic>(
           '/identity/logout',
           body: {'refreshToken': tokens.refreshToken},
+          isPublic: true,
+          headers: {'authorization': 'Bearer ${tokens.accessToken}'},
         );
       } on OrbitException {
         // Sessão já inválida no servidor — segue limpando localmente.
       }
     }
-    await _storage.clear();
   }
 
   Future<OrbitUser> loadProfile() async {

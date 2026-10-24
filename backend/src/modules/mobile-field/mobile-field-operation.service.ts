@@ -722,7 +722,9 @@ export class MobileFieldOperationService {
   }
   private has(actor: MobileFieldActor, permission: string): boolean {
     return (
-      actor.permissions.includes('*') || actor.permissions.includes(permission)
+      actor.isOrganizationOwner === true ||
+      actor.permissions.includes('*') ||
+      actor.permissions.includes(permission)
     );
   }
   private requirePermission(actor: MobileFieldActor, permission: string): void {

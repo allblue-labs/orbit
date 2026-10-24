@@ -29,6 +29,11 @@ class WalkInEquipmentDraft {
     this.model,
     this.serialNumber,
     this.location,
+    this.identifier,
+    this.identifierType,
+    this.installationAt,
+    this.warrantyUntil,
+    this.specifications = const {},
   });
 
   final String name;
@@ -37,6 +42,11 @@ class WalkInEquipmentDraft {
   final String? model;
   final String? serialNumber;
   final String? location;
+  final String? identifier;
+  final String? identifierType;
+  final DateTime? installationAt;
+  final DateTime? warrantyUntil;
+  final Map<String, String> specifications;
 
   /// Só o nome é exigido: "Split do quarto" já identifica o aparelho para quem
   /// está no local. A placa com o número de série costuma estar atrás da
@@ -50,6 +60,22 @@ class WalkInEquipmentDraft {
     ..._opcional('model', model),
     ..._opcional('serialNumber', serialNumber),
     ..._opcional('location', location),
+    ..._opcional('identifier', identifier),
+    if (identifier?.trim().isNotEmpty ?? false)
+      ..._opcional('identifierType', identifierType),
+    if (installationAt != null)
+      'installationAt': DateTime.utc(
+        installationAt!.year,
+        installationAt!.month,
+        installationAt!.day,
+      ).toIso8601String(),
+    if (warrantyUntil != null)
+      'warrantyUntil': DateTime.utc(
+        warrantyUntil!.year,
+        warrantyUntil!.month,
+        warrantyUntil!.day,
+      ).toIso8601String(),
+    if (specifications.isNotEmpty) 'specifications': specifications,
   };
 }
 
@@ -137,7 +163,7 @@ class WalkInCustomerDraft {
   Map<String, dynamic> toJson() => {
     'type': type,
     'legalName': legalName.trim(),
-    ..._opcional('tradeName', tradeName),
+    if (type == 'COMPANY') ..._opcional('tradeName', tradeName),
     ..._opcional('documentNumber', documentNumber),
     ..._opcional('email', email),
     ..._opcional('phone', phone),
@@ -185,12 +211,12 @@ class WalkInDraft {
 
   /// O rascunho está pronto para abrir o atendimento?
   ///
-  /// Equipamento é **opcional** de propósito: o técnico pode abrir a ordem e
-  /// identificar os aparelhos depois, dentro do roteiro. Exigir um aparelho
-  /// aqui travaria o caso de "fui olhar e o problema é a rede elétrica".
+  /// No cadastro avulso, um ou mais equipamentos acompanham o novo cliente.
+  /// Para quem já está cadastrado, a ordem pode identificar os aparelhos depois.
   bool get isReady => switch (origin) {
     WalkInOrigin.existing => (customerId?.isNotEmpty ?? false),
-    WalkInOrigin.fresh => customer?.isUsable ?? false,
+    WalkInOrigin.fresh =>
+      (customer?.isUsable ?? false) && usableEquipment.isNotEmpty,
   };
 
   /// Por que ainda não dá para abrir, na frase de quem está em campo.
@@ -198,7 +224,10 @@ class WalkInDraft {
     if (isReady) return null;
     return switch (origin) {
       WalkInOrigin.existing => 'Escolha o cliente deste atendimento.',
-      WalkInOrigin.fresh => 'Informe ao menos o nome do cliente.',
+      WalkInOrigin.fresh =>
+        (customer?.isUsable ?? false)
+            ? 'Adicione ao menos um equipamento para o novo cliente.'
+            : 'Informe ao menos o nome do cliente.',
     };
   }
 

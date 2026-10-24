@@ -14,9 +14,13 @@ import 'upload_task.dart';
 import 'upload_queue.dart';
 
 class FileUploadQueueStore implements UploadQueueStore {
-  FileUploadQueueStore({Directory? directory}) : _directory = directory;
+  FileUploadQueueStore({Directory? directory, String? namespace})
+    : _directory = directory,
+      _fileName = namespace == null
+          ? 'upload_queue.json'
+          : 'upload_queue.$namespace.json';
 
-  static const _fileName = 'upload_queue.json';
+  final String _fileName;
 
   Directory? _directory;
 

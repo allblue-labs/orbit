@@ -14,6 +14,7 @@ import '../core/network/connectivity_monitor.dart';
 import '../core/network/orbit_api_client.dart';
 import '../core/observability/orbit_logger.dart';
 import '../core/storage/read_cache.dart';
+import '../core/storage/device_identity.dart';
 import '../core/storage/token_storage.dart';
 import '../core/uploads/evidence_capture.dart';
 import '../core/uploads/upload_executor.dart';
@@ -35,7 +36,7 @@ final loggerProvider = Provider<OrbitLogger>(
 );
 
 final tokenStorageProvider = Provider<TokenStorage>(
-  (ref) => SecureTokenStorage(),
+  (ref) => SerializedTokenStorage(SecureTokenStorage()),
 );
 
 /// Preenchido no `main` com `overrideWithValue`, porque a leitura das
@@ -109,6 +110,8 @@ final authRepositoryProvider = Provider<AuthRepository>(
   (ref) => AuthRepository(
     client: ref.watch(apiClientProvider),
     storage: ref.watch(tokenStorageProvider),
+    deviceInstanceId: () =>
+        deviceInstanceId(ref.read(sharedPreferencesProvider)),
   ),
 );
 

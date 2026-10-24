@@ -1,6 +1,8 @@
 /// Sessão: login, restauração, logout e derivação de perfil.
 library;
 
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:orbit_operator/core/contracts/session_contracts.dart';
@@ -190,6 +192,59 @@ void main() {
 
     expect(controller.state, isA<AuthUnauthenticated>());
     verify(() => repository.logout()).called(1);
+  });
+
+  test(
+    'perfil atrasado de A não substitui o usuário B após logout e nova entrada',
+    () async {
+      var user = 'user-1';
+      when(() => repository.readClaims()).thenAnswer(
+        (_) async => AuthRepository.decodeClaims(fakeAccessToken(userId: user)),
+      );
+      when(() => repository.logout()).thenAnswer((_) async {});
+      final controller = buildController(repository);
+      await controller.restore();
+      final late = Completer<OrbitUser>();
+      when(() => repository.loadProfile()).thenAnswer((_) => late.future);
+      final refreshing = controller.refreshProfile();
+      await controller.logout();
+      user = 'user-2';
+      when(() => repository.loadProfile()).thenAnswer(
+        (_) async => const OrbitUser(
+          id: 'user-2',
+          email: 'b@example.test',
+          displayName: 'Usuário B',
+        ),
+      );
+      await controller.restore();
+      late.complete(_user);
+      await refreshing;
+      expect((controller.state as AuthAuthenticated).session.user.id, 'user-2');
+      controller.applyUser(_user);
+      expect((controller.state as AuthAuthenticated).session.user.id, 'user-2');
+    },
+  );
+
+  test('perfil de outra identidade não pode compor a sessão', () async {
+    when(
+      () => repository.login(
+        email: any(named: 'email'),
+        password: any(named: 'password'),
+        mfaCode: any(named: 'mfaCode'),
+      ),
+    ).thenAnswer(
+      (_) async => TokenPair(
+        accessToken: fakeAccessToken(userId: 'user-2'),
+        refreshToken: 'refresh-B',
+        expiresIn: 900,
+      ),
+    );
+    final controller = buildController(repository);
+    await expectLater(
+      controller.login(email: 'b@example.test', password: 'senha-longa'),
+      throwsA(isA<OrbitException>()),
+    );
+    expect(controller.state, isA<AuthUnauthenticated>());
   });
 
   test('Platform Administrator não carrega organização', () async {

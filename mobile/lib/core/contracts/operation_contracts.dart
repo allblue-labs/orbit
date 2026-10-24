@@ -5,6 +5,8 @@
 /// exportar tipos, então as classes abaixo reproduzem o `include`/`select`.
 library;
 
+import 'package:intl/intl.dart';
+
 /// Página de resultados (`PaginationHelper.result`).
 class Paginated<T> {
   const Paginated({
@@ -204,6 +206,7 @@ class OperationHistoryEntry {
     this.toStatus,
     this.actorName,
     this.createdAt,
+    this.details = const {},
   });
 
   factory OperationHistoryEntry.fromJson(Map<String, dynamic> json) {
@@ -215,6 +218,9 @@ class OperationHistoryEntry {
       toStatus: json['toStatus'] as String?,
       actorName: user?['displayName'] as String?,
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? ''),
+      details: json['details'] is Map<String, dynamic>
+          ? json['details'] as Map<String, dynamic>
+          : const {},
     );
   }
 
@@ -224,28 +230,77 @@ class OperationHistoryEntry {
   final String? toStatus;
   final String? actorName;
   final DateTime? createdAt;
+  final Map<String, dynamic> details;
 
   static const _labels = <String, String>{
     'CREATED': 'Operação criada',
     'UPDATED': 'Operação atualizada',
-    'STATUS_CHANGED': 'Status alterado',
+    'STATUS_CHANGED': 'Situação da operação alterada',
     'USER_ASSIGNED': 'Técnico atribuído',
     'USER_UNASSIGNED': 'Técnico removido',
     'ATTACHMENT_ADDED': 'Anexo adicionado',
     'ATTACHMENT_REMOVED': 'Anexo removido',
     'CHECKLIST_STARTED': 'Checklist iniciado',
+    'CHECKLIST_UPDATED': 'Checklist atualizado',
     'CHECKLIST_COMPLETED': 'Checklist concluído',
     'CHECKLIST_CANCELLED': 'Checklist cancelado',
+    'FIELD_OPERATION_STARTED': 'Atendimento iniciado',
+    'FIELD_OPERATION_COMPLETED': 'Atendimento concluído',
+    'FIELD_CHECKLIST_UPDATED': 'Checklist atualizado em campo',
+    'FIELD_NOTE_ADDED': 'Observação do atendimento registrada',
+    'FIELD_MATERIAL_REGISTERED': 'Uso de material registrado',
+    'FIELD_EVIDENCE_ADDED': 'Evidência do atendimento adicionada',
+    'FIELD_DOCUMENT_PREPARED': 'Documento do atendimento preparado',
+    'CUSTOMER_ACKNOWLEDGEMENT_CAPTURED': 'Confirmação do cliente registrada',
+    'RESPONSIBLE_FIELD_TECHNICIAN_REPLACED': 'Técnico responsável alterado',
+    'AUXILIARY_TECHNICIAN_ADDED': 'Técnico auxiliar adicionado',
+    'AUXILIARY_TECHNICIAN_REMOVED': 'Técnico auxiliar removido',
+    'ASSIGNMENT_AUTHORIZED': 'Atendimento autorizado para a equipe',
+    'ASSIGNMENT_AUTHORIZATION_REVOKED': 'Autorização do atendimento retirada',
+    'PMOC_EQUIPMENT_EXECUTION_STARTED': 'Manutenção do equipamento iniciada',
     'DELETED': 'Operação removida',
   };
 
   String get label {
-    final base = _labels[action] ?? action;
+    final base = _labels[action] ?? 'Atualização registrada na operação';
+    if (action == 'FIELD_CHECKLIST_UPDATED' && details['completed'] == true) {
+      return 'Checklist concluído em campo';
+    }
+    if (action == 'CUSTOMER_ACKNOWLEDGEMENT_CAPTURED' &&
+        details['hasSignature'] == true) {
+      return 'Assinatura do cliente registrada';
+    }
     if (action != 'STATUS_CHANGED') return base;
-    final from = fromStatus == null ? null : OperationStatus.label(fromStatus!);
-    final to = toStatus == null ? null : OperationStatus.label(toStatus!);
-    if (from != null && to != null) return '$base: $from → $to';
-    return to == null ? base : '$base: $to';
+    final from = OperationStatus.labels[fromStatus];
+    final to = OperationStatus.labels[toStatus];
+    if (from != null && to != null) {
+      return 'Situação alterada de ${from.toLowerCase()} para ${to.toLowerCase()}';
+    }
+    return to == null ? base : 'Situação alterada para ${to.toLowerCase()}';
+  }
+
+  String? get explanation {
+    final progress = details['progress'];
+    if (action == 'FIELD_CHECKLIST_UPDATED' &&
+        progress is num &&
+        progress.isFinite &&
+        progress >= 0 &&
+        progress <= 100) {
+      return '${NumberFormat('#,##0.#', 'pt_BR').format(progress)}% do checklist preenchido.';
+    }
+    return switch (action) {
+      'FIELD_DOCUMENT_PREPARED' =>
+        'Os dados do atendimento foram reunidos para preparar o documento.',
+      'FIELD_EVIDENCE_ADDED' =>
+        'Uma foto ou outro registro do atendimento foi adicionado.',
+      'CUSTOMER_ACKNOWLEDGEMENT_CAPTURED' =>
+        'A confirmação do cliente sobre o atendimento foi registrada.',
+      'ASSIGNMENT_AUTHORIZED' =>
+        'O atendimento foi liberado para a equipe responsável.',
+      'ASSIGNMENT_AUTHORIZATION_REVOKED' =>
+        'A liberação deste atendimento para a equipe foi retirada.',
+      _ => null,
+    };
   }
 }
 

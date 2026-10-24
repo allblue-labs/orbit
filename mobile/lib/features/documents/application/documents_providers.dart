@@ -140,6 +140,7 @@ class DocumentsController extends StateNotifier<AsyncValue<DocumentsState>> {
         from: _query.from,
         to: _query.to,
       );
+      if (!mounted) return;
       state = AsyncValue.data(
         DocumentsState(
           items: page.data,
@@ -148,6 +149,7 @@ class DocumentsController extends StateNotifier<AsyncValue<DocumentsState>> {
         ),
       );
     } on Object catch (error, stack) {
+      if (!mounted) return;
       state = AsyncValue.error(error, stack);
     } finally {
       _inFlight = false;
@@ -170,6 +172,7 @@ class DocumentsController extends StateNotifier<AsyncValue<DocumentsState>> {
         to: _query.to,
         cursor: current.cursor,
       );
+      if (!mounted) return;
       state = AsyncValue.data(
         current.copyWith(
           items: mergeDocuments(current.items, page.data),
@@ -179,6 +182,8 @@ class DocumentsController extends StateNotifier<AsyncValue<DocumentsState>> {
         ),
       );
     } on Object catch (error) {
+      if (!mounted) return;
+
       /// A falha de uma página não descarta o que já está na tela.
       state = AsyncValue.data(
         current.copyWith(isLoadingMore: false, error: error),

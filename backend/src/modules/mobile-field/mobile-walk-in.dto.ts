@@ -5,14 +5,20 @@ import {
   ArrayUnique,
   IsArray,
   IsEmail,
+  IsDate,
   IsIn,
   IsOptional,
+  IsObject,
   IsString,
   MaxLength,
   MinLength,
   ValidateNested,
 } from 'class-validator';
-import { OperationKind, OperationPriority } from '../../contracts';
+import {
+  AssetIdentifierType,
+  OperationKind,
+  OperationPriority,
+} from '../../contracts';
 import { IsUUIDv7 } from '../../validators';
 
 const trim = ({ value }: { value: unknown }) =>
@@ -215,8 +221,37 @@ export class WalkInEquipmentDto {
   @IsOptional()
   @Transform(trim)
   @IsString()
-  @MaxLength(180)
+  @MaxLength(255)
   location?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(180)
+  identifier?: string;
+
+  @ApiPropertyOptional({ enum: Object.values(AssetIdentifierType) })
+  @IsOptional()
+  @IsIn(Object.values(AssetIdentifierType))
+  identifierType?: AssetIdentifierType;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  installationAt?: Date;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  warrantyUntil?: Date;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsObject()
+  specifications?: Record<string, unknown>;
 }
 
 /**

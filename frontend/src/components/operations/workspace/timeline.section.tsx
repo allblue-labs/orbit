@@ -18,11 +18,10 @@ import { PanelFrame, PanelState, type PanelQuery } from "@/components/panels";
 
 import { useDateFormatters } from "@/hooks/use-date-formatters";
 import {
-  OPERATION_HISTORY_LABELS,
-  OPERATION_STATUS_LABELS,
   type OperationHistoryEntry,
   type OperationTimeline,
 } from "@/types/operations";
+import { presentOperationHistory } from "../operation-history.presentation";
 
 /** Ações que representam desfecho positivo, negativo ou neutro. */
 const ACTION_TONE: Readonly<
@@ -38,6 +37,13 @@ const ACTION_TONE: Readonly<
   CHECKLIST_STARTED: "default",
   CHECKLIST_COMPLETED: "success",
   CHECKLIST_CANCELLED: "warning",
+  FIELD_OPERATION_STARTED: "success",
+  FIELD_OPERATION_COMPLETED: "success",
+  CUSTOMER_ACKNOWLEDGEMENT_CAPTURED: "success",
+  ASSIGNMENT_AUTHORIZED: "success",
+  ASSIGNMENT_AUTHORIZATION_REVOKED: "warning",
+  AUXILIARY_TECHNICIAN_ADDED: "success",
+  AUXILIARY_TECHNICIAN_REMOVED: "warning",
   DELETED: "destructive",
 };
 
@@ -66,12 +72,20 @@ export function TimelineSection({
       >
         {(timeline) => (
           <Timeline
-            items={timeline.events.map((event) => ({
-              title: describe(event),
-              timestamp: formatDateTime(event.createdAt),
-              description: event.user?.displayName ?? "Sistema",
-              tone: ACTION_TONE[event.action] ?? "default",
-            }))}
+            items={timeline.events.map((event) => {
+              const presentation = presentOperationHistory(event);
+              return {
+                title: presentation.title,
+                timestamp: formatDateTime(event.createdAt),
+                description: [
+                  presentation.explanation,
+                  event.user?.displayName ?? "Sistema",
+                ]
+                  .filter(Boolean)
+                  .join(" · "),
+                tone: ACTION_TONE[event.action] ?? "default",
+              };
+            })}
           />
         )}
       </PanelState>
@@ -99,44 +113,33 @@ export function HistorySection({
       >
         {(entries) => (
           <ul className="space-y-3">
-            {entries.map((entry) => (
-              <li
-                key={entry.id}
-                className="flex items-start justify-between gap-3 border-b border-border pb-3 last:border-0 last:pb-0"
-              >
-                <div className="min-w-0 space-y-0.5">
-                  <p className="text-sm font-medium">{describe(entry)}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {entry.user?.displayName ?? "Sistema"}
-                  </p>
-                </div>
-                <time className="shrink-0 font-mono text-xs text-muted-foreground">
-                  {formatDateTime(entry.createdAt)}
-                </time>
-              </li>
-            ))}
+            {entries.map((entry) => {
+              const presentation = presentOperationHistory(entry);
+              return (
+                <li
+                  key={entry.id}
+                  className="flex items-start justify-between gap-3 border-b border-border pb-3 last:border-0 last:pb-0"
+                >
+                  <div className="min-w-0 space-y-0.5">
+                    <p className="text-sm font-medium">{presentation.title}</p>
+                    {presentation.explanation ? (
+                      <p className="text-sm text-muted-foreground">
+                        {presentation.explanation}
+                      </p>
+                    ) : null}
+                    <p className="text-xs text-muted-foreground">
+                      {entry.user?.displayName ?? "Sistema"}
+                    </p>
+                  </div>
+                  <time className="shrink-0 font-mono text-xs text-muted-foreground">
+                    {formatDateTime(entry.createdAt)}
+                  </time>
+                </li>
+              );
+            })}
           </ul>
         )}
       </PanelState>
     </PanelFrame>
   );
-}
-
-/**
- * Descreve o evento.
- *
- * Para transições, mostra origem e destino — a informação que o backend
- * registra em `fromStatus`/`toStatus`.
- */
-function describe(entry: OperationHistoryEntry): string {
-  const label = OPERATION_HISTORY_LABELS[entry.action] ?? entry.action;
-  if (entry.action !== "STATUS_CHANGED") return label;
-  const from = entry.fromStatus
-    ? (OPERATION_STATUS_LABELS[entry.fromStatus] ?? entry.fromStatus)
-    : null;
-  const to = entry.toStatus
-    ? (OPERATION_STATUS_LABELS[entry.toStatus] ?? entry.toStatus)
-    : null;
-  if (from && to) return `${label}: ${from} → ${to}`;
-  return to ? `${label}: ${to}` : label;
 }

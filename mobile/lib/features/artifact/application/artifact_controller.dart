@@ -137,6 +137,7 @@ class ArtifactController extends StateNotifier<ArtifactState> {
         sourceType: sourceType,
         sourceId: sourceId,
       );
+      if (!mounted) return;
       state = ArtifactState(
         preparation: preparation,
         artifact: preparation.existingArtifact,
@@ -145,6 +146,7 @@ class ArtifactController extends StateNotifier<ArtifactState> {
       );
       _schedulePoll();
     } on Object catch (error) {
+      if (!mounted) return;
       state = state.copyWith(loading: false, error: error);
     }
   }
@@ -155,6 +157,7 @@ class ArtifactController extends StateNotifier<ArtifactState> {
   /// o botão fica desabilitado enquanto o comando está em voo, e o servidor
   /// devolve o artefato existente se a intenção chegar duas vezes.
   Future<void> prepare() async {
+    if (!mounted) return;
     if (state.mutating) return;
     if (!state.allows(FieldArtifactAllowedAction.prepareDocument)) return;
 
@@ -164,9 +167,11 @@ class ArtifactController extends StateNotifier<ArtifactState> {
         sourceType: sourceType,
         sourceId: sourceId,
       );
+      if (!mounted) return;
       state = state.copyWith(artifact: artifact, mutating: false);
       await load();
     } on Object catch (error) {
+      if (!mounted) return;
       state = state.copyWith(mutating: false, error: error);
     }
   }
@@ -176,6 +181,7 @@ class ArtifactController extends StateNotifier<ArtifactState> {
   /// A resposta significa "pedido aceito", não "PDF pronto". A partir daqui o
   /// app acompanha o estado — não o deduz.
   Future<void> render() async {
+    if (!mounted) return;
     if (state.mutating) return;
     final artifact = state.artifact;
     if (artifact == null) return;
@@ -184,10 +190,12 @@ class ArtifactController extends StateNotifier<ArtifactState> {
     state = state.copyWith(mutating: true, clearError: true);
     try {
       final updated = await _repository.render(artifact.id);
+      if (!mounted) return;
       _attempts = 0;
       state = state.copyWith(artifact: updated, mutating: false);
       _schedulePoll();
     } on Object catch (error) {
+      if (!mounted) return;
       state = state.copyWith(mutating: false, error: error);
     }
   }
@@ -289,6 +297,7 @@ class ArtifactController extends StateNotifier<ArtifactState> {
   Future<void> discardLocalCopy() async {
     final path = state.download.path;
     if (path != null) await _files.delete(path);
+    if (!mounted) return;
     state = state.copyWith(download: const DownloadState());
   }
 }

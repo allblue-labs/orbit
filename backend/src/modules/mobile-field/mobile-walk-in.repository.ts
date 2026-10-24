@@ -356,6 +356,15 @@ export class MobileWalkInRepository {
           model: equipamento.model ?? null,
           serialNumber: equipamento.serialNumber ?? null,
           location: equipamento.location ?? null,
+          identifier: equipamento.identifier ?? null,
+          identifierType:
+            equipamento.identifierType ??
+            (equipamento.identifier ? 'INTERNAL_CODE' : null),
+          installationAt: equipamento.installationAt,
+          warrantyUntil: equipamento.warrantyUntil,
+          specifications: equipamento.specifications
+            ? this.json(equipamento.specifications)
+            : undefined,
           status: 'ACTIVE',
         },
         select: { id: true },

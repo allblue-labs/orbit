@@ -33,6 +33,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../field/application/field_providers.dart';
 import '../../../core/contracts/walk_in_contracts.dart';
 import '../../../core/design/orbit_primitives.dart';
 import '../../../core/design/orbit_wizard.dart';
@@ -97,7 +98,13 @@ class _WalkInScreenState extends ConsumerState<WalkInScreen> {
 
   bool _consultandoDocumento = false;
   bool _consultandoCep = false;
-  String? _avisoConsulta;
+  String? _avisoDocumento;
+  String? _avisoCep;
+  Timer? _documentoTimer;
+  Timer? _cepTimer;
+  int _documentoRequest = 0;
+  int _cepRequest = 0;
+  final _preenchidosAutomaticamente = <TextEditingController, String>{};
 
   /* Atendimento. */
   String _natureza = 'MAINTENANCE';
@@ -119,6 +126,8 @@ class _WalkInScreenState extends ConsumerState<WalkInScreen> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _documentoTimer?.cancel();
+    _cepTimer?.cancel();
     for (final controller in [
       _busca,
       _nome,
@@ -190,73 +199,174 @@ class _WalkInScreenState extends ConsumerState<WalkInScreen> {
     });
   }
 
+  String _digits(String value) => value.replaceAll(RegExp(r'\D'), '');
+
+  void _escolherOrigem(WalkInOrigin value) {
+    _documentoTimer?.cancel();
+    _cepTimer?.cancel();
+    _documentoRequest++;
+    _cepRequest++;
+    setState(() {
+      _origem = value;
+      _consultandoDocumento = false;
+      _consultandoCep = false;
+      _avisoDocumento = null;
+      _avisoCep = null;
+    });
+  }
+
+  void _mudarTipo(String value) {
+    if (value == _tipo) return;
+    _documentoTimer?.cancel();
+    _documentoRequest++;
+    setState(() {
+      _tipo = value;
+      _documento.clear();
+      _fantasia.clear();
+      if (_nome.text == _preenchidosAutomaticamente[_nome]) _nome.clear();
+      _consultandoDocumento = false;
+      _avisoDocumento = null;
+    });
+  }
+
+  void _documentoMudou(String _) {
+    _documentoTimer?.cancel();
+    _documentoRequest++;
+    setState(() {
+      _consultandoDocumento = false;
+      _avisoDocumento = null;
+    });
+    if (_tipo == 'COMPANY' && _digits(_documento.text).length == 14) {
+      _documentoTimer = Timer(const Duration(milliseconds: 450), () {
+        unawaited(_consultarDocumento());
+      });
+    }
+  }
+
+  void _cepMudou(String _) {
+    _cepTimer?.cancel();
+    _cepRequest++;
+    setState(() {
+      _consultandoCep = false;
+      _avisoCep = null;
+    });
+    if (_digits(_cep.text).length == 8) {
+      _cepTimer = Timer(const Duration(milliseconds: 450), () {
+        unawaited(_consultarCep());
+      });
+    }
+  }
+
   Future<void> _consultarDocumento() async {
-    final digitos = _documento.text.replaceAll(RegExp(r'\D'), '');
-    if (digitos.length != 14 || _consultandoDocumento) return;
+    final digitos = _digits(_documento.text);
+    if (_tipo != 'COMPANY' || digitos.length != 14 || _consultandoDocumento) {
+      return;
+    }
+    _documentoTimer?.cancel();
+    final request = ++_documentoRequest;
+    bool atual() =>
+        mounted &&
+        request == _documentoRequest &&
+        _origem == WalkInOrigin.fresh &&
+        _tipo == 'COMPANY' &&
+        _digits(_documento.text) == digitos;
     setState(() {
       _consultandoDocumento = true;
-      _avisoConsulta = null;
+      _avisoDocumento = null;
     });
     try {
-      final empresa = await ref
-          .read(walkInRepositoryProvider)
-          .company(digitos);
-      if (!mounted) return;
+      final empresa = await ref.read(walkInRepositoryProvider).company(digitos);
+      if (!atual()) return;
       setState(() {
-        /* Preenche só o que está em branco: a pessoa pode ter digitado o nome
-           fantasia que ela usa, e a Receita costuma trazer outro. */
         _preencher(_nome, empresa.legalName);
         _preencher(_fantasia, empresa.tradeName);
         _preencher(_email, empresa.email);
         _preencher(_telefone, empresa.phone);
-        _preencher(_cep, empresa.address.postalCode);
-        _preencher(_rua, empresa.address.street);
-        _preencher(_numero, empresa.address.number);
-        _preencher(_complemento, empresa.address.complement);
-        _preencher(_bairro, empresa.address.district);
-        _preencher(_cidade, empresa.address.city);
-        _preencher(_uf, empresa.address.stateCode);
+        // An address manually chosen by CEP takes precedence over company data.
+        if (_cep.text.trim().isEmpty ||
+            _digits(_cep.text) == _digits(empresa.address.postalCode) ||
+            _cep.text == _preenchidosAutomaticamente[_cep]) {
+          if (_digits(_cep.text) != _digits(empresa.address.postalCode)) {
+            _cepTimer?.cancel();
+            _cepRequest++;
+            _consultandoCep = false;
+            _avisoCep = null;
+          }
+          _preencher(_cep, empresa.address.postalCode);
+          _preencher(_rua, empresa.address.street);
+          _preencher(_numero, empresa.address.number);
+          _preencher(_complemento, empresa.address.complement);
+          _preencher(_bairro, empresa.address.district);
+          _preencher(_cidade, empresa.address.city);
+          _preencher(_uf, empresa.address.stateCode);
+        }
       });
-    } on OrbitException catch (error) {
-      if (mounted) setState(() => _avisoConsulta = error.publicMessage);
+    } on Object catch (error) {
+      if (atual()) {
+        setState(
+          () => _avisoDocumento =
+              '${OrbitException.publicCopyForAny(error, prefixo: 'Não foi possível consultar o CNPJ.')} Você pode preencher os dados manualmente.',
+        );
+      }
     } finally {
-      if (mounted) setState(() => _consultandoDocumento = false);
+      if (atual()) setState(() => _consultandoDocumento = false);
     }
   }
 
   Future<void> _consultarCep() async {
-    final digitos = _cep.text.replaceAll(RegExp(r'\D'), '');
+    final digitos = _digits(_cep.text);
     if (digitos.length != 8 || _consultandoCep) return;
+    _cepTimer?.cancel();
+    final request = ++_cepRequest;
+    bool atual() =>
+        mounted &&
+        request == _cepRequest &&
+        _origem == WalkInOrigin.fresh &&
+        _digits(_cep.text) == digitos;
+    final antes = {
+      for (final c in [_rua, _bairro, _cidade, _uf]) c: c.text,
+    };
     setState(() {
       _consultandoCep = true;
-      _avisoConsulta = null;
+      _avisoCep = null;
     });
     try {
       final endereco = await ref
           .read(walkInRepositoryProvider)
           .postalCode(digitos);
-      if (!mounted) return;
+      if (!atual()) return;
       setState(() {
-        /* Rua, bairro, cidade e UF vêm da consulta; número e complemento são de
-           quem mora lá, e o formulário os mantém como estavam. */
-        _rua.text = endereco.street;
-        _bairro.text = endereco.district;
-        _cidade.text = endereco.city;
-        _uf.text = endereco.stateCode;
+        for (final entry in {
+          _rua: endereco.street,
+          _bairro: endereco.district,
+          _cidade: endereco.city,
+          _uf: endereco.stateCode,
+        }.entries) {
+          // Do not overwrite edits made while the lookup was in flight.
+          if (entry.key.text == antes[entry.key]) {
+            entry.key.text = entry.value;
+            _preenchidosAutomaticamente[entry.key] = entry.value;
+          }
+        }
       });
-    } on OrbitException catch (error) {
-      if (mounted) setState(() => _avisoConsulta = error.publicMessage);
+    } on Object catch (error) {
+      if (atual()) {
+        setState(
+          () => _avisoCep =
+              '${OrbitException.publicCopyForAny(error, prefixo: 'Não foi possível consultar o CEP.')} Você pode preencher o endereço manualmente.',
+        );
+      }
     } finally {
-      if (mounted) setState(() => _consultandoCep = false);
+      if (atual()) setState(() => _consultandoCep = false);
     }
   }
 
-  /// Só preenche campo vazio: sobrescrever o que a pessoa digitou é pior que
-  /// não preencher.
   void _preencher(TextEditingController controller, String? value) {
-    final texto = value?.trim();
-    if (controller.text.trim().isEmpty && texto != null && texto.isNotEmpty) {
-      controller.text = texto;
+    if (value == null || value.trim().isEmpty) return;
+    if (controller.text.trim().isEmpty ||
+        controller.text == _preenchidosAutomaticamente[controller]) {
+      controller.text = value.trim();
+      _preenchidosAutomaticamente[controller] = controller.text;
     }
   }
 
@@ -270,25 +380,31 @@ class _WalkInScreenState extends ConsumerState<WalkInScreen> {
     });
     try {
       final corpo = rascunho.toJson();
-      final resultado = await ref.read(walkInRepositoryProvider).create(
-        idempotencyKey: _idempotencyKey,
-        customerId: corpo['customerId'] as String?,
-        customer: corpo['customer'] as Map<String, dynamic>?,
-        assetIds:
-            (corpo['assetIds'] as List<dynamic>? ?? const [])
+      final resultado = await ref
+          .read(walkInRepositoryProvider)
+          .create(
+            idempotencyKey: _idempotencyKey,
+            customerId: corpo['customerId'] as String?,
+            customer: corpo['customer'] as Map<String, dynamic>?,
+            assetIds: (corpo['assetIds'] as List<dynamic>? ?? const [])
                 .cast<String>()
                 .toList(growable: false),
-        equipment:
-            (corpo['equipment'] as List<dynamic>? ?? const [])
+            equipment: (corpo['equipment'] as List<dynamic>? ?? const [])
                 .cast<Map<String, dynamic>>()
                 .toList(growable: false),
-        kind: corpo['kind'] as String?,
-        title: corpo['title'] as String?,
-        description: corpo['description'] as String?,
-        priority: corpo['priority'] as String?,
-        sector: corpo['sector'] as String?,
-      );
+            businessUnitId: ref.read(walkInBusinessUnitIdProvider),
+            kind: corpo['kind'] as String?,
+            title: corpo['title'] as String?,
+            description: corpo['description'] as String?,
+            priority: corpo['priority'] as String?,
+            sector: corpo['sector'] as String?,
+          );
       if (!mounted) return;
+      ref.invalidate(fieldCustomersProvider);
+      ref.invalidate(walkInCustomersProvider);
+      ref.invalidate(walkInEquipmentProvider);
+      ref.invalidate(workQueueControllerProvider);
+      ref.invalidate(fieldDashboardProvider);
 
       /* Entra direto na execução: abrir o atendimento e começar a executá-lo
          são o mesmo gesto para quem está no local. */
@@ -309,34 +425,40 @@ class _WalkInScreenState extends ConsumerState<WalkInScreen> {
       _etapaAtendimento(),
     ];
 
-    return Scaffold(
-      backgroundColor: context.orbit.background,
-      appBar: AppBar(
-        title: const Text('Novo atendimento'),
-        actions: [
-          /// A saída, nomeada.
-          ///
-          /// Sair aqui **descarta** o rascunho — nada foi enviado ainda —, e é
-          /// o oposto do roteiro de execução, onde cada registro já foi
-          /// gravado. Por isso a confirmação.
-          TextButton(onPressed: _confirmarSaida, child: const Text('Sair')),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.only(bottom: OrbitSpacing.xl),
-        children: [
-          if (_erro != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                OrbitSpacing.md,
-                OrbitSpacing.md,
-                OrbitSpacing.md,
-                0,
-              ),
-              child: SectionError(error: _erro!, onRetry: _abrir),
+    return PopScope(
+      canPop: !_abrindo,
+      child: Scaffold(
+        backgroundColor: context.orbit.background,
+        appBar: AppBar(
+          title: const Text('Novo atendimento'),
+          actions: [
+            /// A saída, nomeada.
+            ///
+            /// Sair aqui **descarta** o rascunho — nada foi enviado ainda —, e é
+            /// o oposto do roteiro de execução, onde cada registro já foi
+            /// gravado. Por isso a confirmação.
+            TextButton(
+              onPressed: _abrindo ? null : _confirmarSaida,
+              child: const Text('Sair'),
             ),
-          OrbitWizard(steps: etapas),
-        ],
+          ],
+        ),
+        body: ListView(
+          padding: const EdgeInsets.only(bottom: OrbitSpacing.xl),
+          children: [
+            if (_erro != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  OrbitSpacing.md,
+                  OrbitSpacing.md,
+                  OrbitSpacing.md,
+                  0,
+                ),
+                child: SectionError(error: _erro!, onRetry: _abrir),
+              ),
+            OrbitWizard(key: const ValueKey('walk-in-wizard'), steps: etapas),
+          ],
+        ),
       ),
     );
   }
@@ -387,18 +509,18 @@ class _WalkInScreenState extends ConsumerState<WalkInScreen> {
       children: [
         WalkInChoiceTile(
           icon: Icons.person_search_outlined,
-          title: 'Cliente já cadastrado',
+          title: 'Criar para cliente existente',
           description: 'Escolher na carteira e ver os equipamentos dele',
           selected: _origem == WalkInOrigin.existing,
-          onTap: () => setState(() => _origem = WalkInOrigin.existing),
+          onTap: () => _escolherOrigem(WalkInOrigin.existing),
         ),
         const SizedBox(height: OrbitSpacing.sm),
         WalkInChoiceTile(
           icon: Icons.person_add_alt_outlined,
-          title: 'Novo cliente',
+          title: 'Criar avulso (novo cliente)',
           description: 'Cadastrar agora, com os equipamentos do endereço',
           selected: _origem == WalkInOrigin.fresh,
-          onTap: () => setState(() => _origem = WalkInOrigin.fresh),
+          onTap: () => _escolherOrigem(WalkInOrigin.fresh),
         ),
       ],
     ),
@@ -447,7 +569,9 @@ class _WalkInScreenState extends ConsumerState<WalkInScreen> {
           escolhido: _escolhido,
           onBuscar: _buscar,
           onEscolher: (cliente) => setState(() {
+            if (_escolhido?.id == cliente.id) return;
             _escolhido = cliente;
+            _novosEquipamentos.clear();
             /* Trocar de cliente invalida a seleção de equipamentos: eles são
                de outro parque. */
             _selecionados.clear();
@@ -460,7 +584,7 @@ class _WalkInScreenState extends ConsumerState<WalkInScreen> {
         complete: _nome.text.trim().length >= 2,
         child: _FormularioDeCliente(
           tipo: _tipo,
-          onTipo: (valor) => setState(() => _tipo = valor),
+          onTipo: _mudarTipo,
           nome: _nome,
           fantasia: _fantasia,
           documento: _documento,
@@ -477,7 +601,10 @@ class _WalkInScreenState extends ConsumerState<WalkInScreen> {
           referencia: _referencia,
           consultandoDocumento: _consultandoDocumento,
           consultandoCep: _consultandoCep,
-          aviso: _avisoConsulta,
+          avisoDocumento: _avisoDocumento,
+          avisoCep: _avisoCep,
+          onDocumentoMudou: _documentoMudou,
+          onCepMudou: _cepMudou,
           onConsultarDocumento: _consultarDocumento,
           onConsultarCep: _consultarCep,
           onMudou: () => setState(() {}),
@@ -492,10 +619,16 @@ class _WalkInScreenState extends ConsumerState<WalkInScreen> {
 
     return OrbitWizardStep(
       title: 'Equipamentos',
-      hint: 'Marque o que vai ser atendido. Opcional.',
+      hint: _origem == WalkInOrigin.fresh
+          ? 'Adicione um ou mais equipamentos. Só o nome é obrigatório.'
+          : 'Escolha os equipamentos deste cliente ou acrescente outros.',
       complete: _selecionados.isNotEmpty || _novosEquipamentos.isNotEmpty,
       lockedReason: _origem == null
           ? 'Escolha a origem do atendimento primeiro.'
+          : _origem == WalkInOrigin.existing && clienteId == null
+          ? 'Escolha o cliente primeiro.'
+          : _origem == WalkInOrigin.fresh && _nome.text.trim().length < 2
+          ? 'Informe o nome do novo cliente primeiro.'
           : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -547,8 +680,9 @@ class _WalkInScreenState extends ConsumerState<WalkInScreen> {
 
           const SizedBox(height: OrbitSpacing.sm),
           Text(
-            'Dá para abrir o atendimento sem nenhum equipamento — e identificar '
-            'os aparelhos durante a execução.',
+            _origem == WalkInOrigin.fresh
+                ? 'Adicione ao menos um equipamento. Somente o nome é obrigatório.'
+                : 'Você pode abrir sem selecionar equipamentos e identificá-los durante a execução.',
             style: OrbitType.caption.copyWith(color: context.orbit.inkSubtle),
           ),
         ],
@@ -757,7 +891,10 @@ class _FormularioDeCliente extends StatelessWidget {
     required this.referencia,
     required this.consultandoDocumento,
     required this.consultandoCep,
-    required this.aviso,
+    required this.avisoDocumento,
+    required this.avisoCep,
+    required this.onDocumentoMudou,
+    required this.onCepMudou,
     required this.onConsultarDocumento,
     required this.onConsultarCep,
     required this.onMudou,
@@ -781,7 +918,10 @@ class _FormularioDeCliente extends StatelessWidget {
   final TextEditingController referencia;
   final bool consultandoDocumento;
   final bool consultandoCep;
-  final String? aviso;
+  final String? avisoDocumento;
+  final String? avisoCep;
+  final ValueChanged<String> onDocumentoMudou;
+  final ValueChanged<String> onCepMudou;
   final VoidCallback onConsultarDocumento;
   final VoidCallback onConsultarCep;
   final VoidCallback onMudou;
@@ -802,7 +942,7 @@ class _FormularioDeCliente extends StatelessWidget {
           hint: _pessoaFisica ? '000.000.000-00' : '00.000.000/0000-00',
           keyboardType: TextInputType.number,
           inputFormatters: [DocumentInputFormatter(individual: _pessoaFisica)],
-          onChanged: (_) => onMudou(),
+          onChanged: onDocumentoMudou,
           /* A consulta existe só para empresa: não há cadastro público de CPF
              que o produto possa consultar, e um botão que nunca funciona é
              pior que nenhum. */
@@ -824,12 +964,22 @@ class _FormularioDeCliente extends StatelessWidget {
                 ),
           helper: _pessoaFisica
               ? null
-              : 'Com o CNPJ completo, toque na lupa para preencher o resto.',
+              : 'Ao completar o CNPJ, os dados são buscados automaticamente.',
         ),
+
+        if (avisoDocumento != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: OrbitSpacing.sm),
+            child: Text(
+              avisoDocumento!,
+              style: OrbitType.caption.copyWith(color: palette.warning),
+            ),
+          ),
 
         WalkInField(
           label: _pessoaFisica ? 'Nome' : 'Razão social',
           controller: nome,
+          maxLength: 255,
           hint: _pessoaFisica ? 'Maria Souza' : 'Clima Norte LTDA',
           onChanged: (_) => onMudou(),
         ),
@@ -838,24 +988,28 @@ class _FormularioDeCliente extends StatelessWidget {
           WalkInField(
             label: 'Nome fantasia',
             controller: fantasia,
+            maxLength: 255,
             hint: 'Como a equipe chama o cliente',
           ),
 
         WalkInField(
           label: 'Telefone',
           controller: telefone,
+          maxLength: 32,
           hint: '(81) 99999-9999',
           keyboardType: TextInputType.phone,
         ),
         WalkInField(
           label: 'E-mail',
           controller: email,
+          maxLength: 320,
           keyboardType: TextInputType.emailAddress,
           textCapitalization: TextCapitalization.none,
         ),
         WalkInField(
           label: 'Quem atende no local',
           controller: contato,
+          maxLength: 180,
           hint: 'Nome de quem recebeu você',
         ),
 
@@ -872,6 +1026,9 @@ class _FormularioDeCliente extends StatelessWidget {
           hint: '00000-000',
           keyboardType: TextInputType.number,
           inputFormatters: const [PostalCodeInputFormatter()],
+          onChanged: onCepMudou,
+          helper:
+              'Ao completar o CEP, o endereço é preenchido automaticamente.',
           suffix: consultandoCep
               ? const Padding(
                   padding: EdgeInsets.all(12),
@@ -887,33 +1044,54 @@ class _FormularioDeCliente extends StatelessWidget {
                   onPressed: onConsultarCep,
                 ),
         ),
+        if (avisoCep != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: OrbitSpacing.sm),
+            child: Text(
+              avisoCep!,
+              style: OrbitType.caption.copyWith(color: palette.warning),
+            ),
+          ),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
               flex: 3,
-              child: WalkInField(label: 'Rua', controller: rua),
+              child: WalkInField(label: 'Rua', controller: rua, maxLength: 255),
             ),
             const SizedBox(width: OrbitSpacing.sm),
             Expanded(
-              child: WalkInField(label: 'Número', controller: numero),
+              child: WalkInField(
+                label: 'Número',
+                controller: numero,
+                maxLength: 40,
+              ),
             ),
           ],
         ),
-        WalkInField(label: 'Complemento', controller: complemento),
-        WalkInField(label: 'Bairro', controller: bairro),
+        WalkInField(
+          label: 'Complemento',
+          controller: complemento,
+          maxLength: 180,
+        ),
+        WalkInField(label: 'Bairro', controller: bairro, maxLength: 180),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
               flex: 3,
-              child: WalkInField(label: 'Cidade', controller: cidade),
+              child: WalkInField(
+                label: 'Cidade',
+                controller: cidade,
+                maxLength: 180,
+              ),
             ),
             const SizedBox(width: OrbitSpacing.sm),
             Expanded(
               child: WalkInField(
                 label: 'UF',
                 controller: uf,
+                maxLength: 2,
                 textCapitalization: TextCapitalization.characters,
               ),
             ),
@@ -922,19 +1100,11 @@ class _FormularioDeCliente extends StatelessWidget {
         WalkInField(
           label: 'Ponto de referência',
           controller: referencia,
+          maxLength: 255,
           hint: 'Portão azul ao lado da padaria',
           maxLines: 2,
           helper: 'É o que leva o próximo técnico ao lugar certo.',
         ),
-
-        if (aviso case final String mensagem)
-          Padding(
-            padding: const EdgeInsets.only(top: OrbitSpacing.xs),
-            child: Text(
-              mensagem,
-              style: OrbitType.caption.copyWith(color: palette.warning),
-            ),
-          ),
       ],
     );
   }

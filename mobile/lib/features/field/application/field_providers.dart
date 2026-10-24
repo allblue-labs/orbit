@@ -23,7 +23,7 @@ String fieldScopeKey(Ref ref) {
   final session = ref.watch(sessionProvider);
   return [
     session?.user.id ?? 'anon',
-    session?.organization?.id ?? 'sem-org',
+    session?.organizationId ?? 'sem-org',
     session?.businessUnitId ?? 'sem-unidade',
   ].join('.');
 }
@@ -246,6 +246,7 @@ class WorkQueueController extends StateNotifier<AsyncValue<WorkQueueState>> {
         from: _filter.from,
         to: _filter.to,
       );
+      if (!mounted) return;
       state = AsyncValue.data(
         WorkQueueState(
           items: page.data,
@@ -254,7 +255,9 @@ class WorkQueueController extends StateNotifier<AsyncValue<WorkQueueState>> {
         ),
       );
     } on Object catch (error, stack) {
+      if (!mounted) return;
       final cached = await _fromProjection(error);
+      if (!mounted) return;
       state = cached ?? AsyncValue.error(error, stack);
     } finally {
       _inFlight = false;
@@ -300,6 +303,7 @@ class WorkQueueController extends StateNotifier<AsyncValue<WorkQueueState>> {
         to: _filter.to,
         cursor: current.cursor,
       );
+      if (!mounted) return;
       state = AsyncValue.data(
         current.copyWith(
           items: mergeWorkItems(current.items, page.data),
@@ -309,6 +313,8 @@ class WorkQueueController extends StateNotifier<AsyncValue<WorkQueueState>> {
         ),
       );
     } on Object catch (error) {
+      if (!mounted) return;
+
       /// A falha de uma página não descarta o que já está na tela: o
       /// profissional continua vendo a fila e pode tentar de novo.
       state = AsyncValue.data(
