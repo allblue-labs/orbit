@@ -179,11 +179,7 @@ class _Folha extends ConsumerWidget {
           ),
           child: SafeArea(
             top: false,
-            child: _acoes(
-              context,
-              ref,
-              session?.hasPermission('operations.create') ?? false,
-            ),
+            child: _acoes(context, ref, session?.canCreateWalkIn ?? false),
           ),
         ),
       ],

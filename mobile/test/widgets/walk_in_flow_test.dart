@@ -125,7 +125,13 @@ Future<void> open(
   WidgetTester tester,
   Backend backend, {
   String? initial,
-  List<String> permissions = const ['operations.create', 'customers.read'],
+  List<String> permissions = const [
+    'operations.walk_in.create',
+    'operations.read',
+    'operations.status.update',
+    'customers.read',
+  ],
+  bool isOwner = false,
   double width = 390,
   double scale = 1,
 }) async {
@@ -191,7 +197,11 @@ Future<void> open(
         apiClientProvider.overrideWithValue(client),
         readCacheProvider.overrideWithValue(InMemoryReadCache()),
         sessionProvider.overrideWith(
-          (ref) => sessionFrom(permissions: permissions),
+          (ref) => sessionFrom(
+            permissions: permissions,
+            roles: isOwner ? const ['OWNER'] : const ['FIELD_TECHNICIAN'],
+            isOrganizationOwner: isOwner,
+          ),
         ),
       ],
       child: MaterialApp.router(
@@ -260,6 +270,47 @@ void main() {
       permissions: ['operations.read'],
     );
     expect(find.text('Iniciar um atendimento'), findsNothing);
+  });
+
+  testWidgets('permissão geral de criação mantém o botão disponível', (
+    tester,
+  ) async {
+    await open(
+      tester,
+      Backend(),
+      initial: OrbitRoutes.workQueue,
+      permissions: ['operations.create', 'customers.read'],
+    );
+    await tap(tester, 'Iniciar um atendimento');
+    expect(find.text('Criar avulso (novo cliente)'), findsOneWidget);
+  });
+
+  testWidgets('proprietário tem a ação sem depender da permissão na lista', (
+    tester,
+  ) async {
+    await open(
+      tester,
+      Backend(),
+      initial: OrbitRoutes.workQueue,
+      permissions: [],
+      isOwner: true,
+    );
+    await tap(tester, 'Iniciar um atendimento');
+    expect(find.text('Criar para cliente existente'), findsOneWidget);
+  });
+
+  testWidgets('ficha do cliente não concede criação a quem só pode consultar', (
+    tester,
+  ) async {
+    await open(
+      tester,
+      Backend(),
+      initial: '/clientes',
+      permissions: ['customers.read'],
+    );
+    await tap(tester, 'Abrir cliente');
+    expect(find.text('Iniciar um atendimento'), findsNothing);
+    expect(find.text('Nada em aberto'), findsOneWidget);
   });
 
   testWidgets('seleciona cliente e vários equipamentos da unidade ativa', (
