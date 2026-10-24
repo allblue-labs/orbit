@@ -40,7 +40,6 @@ import {
 } from "@/hooks/profile/use-profile";
 
 import { useDateFormatters } from "@/hooks/use-date-formatters";
-import { formatDateTime } from "@/lib/formatters";
 import { passwordPolicyIssues } from "@/lib/password-policy";
 import { useSession } from "@/providers/session-provider";
 import { PROFILE_LIMITS } from "@/types/settings";
@@ -271,7 +270,7 @@ function PasswordSection() {
         <Button
           type="submit"
           disabled={
-            !current || !next || mismatch || tooShort || change.isPending || passwordInvalid
+            !current || !next || mismatch || change.isPending || passwordInvalid
           }
         >
           {change.isPending ? "Alterando…" : "Alterar senha"}
