@@ -33,7 +33,7 @@
  * Produtividade por técnico também não — é a mesma ausência que já deixa o
  * widget "Desempenho da Equipe" sem fonte. Ausências declaradas no rodapé.
  */
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   Legend,
   PolarAngleAxis,
@@ -42,7 +42,6 @@ import {
   Radar,
   RadarChart,
   ResponsiveContainer,
-  Text,
   Tooltip,
 } from "recharts";
 
@@ -59,6 +58,13 @@ import type { WidgetProps } from "./widget-registry";
 const CURRENT_COLOR = "var(--color-chart-1)";
 const PREVIOUS_COLOR = "var(--color-chart-4)";
 
+/** Keep perimeter labels short; the tooltip retains the full metric name. */
+const AXIS_LABELS: Readonly<Record<string, string>> = {
+  "operations.completion_rate": "Conclusão",
+  "operations.sla_compliance": "Prazo",
+  "technicians.assignment_coverage": "Equipe",
+};
+
 /** Indicadores pedidos no painel que o Analytics não publica. */
 const NOT_PUBLISHED = [
   "ordens de serviço por tipo",
@@ -68,6 +74,7 @@ const NOT_PUBLISHED = [
 
 interface RadarRow {
   readonly axis: string;
+  readonly label: string;
   readonly current: number;
   readonly previous: number;
 }
@@ -81,11 +88,15 @@ function comparableAxes(
 
   return current
     .filter((kpi) => getMetric(kpi.id)?.comparable && kpi.unit === "%")
-    .map((kpi) => ({
-      axis: resolveMetric(kpi).label,
-      current: kpi.value,
-      previous: before.get(kpi.id) ?? 0,
-    }));
+    .map((kpi) => {
+      const label = resolveMetric(kpi).label;
+      return {
+        axis: AXIS_LABELS[kpi.id] ?? label,
+        label,
+        current: kpi.value,
+        previous: before.get(kpi.id) ?? 0,
+      };
+    });
 }
 
 /** Contagens comparáveis — mostradas como número, nunca como eixo do radar. */
@@ -115,8 +126,6 @@ function comparableCounts(
 
 export function ComparativeRadarWidget({ widget, comparison }: WidgetProps) {
   const { current, previous, windows } = comparison;
-  const [chartWidth, setChartWidth] = useState(0);
-  const labelWidth = Math.max(64, Math.min(112, chartWidth * 0.35));
 
   const rows = useMemo(
     () =>
@@ -139,22 +148,21 @@ export function ComparativeRadarWidget({ widget, comparison }: WidgetProps) {
       panelId={widget.id}
       title={widget.title}
       description={`${windows.thisMonth.label} · ${windows.lastMonth.label}`}
-      height={400}
+      height={340}
     >
       <ComparisonState current={current} previous={previous} rows={rows}>
         <div className="flex h-full flex-col">
           <div className="min-h-0 min-w-0 flex-1">
-            <ResponsiveContainer
-              width="100%"
-              height="100%"
-              onResize={(width) => setChartWidth(width)}
-            >
-              <RadarChart data={[...rows]} outerRadius="56%">
+            <ResponsiveContainer width="100%" height="100%">
+              <RadarChart data={[...rows]} outerRadius="72%">
                 <PolarGrid stroke="var(--color-border)" />
                 <PolarAngleAxis
                   dataKey="axis"
                   tickSize={4}
-                  tick={<RadarAxisLabel maxWidth={labelWidth} />}
+                  tick={{
+                    fontSize: 11,
+                    fill: "var(--color-muted-foreground)",
+                  }}
                 />
                 <PolarRadiusAxis
                   domain={[0, 100]}
@@ -180,6 +188,9 @@ export function ComparativeRadarWidget({ widget, comparison }: WidgetProps) {
                 />
                 <Legend wrapperStyle={{ fontSize: "0.7rem" }} />
                 <Tooltip
+                  labelFormatter={(label) =>
+                    rows.find((row) => row.axis === label)?.label ?? label
+                  }
                   formatter={(value: number | string) => `${value}%`}
                   contentStyle={{
                     background: "var(--color-popover)",
@@ -215,42 +226,6 @@ export function ComparativeRadarWidget({ widget, comparison }: WidgetProps) {
         </div>
       </ComparisonState>
     </PanelChartFrame>
-  );
-}
-
-/** Wrap full axis names within the card instead of clipping a single line. */
-function RadarAxisLabel({
-  x = 0,
-  y = 0,
-  cy = 0,
-  payload,
-  maxWidth,
-}: {
-  x?: number;
-  y?: number;
-  cy?: number;
-  payload?: { value: string | number };
-  maxWidth: number;
-}) {
-  if (!payload) return <g />;
-  const label = String(payload.value);
-  return (
-    <g aria-label={label}>
-      <Text
-        x={x}
-        y={y}
-        width={maxWidth}
-        textAnchor="middle"
-        verticalAnchor={
-          Math.abs(y - cy) < 1 ? "middle" : y < cy ? "end" : "start"
-        }
-        fontSize={11}
-        lineHeight="1.2em"
-        fill="var(--color-muted-foreground)"
-      >
-        {label}
-      </Text>
-    </g>
   );
 }
 
