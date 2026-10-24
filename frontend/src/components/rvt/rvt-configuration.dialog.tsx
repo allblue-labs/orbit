@@ -50,7 +50,7 @@ import {
   useRvtMaintenanceTypes,
 } from "@/hooks/rvt/use-rvt";
 import { useActiveScope } from "@/providers/use-active-scope";
-import { useSession } from "@/providers/session-provider";
+import { useTimeZone } from "@/hooks/use-timezone";
 import { SCHEDULE_MODE, cadenciaDe } from "@/registry";
 
 export function RvtConfigurationDialog({
@@ -78,7 +78,7 @@ export function RvtConfigurationDialog({
 }
 
 function CreateForm({ onDone }: { onDone: () => void }) {
-  const session = useSession();
+  const { timeZone: timezone } = useTimeZone();
   const { businessUnitId } = useActiveScope();
   const customers = useCustomersList({ limit: 100 });
   const create = useCreateRvtConfiguration();
@@ -93,9 +93,6 @@ function CreateForm({ onDone }: { onDone: () => void }) {
   const [coverageEnd, setCoverageEnd] = useState("");
   const [city, setCity] = useState("");
   const [requiresRt, setRequiresRt] = useState(false);
-
-  /** O fuso é o do usuário da sessão — a mesma autoridade que a Agenda usa. */
-  const timezone = session.user?.timezone ?? "America/Recife";
 
   /**
    * Vigência final só é exigida quando há repetição.
@@ -135,7 +132,8 @@ function CreateForm({ onDone }: { onDone: () => void }) {
       <DialogHeader>
         <DialogTitle>Nova visita técnica</DialogTitle>
         <DialogDescription>
-          A configuração define a regra. As visitas previstas são geradas a partir dela e projetadas na Agenda.
+          A configuração define a regra. As visitas previstas são geradas a
+          partir dela e projetadas na Agenda.
         </DialogDescription>
       </DialogHeader>
 

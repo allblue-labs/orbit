@@ -37,7 +37,8 @@ import {
   useEquipmentQr,
   useRotateEquipmentQr,
 } from "@/hooks/equipment-qr/use-equipment-qr";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { cn } from "@/lib/utils";
 import { useSession } from "@/providers/session-provider";
 import { LABEL_FORMATS, qrStatus, type QrTone } from "@/registry";
@@ -53,6 +54,7 @@ const TONE: Readonly<Record<QrTone, string>> = {
 };
 
 export function IdentifierSection({ asset }: { asset: Asset }) {
+  const { formatDateTime } = useDateFormatters();
   const session = useSession();
   const canManage = session.hasPermission("assets.qr.manage");
   const qr = useEquipmentQr(asset.id);

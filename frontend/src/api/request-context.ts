@@ -24,6 +24,14 @@ function detectLocale(): string {
   return navigator.language || DEFAULT_LOCALE;
 }
 
+/** Device defaults must not inherit a previous signed-in user's preferences. */
+export function getDeviceContext(): Pick<
+  AmbientContext,
+  "locale" | "timezone"
+> {
+  return { locale: detectLocale(), timezone: detectTimezone() };
+}
+
 let ambient: AmbientContext = {
   organizationId: null,
   businessUnitId: null,

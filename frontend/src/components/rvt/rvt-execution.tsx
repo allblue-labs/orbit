@@ -34,7 +34,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRvtExecution } from "@/hooks/rvt/use-rvt";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { ROUTES } from "@/lib/routes";
 import { readAcknowledgement, readNotes, type RvtNote } from "@/types/rvt";
 import type { RvtExecution } from "@/types/rvt";
@@ -85,6 +86,7 @@ export function RvtExecutionWorkspace({
 }
 
 function ExecutionHeader({ execution }: { execution: RvtExecution }) {
+  const { formatDateTime } = useDateFormatters();
   return (
     <header className="space-y-3 rounded-xl border border-border p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -410,6 +412,7 @@ function EvidenceSection({ execution }: { execution: RvtExecution }) {
  * cliente — é o registro de que alguém, presente na visita, deu ciência.
  */
 function AcknowledgementSection({ execution }: { execution: RvtExecution }) {
+  const { formatDateTime } = useDateFormatters();
   const acknowledgement = readAcknowledgement(
     execution.customerAcknowledgement,
   );

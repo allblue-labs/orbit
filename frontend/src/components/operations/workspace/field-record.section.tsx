@@ -28,12 +28,9 @@ import { PenLine } from "lucide-react";
 
 import { PanelFrame, PanelState, type PanelQuery } from "@/components/panels";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { formatDateTime } from "@/lib/formatters";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import type {
   OperationFieldEvidence,
   OperationFieldRecord,
@@ -66,6 +63,7 @@ export function FieldRecordSection({
 }: {
   query: PanelQuery<OperationFieldRecord>;
 }) {
+  const { formatDateTime } = useDateFormatters();
   const [aberta, setAberta] = useState<OperationFieldEvidence | null>(null);
 
   return (
@@ -105,9 +103,7 @@ export function FieldRecordSection({
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
                               src={item.url}
-                              alt={
-                                CATEGORIES[item.category] ?? item.category
-                              }
+                              alt={CATEGORIES[item.category] ?? item.category}
                               loading="lazy"
                               className="aspect-4/3 w-full object-cover transition group-hover:opacity-90"
                             />
@@ -191,7 +187,9 @@ export function FieldRecordSection({
         <DialogContent className="max-w-3xl">
           <DialogTitle className="text-sm font-medium">
             {aberta ? (CATEGORIES[aberta.category] ?? aberta.category) : ""}
-            {aberta?.capturedAt ? ` · ${formatDateTime(aberta.capturedAt)}` : ""}
+            {aberta?.capturedAt
+              ? ` · ${formatDateTime(aberta.capturedAt)}`
+              : ""}
           </DialogTitle>
           {aberta ? (
             /* eslint-disable-next-line @next/next/no-img-element */

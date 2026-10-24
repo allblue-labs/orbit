@@ -52,7 +52,8 @@ import {
   useRequestRender,
 } from "@/hooks/documents/use-documents";
 import type { useRenderState } from "@/hooks/documents/use-documents";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 
 export function RenderPanel({
   executionId,
@@ -61,6 +62,7 @@ export function RenderPanel({
   executionId: string;
   query: ReturnType<typeof useRenderState>;
 }) {
+  const { formatDateTime } = useDateFormatters();
   const request = useRequestRender(executionId);
   const {
     renderers,

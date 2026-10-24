@@ -29,7 +29,8 @@ import { Button } from "@/components/ui/button";
 import { useAction } from "@/actions";
 import { useInventoryMovements } from "@/hooks/inventory/use-inventory";
 import { useSession } from "@/providers/session-provider";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import type { Operation } from "@/types/operations";
 import {
   MovementTypeBadge,
@@ -61,6 +62,7 @@ function Materials({
 }: {
   operation: Pick<Operation, "id" | "businessUnitId">;
 }) {
+  const { formatDateTime } = useDateFormatters();
   const query = useInventoryMovements({
     operationId: operation.id,
     limit: 50,
@@ -126,9 +128,9 @@ function Materials({
       <p className="mt-4 flex items-start gap-2 text-xs text-muted-foreground">
         <PackageMinus className="mt-0.5 size-3.5 shrink-0" aria-hidden />
         <span>
-          O que aparece aqui é o material que <strong>saiu da prateleira</strong>{" "}
-          por causa desta operação — registrado por quem esteve em campo. Nada é
-          deduzido de orçamento.
+          O que aparece aqui é o material que{" "}
+          <strong>saiu da prateleira</strong> por causa desta operação —
+          registrado por quem esteve em campo. Nada é deduzido de orçamento.
         </span>
       </p>
 

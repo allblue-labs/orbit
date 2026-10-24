@@ -40,7 +40,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useArtifactExecutionsList } from "@/hooks/artifact-executions/use-artifact-executions";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { ROUTES } from "@/lib/routes";
 import { useSession } from "@/providers/session-provider";
 import { useActiveScope } from "@/providers/use-active-scope";
@@ -66,6 +67,7 @@ const RENDER_LABELS: Readonly<Record<string, { label: string; tone: string }>> =
   };
 
 export function FinancialReceiptsTab() {
+  const { formatDateTime } = useDateFormatters();
   const session = useSession();
   const { businessUnitId } = useActiveScope();
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -133,10 +135,7 @@ export function FinancialReceiptsTab() {
                       <Badge
                         variant={
                           estado.tone as
-                            | "default"
-                            | "secondary"
-                            | "outline"
-                            | "destructive"
+                            "default" | "secondary" | "outline" | "destructive"
                         }
                       >
                         {estado.label}

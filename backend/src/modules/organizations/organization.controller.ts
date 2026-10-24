@@ -15,7 +15,7 @@ import {
 import { ApiTags } from '@nestjs/swagger';
 import { Permissions, Surfaces } from '../../decorators';
 import { PaginationHelper } from '../../database/helpers/database.helpers';
-import { ForbiddenException } from '../../exceptions';
+import { ConflictException, ForbiddenException } from '../../exceptions';
 import { ParseUUIDv7Pipe } from '../../pipes';
 import type { IdentityRequest } from '../identity/infrastructure/jwt-authentication.guard';
 import { RequiresActivePlan } from '../subscription-plans/plan-access';
@@ -40,12 +40,17 @@ export class OrganizationController {
   ) {}
 
   @Post()
-  async create(
+  create(
     @Req() request: IdentityRequest,
     @Body() input: CreateOrganizationDto,
   ) {
-    return this.readModels.context(
-      await this.organizations.create(request.identity!.id, input),
+    // Este endpoint antigo criava outro tenant com avaliação sem consultar a
+    // assinatura. Organizações adicionais são BusinessUnits da conta existente.
+    void request;
+    void input;
+    throw new ConflictException(
+      'Use the existing account organization flow',
+      'REGISTRATION_USE_EXISTING_ACCOUNT',
     );
   }
 

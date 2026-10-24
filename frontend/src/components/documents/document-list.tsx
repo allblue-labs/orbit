@@ -39,7 +39,8 @@ import {
 } from "@/components/ui/table";
 import { RenderStatusBadge } from "@/documents";
 import { EntityLink } from "@/entities/entity-components";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { cn } from "@/lib/utils";
 import {
   ISSUED_DOCUMENT_SOURCE_LABELS,
@@ -63,6 +64,7 @@ export function DocumentList({
   reportTypes: ReportTypeLabels;
   onOpen: (executionId: string) => void;
 }) {
+  const { formatDateTime } = useDateFormatters();
   if (documents.length === 0) {
     return (
       <EmptyState

@@ -33,7 +33,7 @@
  * Produtividade por técnico também não — é a mesma ausência que já deixa o
  * widget "Desempenho da Equipe" sem fonte. Ausências declaradas no rodapé.
  */
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   Legend,
   PolarAngleAxis,
@@ -42,6 +42,7 @@ import {
   Radar,
   RadarChart,
   ResponsiveContainer,
+  Text,
   Tooltip,
 } from "recharts";
 
@@ -114,6 +115,8 @@ function comparableCounts(
 
 export function ComparativeRadarWidget({ widget, comparison }: WidgetProps) {
   const { current, previous, windows } = comparison;
+  const [chartWidth, setChartWidth] = useState(0);
+  const labelWidth = Math.max(64, Math.min(112, chartWidth * 0.35));
 
   const rows = useMemo(
     () =>
@@ -136,20 +139,22 @@ export function ComparativeRadarWidget({ widget, comparison }: WidgetProps) {
       panelId={widget.id}
       title={widget.title}
       description={`${windows.thisMonth.label} · ${windows.lastMonth.label}`}
-      height={340}
+      height={400}
     >
       <ComparisonState current={current} previous={previous} rows={rows}>
         <div className="flex h-full flex-col">
-          <div className="min-h-0 flex-1">
-            <ResponsiveContainer width="100%" height="100%">
-              <RadarChart data={[...rows]} outerRadius="72%">
+          <div className="min-h-0 min-w-0 flex-1">
+            <ResponsiveContainer
+              width="100%"
+              height="100%"
+              onResize={(width) => setChartWidth(width)}
+            >
+              <RadarChart data={[...rows]} outerRadius="56%">
                 <PolarGrid stroke="var(--color-border)" />
                 <PolarAngleAxis
                   dataKey="axis"
-                  tick={{
-                    fontSize: 11,
-                    fill: "var(--color-muted-foreground)",
-                  }}
+                  tickSize={4}
+                  tick={<RadarAxisLabel maxWidth={labelWidth} />}
                 />
                 <PolarRadiusAxis
                   domain={[0, 100]}
@@ -210,6 +215,42 @@ export function ComparativeRadarWidget({ widget, comparison }: WidgetProps) {
         </div>
       </ComparisonState>
     </PanelChartFrame>
+  );
+}
+
+/** Wrap full axis names within the card instead of clipping a single line. */
+function RadarAxisLabel({
+  x = 0,
+  y = 0,
+  cy = 0,
+  payload,
+  maxWidth,
+}: {
+  x?: number;
+  y?: number;
+  cy?: number;
+  payload?: { value: string | number };
+  maxWidth: number;
+}) {
+  if (!payload) return <g />;
+  const label = String(payload.value);
+  return (
+    <g aria-label={label}>
+      <Text
+        x={x}
+        y={y}
+        width={maxWidth}
+        textAnchor="middle"
+        verticalAnchor={
+          Math.abs(y - cy) < 1 ? "middle" : y < cy ? "end" : "start"
+        }
+        fontSize={11}
+        lineHeight="1.2em"
+        fill="var(--color-muted-foreground)"
+      >
+        {label}
+      </Text>
+    </g>
   );
 }
 

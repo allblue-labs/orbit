@@ -214,7 +214,11 @@ export class SchedulingController {
   @ApiOperation({ summary: 'Return day, week or month agenda Read Model' })
   @ApiOkResponse({ description: 'Agenda grouped by day' })
   agenda(@Req() request: IdentityRequest, @Query() query: AgendaQueryDto) {
-    return this.scheduling.agenda(this.org(request), query);
+    return this.scheduling.agenda(
+      this.org(request),
+      query,
+      request.identity!.id,
+    );
   }
 
   @Get('availability')
@@ -270,7 +274,10 @@ export class SchedulingController {
   @Permissions('scheduling.read')
   @ApiOperation({ summary: 'Return the Scheduling Read Model for Dashboard' })
   dashboard(@Req() request: IdentityRequest) {
-    return this.scheduling.dashboardReadModel(this.org(request));
+    return this.scheduling.dashboardReadModel(
+      this.org(request),
+      request.identity!.id,
+    );
   }
 
   private org(request: IdentityRequest) {

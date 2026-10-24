@@ -167,10 +167,11 @@ export function CatalogItemsTab({
       >
         {(rows) => (
           <div className="glass-panel overflow-x-auto rounded-xl">
-            <Table>
+            <Table className="min-w-[48rem]">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Item</TableHead>
+                  <TableHead className="w-40">SKU</TableHead>
+                  <TableHead>Nome</TableHead>
                   <TableHead>Categoria</TableHead>
                   <TableHead>Disponibilidade</TableHead>
                   <TableHead>Preço</TableHead>
@@ -248,17 +249,17 @@ function ItemRow({
 
   return (
     <TableRow>
+      <TableCell className="min-w-32 max-w-56 break-all">
+        <SkuLabel sku={item.sku} />
+      </TableCell>
       <TableCell>
-        <div className="min-w-0 space-y-1">
-          <button
-            type="button"
-            onClick={onOpen}
-            className="text-left font-medium hover:underline"
-          >
-            {item.name}
-          </button>
-          <SkuLabel sku={item.sku} />
-        </div>
+        <button
+          type="button"
+          onClick={onOpen}
+          className="block min-w-48 max-w-md whitespace-normal text-left font-medium [overflow-wrap:anywhere] hover:underline"
+        >
+          {item.name}
+        </button>
       </TableCell>
       <TableCell className="text-sm text-muted-foreground">
         {item.category?.name ?? "—"}

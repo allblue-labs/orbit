@@ -40,6 +40,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useTimeZone } from "@/hooks/use-timezone";
 import { useSession } from "@/providers/session-provider";
 import { ROUTE_ASSINATURA, dataDeVencimento } from "./subscription-access";
 import { useAvisoDeAssinatura } from "./subscription-notice-provider";
@@ -47,10 +48,11 @@ import { expiredSubscriptionNotice } from "./billing-session";
 
 export function SubscriptionExpiredNotice() {
   const session = useSession();
+  const { timeZone } = useTimeZone();
   const { dispensado, dispensar } = useAvisoDeAssinatura();
   const notice = expiredSubscriptionNotice(session.session);
   if (!notice) return null;
-  const venceuEm = dataDeVencimento(notice.end);
+  const venceuEm = dataDeVencimento(notice.end, timeZone);
   const purged =
     session.session.authenticated &&
     !!session.session.subscription?.dataPurgedAt;
@@ -107,6 +109,7 @@ export function SubscriptionExpiredNotice() {
               acesso, até{" "}
               {dataDeVencimento(
                 session.session.subscription.dataRetentionEndsAt,
+                timeZone,
               )}
               . Sem recontratação, serão excluídos automaticamente ao final
               desse prazo.

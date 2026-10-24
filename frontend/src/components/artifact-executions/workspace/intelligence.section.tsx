@@ -26,7 +26,8 @@ import {
 
 import { PanelFrame } from "@/components/panels";
 import { Badge } from "@/components/ui/badge";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import type {
   ArtifactExecution,
   ArtifactExecutionInsight,
@@ -87,6 +88,7 @@ export function IntelligenceSection({
 }
 
 function InsightRow({ insight }: { insight: ArtifactExecutionInsight }) {
+  const { formatDateTime } = useDateFormatters();
   return (
     <li className="space-y-1 rounded-lg border border-border px-3 py-2">
       <div className="flex flex-wrap items-center gap-2">

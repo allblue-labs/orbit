@@ -75,7 +75,8 @@ import {
   type CommissionStatus,
 } from "@/types/commissions";
 import { FORMATTERS } from "@/metrics";
-import { formatDate, formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { useSession } from "@/providers/session-provider";
 
 /** `Select` não aceita item de valor vazio — "todas" precisa de um valor. */
@@ -86,6 +87,7 @@ const keyOf = (commission: Commission): string =>
   `${commission.operationId}:${commission.role}`;
 
 export function CommissionDetail({ userId }: { userId: string }) {
+  const { formatDate, formatDateTime } = useDateFormatters();
   const session = useSession();
   const canManage =
     session.hasPermission("financial.manage") &&
@@ -585,6 +587,7 @@ export function CommissionDetail({ userId }: { userId: string }) {
  * e é a pergunta seguinte de quem lê a lista meses depois.
  */
 function SituacaoDaComissao({ comissao }: { comissao: Commission }) {
+  const { formatDate } = useDateFormatters();
   if (comissao.status === "PAID") {
     return (
       <Badge variant="secondary">

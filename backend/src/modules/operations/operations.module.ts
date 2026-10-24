@@ -19,9 +19,10 @@ import { StorageModule } from '../storage/storage.module';
      evidência e a assinatura do cliente moram no storage, não no banco. */
   imports: [WorkforceModule, NotificationsModule, StorageModule],
   controllers: [
+    // Register this static path before OperationController's GET /operations/:id.
+    OperationCancellationController,
     OperationController,
     ChecklistController,
-    OperationCancellationController,
   ],
   providers: [
     OperationRepository,

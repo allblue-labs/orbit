@@ -29,7 +29,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useRvtConfigurations } from "@/hooks/rvt/use-rvt";
-import { formatDate } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { ROUTES } from "@/lib/routes";
 import { useSession } from "@/providers/session-provider";
 import { CONFIGURATION_STATUS, isOneTime, recurrenceLabel } from "@/registry";
@@ -57,6 +58,7 @@ function nextOccurrence(configuration: RvtConfiguration) {
 }
 
 export function RvtList({ onCreate }: { onCreate: () => void }) {
+  const { formatDate } = useDateFormatters();
   const session = useSession();
   const canManage = session.hasPermission("rvt.manage");
   /**

@@ -26,11 +26,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PanelError, PanelLoading } from "@/components/panels";
-import {
-  useProfile,
-  useUpdateProfile,
-} from "@/hooks/profile/use-profile";
-import { formatDateTime, initialsOf } from "@/lib/formatters";
+import { useProfile, useUpdateProfile } from "@/hooks/profile/use-profile";
+import { initialsOf } from "@/lib/formatters";
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { PROFILE_LIMITS, type UserProfile } from "@/types/settings";
 import { AvatarSection } from "./avatar.section";
 import { SignatureSection } from "./signature.section";
@@ -72,6 +70,7 @@ export function PersonalDataTab() {
 }
 
 function Form({ profile }: { profile: UserProfile }) {
+  const { formatDateTime } = useDateFormatters();
   const update = useUpdateProfile();
 
   const [firstName, setFirstName] = useState(profile.firstName ?? "");
@@ -153,10 +152,10 @@ function Form({ profile }: { profile: UserProfile }) {
 
       <section className="space-y-3 rounded-xl border border-border p-5">
         {/*
-          * Cada bloco de "Minha conta" é uma seção logo abaixo do título da
-          * página, então o nível é `h2`. Eram `h3`, e quem navega por
-          * cabeçalhos pulava um degrau que não existia.
-          */}
+         * Cada bloco de "Minha conta" é uma seção logo abaixo do título da
+         * página, então o nível é `h2`. Eram `h3`, e quem navega por
+         * cabeçalhos pulava um degrau que não existia.
+         */}
         <h2 className="text-sm font-medium">Identidade da conta</h2>
 
         <dl className="grid gap-4 sm:grid-cols-2">

@@ -120,7 +120,7 @@ function EventDetailBody({
   }
 
   const event = query.data;
-  const zone = event.timezone || timeZone;
+  const zone = timeZone;
   const operationId =
     event.sourceModule === "operations" ? event.sourceEntityId : null;
 
@@ -165,8 +165,10 @@ function EventDetailBody({
             )}
           </p>
           <p className="pl-6 text-xs text-muted-foreground">
-            Fuso do evento: {zone}
-            {zone !== timeZone ? " (diferente do fuso da visão)" : ""}
+            Horários no fuso: {zone}
+            {event.timezone !== zone
+              ? ` · Fuso de criação: ${event.timezone}`
+              : ""}
           </p>
         </section>
 

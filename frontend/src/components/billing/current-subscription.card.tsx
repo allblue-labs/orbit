@@ -12,7 +12,8 @@ import { CalendarClock, CreditCard } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PanelFrame } from "@/components/panels";
-import { formatDate } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { useSession } from "@/providers/session-provider";
 import { BILLING_INTERVAL_LABELS, type BillingOverview } from "@/types/billing";
 import { derivarAcoes } from "./billing-actions";
@@ -75,6 +76,7 @@ export function CurrentSubscriptionCard({
   portalPending,
   commandPending,
 }: Props) {
+  const { formatDate } = useDateFormatters();
   const { subscription, catalog, entitlements } = overview;
   const session = useSession();
 

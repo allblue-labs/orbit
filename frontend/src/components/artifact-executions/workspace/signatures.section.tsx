@@ -25,7 +25,8 @@ import { CircleDashed, Lock, PenLine, ShieldOff } from "lucide-react";
 
 import { PanelFrame } from "@/components/panels";
 import { Badge } from "@/components/ui/badge";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { cn } from "@/lib/utils";
 import type { ArtifactExecution } from "@/types/artifact-executions";
 
@@ -52,6 +53,7 @@ export function SignaturesSection({
   execution: ArtifactExecution;
   writable: boolean;
 }) {
+  const { formatDateTime } = useDateFormatters();
   const slots = [...execution.snapshot.signatureSlots].sort(
     (a, b) => a.order - b.order,
   );

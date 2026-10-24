@@ -116,6 +116,36 @@ const entries = [
     'Os dados foram alterados. Atualize e tente novamente.',
   ],
   [
+    'REGISTRATION_DOCUMENT_ALREADY_EXISTS',
+    HttpStatus.CONFLICT,
+    'Este CPF ou CNPJ já está vinculado a uma conta do Orbit. Entre na conta existente para continuar a assinatura ou cadastrar outras organizações, conforme os limites do plano. Se precisar de ajuda para recuperar o acesso, contate o suporte.',
+  ],
+  [
+    'REGISTRATION_EMAIL_ALREADY_EXISTS',
+    HttpStatus.CONFLICT,
+    'Este e-mail já está cadastrado no Orbit. Entre na sua conta ou recupere a senha. Para uma nova conta com outro CPF ou CNPJ, informe outro e-mail.',
+  ],
+  [
+    'REGISTRATION_ORGANIZATION_NAME_UNAVAILABLE',
+    HttpStatus.CONFLICT,
+    'Já existe uma conta com este nome de organização. Informe outro nome para continuar; a razão social pode ser mantida.',
+  ],
+  [
+    'REGISTRATION_CONFLICT',
+    HttpStatus.CONFLICT,
+    'Um dado deste cadastro já está em uso. Se você já possui uma conta, entre para continuar a assinatura. Caso contrário, contate o suporte para identificar o cadastro existente.',
+  ],
+  [
+    'REGISTRATION_USE_EXISTING_ACCOUNT',
+    HttpStatus.CONFLICT,
+    'Cadastre outras organizações em Configurações > Organização na sua conta existente, conforme os limites da assinatura.',
+  ],
+  [
+    'BUSINESS_UNIT_NAME_ALREADY_EXISTS',
+    HttpStatus.CONFLICT,
+    'Já existe uma organização com este nome na sua conta. Informe um nome fantasia diferente para identificá-la; o CPF ou CNPJ pode ser o mesmo.',
+  ],
+  [
     'STALE_VERSION',
     HttpStatus.CONFLICT,
     'Os dados foram alterados. Atualize e tente novamente.',

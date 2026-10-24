@@ -14,6 +14,8 @@
  * categorias oferecidas no filtro saem dos tipos que realmente apareceram na
  * página — não de uma lista inventada aqui.
  */
+import { DEFAULT_TIMEZONE } from "@/lib/env";
+import { addZonedDays, zonedDateKey } from "@/lib/scheduling/timezone";
 import {
   Bell,
   CalendarClock,
@@ -126,36 +128,33 @@ export function notificationStatusLabel(status: string): string {
  * Agrupamento por dia.
  *
  * Rótulos relativos só para hoje e ontem; além disso, a data. O agrupamento
- * usa o fuso do navegador — diferente da agenda, uma notificação não tem fuso
- * próprio no contrato, e o instante é o mesmo para quem recebeu.
+ * usa a preferência de fuso da conta, inclusive nas fronteiras de dia.
  */
 export function groupByDay(
   notifications: readonly { id: string; createdAt: string }[],
+  timeZone = DEFAULT_TIMEZONE,
+  now = new Date(),
 ): readonly { key: string; label: string; ids: readonly string[] }[] {
   const groups = new Map<string, string[]>();
 
   for (const notification of notifications) {
     const date = new Date(notification.createdAt);
     if (Number.isNaN(date.getTime())) continue;
-    const key = date.toISOString().slice(0, 10);
+    const key = zonedDateKey(date, timeZone);
     groups.set(key, [...(groups.get(key) ?? []), notification.id]);
   }
 
   return [...groups.entries()]
     .sort((left, right) => right[0].localeCompare(left[0]))
-    .map(([key, ids]) => ({ key, label: dayLabel(key), ids }));
+    .map(([key, ids]) => ({ key, label: dayLabel(key, timeZone, now), ids }));
 }
 
-function dayLabel(key: string): string {
-  const today = new Date();
-  const todayKey = today.toISOString().slice(0, 10);
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-
-  if (key === todayKey) return "Hoje";
-  if (key === yesterday.toISOString().slice(0, 10)) return "Ontem";
-
+function dayLabel(key: string, timeZone: string, now: Date): string {
+  if (key === zonedDateKey(now, timeZone)) return "Hoje";
+  if (key === zonedDateKey(addZonedDays(now, -1, timeZone), timeZone))
+    return "Ontem";
   return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "UTC",
     day: "2-digit",
     month: "long",
     year: "numeric",
@@ -174,7 +173,11 @@ function dayLabel(key: string): string {
  */
 const RELATIVO = new Intl.RelativeTimeFormat("pt-BR", { numeric: "auto" });
 
-const ESCALAS: readonly { limite: number; unidade: Intl.RelativeTimeFormatUnit; em: number }[] = [
+const ESCALAS: readonly {
+  limite: number;
+  unidade: Intl.RelativeTimeFormatUnit;
+  em: number;
+}[] = [
   { limite: 60_000, unidade: "second", em: 1_000 },
   { limite: 3_600_000, unidade: "minute", em: 60_000 },
   { limite: 86_400_000, unidade: "hour", em: 3_600_000 },

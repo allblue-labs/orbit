@@ -22,6 +22,7 @@
  * prioridade (não existem no modelo `Notification`). Marcar em lote **existe**
  * (`PATCH /read-all`) e está implementado.
  */
+import { useTimeZone } from "@/hooks/use-timezone";
 import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { BellOff, CheckCheck, Filter, RefreshCw } from "lucide-react";
@@ -41,7 +42,8 @@ import {
   useMarkNotificationRead,
   useNotifications,
 } from "@/hooks/notifications/use-notifications";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { cn } from "@/lib/utils";
 import { NotificationStatus } from "@/types/contracts";
 import type {
@@ -67,6 +69,7 @@ const STATUS_OPTIONS = Object.values(NotificationStatus).map((status) => ({
 }));
 
 export function NotificationCenter() {
+  const { timeZone } = useTimeZone();
   const router = useRouter();
   const list = useListController<NotificationQuery>({ limit: 20 });
 
@@ -86,12 +89,16 @@ export function NotificationCenter() {
    */
   const typeOptions = useMemo(() => {
     const seen = new Set(notifications.map((item) => item.type));
-    return [...seen]
-      .sort()
-      .map((type) => ({ value: type, label: notificationCategory(type).label }));
+    return [...seen].sort().map((type) => ({
+      value: type,
+      label: notificationCategory(type).label,
+    }));
   }, [notifications]);
 
-  const groups = useMemo(() => groupByDay(notifications), [notifications]);
+  const groups = useMemo(
+    () => groupByDay(notifications, timeZone),
+    [notifications, timeZone],
+  );
   const byId = useMemo(
     () => new Map(notifications.map((item) => [item.id, item])),
     [notifications],
@@ -133,7 +140,10 @@ export function NotificationCenter() {
           <Button
             variant={list.query.unreadOnly ? "default" : "outline"}
             onClick={() =>
-              list.setFilter("unreadOnly", list.query.unreadOnly ? undefined : true)
+              list.setFilter(
+                "unreadOnly",
+                list.query.unreadOnly ? undefined : true,
+              )
             }
           >
             <Filter className="size-4" />
@@ -173,7 +183,8 @@ export function NotificationCenter() {
             : "Carregando…"}
         </p>
         <p className="text-xs text-muted-foreground">
-          Atualiza a cada {Math.round(NOTIFICATIONS_POLL_MS / 1000)}s — a atualização em tempo real ainda não está disponível nesta tela
+          Atualiza a cada {Math.round(NOTIFICATIONS_POLL_MS / 1000)}s — a
+          atualização em tempo real ainda não está disponível nesta tela
         </p>
       </div>
 
@@ -207,7 +218,9 @@ export function NotificationCenter() {
                       <NotificationRow
                         key={id}
                         notification={notification}
-                        pending={markRead.isPending && markRead.variables === id}
+                        pending={
+                          markRead.isPending && markRead.variables === id
+                        }
                         onOpen={() => open(notification)}
                       />
                     );
@@ -238,6 +251,7 @@ function NotificationRow({
   pending: boolean;
   onOpen: () => void;
 }) {
+  const { formatDateTime } = useDateFormatters();
   const reference = readResourceReference(notification.payload);
   const href = reference ? resourceHref(reference) : null;
   const unread = notification.readAt === null;

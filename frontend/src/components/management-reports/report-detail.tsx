@@ -43,7 +43,8 @@ import {
   useManagementReport,
   useReportSignedUrl,
 } from "@/hooks/management-reports/use-management-reports";
-import { formatDate, formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { isInFlight, type ManagementReport } from "@/types/management-reports";
 import {
   ReportStatusBadge,
@@ -85,7 +86,10 @@ export function ReportDetail({
           para de lê-lo — inclusive um que ele mesmo gerou. `PanelError` já
           distingue os dois.
         */}
-        <PanelError error={report.error} onRetry={() => void report.refetch()} />
+        <PanelError
+          error={report.error}
+          onRetry={() => void report.refetch()}
+        />
       </PanelFrame>
     );
   }
@@ -122,6 +126,7 @@ function GenerationPanel({
   report: ManagementReport;
   onRepeat?: (report: ManagementReport) => void;
 }) {
+  const { formatDate, formatDateTime } = useDateFormatters();
   const repeat = useAction("management-report.repeat");
 
   return (
@@ -141,10 +146,16 @@ function GenerationPanel({
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
           <ReportStatusBadge status={report.status} />
-          <Badge variant="outline" className="border-border text-muted-foreground">
+          <Badge
+            variant="outline"
+            className="border-border text-muted-foreground"
+          >
             {report.businessUnit?.name ?? "Toda a organização"}
           </Badge>
-          <Badge variant="outline" className="border-border text-muted-foreground">
+          <Badge
+            variant="outline"
+            className="border-border text-muted-foreground"
+          >
             {report.format}
           </Badge>
         </div>
@@ -155,10 +166,7 @@ function GenerationPanel({
             value={`${formatDate(report.period.from)} a ${formatDate(report.period.to)}`}
             hint={`Horários no fuso ${report.period.timezone}.`}
           />
-          <Field
-            label="Gerado por"
-            value={report.generatedBy.displayName}
-          />
+          <Field label="Gerado por" value={report.generatedBy.displayName} />
           <Field
             label="Gerado em"
             value={
@@ -328,6 +336,7 @@ function FailedNotice({ report }: { report: ManagementReport }) {
  * enquanto a tela estiver aberta (mesmo ciclo de vida do Document Center).
  */
 function FilePanel({ report }: { report: ManagementReport }) {
+  const { formatDateTime } = useDateFormatters();
   const [operation, setOperation] = useState<"preview" | "download">("preview");
   const signed = useReportSignedUrl(report.id, operation, report.hasFile);
   const download = useAction("management-report.download");
@@ -340,8 +349,8 @@ function FilePanel({ report }: { report: ManagementReport }) {
         description="Nenhum arquivo emitido"
       >
         <p className="text-sm text-muted-foreground">
-          Este relatório não tem arquivo. Os números continuam disponíveis
-          acima — o conteúdo é o relatório; o PDF é uma forma de levá-lo.
+          Este relatório não tem arquivo. Os números continuam disponíveis acima
+          — o conteúdo é o relatório; o PDF é uma forma de levá-lo.
         </p>
       </PanelFrame>
     );
@@ -415,7 +424,8 @@ function FilePanel({ report }: { report: ManagementReport }) {
             <p className="text-xs text-muted-foreground">
               Acesso temporário, renovado automaticamente enquanto esta tela
               estiver aberta — o atual vale até{" "}
-              {formatDateTime(signed.data.expiresAt)}. O link é temporário e pessoal; o arquivo nunca é acessado diretamente.
+              {formatDateTime(signed.data.expiresAt)}. O link é temporário e
+              pessoal; o arquivo nunca é acessado diretamente.
             </p>
           </div>
         ) : null}

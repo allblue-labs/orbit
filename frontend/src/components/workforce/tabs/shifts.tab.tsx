@@ -44,6 +44,7 @@ import {
 } from "@/hooks/scheduling/use-scheduling";
 import { useTeamMembers } from "@/hooks/workforce/use-workforce";
 import { cn } from "@/lib/utils";
+import { useTimeZone } from "@/hooks/use-timezone";
 import { ListState } from "@/workspace";
 
 const WEEKDAYS = [
@@ -69,6 +70,7 @@ function toMinutes(value: string): number {
 }
 
 export function ShiftsTab() {
+  const { timeZone } = useTimeZone();
   const members = useTeamMembers({ page: 1, limit: 100 });
   const shifts = useWorkforceManagement().shifts;
 
@@ -113,7 +115,7 @@ export function ShiftsTab() {
         startMinute: toMinutes(start),
         endMinute: toMinutes(end),
         /** O fuso é o da organização; o backend o exige explicitamente. */
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        timezone: timeZone,
         reason: reason.trim() || undefined,
       },
       { onSuccess: () => setReason("") },
@@ -124,6 +126,9 @@ export function ShiftsTab() {
     <div className="space-y-5">
       <ManagementBlocked reason={shifts.reason} />
       <div className="space-y-1">
+        <p className="text-xs text-muted-foreground">
+          Novas janelas no fuso {timeZone}.
+        </p>
         <p className="text-sm text-muted-foreground">
           Janelas de disponibilidade e bloqueio por pessoa. É o que o motor de
           agenda consulta ao detectar conflito.

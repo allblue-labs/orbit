@@ -17,6 +17,8 @@
  *
  * Aqui só se **lê** essa resposta e se traduz em qual passo mostrar.
  */
+import { DEFAULT_TIMEZONE } from "@/lib/env";
+import { instantFromLocalInput } from "@/lib/scheduling/timezone";
 import type { PmocExecutionPreparation } from "@/types/pmoc";
 
 /**
@@ -105,8 +107,8 @@ export function isFinished(preparation: PmocExecutionPreparation): boolean {
   const execucao = preparation.existingExecution;
   return Boolean(
     execucao &&
-      execucao.status === "COMPLETED" &&
-      execucao.artifactExecution !== null,
+    execucao.status === "COMPLETED" &&
+    execucao.artifactExecution !== null,
   );
 }
 
@@ -124,6 +126,7 @@ export function stepIssues(
   step: AttendanceStep,
   draft: AttendanceDraft,
   preparation: PmocExecutionPreparation,
+  timeZone = DEFAULT_TIMEZONE,
 ): readonly string[] {
   const issues: string[] = [];
 
@@ -156,7 +159,10 @@ export function stepIssues(
       break;
 
     case "concluir":
-      if (draft.performedAt && isFuture(draft.performedAt)) {
+      if (
+        draft.performedAt &&
+        isFuture(draft.performedAt, Date.now(), timeZone)
+      ) {
         /* O servidor recusa data no futuro. Dizer aqui poupa a requisição e
            explica melhor que o 400 que voltaria. */
         issues.push(
@@ -178,8 +184,12 @@ export function stepIssues(
  * Um minuto de tolerância, como o servidor: relógios de máquinas diferentes não
  * batem no segundo, e recusar por causa disso seria recusar o caminho correto.
  */
-export function isFuture(local: string, now = Date.now()): boolean {
-  const escolhido = new Date(local).getTime();
+export function isFuture(
+  local: string,
+  now = Date.now(),
+  timeZone = DEFAULT_TIMEZONE,
+): boolean {
+  const escolhido = instantFromLocalInput(local, timeZone).getTime();
   if (Number.isNaN(escolhido)) return false;
   return escolhido > now + 60_000;
 }
@@ -199,12 +209,15 @@ export function startPayload(draft: AttendanceDraft) {
   };
 }
 
-export function completePayload(draft: AttendanceDraft) {
+export function completePayload(
+  draft: AttendanceDraft,
+  timeZone = DEFAULT_TIMEZONE,
+) {
   return {
     /* Vazio significa **agora**, e é o servidor que resolve o "agora" — o relógio
        do navegador pode estar errado, e a hora da manutenção é registro legal. */
     performedAt: draft.performedAt
-      ? new Date(draft.performedAt).toISOString()
+      ? instantFromLocalInput(draft.performedAt, timeZone).toISOString()
       : undefined,
     notes: draft.notes.trim() || undefined,
   };

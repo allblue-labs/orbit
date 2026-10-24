@@ -28,6 +28,7 @@ import { useApiQuery } from "@/hooks/api/use-api-query";
 import { CACHE } from "@/hooks/api/cache-policy";
 import { notificationsService } from "@/services/notifications.service";
 import { profileService } from "@/services/profile.service";
+import type { SessionState } from "@/types/session";
 import type {
   ChangePasswordInput,
   EnableMfaInput,
@@ -82,6 +83,22 @@ export function useUpdateProfile() {
       onSuccess: async (profile) => {
         /** Estado confirmado pelo servidor — não antecipação. */
         queryClient.setQueryData(profileService.keys.profile(), profile);
+        // Publish confirmed preferences immediately, while session revalidation
+        // refreshes the remaining profile fields (photo, MFA and permissions).
+        queryClient.setQueryData<SessionState>(
+          queryKeys.session(),
+          (session) =>
+            session?.authenticated
+              ? {
+                  ...session,
+                  user: {
+                    ...session.user,
+                    locale: profile.locale,
+                    timezone: profile.timezone,
+                  },
+                }
+              : session,
+        );
         /**
          * `displayName` aparece no topo, que lê da sessão da aplicação.
          * Sem isto, o nome antigo ficaria lá até a próxima navegação.

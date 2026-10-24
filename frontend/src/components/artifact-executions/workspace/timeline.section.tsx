@@ -33,7 +33,8 @@ import {
 } from "lucide-react";
 
 import { PanelFrame, PanelWithoutSource } from "@/components/panels";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import type { ArtifactExecution } from "@/types/artifact-executions";
 
 interface TimelineEntry {
@@ -48,6 +49,7 @@ export function TimelineSection({
 }: {
   execution: ArtifactExecution;
 }) {
+  const { formatDateTime } = useDateFormatters();
   const entries = useMemo(() => buildTimeline(execution), [execution]);
 
   return (

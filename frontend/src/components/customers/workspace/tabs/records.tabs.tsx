@@ -43,7 +43,8 @@ import {
   useCustomerExecutionsList,
   useCustomerOperationsList,
 } from "@/hooks/customers/use-customers";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import type { ArtifactExecutionQuery } from "@/types/artifact-executions";
 import type { OperationQuery } from "@/types/operations";
 import {
@@ -66,6 +67,7 @@ export function OperationsTab({
   customerId: string;
   customerLabel: string;
 }) {
+  const { formatDateTime } = useDateFormatters();
   const create = useAction("operation.create");
   const { timeZone } = useSchedulingTimeZone();
   const [formOpen, setFormOpen] = useState(false);
@@ -338,6 +340,7 @@ export function ExecutionsTab({ customerId }: { customerId: string }) {
  * download com URL assinada, sem uma segunda implementação.
  */
 export function DocumentsTab({ customerId }: { customerId: string }) {
+  const { formatDateTime } = useDateFormatters();
   const list = useListController<ArtifactExecutionQuery>({ limit: 10 });
   const query = useCustomerExecutionsList(customerId, list.query);
   const [selected, setSelected] = useState<string | null>(null);

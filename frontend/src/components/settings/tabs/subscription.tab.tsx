@@ -51,7 +51,8 @@ import {
   useKeepSubscription,
   useOpenBillingPortal,
 } from "@/hooks/billing/use-billing";
-import { formatDate } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { notifySuccess } from "@/lib/notify";
 import { diasAte } from "@/components/billing/billing-format";
 import { BILLING_INTERVAL_LABELS } from "@/types/billing";
@@ -65,6 +66,7 @@ type Confirmacao =
   | { tipo: "TROCAR"; planCode: string; intervalo: string };
 
 export function SubscriptionSettingsTab() {
+  const { formatDate } = useDateFormatters();
   const params = useSearchParams();
   const { refresh: refreshSession } = useSession();
   const overview = useBillingOverview();
@@ -353,6 +355,7 @@ function RetentionBanner({
 }: {
   overview: NonNullable<ReturnType<typeof useBillingOverview>["data"]>;
 }) {
+  const { formatDate, formatDateTime } = useDateFormatters();
   const subscription = overview.subscription;
   const deadline =
     overview.dataRetentionEndsAt ?? subscription?.dataRetentionEndsAt;
@@ -392,9 +395,9 @@ function RetentionBanner({
       </p>
       <p>
         Os dados operacionais serão mantidos por 30 dias após o fim do acesso,
-        até <strong>{new Date(deadline).toLocaleString("pt-BR")}</strong>. Sem
-        pagamento de uma nova contratação até esse prazo, serão excluídos
-        automaticamente. Apenas abrir o pagamento não preserva os dados.
+        até <strong>{formatDateTime(deadline)}</strong>. Sem pagamento de uma
+        nova contratação até esse prazo, serão excluídos automaticamente. Apenas
+        abrir o pagamento não preserva os dados.
       </p>
     </div>
   );
@@ -446,6 +449,7 @@ function ConfirmacaoDialog({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const { formatDate } = useDateFormatters();
   const assinatura = overview.subscription;
   if (!confirmacao || !assinatura) return null;
 

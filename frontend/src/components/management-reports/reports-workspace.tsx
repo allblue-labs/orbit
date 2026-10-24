@@ -64,7 +64,8 @@ import { ROUTES } from "@/lib/routes";
 import { useSession } from "@/providers/session-provider";
 import type { ManagementReportSummary } from "@/types/management-reports";
 import { MetricCard, TabBoundary } from "@/workspace";
-import { formatDate, formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { PeriodSnapshot } from "./period-snapshot";
 import { ReportGenerator } from "./report-generator";
 import { ReportHistory } from "./report-history";
@@ -302,6 +303,7 @@ function Overview({
   onGenerate: (period?: { from: string; to: string }) => void;
   onOpen: (report: { id: string }) => void;
 }) {
+  const { formatDate, formatDateTime } = useDateFormatters();
   const total = useManagementReportCount({});
   const inFlight = useManagementReportCount({ status: "GENERATING" });
   const queued = useManagementReportCount({ status: "PENDING" });

@@ -52,6 +52,8 @@ import {
   useFinancialSummary,
   useFinancialTimeline,
 } from "@/hooks/financial/use-financial";
+import { useTimeZone } from "@/hooks/use-timezone";
+import { zonedDateKey } from "@/lib/scheduling/timezone";
 import { useSession } from "@/providers/session-provider";
 import { ROUTES } from "@/lib/routes";
 import { FORMATTERS, resolveMetric } from "@/metrics";
@@ -69,6 +71,7 @@ const toDay = (iso: string | undefined): string | undefined =>
   iso?.slice(0, 10);
 
 export function FinancialHealthWidget({ widget, analytics }: WidgetProps) {
+  const { timeZone } = useTimeZone();
   const session = useSession();
   const allowed = session.hasCapability("financial.read");
 
@@ -98,7 +101,10 @@ export function FinancialHealthWidget({ widget, analytics }: WidgetProps) {
    */
   const timeline = useFinancialTimeline(
     allowed
-      ? { ...historyWindow(query.to), businessUnitId: query.businessUnitId }
+      ? {
+          ...historyWindow(query.to, new Date(), timeZone),
+          businessUnitId: query.businessUnitId,
+        }
       : undefined,
   );
 
@@ -253,6 +259,7 @@ function TimelineChart({
 }: {
   query: ReturnType<typeof useFinancialTimeline>;
 }) {
+  const { timeZone } = useTimeZone();
   const points = (query.data ?? []).map((point) => ({
     month: point.month,
     label: formatMonth(point.month),
@@ -293,7 +300,7 @@ function TimelineChart({
 
   /* O mês de hoje, no formato da série. `sv-SE` dá `YYYY-MM-DD` sem depender de
      montar a data à mão com `padStart`. */
-  const hoje = new Date().toLocaleDateString("sv-SE").slice(0, 7);
+  const hoje = zonedDateKey(new Date(), timeZone).slice(0, 7);
   const mesCorrente = points.find((point) => point.month === hoje);
 
   return (

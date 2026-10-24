@@ -261,6 +261,7 @@ model Organization {
   usageEvents                   PlanUsageEvent[]
   subscriptions                 OrganizationSubscription[]
   legalAcceptances              OrganizationLegalAcceptance[]
+  registeredAccountDocuments    AccountDocumentRegistration[]
   trialGrants                   SubscriptionTrialGrant[]
   billingCustomers              BillingCustomer[]
   billingCheckoutAttempts       BillingCheckoutAttempt[]
@@ -440,7 +441,7 @@ model BusinessUnit {
   operationMaterials            OperationMaterial[]
 
   @@unique([organizationId, slug])
-  @@unique([organizationId, documentType, documentNumber])
+  @@index([organizationId, documentType, documentNumber], map: "business_units_org_document_idx")
   @@index([organizationId, status, deletedAt])
   @@index([organizationId, isPrimary])
   @@map("business_units")
@@ -4789,4 +4790,15 @@ model StorageDeletionJob {
   @@unique([provider, bucket, objectKey])
   @@index([nextAttemptAt], map: "storage_deletion_jobs_due_idx")
   @@map("storage_deletion_jobs")
+}
+
+/// Reserva global do documento da conta; não impede organizações internas repetidas.
+model AccountDocumentRegistration {
+  documentNumber String       @id @map("document_number") @db.VarChar(14)
+  organizationId String       @map("organization_id") @db.Uuid
+  registeredAt   DateTime     @default(now()) @map("registered_at") @db.Timestamptz(3)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId], map: "account_document_registrations_org_idx")
+  @@map("account_document_registrations")
 }

@@ -38,7 +38,8 @@ import {
   resolveFormat,
 } from "@/documents";
 import { useSignedUrl } from "@/hooks/documents/use-signed-url";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import type {
   ArtifactManifestSummary,
   SignedUrlOperation,
@@ -51,6 +52,7 @@ export function DocumentPreview({
   manifestId: string;
   summary: ArtifactManifestSummary;
 }) {
+  const { formatDateTime } = useDateFormatters();
   const format = resolveFormat(summary.format);
   const [operation, setOperation] = useState<SignedUrlOperation>(
     format.previewable ? "preview" : "download",
@@ -75,7 +77,8 @@ export function DocumentPreview({
       <div className="space-y-3 rounded-lg border border-destructive/40 bg-destructive/10 p-4">
         <p className="text-sm font-medium">Documento revogado</p>
         <p className="text-xs text-muted-foreground">
-          {summary.revokedReason ?? "Sem motivo informado."} Um documento revogado não é mais distribuído — o registro permanece para auditoria.
+          {summary.revokedReason ?? "Sem motivo informado."} Um documento
+          revogado não é mais distribuído — o registro permanece para auditoria.
         </p>
       </div>
     );
@@ -171,7 +174,8 @@ export function DocumentPreview({
           <p className="text-xs text-muted-foreground">
             Acesso temporário, renovado automaticamente enquanto esta tela
             estiver aberta — o atual vale até{" "}
-            {formatDateTime(signed.data.expiresAt)}. O link é temporário e pessoal; o arquivo nunca é acessado diretamente.
+            {formatDateTime(signed.data.expiresAt)}. O link é temporário e
+            pessoal; o arquivo nunca é acessado diretamente.
           </p>
         </div>
       ) : null}
@@ -215,6 +219,7 @@ function Frame({
 }
 
 function Metadata({ summary }: { summary: ArtifactManifestSummary }) {
+  const { formatDateTime } = useDateFormatters();
   return (
     <dl className="grid gap-3 rounded-lg border border-border p-3 sm:grid-cols-2">
       <Field label="Revisão">

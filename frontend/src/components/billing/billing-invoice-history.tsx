@@ -1,10 +1,13 @@
+"use client";
+
 /** Histórico financeiro reconciliado com o provedor. */
 import { ExternalLink, FileDown } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PanelFrame } from "@/components/panels";
-import { formatDate } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import type { BillingInvoice } from "@/types/billing";
 
 const STATUS_LABEL: Readonly<Record<string, string>> = {
@@ -27,6 +30,7 @@ export function BillingInvoiceHistory({
 }: {
   invoices: readonly BillingInvoice[];
 }) {
+  const { formatDate } = useDateFormatters();
   return (
     <PanelFrame
       panelId="billing-invoices"

@@ -69,7 +69,8 @@ import {
   uniqueIdentifier,
   type StudioContentNode,
 } from "@/lib/artifact-studio";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { ROUTES } from "@/lib/routes";
 import { useSession } from "@/providers/session-provider";
 import { useAction } from "@/actions";
@@ -131,6 +132,7 @@ function StudioWorkspace({
   template: ArtifactTemplate;
   onRefresh: () => void;
 }) {
+  const { formatDateTime } = useDateFormatters();
   const session = useSession();
   const studio = useStudioDocument(template.current);
   const lifecycle = useArtifactTemplateLifecycle(template.id);

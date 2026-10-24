@@ -45,7 +45,9 @@ import { financialService } from "@/services/financial.service";
 import { ROUTES } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 import { FORMATTERS } from "@/metrics";
-import { formatDate } from "@/lib/formatters";
+
+import { useTimeZone } from "@/hooks/use-timezone";
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import {
   RECEIPT_STEPS,
   STEP_TITLES,
@@ -79,9 +81,12 @@ export function ReceiptWizardDialog({
 }
 
 function Body({ onOpenChange }: { onOpenChange: (open: boolean) => void }) {
+  const { timeZone } = useTimeZone();
   const router = useRouter();
   const [index, setIndex] = useState(0);
-  const [draft, setDraft] = useState<ReceiptDraft>(() => emptyDraft());
+  const [draft, setDraft] = useState<ReceiptDraft>(() =>
+    emptyDraft(new Date(), timeZone),
+  );
 
   const create = useCreateReceipt();
   const step = RECEIPT_STEPS[index]!;
@@ -257,6 +262,7 @@ function OriginStep({
   draft: ReceiptDraft;
   onChange: (changes: Partial<ReceiptDraft>) => void;
 }) {
+  const { formatDate } = useDateFormatters();
   const completed = useOperationsList({
     status: "COMPLETED",
     page: 1,
@@ -319,8 +325,8 @@ function OriginStep({
             <p className="text-muted-foreground text-sm">Carregando…</p>
           ) : (completed.data?.data ?? []).length === 0 ? (
             <p className="text-muted-foreground text-sm">
-              Nenhum atendimento concluído para faturar. Um recibo do zero cobre o
-              caso de adiantamento ou acerto.
+              Nenhum atendimento concluído para faturar. Um recibo do zero cobre
+              o caso de adiantamento ou acerto.
             </p>
           ) : (
             <ul className="divide-border max-h-64 divide-y overflow-y-auto rounded-lg border border-border">
@@ -404,7 +410,11 @@ function DataStep({
 }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2">
-      <Field label="Recebemos de" htmlFor="receipt-payer" className="sm:col-span-2">
+      <Field
+        label="Recebemos de"
+        htmlFor="receipt-payer"
+        className="sm:col-span-2"
+      >
         <Input
           id="receipt-payer"
           value={draft.payer}
@@ -499,6 +509,7 @@ function ReviewStep({
   draft: ReceiptDraft;
   onChange: (changes: Partial<ReceiptDraft>) => void;
 }) {
+  const { formatDate } = useDateFormatters();
   const valor = parseAmount(draft.amount);
 
   return (
@@ -511,7 +522,10 @@ function ReviewStep({
           value={valor ? FORMATTERS.currency(Number(valor)) : "—"}
           emphasis
         />
-        <Row label="Data" value={draft.paidOn ? formatDate(draft.paidOn) : "—"} />
+        <Row
+          label="Data"
+          value={draft.paidOn ? formatDate(draft.paidOn) : "—"}
+        />
         <Row label="Forma de pagamento" value={draft.paymentMethod || "—"} />
         <Row
           label="Origem"
@@ -528,9 +542,9 @@ function ReviewStep({
       </dl>
 
       <p className="text-muted-foreground text-xs">
-        O número do recibo é gerado na emissão, com a contagem da sua organização. O
-        documento sai no modelo premium de recibo e entra no Financeiro como receita
-        quando a emissão for publicada.
+        O número do recibo é gerado na emissão, com a contagem da sua
+        organização. O documento sai no modelo premium de recibo e entra no
+        Financeiro como receita quando a emissão for publicada.
       </p>
 
       <label className="flex items-start gap-2 text-sm">
@@ -541,8 +555,8 @@ function ReviewStep({
           className="mt-0.5"
         />
         <span>
-          Confiro que os dados acima estão corretos. Depois de assinado, o recibo
-          prova a quitação.
+          Confiro que os dados acima estão corretos. Depois de assinado, o
+          recibo prova a quitação.
         </span>
       </label>
     </div>

@@ -18,7 +18,8 @@ import { Bot, Sparkles, TriangleAlert } from "lucide-react";
 
 import { PanelFrame, PanelState, type PanelQuery } from "@/components/panels";
 import { Badge } from "@/components/ui/badge";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { cn } from "@/lib/utils";
 import type { PaginatedResult } from "@/types/api";
 import type { AiExecution } from "@/types/operations";
@@ -102,6 +103,7 @@ export function IntelligenceSection({
 }
 
 function ExecutionCard({ execution }: { execution: AiExecution }) {
+  const { formatDateTime } = useDateFormatters();
   const output = readOutput(execution.output);
 
   return (

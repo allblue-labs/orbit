@@ -40,7 +40,8 @@ import {
 } from "@/hooks/pmoc/use-pmoc";
 import { PmocAttendanceDialog } from "./attendance/attendance.dialog";
 import { useSession } from "@/providers/session-provider";
-import { formatDate, formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { cn } from "@/lib/utils";
 import { executionBlockedLabel, knownBlockedReason } from "@/registry";
 import type { PmocCycle, PmocCycleEquipmentRow } from "@/types/pmoc";
@@ -92,6 +93,7 @@ function CycleList({
   selectedId: string | null;
   onSelect: (id: string) => void;
 }) {
+  const { formatDate } = useDateFormatters();
   return (
     <ul className="space-y-2" aria-label="Execuções do plano">
       {cycles.map((cycle) => (
@@ -209,6 +211,7 @@ function EquipmentRow({
   row: PmocCycleEquipmentRow;
   onAttend: () => void;
 }) {
+  const { formatDateTime } = useDateFormatters();
   const eligibility = row.eligibility;
   const session = useSession();
 

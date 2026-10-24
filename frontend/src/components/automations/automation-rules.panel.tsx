@@ -22,7 +22,14 @@
  * do servidor e aparece dentro da confirmação, onde a decisão foi tomada.
  */
 import { useState } from "react";
-import { Copy, MoreHorizontal, Pencil, Plus, ScrollText, Trash2 } from "lucide-react";
+import {
+  Copy,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  ScrollText,
+  Trash2,
+} from "lucide-react";
 
 import { MutationError } from "@/components/artifact-studio/mutation-error";
 import { ConfirmDialog } from "@/components/financial/confirm.dialog";
@@ -42,8 +49,13 @@ import {
   useDuplicateAutomationRule,
   useToggleAutomationRule,
 } from "@/hooks/automations/use-automations";
-import { formatDateTime } from "@/lib/formatters";
-import type { AutomationCatalog, AutomationRule, AutomationRuleQuery } from "@/types/automations";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
+import type {
+  AutomationCatalog,
+  AutomationRule,
+  AutomationRuleQuery,
+} from "@/types/automations";
 import {
   FilterBar,
   FilterSelect,
@@ -219,6 +231,7 @@ function RuleRow({
   onView: () => void;
   onEdit: () => void;
 }) {
+  const { formatDateTime } = useDateFormatters();
   const toggle = useToggleAutomationRule();
   const duplicate = useDuplicateAutomationRule();
   const remove = useDeleteAutomationRule();
@@ -226,9 +239,7 @@ function RuleRow({
   const [confirming, setConfirming] = useState(false);
 
   const actionSummary =
-    rule.actions.length === 1
-      ? "1 ação"
-      : `${rule.actions.length} ações`;
+    rule.actions.length === 1 ? "1 ação" : `${rule.actions.length} ações`;
   const conditionSummary =
     rule.conditions.length === 0
       ? "sem condição"

@@ -59,8 +59,8 @@ export function SchedulingSettingsTab() {
               Calendários
             </h3>
             <p className="text-xs text-muted-foreground">
-              Cada evento pertence a um calendário. O fuso é do calendário, não
-              do navegador.
+              Horários exibidos em {timeZone}, conforme sua preferência em Minha
+              Conta. Novos calendários usam esse mesmo fuso.
             </p>
           </div>
           {manage.allowed && !creating && calendars.length > 0 ? (
@@ -114,8 +114,13 @@ export function SchedulingSettingsTab() {
                       ) : null}
                     </p>
                     <p className="font-mono text-xs text-muted-foreground">
-                      {calendar.timezone}
+                      Exibição: {timeZone}
                     </p>
+                    {calendar.timezone !== timeZone ? (
+                      <p className="text-xs text-muted-foreground">
+                        Fuso de criação: {calendar.timezone}
+                      </p>
+                    ) : null}
                   </div>
 
                   <span className="text-xs text-muted-foreground">

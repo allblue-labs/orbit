@@ -20,6 +20,7 @@ import {
 import { BusinessUnitType } from '../../../contracts';
 import { ROLE_SURFACES } from '../team-roles';
 import { IsDocument, IsUUIDv7 } from '../../../validators';
+import { normalizeBrazilianDocument } from '../../../utils';
 
 const trim = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.trim() : value;
@@ -48,6 +49,9 @@ export class CreateBusinessUnitDto {
   documentType!: string;
 
   @ApiProperty()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? normalizeBrazilianDocument(value) : value,
+  )
   @IsDocument()
   documentNumber!: string;
 

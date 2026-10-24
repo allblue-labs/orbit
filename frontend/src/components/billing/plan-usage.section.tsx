@@ -14,7 +14,8 @@ import { Gauge } from "lucide-react";
 
 import { PanelFrame } from "@/components/panels";
 import { Progress } from "@/components/ui/progress";
-import { formatDate } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { cn } from "@/lib/utils";
 import {
   HIDDEN_ENTITLEMENT_RESOURCES,
@@ -74,6 +75,7 @@ export function PlanUsageSection({
 }: {
   entitlements: OrganizationEntitlementsView;
 }) {
+  const { formatDate } = useDateFormatters();
   const alocacao = visiveis(entitlements.allocation);
   const uso = visiveis(entitlements.usage);
   const diasParaRenovar = diasAte(entitlements.window.end);

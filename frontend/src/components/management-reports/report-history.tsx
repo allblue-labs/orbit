@@ -21,7 +21,8 @@ import { PanelFrame } from "@/components/panels";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useManagementReports } from "@/hooks/management-reports/use-management-reports";
-import { formatDate, formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import type {
   ManagementReportQuery,
   ManagementReportSummary,
@@ -169,10 +170,15 @@ function HistoryRow({
   onOpen: () => void;
   onRepeat?: () => void;
 }) {
+  const { formatDate, formatDateTime } = useDateFormatters();
   return (
     <li className="rounded-lg border border-border p-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
+        <button
+          type="button"
+          onClick={onOpen}
+          className="min-w-0 flex-1 text-left"
+        >
           <p className="truncate font-medium">{report.name}</p>
           <p className="mt-1 text-xs text-muted-foreground">
             Período analisado: {formatDate(report.period.from)} a{" "}

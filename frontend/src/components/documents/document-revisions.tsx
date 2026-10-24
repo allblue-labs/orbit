@@ -14,12 +14,9 @@
 import { Check } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
-import {
-  ContentHash,
-  DocumentFormatBadge,
-  RendererLabel,
-} from "@/documents";
-import { formatDateTime } from "@/lib/formatters";
+import { ContentHash, DocumentFormatBadge, RendererLabel } from "@/documents";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { cn } from "@/lib/utils";
 import type { ArtifactManifestSummary } from "@/types/documents";
 
@@ -41,6 +38,7 @@ export function DocumentRevisions({
   selectedId: string | null;
   onSelect: (id: string) => void;
 }) {
+  const { formatDateTime } = useDateFormatters();
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">
@@ -94,9 +92,7 @@ export function DocumentRevisions({
                       ? `Emitida em ${formatDateTime(revision.issuedAt)}`
                       : "Ainda não emitida"}
                   </span>
-                  <span>
-                    Por {revision.issuedBy?.displayName ?? "—"}
-                  </span>
+                  <span>Por {revision.issuedBy?.displayName ?? "—"}</span>
                   <span className="flex items-center gap-1">
                     conteúdo <ContentHash hash={revision.contentHash} />
                   </span>

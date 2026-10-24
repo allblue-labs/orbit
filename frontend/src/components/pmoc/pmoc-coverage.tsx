@@ -29,7 +29,8 @@ import {
 } from "@/components/ui/table";
 import { usePmocCoverage, useRemovePmocCoverage } from "@/hooks/pmoc/use-pmoc";
 import { useSession } from "@/providers/session-provider";
-import { formatDate } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import type { PmocCoveragePageQuery } from "@/types/pmoc";
 import { ListState, SearchField } from "@/workspace";
 import { EquipmentSelectorDialog } from "./equipment-selector.dialog";
@@ -43,6 +44,7 @@ export function PmocCoveragePanel({
   customerId: string;
   businessUnitId: string;
 }) {
+  const { formatDate } = useDateFormatters();
   const session = useSession();
   const canManage = session.hasPermission("pmoc.manage");
   const [adding, setAdding] = useState(false);

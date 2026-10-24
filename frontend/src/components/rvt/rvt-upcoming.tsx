@@ -24,7 +24,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useRvtOccurrences } from "@/hooks/rvt/use-rvt";
-import { formatDate } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { ROUTES } from "@/lib/routes";
 import { OCCURRENCE_STATUS } from "@/registry";
 import { FilterBar, FilterSelect, ListState } from "@/workspace";
@@ -35,6 +36,7 @@ const STATUS_OPTIONS = Object.entries(OCCURRENCE_STATUS).map(
 );
 
 export function RvtUpcomingPanel() {
+  const { formatDate } = useDateFormatters();
   /** Cursor, como a configuração: `page` não existe neste contrato. */
   const [status, setStatus] = useState("");
   const query = useMemo(() => (status ? { status } : {}), [status]);

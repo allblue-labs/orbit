@@ -28,7 +28,8 @@ import {
   useOperationIntelligence,
   useOperationTimeline,
 } from "@/hooks/operations/use-operations";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { ROUTES } from "@/lib/routes";
 import { OperationStatusBadge } from "../operation-badges";
 import { AssigneesSection } from "./assignees.section";
@@ -50,6 +51,7 @@ import { useSession } from "@/providers/session-provider";
 import { PRODUCT_CAPABILITY, PRODUCT_FEATURE } from "@/registry/product-access";
 
 export function OperationWorkspace({ operationId }: { operationId: string }) {
+  const { formatDateTime } = useDateFormatters();
   const session = useSession();
   const canUseIntelligence =
     session.hasPermission("ai.executions.read") &&

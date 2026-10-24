@@ -34,7 +34,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatDate } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { ROUTES } from "@/lib/routes";
 import type { RvtOccurrence } from "@/types/rvt";
 import { ListState } from "@/workspace";
@@ -45,6 +46,7 @@ export function RvtOccurrencesPanel({
 }: {
   occurrences: readonly RvtOccurrence[];
 }) {
+  const { formatDate } = useDateFormatters();
   return (
     <ListState
       isPending={false}

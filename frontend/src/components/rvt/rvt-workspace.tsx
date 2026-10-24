@@ -23,7 +23,8 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useRvtConfiguration } from "@/hooks/rvt/use-rvt";
-import { formatDate } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { useSession } from "@/providers/session-provider";
 import { isOneTime, recurrenceLabel } from "@/registry";
 import type { RvtConfiguration } from "@/types/rvt";
@@ -121,7 +122,9 @@ function ConfigurationHeader({
           <ScheduleModeBadge mode={configuration.scheduleMode} />
           {/** Visita avulsa não tem periodicidade a anunciar. */}
           {isOneTime(configuration) ? null : (
-            <MaintenanceTypeBadge label={configuration.maintenanceType?.label} />
+            <MaintenanceTypeBadge
+              label={configuration.maintenanceType?.label}
+            />
           )}
           {canManage ? (
             <Button
@@ -159,6 +162,7 @@ function ConfigurationOverview({
 }: {
   configuration: RvtConfiguration;
 }) {
+  const { formatDate } = useDateFormatters();
   return (
     <div className="space-y-4">
       <dl className="grid gap-4 rounded-xl border border-border p-4 sm:grid-cols-2 lg:grid-cols-3">

@@ -16,20 +16,22 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
+  useLayoutEffect,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
 
 import { ORBIT_QUERY_SCOPE } from "@/api/query-keys";
-import { getAmbientContext, setAmbientContext } from "@/api/request-context";
+import { getDeviceContext, setAmbientContext } from "@/api/request-context";
+import { resolveTimeZone } from "@/lib/timezone-preference";
 import type { OrbitRequestContext } from "@/types/api";
 import { useOptionalSession } from "./session-provider";
 
 export type AmbientRequestContext = Omit<OrbitRequestContext, "requestId">;
 
 export interface RequestContextValue extends AmbientRequestContext {
+  timezoneOrigin: string;
   /** Unidades acessíveis pela sessão atual. */
   availableBusinessUnitIds: readonly string[];
   setBusinessUnit: (businessUnitId: string | null) => void;
@@ -44,8 +46,8 @@ export function RequestContextProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
 
   /** Locale e timezone do dispositivo, detectados uma única vez. */
-  const [detected] = useState(getAmbientContext);
-  const [locale, setLocale] = useState(detected.locale);
+  const [detected] = useState(getDeviceContext);
+  const [localeOverride, setLocale] = useState<string | null>(null);
   const [businessUnitOverride, setBusinessUnitOverride] = useState<
     string | null
   >(null);
@@ -55,6 +57,23 @@ export function RequestContextProvider({ children }: { children: ReactNode }) {
 
   const sessionOrganizationId = session?.scope.organizationId ?? null;
   const sessionBusinessUnitId = session?.scope.businessUnitId ?? null;
+  const locale = localeOverride ?? session?.user?.locale ?? detected.locale;
+  const { timeZone, origin: timezoneOrigin } = useMemo(
+    () =>
+      resolveTimeZone({
+        preferredTimeZone: session?.user?.timezone,
+        businessUnits: session?.businessUnits,
+        businessUnitId: businessUnitOverride ?? sessionBusinessUnitId,
+        browserTimeZone: detected.timezone,
+      }),
+    [
+      session?.user?.timezone,
+      session?.businessUnits,
+      businessUnitOverride,
+      sessionBusinessUnitId,
+      detected.timezone,
+    ],
+  );
 
   const context = useMemo<AmbientRequestContext>(
     () => ({
@@ -62,11 +81,11 @@ export function RequestContextProvider({ children }: { children: ReactNode }) {
       organizationId: organizationOverride ?? sessionOrganizationId,
       businessUnitId: businessUnitOverride ?? sessionBusinessUnitId,
       locale,
-      timezone: detected.timezone,
+      timezone: timeZone,
     }),
     [
       businessUnitOverride,
-      detected.timezone,
+      timeZone,
       locale,
       organizationOverride,
       sessionBusinessUnitId,
@@ -75,7 +94,7 @@ export function RequestContextProvider({ children }: { children: ReactNode }) {
   );
 
   /** Espelha o contexto no store lido pelo cliente HTTP. */
-  useEffect(() => {
+  useLayoutEffect(() => {
     setAmbientContext(context);
   }, [context]);
 
@@ -119,12 +138,19 @@ export function RequestContextProvider({ children }: { children: ReactNode }) {
   const value = useMemo<RequestContextValue>(
     () => ({
       ...context,
+      timezoneOrigin,
       availableBusinessUnitIds: session?.scope.businessUnitIds ?? [],
       setBusinessUnit,
       setOrganization,
       setLocale,
     }),
-    [context, session?.scope.businessUnitIds, setBusinessUnit, setOrganization],
+    [
+      context,
+      timezoneOrigin,
+      session?.scope.businessUnitIds,
+      setBusinessUnit,
+      setOrganization,
+    ],
   );
 
   return (
@@ -140,4 +166,9 @@ export function useRequestContext(): RequestContextValue {
     );
   }
   return context;
+}
+
+/** Public pages can format dates without an authenticated request context. */
+export function useOptionalRequestContext(): RequestContextValue | null {
+  return useContext(RequestContext);
 }

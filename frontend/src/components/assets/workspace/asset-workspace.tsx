@@ -41,7 +41,8 @@ import { useRemoveAsset, useUpdateAsset } from "@/hooks/assets/use-assets";
 import { AssetStatus } from "@/types/contracts";
 import { AssetFormDialog } from "../asset-form.dialog";
 import { useAsset } from "@/hooks/assets/use-assets";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { ROUTES } from "@/lib/routes";
 import type { Asset } from "@/types/assets";
 import { IdentifierSection } from "./identifier.section";
@@ -101,6 +102,7 @@ function WorkspaceBody({
   asset: Asset;
   onRefresh: () => void;
 }) {
+  const { formatDateTime } = useDateFormatters();
   const session = useSession();
   const canUseIntelligence = session.canUseProductFeature(
     PRODUCT_CAPABILITY.ORBIT_INTELLIGENCE,

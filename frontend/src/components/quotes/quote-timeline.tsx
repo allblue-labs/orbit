@@ -17,7 +17,8 @@
  * eventos que ninguém publicou.
  */
 import { PanelFrame } from "@/components/panels";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import type { Quote } from "@/types/quotes";
 
 interface Moment {
@@ -29,6 +30,7 @@ interface Moment {
 }
 
 export function QuoteTimeline({ quote }: { quote: Quote }) {
+  const { formatDateTime } = useDateFormatters();
   const moments: Moment[] = [
     {
       label: "Criada",
@@ -118,7 +120,8 @@ export function QuoteTimeline({ quote }: { quote: Quote }) {
         </ol>
 
         <p className="border-t border-border pt-3 text-xs text-muted-foreground">
-          Alterações de itens ficam registradas, mas essa auditoria ainda não pode ser consultada aqui — a mesma ausência de Clientes e
+          Alterações de itens ficam registradas, mas essa auditoria ainda não
+          pode ser consultada aqui — a mesma ausência de Clientes e
           Equipamentos. Nada é reconstruído aqui.
         </p>
       </div>

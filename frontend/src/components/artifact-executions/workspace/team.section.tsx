@@ -16,11 +16,13 @@ import { UsersRound } from "lucide-react";
 
 import { PanelFrame } from "@/components/panels";
 import { Badge } from "@/components/ui/badge";
-import { formatDate } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import type { ArtifactExecution } from "@/types/artifact-executions";
 import { UserReference } from "./overview.section";
 
 export function TeamSection({ execution }: { execution: ArtifactExecution }) {
+  const { formatDate } = useDateFormatters();
   const responsible = execution.responsibleUserId;
 
   return (
@@ -60,7 +62,8 @@ export function TeamSection({ execution }: { execution: ArtifactExecution }) {
       )}
 
       <p className="mt-4 border-t border-border pt-3 text-xs text-muted-foreground">
-        Os nomes dos membros da organização ainda não estão disponíveis nesta tela.
+        Os nomes dos membros da organização ainda não estão disponíveis nesta
+        tela.
       </p>
     </PanelFrame>
   );

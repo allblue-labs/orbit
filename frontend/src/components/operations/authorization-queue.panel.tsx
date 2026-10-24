@@ -39,7 +39,8 @@ import {
 } from "@/hooks/operations/use-operations";
 import { useFieldTechnicians } from "@/hooks/workforce/use-workforce";
 import { useActiveScope } from "@/providers/use-active-scope";
-import { formatDate, formatDateTime } from "@/lib/formatters";
+import { formatDate } from "@/lib/formatters";
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import type { OperationQuery } from "@/types/operations";
 import {
   FilterBar,
@@ -53,6 +54,7 @@ import {
 import { agruparFila } from "./authorization-queue";
 
 export function AuthorizationQueuePanel({ timeZone }: { timeZone: string }) {
+  const { formatDateTime } = useDateFormatters();
   const { businessUnitId, businessUnits } = useActiveScope();
   const list = useListController<OperationQuery>({ limit: 50 });
   const authorize = useAuthorizeOperations();
@@ -292,6 +294,5 @@ export function AuthorizationQueuePanel({ timeZone }: { timeZone: string }) {
  * mesmo erro que o agrupamento existe para não cometer.
  */
 function diaLegivel(dia: string): string {
-  const [ano, mes, diaDoMes] = dia.split("-").map(Number);
-  return formatDate(new Date(Date.UTC(ano!, mes! - 1, diaDoMes!, 12)));
+  return formatDate(dia, "UTC");
 }

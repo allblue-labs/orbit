@@ -31,11 +31,13 @@ import {
   useRemoveCertification,
 } from "@/hooks/workforce/use-workforce";
 import type { MemberCertification } from "@/types/workforce";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { CertificationBadge } from "./certification-badge";
 import { CertificationFormDialog } from "./certification-form.dialog";
 
 export function MemberCertificationsSection({ userId }: { userId: string }) {
+  const { formatDateTime } = useDateFormatters();
   const query = useCertifications({ userId });
   const workforce = useWorkforceManagement().workforce;
 

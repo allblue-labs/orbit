@@ -44,7 +44,8 @@ import { EntityLink } from "@/entities/entity-components";
 import { useSchedulingTimeZone } from "@/components/scheduling/use-scheduling-timezone";
 import { useOperationsList } from "@/hooks/operations/use-operations";
 import { useAction } from "@/actions";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { cn } from "@/lib/utils";
 import { ROUTES } from "@/lib/routes";
 import type { OperationListItem, OperationQuery } from "@/types/operations";
@@ -234,6 +235,7 @@ function OperationRow({
   onToggle: () => void;
   onEdit: () => void;
 }) {
+  const { formatDateTime } = useDateFormatters();
   return (
     <TableRow className={cn(selected && "bg-secondary/40")}>
       <TableCell>

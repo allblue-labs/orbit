@@ -39,9 +39,27 @@ export class SchedulingRepository {
     );
   }
 
-  /** Autoridade da visão: unidade explícita, calendário default, fallback. */
-  agendaTimezone(organizationId: string, businessUnitId?: string) {
+  /** Personal view preference, then unit, default calendar and fallback. */
+  agendaTimezone(
+    organizationId: string,
+    businessUnitId?: string,
+    viewerId?: string,
+  ) {
     return this.rls.run(async (tx) => {
+      if (viewerId) {
+        const viewer = await tx.user.findFirst({
+          where: { id: viewerId, deletedAt: null },
+          select: { timezone: true },
+        });
+        if (viewer?.timezone) {
+          try {
+            new Intl.DateTimeFormat('en-US', { timeZone: viewer.timezone });
+            return viewer.timezone;
+          } catch {
+            // Invalid legacy values fall through to the organization's defaults.
+          }
+        }
+      }
       if (businessUnitId) {
         const unit = await tx.businessUnit.findFirst({
           where: { id: businessUnitId, organizationId, deletedAt: null },

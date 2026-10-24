@@ -15,7 +15,8 @@
 import { Badge } from "@/components/ui/badge";
 import { Timeline } from "@/components/ui/timeline";
 import { PanelFrame, PanelState, type PanelQuery } from "@/components/panels";
-import { formatDateTime } from "@/lib/formatters";
+
+import { useDateFormatters } from "@/hooks/use-date-formatters";
 import {
   OPERATION_HISTORY_LABELS,
   OPERATION_STATUS_LABELS,
@@ -45,6 +46,7 @@ export function TimelineSection({
 }: {
   query: PanelQuery<OperationTimeline>;
 }) {
+  const { formatDateTime } = useDateFormatters();
   return (
     <PanelFrame
       panelId="operation-timeline"
@@ -82,6 +84,7 @@ export function HistorySection({
 }: {
   query: PanelQuery<readonly OperationHistoryEntry[]>;
 }) {
+  const { formatDateTime } = useDateFormatters();
   return (
     <PanelFrame
       panelId="operation-history"
