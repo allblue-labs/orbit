@@ -55,7 +55,7 @@ export class PmocPlanDocumentService {
           Title: `PMOC — ${request.plan.plan.name}`,
           Subject: request.plan.plan.code,
           Creator: 'Orbit',
-          Producer: 'pdf.premium@2.0.0',
+          Producer: 'pdf.premium@2.0.1',
         },
       });
 

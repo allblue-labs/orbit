@@ -55,7 +55,7 @@ export class QuoteDocumentService {
           Title: `Orçamento ${request.quote.quote.code}`,
           Subject: request.quote.quote.title,
           Creator: 'Orbit',
-          Producer: 'pdf.premium@2.0.0',
+          Producer: 'pdf.premium@2.0.1',
         },
       });
 

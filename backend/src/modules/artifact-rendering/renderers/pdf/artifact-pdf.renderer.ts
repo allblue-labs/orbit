@@ -41,7 +41,7 @@ import type {
 } from '../artifact-renderer';
 import { formatAnswer, safeColor } from '../html/html-safe';
 
-const VERSION = '1.0.0';
+const VERSION = '1.0.1';
 const MARGIN = 48;
 const LABEL_WIDTH = 200;
 
@@ -269,21 +269,30 @@ export class ArtifactPdfRenderer implements ArtifactRenderer {
     for (const signature of [...signatures].sort(
       (left, right) => left.order - right.order,
     )) {
-      this.ensureSpace(document, 90);
+      this.ensureSpace(document, 180);
       document.moveDown(1.6);
+      const contentWidth = document.page.width - MARGIN * 2;
+      const width = contentWidth * 0.6;
+      const x = MARGIN + (contentWidth - width) / 2;
+      const textOptions = { width, align: 'center' as const };
 
       if (
         signature.signatureImage &&
         /^image\/(png|jpeg|jpg)$/i.test(signature.signatureImageMimeType ?? '')
       ) {
-        document.image(signature.signatureImage, { fit: [220, 70] });
+        const top = document.y;
+        document.image(signature.signatureImage, x + (width - 220) / 2, top, {
+          fit: [220, 70],
+          align: 'center',
+          valign: 'center',
+        });
+        document.y = top + 70;
         document.moveDown(0.3);
       }
 
-      const width = (document.page.width - MARGIN * 2) * 0.6;
       document
-        .moveTo(MARGIN, document.y)
-        .lineTo(MARGIN + width, document.y)
+        .moveTo(x, document.y)
+        .lineTo(x + width, document.y)
         .strokeColor('#1c2333')
         .lineWidth(0.7)
         .stroke();
@@ -293,44 +302,60 @@ export class ArtifactPdfRenderer implements ArtifactRenderer {
         .font('Helvetica-Bold')
         .fontSize(9)
         .fillColor('#1c2333')
-        .text(`${signature.label} · ${signature.signerRole}`);
+        .text(
+          `${signature.label} · ${signature.signerRole}`,
+          x,
+          document.y,
+          textOptions,
+        );
 
       const signed = Boolean(signature.signedAt);
       document
         .font(signed ? 'Helvetica' : 'Helvetica-Oblique')
         .fontSize(9)
         .fillColor(signed ? '#1c2333' : '#8a94a8')
-        .text(signed ? (signature.signerName ?? '') : 'aguardando assinatura');
+        .text(
+          signed ? (signature.signerName ?? '') : 'aguardando assinatura',
+          x,
+          document.y,
+          textOptions,
+        );
 
       if (signature.signerDocument) {
         document
           .font('Helvetica')
           .fontSize(8)
           .fillColor('#5b6478')
-          .text(signature.signerDocument);
+          .text(signature.signerDocument, x, document.y, textOptions);
       }
       if (signature.professionalCredential) {
         document
           .font('Helvetica')
           .fontSize(8)
           .fillColor('#5b6478')
-          .text(signature.professionalCredential);
+          .text(signature.professionalCredential, x, document.y, textOptions);
       }
       if (signature.signedAt) {
         document
           .font('Helvetica')
           .fontSize(8)
           .fillColor('#5b6478')
-          .text(`Assinado em ${signature.signedAt}`);
+          .text(
+            `Assinado em ${signature.signedAt}`,
+            x,
+            document.y,
+            textOptions,
+          );
       }
       if (signature.signatureHash) {
         document
           .font('Courier')
           .fontSize(7)
           .fillColor('#5b6478')
-          .text(signature.signatureHash);
+          .text(signature.signatureHash, x, document.y, textOptions);
       }
     }
+    document.x = MARGIN;
   }
 
   /**
