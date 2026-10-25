@@ -38,7 +38,7 @@ import { composeAirQuality } from './documents/air-quality.document';
 import { documentTitleFor } from './documents/labels';
 import { composeGeneric } from './documents/generic.document';
 
-const VERSION = '2.0.0';
+const VERSION = '2.0.1';
 
 @Injectable()
 export class ArtifactPremiumPdfRenderer implements ArtifactRenderer {

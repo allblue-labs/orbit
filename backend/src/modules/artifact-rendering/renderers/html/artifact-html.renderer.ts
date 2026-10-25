@@ -38,7 +38,7 @@ import type {
 import { escapeHtml, formatAnswer, safeColor } from './html-safe';
 
 /** Sobe quando a saída muda de forma — fica gravado no manifest. */
-const VERSION = '1.0.0';
+const VERSION = '1.0.1';
 
 @Injectable()
 export class ArtifactHtmlRenderer implements ArtifactRenderer {
@@ -114,7 +114,8 @@ export class ArtifactHtmlRenderer implements ArtifactRenderer {
       '.pending{color:#8a94a8;font-style:italic}',
       '.required{color:#b3261e}',
       '.signatures{margin-top:28px;break-inside:avoid;page-break-inside:avoid}',
-      '.signature{border-top:1px solid #1c2333;margin-top:36px;padding-top:6px;width:60%}',
+      '.signature{border-top:1px solid #1c2333;margin:36px auto 0;padding-top:6px;width:60%;text-align:center}',
+      '.signature img{display:block;max-width:100%;max-height:90px;margin:0 auto;object-fit:contain}',
       'footer{margin-top:32px;border-top:1px solid #d8dde8;padding-top:8px;color:#5b6478;font-size:9px}',
       '.hash{font-family:monospace;word-break:break-all}',
       '.evidence-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}',
@@ -233,7 +234,7 @@ export class ArtifactHtmlRenderer implements ArtifactRenderer {
           /^image\/(png|jpeg|jpg|webp)$/i.test(
             signature.signatureImageMimeType ?? '',
           )
-            ? `<img alt="Assinatura de ${escapeHtml(signature.signerName ?? '')}" src="data:${escapeHtml(signature.signatureImageMimeType ?? 'image/png')};base64,${signature.signatureImage.toString('base64')}" style="max-width:240px;max-height:90px">`
+            ? `<img alt="Assinatura de ${escapeHtml(signature.signerName ?? '')}" src="data:${escapeHtml(signature.signatureImageMimeType ?? 'image/png')};base64,${signature.signatureImage.toString('base64')}" style="max-width:min(240px,100%);max-height:90px">`
             : '';
 
         return [

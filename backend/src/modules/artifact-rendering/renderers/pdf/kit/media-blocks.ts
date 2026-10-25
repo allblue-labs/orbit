@@ -145,20 +145,26 @@ export function signatureBlock(
   for (let indice = 0; indice < assinaturas.length; indice += colunas) {
     ensureSpace(document, alturaDoBloco + 10);
     const topo = document.y;
+    const itensDaLinha = Math.min(colunas, assinaturas.length - indice);
+    const larguraDaLinha =
+      itensDaLinha * larguraDoBloco + (itensDaLinha - 1) * METRICS.gutter;
+    const inicioDaLinha = esquerda + (largura - larguraDaLinha) / 2;
 
     for (let coluna = 0; coluna < colunas; coluna += 1) {
       const assinatura = assinaturas[indice + coluna];
       if (!assinatura) break;
 
-      const x = esquerda + coluna * (larguraDoBloco + METRICS.gutter);
+      const x = inicioDaLinha + coluna * (larguraDoBloco + METRICS.gutter);
 
       if (
         assinatura.image &&
         IMAGEM_SUPORTADA.test(assinatura.imageMimeType ?? '')
       ) {
         try {
-          document.image(assinatura.image, x, topo, {
+          document.image(assinatura.image, x + larguraDoBloco * 0.15, topo, {
             fit: [larguraDoBloco * 0.7, alturaDaAssinatura],
+            align: 'center',
+            valign: 'center',
           });
         } catch {
           /* Assinatura ilegível vira linha em branco, não erro. */
@@ -181,6 +187,7 @@ export function signatureBlock(
         .fillColor(theme.ink)
         .text(assinatura.signerName ?? assinatura.label, x, linhaY + 6, {
           width: larguraDoBloco,
+          align: 'center',
           lineBreak: false,
           ellipsis: true,
         });
@@ -198,7 +205,10 @@ export function signatureBlock(
           .font(FONTS.regular)
           .fontSize(7.5)
           .fillColor(theme.inkMuted)
-          .text(detalhes, x, document.y + 1, { width: larguraDoBloco });
+          .text(detalhes, x, document.y + 1, {
+            width: larguraDoBloco,
+            align: 'center',
+          });
       }
     }
 
