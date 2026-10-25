@@ -20,8 +20,9 @@
  *
  * ## A imagem vem do storage
  *
- * O endereço é assinado e temporário, com host próprio: `<img>` cru, e não
- * `next/image` — não há o que otimizar num endereço que expira.
+ * O endereço é assinado e temporário. O serviço traduz o storage LOCAL para
+ * a origem pública do BFF e preserva os endereços externos (S3/MinIO).
+ * `<img>` usa a URL recebida, sem cache de otimização sobre um link que expira.
  */
 import { useState } from "react";
 import { PenLine } from "lucide-react";
@@ -31,10 +32,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 import { useDateFormatters } from "@/hooks/use-date-formatters";
-import type {
-  OperationFieldEvidence,
-  OperationFieldRecord,
-} from "@/types/operations";
+import type { OperationFieldRecord } from "@/types/operations";
 
 /**
  * A categoria da foto, em português.
@@ -64,7 +62,11 @@ export function FieldRecordSection({
   query: PanelQuery<OperationFieldRecord>;
 }) {
   const { formatDateTime } = useDateFormatters();
-  const [aberta, setAberta] = useState<OperationFieldEvidence | null>(null);
+  const [abertaId, setAbertaId] = useState<string | null>(null);
+  // A consulta renova os links assinados. A foto aberta acompanha essa
+  // renovação, em vez de guardar uma cópia da URL até ela expirar.
+  const aberta =
+    query.data?.evidence.find((item) => item.id === abertaId) ?? null;
 
   return (
     <PanelFrame
@@ -96,7 +98,7 @@ export function FieldRecordSection({
                       <li key={item.id}>
                         <button
                           type="button"
-                          onClick={() => setAberta(item)}
+                          onClick={() => setAbertaId(item.id)}
                           className="group focus-visible:ring-ring block w-full space-y-1.5 text-left focus-visible:ring-2 focus-visible:outline-none"
                         >
                           <span className="block overflow-hidden rounded-lg border border-border bg-muted/30">
@@ -183,7 +185,7 @@ export function FieldRecordSection({
       {/* A foto em tamanho de leitura: numa grade de miniaturas não se enxerga a
           etiqueta do equipamento nem o estado do filtro, que é o que o dono
           precisa ver quando o cliente contesta. */}
-      <Dialog open={aberta !== null} onOpenChange={() => setAberta(null)}>
+      <Dialog open={aberta !== null} onOpenChange={() => setAbertaId(null)}>
         <DialogContent className="max-w-3xl">
           <DialogTitle className="text-sm font-medium">
             {aberta ? (CATEGORIES[aberta.category] ?? aberta.category) : ""}

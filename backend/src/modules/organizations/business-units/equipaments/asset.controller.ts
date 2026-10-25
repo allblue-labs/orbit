@@ -14,7 +14,7 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiProduces, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
-import { Permissions } from '../../../../decorators';
+import { Permissions, Surfaces } from '../../../../decorators';
 import { ForbiddenException } from '../../../../exceptions';
 import { ParseUUIDv7Pipe } from '../../../../pipes';
 import type { IdentityRequest } from '../../../identity/infrastructure/jwt-authentication.guard';
@@ -54,6 +54,7 @@ export class AssetController {
   }
 
   @Get('qr/:token')
+  @Surfaces('WEB', 'MOBILE', 'API')
   @Capabilities('assets.read')
   @Permissions('assets.read')
   @ApiOperation({

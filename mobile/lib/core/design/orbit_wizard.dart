@@ -121,6 +121,7 @@ class OrbitWizard extends StatefulWidget {
     this.initialStep = 0,
     this.onStepChanged,
     this.footer,
+    this.contentPadding = EdgeInsets.zero,
   });
 
   final List<OrbitWizardStep> steps;
@@ -130,6 +131,9 @@ class OrbitWizard extends StatefulWidget {
   /// O que fica abaixo do conteúdo, dentro da rolagem — a ação principal do
   /// domínio, quando a etapa é a última.
   final Widget? footer;
+
+  /// Margem do conteúdo de cada etapa; cabeçalho e navegação têm margens próprias.
+  final EdgeInsetsGeometry contentPadding;
 
   @override
   State<OrbitWizard> createState() => OrbitWizardState();
@@ -290,7 +294,7 @@ class OrbitWizardState extends State<OrbitWizard> {
             ),
           )
         else
-          etapa.child,
+          Padding(padding: widget.contentPadding, child: etapa.child),
 
         if (widget.footer case final Widget rodape) ...[
           const SizedBox(height: OrbitSpacing.md),

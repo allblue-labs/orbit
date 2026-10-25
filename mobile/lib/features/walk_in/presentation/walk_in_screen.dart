@@ -456,7 +456,13 @@ class _WalkInScreenState extends ConsumerState<WalkInScreen> {
                 ),
                 child: SectionError(error: _erro!, onRetry: _abrir),
               ),
-            OrbitWizard(key: const ValueKey('walk-in-wizard'), steps: etapas),
+            OrbitWizard(
+              key: const ValueKey('walk-in-wizard'),
+              steps: etapas,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: OrbitSpacing.gutter,
+              ),
+            ),
           ],
         ),
       ),

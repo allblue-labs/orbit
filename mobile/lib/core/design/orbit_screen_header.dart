@@ -194,18 +194,22 @@ class _OrbitChipStripState extends State<OrbitChipStrip> {
       child: Row(
         children: [
           Expanded(
-            child: _temMais
-                ? ShaderMask(
-                    shaderCallback: (rect) => const LinearGradient(
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                      colors: [Colors.black, Colors.black, Colors.transparent],
-                      stops: [0, 0.88, 1],
-                    ).createShader(rect),
-                    blendMode: BlendMode.dstIn,
-                    child: lista,
-                  )
-                : lista,
+            // Keep the same subtree while scrolling. Adding/removing the mask
+            // recreates the ListView at the end and resets its scroll position.
+            child: ShaderMask(
+              shaderCallback: (rect) => LinearGradient(
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+                colors: [
+                  Colors.black,
+                  Colors.black,
+                  _temMais ? Colors.transparent : Colors.black,
+                ],
+                stops: const [0, 0.88, 1],
+              ).createShader(rect),
+              blendMode: BlendMode.dstIn,
+              child: lista,
+            ),
           ),
           if (widget.trailing case final botao?)
             Padding(

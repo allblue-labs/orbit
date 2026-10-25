@@ -16,6 +16,12 @@ Possuir o QR não concede acesso. O resolver exige sessão, plano, `assets.read`
 tenant e Business Unit. O mesmo token pode produzir ações diferentes conforme
 as permissões e o contexto operacional do ator.
 
+A rota de resolução declara explicitamente as superfícies WEB, MOBILE e API.
+Técnicos operacionais e auxiliares têm `assets.read` no papel padrão e podem
+consultar equipamentos de diferentes clientes, sem precisar de atribuição a um
+atendimento. A leitura mantém o isolamento de tenant e de unidades autorizadas;
+as rotas administrativas do equipamento e da etiqueta têm autorização própria.
+
 ## Auditoria Stage 0
 
 | Conceito atual | Uso | Lacuna encontrada | Destino V2 |
