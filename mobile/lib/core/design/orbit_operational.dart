@@ -17,6 +17,7 @@ class OrbitServiceRow extends StatelessWidget {
     this.accent,
     this.timeline = false,
     this.emphasis = false,
+    this.padding = const EdgeInsets.symmetric(vertical: 12),
   });
   final String title;
   final String? time, subtitle, detail;
@@ -25,6 +26,7 @@ class OrbitServiceRow extends StatelessWidget {
   final VoidCallback? onTap;
   final Color? accent;
   final bool timeline, emphasis;
+  final EdgeInsetsGeometry padding;
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +38,7 @@ class OrbitServiceRow extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          padding: padding,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

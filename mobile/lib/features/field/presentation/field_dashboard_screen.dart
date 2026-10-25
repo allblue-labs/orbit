@@ -1095,6 +1095,10 @@ class _DocumentRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) => OrbitServiceRow(
     icon: Icons.picture_as_pdf_outlined,
+    padding: const EdgeInsets.symmetric(
+      horizontal: OrbitSpacing.gutter,
+      vertical: OrbitSpacing.ms,
+    ),
     title: document.label,
     subtitle: document.customerName,
     detail: OrbitFormat.dateHourOf(document.createdAt),

@@ -6,6 +6,7 @@
  * agenda e permissões são do backend.
  */
 import { apiClient } from "@/api/client";
+import { browserUrlFor } from "@/lib/backend-url";
 import { queryKeys, type QueryKey } from "@/api/query-keys";
 import { download, upload, type DownloadResult } from "@/api/transfer";
 import type { QueryParams, PaginatedResult, RequestOptions } from "@/types/api";
@@ -96,11 +97,33 @@ export const operationsService = {
    * validade curta — carregá-la em toda leitura de operação geraria assinaturas
    * que ninguém abre.
    */
-  fieldRecord: (
+  fieldRecord: async (
     id: string,
     options?: RequestOptions,
-  ): Promise<OperationFieldRecord> =>
-    apiClient.get<OperationFieldRecord>(`${item(id)}/field-record`, options),
+  ): Promise<OperationFieldRecord> => {
+    const record = await apiClient.get<OperationFieldRecord>(
+      `${item(id)}/field-record`,
+      options,
+    );
+    return {
+      ...record,
+      evidence: record.evidence.map((evidence) => ({
+        ...evidence,
+        url: browserUrlFor(evidence.url),
+      })),
+      acknowledgement: record.acknowledgement
+        ? {
+            ...record.acknowledgement,
+            signature: record.acknowledgement.signature
+              ? {
+                  ...record.acknowledgement.signature,
+                  url: browserUrlFor(record.acknowledgement.signature.url),
+                }
+              : null,
+          }
+        : null,
+    };
+  },
 
   /** O backend valida a transição; o frontend só envia a intenção. */
   changeStatus: (
