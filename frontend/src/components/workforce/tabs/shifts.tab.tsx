@@ -45,6 +45,7 @@ import {
 import { useTeamMembers } from "@/hooks/workforce/use-workforce";
 import { cn } from "@/lib/utils";
 import { useTimeZone } from "@/hooks/use-timezone";
+import { formatDate } from "@/lib/formatters";
 import { ListState } from "@/workspace";
 
 const WEEKDAYS = [
@@ -195,7 +196,7 @@ export function ShiftsTab() {
                     <span className="min-w-0 flex-1 text-sm">
                       {window.dayOfWeek !== null
                         ? WEEKDAYS[window.dayOfWeek]
-                        : (window.date ?? "—")}
+                        : (window.date ? formatDate(window.date, timeZone) : "—")}
                       <span className="ml-2 font-mono text-xs text-muted-foreground">
                         {toTime(window.startMinute)}–{toTime(window.endMinute)}
                       </span>
