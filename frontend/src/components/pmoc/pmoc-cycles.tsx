@@ -52,7 +52,10 @@ export function PmocCyclesPanel({ planId }: { planId: string }) {
   const cycles = usePmocCycles(planId);
   const [selected, setSelected] = useState<string | null>(null);
 
-  const current = selected ?? cycles.data?.[0]?.id ?? null;
+  const nextCycle = cycles.data
+    ?.filter((cycle) => cycle.status === "PENDING")
+    .sort((a, b) => a.dueOn.localeCompare(b.dueOn))[0];
+  const current = selected ?? nextCycle?.id ?? cycles.data?.[0]?.id ?? null;
 
   return (
     <div className="space-y-4">
@@ -73,6 +76,7 @@ export function PmocCyclesPanel({ planId }: { planId: string }) {
             <CycleList
               cycles={rows}
               selectedId={current}
+              nextCycleId={nextCycle?.id}
               onSelect={setSelected}
             />
             {current ? (
@@ -93,10 +97,12 @@ export function PmocCyclesPanel({ planId }: { planId: string }) {
 function CycleList({
   cycles,
   selectedId,
+  nextCycleId,
   onSelect,
 }: {
   cycles: readonly PmocCycle[];
   selectedId: string | null;
+  nextCycleId?: string;
   onSelect: (id: string) => void;
 }) {
   const { formatDate } = useDateFormatters();
@@ -115,6 +121,12 @@ function CycleList({
                 : "border-border hover:bg-surface-strong",
             )}
           >
+            {cycle.id === nextCycleId ? (
+              <span className="mb-2 flex items-center gap-1.5 text-xs font-medium text-primary">
+                <CalendarClock className="size-3.5" />
+                Próxima execução prevista
+              </span>
+            ) : null}
             <span className="flex items-center justify-between gap-2">
               <span className="text-sm font-medium">
                 Execução {cycle.sequenceNumber}

@@ -47,6 +47,7 @@ import {
   toDateOnly,
 } from './pmoc.domain';
 import type { FrequencyUnit } from './pmoc.domain';
+import { nextPmocDueOnSql } from './pmoc-schedule.sql';
 import type {
   PmocAnalyticsQueryDto,
   PmocPlanQueryDto,
@@ -907,8 +908,8 @@ export class PmocRepository {
    * Fecha um ciclo e rola a periodicidade.
    *
    * Tudo numa transação: o ciclo vira `COMPLETED`, o plano recebe a data da
-   * execução e o próximo vencimento **calculado pelo Postgres a partir dessa
-   * data**, e o ciclo seguinte nasce. Em três instruções separadas, uma falha
+   * execução e o próximo vencimento calculado pelo Postgres, sem retroceder
+   * em atendimentos antecipados, e o ciclo seguinte nasce. Uma falha
    * no meio deixaria um plano concluído sem próximo vencimento — em dia para
    * sempre.
    */
@@ -942,12 +943,7 @@ export class PmocRepository {
       const rolled = await tx.$queryRaw<{ next_due_on: Date }[]>`
         UPDATE pmoc_plans
            SET last_executed_at = ${input.performedAt},
-               next_due_on = (${input.performedAt}::date + make_interval(
-                 years  => CASE WHEN frequency_unit = 'YEARS'  THEN frequency_amount ELSE 0 END,
-                 months => CASE WHEN frequency_unit = 'MONTHS' THEN frequency_amount ELSE 0 END,
-                 weeks  => CASE WHEN frequency_unit = 'WEEKS'  THEN frequency_amount ELSE 0 END,
-                 days   => CASE WHEN frequency_unit = 'DAYS'   THEN frequency_amount ELSE 0 END
-               ))::date,
+               next_due_on = ${nextPmocDueOnSql(input.performedAt, input.executionId)},
                /** O aviso do vencimento novo ainda não foi dado. */
                due_soon_notified_for = NULL,
                overdue_notified_for = NULL,
@@ -2254,11 +2250,7 @@ export class PmocRepository {
         if (cycle.count) {
           const rolled = await tx.$queryRaw<{ next_due_on: Date }[]>`
             UPDATE pmoc_plans SET last_executed_at=${input.performedAt},
-              next_due_on=(${input.performedAt}::date + make_interval(
-                years=>CASE WHEN frequency_unit='YEARS' THEN frequency_amount ELSE 0 END,
-                months=>CASE WHEN frequency_unit='MONTHS' THEN frequency_amount ELSE 0 END,
-                weeks=>CASE WHEN frequency_unit='WEEKS' THEN frequency_amount ELSE 0 END,
-                days=>CASE WHEN frequency_unit='DAYS' THEN frequency_amount ELSE 0 END))::date,
+              next_due_on=${nextPmocDueOnSql(input.performedAt, input.cycleId)},
               due_soon_notified_for=NULL, overdue_notified_for=NULL, updated_at=now()
             WHERE id=${input.planId}::uuid AND organization_id=${input.organizationId}::uuid
             RETURNING next_due_on

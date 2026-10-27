@@ -210,13 +210,18 @@ async function setup(page: Page, failArtifact = false) {
         {
           coverageId: "coverage",
           equipment,
-          status: completed
-            ? "COMPLETED"
-            : started
-              ? "IN_PROGRESS"
-              : "NOT_STARTED",
-          execution: execution(),
-          eligibility: { ready: !completed, blockedReasons: [] },
+          status: path.includes("cycle-next-month")
+            ? "NOT_STARTED"
+            : completed
+              ? "COMPLETED"
+              : started
+                ? "IN_PROGRESS"
+                : "NOT_STARTED",
+          execution: path.includes("cycle-next-month") ? null : execution(),
+          eligibility: {
+            ready: path.includes("cycle-next-month") || !completed,
+            blockedReasons: [],
+          },
         },
       ];
     else if (path === "/api/orbit/artifact-executions/equipment-report/render")
@@ -260,7 +265,21 @@ async function setup(page: Page, failArtifact = false) {
         body: "%PDF-1.4 test-report",
       });
       return;
-    } else if (path === "/api/orbit/rvt/configurations/visit-configuration")
+    } else if (path === "/api/orbit/rvt/executions/visit-execution")
+      data = {
+        id: "visit-execution",
+        status: "COMPLETED",
+        startedAt: STAMP,
+        completedAt: STAMP,
+        responsibleFieldTechnician: { id: "technician", name: "Marina" },
+        auxiliaryTechnicians: [],
+        equipment: [],
+        evidence: [],
+        notes: {},
+        customerAcknowledgement: null,
+        artifact: null,
+      };
+    else if (path === "/api/orbit/rvt/configurations/visit-configuration")
       data = {
         id: "visit-configuration",
         name: "Visita programada",
@@ -312,9 +331,10 @@ test("concluir fecha o wizard, mantém a execução atual e oferece seu relatór
   ).toBeVisible();
   const current = page.getByRole("button", { name: /Execução 1/ });
   await expect(current).toHaveAttribute("aria-current", "true");
-  await expect(
-    page.getByRole("button", { name: /Execução 2/ }),
-  ).not.toHaveAttribute("aria-current", "true");
+  const next = page.getByRole("button", { name: /Execução 2/ });
+  await expect(next).toBeVisible();
+  await expect(next).toContainText("Próxima execução prevista");
+  await expect(next).not.toHaveAttribute("aria-current", "true");
   expect(preparations.some((path) => path.includes("cycle-next-month"))).toBe(
     false,
   );
@@ -340,6 +360,14 @@ test("concluir fecha o wizard, mantém a execução atual e oferece seu relatór
   expect(
     writes.filter((path) => path.endsWith("/artifact/generate")),
   ).toHaveLength(1);
+  // The next visit remains available, and changes only on an explicit click.
+  await next.click();
+  await expect(next).toHaveAttribute("aria-current", "true");
+  await expect(
+    page.getByRole("button", { name: "Atender", exact: true }),
+  ).toBeVisible();
+  await expect(report).toHaveCount(0);
+  expect(writes.filter((path) => path.endsWith("/complete"))).toHaveLength(1);
 });
 
 test("falha na emissão mantém o modal e repetir não conclui duas vezes", async ({
@@ -403,4 +431,43 @@ test("a visita técnica oferece volta direta à aba RVT de Operações", async (
   await expect(
     page.getByRole("tab", { name: "RVT", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
+});
+
+test("o detalhe da visita realizada também volta diretamente para RVT", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.goto("/rvt/execucoes/visit-execution");
+  await expect(
+    page.getByRole("heading", { name: "Visita técnica", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("link", { name: "Voltar para RVT", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/operacoes\?secao=rvt$/);
+  await expect(
+    page.getByRole("tab", { name: "RVT", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
+});
+
+test("o retorno para RVT continua disponível se a consulta da visita falhar", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.route("**/api/orbit/rvt/executions/visit-execution", (route) =>
+    route.fulfill({
+      status: 403,
+      json: {
+        success: false,
+        error: {
+          code: "FORBIDDEN",
+          message: "Você não possui permissão para realizar esta ação.",
+        },
+      },
+    }),
+  );
+  await page.goto("/rvt/execucoes/visit-execution");
+  await expect(
+    page.getByRole("link", { name: "Voltar para RVT", exact: true }),
+  ).toHaveAttribute("href", "/operacoes?secao=rvt");
 });

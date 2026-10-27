@@ -1,4 +1,5 @@
 import { RvtExecutionWorkspace } from "@/components/rvt/rvt-execution";
+import { RvtBackLink } from "@/components/rvt/rvt-back-link";
 import { WorkspacePage } from "@/workspace";
 
 /**
@@ -22,6 +23,7 @@ export default async function RvtExecutionPage({
       description="Equipamentos atendidos, equipe, evidências e documento."
       activeLabel="Execução"
       suspense={false}
+      action={<RvtBackLink />}
     >
       <RvtExecutionWorkspace executionId={executionId} />
     </WorkspacePage>
