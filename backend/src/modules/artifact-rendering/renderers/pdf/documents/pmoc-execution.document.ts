@@ -36,6 +36,7 @@ import type { DocumentTheme } from '../kit/theme';
 import type { RenderInput, RenderSectionInput } from '../../artifact-renderer';
 import { formatAnswer } from '../../html/html-safe';
 import { roleLabel } from './labels';
+import { pmocProcedure } from '../../../../pmoc/pmoc-procedure';
 
 type Doc = PDFKit.PDFDocument;
 
@@ -207,7 +208,24 @@ function roteiro(
   const secoes = [...input.sections]
     .sort((esquerda, direita) => esquerda.order - direita.order)
     .filter(ehRoteiro);
-  if (secoes.length === 0) return;
+  if (secoes.length === 0) {
+    const groups = Object.entries(pmocProcedure(input.metadata?.procedure));
+    if (!groups.length) return;
+    sectionTitle(document, 'Roteiro da manutenção', theme);
+    for (const [name, items] of groups) {
+      groupLabel(document, name, theme);
+      table(
+        document,
+        [
+          { header: 'Procedimento previsto', weight: 7 },
+          { header: 'Registro', weight: 3 },
+        ],
+        items.map((item) => [item, 'Previsto no plano']),
+        theme,
+      );
+    }
+    return;
+  }
 
   sectionTitle(document, 'Checklist do procedimento', theme);
 

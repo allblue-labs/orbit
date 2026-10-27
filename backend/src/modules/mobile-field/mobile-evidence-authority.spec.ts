@@ -95,11 +95,11 @@ describe('evidência de uma execução de PMOC', () => {
     await expect(autorizar()).resolves.toMatchObject({ denied: false });
   });
 
-  it('sem nenhuma das duas, não anexa', async () => {
-    /* Ler o PMOC não é participar dele. */
+  it('a atribuição à execução autoriza a coleta sem permissão global', async () => {
+    /* A escala explícita autoriza esta execução, sem liberar outras. */
     const { autorizar } = bancada({ permissions: ['pmoc.read'] });
 
-    await expect(autorizar()).resolves.toMatchObject({ denied: true });
+    await expect(autorizar()).resolves.toMatchObject({ denied: false });
   });
 
   it('a permissão não substitui a atribuição', async () => {

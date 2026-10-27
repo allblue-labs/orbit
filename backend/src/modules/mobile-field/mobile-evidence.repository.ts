@@ -118,6 +118,7 @@ export class MobileEvidenceRepository {
         select: { id: true },
       });
       const permitted =
+        (target.type === 'PMOC_EQUIPMENT_EXECUTION' && target.assigned) ||
         permissions.includes('*') ||
         target.permissions.some((permission) =>
           permissions.includes(permission),
@@ -261,7 +262,8 @@ export class MobileEvidenceRepository {
         !membership ||
         !context.assigned ||
         !context.mutable ||
-        (!permissions.includes('*') &&
+        (!(context.type === 'PMOC_EQUIPMENT_EXECUTION' && context.assigned) &&
+          !permissions.includes('*') &&
           !context.permissions.some((permission) =>
             permissions.includes(permission),
           ))
@@ -279,9 +281,13 @@ export class MobileEvidenceRepository {
           : type === 'RVT_EXECUTION'
             ? policy.rvtMaximumFiles
             : policy.operationMaximumFiles;
-      const count = await tx.fieldEvidence.count({
+      let count = await tx.fieldEvidence.count({
         where: this.targetColumns(type, this.idOf(upload)),
       });
+      if (type === 'PMOC_EQUIPMENT_EXECUTION')
+        count += await tx.pmocEquipmentEvidence.count({
+          where: { equipmentExecutionId: this.idOf(upload) },
+        });
       if (count >= maximum) return { kind: 'LIMIT' as const, maximum };
 
       const now = new Date();

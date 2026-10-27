@@ -22,10 +22,11 @@
  * nascerem duas ordens para a mesma manutenção.
  */
 import { Injectable, Logger } from '@nestjs/common';
+import { executionPmocProcedure } from './pmoc-procedure';
 import { Prisma } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import { RequestContextService } from '../../context';
-import { ConflictException } from '../../exceptions';
+import { ConflictException, EntityNotFoundException } from '../../exceptions';
 import {
   PaginationHelper,
   PrismaService,
@@ -155,6 +156,24 @@ const equipmentExecutionView = {
     },
   },
   artifactExecution: { select: { id: true, code: true, status: true } },
+  fieldEvidence: {
+    where: { status: 'FINALIZED' },
+    orderBy: { createdAt: 'asc' as const },
+    select: {
+      id: true,
+      caption: true,
+      createdAt: true,
+      storageFile: {
+        select: {
+          id: true,
+          fileName: true,
+          mimeType: true,
+          sizeBytes: true,
+          status: true,
+        },
+      },
+    },
+  },
   evidence: {
     orderBy: { createdAt: 'asc' as const },
     select: {
@@ -1217,6 +1236,7 @@ export class PmocRepository {
           /* A atribuição operacional: quem atende este contrato. É ela que
              autoriza o técnico a abrir o atendimento dele pelo celular. */
           technicianUserId: true,
+          units: { include: { unit: { include: unitView } } },
         },
       });
       if (!plan) return null;
@@ -1521,6 +1541,64 @@ export class PmocRepository {
     });
   }
 
+  /** Imagem e vínculo na mesma transação; a conclusão aguarda o upload em voo. */
+  uploadEquipmentPhoto(input: {
+    organizationId: string;
+    businessUnitIds: readonly string[];
+    executionId: string;
+    actorId: string;
+    store: (
+      tx: PrismaTransactionClient,
+      businessUnitId: string,
+    ) => Promise<{ id: string }>;
+  }) {
+    return this.rls.runAmbient(
+      async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`field-evidence-target:PMOC_EQUIPMENT_EXECUTION:${input.executionId}`}))`;
+        await tx.$queryRaw`SELECT id FROM pmoc_equipment_executions WHERE id = ${input.executionId}::uuid AND organization_id = ${input.organizationId}::uuid FOR UPDATE`;
+        const execution = await tx.pmocEquipmentExecution.findFirst({
+          where: {
+            id: input.executionId,
+            organizationId: input.organizationId,
+            businessUnitId: { in: [...input.businessUnitIds] },
+          },
+          select: { businessUnitId: true, status: true },
+        });
+        if (!execution)
+          throw new EntityNotFoundException('PmocEquipmentExecution');
+        if (execution.status !== 'IN_PROGRESS')
+          throw new ConflictException('Execution closed');
+        const count =
+          (await tx.pmocEquipmentEvidence.count({
+            where: { equipmentExecutionId: input.executionId },
+          })) +
+          (await tx.fieldEvidence.count({
+            where: {
+              pmocEquipmentExecutionId: input.executionId,
+              status: 'FINALIZED',
+            },
+          }));
+        if (count >= 6)
+          throw new ConflictException(
+            'Evidence limit reached',
+            'EVIDENCE_LIMIT_REACHED',
+          );
+        const file = await input.store(tx, execution.businessUnitId);
+        return tx.pmocEquipmentEvidence.create({
+          data: {
+            organizationId: input.organizationId,
+            equipmentExecutionId: input.executionId,
+            storageFileId: file.id,
+            kind: 'PHOTO',
+            uploadedById: input.actorId,
+          },
+          select: { id: true },
+        });
+      },
+      { timeout: 30_000 },
+    );
+  }
+
   linkEquipmentArtifact(
     organizationId: string,
     executionId: string,
@@ -1586,6 +1664,7 @@ export class PmocRepository {
                 include: {
                   customer: true,
                   businessUnit: true,
+                  units: { include: { unit: { include: unitView } } },
                 },
               },
             },
@@ -1730,7 +1809,11 @@ export class PmocRepository {
           identifier: physical.asset.identifier,
           location: physical.asset.location,
         },
-        procedure: physical.procedureSnapshot,
+        procedure: executionPmocProcedure(
+          physical.procedureSnapshot,
+          physical.cycle.plan.procedure,
+          physical.cycle.plan.units,
+        ),
         fieldTechnician: physical.responsibleFieldTechnician,
         auxiliaries:
           physical.operation?.auxiliaryTechnicians.map((item) => item.user) ??
@@ -1745,13 +1828,15 @@ export class PmocRepository {
           title: 'Execução PMOC por equipamento',
           order: 1,
           type: 'FORM',
-          fields: Object.keys(context).map((key, index) => ({
-            id: key,
-            label: key,
-            type: 'TEXT',
-            order: index + 1,
-            required: true,
-          })),
+          fields: Object.keys(context)
+            .filter((key) => key !== 'procedure')
+            .map((key, index) => ({
+              id: key,
+              label: key,
+              type: 'TEXT',
+              order: index + 1,
+              required: true,
+            })),
         },
       ];
       const signatureSlots = [
@@ -2267,7 +2352,7 @@ export class PmocRepository {
           unit: {
             select: {
               name: true,
-              checklistTemplate: { select: { name: true } },
+              checklistTemplate: { select: { name: true, items: true } },
             },
           },
         },

@@ -42,6 +42,53 @@ PmocPlanCycleView view(String? technicianId) => PmocPlanCycleView(
 );
 
 void main() {
+  test(
+    'atribuição na execução libera o atendente sem liberar outros equipamentos do plano',
+    () {
+      final original = view('plan-technician');
+      final assigned = PmocCycleEquipmentContract.fromJson({
+        'equipment': {'id': 'asset-1', 'name': 'Split'},
+        'execution': {
+          'id': 'execution-1',
+          'status': 'IN_PROGRESS',
+          'responsibleFieldTechnician': {
+            'id': 'field',
+            'displayName': 'Técnico atribuído',
+          },
+        },
+      });
+      final unassigned = PmocCycleEquipmentContract.fromJson({
+        'equipment': {'id': 'asset-2', 'name': 'Outro split'},
+      });
+      final data = PmocPlanCycleView(
+        plan: original.plan,
+        cycle: original.cycle,
+        equipment: [assigned, unassigned],
+      );
+      expect(data.canAttend(actorId: 'field', isOwner: false), isTrue);
+      expect(
+        data.canAttendEquipment(assigned, actorId: 'field', isOwner: false),
+        isTrue,
+      );
+      expect(
+        data.canAttendEquipment(unassigned, actorId: 'field', isOwner: false),
+        isFalse,
+      );
+      expect(
+        data.canAttendEquipment(
+          assigned,
+          actorId: 'plan-technician',
+          isOwner: false,
+        ),
+        isFalse,
+      );
+      expect(
+        data.canAttendEquipment(assigned, actorId: 'owner', isOwner: true),
+        isTrue,
+      );
+    },
+  );
+
   group('quem pode atender', () {
     test('o técnico atribuído ao plano', () {
       expect(

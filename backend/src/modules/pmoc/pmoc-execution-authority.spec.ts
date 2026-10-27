@@ -289,17 +289,26 @@ describe('autoridade para emitir o relatório da execução', () => {
     );
   });
 
-  it('exige a permissão de renderizar', async () => {
-    const { service, repository } = servicoDeEmissao(null);
+  it('o escalado emite sem receber permissão global de renderização', async () => {
+    const { service, repository } = servicoDeEmissao({
+      artifactExecutionId: 'art-1',
+      renderStatus: 'READY',
+      created: false,
+    });
     const semRender: PmocActor = {
       ...emissor(TECNICO),
       permissions: ['pmoc.execute'],
     };
 
-    await expect(emitir(service, semRender)).rejects.toBeInstanceOf(
-      ForbiddenException,
+    await expect(emitir(service, semRender)).resolves.toMatchObject({
+      artifactExecutionId: 'art-1',
+    });
+    expect(repository.createEquipmentArtifact).toHaveBeenCalledWith(
+      'org-1',
+      'exec-1',
+      TECNICO,
+      TECNICO,
     );
-    expect(repository.createEquipmentArtifact).not.toHaveBeenCalled();
   });
 });
 

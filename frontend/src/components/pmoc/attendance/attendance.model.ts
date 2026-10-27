@@ -32,15 +32,16 @@ export const ATTENDANCE_STEPS = [
   "escalar",
   "roteiro",
   "concluir",
-  "emitir",
+  "resumo",
 ] as const;
 
-export type AttendanceStep = (typeof ATTENDANCE_STEPS)[number];
+export type AttendanceStep = (typeof ATTENDANCE_STEPS)[number] | "emitir";
 
 export const STEP_TITLES: Readonly<Record<AttendanceStep, string>> = {
   escalar: "Quem atende",
   roteiro: "Roteiro e evidências",
-  concluir: "Registrar a manutenção",
+  concluir: "Observações",
+  resumo: "Resumo e confirmação",
   emitir: "Emitir o relatório",
 };
 
@@ -142,7 +143,7 @@ export function stepIssues(
        * suspenso, equipamento inativo. Repetir a regra no navegador criaria uma
        * segunda autoridade; o que se faz é mostrar a dele.
        */
-      if (!preparation.eligibility.ready) {
+      if (!preparation.existingExecution && !preparation.eligibility.ready) {
         issues.push(
           "O servidor não liberou esta execução — veja os motivos acima.",
         );
@@ -159,6 +160,7 @@ export function stepIssues(
       break;
 
     case "concluir":
+    case "resumo":
       if (
         draft.performedAt &&
         isFuture(draft.performedAt, Date.now(), timeZone)

@@ -170,6 +170,33 @@ export class WorkforceService {
     }));
   }
 
+  /** No PMOC o proprietário designado RT também pode executar a manutenção. */
+  async listPmocFieldTechnicians(
+    organizationId: string,
+    businessUnitId: string,
+  ) {
+    const [field, technical, organization] = await Promise.all([
+      this.listProfessionals(
+        organizationId,
+        'FIELD_TECHNICIAN',
+        businessUnitId,
+      ),
+      this.listProfessionals(
+        organizationId,
+        'TECHNICAL_RESPONSIBLE',
+        businessUnitId,
+      ),
+      this.repository.organizationOwner(organizationId),
+    ]);
+    const candidates = [
+      ...field,
+      ...technical.filter((person) => person.id === organization?.ownerUserId),
+    ];
+    return [
+      ...new Map(candidates.map((person) => [person.id, person])).values(),
+    ].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+  }
+
   async addProfessionalCredential(
     organizationId: string,
     userId: string,

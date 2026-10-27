@@ -106,9 +106,7 @@ export const pmocService = {
     apiClient.delete<void>(`/pmoc/units/${encodeURIComponent(id)}`, options),
 
   /** Os nomes sugeridos para um plano. Catálogo da plataforma. */
-  planNameOptions: (
-    options?: RequestOptions,
-  ): Promise<PmocPlanNameOption[]> =>
+  planNameOptions: (options?: RequestOptions): Promise<PmocPlanNameOption[]> =>
     apiClient.get<PmocPlanNameOption[]>("/pmoc/plan-name-options", options),
 
   codeSuggestion: (
@@ -234,8 +232,8 @@ export const pmocService = {
     cycleId: string,
     assetId: string,
     input: StartPmocExecutionInput,
-  ): Promise<PmocEquipmentExecution> =>
-    apiClient.post<PmocEquipmentExecution>(
+  ): Promise<{ execution: PmocEquipmentExecution; created: boolean }> =>
+    apiClient.post<{ execution: PmocEquipmentExecution; created: boolean }>(
       `${cycle(planId, cycleId)}/equipment/${encodeURIComponent(assetId)}/executions`,
       input,
     ),
@@ -266,8 +264,8 @@ export const pmocService = {
    */
   generateExecutionArtifact: (
     executionId: string,
-  ): Promise<PmocEquipmentExecution> =>
-    apiClient.post<PmocEquipmentExecution>(
+  ): Promise<{ artifactExecutionId: string; created: boolean }> =>
+    apiClient.post<{ artifactExecutionId: string; created: boolean }>(
       `/pmoc/equipment-executions/${encodeURIComponent(executionId)}/artifact/generate`,
       {},
     ),

@@ -474,6 +474,15 @@ export class WorkforceRepository {
     );
   }
 
+  organizationOwner(organizationId: string) {
+    return this.rls.run((tx) =>
+      tx.organization.findFirst({
+        where: { id: organizationId },
+        select: { ownerUserId: true },
+      }),
+    );
+  }
+
   activeSignature(organizationId: string, userId: string) {
     return this.rls.run((tx) =>
       tx.userSignature.findFirst({

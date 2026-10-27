@@ -50,12 +50,29 @@ class PmocPlanCycleView {
   /// faltou. Aqui ela existe para não oferecer um botão que voltaria 403; a
   /// recusa de verdade continua sendo do backend.
   bool canAttend({required String? actorId, required bool isOwner}) =>
-      isOwner || (actorId != null && plan.technicianId == actorId);
+      isOwner ||
+      (actorId != null &&
+          (plan.technicianId == actorId ||
+              equipment.any(
+                (item) =>
+                    item.execution?.responsibleFieldTechnicianId == actorId,
+              )));
+
+  bool canAttendEquipment(
+    PmocCycleEquipmentContract item, {
+    required String? actorId,
+    required bool isOwner,
+  }) =>
+      isOwner ||
+      (actorId != null &&
+          (item.execution != null
+              ? item.execution!.responsibleFieldTechnicianId == actorId
+              : plan.technicianId == actorId));
 }
 
-final pmocPlanProvider =
-    FutureProvider.family<PmocPlanDetailContract, String>((ref, planId) =>
-        ref.watch(pmocRepositoryProvider).plan(planId));
+final pmocPlanProvider = FutureProvider.family<PmocPlanDetailContract, String>(
+  (ref, planId) => ref.watch(pmocRepositoryProvider).plan(planId),
+);
 
 final pmocPlanCycleProvider = FutureProvider.family<PmocPlanCycleView, String>((
   ref,

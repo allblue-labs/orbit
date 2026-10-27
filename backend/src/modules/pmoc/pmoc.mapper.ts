@@ -256,7 +256,15 @@ export class PmocMapper {
           }
         : null,
       artifactExecution: source.artifactExecution,
-      evidence: source.evidence.map((item) => ({
+      evidence: [
+        ...source.evidence,
+        ...(source.fieldEvidence ?? []).map((item) => ({
+          ...item,
+          kind: item.storageFile.mimeType.startsWith('image/')
+            ? 'PHOTO'
+            : 'DOCUMENT',
+        })),
+      ].map((item) => ({
         id: item.id,
         kind: item.kind,
         caption: item.caption,

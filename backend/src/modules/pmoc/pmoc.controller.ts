@@ -488,7 +488,7 @@ export class PmocController {
    */
   @Post('plans/:id/cycles/:cycleId/equipment/:assetId/executions/mine')
   @Capabilities('pmoc.manage', 'operations.manage')
-  @Permissions('pmoc.execute')
+  // A atribuição é validada pelo serviço para esta execução, sem conceder gestão global.
   @ApiOperation({
     summary: 'Start my own physical execution (field technician)',
   })
@@ -541,7 +541,7 @@ export class PmocController {
     'plans/:id/cycles/:cycleId/equipment-executions/:executionId/complete/mine',
   )
   @Capabilities('pmoc.manage', 'operations.manage')
-  @Permissions('pmoc.execute')
+  // A atribuição é validada pelo serviço para esta execução, sem conceder gestão global.
   @ApiOperation({
     summary: 'Complete my own physical execution (field technician)',
   })
@@ -634,7 +634,7 @@ export class PmocController {
    */
   @Post('equipment-executions/:executionId/artifact/generate/mine')
   @Capabilities('pmoc.manage', 'artifact_rendering.render')
-  @Permissions('pmoc.execute')
+  // A atribuição é validada pelo serviço para esta execução, sem conceder gestão global.
   @ApiOperation({
     summary: 'Render the PMOC document of my own execution (field technician)',
   })
