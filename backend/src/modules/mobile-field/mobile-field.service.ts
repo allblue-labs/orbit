@@ -872,14 +872,15 @@ export class MobileFieldService {
     actor: MobileFieldActor,
   ): MobileFieldAction[] {
     const actions: MobileFieldAction[] = [];
-    if (this.has(actor, 'pmoc.read')) actions.push('VIEW');
-    if (execution?.status === 'IN_PROGRESS' && this.has(actor, 'pmoc.execute'))
+    const assigned =
+      actor.isOrganizationOwner === true ||
+      (execution
+        ? execution.responsibleFieldTechnician.id === actor.id
+        : cycle.plan.technician?.id === actor.id);
+    if (assigned || this.has(actor, 'pmoc.read')) actions.push('VIEW');
+    if (execution?.status === 'IN_PROGRESS' && assigned)
       actions.push('RESUME', 'ADD_EVIDENCE', 'COMPLETE');
-    if (
-      !execution &&
-      cycle.plan.technicalResponsibleUserId &&
-      this.has(actor, 'pmoc.execute')
-    )
+    if (!execution && cycle.plan.technicalResponsibleUserId && assigned)
       actions.push('EXECUTE_PMOC');
     if (cycle.artifactExecution && this.has(actor, 'artifact_executions.read'))
       actions.push('VIEW_DOCUMENT', 'DOWNLOAD_DOCUMENT');

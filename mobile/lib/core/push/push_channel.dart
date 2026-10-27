@@ -45,7 +45,11 @@ abstract interface class PushTokenSource {
 }
 
 /// A implementação sobre o canal nativo.
-class PushChannel implements PushTokenSource {
+abstract interface class PushMessageSource {
+  Stream<String> get onNotificationReceived;
+}
+
+class PushChannel implements PushTokenSource, PushMessageSource {
   PushChannel({
     MethodChannel? canal,
     EventChannel? tokens,
@@ -60,6 +64,23 @@ class PushChannel implements PushTokenSource {
   final EventChannel _tokens;
   final EventChannel _links;
   final TargetPlatform _plataforma;
+
+  // One broadcast subscription per native channel survives overlapping session
+  // teardown/startup. Cancelling the old account cannot detach the new listener.
+  late final Stream<String> _receiptEvents = _strings(
+    const EventChannel('orbit/push/received'),
+  );
+  late final Stream<String> _tokenEvents = _strings(_tokens);
+  late final Stream<String> _linkEvents = _strings(_links);
+
+  static Stream<String> _strings(EventChannel channel) => channel
+      .receiveBroadcastStream()
+      .where((value) => value is String && value.isNotEmpty)
+      .cast<String>()
+      .handleError((Object _) {});
+
+  @override
+  Stream<String> get onNotificationReceived => _receiptEvents;
 
   @override
   MobilePushProvider get provider => _plataforma == TargetPlatform.iOS
@@ -90,20 +111,10 @@ class PushChannel implements PushTokenSource {
   }
 
   @override
-  Stream<String> get onTokenRefresh => _tokens
-      .receiveBroadcastStream()
-      .map((evento) => evento as String?)
-      .where((valor) => valor != null && valor.isNotEmpty)
-      .cast<String>()
-      .handleError((Object _) {});
+  Stream<String> get onTokenRefresh => _tokenEvents;
 
   @override
-  Stream<String> get onDeepLink => _links
-      .receiveBroadcastStream()
-      .map((evento) => evento as String?)
-      .where((valor) => valor != null && valor.isNotEmpty)
-      .cast<String>()
-      .handleError((Object _) {});
+  Stream<String> get onDeepLink => _linkEvents;
 }
 
 /// A fonte que não faz nada.

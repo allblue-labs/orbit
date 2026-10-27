@@ -748,3 +748,79 @@ describe('RVT demand visibility and execution', () => {
     expect(result.data[0]!.allowedActions).toContain('EXECUTE_RVT');
   });
 });
+
+describe('PMOC assignment authorizes the field work item', () => {
+  function scenario(existingAssignee?: string) {
+    const source = emptySource();
+    source.businessUnits.push({
+      id: actor.businessUnitIds[0],
+      legalName: 'Matriz',
+      timezone: 'America/Recife',
+    });
+    source.pmocCycles.push({
+      id: 'cycle',
+      dueOn: new Date('2099-01-01'),
+      status: 'PENDING',
+      updatedAt: new Date(),
+      plan: {
+        id: 'plan',
+        code: 'PMOC-1',
+        name: 'PMOC',
+        businessUnitId: actor.businessUnitIds[0],
+        technician: {
+          id: existingAssignee ? 'planned-other' : actor.id,
+          displayName: 'Previsto',
+        },
+        technicalResponsibleUserId: 'rt',
+        coverages: [
+          {
+            id: 'coverage',
+            asset: {
+              id: 'asset',
+              name: 'Split',
+              status: 'ACTIVE',
+              qrIdentities: [],
+            },
+          },
+        ],
+      },
+      equipmentExecutions: existingAssignee
+        ? [
+            {
+              id: 'exec',
+              coverageId: 'coverage',
+              status: 'IN_PROGRESS',
+              responsibleFieldTechnician: {
+                id: existingAssignee,
+                displayName: 'Atribuído',
+              },
+              operation: { auxiliaryTechnicians: [] },
+            },
+          ]
+        : [],
+    });
+    return new MobileFieldService({
+      project: jest.fn().mockResolvedValue(source),
+    } as never);
+  }
+  it('offers attendance to the plan assignee without a global PMOC permission', async () => {
+    const queue = await scenario().workQueue(actor, {});
+    expect(queue.data[0]?.allowedActions).toEqual(['VIEW', 'EXECUTE_PMOC']);
+  });
+  it('offers resume and completion to the execution assignee instead of the plan technician', async () => {
+    const queue = await scenario(actor.id).workQueue(actor, {});
+    expect(queue.data[0]?.allowedActions).toEqual([
+      'VIEW',
+      'RESUME',
+      'ADD_EVIDENCE',
+      'COMPLETE',
+    ]);
+  });
+  it('does not offer another technician an assigned execution', async () => {
+    const queue = await scenario('another-technician').workQueue(
+      { ...actor, permissions: ['pmoc.read', 'pmoc.execute'] },
+      {},
+    );
+    expect(queue.data).toEqual([]);
+  });
+});

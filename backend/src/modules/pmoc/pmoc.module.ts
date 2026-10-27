@@ -10,6 +10,7 @@
  *
  * `DomainEventEmitter` vem do `AutomationsModule`, que é global.
  */
+import { NotificationsModule } from '../notifications/notifications.module';
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../../database/prisma.module';
 import { SubscriptionPlansModule } from '../subscription-plans/subscription-plans.module';
@@ -26,6 +27,7 @@ import { PmocWebEvidenceController } from './pmoc-web-evidence.controller';
 @Module({
   imports: [
     PrismaModule,
+    NotificationsModule,
     SubscriptionPlansModule,
     WorkforceModule,
     ArtifactRenderingModule,

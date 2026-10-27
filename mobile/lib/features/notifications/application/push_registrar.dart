@@ -38,6 +38,7 @@ class PushRegistrar {
     required OrbitLogger logger,
     required Future<String> Function() deviceInstanceId,
     required Future<String> Function() appVersion,
+    this.retryDelay = const Duration(seconds: 30),
   }) : _source = source,
        _repository = repository,
        _logger = logger,
@@ -50,7 +51,13 @@ class PushRegistrar {
   final Future<String> Function() _deviceInstanceId;
   final Future<String> Function() _appVersion;
 
+  final Duration retryDelay;
   StreamSubscription<String>? _refresh;
+  Timer? _retry;
+  Future<void> _registration = Future.value();
+  Future<void>? _starting;
+  String? _latestToken;
+  bool _permitted = false;
 
   /// O último token registrado, para não repetir o `POST` a cada abertura.
   String? _registrado;
@@ -61,12 +68,27 @@ class PushRegistrar {
   ///
   /// Idempotente: registrar o mesmo token duas vezes é uma requisição
   /// desperdiçada, e o aplicativo restaura a sessão a cada abertura.
-  Future<void> start() async {
+  Future<void> start() {
+    if (_starting case final pending?) return pending;
+    late final Future<void> work;
+    work = _start().whenComplete(() {
+      if (identical(_starting, work)) _starting = null;
+    });
+    _starting = work;
+    return work;
+  }
+
+  Future<void> _start() async {
     _active = true;
     final generation = _generation;
-    _refresh ??= _source.onTokenRefresh.listen(_registrar);
+    _refresh ??= _source.onTokenRefresh.listen((token) {
+      if (_permitted) unawaited(_registrar(token));
+    });
 
-    if (!await _source.requestPermission()) {
+    final permitted = await _source.requestPermission();
+    if (!_active || generation != _generation) return;
+    _permitted = permitted;
+    if (!permitted) {
       _logger.info('push_permission_denied');
       return;
     }
@@ -80,7 +102,22 @@ class PushRegistrar {
     await _registrar(token);
   }
 
-  Future<void> _registrar(String token) async {
+  Future<void> _registrar(String token) {
+    _latestToken = token;
+    final generation = _generation;
+    _registration = _registration.then((_) async {
+      if (!_active ||
+          generation != _generation ||
+          !_permitted ||
+          _latestToken != token) {
+        return;
+      }
+      await _register(token);
+    });
+    return _registration;
+  }
+
+  Future<void> _register(String token) async {
     if (!_active || token == _registrado) return;
     final generation = _generation;
     try {
@@ -102,11 +139,20 @@ class PushRegistrar {
       );
       if (!_active || generation != _generation) return;
       _registrado = token;
+      _retry?.cancel();
+      _retry = null;
       _logger.info('push_device_registered');
     } on Object catch (error) {
       /// Nunca o token no log: ele é credencial de entrega, e quem o tiver
       /// consegue mandar aviso para este aparelho.
       _logger.error('push_device_register_failed', error: error);
+      if (_active && generation == _generation) {
+        _retry?.cancel();
+        _retry = Timer(retryDelay, () {
+          final latest = _latestToken;
+          if (_active && latest != null) unawaited(_registrar(latest));
+        });
+      }
     }
   }
 
@@ -115,6 +161,11 @@ class PushRegistrar {
   Future<void> stop() async {
     _active = false;
     _generation++;
+    _permitted = false;
+    _starting = null;
+    _retry?.cancel();
+    _retry = null;
+    _latestToken = null;
     await _refresh?.cancel();
     _refresh = null;
     final id = await _deviceInstanceId();
@@ -131,6 +182,11 @@ class PushRegistrar {
   void dispose() {
     _active = false;
     _generation++;
+    _permitted = false;
+    _starting = null;
+    _retry?.cancel();
+    _retry = null;
+    _latestToken = null;
     unawaited(_refresh?.cancel());
     _refresh = null;
     _registrado = null;

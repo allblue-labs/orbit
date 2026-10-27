@@ -30,7 +30,10 @@ String? routeForDeepLink(String? deepLink) {
   if (resto == 'sync') return OrbitRoutes.syncCenter;
 
   if (resto.startsWith('work-items/')) {
-    final id = resto.substring('work-items/'.length);
+    var id = resto.substring('work-items/'.length);
+    if (id.startsWith('OPERATION:')) {
+      id = 'SERVICE_OPERATION:${id.substring('OPERATION:'.length)}';
+    }
     return id.isEmpty ? null : OrbitRoutes.workItemDetail(id);
   }
 

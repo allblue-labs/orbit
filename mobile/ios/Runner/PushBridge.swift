@@ -23,6 +23,7 @@ final class PushBridge: NSObject {
 
   private var tokenSink: FlutterEventSink?
   private var linkSink: FlutterEventSink?
+  fileprivate var messageSink: FlutterEventSink?
 
   /// O token mais recente. Guardado porque ele pode chegar **antes** de o
   /// Dart perguntar — o sistema responde ao registro quando quer.
@@ -60,6 +61,7 @@ final class PushBridge: NSObject {
       binaryMessenger: registrar.messenger()
     ).setStreamHandler(LinkStreamHandler())
 
+    FlutterEventChannel(name: "orbit/push/received", binaryMessenger: registrar.messenger()).setStreamHandler(MessageStreamHandler())
     UNUserNotificationCenter.current().delegate = self
   }
 
@@ -134,6 +136,7 @@ extension PushBridge: UNUserNotificationCenterDelegate {
     withCompletionHandler completionHandler:
       @escaping (UNNotificationPresentationOptions) -> Void
   ) {
+    if let id = notification.request.content.userInfo["notificationId"] as? String { messageSink?(id) }
     completionHandler([.banner, .list, .sound])
   }
 
@@ -175,4 +178,9 @@ private final class LinkStreamHandler: NSObject, FlutterStreamHandler {
     PushBridge.shared.detachLinkSink()
     return nil
   }
+}
+
+private final class MessageStreamHandler: NSObject, FlutterStreamHandler {
+  func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? { PushBridge.shared.messageSink = events; return nil }
+  func onCancel(withArguments arguments: Any?) -> FlutterError? { PushBridge.shared.messageSink = nil; return nil }
 }

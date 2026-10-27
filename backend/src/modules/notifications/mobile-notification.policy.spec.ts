@@ -16,8 +16,18 @@ describe('MobileNotificationPolicy', () => {
       dedupeKey: `WORK_ASSIGNED:${base.factId}:${base.recipientUserId}`,
       title: 'Novo atendimento atribuído',
       body: 'Abra o Orbit para consultar os detalhes atualizados.',
-      deepLink: `/field/work-items/OPERATION:${base.resourceId}`,
+      deepLink: `/field/work-items/SERVICE_OPERATION:${base.resourceId}`,
     });
+  });
+
+  it('links PMOC assignments to the cycle equipment work item', () => {
+    expect(
+      policy.resolve({
+        ...base,
+        type: 'WORK_ASSIGNED',
+        workItemId: 'PMOC:cycle:asset',
+      }).deepLink,
+    ).toBe('/field/work-items/PMOC:cycle:asset');
   });
 
   it('uses privacy-safe copy without operational PII', () => {

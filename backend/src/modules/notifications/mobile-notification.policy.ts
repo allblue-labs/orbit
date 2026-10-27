@@ -8,6 +8,7 @@ export interface MobileNotificationIntent {
   type: MobileNotificationType;
   factId: string;
   resourceId: string;
+  workItemId?: string;
   correlationId: string;
 }
 
@@ -28,7 +29,7 @@ export class MobileNotificationPolicy {
           dedupeKey: base,
           title: 'Novo atendimento atribuído',
           body: 'Abra o Orbit para consultar os detalhes atualizados.',
-          deepLink: `/field/work-items/OPERATION:${intent.resourceId}`,
+          deepLink: `/field/work-items/${intent.workItemId ?? `SERVICE_OPERATION:${intent.resourceId}`}`,
         };
       case 'ARTIFACT_AVAILABLE':
         return {

@@ -9,7 +9,7 @@ void main() {
   test('atendimento atribuído abre o item de trabalho', () {
     expect(
       routeForDeepLink('/field/work-items/OPERATION:abc-123'),
-      OrbitRoutes.workItemDetail('OPERATION:abc-123'),
+      OrbitRoutes.workItemDetail('SERVICE_OPERATION:abc-123'),
     );
   });
 

@@ -18,6 +18,7 @@ import 'core/theme/orbit_theme.dart';
 import 'features/authentication/domain/session.dart';
 import 'features/notifications/application/push_providers.dart';
 import 'features/notifications/domain/deep_link.dart';
+import 'features/notifications/presentation/foreground_notifications.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -130,6 +131,12 @@ class _OrbitOperatorAppState extends ConsumerState<OrbitOperatorApp> {
         child: Consumer(
           builder: (context, scopedRef, _) => MaterialApp.router(
             title: 'Orbit Operator',
+            scaffoldMessengerKey: scopedRef.watch(
+              notificationMessengerKeyProvider,
+            ),
+            builder: (context, child) => ForegroundNotifications(
+              child: child ?? const SizedBox.shrink(),
+            ),
             debugShowCheckedModeBanner: false,
             theme: OrbitTheme.light(),
 

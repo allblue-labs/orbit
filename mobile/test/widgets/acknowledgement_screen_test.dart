@@ -6,6 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:orbit_operator/core/contracts/mobile_signature_contracts.dart';
 import 'package:orbit_operator/core/presentation/field_registry.dart';
+import 'package:orbit_operator/features/signature/presentation/attendance_review.dart';
+import 'package:orbit_operator/core/theme/orbit_theme.dart';
 import 'package:orbit_operator/core/widgets/section_states.dart';
 
 CustomerAcknowledgementPreparation preparation({
@@ -33,6 +35,7 @@ Widget host(Widget child, {double textScale = 1.0, double width = 360}) =>
         size: Size(width, 720),
       ),
       child: MaterialApp(
+        theme: OrbitTheme.light(),
         home: Scaffold(
           body: SizedBox(
             width: width,
@@ -44,18 +47,8 @@ Widget host(Widget child, {double textScale = 1.0, double width = 360}) =>
 
 /// Reproduz o cartão de resumo tal como a tela o monta, para provar o
 /// conteúdo sem levantar o Riverpod inteiro.
-Widget summaryCard(CustomerAcknowledgementPreparation value) => SectionBlock(
-  title: 'Resumo do atendimento',
-  child: Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      if (value.customerName case final name?) Text(name),
-      for (final equipment in value.equipment)
-        Text('${equipment.name} · ${equipment.code}'),
-      Text(value.serviceSummary),
-    ],
-  ),
-);
+Widget summaryCard(CustomerAcknowledgementPreparation value) =>
+    AttendanceReview(preparation: value);
 
 void main() {
   setUpAll(() async => initializeDateFormatting('pt_BR'));
@@ -77,7 +70,8 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Condomínio Central'), findsOneWidget);
-    expect(find.text('Split Cassete · TAG-1'), findsOneWidget);
+    expect(find.text('Split Cassete'), findsOneWidget);
+    expect(find.text('TAG-1'), findsOneWidget);
 
     /// Nada de identificadores, hash ou vocabulário técnico na tela que o
     /// cliente lê.
@@ -89,6 +83,22 @@ void main() {
     expect(body, isNot(contains('aaaa')));
     expect(body, isNot(contains('contentHash')));
     expect(body, isNot(contains('OPERATION')));
+  });
+
+  testWidgets('confirmação separa o conteúdo completo com ícones de execução', (
+    tester,
+  ) async {
+    const summary =
+        'Manutenção preventiva.\nChecklist: Visita\n• Limpar filtro: Realizado\n• Verificar dreno: Não realizado\nServiço realizado: Filtro limpo.\nMateriais utilizados:\n• Filtro: 1 UN\nEvidências registradas: 1\n• Foto após limpeza';
+    await tester.pumpWidget(host(summaryCard(preparation(summary: summary))));
+    for (final line in summary.split('\n')) {
+      expect(find.text(line), findsOneWidget);
+    }
+    expect(find.byIcon(Icons.check_circle_outline), findsOneWidget);
+    expect(find.byIcon(Icons.remove_circle_outline), findsOneWidget);
+    expect(find.byIcon(Icons.inventory_2_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.photo_library_outlined), findsOneWidget);
+    expect(layoutError, isNull);
   });
 
   testWidgets('resumo longo rola em vez de estourar', (tester) async {

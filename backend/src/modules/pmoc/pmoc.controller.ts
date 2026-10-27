@@ -435,7 +435,6 @@ export class PmocController {
 
   @Get('plans/:id/cycles/:cycleId/equipment/:assetId/execution-preparation')
   @Capabilities('pmoc.read')
-  @Permissions('pmoc.read')
   @ApiOperation({
     summary: 'Authoritative PMOC execution preparation for Web and Mobile',
   })
