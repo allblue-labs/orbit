@@ -65,6 +65,7 @@ describe('walk-in equipment contract and persistence', () => {
           .mockResolvedValue({ id: CUSTOMER, legalName: 'Cliente' }),
       },
       asset: {
+        findFirst: jest.fn().mockResolvedValue(null),
         findMany: jest.fn().mockResolvedValue([{ id: 'existing-equipment' }]),
         create: jest
           .fn()

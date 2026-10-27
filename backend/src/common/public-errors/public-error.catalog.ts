@@ -181,6 +181,26 @@ const entries = [
     'Este cliente já possui um contato principal.',
   ],
   [
+    'WALK_IN_CUSTOMER_DOCUMENT_EXISTS',
+    HttpStatus.CONFLICT,
+    'Já existe um cliente com este CPF ou CNPJ. Volte à etapa Origem, escolha “Criar para cliente existente” e selecione o cadastro. Se ele estiver inativo, solicite a reativação ao responsável.',
+  ],
+  [
+    'WALK_IN_ASSET_IDENTIFIER_EXISTS',
+    HttpStatus.CONFLICT,
+    'Já existe um equipamento com este identificador. Volte à etapa Equipamentos e selecione o equipamento cadastrado ou corrija o identificador informado.',
+  ],
+  [
+    'WALK_IN_ASSET_SERIAL_EXISTS',
+    HttpStatus.CONFLICT,
+    'Já existe um equipamento com este número de série. Volte à etapa Equipamentos e selecione o equipamento cadastrado ou corrija o número de série informado.',
+  ],
+  [
+    'WALK_IN_CONFLICT',
+    HttpStatus.CONFLICT,
+    'Não foi possível abrir o atendimento porque um dos dados já está em uso. Confira o CPF ou CNPJ do cliente e os identificadores dos equipamentos antes de tentar novamente.',
+  ],
+  [
     'PORTAL_INVITATION_INVALID',
     HttpStatus.CONFLICT,
     'O convite não é válido ou expirou.',

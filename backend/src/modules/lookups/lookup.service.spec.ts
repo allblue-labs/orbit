@@ -44,7 +44,10 @@ function falharRede() {
 }
 
 describe('consulta de CEP', () => {
-  const service = new LookupService();
+  let service: LookupService;
+  beforeEach(() => {
+    service = new LookupService();
+  });
   const original = globalThis.fetch;
   afterEach(() => {
     globalThis.fetch = original;
@@ -147,10 +150,133 @@ describe('consulta de CEP', () => {
 });
 
 describe('consulta de CNPJ', () => {
-  const service = new LookupService();
+  let service: LookupService;
+  beforeEach(() => {
+    service = new LookupService();
+  });
   const original = globalThis.fetch;
   afterEach(() => {
     globalThis.fetch = original;
+    jest.restoreAllMocks();
+  });
+
+  const fallbackPayload = {
+    taxId: CNPJ,
+    company: { name: 'EMPRESA DE TESTE' },
+    alias: 'Empresa',
+    status: { text: 'Ativa' },
+    phones: [{ area: '81', number: '33334444' }],
+    emails: [{ address: 'CONTATO@EXAMPLE.TEST' }],
+    address: {
+      zip: '50030230',
+      street: 'Rua A',
+      number: '42',
+      details: 'Sala 2',
+      district: 'Centro',
+      city: 'Recife',
+      state: 'PE',
+    },
+  };
+  const response = (status: number, body: unknown) => ({
+    status,
+    ok: status >= 200 && status < 300,
+    json: () => Promise.resolve(body),
+  });
+
+  it.each([429, 503])(
+    'usa provedor alternativo após %s sem perder contato e endereço',
+    async (status) => {
+      const fetcher = jest
+        .fn()
+        .mockResolvedValueOnce(response(status, {}))
+        .mockResolvedValueOnce(response(200, fallbackPayload));
+      globalThis.fetch = fetcher as never;
+      await expect(service.company(CNPJ)).resolves.toMatchObject({
+        documentNumber: CNPJ,
+        legalName: 'EMPRESA DE TESTE',
+        tradeName: 'Empresa',
+        email: 'contato@example.test',
+        phone: '8133334444',
+        address: {
+          postalCode: '50030230',
+          street: 'Rua A',
+          number: '42',
+          complement: 'Sala 2',
+          city: 'Recife',
+          stateCode: 'PE',
+          state: 'Pernambuco',
+        },
+      });
+      expect(fetcher.mock.calls.map((call: unknown[]) => call[0])).toEqual([
+        `https://brasilapi.com.br/api/cnpj/v1/${CNPJ}`,
+        `https://open.cnpja.com/office/${CNPJ}`,
+      ]);
+    },
+  );
+
+  it('usa alternativa após falha de rede e não armazena falhas', async () => {
+    const fetcher = jest
+      .fn()
+      .mockRejectedValueOnce(new Error('timeout'))
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce(
+        response(200, { razao_social: 'Empresa recuperada' }),
+      );
+    globalThis.fetch = fetcher as never;
+    await expect(service.company(CNPJ)).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+    await expect(service.company(CNPJ)).resolves.toMatchObject({
+      legalName: 'Empresa recuperada',
+    });
+    expect(fetcher).toHaveBeenCalledTimes(3);
+  });
+
+  it('não transforma CNPJ inexistente em consulta alternativa', async () => {
+    responderCom(404, {});
+    await expect(service.company(CNPJ)).rejects.toBeInstanceOf(
+      EntityNotFoundException,
+    );
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('compartilha consulta simultânea e guarda somente o sucesso por dez minutos', async () => {
+    let finish!: (value: unknown) => void;
+    const fetcher = jest.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    globalThis.fetch = fetcher as never;
+    const now = jest.spyOn(Date, 'now').mockReturnValue(1000);
+    const first = service.company(CNPJ),
+      second = service.company(CNPJ);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    finish(response(200, { razao_social: 'Empresa' }));
+    await Promise.all([first, second]);
+    await service.company(CNPJ);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    now.mockReturnValue(1000 + 10 * 60_000);
+    fetcher.mockImplementation(() =>
+      Promise.resolve(response(200, { razao_social: 'Empresa atualizada' })),
+    );
+    await expect(service.company(CNPJ)).resolves.toMatchObject({
+      legalName: 'Empresa atualizada',
+    });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it('recusa resposta alternativa que pertença a outro CNPJ', async () => {
+    globalThis.fetch = jest
+      .fn()
+      .mockResolvedValueOnce(response(503, {}))
+      .mockResolvedValueOnce(
+        response(200, { ...fallbackPayload, taxId: '00000000000000' }),
+      ) as never;
+    await expect(service.company(CNPJ)).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
   });
 
   it('traduz razão social, contato e endereço', async () => {

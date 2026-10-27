@@ -10,6 +10,7 @@ import type { MobileFieldActor } from './mobile-field.service';
 import type { CreateWalkInOperationDto } from './mobile-walk-in.dto';
 import { MobileWalkInRepository } from './mobile-walk-in.repository';
 import { WALK_IN_CREATE_PERMISSION } from '../organizations/team-roles';
+import { walkInConflict } from './mobile-walk-in.conflicts';
 
 /**
  * Abrir um atendimento na hora, estando no local.
@@ -175,6 +176,8 @@ export class MobileWalkInService {
    * transporte e evita que uma condição de domínio chegue ao cliente como 500.
    */
   private translate(error: unknown): unknown {
+    const conflict = walkInConflict(error);
+    if (conflict) return conflict;
     if (!(error instanceof Error)) return error;
     switch (error.message) {
       case 'WALK_IN_IDEMPOTENCY_PAYLOAD_MISMATCH':

@@ -24,6 +24,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/design/orbit_keyboard.dart';
 import '../../../core/contracts/mobile_evidence_contracts.dart';
 import '../../../core/contracts/pmoc_contracts.dart';
 import '../../../core/design/orbit_primitives.dart';
@@ -152,9 +153,7 @@ class _Body extends StatelessWidget {
                 ),
                 child: FilledButton(
                   onPressed: state.isBusy ? null : controller.start,
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size(0, 48),
-                  ),
+                  style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
                   child: Text(
                     state.pending == PmocAttendanceCommand.start
                         ? 'Abrindo…'
@@ -221,6 +220,7 @@ class _Body extends StatelessWidget {
       /// define o passo seguinte.
       onRefresh: () async => state.isBusy ? null : controller.load(),
       child: ListView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: const EdgeInsets.only(bottom: OrbitSpacing.xl),
         children: [
           if (state.error != null)
@@ -315,7 +315,8 @@ class _Summary extends StatelessWidget {
 
             /// Quem abriu, quando já foi aberto. É histórico, e é o que explica
             /// para o técnico certo por que ele pode concluir — ou não.
-            if (execution?.responsibleFieldTechnicianName case final String quem)
+            if (execution?.responsibleFieldTechnicianName
+                case final String quem)
               _Line(
                 label: 'Atendendo',
                 value:
@@ -479,10 +480,12 @@ class _Register extends StatelessWidget {
           title: 'Observações e conclusão',
           child: TextField(
             controller: notes,
+            onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
             maxLines: 5,
             minLines: 3,
             textCapitalization: TextCapitalization.sentences,
             decoration: const InputDecoration(
+              suffixIcon: OrbitKeyboardDismissButton(),
               hintText:
                   'O que foi encontrado e o que foi feito neste equipamento.',
             ),
@@ -556,8 +559,7 @@ class _Report extends StatelessWidget {
       'PMOC',
       preparation?.planCode ?? '',
       preparation?.equipmentName ?? '',
-      if (execution?.sequenceNumber case final int numero)
-        'manutencao-$numero',
+      if (execution?.sequenceNumber case final int numero) 'manutencao-$numero',
     ]);
 
     final subject = [
@@ -587,9 +589,7 @@ class _Report extends StatelessWidget {
                   onPressed: state.isBusy || execution == null
                       ? null
                       : controller.issueReport,
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size(0, 48),
-                  ),
+                  style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
                   child: Text(
                     state.pending == PmocAttendanceCommand.issue
                         ? 'Emitindo…'

@@ -50,6 +50,7 @@ class Backend {
   final requests = <RequestOptions>[];
   Future<ResponseBody> Function(RequestOptions)? lookup;
   bool failNextCreate = false;
+  Map<String, String>? conflictNextCreate;
   List<RequestOptions> get creates =>
       requests.where((r) => r.method == 'POST' && r.path == base).toList();
 
@@ -101,6 +102,13 @@ class Backend {
       );
     }
     if (request.method == 'POST' && request.path == base) {
+      if (conflictNextCreate case final conflict?) {
+        conflictNextCreate = null;
+        return jsonResponse(
+          errorEnvelope(code: conflict['code']!, message: conflict['message']!),
+          status: 409,
+        );
+      }
       if (failNextCreate) {
         failNextCreate = false;
         return jsonResponse(
@@ -379,6 +387,17 @@ void main() {
     await tap(tester, 'Avançar · Equipamentos');
     await equipment(tester, 'Split do quarto');
     await equipment(tester, 'Split da sala');
+    expect(find.text('Novo equipamento'), findsNWidgets(2));
+    final card = find.byKey(const ValueKey('walk-in.equipment.0'));
+    expect(
+      tester.getRect(find.text('Split do quarto')).left -
+          tester.getRect(card).left,
+      greaterThanOrEqualTo(16),
+    );
+    expect(
+      tester.getRect(find.byTooltip('Remover Split do quarto')).right,
+      lessThan(tester.getRect(card).right),
+    );
     await tap(tester, 'Avançar · Atendimento');
     await tap(tester, 'Abrir atendimento');
     final body = backend.creates.single.data as Map<String, dynamic>;
@@ -600,4 +619,37 @@ void main() {
     expect(keys[0], keys[1]);
     expect(find.text('Execução op-nova'), findsOneWidget);
   });
+
+  testWidgets(
+    'conflito explica o documento duplicado, fica visível e preserva o rascunho',
+    (tester) async {
+      const message =
+          'Já existe um cliente com este CPF ou CNPJ. Volte à etapa Origem e selecione o cliente existente.';
+      final backend = Backend()
+        ..conflictNextCreate = {
+          'code': 'WALK_IN_CUSTOMER_DOCUMENT_EXISTS',
+          'message': message,
+        };
+      await open(tester, backend, width: 320, scale: 1.25);
+      await fresh(tester);
+      await tap(tester, 'Pessoa física');
+      await fill(tester, 'Nome', 'Maria Souza');
+      await tap(tester, 'Avançar · Equipamentos');
+      await equipment(tester, 'Split do quarto');
+      await tap(tester, 'Avançar · Atendimento');
+      await tap(tester, 'Abrir atendimento');
+      expect(backend.creates, hasLength(1));
+      expect(find.text(message).hitTestable(), findsOneWidget);
+      expect(
+        find.text('Os dados foram alterados. Atualize e tente novamente.'),
+        findsNothing,
+      );
+      expect(find.text('Execução op-nova'), findsNothing);
+      await tap(tester, 'Voltar');
+      expect(find.text('Split do quarto'), findsOneWidget);
+      await tap(tester, 'Voltar');
+      expect(valueOf(tester, 'Nome'), 'Maria Souza');
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

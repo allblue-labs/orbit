@@ -5,6 +5,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../../../core/design/orbit_keyboard.dart';
 import '../../../../core/theme/orbit_theme.dart';
 import '../../application/execution_controller.dart';
 
@@ -65,10 +66,12 @@ class _NoteSheetState extends State<_NoteSheet> {
           const SizedBox(height: OrbitSpacing.sm),
           TextField(
             controller: _field,
+            onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
             maxLines: 4,
             maxLength: 2000,
             autofocus: true,
             decoration: const InputDecoration(
+              suffixIcon: OrbitKeyboardDismissButton(),
               hintText: 'O que aconteceu no atendimento',
             ),
           ),

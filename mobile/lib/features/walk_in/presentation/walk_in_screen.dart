@@ -73,6 +73,7 @@ class _WalkInScreenState extends ConsumerState<WalkInScreen> {
   WalkInCustomerContract? _escolhido;
 
   final _busca = TextEditingController();
+  final _scroll = ScrollController();
   String _termo = '';
   Timer? _debounce;
 
@@ -114,7 +115,7 @@ class _WalkInScreenState extends ConsumerState<WalkInScreen> {
   final _setor = TextEditingController();
 
   bool _abrindo = false;
-  Object? _erro;
+  OrbitException? _erro;
 
   @override
   void initState() {
@@ -128,6 +129,7 @@ class _WalkInScreenState extends ConsumerState<WalkInScreen> {
     _debounce?.cancel();
     _documentoTimer?.cancel();
     _cepTimer?.cancel();
+    _scroll.dispose();
     for (final controller in [
       _busca,
       _nome,
@@ -410,7 +412,18 @@ class _WalkInScreenState extends ConsumerState<WalkInScreen> {
          são o mesmo gesto para quem está no local. */
       context.go(OrbitRoutes.operationExecution(resultado.operationId));
     } on OrbitException catch (error) {
-      if (mounted) setState(() => _erro = error);
+      if (mounted) {
+        setState(() => _erro = error);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _scroll.hasClients) {
+            _scroll.animateTo(
+              0,
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeOut,
+            );
+          }
+        });
+      }
     } finally {
       if (mounted) setState(() => _abrindo = false);
     }
@@ -444,6 +457,8 @@ class _WalkInScreenState extends ConsumerState<WalkInScreen> {
           ],
         ),
         body: ListView(
+          controller: _scroll,
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           padding: const EdgeInsets.only(bottom: OrbitSpacing.xl),
           children: [
             if (_erro != null)
@@ -454,7 +469,29 @@ class _WalkInScreenState extends ConsumerState<WalkInScreen> {
                   OrbitSpacing.md,
                   0,
                 ),
-                child: SectionError(error: _erro!, onRetry: _abrir),
+                child: _erro!.isConflict
+                    ? OrbitCard(
+                        tone: OrbitTone.warning,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Revise os dados do atendimento',
+                              style: OrbitType.sectionTitle.copyWith(
+                                color: context.orbit.ink,
+                              ),
+                            ),
+                            const SizedBox(height: OrbitSpacing.sm),
+                            Text(
+                              _erro!.publicMessage,
+                              style: OrbitType.body.copyWith(
+                                color: context.orbit.inkMuted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : SectionError(error: _erro!, onRetry: _abrir),
               ),
             OrbitWizard(
               key: const ValueKey('walk-in-wizard'),
@@ -656,19 +693,11 @@ class _WalkInScreenState extends ConsumerState<WalkInScreen> {
             ),
             const SizedBox(height: OrbitSpacing.xs),
             for (final (indice, equipamento) in _novosEquipamentos.indexed)
-              OrbitListRow(
-                title: equipamento.name,
-                subtitle: [
-                  equipamento.manufacturer,
-                  equipamento.model,
-                  equipamento.location,
-                ].where((part) => part?.trim().isNotEmpty ?? false).join(' · '),
-                trailing: IconButton(
-                  tooltip: 'Remover',
-                  icon: const Icon(Icons.close, size: 18),
-                  onPressed: () =>
-                      setState(() => _novosEquipamentos.removeAt(indice)),
-                ),
+              _NovoEquipamentoCard(
+                key: ValueKey('walk-in.equipment.$indice'),
+                equipamento: equipamento,
+                onRemove: () =>
+                    setState(() => _novosEquipamentos.removeAt(indice)),
               ),
           ],
 
@@ -724,6 +753,83 @@ class _WalkInScreenState extends ConsumerState<WalkInScreen> {
 /* ------------------------------------------------------------------ */
 /* A carteira                                                          */
 /* ------------------------------------------------------------------ */
+
+class _NovoEquipamentoCard extends StatelessWidget {
+  const _NovoEquipamentoCard({
+    super.key,
+    required this.equipamento,
+    required this.onRemove,
+  });
+
+  final WalkInEquipmentDraft equipamento;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.orbit;
+    final details = [
+      equipamento.manufacturer,
+      equipamento.model,
+      equipamento.location,
+    ].where((value) => value?.trim().isNotEmpty ?? false).join(' · ');
+    return Padding(
+      padding: const EdgeInsets.only(bottom: OrbitSpacing.sm),
+      child: OrbitCard(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(OrbitSpacing.sm),
+              decoration: BoxDecoration(
+                color: palette.accentSoft,
+                borderRadius: OrbitRadius.field,
+              ),
+              child: Icon(
+                Icons.home_repair_service_outlined,
+                color: palette.accentStrong,
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: OrbitSpacing.ms),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    equipamento.name,
+                    style: OrbitType.body.copyWith(
+                      color: palette.ink,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  if (details.isNotEmpty) ...[
+                    const SizedBox(height: OrbitSpacing.xs),
+                    Text(
+                      details,
+                      style: OrbitType.caption.copyWith(
+                        color: palette.inkMuted,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: OrbitSpacing.sm),
+                  const OrbitStatusBadge(
+                    label: 'Novo equipamento',
+                    tone: OrbitTone.info,
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              tooltip: 'Remover ${equipamento.name}',
+              icon: Icon(Icons.close, size: 20, color: palette.inkSubtle),
+              onPressed: onRemove,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class _Carteira extends ConsumerWidget {
   const _Carteira({

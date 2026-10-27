@@ -98,6 +98,7 @@ class OrbitWizardForward {
     required this.onPressed,
     this.enabled = true,
     this.pending = false,
+
     /// Avança sozinho depois de a ação dar certo.
     ///
     /// É o que faz "Iniciar atendimento" levar à etapa seguinte sem um segundo
@@ -155,6 +156,7 @@ class OrbitWizardState extends State<OrbitWizard> {
 
   void _ir(int destino) {
     if (destino < 0 || destino >= widget.steps.length) return;
+    FocusManager.instance.primaryFocus?.unfocus();
     setState(() => _atual = destino);
     widget.onStepChanged?.call(destino);
   }
@@ -179,6 +181,7 @@ class OrbitWizardState extends State<OrbitWizard> {
         pendente: acao.pending,
         ehAcao: true,
         tocar: () async {
+          FocusManager.instance.primaryFocus?.unfocus();
           await acao.onPressed();
           /* Avança só se ainda estamos montados e há para onde: a ação pode ter
              mudado a lista de etapas. */

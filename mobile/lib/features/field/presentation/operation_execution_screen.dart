@@ -192,6 +192,7 @@ class _Body extends StatelessWidget {
       OrbitWizardStep(
         title: 'Materiais',
         hint: 'Materiais aplicados e observações do atendimento.',
+
         /// Travada quando nem material nem observação estão autorizados: o conteúdo
         /// são dois botões que abrem folhas de registro, e abri-las sem autorização
         /// levaria a uma recusa do servidor depois de a pessoa ter digitado tudo.
@@ -258,12 +259,9 @@ class _Body extends StatelessWidget {
                 enabled: !state.isBusy,
                 pending:
                     state.isBusy &&
-                    state.pendingAction ==
-                        FieldOperationAllowedAction.complete,
-                onPressed: () => confirmExecutionCompletion(
-                  context,
-                  controller,
-                ),
+                    state.pendingAction == FieldOperationAllowedAction.complete,
+                onPressed: () =>
+                    confirmExecutionCompletion(context, controller),
               )
             : null,
       ),
@@ -274,6 +272,7 @@ class _Body extends StatelessWidget {
       /// define o estado seguinte.
       onRefresh: () async => state.isBusy ? null : controller.load(),
       child: ListView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: const EdgeInsets.only(bottom: OrbitSpacing.xl),
         children: [
           if (state.phase == ExecutionPhase.conflict)

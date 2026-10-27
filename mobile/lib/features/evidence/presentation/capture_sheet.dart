@@ -17,6 +17,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/design/orbit_keyboard.dart';
 import '../../../core/contracts/mobile_evidence_contracts.dart';
 import '../../../core/presentation/field_registry.dart';
 import '../../../core/theme/orbit_theme.dart';
@@ -150,6 +151,7 @@ class _CaptureSheetState extends ConsumerState<_CaptureSheet> {
         bottom: MediaQuery.viewInsetsOf(context).bottom + OrbitSpacing.md,
       ),
       child: SingleChildScrollView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -258,10 +260,13 @@ class _CaptureSheetState extends ConsumerState<_CaptureSheet> {
               const SizedBox(height: 4),
               TextField(
                 controller: _legenda,
+                onTapOutside: (_) =>
+                    FocusManager.instance.primaryFocus?.unfocus(),
                 maxLength: 500,
                 maxLines: 2,
                 textCapitalization: TextCapitalization.sentences,
                 decoration: const InputDecoration(
+                  suffixIcon: OrbitKeyboardDismissButton(),
                   hintText: 'Evaporadora após limpeza química',
                   isDense: true,
                   counterText: '',
