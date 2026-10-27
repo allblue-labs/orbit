@@ -1,6 +1,8 @@
-// Debug builds default to no APNs entitlement so Personal Teams can run locally.
-// Release.xcconfig enables Runner/Runner.entitlements for distribution builds.
-// For push on a debug device, use an Apple team/provisioning profile with Push
-// Notifications enabled and override ORBIT_PUSH_ENTITLEMENTS with that same path.
+// Release mode also supports direct installation with an Apple Personal Team.
+// APNs requires an explicit opt-in and a provisioning profile that supports it.
 // APNs credentials belong to the configured server push gateway, never the app.
 ORBIT_PUSH_ENTITLEMENTS =
+
+// Copy Push.local.xcconfig.example to Push.local.xcconfig on machines/CI builds
+// signed with a compatible Apple Developer Program team.
+#include? "Push.local.xcconfig"

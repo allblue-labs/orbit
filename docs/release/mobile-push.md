@@ -33,10 +33,22 @@ o banner. As preferências de avisos do usuário são respeitadas.
 1. No Apple Developer, habilite **Push Notifications** no identificador
    `com.allbluelabs.orbitOperator` e atualize o provisioning profile.
 2. Em Xcode → Runner → Signing & Capabilities, use a equipe e o perfil com essa
-   capacidade. Release já inclui `Runner/Runner.entitlements`; Debug deixa a
-   capacidade opcional para permitir testes locais com Personal Team. Para
-   testar push em Debug, configure `ORBIT_PUSH_ENTITLEMENTS` com esse mesmo caminho
-   e utilize um perfil compatível.
+   capacidade. O push é opcional em Debug, Profile e Release: `flutter run
+   --release` também pode instalar diretamente em um iPhone com Personal Team,
+   que não suporta APNs. Nessa equipe, deixe o arquivo de configuração local
+   ausente; os avisos dentro do app continuam funcionando.
+
+   Para builds com push, usando uma equipe do Apple Developer Program e um perfil
+   compatível, execute a partir de `mobile/`:
+
+   ```bash
+   cp ios/Flutter/Push.local.xcconfig.example ios/Flutter/Push.local.xcconfig
+   ```
+
+   Esse arquivo local habilita `Runner/Runner.entitlements` e está ignorado no Git.
+   Prepare-o também na máquina de CI/publicação antes de gerar a build assinada.
+   Remova o arquivo local ao voltar a instalar com Personal Team. A URL de produção
+   da API e `--release` não habilitam push automaticamente.
 3. Configure a autenticação APNs (chave ou certificado), Team ID, Key ID quando
    aplicável, e o bundle ID no gateway de envio. Esses segredos permanecem no
    servidor do gateway. O Orbit recebe diretamente um token **APNS**, não FCM.
