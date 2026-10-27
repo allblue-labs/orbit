@@ -1,3 +1,4 @@
+import { checklistDefaults } from '../operations/checklist-defaults';
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument, orbit/no-concurrent-transaction-queries */
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -728,6 +729,13 @@ export class RvtRepository {
           location: true,
         },
       });
+      if (assets.length)
+        await tx.operationAsset.createMany({
+          data: assets.map((asset) => ({
+            operationId: operation.id,
+            assetId: asset.id,
+          })),
+        });
       const configurationSnapshot = {
         configurationId: occurrence.configuration.id,
         code: occurrence.configuration.code,
@@ -794,6 +802,8 @@ export class RvtRepository {
       const roteiro =
         occurrence.configuration.maintenanceType?.checklistTemplate;
       if (roteiro) {
+        const answers = checklistDefaults(roteiro.items);
+        const items = Array.isArray(roteiro.items) ? roteiro.items : [];
         await tx.checklistExecution.create({
           data: {
             id: generateUuidV7(),
@@ -801,8 +811,13 @@ export class RvtRepository {
             businessUnitId: occurrence.businessUnitId,
             templateId: roteiro.id,
             rvtExecutionId: execution.id,
+            operationId: operation.id,
             createdById: input.actorId,
             templateVersion: roteiro.version,
+            answers,
+            progress: items.length
+              ? Math.round((Object.keys(answers).length / items.length) * 100)
+              : 100,
             templateSnapshot: this.json({
               id: roteiro.id,
               key: roteiro.key,

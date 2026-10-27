@@ -50,3 +50,23 @@ export function executionPmocProcedure(
     ? existing
     : pmocProcedure(procedure, units);
 }
+
+/** Chaves estáveis dentro do snapshot congelado da execução. */
+export function pmocProcedureItems(procedure: unknown) {
+  return Object.entries(pmocProcedure(procedure)).flatMap(([group, items], g) =>
+    items.map((label, i) => ({ key: `${g}:${i}`, group, label })),
+  );
+}
+
+export function pmocProcedureAnswers(
+  metadata: unknown,
+): Record<string, boolean> {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata))
+    return {};
+  const answers = (metadata as Record<string, unknown>).pmocChecklistAnswers;
+  if (!answers || typeof answers !== 'object' || Array.isArray(answers))
+    return {};
+  return Object.fromEntries(
+    Object.entries(answers).filter(([, value]) => typeof value === 'boolean'),
+  ) as Record<string, boolean>;
+}

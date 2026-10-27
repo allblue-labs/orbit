@@ -62,6 +62,7 @@ import type {
   AddPmocCoverageDto,
   AddPmocEquipmentEvidenceDto,
   CompletePmocEquipmentExecutionDto,
+  SavePmocEquipmentWorkDto,
   GeneratePmocEquipmentArtifactDto,
   CompletePmocExecutionDto,
   CreatePmocOperationDto,
@@ -2029,6 +2030,25 @@ export class PmocService {
     };
   }
 
+  saveEquipmentWork(
+    planId: string,
+    cycleId: string,
+    executionId: string,
+    actor: PmocActor,
+    input: SavePmocEquipmentWorkDto,
+  ) {
+    return this.repository.saveEquipmentWork({
+      ...input,
+      planId,
+      cycleId,
+      executionId,
+      organizationId: actor.organizationId,
+      actorId: actor.actorId,
+      isOwner: actor.isOrganizationOwner,
+      businessUnitIds: actor.businessUnitIds,
+    });
+  }
+
   async completeEquipmentExecution(
     planId: string,
     cycleId: string,
@@ -2061,7 +2081,7 @@ export class PmocService {
       actorId: actor.actorId,
       restrictToTechnicianId: actor.isOrganizationOwner ? null : actor.actorId,
       performedAt,
-      notes: input.notes ?? null,
+      notes: input.notes,
     });
 
     if (result.refused === 'NOT_FOUND') {

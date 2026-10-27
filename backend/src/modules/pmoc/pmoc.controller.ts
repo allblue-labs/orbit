@@ -45,6 +45,7 @@ import {
   AddPmocCoverageDto,
   AddPmocEquipmentEvidenceDto,
   CompletePmocEquipmentExecutionDto,
+  SavePmocEquipmentWorkDto,
   GeneratePmocEquipmentArtifactDto,
   CompletePmocExecutionDto,
   CreatePmocOperationDto,
@@ -503,6 +504,26 @@ export class PmocController {
       cycleId,
       assetId,
       this.actor(request),
+    );
+  }
+
+  @Patch(
+    'plans/:id/cycles/:cycleId/equipment-executions/:executionId/work/mine',
+  )
+  @Capabilities('pmoc.manage', 'operations.manage')
+  saveEquipmentWork(
+    @Param('id', ParseUUIDv7Pipe) id: string,
+    @Param('cycleId', ParseUUIDv7Pipe) cycleId: string,
+    @Param('executionId', ParseUUIDv7Pipe) executionId: string,
+    @Req() request: IdentityRequest,
+    @Body() input: SavePmocEquipmentWorkDto,
+  ) {
+    return this.pmoc.saveEquipmentWork(
+      id,
+      cycleId,
+      executionId,
+      this.actor(request),
+      input,
     );
   }
 

@@ -68,6 +68,11 @@ class FieldOperationRepository {
     return FieldOperationCommandResultContract.fromJson(data);
   }
 
+  Future<void> completeRvt(String executionId) => _client.post<Object?>(
+    '/rvt/executions/${Uri.encodeComponent(executionId)}/complete',
+    body: const <String, Object?>{},
+  );
+
   /// Pede ao dono o cancelamento do atendimento.
   ///
   /// **Pedido, e não comando.** Por isso fica fora de `commands/` e não carrega

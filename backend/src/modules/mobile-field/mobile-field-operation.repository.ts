@@ -489,6 +489,10 @@ export class MobileFieldOperationRepository {
           completedAt: input.complete ? new Date() : undefined,
         },
       });
+      await tx.operation.update({
+        where: { id: input.operationId },
+        data: { updatedAt: new Date() },
+      });
       await tx.operationHistory.create({
         data: {
           operationId: input.operationId,

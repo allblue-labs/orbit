@@ -1,3 +1,4 @@
+import { attendanceSummary } from './attendance-summary';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import {
@@ -408,8 +409,8 @@ export class MobileSignatureService {
       throw new ForbiddenException('Atendimento fora do contexto permitido');
     const actual =
       operation.completedByUserId ??
-      operation.startedByUserId ??
-      operation.responsibleFieldTechnicianId;
+      operation.responsibleFieldTechnicianId ??
+      operation.startedByUserId;
     if (actual !== actor.id)
       throw new ForbiddenException(
         'Somente o Técnico em Campo efetivo pode coletar o reconhecimento',
@@ -445,7 +446,7 @@ export class MobileSignatureService {
         code: link.asset.identifier ?? link.asset.id,
         name: link.asset.name,
       })),
-      serviceSummary: operation.description?.trim() || operation.title,
+      serviceSummary: attendanceSummary(operation),
       performedAt:
         operation.completedAt?.toISOString() ??
         operation.startedAt?.toISOString() ??

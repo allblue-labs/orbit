@@ -554,6 +554,44 @@ export class MobileFieldArtifactService {
         this.section('equipamentos', 'Equipamentos', 2, {
           Equipamentos: execution.equipment.map((item) => item.assetSnapshot),
         }),
+        ...(execution.checklistExecutions ?? []).map((checklist, index) => {
+          const snapshot = this.recordOrNull(checklist.templateSnapshot) ?? {};
+          const answers = this.recordOrNull(checklist.answers) ?? {};
+          const items = Array.isArray(snapshot.items) ? snapshot.items : [];
+          return this.section(
+            `checklist-${checklist.id}`,
+            String(snapshot.name ?? 'Checklist da visita'),
+            4 + index,
+            Object.fromEntries(
+              items.map((item) => {
+                const row = this.recordOrNull(item) ?? {};
+                const value = answers[String(row.key)];
+                return [
+                  String(row.label ?? row.key),
+                  value === true
+                    ? 'Realizado'
+                    : value === false
+                      ? 'Não realizado'
+                      : (value ?? 'Não informado'),
+                ];
+              }),
+            ),
+          );
+        }),
+        this.section('servico', 'Serviço realizado e materiais', 20, {
+          Observações: (execution.fieldOperation?.history ?? []).flatMap(
+            (item) => {
+              const detail = this.recordOrNull(item.details);
+              return detail?.visibility === 'CUSTOMER_VISIBLE'
+                ? [detail.note]
+                : [];
+            },
+          ),
+          Materiais: (execution.fieldOperation?.materials ?? []).map(
+            (item) =>
+              `${item.description}: ${item.quantity.toString()} ${item.unit}`,
+          ),
+        }),
         this.section('procedimento', 'Procedimento e constatações', 3, {
           Procedimento: execution.procedureSnapshot,
           Observações: execution.observations,
@@ -563,11 +601,9 @@ export class MobileFieldArtifactService {
       ],
       signatures,
       evidence: execution.fieldEvidence.map((item) => this.evidence(item)),
-      customerAcknowledgement:
-        this.recordOrNull(execution.customerAcknowledgement) ??
-        (source.acknowledgement
-          ? this.acknowledgement(source.acknowledgement)
-          : null),
+      customerAcknowledgement: source.acknowledgement
+        ? this.acknowledgement(source.acknowledgement)
+        : this.recordOrNull(execution.customerAcknowledgement),
       frozenAt: new Date().toISOString(),
     };
   }

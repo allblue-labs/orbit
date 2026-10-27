@@ -26,7 +26,13 @@ import { executionPmocProcedure } from './pmoc-procedure';
 import { Prisma } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import { RequestContextService } from '../../context';
-import { ConflictException, EntityNotFoundException } from '../../exceptions';
+import {
+  ConflictException,
+  EntityNotFoundException,
+  ForbiddenException,
+  ValidationException,
+} from '../../exceptions';
+import { pmocProcedureAnswers, pmocProcedureItems } from './pmoc-procedure';
 import {
   PaginationHelper,
   PrismaService,
@@ -133,6 +139,7 @@ const equipmentExecutionView = {
   completedAt: true,
   notes: true,
   procedureSnapshot: true,
+  updatedAt: true,
   technicalResponsibleSnapshot: true,
   asset: {
     select: {
@@ -149,6 +156,7 @@ const equipmentExecutionView = {
       id: true,
       code: true,
       status: true,
+      data: true,
       auxiliaryTechnicians: {
         where: { removedAt: null },
         select: { user: { select: { id: true, displayName: true } } },
@@ -1477,6 +1485,19 @@ export class PmocRepository {
         )
         RETURNING id
       `;
+      await tx.operation.update({
+        where: { id: operation.id },
+        data: {
+          data: {
+            pmocChecklistAnswers: Object.fromEntries(
+              pmocProcedureItems(input.procedureSnapshot).map((item) => [
+                item.key,
+                true,
+              ]),
+            ),
+          },
+        },
+      });
       const execution = await tx.pmocEquipmentExecution.findUniqueOrThrow({
         where: { id: inserido[0]!.id },
         select: equipmentExecutionView,
@@ -1675,11 +1696,20 @@ export class PmocRepository {
           },
           operation: {
             include: {
+              materials: {
+                where: { deletedAt: null, origin: 'APPLIED' },
+                orderBy: { createdAt: 'asc' },
+              },
               auxiliaryTechnicians: {
                 where: { removedAt: null },
                 include: { user: { select: { id: true, displayName: true } } },
               },
             },
+          },
+          fieldEvidence: {
+            where: { status: 'FINALIZED' },
+            orderBy: { createdAt: 'asc' },
+            include: { storageFile: true },
           },
           evidence: {
             orderBy: { createdAt: 'asc' },
@@ -1733,7 +1763,21 @@ export class PmocRepository {
         string,
         unknown
       >;
-      const evidence = physical.evidence.map((item) => ({
+      const acknowledgement = physical.operationId
+        ? await tx.customerAcknowledgement.findFirst({
+            where: {
+              organizationId,
+              executionType: 'OPERATION',
+              executionId: physical.operationId,
+              invalidatedAt: null,
+            },
+            orderBy: { acknowledgedAt: 'desc' },
+          })
+        : null;
+      const evidence = [
+        ...physical.evidence.map((item) => ({ ...item, kind: item.kind })),
+        ...physical.fieldEvidence.map((item) => ({ ...item, kind: 'PHOTO' })),
+      ].map((item) => ({
         id: item.id,
         kind: item.kind,
         caption: item.caption,
@@ -1790,7 +1834,15 @@ export class PmocRepository {
          * O assembler espalha os metadados do snapshot no render input, então
          * nomear o campo aqui é o que faz a seção existir em produção.
          */
-        executionNotes: physical.notes,
+        executionNotes: [
+          physical.notes,
+          ...(physical.operation?.materials ?? []).map(
+            (item) =>
+              `Material utilizado: ${item.description} — ${item.quantity.toString()} ${item.unit}`,
+          ),
+        ]
+          .filter(Boolean)
+          .join('\n'),
         customer: {
           id: physical.cycle.plan.customer.id,
           name:
@@ -1809,6 +1861,7 @@ export class PmocRepository {
           identifier: physical.asset.identifier,
           location: physical.asset.location,
         },
+        procedureAnswers: pmocProcedureAnswers(physical.operation?.data),
         procedure: executionPmocProcedure(
           physical.procedureSnapshot,
           physical.cycle.plan.procedure,
@@ -1848,6 +1901,14 @@ export class PmocRepository {
           order: 1,
         },
       ];
+      if (acknowledgement)
+        signatureSlots.push({
+          id: 'customer',
+          label: 'Aceite do cliente',
+          signerRole: 'CUSTOMER',
+          required: false,
+          order: 2,
+        });
       const structureHash = createHash('sha256')
         .update(JSON.stringify({ sections, signatureSlots, context }))
         .digest('hex');
@@ -1943,6 +2004,25 @@ export class PmocRepository {
           },
         });
       }
+      if (acknowledgement)
+        await tx.artifactExecutionSignature.create({
+          data: {
+            organizationId,
+            executionId: artifact.id,
+            slotId: 'customer',
+            signerRole: 'CUSTOMER',
+            signerName: acknowledgement.signerName,
+            signatureData: {
+              acknowledgementId: acknowledgement.id,
+              contentHash: acknowledgement.contentHash,
+            },
+            signatureHash:
+              acknowledgement.signatureSha256 ?? acknowledgement.contentHash,
+            signatureAssetId: acknowledgement.signatureStorageFileId,
+            signatureAssetHash: acknowledgement.signatureSha256,
+            signedAt: acknowledgement.acknowledgedAt,
+          },
+        });
       await tx.pmocEquipmentExecution.update({
         where: { id: physical.id },
         data: { artifactExecutionId: artifact.id },
@@ -1986,6 +2066,103 @@ export class PmocRepository {
    * Ela só acontece no caminho da falha, então o caminho felizes segue com uma
    * instrução.
    */
+  saveEquipmentWork(input: {
+    organizationId: string;
+    planId: string;
+    cycleId: string;
+    executionId: string;
+    actorId: string;
+    isOwner: boolean;
+    businessUnitIds: readonly string[];
+    expectedVersion: string;
+    answers: Record<string, boolean>;
+    notes?: string;
+  }) {
+    return this.rls.run(async (tx) => {
+      await tx.$executeRaw`SELECT id FROM pmoc_equipment_executions WHERE id=${input.executionId}::uuid FOR UPDATE`;
+      const execution = await tx.pmocEquipmentExecution.findFirst({
+        where: {
+          id: input.executionId,
+          organizationId: input.organizationId,
+          planId: input.planId,
+          cycleId: input.cycleId,
+        },
+        include: {
+          operation: true,
+          plan: {
+            include: { units: { include: { unit: { include: unitView } } } },
+          },
+        },
+      });
+      if (
+        !execution ||
+        !input.businessUnitIds.includes(execution.businessUnitId)
+      )
+        throw new EntityNotFoundException(
+          'PmocEquipmentExecution',
+          input.executionId,
+        );
+      if (
+        !input.isOwner &&
+        execution.responsibleFieldTechnicianId !== input.actorId
+      )
+        throw new ForbiddenException(
+          'Somente o técnico escalado pode registrar este atendimento.',
+        );
+      if (execution.status !== 'IN_PROGRESS' || !execution.operation)
+        throw new ConflictException('Este atendimento não está em andamento.');
+      if (execution.updatedAt.toISOString() !== input.expectedVersion)
+        throw new ConflictException(
+          'O atendimento foi alterado. Atualize antes de salvar.',
+        );
+      const procedure = executionPmocProcedure(
+        execution.procedureSnapshot,
+        execution.plan.procedure,
+        execution.plan.units,
+      );
+      const items = pmocProcedureItems(procedure);
+      const keys = new Set(items.map((item) => item.key));
+      if (
+        Object.keys(input.answers).some(
+          (key) => !keys.has(key) || typeof input.answers[key] !== 'boolean',
+        ) ||
+        items.some((item) => typeof input.answers[item.key] !== 'boolean')
+      )
+        throw new ValidationException(
+          'Confira as respostas de todos os itens do roteiro.',
+        );
+      const metadata = execution.operation.data as Record<
+        string,
+        Prisma.InputJsonValue
+      >;
+      await tx.operation.update({
+        where: { id: execution.operation.id },
+        data: {
+          data: { ...metadata, pmocChecklistAnswers: input.answers },
+          updatedAt: new Date(),
+        },
+      });
+      await tx.pmocEquipmentExecution.update({
+        where: { id: execution.id },
+        data: {
+          procedureSnapshot: procedure,
+          notes: input.notes?.trim(),
+          updatedAt: new Date(),
+        },
+      });
+      await this.audit(
+        tx,
+        input.planId,
+        input.organizationId,
+        input.actorId,
+        'PMOC_EQUIPMENT_WORK_SAVED',
+        {},
+        { executionId: execution.id, answers: input.answers },
+      );
+      return { saved: true };
+    });
+  }
+
   completeEquipmentExecution(input: {
     organizationId: string;
     planId: string;
@@ -1994,7 +2171,7 @@ export class PmocRepository {
     actorId: string;
     restrictToTechnicianId: string | null;
     performedAt: Date;
-    notes: string | null;
+    notes: string | undefined;
   }) {
     return this.rls.run(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`pmoc:cycle-completion:${input.cycleId}`}))`;

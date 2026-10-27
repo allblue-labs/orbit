@@ -152,6 +152,22 @@ class PmocRepository {
     );
   }
 
+  Future<void> saveWork({
+    required String planId,
+    required String cycleId,
+    required String executionId,
+    required String expectedVersion,
+    required Map<String, bool> answers,
+    String? notes,
+  }) => _client.patch<Object?>(
+    '${_cycle(planId, cycleId)}/equipment-executions/${Uri.encodeComponent(executionId)}/work/mine',
+    body: {
+      'expectedVersion': expectedVersion,
+      'answers': answers,
+      if (notes != null) 'notes': notes,
+    },
+  );
+
   /// Conclui o atendimento deste equipamento.
   ///
   /// O ciclo fecha sozinho quando todos os equipamentos dele estiverem

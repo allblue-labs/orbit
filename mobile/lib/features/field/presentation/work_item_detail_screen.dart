@@ -31,6 +31,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/providers.dart';
+import '../../../core/errors/orbit_exception.dart';
 import '../../../core/contracts/mobile_field_contracts.dart';
 import '../../../core/presentation/field_registry.dart';
 import '../../../core/presentation/orbit_format.dart';
@@ -201,10 +202,7 @@ class _Capa extends StatelessWidget {
               /// parecer que não aconteceu. O estado real é este: programado,
               /// e aguardando uma decisão sobre o cancelamento.
               if (item.pendingCancellation != null)
-                const _Tag(
-                  label: 'Aguardando cancelamento',
-                  enfase: true,
-                ),
+                const _Tag(label: 'Aguardando cancelamento', enfase: true),
               _Tag(label: dueStateLabel(item.dueState)),
               if (status != null) _Tag(label: status),
               if (assignment != FieldAssignment.none)
@@ -217,11 +215,7 @@ class _Capa extends StatelessWidget {
           /// A hora, no tamanho que ela merece.
           Row(
             children: [
-              Icon(
-                Icons.event_outlined,
-                size: 18,
-                color: palette.accentStrong,
-              ),
+              Icon(Icons.event_outlined, size: 18, color: palette.accentStrong),
               const SizedBox(width: OrbitSpacing.sm),
               Expanded(
                 child: Text(
@@ -544,9 +538,7 @@ class _Equipamentos extends StatelessWidget {
                         .whereType<String>()
                         .where((v) => v.isNotEmpty)
                         .join(' · '),
-                    style: OrbitType.caption.copyWith(
-                      color: palette.inkMuted,
-                    ),
+                    style: OrbitType.caption.copyWith(color: palette.inkMuted),
                   ),
                 ],
               ),
@@ -815,7 +807,12 @@ VoidCallback? _iniciar(
 ) {
   final comecar = item.allowedActions.contains(MobileFieldAction.start);
   final retomar = item.allowedActions.contains(MobileFieldAction.resume);
-  if (!comecar && !retomar) return null;
+  if (!comecar &&
+      !retomar &&
+      !item.allowedActions.contains(MobileFieldAction.executeRvt) &&
+      !item.allowedActions.contains(MobileFieldAction.executePmoc)) {
+    return null;
+  }
 
   final navegacao = item.navigationContext;
 
@@ -832,9 +829,7 @@ VoidCallback? _iniciar(
       /* Explícito, embora o controlador também recuse iniciar o que não está
          liberado: ler aqui que "Continuar" não envia nada é mais claro do que
          depender do silêncio de um no-op lá dentro. */
-      final precisaIniciar = estado.allows(
-        FieldOperationAllowedAction.start,
-      );
+      final precisaIniciar = estado.allows(FieldOperationAllowedAction.start);
       if (precisaIniciar && !estado.preparation!.eligible) return null;
 
       return () async {
@@ -869,7 +864,46 @@ VoidCallback? _iniciar(
       );
 
     case MobileWorkItemKind.rvt:
-      return null;
+      return () async {
+        try {
+          final api = ref.read(apiClientProvider);
+          final existingId = navegacao.executionId;
+          final execution = existingId == null
+              ? await api.post<Map<String, dynamic>>(
+                  '/rvt/occurrences/${Uri.encodeComponent(navegacao.sourceId)}/start',
+                  body: const <String, Object?>{},
+                )
+              : await api.get<Map<String, dynamic>>(
+                  '/rvt/executions/${Uri.encodeComponent(existingId)}',
+                );
+          final operation = execution['operation'] as Map<String, dynamic>?;
+          final operationId = operation?['id'] as String?;
+          final executionId = execution['id'] as String?;
+          if (operationId == null || executionId == null) {
+            throw const FormatException('Atendimento sem operação vinculada');
+          }
+          if (context.mounted) {
+            context.push(
+              OrbitRoutes.operationExecution(
+                operationId,
+                rvtExecutionId: executionId,
+              ),
+            );
+          }
+        } on Object catch (error) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  error is OrbitException
+                      ? error.publicMessage
+                      : 'Não foi possível abrir a visita técnica. Tente novamente.',
+                ),
+              ),
+            );
+          }
+        }
+      };
   }
 }
 

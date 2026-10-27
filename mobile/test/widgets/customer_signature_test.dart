@@ -145,11 +145,13 @@ typedef Cenario = ({Widget widget, SyncController sync});
 Widget wrap(
   Backend backend, {
   String operationId = 'op-1',
+  bool embedded = false,
   double textScale = 1.0,
   double width = 390,
 }) => cenario(
   backend,
   operationId: operationId,
+  embedded: embedded,
   textScale: textScale,
   width: width,
 ).widget;
@@ -157,6 +159,7 @@ Widget wrap(
 Cenario cenario(
   Backend backend, {
   String operationId = 'op-1',
+  bool embedded = false,
   double textScale = 1.0,
   double width = 390,
 }) {
@@ -201,7 +204,16 @@ Cenario cenario(
       ),
       child: MaterialApp(
         theme: OrbitTheme.light(),
-        home: CustomerAcknowledgementScreen(operationId: operationId),
+        home: embedded
+            ? Scaffold(
+                body: SingleChildScrollView(
+                  child: CustomerAcknowledgementScreen(
+                    operationId: operationId,
+                    embedded: true,
+                  ),
+                ),
+              )
+            : CustomerAcknowledgementScreen(operationId: operationId),
       ),
     ),
   );
@@ -290,6 +302,33 @@ void main() {
     FlutterError.onError = (details) => layoutError ??= details.exception;
   });
   tearDown(() => FlutterError.onError = FlutterError.presentError);
+
+  testWidgets(
+    'confirma no próprio passo, atualiza a leitura e mantém o resumo',
+    (tester) async {
+      final backend = Backend();
+      await tester.pumpWidget(wrap(backend, embedded: true));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'Maria Zeladora');
+      await assinar(tester);
+      await confirmarComAssinatura(tester);
+      expect(
+        backend.acknowledgements.single['signatureStorageFileId'],
+        'file-cliente-1',
+      );
+      expect(find.text('Voltar ao atendimento'), findsNothing);
+      expect(find.text('CIÊNCIA REGISTRADA'), findsOneWidget);
+      expect(find.text('Manutenção preventiva realizada.'), findsOneWidget);
+      expect(
+        backend.paths
+            .where(
+              (path) => path.endsWith('/customer-acknowledgement/preparation'),
+            )
+            .length,
+        greaterThanOrEqualTo(2),
+      );
+    },
+  );
 
   testWidgets('o cliente pode assinar na confirmação do atendimento', (
     tester,

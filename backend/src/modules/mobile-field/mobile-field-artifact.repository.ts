@@ -297,6 +297,7 @@ export class MobileFieldArtifactRepository {
           },
           include: {
             occurrence: { include: { configuration: true } },
+            checklistExecutions: { orderBy: { createdAt: 'asc' } },
             equipment: { orderBy: { createdAt: 'asc' } },
             fieldEvidence: {
               where: { status: 'FINALIZED' },
@@ -321,15 +322,42 @@ export class MobileFieldArtifactRepository {
           where: {
             organizationId: actor.organizationId,
             businessUnitId: source.businessUnitId,
-            executionType: 'RVT_EXECUTION',
-            executionId: source.id,
+            OR: [
+              { executionType: 'RVT_EXECUTION', executionId: source.id },
+              ...(source.operationId
+                ? [
+                    {
+                      executionType: 'OPERATION',
+                      executionId: source.operationId,
+                    },
+                  ]
+                : []),
+            ],
             invalidatedAt: null,
           },
           orderBy: { acknowledgedAt: 'desc' },
         });
+        const operation = source.operationId
+          ? await tx.operation.findFirst({
+              where: {
+                id: source.operationId,
+                organizationId: actor.organizationId,
+              },
+              include: {
+                history: {
+                  where: { action: 'FIELD_NOTE_ADDED' },
+                  orderBy: { createdAt: 'asc' },
+                },
+                materials: {
+                  where: { deletedAt: null, origin: 'APPLIED' },
+                  orderBy: { createdAt: 'asc' },
+                },
+              },
+            })
+          : null;
         return {
           kind: 'RVT_EXECUTION' as const,
-          source,
+          source: { ...source, fieldOperation: operation },
           acknowledgement,
           template,
           permissions,

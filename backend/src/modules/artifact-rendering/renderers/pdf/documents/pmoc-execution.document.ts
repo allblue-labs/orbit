@@ -212,7 +212,7 @@ function roteiro(
     const groups = Object.entries(pmocProcedure(input.metadata?.procedure));
     if (!groups.length) return;
     sectionTitle(document, 'Roteiro da manutenção', theme);
-    for (const [name, items] of groups) {
+    for (const [g, [name, items]] of groups.entries()) {
       groupLabel(document, name, theme);
       table(
         document,
@@ -220,7 +220,19 @@ function roteiro(
           { header: 'Procedimento previsto', weight: 7 },
           { header: 'Registro', weight: 3 },
         ],
-        items.map((item) => [item, 'Previsto no plano']),
+        items.map((item, i) => {
+          const answers = input.metadata?.procedureAnswers as
+            Record<string, boolean> | undefined;
+          const value = answers?.[`${g}:${i}`];
+          return [
+            item,
+            value === true
+              ? 'Realizado'
+              : value === false
+                ? 'Não realizado'
+                : 'Previsto no plano',
+          ];
+        }),
         theme,
       );
     }

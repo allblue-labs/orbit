@@ -181,4 +181,20 @@ describe('PMOC de execução — contagem de manutenção', () => {
     expect(text).toContain('Limpar filtros');
     expect(text).toContain('Previsto no plano');
   });
+  it('imprime os itens realizados e não realizados do roteiro salvo em campo', async () => {
+    const base = entrada();
+    const output = await renderer.render({
+      ...base,
+      sections: [],
+      metadata: {
+        ...base.metadata,
+        procedure: { Evaporadora: ['Limpar filtros', 'Verificar dreno'] },
+        procedureAnswers: { '0:0': true, '0:1': false },
+      },
+    });
+    const text = pdfText(output.bytes);
+    expect(text).toContain('Realizado');
+    expect(text).toContain('Não realizado');
+    expect(text).not.toContain('Previsto no plano');
+  });
 });

@@ -1,3 +1,4 @@
+import { pmocProcedureAnswers } from './pmoc-procedure';
 /**
  * Mapeadores do domínio PMOC.
  *
@@ -244,6 +245,8 @@ export class PmocMapper {
       startedAt: source.startedAt.toISOString(),
       completedAt: source.completedAt?.toISOString() ?? null,
       notes: source.notes,
+      version: source.updatedAt.toISOString(),
+      procedureAnswers: pmocProcedureAnswers(source.operation?.data),
       asset: source.asset,
       responsibleFieldTechnician: source.responsibleFieldTechnician,
       auxiliaryTechnicians:

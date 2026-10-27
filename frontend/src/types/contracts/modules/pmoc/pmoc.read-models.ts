@@ -94,6 +94,8 @@ export interface PmocExecutionReadModel {
 
 export interface PmocEquipmentExecutionReadModel {
   id: string;
+  version: string;
+  procedureAnswers: Record<string, boolean>;
   status: string;
   /**
    * Qual manutenção deste equipamento esta é — 1, 2, 3…

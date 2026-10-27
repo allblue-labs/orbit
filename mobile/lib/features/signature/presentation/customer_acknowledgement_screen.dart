@@ -1,24 +1,4 @@
-/// Aceite do cliente.
-///
-/// ## O aparelho passa de mão
-///
-/// Esta é a única tela do app pensada para ser lida por **outra pessoa**. Ela
-/// é empurrada fora do shell, então a barra de navegação do app não aparece:
-/// enquanto o cliente revisa o resumo e confirma, o resto do trabalho do
-/// técnico fica fora de vista. A seta de voltar continua ali — quem devolve o
-/// aparelho é o técnico, e prendê-lo na tela não protegeria nada.
-///
-/// ## O que o cliente vê é o que o servidor congelou
-///
-/// `serviceSummary` chega redigido, e é exatamente o texto que o `contentHash`
-/// cobre. Montar um resumo alternativo aqui quebraria a correspondência: o
-/// cliente concordaria com um texto e o backend registraria outro.
-///
-/// ## Aceite não é assinatura
-///
-/// A assinatura gráfica é opcional por política (`signatureRequired: false`).
-/// Por isso o termo é "aceite", e não "assinatura do cliente" — e em lugar
-/// nenhum se promete assinatura digital certificada.
+/// Resumo e aceite do cliente, reutilizados diretamente na confirmação do wizard.
 library;
 
 import 'package:flutter/material.dart';
@@ -38,9 +18,14 @@ import '../../sync/presentation/widgets/pending_badge.dart';
 import '../application/signature_providers.dart';
 
 class CustomerAcknowledgementScreen extends ConsumerStatefulWidget {
-  const CustomerAcknowledgementScreen({super.key, required this.operationId});
+  const CustomerAcknowledgementScreen({
+    super.key,
+    required this.operationId,
+    this.embedded = false,
+  });
 
   final String operationId;
+  final bool embedded;
 
   @override
   ConsumerState<CustomerAcknowledgementScreen> createState() =>
@@ -72,8 +57,7 @@ class _CustomerAcknowledgementScreenState
   /// no pad, e o próximo cliente confirmaria um serviço com a assinatura de
   /// outra pessoa.
   ///
-  /// Hoje a navegação empurra uma rota nova e o `State` nasce limpo por acaso.
-  /// "Por acaso" não é garantia: isto torna a limpeza deliberada.
+  /// A coleta é reutilizada no wizard, e a limpeza acompanha a identidade do atendimento.
   @override
   void didUpdateWidget(CustomerAcknowledgementScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -83,6 +67,7 @@ class _CustomerAcknowledgementScreenState
       setState(() {
         _accepted = null;
         _failure = null;
+        _sending = false;
       });
     }
   }
@@ -105,14 +90,40 @@ class _CustomerAcknowledgementScreenState
   /// correspondência com o texto que o cliente leu, que é a única coisa que dá
   /// sentido ao aceite.
   Future<void> _submit(CustomerAcknowledgementPreparation preparation) async {
+    final operationId = widget.operationId;
     final name = _signerName.text.trim();
-    if (name.length < 2 || _sending) return;
+    if (_sending) return;
+    if (name.length < 2) {
+      setState(
+        () => _failure =
+            'Informe o nome de quem recebeu o serviço (mínimo de 2 caracteres).',
+      );
+      return;
+    }
+    if (preparation.signatureRequired && !_pad.temTraco) {
+      setState(
+        () => _failure = 'Assine no espaço indicado antes de confirmar.',
+      );
+      return;
+    }
+    FocusManager.instance.primaryFocus?.unfocus();
 
     setState(() {
       _sending = true;
       _failure = null;
     });
     try {
+      final sync = ref.read(syncControllerProvider.notifier);
+      final pending = await sync.commandsFor(operationId);
+      if (!mounted || widget.operationId != operationId) return;
+      if (pending.isNotEmpty) {
+        setState(
+          () => _failure =
+              'Há registros aguardando sincronização. Sincronize o atendimento antes de confirmar o resumo com o cliente.',
+        );
+        return;
+      }
+
       /// A imagem sobe **antes** do comando.
       ///
       /// O comando carrega o identificador do arquivo, então o arquivo precisa
@@ -122,26 +133,30 @@ class _CustomerAcknowledgementScreenState
       String? signatureFileId;
       if (_pad.temTraco) {
         final bytes = await _pad.exportar();
-        if (bytes != null) {
-          signatureFileId = await ref
-              .read(signatureRepositoryProvider)
-              .uploadSignatureImage(
-                fileName: 'aceite.png',
-                mimeType: 'image/png',
-                bytes: bytes,
-                purpose: 'CUSTOMER_ACKNOWLEDGEMENT',
-              );
+        if (bytes == null) {
+          throw StateError(
+            'Não foi possível preparar a assinatura. Tente novamente.',
+          );
         }
+        if (!mounted || widget.operationId != operationId) return;
+        signatureFileId = await ref
+            .read(signatureRepositoryProvider)
+            .uploadSignatureImage(
+              fileName: 'aceite.png',
+              mimeType: 'image/png',
+              bytes: bytes,
+              purpose: 'CUSTOMER_ACKNOWLEDGEMENT',
+            );
       }
 
       final commandId = newCommandId();
-      final sync = ref.read(syncControllerProvider.notifier);
+      if (!mounted || widget.operationId != operationId) return;
       await sync.enqueue(
         OfflineCommandEnvelope(
           commandId: commandId,
           idempotencyKey: commandId,
           commandType: OfflineCommandType.customerAcknowledgement,
-          aggregateId: widget.operationId,
+          aggregateId: operationId,
           expectedVersion: preparation.contentVersion,
           occurredAt: DateTime.now().toUtc(),
           payload: {
@@ -155,11 +170,15 @@ class _CustomerAcknowledgementScreenState
       );
 
       final outcome = await sync.outcomeOf(commandId);
-      if (!mounted) return;
+      if (!mounted || widget.operationId != operationId) return;
 
       switch (outcome) {
         case CommandConfirmed():
           setState(() => _accepted = _AcceptedState.confirmed);
+          ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+            const SnackBar(content: Text('Confirmação do cliente registrada.')),
+          );
+          ref.invalidate(acknowledgementPreparationProvider(operationId));
 
         case CommandPendingOutcome():
           setState(() => _accepted = _AcceptedState.pending);
@@ -169,13 +188,12 @@ class _CustomerAcknowledgementScreenState
           /// O atendimento mudou desde que o resumo foi congelado. A saída é
           /// recarregar e coletar de novo — nunca registrar concordância com
           /// um texto que o cliente não leu.
-          ref.invalidate(
-            acknowledgementPreparationProvider(widget.operationId),
-          );
+          ref.invalidate(acknowledgementPreparationProvider(operationId));
+          _pad.limpar();
           setState(() => _failure = outcome.message);
       }
     } on Object catch (error) {
-      if (mounted) {
+      if (mounted && widget.operationId == operationId) {
         setState(
           () => _failure = error is OrbitException
               ? error.publicMessage
@@ -183,48 +201,74 @@ class _CustomerAcknowledgementScreenState
         );
       }
     } finally {
-      if (mounted) setState(() => _sending = false);
+      if (mounted && widget.operationId == operationId) {
+        setState(() => _sending = false);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(acknowledgementPreparationProvider(widget.operationId), (
+      previous,
+      next,
+    ) {
+      final oldHash = previous?.valueOrNull?.contentHash;
+      final newHash = next.valueOrNull?.contentHash;
+      if (oldHash != null && newHash != null && oldHash != newHash) {
+        _pad.limpar();
+        setState(() {
+          _accepted = null;
+          _failure =
+              'O atendimento foi atualizado. Confira o novo resumo e colete a assinatura novamente.';
+        });
+      }
+    });
     final preparation = ref.watch(
       acknowledgementPreparationProvider(widget.operationId),
     );
 
+    final content = preparation.when(
+      loading: () => const SectionLoading(lines: 5),
+      error: (error, _) => SectionError(
+        error: error,
+        onRetry: () => ref.invalidate(
+          acknowledgementPreparationProvider(widget.operationId),
+        ),
+      ),
+      data: (value) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (_accepted != null)
+            _Accepted(state: _accepted!, signerName: _signerName.text.trim()),
+          _Form(
+            preparation: value,
+            signerName: _signerName,
+            pad: _pad,
+            sending: _sending,
+            failure: _failure,
+            accepted: _accepted != null,
+            onSubmit: () => _submit(value),
+            onCollectAgain: () => setState(() {
+              _accepted = null;
+              _pad.limpar();
+              _signerName.clear();
+              ref.invalidate(
+                acknowledgementPreparationProvider(widget.operationId),
+              );
+            }),
+          ),
+        ],
+      ),
+    );
+    if (widget.embedded) return content;
     return Scaffold(
       appBar: AppBar(title: const Text('Aceite do cliente')),
       body: SafeArea(
-        child: preparation.when(
-          loading: () => const Padding(
-            padding: EdgeInsets.all(OrbitSpacing.gutter),
-            child: SectionLoading(lines: 5),
-          ),
-          error: (error, _) => ListView(
-            padding: const EdgeInsets.all(OrbitSpacing.gutter),
-            children: [
-              SectionError(
-                error: error,
-                onRetry: () => ref.invalidate(
-                  acknowledgementPreparationProvider(widget.operationId),
-                ),
-              ),
-            ],
-          ),
-          data: (value) => _accepted == null
-              ? _Form(
-                  preparation: value,
-                  signerName: _signerName,
-                  pad: _pad,
-                  sending: _sending,
-                  failure: _failure,
-                  onSubmit: () => _submit(value),
-                )
-              : _Accepted(
-                  state: _accepted!,
-                  signerName: _signerName.text.trim(),
-                ),
+        child: SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          padding: const EdgeInsets.all(OrbitSpacing.md),
+          child: content,
         ),
       ),
     );
@@ -239,6 +283,8 @@ class _Form extends StatelessWidget {
     required this.sending,
     required this.failure,
     required this.onSubmit,
+    required this.accepted,
+    required this.onCollectAgain,
   });
 
   final CustomerAcknowledgementPreparation preparation;
@@ -247,18 +293,13 @@ class _Form extends StatelessWidget {
   final bool sending;
   final String? failure;
   final VoidCallback onSubmit;
+  final bool accepted;
+  final VoidCallback onCollectAgain;
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: EdgeInsets.only(
-        left: OrbitSpacing.md,
-        right: OrbitSpacing.md,
-        top: OrbitSpacing.md,
-
-        /// O teclado empurra o conteúdo; o botão nunca fica coberto.
-        bottom: MediaQuery.viewInsetsOf(context).bottom + OrbitSpacing.xl,
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (preparation.existingAcknowledgement case final existing?)
           _PreviousAcknowledgement(existing: existing),
@@ -295,107 +336,115 @@ class _Form extends StatelessWidget {
           ),
         ),
 
-        SectionBlock(
-          title: 'Quem está dando ciência',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextField(
-                controller: signerName,
-                textCapitalization: TextCapitalization.words,
-                maxLength: 180,
-                decoration: const InputDecoration(
-                  labelText: 'Nome de quem recebeu o serviço',
-                ),
-              ),
-
-              /// O nome fica **no aceite**, não no cadastro do cliente: quem
-              /// recebe pode ser o zelador, o síndico, qualquer um presente.
-              const Text(
-                'O nome fica registrado neste atendimento e não altera o '
-                'cadastro do cliente.',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: OrbitColors.textSecondary,
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        /// A assinatura vem **depois** do resumo e do nome, e não antes.
-        ///
-        /// O cliente precisa ter lido o que está confirmando: assinar primeiro
-        /// e ler depois inverte o sentido do gesto, e é o que transforma
-        /// aceite em formalidade vazia.
-        SectionBlock(
-          title: 'Assinatura',
-          child: ListenableBuilder(
-            listenable: pad,
-            builder: (context, _) => Column(
+        if (accepted)
+          OutlinedButton(
+            onPressed: onCollectAgain,
+            child: const Text('Coletar novamente'),
+          )
+        else ...[
+          SectionBlock(
+            title: 'Quem está dando ciência',
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                OrbitSignaturePad(
-                  controller: pad,
-                  hint: 'Assine neste espaço',
-                  enabled: !sending,
-                ),
-                const SizedBox(height: OrbitSpacing.sm),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: sending ? null : pad.limpar,
-                        style: OutlinedButton.styleFrom(
-                          minimumSize: const Size(0, 48),
-                        ),
-                        child: const Text('Limpar'),
-                      ),
-                    ),
-                  ],
-                ),
-
-                /// A assinatura gráfica é opcional por política do servidor
-                /// (`signatureRequired: false`). Dizer isso evita que o técnico
-                /// fique parado esperando um cliente que não quer assinar.
-                const SizedBox(height: OrbitSpacing.sm),
-                Text(
-                  'A assinatura é opcional. Sem ela, fica registrado o nome de '
-                  'quem recebeu o serviço.',
-                  style: OrbitType.caption.copyWith(
-                    color: context.orbit.inkMuted,
+                TextField(
+                  controller: signerName,
+                  textCapitalization: TextCapitalization.words,
+                  maxLength: 180,
+                  decoration: const InputDecoration(
+                    labelText: 'Nome de quem recebeu o serviço',
                   ),
                 ),
 
-                if (failure case final String message) ...[
-                  const SizedBox(height: OrbitSpacing.sm),
-                  Text(
-                    message,
-                    style: OrbitType.caption.copyWith(
-                      color: context.orbit.danger,
-                    ),
-                  ),
-                ],
-
-                const SizedBox(height: OrbitSpacing.md),
-                Semantics(
-                  button: true,
-                  enabled: !sending,
-                  label: 'Confirmar atendimento',
-                  child: FilledButton(
-                    onPressed: sending ? null : onSubmit,
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size(0, 52),
-                    ),
-                    child: Text(
-                      sending ? 'Registrando…' : 'Confirmar atendimento',
-                    ),
+                /// O nome fica **no aceite**, não no cadastro do cliente: quem
+                /// recebe pode ser o zelador, o síndico, qualquer um presente.
+                const Text(
+                  'O nome fica registrado neste atendimento e não altera o '
+                  'cadastro do cliente.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: OrbitColors.textSecondary,
                   ),
                 ),
               ],
             ),
           ),
-        ),
+
+          /// A assinatura vem **depois** do resumo e do nome, e não antes.
+          ///
+          /// O cliente precisa ter lido o que está confirmando: assinar primeiro
+          /// e ler depois inverte o sentido do gesto, e é o que transforma
+          /// aceite em formalidade vazia.
+          SectionBlock(
+            title: 'Assinatura',
+            child: ListenableBuilder(
+              listenable: pad,
+              builder: (context, _) => Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  OrbitSignaturePad(
+                    controller: pad,
+                    hint: 'Assine neste espaço',
+                    enabled: !sending,
+                  ),
+                  const SizedBox(height: OrbitSpacing.sm),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: sending ? null : pad.limpar,
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(0, 48),
+                          ),
+                          child: const Text('Limpar'),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  /// A assinatura gráfica é opcional por política do servidor
+                  /// (`signatureRequired: false`). Dizer isso evita que o técnico
+                  /// fique parado esperando um cliente que não quer assinar.
+                  const SizedBox(height: OrbitSpacing.sm),
+                  Text(
+                    preparation.signatureRequired
+                        ? 'Assine para confirmar o resumo deste atendimento.'
+                        : 'A assinatura é opcional. Sem ela, fica registrado o nome de quem recebeu o serviço.',
+                    style: OrbitType.caption.copyWith(
+                      color: context.orbit.inkMuted,
+                    ),
+                  ),
+
+                  if (failure case final String message) ...[
+                    const SizedBox(height: OrbitSpacing.sm),
+                    Text(
+                      message,
+                      style: OrbitType.caption.copyWith(
+                        color: context.orbit.danger,
+                      ),
+                    ),
+                  ],
+
+                  const SizedBox(height: OrbitSpacing.md),
+                  Semantics(
+                    button: true,
+                    enabled: !sending,
+                    label: 'Confirmar atendimento',
+                    child: FilledButton(
+                      onPressed: sending ? null : onSubmit,
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size(0, 52),
+                      ),
+                      child: Text(
+                        sending ? 'Registrando…' : 'Confirmar atendimento',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -447,8 +496,8 @@ class _Accepted extends StatelessWidget {
   Widget build(BuildContext context) {
     final confirmed = state == _AcceptedState.confirmed;
 
-    return ListView(
-      padding: const EdgeInsets.all(OrbitSpacing.gutter),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SectionBlock(
           title: confirmed
@@ -494,11 +543,6 @@ class _Accepted extends StatelessWidget {
               ),
             ],
           ),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(),
-          style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
-          child: const Text('Voltar ao atendimento'),
         ),
       ],
     );

@@ -28,8 +28,9 @@ const _codes = <FieldOperationAllowedAction, String>{
 /// "Avançar", e duas ações grandes lado a lado não dizem qual vem primeiro.
 Future<void> confirmExecutionCompletion(
   BuildContext context,
-  ExecutionController controller,
-) async {
+  ExecutionController controller, {
+  Future<void> Function()? onComplete,
+}) async {
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
@@ -49,7 +50,7 @@ Future<void> confirmExecutionCompletion(
       ],
     ),
   );
-  if (confirmed ?? false) await controller.complete();
+  if (confirmed ?? false) await (onComplete ?? controller.complete)();
 }
 
 /// Observação e material, quando publicados.

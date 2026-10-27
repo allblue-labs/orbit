@@ -32,13 +32,18 @@ import '../application/execution_controller.dart';
 import 'widgets/execution_actions.dart';
 import 'widgets/execution_checklist.dart';
 import 'widgets/execution_signing.dart';
-import 'widgets/material_sheet.dart';
-import 'widgets/note_sheet.dart';
+import 'widgets/attendance_work_record.dart';
+import 'widgets/attendance_wizard.dart';
 
 class OperationExecutionScreen extends ConsumerWidget {
-  const OperationExecutionScreen({super.key, required this.operationId});
+  const OperationExecutionScreen({
+    super.key,
+    required this.operationId,
+    this.rvtExecutionId,
+  });
 
   final String operationId;
+  final String? rvtExecutionId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -49,7 +54,7 @@ class OperationExecutionScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Atendimento'),
+        title: Text(rvtExecutionId == null ? 'Atendimento' : 'Visita técnica'),
         actions: [
           /// A saída, nomeada.
           ///
@@ -78,6 +83,7 @@ class OperationExecutionScreen extends ConsumerWidget {
           state: state,
           controller: controller,
           operationId: operationId,
+          rvtExecutionId: rvtExecutionId,
         ),
       },
 
@@ -120,26 +126,27 @@ class _Body extends StatelessWidget {
     required this.state,
     required this.controller,
     required this.operationId,
+    this.rvtExecutionId,
   });
 
   final ExecutionState state;
   final ExecutionController controller;
   final String operationId;
+  final String? rvtExecutionId;
 
   @override
   Widget build(BuildContext context) {
     final preparation = state.preparation!;
     final checklists = preparation.checklist;
 
-    /// Progresso do checklist é **do servidor**. A tela não conta itens
-    /// respondidos para chegar a um número próprio.
-    final checklistCumprido =
-        checklists.isNotEmpty &&
-        checklists.every((lista) => lista.progress >= 100);
+    /// Marcar os itens prepara as respostas; a etapa termina quando o checklist é confirmado.
+    final checklistCumprido = checklists.every(
+      (lista) => lista.status != 'IN_PROGRESS',
+    );
 
     final etapas = <OrbitWizardStep>[
       OrbitWizardStep(
-        title: 'Execução',
+        title: rvtExecutionId == null ? 'Checklist' : 'Checklist da visita',
         hint: 'Responda o checklist previsto para este atendimento.',
 
         /// Sem checklist a etapa **abre** e diz que não há itens.
@@ -164,6 +171,14 @@ class _Body extends StatelessWidget {
                 enabled:
                     state.allows(FieldOperationAllowedAction.updateChecklist) &&
                     !state.isBusy,
+                onSave: controller.saveChecklist,
+                pendingIds: {
+                  for (final command in state.pendingCommands)
+                    if (command.envelope.commandType ==
+                            OfflineCommandType.operationChecklistUpdate &&
+                        !command.isBlocking)
+                      command.envelope.payload['checklistId'] as String,
+                },
                 onAnswer: (checklistId, itemId, answer) =>
                     controller.answerChecklistItem(
                       checklistId: checklistId,
@@ -182,34 +197,27 @@ class _Body extends StatelessWidget {
         /// que foi autorizado.
         child: EvidenceSection(
           target: FieldEvidenceTargetRef(
-            type: FieldEvidenceTarget.operation,
-            id: operationId,
+            type: rvtExecutionId == null
+                ? FieldEvidenceTarget.operation
+                : FieldEvidenceTarget.rvtExecution,
+            id: rvtExecutionId ?? operationId,
           ),
           canCapture: state.allows(FieldOperationAllowedAction.addEvidence),
         ),
       ),
 
       OrbitWizardStep(
-        title: 'Materiais',
-        hint: 'Materiais aplicados e observações do atendimento.',
-
-        /// Travada quando nem material nem observação estão autorizados: o conteúdo
-        /// são dois botões que abrem folhas de registro, e abri-las sem autorização
-        /// levaria a uma recusa do servidor depois de a pessoa ter digitado tudo.
-        lockedReason:
-            preparation.materialPolicy.enabled ||
-                state.allows(FieldOperationAllowedAction.addNote)
-            ? null
-            : 'Este atendimento não prevê registro de materiais nem observações.',
-        child: ExecutionSecondaryActions(
-          state: state,
-          onNote: () => showNoteSheet(context, controller),
-          onMaterial: () => showMaterialSheet(context, controller),
-        ),
+        title: 'Serviço realizado',
+        hint:
+            'Registre o que foi feito e os materiais utilizados, se necessário.',
+        child: AttendanceWorkRecord(operationId: operationId),
       ),
 
       OrbitWizardStep(
         title: 'Confirmação',
+        lockedReason: checklists.any((item) => item.status == 'IN_PROGRESS')
+            ? 'Confirme os checklists antes de apresentar o resumo ao cliente.'
+            : null,
         hint: 'Assinatura profissional, aceite do cliente e documento.',
         child: ExecutionSigningSections(
           operationId: operationId,
@@ -224,6 +232,14 @@ class _Body extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (!checklistCumprido)
+              const SectionBlock(
+                title: 'Confira o checklist',
+                child: Text(
+                  'Confirme os checklists antes de concluir o atendimento.',
+                ),
+              ),
+
             /// O documento é a última coisa, e é aqui que ele pertence: a
             /// política dele é `eligibleAfterCompletion`, e é neste passo que o
             /// atendimento acaba de ser concluído.
@@ -233,8 +249,10 @@ class _Body extends StatelessWidget {
             /// quem recebe.
             DocumentSection(
               source: ArtifactSourceRef(
-                type: FieldArtifactSourceType.operation,
-                id: operationId,
+                type: rvtExecutionId == null
+                    ? FieldArtifactSourceType.operation
+                    : FieldArtifactSourceType.rvtExecution,
+                id: rvtExecutionId ?? operationId,
               ),
               fileName: documentFileNameOf([
                 preparation.operation.serviceOrderCode ??
@@ -242,7 +260,7 @@ class _Body extends StatelessWidget {
                 preparation.customer?.name ?? '',
               ]),
               subject: [
-                'Ordem de Serviço',
+                rvtExecutionId == null ? 'Ordem de Serviço' : 'Visita técnica',
                 preparation.operation.serviceOrderCode ??
                     preparation.operation.code,
                 preparation.customer?.name,
@@ -256,12 +274,20 @@ class _Body extends StatelessWidget {
         forward: state.allows(FieldOperationAllowedAction.complete)
             ? OrbitWizardForward(
                 label: 'Concluir atendimento',
-                enabled: !state.isBusy,
+                enabled:
+                    !state.isBusy &&
+                    checklistCumprido &&
+                    state.pendingCommands.isEmpty,
                 pending:
                     state.isBusy &&
                     state.pendingAction == FieldOperationAllowedAction.complete,
-                onPressed: () =>
-                    confirmExecutionCompletion(context, controller),
+                onPressed: () => confirmExecutionCompletion(
+                  context,
+                  controller,
+                  onComplete: rvtExecutionId == null
+                      ? null
+                      : () => controller.completeRvt(rvtExecutionId!),
+                ),
               )
             : null,
       ),
@@ -336,7 +362,11 @@ class _Body extends StatelessWidget {
               child: _Blockers(blockers: preparation.blockers),
             ),
 
-          OrbitWizard(steps: etapas),
+          AttendanceWizard(
+            steps: etapas,
+            confirmationStep: 3,
+            operationId: operationId,
+          ),
         ],
       ),
     );

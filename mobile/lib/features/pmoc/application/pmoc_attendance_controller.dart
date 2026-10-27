@@ -37,7 +37,7 @@ import 'pmoc_providers.dart';
 enum PmocAttendancePhase { loading, ready, sending, error }
 
 /// Qual comando está em voo — para desabilitar exatamente o botão certo.
-enum PmocAttendanceCommand { start, complete, issue }
+enum PmocAttendanceCommand { start, save, complete, issue }
 
 /// O equipamento que está sendo atendido.
 class PmocAttendanceTarget {
@@ -132,7 +132,9 @@ class PmocAttendanceController extends StateNotifier<PmocAttendanceState> {
 
   Future<void> load() async {
     state = state.copyWith(
-      phase: PmocAttendancePhase.loading,
+      phase: state.preparation == null
+          ? PmocAttendancePhase.loading
+          : state.phase,
       clearError: true,
     );
     try {
@@ -167,6 +169,28 @@ class PmocAttendanceController extends StateNotifier<PmocAttendanceState> {
       assetId: target.assetId,
     ),
   );
+
+  Future<bool> saveWork({
+    required Map<String, bool> answers,
+    String? notes,
+  }) async {
+    final execution = state.execution;
+    if (execution == null || state.isBusy || !state.allows('COMPLETE')) {
+      return false;
+    }
+    await _run(
+      PmocAttendanceCommand.save,
+      () => _repository.saveWork(
+        planId: target.planId,
+        cycleId: target.cycleId,
+        executionId: execution.id,
+        expectedVersion: execution.version,
+        answers: answers,
+        notes: notes,
+      ),
+    );
+    return mounted && state.error == null;
+  }
 
   Future<void> complete({DateTime? performedAt, String? notes}) async {
     final atual = state.execution;

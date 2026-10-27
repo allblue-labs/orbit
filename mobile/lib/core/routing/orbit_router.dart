@@ -100,8 +100,13 @@ abstract final class OrbitRoutes {
 
   /// Execução de um atendimento. A rota usa o **id da Operation**, que é o
   /// que os comandos do MB-02 endereçam — não o id composto do item.
-  static String operationExecution(String operationId) =>
-      '$workQueue/execucao/$operationId';
+  static String operationExecution(
+    String operationId, {
+    String? rvtExecutionId,
+  }) => Uri(
+    path: '$workQueue/execucao/$operationId',
+    queryParameters: rvtExecutionId == null ? null : {'rvt': rvtExecutionId},
+  ).toString();
 
   /// Abrir um atendimento estando no local.
   ///
@@ -276,6 +281,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                 parentNavigatorKey: rootNavigatorKey,
                 builder: (context, state) => OperationExecutionScreen(
                   operationId: state.pathParameters['operationId'] ?? '',
+                  rvtExecutionId: state.uri.queryParameters['rvt'],
                 ),
                 routes: [
                   GoRoute(
