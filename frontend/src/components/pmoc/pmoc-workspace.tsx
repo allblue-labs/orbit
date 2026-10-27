@@ -12,9 +12,9 @@
  * Histórico   → o que aconteceu
  * ```
  *
- * Não há "Gerar PDF" em lugar nenhum desta tela: **configuração não é
- * documento**. O PMOC emitido pertence a cada equipamento executado, e é de lá
- * que se chega até ele.
+ * O cabeçalho oferece o contrato do plano e seu link de assinatura. A aba
+ * Execuções oferece o relatório de cada equipamento atendido, com o documento
+ * vinculado àquela manutenção.
  */
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";

@@ -7,6 +7,8 @@ library;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:orbit_operator/core/routing/orbit_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -194,6 +196,71 @@ void main() {
         )
         .where((w) => w.onTap != null);
     expect(tocaveis, isNotEmpty);
+  });
+
+  testWidgets('voltar de um atendimento atualiza a home automaticamente', (
+    tester,
+  ) async {
+    var calls = 0;
+    Future<ResponseBody> handler(RequestOptions options) async {
+      if (options.uri.path.endsWith('/home')) calls++;
+      return jsonResponse({
+        'success': true,
+        'data': home(
+          today: [
+            workItem(
+              customer: calls < 2
+                  ? 'Antes do atendimento'
+                  : 'Depois do atendimento',
+            ),
+          ],
+        ),
+      });
+    }
+
+    final client = OrbitApiClient.create(
+      environment: OrbitEnvironment.fromDefines(),
+      storage: InMemoryTokenStorage(),
+      logger: const OrbitLogger(isProduction: true),
+      dio: Dio()..httpClientAdapter = ScriptedAdapter(handler),
+      retryDio: Dio()..httpClientAdapter = ScriptedAdapter(handler),
+    );
+    final router = GoRouter(
+      initialLocation: OrbitRoutes.home,
+      routes: [
+        GoRoute(
+          path: OrbitRoutes.home,
+          builder: (_, _) => const FieldDashboardScreen(),
+        ),
+        GoRoute(
+          path: '/atendimento-teste',
+          builder: (_, _) => const Scaffold(body: Text('Atendimento aberto')),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          apiClientProvider.overrideWithValue(client),
+          readCacheProvider.overrideWithValue(InMemoryReadCache()),
+        ],
+        child: MaterialApp.router(
+          theme: OrbitTheme.light(),
+          routerConfig: router,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(calls, 1);
+    expect(find.text('Antes do atendimento'), findsWidgets);
+    router.push('/atendimento-teste');
+    await tester.pumpAndSettle();
+    router.pop();
+    await tester.pumpAndSettle();
+    expect(calls, 2);
+    expect(find.text('Depois do atendimento'), findsWidgets);
+    expect(find.text('Antes do atendimento'), findsNothing);
   });
 
   testWidgets('seção vazia não aparece', (tester) async {

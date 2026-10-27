@@ -73,7 +73,10 @@ class Backend {
   }
 }
 
-({PushRegistrar registrar, Backend backend}) montar(FonteFalsa fonte) {
+({PushRegistrar registrar, Backend backend}) montar(
+  FonteFalsa fonte, {
+  Duration retryDelay = const Duration(seconds: 30),
+}) {
   final backend = Backend();
   final dio = Dio()..httpClientAdapter = ScriptedAdapter(backend.call);
   final plain = Dio()..httpClientAdapter = ScriptedAdapter(backend.call);
@@ -85,16 +88,16 @@ class Backend {
     retryDio: plain,
   );
 
-  return (
-    registrar: PushRegistrar(
-      source: fonte,
-      repository: MobileDeviceRepository(client: client),
-      logger: const OrbitLogger(isProduction: true),
-      deviceInstanceId: () async => 'instalacao-de-teste-0001',
-      appVersion: () async => '1.4.0+42',
-    ),
-    backend: backend,
+  final registrar = PushRegistrar(
+    source: fonte,
+    retryDelay: retryDelay,
+    repository: MobileDeviceRepository(client: client),
+    logger: const OrbitLogger(isProduction: true),
+    deviceInstanceId: () async => 'instalacao-de-teste-0001',
+    appVersion: () async => '1.4.0+42',
   );
+  addTearDown(registrar.dispose);
+  return (registrar: registrar, backend: backend);
 }
 
 /// Espera uma condição acontecer, com teto.
@@ -125,6 +128,37 @@ void main() {
     /// que separa um token do APNs de um do Firebase no servidor.
     expect(corpo['pushProvider'], 'APNS');
   });
+
+  test('inícios simultâneos registram apenas uma instalação', () async {
+    final fonte = FonteFalsa();
+    addTearDown(fonte.fechar);
+    final (:registrar, :backend) = montar(fonte);
+    await Future.wait([registrar.start(), registrar.start()]);
+    expect(backend.chamadas, hasLength(1));
+    expect(fonte.permissoesPedidas, 1);
+  });
+
+  test(
+    'repete registro após falha temporária e cancela novas tentativas no logout',
+    () async {
+      final fonte = FonteFalsa();
+      addTearDown(fonte.fechar);
+      final (:registrar, :backend) = montar(
+        fonte,
+        retryDelay: const Duration(milliseconds: 20),
+      );
+      backend.status = 503;
+      await registrar.start();
+      backend.status = 200;
+      await _ate(() => backend.chamadas.length >= 2);
+      expect(backend.chamadas.where((c) => c.method == 'POST'), hasLength(2));
+      await registrar.stop();
+      final callsAtLogout = backend.chamadas.length;
+      fonte.rotacionar(tokenB);
+      await Future<void>.delayed(const Duration(milliseconds: 45));
+      expect(backend.chamadas.length, callsAtLogout);
+    },
+  );
 
   test('permissão negada não registra nada', () async {
     /// Registrar sem permissão guardaria no servidor um token que o sistema

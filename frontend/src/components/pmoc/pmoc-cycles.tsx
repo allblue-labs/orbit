@@ -38,6 +38,7 @@ import {
   usePmocCycles,
   usePmocEquipmentExecutions,
 } from "@/hooks/pmoc/use-pmoc";
+import { AttendanceReport } from "./attendance/attendance-report";
 import { PmocAttendanceDialog } from "./attendance/attendance.dialog";
 import { useSession } from "@/providers/session-provider";
 
@@ -75,7 +76,12 @@ export function PmocCyclesPanel({ planId }: { planId: string }) {
               onSelect={setSelected}
             />
             {current ? (
-              <EquipmentExecutions planId={planId} cycleId={current} />
+              <EquipmentExecutions
+                key={current}
+                planId={planId}
+                cycleId={current}
+                onAttend={() => setSelected(current)}
+              />
             ) : null}
           </div>
         )}
@@ -134,9 +140,11 @@ function CycleList({
 function EquipmentExecutions({
   planId,
   cycleId,
+  onAttend,
 }: {
   planId: string;
   cycleId: string;
+  onAttend: () => void;
 }) {
   const rows = usePmocEquipmentExecutions(planId, cycleId);
   const items = rows.data ?? [];
@@ -173,7 +181,12 @@ function EquipmentExecutions({
               <EquipmentRow
                 key={row.coverageId}
                 row={row}
-                onAttend={() => setAttending(row.equipment.id)}
+                onAttend={() => {
+                  // Completing the last equipment opens the next cycle on the
+                  // server. Keep this cycle selected throughout the attendance.
+                  onAttend();
+                  setAttending(row.equipment.id);
+                }}
               />
             ))}
           </ul>
@@ -339,6 +352,11 @@ function EquipmentRow({
               </Button>
             ) : null}
           </div>
+          {row.execution.artifactExecution &&
+          session.hasPermission("artifact_executions.read") &&
+          session.hasPermission("artifact_manifests.read") ? (
+            <AttendanceReport artifactId={row.execution.artifactExecution.id} />
+          ) : null}
         </>
       ) : (
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">

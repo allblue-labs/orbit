@@ -112,6 +112,16 @@ class OrbitSignaturePad extends StatefulWidget {
 
 class _OrbitSignaturePadState extends State<OrbitSignaturePad> {
   int? _activePointer;
+  bool _inside = false;
+
+  @override
+  void didUpdateWidget(OrbitSignaturePad oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller || !widget.enabled) {
+      _activePointer = null;
+      _inside = false;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -148,13 +158,28 @@ class _OrbitSignaturePadState extends State<OrbitSignaturePad> {
                       if (_activePointer != null) return;
                       FocusManager.instance.primaryFocus?.unfocus();
                       _activePointer = event.pointer;
-                      widget.controller.iniciar(_local(context, event));
+                      _inside = true;
+                      widget.controller.iniciar(event.localPosition);
                     }
                   : null,
               onPointerMove: widget.enabled
                   ? (event) {
                       if (_activePointer != event.pointer) return;
-                      widget.controller.estender(_local(context, event));
+                      final box = event.localPosition;
+                      final renderBox =
+                          context.findRenderObject() as RenderBox?;
+                      final bounds =
+                          Offset.zero & (renderBox?.size ?? Size.zero);
+                      if (!bounds.contains(box)) {
+                        _inside = false;
+                        return;
+                      }
+                      if (_inside) {
+                        widget.controller.estender(box);
+                      } else {
+                        widget.controller.iniciar(box);
+                        _inside = true;
+                      }
                     }
                   : null,
               onPointerUp: (event) {
@@ -163,32 +188,35 @@ class _OrbitSignaturePadState extends State<OrbitSignaturePad> {
               onPointerCancel: (event) {
                 if (_activePointer == event.pointer) _activePointer = null;
               },
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  /// Branco e borda discreta: a assinatura vai para um documento
-                  /// de fundo branco, e uma área colorida faria o traço parecer
-                  /// uma coisa na tela e outra no PDF.
-                  color: Colors.white,
-                  border: Border.all(color: palette.border),
-                  borderRadius: OrbitRadius.card,
-                ),
-                child: Stack(
-                  children: [
-                    if (!widget.controller.temTraco)
-                      Center(
-                        child: Text(
-                          widget.hint,
-                          style: OrbitType.body.copyWith(
-                            color: palette.inkDisabled,
+              child: ClipRRect(
+                borderRadius: OrbitRadius.card,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    /// Branco e borda discreta: a assinatura vai para um documento
+                    /// de fundo branco, e uma área colorida faria o traço parecer
+                    /// uma coisa na tela e outra no PDF.
+                    color: Colors.white,
+                    border: Border.all(color: palette.border),
+                    borderRadius: OrbitRadius.card,
+                  ),
+                  child: Stack(
+                    children: [
+                      if (!widget.controller.temTraco)
+                        Center(
+                          child: Text(
+                            widget.hint,
+                            style: OrbitType.body.copyWith(
+                              color: palette.inkDisabled,
+                            ),
                           ),
                         ),
+                      Positioned.fill(
+                        child: CustomPaint(
+                          painter: _AssinaturaPainter(widget.controller.tracos),
+                        ),
                       ),
-                    Positioned.fill(
-                      child: CustomPaint(
-                        painter: _AssinaturaPainter(widget.controller.tracos),
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -196,11 +224,6 @@ class _OrbitSignaturePadState extends State<OrbitSignaturePad> {
         ),
       ),
     );
-  }
-
-  Offset _local(BuildContext context, PointerEvent evento) {
-    final box = context.findRenderObject() as RenderBox?;
-    return box?.globalToLocal(evento.position) ?? evento.localPosition;
   }
 }
 
@@ -211,6 +234,8 @@ class _AssinaturaPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    canvas.save();
+    canvas.clipRect(Offset.zero & size);
     final tinta = Paint()
       ..color = const Color(0xFF111827)
       ..strokeWidth = 2.4
@@ -233,6 +258,7 @@ class _AssinaturaPainter extends CustomPainter {
       }
       canvas.drawPath(caminho, tinta);
     }
+    canvas.restore();
   }
 
   @override

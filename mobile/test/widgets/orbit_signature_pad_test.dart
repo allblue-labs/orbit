@@ -32,6 +32,35 @@ void main() {
     );
   });
 
+  testWidgets(
+    'sair da área interrompe o traço e reentrar inicia outro sem conexão',
+    (tester) async {
+      final scroll = ScrollController();
+      final signature = OrbitSignatureController();
+      addTearDown(scroll.dispose);
+      addTearDown(signature.dispose);
+      await tester.pumpWidget(_host(scroll: scroll, signature: signature));
+      final pad = tester.getRect(find.byType(OrbitSignaturePad));
+      final gesture = await tester.startGesture(pad.center);
+      await gesture.moveTo(pad.center + const Offset(40, 20));
+      await gesture.moveTo(pad.topLeft - const Offset(0, 80));
+      await gesture.moveTo(pad.topRight + const Offset(40, -100));
+      await gesture.moveTo(pad.center - const Offset(40, 20));
+      await gesture.moveTo(pad.center - const Offset(10, 10));
+      await gesture.up();
+      await tester.pump();
+      expect(signature.tracos, hasLength(2));
+      final bounds = Offset.zero & pad.size;
+      expect(
+        signature.tracos.expand((stroke) => stroke).every(bounds.contains),
+        isTrue,
+      );
+      expect(scroll.offset, 0);
+      expect(await tester.runAsync(signature.exportar), isNotNull);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('gesto fora do pad continua rolando a tela', (tester) async {
     final scroll = ScrollController();
     final signature = OrbitSignatureController();

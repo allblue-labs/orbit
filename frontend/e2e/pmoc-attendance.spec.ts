@@ -176,18 +176,28 @@ test("o atendimento vai de aberto a relatório emitido", async ({
   await dialogo
     .getByLabel("Observações")
     .fill("Filtros lavados; dreno desobstruído.");
-  await dialogo.getByRole("button", { name: /Registrar manutenção/i }).click();
-  await settled(page);
-
-  /* Passo 4 — emitir. Concluir não emite: são duas decisões. */
-  const emitir = dialogo.getByRole("button", { name: /Emitir relatório/i });
-  await expect(emitir).toBeVisible();
-  await emitir.click();
-  await settled(page);
-
-  await expect(dialogo.getByText(/Relatório emitido/i)).toBeVisible();
+  await dialogo.getByRole("button", { name: /Revisar atendimento/i }).click();
   await expect(
-    dialogo.getByRole("link", { name: /Abrir o documento/i }),
+    dialogo.getByText(/Confira os dados antes de concluir/),
+  ).toBeVisible();
+  await dialogo
+    .getByRole("button", { name: /Confirmar e gerar relatório/i })
+    .click();
+  await expect(dialogo).toHaveCount(0);
+  await expect(
+    page.getByText("Atendimento de PMOC finalizado", { exact: true }),
+  ).toBeVisible();
+
+  // The document belongs to the attended equipment and remains accessible
+  // after the wizard closes, even when completing it opened the next cycle.
+  await expect(
+    linha.getByRole("link", {
+      name: "Baixar relatório de execução",
+      exact: true,
+    }),
+  ).toBeVisible({ timeout: 30_000 });
+  await expect(
+    linha.getByRole("button", { name: "Compartilhar relatório", exact: true }),
   ).toBeVisible();
 
   expect(recorder.pageErrors, "exceções não tratadas").toEqual([]);

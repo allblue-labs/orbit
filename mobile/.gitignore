@@ -49,6 +49,9 @@ app.*.map.json
 /config/staging.json
 /config/production.json
 
+# APNs is enabled per signing environment, never by the API URL or build mode.
+/ios/Flutter/Push.local.xcconfig
+
 # Artefatos de comparacao dos goldens: gerados quando um golden falha,
 # substituidos a cada execucao. O golden em si ja e ignorado logo acima.
 test/screenshots/failures/

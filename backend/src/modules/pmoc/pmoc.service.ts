@@ -21,7 +21,8 @@
  * exatamente onde as autorizações se perdem, se cada uma não for conferida no
  * seu lugar.
  */
-import { Inject, Injectable } from '@nestjs/common';
+import { MobileNotificationService } from '../notifications/mobile-notification.service';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { pmocProcedure, executionPmocProcedure } from './pmoc-procedure';
 import { createHash, randomBytes } from 'node:crypto';
 import { HashHelper } from '../../helpers';
@@ -232,6 +233,7 @@ function roteiroDoPlano(
 
 @Injectable()
 export class PmocService {
+  private readonly logger = new Logger(PmocService.name);
   constructor(
     private readonly repository: PmocRepository,
     private readonly mapper: PmocMapper,
@@ -242,6 +244,8 @@ export class PmocService {
     /* Para ler os bytes da assinatura do Responsável Técnico ao imprimir o
        contrato — a mesma dependência que o orçamento usa, pelo mesmo motivo. */
     @Inject(STORAGE_PROVIDER) private readonly storage: StorageProvider,
+    @Optional()
+    private readonly mobileNotifications?: MobileNotificationService,
   ) {}
 
   /* ---------------------------------------------------------------- */
@@ -1596,6 +1600,20 @@ export class PmocService {
     if (!data)
       throw new EntityNotFoundException('PmocEquipmentCoverage', assetId);
     this.assertUnitInScope(actor, data.plan.businessUnitId);
+    const assigned = data.existing
+      ? data.existing.responsibleFieldTechnician.id === actor.actorId
+      : data.plan.technicianUserId === actor.actorId;
+    if (
+      !actor.isOrganizationOwner &&
+      !assigned &&
+      !['*', 'pmoc.read', 'pmoc.manage'].some((permission) =>
+        actor.permissions.includes(permission),
+      )
+    )
+      throw new ForbiddenException(
+        'Este atendimento de PMOC não está atribuído a você.',
+      );
+
     const technicalResponsibleEligibility = data.plan.technicalResponsibleUserId
       ? await this.workforce.professionalEligibility(
           actor.organizationId,
@@ -1794,21 +1812,28 @@ export class PmocService {
     }
 
     /*
-     * A atribuição é do **plano**, e é o que autoriza.
+     * A atribuição da execução prevalece sobre o técnico previsto no plano.
      *
      * `technicianUserId` é a referência operacional: quem atende este contrato.
      * O dono passa sem ela, pela mesma razão de sempre — é ele que atende quando
      * o escalado faltou.
      */
-    if (
-      !actor.isOrganizationOwner &&
-      preparation.plan.technicianUserId !== actor.actorId
-    ) {
+    this.assertUnitInScope(actor, preparation.plan.businessUnitId);
+    const assignedTo =
+      preparation.existing?.responsibleFieldTechnician.id ??
+      preparation.plan.technicianUserId;
+    if (!actor.isOrganizationOwner && assignedTo !== actor.actorId) {
       throw new ForbiddenException(
         'Este PMOC não está atribuído a você. Só o técnico atribuído — ou o dono da organização — pode atendê-lo.',
       );
     }
 
+    if (preparation.existing) {
+      return {
+        execution: this.mapper.equipmentExecution(preparation.existing),
+        created: false,
+      };
+    }
     return this.startEquipmentExecution(planId, cycleId, assetId, actor, {
       /* Abre para si mesmo. É o que distingue esta porta da outra. */
       responsibleFieldTechnicianId: actor.actorId,
@@ -1830,6 +1855,7 @@ export class PmocService {
     );
     if (!preparation)
       throw new EntityNotFoundException('PmocEquipmentCoverage', assetId);
+    this.assertUnitInScope(actor, preparation.plan.businessUnitId);
     if (
       preparation.plan.status !== 'ACTIVE' ||
       preparation.cycle.status !== 'PENDING'
@@ -1900,6 +1926,35 @@ export class PmocService {
       ),
       title: `${preparation.plan.name} — ${preparation.coverage.asset.name}`,
     });
+    if (result.created && this.mobileNotifications) {
+      for (const recipientUserId of [
+        input.responsibleFieldTechnicianId,
+        ...auxiliaries,
+      ]) {
+        if (recipientUserId === actor.actorId) continue;
+        try {
+          await this.mobileNotifications.materialize({
+            organizationId: actor.organizationId,
+            businessUnitId: preparation.plan.businessUnitId,
+            recipientUserId,
+            type: 'WORK_ASSIGNED',
+            factId: result.execution.id,
+            resourceId: result.execution.id,
+            workItemId: `PMOC:${cycleId}:${assetId}`,
+            correlationId: generateUuidV7(),
+          });
+        } catch (error) {
+          // A notification failure must not undo a committed attendance.
+          this.logger.warn(
+            JSON.stringify({
+              event: 'pmoc_assignment_notification_failed',
+              errorClass:
+                error instanceof Error ? error.constructor.name : 'Unknown',
+            }),
+          );
+        }
+      }
+    }
     return {
       created: result.created,
       execution: this.mapper.equipmentExecution(result.execution),

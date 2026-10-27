@@ -11,7 +11,10 @@ const actor: PmocActor = {
   businessUnitIds: ['unit'],
   permissions: ['pmoc.read'],
 };
-function setup(existing: unknown = null) {
+function setup(
+  existing: unknown = null,
+  mobileNotifications?: { materialize: jest.Mock },
+) {
   const data = {
     plan: {
       id: 'plan',
@@ -74,6 +77,7 @@ function setup(existing: unknown = null) {
     {} as never,
     {} as never,
     {} as never,
+    mobileNotifications as never,
   );
   return { service, data, repository, workforce };
 }
@@ -126,6 +130,39 @@ describe('preparação e escala do atendimento PMOC', () => {
     );
   });
 
+  it('notifica os técnicos atribuídos com o destino do equipamento PMOC, sem repetir na retomada', async () => {
+    const notifications = { materialize: jest.fn().mockResolvedValue({}) };
+    const env = setup(null, notifications);
+    const start = () =>
+      env.service.startEquipmentExecution(
+        'plan',
+        'cycle',
+        'asset',
+        { ...actor, actorId: 'manager', isOrganizationOwner: true },
+        {
+          responsibleFieldTechnicianId: 'field',
+          auxiliaryTechnicianIds: ['assistant'],
+        },
+      );
+    await start();
+    expect(notifications.materialize).toHaveBeenCalledTimes(2);
+    expect(notifications.materialize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        organizationId: 'org',
+        businessUnitId: 'unit',
+        recipientUserId: 'field',
+        workItemId: 'PMOC:cycle:asset',
+        factId: 'execution',
+      }),
+    );
+    env.repository.startEquipmentExecution.mockResolvedValue({
+      created: false,
+      execution: { id: 'execution' },
+    });
+    await start();
+    expect(notifications.materialize).toHaveBeenCalledTimes(2);
+  });
+
   it('a atribuição à execução libera conclusão sem depender da atribuição ao plano', async () => {
     const env = setup({
       id: 'execution',
@@ -140,6 +177,24 @@ describe('preparação e escala do atendimento PMOC', () => {
       actor,
     );
     expect(result.allowedActions).toEqual(['COMPLETE', 'ADD_EVIDENCE']);
+    const assignedWithoutGlobalPermissions =
+      await env.service.equipmentExecutionPreparation(
+        'plan',
+        'cycle',
+        'asset',
+        { ...actor, permissions: [] },
+      );
+    expect(assignedWithoutGlobalPermissions.allowedActions).toEqual([
+      'COMPLETE',
+      'ADD_EVIDENCE',
+    ]);
+    await expect(
+      env.service.equipmentExecutionPreparation('plan', 'cycle', 'asset', {
+        ...actor,
+        actorId: 'someone-else',
+        permissions: [],
+      }),
+    ).rejects.toThrow(/não está atribuído/i);
     const other = await env.service.equipmentExecutionPreparation(
       'plan',
       'cycle',

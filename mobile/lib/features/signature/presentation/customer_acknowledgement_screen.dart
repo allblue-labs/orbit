@@ -16,6 +16,7 @@ import '../../sync/application/sync_controller.dart';
 import '../../sync/application/sync_providers.dart';
 import '../../sync/presentation/widgets/pending_badge.dart';
 import '../application/signature_providers.dart';
+import 'attendance_review.dart';
 
 class CustomerAcknowledgementScreen extends ConsumerStatefulWidget {
   const CustomerAcknowledgementScreen({
@@ -349,37 +350,7 @@ class _Form extends StatelessWidget {
         if (preparation.existingAcknowledgement case final existing?)
           _PreviousAcknowledgement(existing: existing),
 
-        SectionBlock(
-          title: 'Resumo do atendimento',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (preparation.customerName case final name?)
-                _Line(label: 'Cliente', value: name),
-              if (preparation.performedAt != null)
-                _Line(
-                  label: 'Realizado em',
-                  value: OrbitFormat.dateHourOf(preparation.performedAt),
-                ),
-              for (final equipment in preparation.equipment)
-                _Line(
-                  label: 'Equipamento',
-                  value: '${equipment.name} · ${equipment.code}',
-                ),
-              const SizedBox(height: OrbitSpacing.sm),
-
-              /// O texto do servidor, como veio.
-              Text(
-                preparation.serviceSummary,
-                style: const TextStyle(
-                  fontSize: 14,
-                  height: 1.4,
-                  color: OrbitColors.textPrimary,
-                ),
-              ),
-            ],
-          ),
-        ),
+        AttendanceReview(preparation: preparation),
 
         if (accepted)
           OutlinedButton(
@@ -396,8 +367,12 @@ class _Form extends StatelessWidget {
                   controller: signerName,
                   textCapitalization: TextCapitalization.words,
                   maxLength: 180,
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) =>
+                      FocusManager.instance.primaryFocus?.unfocus(),
                   decoration: const InputDecoration(
                     labelText: 'Nome de quem recebeu o serviço',
+                    prefixIcon: Icon(Icons.person_outline),
                   ),
                 ),
 
@@ -436,12 +411,25 @@ class _Form extends StatelessWidget {
                   Row(
                     children: [
                       Expanded(
-                        child: OutlinedButton(
-                          onPressed: sending ? null : pad.limpar,
+                        child: OutlinedButton.icon(
+                          onPressed: sending || pad.tracos.isEmpty
+                              ? null
+                              : pad.desfazer,
+                          icon: const Icon(Icons.undo_rounded, size: 18),
+                          label: const Text('Desfazer'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.delete_outline, size: 18),
+                          onPressed: sending || pad.tracos.isEmpty
+                              ? null
+                              : pad.limpar,
                           style: OutlinedButton.styleFrom(
                             minimumSize: const Size(0, 48),
                           ),
-                          child: const Text('Limpar'),
+                          label: const Text('Limpar'),
                         ),
                       ),
                     ],
@@ -475,12 +463,19 @@ class _Form extends StatelessWidget {
                     button: true,
                     enabled: !sending,
                     label: 'Confirmar atendimento',
-                    child: FilledButton(
+                    child: FilledButton.icon(
+                      icon: sending
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.check_circle_outline),
                       onPressed: sending ? null : onSubmit,
                       style: FilledButton.styleFrom(
                         minimumSize: const Size(0, 52),
                       ),
-                      child: Text(
+                      label: Text(
                         sending ? 'Registrando…' : 'Confirmar atendimento',
                       ),
                     ),
@@ -592,32 +587,4 @@ class _Accepted extends StatelessWidget {
       ],
     );
   }
-}
-
-class _Line extends StatelessWidget {
-  const _Line({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 4),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 11,
-            color: OrbitColors.textSecondary,
-          ),
-        ),
-        Text(
-          value,
-          style: const TextStyle(fontSize: 14, color: OrbitColors.textPrimary),
-        ),
-      ],
-    ),
-  );
 }

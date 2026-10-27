@@ -55,7 +55,7 @@ import '../../profile/presentation/my_avatar.dart';
 import '../application/field_providers.dart';
 import 'widgets/work_item_row.dart';
 
-class FieldDashboardScreen extends ConsumerWidget {
+class FieldDashboardScreen extends ConsumerStatefulWidget {
   const FieldDashboardScreen({super.key, this.now});
 
   /// Relógio visual da saudação. Em produção usa o horário local do aparelho;
@@ -63,7 +63,71 @@ class FieldDashboardScreen extends ConsumerWidget {
   final DateTime? now;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<FieldDashboardScreen> createState() =>
+      _FieldDashboardScreenState();
+}
+
+class _FieldDashboardScreenState extends ConsumerState<FieldDashboardScreen>
+    with WidgetsBindingObserver {
+  GoRouter? _router;
+  bool _atHome = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final router = GoRouter.maybeOf(context);
+    if (_router == router) return;
+    _router?.routerDelegate.removeListener(_navigationChanged);
+    _router = router;
+    _atHome =
+        router == null ||
+        router
+                .routerDelegate
+                .currentConfiguration
+                .lastOrNull
+                ?.matchedLocation ==
+            OrbitRoutes.home;
+    router?.routerDelegate.addListener(_navigationChanged);
+  }
+
+  void _navigationChanged() {
+    final atHome =
+        _router
+            ?.routerDelegate
+            .currentConfiguration
+            .lastOrNull
+            ?.matchedLocation ==
+        OrbitRoutes.home;
+    if (atHome && !_atHome && mounted) _refresh();
+    _atHome = atHome;
+  }
+
+  void _refresh() {
+    ref.invalidate(fieldHomeProvider);
+    ref.invalidate(fieldDashboardProvider);
+    ref.invalidate(notificationsProvider);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _atHome) _refresh();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _router?.routerDelegate.removeListener(_navigationChanged);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final home = ref.watch(fieldHomeProvider);
     final session = ref.watch(sessionProvider);
 
@@ -72,7 +136,15 @@ class FieldDashboardScreen extends ConsumerWidget {
       body: SafeArea(
         bottom: false,
         child: RefreshIndicator(
-          onRefresh: () async => ref.invalidate(fieldHomeProvider),
+          onRefresh: () async {
+            ref.invalidate(notificationsProvider);
+            try {
+              ref.invalidate(fieldHomeProvider);
+              await ref.read(fieldHomeProvider.future);
+            } on Object {
+              /* The provider exposes the error while keeping its previous data. */
+            }
+          },
 
           /// O que já está na tela sobrevive a um refresh que falha.
           ///
@@ -83,7 +155,7 @@ class FieldDashboardScreen extends ConsumerWidget {
           ///
           /// Com dado em mãos, a falha vira um aviso. Sem dado, aí sim a tela
           /// é o erro: não há o que preservar.
-          child: _corpo(ref, home, session, now: now),
+          child: _corpo(ref, home, session, now: widget.now),
         ),
       ),
     );
@@ -1033,6 +1105,7 @@ class _QuickActions extends StatelessWidget {
             await showEquipmentSheet(context, token);
           },
         ),
+
       /// PMOC **não** é atalho daqui.
       ///
       /// Era, e abria a base de contratos da organização para quem entra neste

@@ -85,6 +85,8 @@ for negada, a permissão vive em _Ajustes › Orbit › Rede local_.
 
 ---
 
+Configuração de push para iPhone e Android: [guia de publicação](../docs/release/mobile-push.md).
+
 ## 2. Arquitetura
 
 ```

@@ -108,6 +108,12 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       EMAIL_FROM: ${EMAIL_FROM:-Orbit <no-reply@orbit.local>}
+      # Native mobile push uses a server gateway (APNs on iOS / FCM on Android).
+      PUSH_PROVIDER: ${PUSH_PROVIDER:-disabled}
+      PUSH_GATEWAY_URL: ${PUSH_GATEWAY_URL:-}
+      PUSH_GATEWAY_CREDENTIAL: ${PUSH_GATEWAY_CREDENTIAL:-}
+      JOBS_WORKER_ENABLED: ${JOBS_WORKER_ENABLED:-true}
+      JOBS_POLL_INTERVAL_MS: ${JOBS_POLL_INTERVAL_MS:-2000}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@orbit.local}
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}

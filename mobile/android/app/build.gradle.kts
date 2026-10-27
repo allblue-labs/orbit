@@ -43,3 +43,13 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+// The Firebase client configuration is supplied by each deployment.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
+dependencies {
+    implementation(platform("com.google.firebase:firebase-bom:35.1.0"))
+    implementation("com.google.firebase:firebase-messaging")
+}

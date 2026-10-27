@@ -176,6 +176,44 @@ describe('autoridade para abrir o próprio atendimento', () => {
     );
   });
 
+  it('retoma a execução atribuída mesmo se o plano prevê outro técnico, sem permissões globais', async () => {
+    const { service, repository } = servicoDeAbertura(OUTRO);
+    const existing = {
+      id: 'execution-1',
+      responsibleFieldTechnician: { id: TECNICO },
+    };
+    repository.executionPreparation.mockResolvedValue({
+      ...preparacao(OUTRO),
+      existing,
+    } as never);
+    const mapper = jest
+      .spyOn((service as any).mapper, 'equipmentExecution')
+      .mockReturnValue(existing);
+    const result = await abrir(service, { ...ator(TECNICO), permissions: [] });
+    expect(result).toEqual({ created: false, execution: existing });
+    expect(mapper).toHaveBeenCalledWith(existing);
+    expect(repository.startEquipmentExecution).not.toHaveBeenCalled();
+  });
+
+  it('o técnico previsto no plano não pode retomar a execução atribuída a outro', async () => {
+    const { service, repository } = servicoDeAbertura(TECNICO);
+    repository.executionPreparation.mockResolvedValue({
+      ...preparacao(TECNICO),
+      existing: { responsibleFieldTechnician: { id: OUTRO } },
+    } as never);
+    await expect(abrir(service, ator(TECNICO))).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    expect(repository.startEquipmentExecution).not.toHaveBeenCalled();
+  });
+
+  it('atribuição não permite atravessar a unidade autorizada', async () => {
+    const { service } = servicoDeAbertura(TECNICO);
+    await expect(
+      abrir(service, { ...ator(TECNICO), businessUnitIds: ['other-unit'] }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
   it('não encontrado quando a cobertura não existe', async () => {
     const { service, repository } = servicoDeAbertura(TECNICO);
     repository.executionPreparation.mockResolvedValue(null);
