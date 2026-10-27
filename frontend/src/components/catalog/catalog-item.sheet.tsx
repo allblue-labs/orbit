@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/sheet";
 import { InventoryItemSection } from "@/components/inventory/inventory-item.section";
 import { useAction } from "@/actions";
-import { CATALOG_KIND_LABELS, EntityBadge } from "@/entities";
+import { CATALOG_KIND_LABELS } from "@/entities";
 
 import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { ProductKind } from "@/types/contracts";
@@ -41,6 +41,7 @@ import {
   DetailRow,
   PriceLabel,
   SkuLabel,
+  CatalogAvailabilityBadge,
 } from "./catalog-presentation";
 
 export function CatalogItemSheet({
@@ -77,11 +78,7 @@ function Body({
       <SheetHeader>
         <SheetTitle className="flex flex-wrap items-center gap-2">
           {item.name}
-          <EntityBadge
-            entity="catalog-item"
-            group="status"
-            value={item.status}
-          />
+          <CatalogAvailabilityBadge item={item} />
         </SheetTitle>
         <SheetDescription>
           {CATALOG_KIND_LABELS[item.kind] ?? item.kind} · atualizado em{" "}

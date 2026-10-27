@@ -1,4 +1,9 @@
-import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+import {
+  ApiProperty,
+  ApiPropertyOptional,
+  OmitType,
+  PartialType,
+} from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
@@ -152,9 +157,31 @@ export class CreateProductDto {
   @IsOptional()
   @IsObject()
   metadata?: Record<string, unknown>;
+
+  @ApiPropertyOptional({
+    description: 'Quantidade da entrada inicial no estoque.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 3 })
+  @Min(0)
+  @Max(9_999_999)
+  initialStock?: number;
+
+  @ApiPropertyOptional({
+    description: 'Unidade onde a entrada inicial será registrada.',
+  })
+  @IsOptional()
+  @IsUUIDv7()
+  initialStockBusinessUnitId?: string;
 }
 
-export class UpdateProductDto extends PartialType(CreateProductDto) {
+export class UpdateProductDto extends PartialType(
+  OmitType(CreateProductDto, [
+    'initialStock',
+    'initialStockBusinessUnitId',
+  ] as const),
+) {
   /**
    * Ativa ou desativa o item sem removê-lo.
    *

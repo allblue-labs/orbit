@@ -5,9 +5,9 @@
  *
  * ## Cadência
  *
- * Catálogo é cadastro: muda por ato deliberado de alguém, não por evento
- * operacional. Nada aqui se recarrega sozinho — `CACHE.stable` para as listas,
- * `CACHE.catalog` para as categorias, que mudam ainda menos.
+ * O cadastro muda por edição; sua disponibilidade também muda com as
+ * movimentações em campo. Por isso usamos `CACHE.live` para os itens e
+ * `CACHE.catalog` para as categorias.
  *
  * ## Sem atualização otimista
  *
@@ -29,6 +29,8 @@ import { useApiMutation } from "@/hooks/api/use-api-mutation";
 import { useApiQuery } from "@/hooks/api/use-api-query";
 import { CACHE } from "@/hooks/api/cache-policy";
 import { catalogService } from "@/services/catalog.service";
+import { inventoryService } from "@/services/inventory.service";
+import { useActiveScope } from "@/providers/use-active-scope";
 import type {
   CatalogItem,
   CatalogQuery,
@@ -39,7 +41,7 @@ import type {
 } from "@/types/catalog";
 
 export const CATALOG_REFRESH = {
-  list: CACHE.stable,
+  list: CACHE.live,
   detail: CACHE.fresh,
   categories: CACHE.catalog,
 } as const;
@@ -49,13 +51,31 @@ export const CATALOG_REFRESH = {
 /* ------------------------------------------------------------------ */
 
 export function useCatalogItems(query: CatalogQuery) {
+  const { organizationId, businessUnitId } = useActiveScope();
+  const scoped = {
+    ...query,
+    businessUnitId: query.businessUnitId ?? businessUnitId ?? undefined,
+  };
   return useApiQuery(
-    catalogService.keys.list(query),
-    ({ signal }) => catalogService.list(query, { signal }),
+    catalogService.keys.scopedList(scoped, organizationId),
+    ({ signal }) => catalogService.list(scoped, { signal }),
     {
       ...CATALOG_REFRESH.list,
+      enabled: Boolean(organizationId),
+      refetchOnMount: "always",
+      refetchOnWindowFocus: true,
       /** Mantém a página anterior visível durante a troca de página. */
-      placeholderData: (previous) => previous,
+      placeholderData: (previous, previousQuery) => {
+        const previousScope = previousQuery?.queryKey[4] as
+          { organizationId?: string } | undefined;
+        const previousParams = previousQuery?.queryKey[3] as
+          CatalogQuery | undefined;
+        return previousScope?.organizationId === organizationId &&
+          previousParams?.businessUnitId === scoped.businessUnitId &&
+          previousParams?.kind === scoped.kind
+          ? previous
+          : undefined;
+      },
     },
   );
 }
@@ -85,11 +105,21 @@ export function useCatalogCategories() {
  * ambiente), e contar no cliente daria o tamanho da página, não o do catálogo.
  */
 export function useCatalogCount(query: CatalogQuery) {
-  const scoped: CatalogQuery = { ...query, page: 1, limit: 1 };
+  const { organizationId, businessUnitId } = useActiveScope();
+  const scoped: CatalogQuery = {
+    ...query,
+    businessUnitId: query.businessUnitId ?? businessUnitId ?? undefined,
+    page: 1,
+    limit: 1,
+  };
   const result = useApiQuery(
-    catalogService.keys.list(scoped),
+    catalogService.keys.scopedList(scoped, organizationId),
     ({ signal }) => catalogService.list(scoped, { signal }),
-    CATALOG_REFRESH.list,
+    {
+      ...CACHE.stable,
+      enabled: Boolean(organizationId),
+      refetchOnMount: "always",
+    },
   );
 
   return {
@@ -116,6 +146,15 @@ function useItemWriteOptions(id?: string) {
       await queryClient.invalidateQueries({
         queryKey: catalogService.keys.lists(),
       });
+      await Promise.all(
+        [
+          inventoryService.keys.all(),
+          inventoryService.keys.balanceLists(),
+          inventoryService.keys.movementLists(),
+          inventoryService.keys.summary(),
+          inventoryService.keys.consumption(),
+        ].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+      );
     },
   } as const;
 }

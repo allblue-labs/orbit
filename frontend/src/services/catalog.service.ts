@@ -62,10 +62,8 @@ export const catalogService = {
   create: (input: CreateCatalogItemInput): Promise<CatalogItem> =>
     apiClient.post<CatalogItem>(PRODUCTS_PATH, input),
 
-  update: (
-    id: string,
-    input: UpdateCatalogItemInput,
-  ): Promise<CatalogItem> => apiClient.patch<CatalogItem>(product(id), input),
+  update: (id: string, input: UpdateCatalogItemInput): Promise<CatalogItem> =>
+    apiClient.patch<CatalogItem>(product(id), input),
 
   /**
    * Soft delete.
@@ -104,6 +102,13 @@ export const catalogService = {
     lists: (): QueryKey => queryKeys.lists(ITEMS),
     list: (query?: CatalogQuery): QueryKey =>
       queryKeys.list(ITEMS, asParams(query)),
+    scopedList: (
+      query: CatalogQuery,
+      organizationId: string | null,
+    ): QueryKey => [
+      ...queryKeys.list(ITEMS, asParams(query)),
+      { organizationId },
+    ],
     detail: (id: string): QueryKey => queryKeys.detail(ITEMS, id),
 
     categoriesModule: (): QueryKey => queryKeys.module(CATEGORIES),

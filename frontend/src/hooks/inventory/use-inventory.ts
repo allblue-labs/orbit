@@ -27,6 +27,7 @@ import { useApiMutation } from "@/hooks/api/use-api-mutation";
 import { useApiQuery } from "@/hooks/api/use-api-query";
 import { CACHE } from "@/hooks/api/cache-policy";
 import { inventoryService } from "@/services/inventory.service";
+import { catalogService } from "@/services/catalog.service";
 import type {
   InventoryAdjustmentInput,
   InventoryAnalyticsQuery,
@@ -88,8 +89,7 @@ export function useInventoryCount(query: InventoryBalanceQuery) {
 export function useInventoryItem(catalogItemId: string | null, enabled = true) {
   return useApiQuery(
     inventoryService.keys.item(catalogItemId ?? "none"),
-    ({ signal }) =>
-      inventoryService.item(catalogItemId as string, { signal }),
+    ({ signal }) => inventoryService.item(catalogItemId as string, { signal }),
     {
       ...INVENTORY_REFRESH.balances,
       enabled: Boolean(catalogItemId) && enabled,
@@ -140,6 +140,9 @@ function useInventoryWrite(scopeId: string) {
   const queryClient = useQueryClient();
 
   const revalidate = async () => {
+    await queryClient.invalidateQueries({
+      queryKey: catalogService.keys.lists(),
+    });
     await queryClient.invalidateQueries({
       queryKey: inventoryService.keys.all(),
     });

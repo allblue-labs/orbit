@@ -61,6 +61,8 @@ export interface CatalogItem {
   taxData: Record<string, unknown> | null;
   metadata: Record<string, unknown> | null;
   status: ProductStatus;
+  /** Disponibilidade física no escopo consultado; serviços não têm estoque. */
+  stockAvailable?: boolean | null;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
@@ -106,6 +108,8 @@ export interface CreateCatalogItemInput {
   businessUnitId?: string;
   taxData?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  initialStock?: number;
+  initialStockBusinessUnitId?: string;
 }
 
 /**
@@ -115,8 +119,9 @@ export interface CreateCatalogItemInput {
  * explícitos que o DTO oferece, porque `undefined` significa "não mexa" e não
  * há como pedir "remova" de outro jeito.
  */
-export interface UpdateCatalogItemInput
-  extends Partial<CreateCatalogItemInput> {
+export interface UpdateCatalogItemInput extends Partial<
+  Omit<CreateCatalogItemInput, "initialStock" | "initialStockBusinessUnitId">
+> {
   status?: ProductStatus;
   /** Remove o recorte de unidade e torna o item da organização inteira. */
   organizationWide?: boolean;
@@ -147,8 +152,6 @@ export const CATALOG_LIMITS = {
 /**
  * O que o contrato do catálogo **não** tem, e que a tela por isso não inventa:
  *
- * - **estoque** — não existe modelo, coluna nem endpoint; nenhuma quantidade
- *   é publicada em lugar nenhum da plataforma;
  * - **duração padrão de serviço** — não há coluna; `POST` com
  *   `durationMinutes` é recusado pelo `forbidNonWhitelisted`;
  * - **Analytics de catálogo** — `AnalyticsDomain` cobre operações, PMOC,
@@ -160,7 +163,6 @@ export const CATALOG_LIMITS = {
  * campo de primeira classe.
  */
 export const CATALOG_CONTRACT_GAPS = [
-  "stock",
   "serviceDuration",
   "analytics",
   "intelligence",
