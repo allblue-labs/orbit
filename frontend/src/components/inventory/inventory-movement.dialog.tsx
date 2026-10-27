@@ -208,7 +208,7 @@ function Body({
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="inventory-quantity">
+            <Label required htmlFor="inventory-quantity">
               Quantidade ({item.unit})
             </Label>
             <Input
@@ -245,7 +245,7 @@ function Body({
         {isAdjustment ? <AdjustmentNotice /> : null}
 
         <div className="space-y-2">
-          <Label htmlFor="inventory-reason">
+          <Label required={isAdjustment} htmlFor="inventory-reason">
             Motivo{isAdjustment ? "" : " (opcional)"}
           </Label>
           <Input

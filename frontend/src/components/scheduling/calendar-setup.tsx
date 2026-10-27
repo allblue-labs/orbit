@@ -106,9 +106,10 @@ export function CalendarSetup({
       <div className="space-y-2">
         <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
           <div className="space-y-2">
-            <Label htmlFor="calendar-name">Nome</Label>
+            <Label htmlFor="calendar-name" required>Nome</Label>
             <Input
               id="calendar-name"
+              required
               value={name}
               maxLength={160}
               onChange={(event) => setName(event.target.value)}

@@ -243,7 +243,7 @@ function Body({
       </DialogHeader>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Nome" htmlFor="asset-name" className="sm:col-span-2">
+        <Field label="Nome" htmlFor="asset-name" className="sm:col-span-2" required>
           <Input
             id="asset-name"
             value={form.name}
@@ -272,12 +272,12 @@ function Body({
           </Select>
         </Field>
 
-        <Field label="Unidade" htmlFor="asset-unit">
+        <Field label="Unidade" htmlFor="asset-unit" required>
           <Select
             value={form.businessUnitId}
             onValueChange={(value) => set("businessUnitId", value)}
           >
-            <SelectTrigger id="asset-unit">
+            <SelectTrigger id="asset-unit" aria-required="true">
               <SelectValue placeholder="Selecione" />
             </SelectTrigger>
             <SelectContent>
@@ -433,6 +433,7 @@ function Field({
   hint,
   className,
   children,
+  required,
 }: {
   label: string;
   /**
@@ -444,11 +445,12 @@ function Field({
   hint?: string;
   className?: string;
   children: React.ReactNode;
+  required?: boolean;
 }) {
   return (
     <div className={`space-y-2 ${className ?? ""}`}>
       {htmlFor ? (
-        <Label htmlFor={htmlFor}>{label}</Label>
+        <Label htmlFor={htmlFor} required={required}>{label}</Label>
       ) : (
         <span className="text-sm font-medium leading-none">{label}</span>
       )}

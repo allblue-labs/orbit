@@ -212,7 +212,7 @@ function PasswordSection() {
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2 sm:col-span-2">
-          <Label htmlFor="password-current">Senha atual</Label>
+          <Label required htmlFor="password-current">Senha atual</Label>
           <Input
             id="password-current"
             type="password"
@@ -224,7 +224,7 @@ function PasswordSection() {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="password-new">Nova senha</Label>
+          <Label required htmlFor="password-new">Nova senha</Label>
           <Input
             id="password-new"
             type="password"
@@ -243,7 +243,7 @@ function PasswordSection() {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="password-confirm">Confirmar nova senha</Label>
+          <Label required htmlFor="password-confirm">Confirmar nova senha</Label>
           <Input
             id="password-confirm"
             type="password"

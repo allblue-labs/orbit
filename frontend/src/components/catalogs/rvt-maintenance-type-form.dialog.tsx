@@ -166,7 +166,7 @@ function Form({
 
       <div className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="rvt-tipo-label">Nome</Label>
+          <Label htmlFor="rvt-tipo-label" required>Nome</Label>
           <Input
             id="rvt-tipo-label"
             value={label}
@@ -185,7 +185,7 @@ function Form({
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="rvt-tipo-intervalo">Repetir a cada</Label>
+            <Label htmlFor="rvt-tipo-intervalo" required>Repetir a cada</Label>
             <Input
               id="rvt-tipo-intervalo"
               type="number"
@@ -196,7 +196,7 @@ function Form({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="rvt-tipo-unidade">Unidade</Label>
+            <Label htmlFor="rvt-tipo-unidade" required>Unidade</Label>
             <Select
               value={unidade}
               onValueChange={(valor) => setUnidade(valor as "dias" | "meses")}

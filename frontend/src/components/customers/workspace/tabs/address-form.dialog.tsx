@@ -146,7 +146,7 @@ function Body({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2 sm:col-span-2">
-          <Label htmlFor="address-label">Nome deste lugar</Label>
+          <Label required htmlFor="address-label">Nome deste lugar</Label>
           <Input
             id="address-label"
             value={label}
@@ -176,7 +176,7 @@ function Body({
         </div>
 
         <div className="space-y-2 sm:col-span-2">
-          <Label htmlFor="address-street">Logradouro</Label>
+          <Label required htmlFor="address-street">Logradouro</Label>
           <Input
             id="address-street"
             value={street}
@@ -204,7 +204,7 @@ function Body({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="address-city">Cidade</Label>
+          <Label required htmlFor="address-city">Cidade</Label>
           <Input
             id="address-city"
             value={city}

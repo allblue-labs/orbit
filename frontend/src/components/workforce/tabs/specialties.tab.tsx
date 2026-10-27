@@ -95,7 +95,7 @@ export function SpecialtiesTab() {
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="specialty-name">Nome</Label>
+              <Label required htmlFor="specialty-name">Nome</Label>
               <Input
                 id="specialty-name"
                 value={name}

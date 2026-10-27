@@ -183,7 +183,7 @@ function Body({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2 sm:col-span-2">
-          <Label htmlFor="template-name">Nome</Label>
+          <Label required htmlFor="template-name">Nome</Label>
           <Input
             id="template-name"
             value={name}

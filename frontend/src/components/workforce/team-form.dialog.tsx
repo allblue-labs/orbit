@@ -122,7 +122,7 @@ function Body({
 
       <div className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="team-form-name">Nome</Label>
+          <Label required htmlFor="team-form-name">Nome</Label>
           <Input
             id="team-form-name"
             value={name}

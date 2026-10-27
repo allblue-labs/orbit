@@ -259,7 +259,7 @@ function Body({
           </Field>
         )}
 
-        <Field
+        <Field required
           label="Valor"
           htmlFor="financial-amount"
           hint="Sempre positivo — o sentido é dado pelo campo acima."
@@ -274,7 +274,7 @@ function Body({
           />
         </Field>
 
-        <Field
+        <Field required
           label="Descrição"
           htmlFor="financial-description"
           className="sm:col-span-2"
@@ -289,7 +289,7 @@ function Body({
           />
         </Field>
 
-        <Field
+        <Field required
           label="Competência"
           htmlFor="financial-competence"
           hint="Quando o fato aconteceu, não quando foi digitado."
@@ -341,13 +341,14 @@ function Body({
           <Field
             label="Organização"
             htmlFor="financial-unit"
+            required
             hint="Dinheiro é contado por organização, e não muda depois."
           >
             <Select
               value={form.businessUnitId}
               onValueChange={(value) => set("businessUnitId", value)}
             >
-              <SelectTrigger id="financial-unit">
+              <SelectTrigger id="financial-unit" aria-required="true">
                 <SelectValue placeholder="Selecione" />
               </SelectTrigger>
               <SelectContent>
@@ -426,16 +427,18 @@ function Field({
   hint,
   className,
   children,
+  required,
 }: {
   label: string;
   htmlFor: string;
   hint?: string;
   className?: string;
   children: React.ReactNode;
+  required?: boolean;
 }) {
   return (
     <div className={`space-y-2 ${className ?? ""}`}>
-      <Label htmlFor={htmlFor}>{label}</Label>
+      <Label htmlFor={htmlFor} required={required}>{label}</Label>
       {children}
       {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
     </div>

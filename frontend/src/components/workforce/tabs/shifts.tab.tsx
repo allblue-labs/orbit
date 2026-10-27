@@ -288,7 +288,7 @@ export function ShiftsTab() {
                 </div>
               ) : (
                 <div className="space-y-1.5">
-                  <Label htmlFor="shift-date">Data</Label>
+                  <Label required htmlFor="shift-date">Data</Label>
                   <Input
                     id="shift-date"
                     type="date"

@@ -57,3 +57,20 @@ export interface EquipmentServiceOrderPreparationReadModel {
   /** Preparation never creates an Operation. */
   operationCreated: false;
 }
+
+/** One completed attendance per item, without operational timeline events. */
+export interface EquipmentServiceHistoryReadModel {
+  id: string;
+  code: string;
+  title: string;
+  type: string;
+  completedAt: Date | null;
+  technicianName: string | null;
+  description: string | null;
+  observations: string[];
+}
+
+export interface EquipmentServiceHistoryPageReadModel {
+  data: EquipmentServiceHistoryReadModel[];
+  meta: { page: number; limit: number; total: number; totalPages: number };
+}

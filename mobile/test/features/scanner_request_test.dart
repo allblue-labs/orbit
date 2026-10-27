@@ -9,7 +9,7 @@ void main() {
     expect(EquipmentScannerRequest.fromExtra(null).returnsToken, isFalse);
   });
 
-  test('a tela inicial pede o token de volta', () {
+  test('um pedido explícito permite devolver o token ao chamador', () {
     expect(
       EquipmentScannerRequest.fromExtra(
         const EquipmentScannerRequest(returnsToken: true),

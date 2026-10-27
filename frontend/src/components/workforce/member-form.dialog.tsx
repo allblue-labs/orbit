@@ -195,9 +195,10 @@ function Body({
           <>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="member-first-name">Nome</Label>
+                <Label htmlFor="member-first-name" required>Nome</Label>
                 <Input
                   id="member-first-name"
+                  required
                   value={firstName}
                   onChange={(event) => setFirstName(event.target.value)}
                   maxLength={120}
@@ -206,9 +207,10 @@ function Body({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="member-last-name">Sobrenome</Label>
+                <Label htmlFor="member-last-name" required>Sobrenome</Label>
                 <Input
                   id="member-last-name"
+                  required
                   value={lastName}
                   onChange={(event) => setLastName(event.target.value)}
                   maxLength={120}
@@ -218,9 +220,10 @@ function Body({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="member-email">E-mail</Label>
+              <Label htmlFor="member-email" required>E-mail</Label>
               <Input
                 id="member-email"
+                required
                 type="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}

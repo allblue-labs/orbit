@@ -135,7 +135,7 @@ function Body({
 
       <div className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="pmoc-unit-name">Nome</Label>
+          <Label required htmlFor="pmoc-unit-name">Nome</Label>
           <Input
             id="pmoc-unit-name"
             value={name}
@@ -146,7 +146,7 @@ function Body({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="pmoc-unit-key">Chave</Label>
+          <Label required htmlFor="pmoc-unit-key">Chave</Label>
           <Input
             id="pmoc-unit-key"
             value={chaveFinal}

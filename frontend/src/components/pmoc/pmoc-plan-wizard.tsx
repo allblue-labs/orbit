@@ -515,7 +515,7 @@ export function PmocPlanWizard({
           {etapa === 0 && (
             <>
               <div className="space-y-2">
-                <Label htmlFor="pmoc-customer">Cliente</Label>
+                <Label htmlFor="pmoc-customer" required>Cliente</Label>
                 <Select value={customerId} onValueChange={trocarCliente}>
                   <SelectTrigger id="pmoc-customer">
                     <SelectValue placeholder="Selecione o cliente" />
@@ -563,7 +563,7 @@ export function PmocPlanWizard({
                 "Outros" continua permitindo qualquer nome.
               */}
               <div className="space-y-2">
-                <Label htmlFor="pmoc-name-option">Nome</Label>
+                <Label htmlFor="pmoc-name-option" required>Nome</Label>
                 <Select
                   value={nomeEscolhido}
                   onValueChange={(valor) => {
@@ -698,7 +698,7 @@ export function PmocPlanWizard({
           {etapa === 2 && (
             <>
               <div className="space-y-2">
-                <Label htmlFor="pmoc-starts">Data inicial</Label>
+                <Label htmlFor="pmoc-starts" required>Data inicial</Label>
                 <Input
                   id="pmoc-starts"
                   type="date"
@@ -708,7 +708,7 @@ export function PmocPlanWizard({
               </div>
 
               <fieldset className="space-y-2 rounded-md border p-3">
-                <legend className="px-1 text-sm font-medium">Vigência</legend>
+                <legend className="px-1 text-sm font-medium">Vigência (obrigatória)</legend>
                 <p className="text-xs text-muted-foreground">
                   Por quanto tempo o contrato vale.
                 </p>
@@ -738,7 +738,7 @@ export function PmocPlanWizard({
 
               <fieldset className="space-y-2 rounded-md border p-3">
                 <legend className="px-1 text-sm font-medium">
-                  Frequência de atendimento
+                  Frequência de atendimento (obrigatória)
                 </legend>
                 <p className="text-xs text-muted-foreground">
                   De quanto em quanto tempo a equipe vai ao local.

@@ -349,7 +349,7 @@ function OperationForm({
     </div>,
     <div key="service" className="grid gap-4 sm:grid-cols-2">
       <div className="space-y-2 sm:col-span-2">
-        <Label htmlFor="operation-title">Título</Label>
+        <Label htmlFor="operation-title" required>Título</Label>
         <Input
           id="operation-title"
           value={form.title}
@@ -359,7 +359,7 @@ function OperationForm({
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="operation-code">Código</Label>
+        <Label htmlFor="operation-code" required>Código</Label>
         <Input
           id="operation-code"
           value={form.code}
@@ -370,7 +370,7 @@ function OperationForm({
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="operation-kind">Tipo</Label>
+        <Label htmlFor="operation-kind" required>Tipo</Label>
         <Select
           value={form.kind}
           onValueChange={(value) => edit({ kind: value, checklistExtras: [] })}
@@ -408,7 +408,7 @@ function OperationForm({
     <div key="schedule" className="grid gap-4 sm:grid-cols-2">
       {session.businessUnits.length > 1 || !form.businessUnitId ? (
         <div className="space-y-2 sm:col-span-2">
-          <Label htmlFor="operation-unit">Unidade responsável</Label>
+          <Label htmlFor="operation-unit" required>Unidade responsável</Label>
           <Select
             value={form.businessUnitId}
             onValueChange={(value) =>
@@ -434,7 +434,7 @@ function OperationForm({
         </div>
       ) : null}
       <div className="space-y-2">
-        <Label htmlFor="operation-start">Início previsto</Label>
+        <Label htmlFor="operation-start" required={Boolean(form.endLocal)}>Início previsto</Label>
         <Input
           id="operation-start"
           type="datetime-local"

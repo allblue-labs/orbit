@@ -237,3 +237,63 @@ class RvtAddExistingEquipmentContextContract {
   final String executionId;
   final String equipmentId;
 }
+
+class EquipmentServiceHistoryItem {
+  const EquipmentServiceHistoryItem({
+    required this.id,
+    required this.code,
+    required this.title,
+    required this.type,
+    required this.observations,
+    this.completedAt,
+    this.technicianName,
+    this.description,
+  });
+
+  factory EquipmentServiceHistoryItem.fromJson(Map<String, dynamic> json) =>
+      EquipmentServiceHistoryItem(
+        id: json['id'] as String,
+        code: json['code'] as String? ?? '',
+        title: json['title'] as String? ?? 'Atendimento',
+        type: json['type'] as String? ?? '',
+        completedAt: DateTime.tryParse(json['completedAt'] as String? ?? ''),
+        technicianName: json['technicianName'] as String?,
+        description: json['description'] as String?,
+        observations: (json['observations'] as List<dynamic>? ?? const [])
+            .whereType<String>()
+            .toList(growable: false),
+      );
+
+  final String id;
+  final String code;
+  final String title;
+  final String type;
+  final DateTime? completedAt;
+  final String? technicianName;
+  final String? description;
+  final List<String> observations;
+}
+
+class EquipmentServiceHistoryPage {
+  const EquipmentServiceHistoryPage({
+    required this.items,
+    required this.page,
+    required this.totalPages,
+  });
+
+  factory EquipmentServiceHistoryPage.fromJson(Map<String, dynamic> json) {
+    final meta = json['meta'] as Map<String, dynamic>;
+    return EquipmentServiceHistoryPage(
+      items: (json['data'] as List<dynamic>)
+          .whereType<Map<String, dynamic>>()
+          .map(EquipmentServiceHistoryItem.fromJson)
+          .toList(growable: false),
+      page: (meta['page'] as num).toInt(),
+      totalPages: (meta['totalPages'] as num).toInt(),
+    );
+  }
+
+  final List<EquipmentServiceHistoryItem> items;
+  final int page;
+  final int totalPages;
+}

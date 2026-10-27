@@ -3,13 +3,18 @@ import {
   EntityNotFoundException,
   ValidationException,
 } from '../../../../exceptions';
-import type { EquipmentQrRenderQueryDto } from './equipment-qr.dto';
+import type {
+  EquipmentQrRenderQueryDto,
+  EquipmentServiceHistoryQueryDto,
+} from './equipment-qr.dto';
+import { documentValue } from '../../../../common/document-value';
 import type {
   EquipmentFieldAction,
   EquipmentFieldDetailsReadModel,
   EquipmentPmocContextReadModel,
   EquipmentQrSummaryReadModel,
   EquipmentServiceOrderPreparationReadModel,
+  EquipmentServiceHistoryPageReadModel,
 } from './equipment-qr.read-models';
 import { EquipmentQrRenderer } from './equipment-qr.renderer';
 import { EquipmentQrRepository } from './equipment-qr.repository';
@@ -228,6 +233,66 @@ export class EquipmentQrService {
           : [],
       allowedActions: actions,
       availability: { active: equipment.status === 'ACTIVE', rvtExecutionIds },
+    };
+  }
+
+  async serviceHistory(
+    token: string,
+    actor: EquipmentQrActor,
+    query: EquipmentServiceHistoryQueryDto,
+  ): Promise<EquipmentServiceHistoryPageReadModel> {
+    const identity = await this.repository.identityByTokenHash(
+      this.repository.hash(this.normalizeToken(token)),
+      actor.organizationId,
+    );
+    if (!identity || !actor.businessUnitIds.includes(identity.businessUnitId))
+      throw new EntityNotFoundException('Equipment');
+    const result = await this.repository.serviceHistory({
+      equipmentId: identity.equipment.id,
+      organizationId: actor.organizationId,
+      businessUnitId: identity.businessUnitId,
+      page: query.page,
+      limit: query.limit,
+    });
+    return {
+      data: result.rows.map((row) => {
+        const visit = result.visits.find((item) => item.operationId === row.id);
+        const observations = [
+          row.pmocEquipmentExecution?.notes,
+          ...row.history.map((entry) => {
+            const details = this.record(entry.details);
+            return typeof details.note === 'string' ? details.note : null;
+          }),
+          ...(visit
+            ? [
+                documentValue(visit.observations),
+                documentValue(visit.recommendations),
+                visit.freeTextRecommendation,
+              ]
+            : []),
+        ].filter(
+          (value): value is string =>
+            typeof value === 'string' &&
+            value.trim().length > 0 &&
+            value !== '—',
+        );
+        return {
+          id: row.id,
+          code: row.code,
+          title: row.title,
+          type: row.pmocEquipmentExecution ? 'PMOC' : visit ? 'RVT' : row.kind,
+          completedAt: row.completedAt,
+          technicianName: row.responsibleFieldTechnician?.displayName ?? null,
+          description: row.description,
+          observations: [...new Set(observations.map((text) => text.trim()))],
+        };
+      }),
+      meta: {
+        page: query.page,
+        limit: query.limit,
+        total: result.total,
+        totalPages: Math.ceil(result.total / query.limit),
+      },
     };
   }
 

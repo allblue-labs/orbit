@@ -17,6 +17,7 @@ import {
 } from '../../../subscription-plans/plan-access';
 import { AssetController } from './asset.controller';
 import { EquipmentQrService } from './equipment-qr.service';
+import { EquipmentServiceHistoryQueryDto } from './equipment-qr.dto';
 
 describe('Leitura de equipamentos por QR no aplicativo de campo', () => {
   const reflector = new Reflector();
@@ -84,6 +85,31 @@ describe('Leitura de equipamentos por QR no aplicativo de campo', () => {
         rvtExecutions: [],
         lastService: null,
       }),
+      serviceHistory: jest.fn().mockResolvedValue({
+        total: 1,
+        rows: [
+          {
+            id: 'service-1',
+            code: 'OS-1',
+            title: 'Limpeza preventiva',
+            kind: 'SERVICE_ORDER',
+            completedAt: new Date('2026-10-27T12:00:00Z'),
+            description: 'Limpeza dos filtros.',
+            responsibleFieldTechnician: { displayName: 'Marina' },
+            pmocEquipmentExecution: { notes: 'Dreno desobstruído.' },
+            history: [
+              {
+                details: {
+                  note: 'Funcionamento conferido.',
+                  payloadHash: 'private-hash',
+                  idempotencyKey: 'private-key',
+                },
+              },
+            ],
+          },
+        ],
+        visits: [],
+      }),
     };
     const service = new EquipmentQrService(
       repository as never,
@@ -132,6 +158,63 @@ describe('Leitura de equipamentos por QR no aplicativo de campo', () => {
       'a'.repeat(43),
       'foreign-org',
     );
+  });
+
+  it.each([FIELD_TECHNICIAN_ROLE_KEY, ASSISTANT_TECHNICIAN_ROLE_KEY])(
+    '%s consulta o histórico de atendimentos sem precisar estar atribuído',
+    async (roleKey) => {
+      const { context, controller, request, repository } = setup(roleKey);
+      expect(surfaces.canActivate(context('serviceHistory'))).toBe(true);
+      expect(permissions.canActivate(context('serviceHistory'))).toBe(true);
+      const query = new EquipmentServiceHistoryQueryDto();
+      query.page = 2;
+      const history = await controller.serviceHistory(
+        'a'.repeat(43),
+        request,
+        query,
+      );
+      expect(repository.serviceHistory).toHaveBeenCalledWith({
+        organizationId: 'org-1',
+        businessUnitId: 'unit-1',
+        equipmentId: 'equipment-a',
+        page: 2,
+        limit: 10,
+      });
+      expect(history.data[0]).toMatchObject({
+        title: 'Limpeza preventiva',
+        description: 'Limpeza dos filtros.',
+        technicianName: 'Marina',
+        observations: ['Dreno desobstruído.', 'Funcionamento conferido.'],
+      });
+      expect(JSON.stringify(history)).not.toMatch(
+        /private-hash|private-key|FIELD_NOTE_ADDED/,
+      );
+    },
+  );
+
+  it('recusa o histórico fora do tenant/unidade e sem a permissão específica', async () => {
+    const { controller, context, request, repository } = setup(
+      ASSISTANT_TECHNICIAN_ROLE_KEY,
+      'outside',
+    );
+    await expect(
+      controller.serviceHistory(
+        'a'.repeat(43),
+        request,
+        new EquipmentServiceHistoryQueryDto(),
+      ),
+    ).rejects.toThrow();
+    expect(repository.serviceHistory).not.toHaveBeenCalled();
+    request.identity!.organizationId = 'foreign-org';
+    await expect(
+      controller.serviceHistory(
+        'a'.repeat(43),
+        request,
+        new EquipmentServiceHistoryQueryDto(),
+      ),
+    ).rejects.toThrow();
+    request.user = { ...request.user!, permissions: ['assets.read'] };
+    expect(() => permissions.canActivate(context('serviceHistory'))).toThrow();
   });
 
   it('não abre cadastro, alteração ou administração do QR para o app', () => {

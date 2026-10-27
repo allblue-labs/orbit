@@ -184,7 +184,7 @@ function Body({
         )}
 
         <div className="space-y-1.5">
-          <Label htmlFor="certification-name">Certificação</Label>
+          <Label required htmlFor="certification-name">Certificação</Label>
           <Input
             id="certification-name"
             value={name}

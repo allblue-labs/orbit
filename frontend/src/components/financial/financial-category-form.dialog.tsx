@@ -164,7 +164,7 @@ function Body({
         )}
 
         <div className="space-y-2">
-          <Label htmlFor="financial-category-name">Nome</Label>
+          <Label required htmlFor="financial-category-name">Nome</Label>
           <Input
             id="financial-category-name"
             value={name}

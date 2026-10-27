@@ -94,7 +94,7 @@ function Body({
         </p>
 
         <div className="space-y-2">
-          <Label htmlFor="inventory-minimum">
+          <Label required htmlFor="inventory-minimum">
             Mínimo ({balance.item.unit})
           </Label>
           <Input
