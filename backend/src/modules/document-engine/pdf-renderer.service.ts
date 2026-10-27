@@ -1,3 +1,4 @@
+import { documentValue } from '../../common/document-value';
 import { Injectable } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
 import type {
@@ -231,7 +232,7 @@ export class PdfRendererService {
   private value(value: unknown): string {
     if (value === null || value === undefined) return '—';
     if (value instanceof Date) return value.toISOString();
-    if (typeof value === 'object') return JSON.stringify(value);
+    if (typeof value === 'object') return documentValue(value);
     if (
       typeof value === 'string' ||
       typeof value === 'number' ||

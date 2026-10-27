@@ -1,3 +1,5 @@
+import { documentValue } from '../../../../common/document-value';
+
 /**
  * Sanitização — a fronteira entre dado do tenant e HTML.
  *
@@ -67,33 +69,7 @@ export function safeColor(value: unknown, fallback = '#17213a'): string {
   return /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(raw) ? raw : fallback;
 }
 
-/**
- * Representação textual de uma resposta.
- *
- * `value` é `Json` no contrato — pode ser texto, número, booleano, lista ou
- * objeto. O documento precisa de algo legível, e nada aqui interpreta
- * significado: booleano vira Sim/Não, lista vira itens separados, objeto vira
- * JSON legível. O escape acontece depois, sobre o resultado.
- */
+/** Business answers use the same readable presentation in HTML and PDF. */
 export function formatAnswer(value: unknown): string {
-  if (value === null || value === undefined || value === '') return '—';
-  if (typeof value === 'boolean') return value ? 'Sim' : 'Não';
-  if (typeof value === 'number') return String(value);
-  if (typeof value === 'string') return value;
-  if (Array.isArray(value)) {
-    return value.length === 0
-      ? '—'
-      : value.map((item) => formatAnswer(item)).join(', ');
-  }
-  if (typeof value === 'object') {
-    /**
-     * Objeto sem forma conhecida.
-     *
-     * O motor de artefatos não interpreta o conteúdo de um campo — inventar
-     * uma leitura aqui seria regra de negócio no renderer. O JSON legível
-     * mostra o que foi respondido sem afirmar o que significa.
-     */
-    return JSON.stringify(value);
-  }
-  return stringify(value);
+  return documentValue(value);
 }

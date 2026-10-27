@@ -1,3 +1,4 @@
+import { documentContent } from '../document-content';
 /**
  * Renderer PDF.
  *
@@ -41,7 +42,7 @@ import type {
 } from '../artifact-renderer';
 import { formatAnswer, safeColor } from '../html/html-safe';
 
-const VERSION = '1.0.1';
+const VERSION = '1.0.2';
 const MARGIN = 48;
 const LABEL_WIDTH = 200;
 
@@ -53,6 +54,7 @@ export class ArtifactPdfRenderer implements ArtifactRenderer {
   readonly mimeType = 'application/pdf';
 
   render(input: RenderInput): Promise<RenderOutput> {
+    input = documentContent(input);
     return new Promise((resolve, reject) => {
       const document = new PDFDocument({
         size: 'A4',

@@ -5,13 +5,8 @@
  * o que foi pedido, o que foi feito e o que ficou faltando, e é a peça que o
  * cliente saca quando discorda da cobrança ou pede garantia.
  *
- * ## O que o modelo do setor não responde
- *
- * A OS tradicional imprime datas soltas — criação, agendamento, conclusão — e
- * um nome de técnico. Quando o cliente contesta, a pergunta não é *quando*, é
- * **quem**: quem iniciou, quem concluiu, quem mais esteve na equipe. O Orbit
- * tem esse dado e ele sai aqui, numa linha do tempo, em vez de ficar só na
- * trilha de auditoria que o cliente nunca vê.
+ * As datas úteis do atendimento aparecem na identificação. As etapas internas
+ * e a trilha de auditoria ficam no sistema, fora do documento entregue ao cliente.
  *
  * ## Pendência é o que gera o retorno
  *
@@ -69,12 +64,6 @@ const COLUNAS_DO_MATERIAL: readonly TableColumn[] = [
   { header: 'Origem', weight: 1.6, align: 'center' },
 ];
 
-const COLUNAS_DA_LINHA_DO_TEMPO: readonly TableColumn[] = [
-  { header: 'Etapa', weight: 2 },
-  { header: 'Quando', weight: 2.4 },
-  { header: 'Por quem', weight: 3 },
-];
-
 /** Campos que saem em lugar próprio e não devem repetir no resíduo. */
 const CAMPOS_PROPRIOS = new Set([
   'tipo_servico',
@@ -105,7 +94,6 @@ export function composeServiceOrder(
   equipamentos(document, context, theme);
   execucao(document, input, theme);
   checklist(document, input, theme);
-  linhaDoTempo(document, context, theme);
   respostasLivres(document, input, theme);
   evidencias(document, input, theme);
   pendencias(document, input, theme);
@@ -129,6 +117,8 @@ function identificacao(
     },
     { label: 'Prioridade', value: prioridade(operacao?.priority) },
     { label: 'Agendamento', value: operacao?.scheduledFor },
+    { label: 'Início do atendimento', value: operacao?.startedAt },
+    { label: 'Conclusão do atendimento', value: operacao?.completedAt },
     { label: 'Duração do atendimento', value: operacao?.duration },
     { label: 'Setor', value: operacao?.sector },
     { label: 'Assunto', value: operacao?.title ?? input.execution.title },
@@ -348,58 +338,6 @@ function checklist(
 
     checkList(document, itens, theme);
   }
-}
-
-/**
- * Quando cada etapa aconteceu, e por quem.
- *
- * Tabela e não cartão: as etapas têm ordem, e ordem se lê melhor em linhas
- * empilhadas do que em pares espalhados por duas colunas.
- *
- * Etapa sem data não aparece. Uma linha "Autorizada — —" ocupa espaço para
- * dizer que nada aconteceu, e quem lê tenta entender o que ela significa.
- */
-function linhaDoTempo(
-  document: Doc,
-  context: DocumentContext,
-  theme: DocumentTheme,
-): void {
-  const operacao = context.operation;
-  if (!operacao) return;
-
-  const etapas: [string, string | undefined, string | undefined][] = [
-    ['Aberta', operacao.openedAt, undefined],
-    ['Agendada', operacao.scheduledFor, undefined],
-    ['Autorizada', operacao.authorizedAt, undefined],
-    ['Iniciada', operacao.startedAt, operacao.startedBy],
-    ['Concluída', operacao.completedAt, operacao.completedBy],
-  ];
-  const linhas = etapas.filter(([, quando]) => quando);
-  if (linhas.length === 0) return;
-
-  /**
-   * A coluna do autor só existe quando alguma etapa tem autor.
-   *
-   * Abertura, agendamento e autorização não trazem quem — é o limite do
-   * `select` documentado no repositório. Nas etapas em que ninguém é
-   * conhecido o kit imprime o traço de célula vazia, que é a convenção do
-   * documento inteiro; o que não se admite é a coluna **toda** de traços,
-   * ocupando um terço da largura para não dizer nada.
-   */
-  const temAutor = linhas.some(([, , quem]) => quem);
-  const colunas = temAutor
-    ? COLUNAS_DA_LINHA_DO_TEMPO
-    : COLUNAS_DA_LINHA_DO_TEMPO.slice(0, 2);
-
-  sectionTitle(document, 'Andamento do atendimento', theme);
-  table(
-    document,
-    colunas,
-    linhas.map(([etapa, quando, quem]) =>
-      temAutor ? [etapa, quando, quem] : [etapa, quando],
-    ),
-    theme,
-  );
 }
 
 function respostasLivres(

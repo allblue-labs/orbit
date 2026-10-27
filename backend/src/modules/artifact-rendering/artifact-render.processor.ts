@@ -105,7 +105,15 @@ export class ArtifactRenderProcessor implements JobProcessor, OnModuleInit {
      * Crash/retry depois da emissão, mas antes de marcar READY: o manifest já
      * é a autoridade. Reconciliar o estado evita uma segunda revisão/PDF.
      */
-    if (source.fieldArtifact && source.manifests.length > 0) {
+    const renderer = this.renderers.get(payload.renderer);
+    const currentManifest = source.manifests.find(
+      (manifest) =>
+        manifest.renderer === renderer.id &&
+        manifest.rendererVersion === renderer.version,
+    );
+    // A manual request after a renderer correction creates a new revision;
+    // retrying an already-issued revision of the same version remains idempotent.
+    if (source.fieldArtifact && currentManifest) {
       await this.repository.markReady(payload.executionId);
       if (source.fieldArtifact && this.mobileNotifications) {
         try {
@@ -114,7 +122,7 @@ export class ArtifactRenderProcessor implements JobProcessor, OnModuleInit {
             businessUnitId: source.businessUnitId,
             recipientUserId: source.responsibleUserId ?? source.createdById,
             type: 'ARTIFACT_AVAILABLE',
-            factId: source.manifests[0]!.id,
+            factId: currentManifest.id,
             resourceId: source.fieldArtifact.id,
             correlationId: job.correlationId,
           });
@@ -143,8 +151,6 @@ export class ArtifactRenderProcessor implements JobProcessor, OnModuleInit {
     await this.repository.markRendering(payload.executionId);
 
     try {
-      const renderer = this.renderers.get(payload.renderer);
-
       /**
        * A montagem é do fabricante, e não daqui.
        *

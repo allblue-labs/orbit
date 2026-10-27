@@ -284,7 +284,7 @@ function respostasLivres(
       .sort((esquerda, direita) => esquerda.order - direita.order)
       .map((campo) => {
         /* A largura é decidida pelo texto que vai ser impresso, e não pelo
-           valor cru — um objeto respondido vira JSON longo, e medir o objeto
+           valor cru — uma resposta estruturada ocupa várias linhas, e medir o objeto
            daria "[object Object]". */
         const texto = formatAnswer(campo.value);
         return {

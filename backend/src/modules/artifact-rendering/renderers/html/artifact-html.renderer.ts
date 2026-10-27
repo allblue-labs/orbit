@@ -1,3 +1,4 @@
+import { documentContent } from '../document-content';
 /**
  * Renderer HTML — o documento em marcação.
  *
@@ -38,7 +39,7 @@ import type {
 import { escapeHtml, formatAnswer, safeColor } from './html-safe';
 
 /** Sobe quando a saída muda de forma — fica gravado no manifest. */
-const VERSION = '1.0.1';
+const VERSION = '1.0.2';
 
 @Injectable()
 export class ArtifactHtmlRenderer implements ArtifactRenderer {
@@ -70,6 +71,7 @@ export class ArtifactHtmlRenderer implements ArtifactRenderer {
 
   /** HTML completo — usado também pelo renderer de PDF baseado em impressão. */
   document(input: RenderInput): string {
+    input = documentContent(input);
     const color = safeColor(input.branding.primaryColor);
     const title = escapeHtml(
       input.branding.documentTitle ?? input.execution.title,
@@ -111,6 +113,7 @@ export class ArtifactHtmlRenderer implements ArtifactRenderer {
       'table{width:100%;border-collapse:collapse}',
       'th,td{text-align:left;vertical-align:top;padding:6px 8px;border-bottom:1px solid #e6e9f0}',
       'th{width:38%;font-weight:600;color:#3b455c}',
+      'td{white-space:pre-wrap;overflow-wrap:anywhere}',
       '.pending{color:#8a94a8;font-style:italic}',
       '.required{color:#b3261e}',
       '.signatures{margin-top:28px;break-inside:avoid;page-break-inside:avoid}',

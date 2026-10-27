@@ -136,8 +136,8 @@ describe('ArtifactPdfRenderer', () => {
     const output = await renderer.render(input());
     const raw = output.bytes.toString('latin1');
 
-    expect(raw).toContain('pdf.default@1.0.1');
-    expect(output.rendererVersion).toBe('1.0.1');
+    expect(raw).toContain('pdf.default@1.0.2');
+    expect(output.rendererVersion).toBe('1.0.2');
   });
 
   it('escreve o conteúdo do documento', async () => {
