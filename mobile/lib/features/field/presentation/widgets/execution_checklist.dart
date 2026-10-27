@@ -17,12 +17,15 @@ import '../../../../core/widgets/section_states.dart';
 typedef ChecklistAnswer =
     void Function(String checklistId, String itemId, Object? answer);
 
-class ExecutionChecklist extends StatelessWidget {
+class ExecutionChecklist extends StatefulWidget {
   const ExecutionChecklist({
     super.key,
     required this.checklists,
     required this.enabled,
     required this.onAnswer,
+    this.onConfirm,
+    this.onSave,
+    this.pendingIds = const {},
   });
 
   final List<FieldOperationChecklistContract> checklists;
@@ -31,12 +34,36 @@ class ExecutionChecklist extends StatelessWidget {
   /// em voo.
   final bool enabled;
   final ChecklistAnswer onAnswer;
+  final ValueChanged<String>? onConfirm;
+  final void Function(String, Map<String, dynamic>)? onSave;
+  final Set<String> pendingIds;
+  @override
+  State<ExecutionChecklist> createState() => _ExecutionChecklistState();
+}
+
+class _ExecutionChecklistState extends State<ExecutionChecklist> {
+  final Map<String, Map<String, dynamic>> _drafts = {};
+  Map<String, dynamic> _answers(FieldOperationChecklistContract checklist) =>
+      _drafts.putIfAbsent(checklist.id, () => checklist.defaultAnswers);
+  @override
+  void didUpdateWidget(ExecutionChecklist oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    for (final checklist in widget.checklists) {
+      final previous = oldWidget.checklists
+          .where((item) => item.id == checklist.id)
+          .firstOrNull;
+      if (checklist.status != 'IN_PROGRESS' ||
+          previous?.version != checklist.version) {
+        _drafts.remove(checklist.id);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        for (final checklist in checklists)
+        for (final checklist in widget.checklists)
           SectionBlock(
             title: checklist.name,
             child: Column(
@@ -54,11 +81,47 @@ class ExecutionChecklist extends StatelessWidget {
                 const SizedBox(height: OrbitSpacing.sm),
                 for (final item in checklist.items)
                   _ChecklistTile(
+                    key: ValueKey(
+                      '${checklist.id}:${checklist.version}:${item.id}',
+                    ),
                     item: item,
-                    enabled: enabled,
-                    onChanged: (answer) =>
-                        onAnswer(checklist.id, item.id, answer),
+                    enabled:
+                        widget.enabled &&
+                        checklist.status == 'IN_PROGRESS' &&
+                        !widget.pendingIds.contains(checklist.id),
+                    currentAnswer: widget.onSave == null
+                        ? item.answer
+                        : _answers(checklist)[item.id],
+                    onChanged: (answer) {
+                      if (widget.onSave != null) {
+                        setState(() => _answers(checklist)[item.id] = answer);
+                      } else {
+                        widget.onAnswer(checklist.id, item.id, answer);
+                      }
+                    },
                   ),
+                if ((widget.onSave != null || widget.onConfirm != null) &&
+                    checklist.status == 'IN_PROGRESS') ...[
+                  const SizedBox(height: OrbitSpacing.sm),
+                  const Text(
+                    'Os itens vêm marcados. Desmarque o que não foi realizado e confirme o checklist.',
+                  ),
+                  OutlinedButton(
+                    onPressed:
+                        widget.enabled &&
+                            !widget.pendingIds.contains(checklist.id)
+                        ? () {
+                            FocusManager.instance.primaryFocus?.unfocus();
+                            if (widget.onSave case final save?) {
+                              save(checklist.id, Map.of(_answers(checklist)));
+                            } else {
+                              widget.onConfirm?.call(checklist.id);
+                            }
+                          }
+                        : null,
+                    child: const Text('Confirmar checklist'),
+                  ),
+                ],
               ],
             ),
           ),
@@ -69,18 +132,45 @@ class ExecutionChecklist extends StatelessWidget {
 
 class _ChecklistTile extends StatelessWidget {
   const _ChecklistTile({
+    super.key,
     required this.item,
     required this.enabled,
     required this.onChanged,
+    required this.currentAnswer,
   });
 
   final FieldOperationChecklistItemContract item;
+  final Object? currentAnswer;
   final bool enabled;
   final ValueChanged<Object?> onChanged;
 
   @override
   Widget build(BuildContext context) {
-    final checked = item.answer == true;
+    if (!item.isCheck) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: TextFormField(
+          key: ValueKey(item.id),
+          initialValue: currentAnswer?.toString(),
+          keyboardType: item.type == 'NUMBER'
+              ? const TextInputType.numberWithOptions(
+                  decimal: true,
+                  signed: true,
+                )
+              : TextInputType.text,
+          enabled: enabled,
+          decoration: InputDecoration(
+            labelText: item.required ? '${item.label} *' : item.label,
+          ),
+          onChanged: (value) => onChanged(
+            item.type == 'NUMBER'
+                ? num.tryParse(value.replaceAll(',', '.'))
+                : value,
+          ),
+        ),
+      );
+    }
+    final checked = currentAnswer == true || currentAnswer == null;
 
     /// O leitor de tela anuncia o item e o estado como **um** nó:
     /// "Filtro limpo, obrigatório, marcado". Sem `container` e sem excluir a

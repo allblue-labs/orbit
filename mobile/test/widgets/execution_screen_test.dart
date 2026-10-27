@@ -106,8 +106,37 @@ void main() {
       /// Identidade é o ID: dois itens podem ter o mesmo rótulo, e a ordem
       /// pode mudar.
       expect(itemId, 'i2');
-      expect(answer, isTrue);
+      expect(answer, isFalse);
     });
+
+    testWidgets(
+      'confirma todos os itens em um único registro e preserva os desmarcados',
+      (tester) async {
+        Map<String, dynamic>? saved;
+        await tester.pumpWidget(
+          host(
+            ExecutionChecklist(
+              checklists: [checklist()],
+              enabled: true,
+              onAnswer: (_, _, _) =>
+                  fail('Os rascunhos não devem gerar comandos por item'),
+              onSave: (_, answers) => saved = answers,
+            ),
+          ),
+        );
+        expect(
+          tester
+              .widgetList<Checkbox>(find.byType(Checkbox))
+              .every((checkbox) => checkbox.value == true),
+          isTrue,
+        );
+        await tester.tap(find.text('Dreno desobstruído'));
+        await tester.pump();
+        await tester.ensureVisible(find.text('Confirmar checklist'));
+        await tester.tap(find.text('Confirmar checklist'));
+        expect(saved, {'i1': true, 'i2': false});
+      },
+    );
 
     testWidgets('sem permissão publicada, o checklist não aceita toque', (
       tester,

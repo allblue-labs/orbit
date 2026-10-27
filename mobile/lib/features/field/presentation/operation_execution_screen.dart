@@ -1,10 +1,4 @@
-/// Execução de um atendimento em campo.
-///
-/// Preparação, início, checklist, observações, materiais e conclusão — todos
-/// pelos comandos semânticos do MB-02. A tela mostra o estado publicado e
-/// envia intenções; ela não sabe o que é uma transição válida.
-///
-/// Abrir esta tela **não muda nada**: a preparação é um `GET`.
+/// Atendimento em campo: execução, confirmação e entrega automática do relatório.
 library;
 
 import 'package:flutter/material.dart';
@@ -15,7 +9,6 @@ import '../../../core/contracts/field_operation_contracts.dart';
 import '../../../core/design/orbit_primitives.dart';
 import '../../../core/design/orbit_wizard.dart';
 import '../../../core/presentation/field_registry.dart';
-import '../../../core/presentation/orbit_format.dart';
 import '../../../core/theme/orbit_theme.dart';
 import '../../../core/widgets/section_states.dart';
 import '../../../core/contracts/mobile_evidence_contracts.dart';
@@ -29,16 +22,21 @@ import '../../evidence/presentation/widgets/evidence_section.dart';
 import '../../sync/data/command_journal.dart';
 import '../../sync/presentation/widgets/pending_badge.dart';
 import '../application/execution_controller.dart';
-import 'widgets/execution_actions.dart';
+import 'widgets/attendance_result.dart';
 import 'widgets/execution_checklist.dart';
 import 'widgets/execution_signing.dart';
-import 'widgets/material_sheet.dart';
-import 'widgets/note_sheet.dart';
+import 'widgets/attendance_work_record.dart';
+import 'widgets/attendance_wizard.dart';
 
 class OperationExecutionScreen extends ConsumerWidget {
-  const OperationExecutionScreen({super.key, required this.operationId});
+  const OperationExecutionScreen({
+    super.key,
+    required this.operationId,
+    this.rvtExecutionId,
+  });
 
   final String operationId;
+  final String? rvtExecutionId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -49,7 +47,7 @@ class OperationExecutionScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Atendimento'),
+        title: Text(rvtExecutionId == null ? 'Atendimento' : 'Visita técnica'),
         actions: [
           /// A saída, nomeada.
           ///
@@ -78,68 +76,40 @@ class OperationExecutionScreen extends ConsumerWidget {
           state: state,
           controller: controller,
           operationId: operationId,
+          rvtExecutionId: rvtExecutionId,
         ),
       },
-
-      /// **Sem barra fixa.**
-      ///
-      /// Havia uma, com a ação principal do atendimento, e ela competia com o
-      /// "Avançar" do roteiro: na primeira etapa a tela mostrava "Avançar ·
-      /// Execução" no meio e "Iniciar atendimento" colado embaixo, dois botões
-      /// grandes dizendo coisas diferentes sem nada indicando qual vinha
-      /// primeiro.
-      ///
-      /// A ação do domínio passou para **dentro da etapa a que pertence** —
-      /// iniciar na Preparação, concluir na Finalização. O par persistente
-      /// voltou a ser só navegação: Voltar e Avançar.
     );
   }
 }
 
-/// O corpo da execução, em etapas.
-///
-/// ## O que mudou, e por quê
-///
-/// Eram sete seções empilhadas numa rolagem só. Quem executa em campo está de
-/// pé, de luva, com o celular numa mão — rolava para achar o checklist, rolava
-/// de volta para a evidência, e não tinha como saber o que ainda faltava antes
-/// de tentar concluir. O roteiro responde **onde estou** e **o que falta**.
-///
-/// ## O que continua igual
-///
-/// Tudo o que é domínio. Cada etapa continua mostrando exatamente o que o
-/// servidor publicou: `allowedActions` decide o que vira botão, `blockers`
-/// dizem por que ainda não dá, `version` viaja em todo comando, e o journal
-/// offline continua sendo o mesmo. Mudar de etapa **não envia comando nenhum**
-/// — é navegação, e sair no meio não perde o que já foi registrado.
-///
-/// Nenhuma etapa é marcada como cumprida por dedução da tela: "cumprida" vem
-/// de `eligible` e do `progress` que o servidor calcula.
+/// As ações de cada etapa continuam autorizadas pelo servidor.
 class _Body extends StatelessWidget {
   const _Body({
     required this.state,
     required this.controller,
     required this.operationId,
+    this.rvtExecutionId,
   });
 
   final ExecutionState state;
   final ExecutionController controller;
   final String operationId;
+  final String? rvtExecutionId;
 
   @override
   Widget build(BuildContext context) {
     final preparation = state.preparation!;
     final checklists = preparation.checklist;
 
-    /// Progresso do checklist é **do servidor**. A tela não conta itens
-    /// respondidos para chegar a um número próprio.
-    final checklistCumprido =
-        checklists.isNotEmpty &&
-        checklists.every((lista) => lista.progress >= 100);
+    /// Marcar os itens prepara as respostas; a etapa termina quando o checklist é confirmado.
+    final checklistCumprido = checklists.every(
+      (lista) => lista.status != 'IN_PROGRESS',
+    );
 
     final etapas = <OrbitWizardStep>[
       OrbitWizardStep(
-        title: 'Execução',
+        title: rvtExecutionId == null ? 'Checklist' : 'Checklist da visita',
         hint: 'Responda o checklist previsto para este atendimento.',
 
         /// Sem checklist a etapa **abre** e diz que não há itens.
@@ -164,6 +134,14 @@ class _Body extends StatelessWidget {
                 enabled:
                     state.allows(FieldOperationAllowedAction.updateChecklist) &&
                     !state.isBusy,
+                onSave: controller.saveChecklist,
+                pendingIds: {
+                  for (final command in state.pendingCommands)
+                    if (command.envelope.commandType ==
+                            OfflineCommandType.operationChecklistUpdate &&
+                        !command.isBlocking)
+                      command.envelope.payload['checklistId'] as String,
+                },
                 onAnswer: (checklistId, itemId, answer) =>
                     controller.answerChecklistItem(
                       checklistId: checklistId,
@@ -182,33 +160,27 @@ class _Body extends StatelessWidget {
         /// que foi autorizado.
         child: EvidenceSection(
           target: FieldEvidenceTargetRef(
-            type: FieldEvidenceTarget.operation,
-            id: operationId,
+            type: rvtExecutionId == null
+                ? FieldEvidenceTarget.operation
+                : FieldEvidenceTarget.rvtExecution,
+            id: rvtExecutionId ?? operationId,
           ),
           canCapture: state.allows(FieldOperationAllowedAction.addEvidence),
         ),
       ),
 
       OrbitWizardStep(
-        title: 'Materiais',
-        hint: 'Materiais aplicados e observações do atendimento.',
-        /// Travada quando nem material nem observação estão autorizados: o conteúdo
-        /// são dois botões que abrem folhas de registro, e abri-las sem autorização
-        /// levaria a uma recusa do servidor depois de a pessoa ter digitado tudo.
-        lockedReason:
-            preparation.materialPolicy.enabled ||
-                state.allows(FieldOperationAllowedAction.addNote)
-            ? null
-            : 'Este atendimento não prevê registro de materiais nem observações.',
-        child: ExecutionSecondaryActions(
-          state: state,
-          onNote: () => showNoteSheet(context, controller),
-          onMaterial: () => showMaterialSheet(context, controller),
-        ),
+        title: 'Serviço realizado',
+        hint:
+            'Registre o que foi feito e os materiais utilizados, se necessário.',
+        child: AttendanceWorkRecord(operationId: operationId),
       ),
 
       OrbitWizardStep(
         title: 'Confirmação',
+        lockedReason: checklists.any((item) => item.status == 'IN_PROGRESS')
+            ? 'Confirme os checklists antes de apresentar o resumo ao cliente.'
+            : null,
         hint: 'Assinatura profissional, aceite do cliente e documento.',
         child: ExecutionSigningSections(
           operationId: operationId,
@@ -217,55 +189,45 @@ class _Body extends StatelessWidget {
       ),
 
       OrbitWizardStep(
-        title: 'Finalização',
-        hint: 'Encerre o atendimento, emita o relatório e entregue ao cliente.',
+        title: 'Conclusão',
+        hint: 'Resumo técnico e relatório do atendimento.',
         complete: preparation.operation.completedAt != null,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            /// O documento é a última coisa, e é aqui que ele pertence: a
-            /// política dele é `eligibleAfterCompletion`, e é neste passo que o
-            /// atendimento acaba de ser concluído.
-            ///
-            /// O nome do arquivo e o assunto vêm do atendimento porque é o que o
-            /// cliente lê antes de abrir o anexo — `documento.pdf` não diz nada a
-            /// quem recebe.
-            DocumentSection(
-              source: ArtifactSourceRef(
-                type: FieldArtifactSourceType.operation,
-                id: operationId,
-              ),
-              fileName: documentFileNameOf([
-                preparation.operation.serviceOrderCode ??
-                    preparation.operation.code,
-                preparation.customer?.name ?? '',
-              ]),
-              subject: [
-                'Ordem de Serviço',
-                preparation.operation.serviceOrderCode ??
-                    preparation.operation.code,
-                preparation.customer?.name,
-              ].whereType<String>().join(' · '),
+            AttendanceTechnicalSummary(
+              operationId: operationId,
+              code:
+                  preparation.operation.serviceOrderCode ??
+                  preparation.operation.code,
+              technician: preparation.responsibleFieldTechnician?.name,
+              completedAt: preparation.operation.completedAt,
             ),
-            _Timeline(operationId: operationId),
+            if (preparation.operation.completedAt != null)
+              DocumentSection(
+                automatic: true,
+                source: ArtifactSourceRef(
+                  type: rvtExecutionId == null
+                      ? FieldArtifactSourceType.operation
+                      : FieldArtifactSourceType.rvtExecution,
+                  id: rvtExecutionId ?? operationId,
+                ),
+                fileName: documentFileNameOf([
+                  preparation.operation.serviceOrderCode ??
+                      preparation.operation.code,
+                  preparation.customer?.name ?? '',
+                ]),
+                subject: [
+                  rvtExecutionId == null
+                      ? 'Ordem de Serviço'
+                      : 'Visita técnica',
+                  preparation.operation.serviceOrderCode ??
+                      preparation.operation.code,
+                  preparation.customer?.name,
+                ].whereType<String>().join(' · '),
+              ),
           ],
         ),
-
-        /// Concluir é o avanço da última etapa — não há para onde ir depois.
-        forward: state.allows(FieldOperationAllowedAction.complete)
-            ? OrbitWizardForward(
-                label: 'Concluir atendimento',
-                enabled: !state.isBusy,
-                pending:
-                    state.isBusy &&
-                    state.pendingAction ==
-                        FieldOperationAllowedAction.complete,
-                onPressed: () => confirmExecutionCompletion(
-                  context,
-                  controller,
-                ),
-              )
-            : null,
       ),
     ];
 
@@ -274,6 +236,7 @@ class _Body extends StatelessWidget {
       /// define o estado seguinte.
       onRefresh: () async => state.isBusy ? null : controller.load(),
       child: ListView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: const EdgeInsets.only(bottom: OrbitSpacing.xl),
         children: [
           if (state.phase == ExecutionPhase.conflict)
@@ -337,7 +300,16 @@ class _Body extends StatelessWidget {
               child: _Blockers(blockers: preparation.blockers),
             ),
 
-          OrbitWizard(steps: etapas),
+          AttendanceWizard(
+            steps: etapas,
+            confirmationStep: 3,
+            operationId: operationId,
+            completed: preparation.operation.completedAt != null,
+            initialStep: preparation.operation.completedAt != null ? 4 : 0,
+            onComplete: () => controller.finishAfterConfirmation(
+              rvtExecutionId: rvtExecutionId,
+            ),
+          ),
         ],
       ),
     );
@@ -395,68 +367,6 @@ class _ConflictBanner extends StatelessWidget {
       ],
     ),
   );
-}
-
-class _Timeline extends ConsumerWidget {
-  const _Timeline({required this.operationId});
-
-  final String operationId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final timeline = ref.watch(executionTimelineProvider(operationId));
-
-    return SectionBlock(
-      title: 'Histórico',
-      child: timeline.when(
-        loading: () => const SectionLoading(lines: 3),
-        error: (error, _) => SectionError(
-          error: error,
-          onRetry: () => ref.invalidate(executionTimelineProvider(operationId)),
-        ),
-        data: (page) => page.data.isEmpty
-            ? const Text(
-                'Nada registrado ainda.',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: OrbitColors.textSecondary,
-                ),
-              )
-            : Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  /// Na ordem publicada, com a frase que o servidor escreveu.
-                  for (final entry in page.data)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: OrbitSpacing.sm),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            entry.message,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: OrbitColors.textPrimary,
-                            ),
-                          ),
-                          Text(
-                            [
-                              OrbitFormat.dateHourOf(entry.occurredAt),
-                              if (entry.actor case final actor?) actor.name,
-                            ].join(' · '),
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: OrbitColors.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-      ),
-    );
-  }
 }
 
 /// As intenções deste atendimento que o servidor ainda não confirmou.

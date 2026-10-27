@@ -31,6 +31,8 @@ export interface RvtEquipmentReadModel {
 export interface RvtOccurrenceReadModel {
   id: string;
   configurationId: string;
+  responsibleFieldTechnicianId: string | null;
+  equipmentIds: readonly string[];
   sequenceNumber: number;
   sequence: string;
   scheduledFor: string | null;
@@ -51,6 +53,8 @@ export interface RvtConfigurationReadModel {
    * cujo tipo foi removido do catálogo — o cadastro exige um.
    */
   maintenanceType: RvtMaintenanceTypeReadModel | null;
+  calendarId: string | null;
+  startTime: string;
   scheduleMode: string;
   status: string;
   coverage: { start: string; end: string | null };

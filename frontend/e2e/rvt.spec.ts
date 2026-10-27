@@ -21,6 +21,8 @@ import { OWNER, assertClean, login, record, settled } from "./support";
 test.describe.configure({ mode: "serial" });
 
 const stamp = () => Date.now().toString().slice(-6);
+let scenarioCustomerName = "";
+let scenarioUnitName = "";
 
 /** Abre a lista de RVT já autenticado. */
 async function openRvt(page: import("@playwright/test").Page) {
@@ -45,34 +47,64 @@ async function createConfiguration(
     .click();
 
   const dialog = page.getByRole("dialog");
-  await dialog.getByRole("combobox").first().click();
-  await page.getByRole("option").first().click();
-
-  await dialog.getByLabel("Código").fill(code);
-  await dialog.getByLabel("Nome").fill(options.name);
-
-  await dialog.getByLabel("Agenda").click();
-  await page.getByRole("option", { name: options.mode, exact: true }).click();
-
-  /*
-    "Tipo de manutenção", e a opção traz a cadência junto.
-
-    O ritmo deixou de ser um literal de dois valores traduzido no cliente: é
-    cadastro da organização, e o seletor mostra "Semanal · a cada 7 dias" para
-    quem contrata saber o que está contratando.
-  */
-  await dialog.getByLabel("Tipo de manutenção").click();
+  const unitField = dialog.getByRole("combobox", {
+    name: "Unidade *",
+    exact: true,
+  });
+  if (await unitField.isVisible()) {
+    await unitField.click();
+    await page
+      .getByRole("option", { name: scenarioUnitName, exact: true })
+      .click();
+  }
+  await dialog.getByLabel("Buscar cliente").fill(scenarioCustomerName);
+  await dialog
+    .getByRole("combobox", { name: "Cliente *", exact: true })
+    .click();
+  await page
+    .getByRole("option", { name: scenarioCustomerName, exact: true })
+    .click();
+  await dialog.getByLabel("Código *", { exact: true }).fill(code);
+  await dialog
+    .getByLabel("Nome do atendimento *", { exact: true })
+    .fill(options.name);
+  await dialog.getByRole("button", { name: "Continuar", exact: true }).click();
+  await dialog.getByRole("checkbox").nth(0).check();
+  await dialog.getByRole("checkbox").nth(1).check();
+  await dialog
+    .getByLabel("Rua / logradouro *", { exact: true })
+    .fill("Rua das visitas");
+  await dialog.getByLabel("Cidade *", { exact: true }).fill("Recife");
+  await dialog.getByLabel("UF *", { exact: true }).fill("PE");
+  await dialog.getByRole("button", { name: "Continuar", exact: true }).click();
+  await dialog.getByRole("combobox", { name: "Agenda *", exact: true }).click();
+  await page
+    .getByRole("option", {
+      name: options.recurring ? "Visitas recorrentes" : "Visita única",
+      exact: true,
+    })
+    .click();
+  await dialog
+    .getByRole("combobox", { name: "Tipo de atendimento *", exact: true })
+    .click();
   await page
     .getByRole("option", { name: new RegExp(`^${options.type} · `) })
     .click();
-
-  await dialog.getByLabel("Início da vigência").fill("2026-09-07");
-  if (options.recurring) {
-    await dialog.getByLabel("Fim da vigência").fill("2026-11-30");
-  }
-  await dialog.getByLabel("Local do serviço").fill("Recife");
-
-  await dialog.getByRole("button", { name: "Criar visita técnica" }).click();
+  await dialog
+    .getByLabel(options.recurring ? "Primeira visita *" : "Data da visita *", {
+      exact: true,
+    })
+    .fill("2099-09-07");
+  await dialog.getByLabel("Horário *", { exact: true }).fill("14:35");
+  if (options.recurring)
+    await dialog
+      .getByLabel("Fim da vigência *", { exact: true })
+      .fill("2099-11-30");
+  await dialog.getByRole("button", { name: "Continuar", exact: true }).click();
+  await expect(dialog.getByText("Confira o atendimento")).toBeVisible();
+  await dialog
+    .getByRole("button", { name: "Criar RVT e visitas", exact: true })
+    .click();
   await expect(dialog).toBeHidden({ timeout: 20_000 });
   await settled(page);
   return { code, name: options.name };
@@ -155,7 +187,9 @@ test.beforeAll(async ({ request }) => {
   const context = await request.get(`${api}/organizations/current`, {
     headers,
   });
-  const unit = (await context.json()).data.businessUnits[0].id as string;
+  const unitRecord = (await context.json()).data.businessUnits[0];
+  const unit = unitRecord.id as string;
+  scenarioUnitName = unitRecord.tradeName ?? unitRecord.legalName;
 
   /**
    * Cliente e equipamentos próprios, na mesma unidade das visitas.
@@ -168,9 +202,10 @@ test.beforeAll(async ({ request }) => {
    */
   const suffix = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
 
+  scenarioCustomerName = `Cenário RVT ${suffix}`;
   const customer = await request.post(`${api}/customers`, {
     headers,
-    data: { type: "COMPANY", legalName: `Cenário RVT ${suffix}` },
+    data: { type: "COMPANY", legalName: scenarioCustomerName },
   });
   expect(customer.ok(), await customer.text()).toBe(true);
   const customerId = (await customer.json()).data.id as string;
@@ -482,38 +517,27 @@ test("editar a configuração deixa o servidor reconciliar a agenda futura", asy
   await page.getByRole("button", { name: "Editar" }).click();
   const dialog = page.getByRole("dialog");
 
-  /** Imutáveis por decisão de domínio: aparecem como contexto, não como campo. */
-  await expect(dialog.getByText(created.code)).toBeVisible();
-  await expect(dialog.getByLabel("Código")).toHaveCount(0);
-  await expect(dialog.getByLabel("Cliente")).toHaveCount(0);
-
-  /** Semanal → semestral muda quais visitas devem existir. */
-  await dialog.getByLabel("Tipo de manutenção").click();
+  await expect(dialog.getByLabel("Código *", { exact: true })).toBeDisabled();
+  await expect(
+    dialog.getByRole("combobox", { name: "Cliente *", exact: true }),
+  ).toBeDisabled();
+  await dialog.getByRole("button", { name: "Continuar", exact: true }).click();
+  await dialog.getByRole("button", { name: "Continuar", exact: true }).click();
+  await dialog
+    .getByRole("combobox", { name: "Tipo de atendimento *", exact: true })
+    .click();
   await page.getByRole("option", { name: /^Semestral · / }).click();
-  await dialog.getByRole("button", { name: "Salvar" }).click();
-
-  /**
-   * O resultado é o que o **servidor** fez — criadas, remarcadas, canceladas.
-   * A tela não deduz isso comparando listas, e não apaga nem recria
-   * ocorrência nenhuma.
-   */
-  await expect(
-    dialog.getByRole("heading", { name: "Visita técnica atualizada" }),
-  ).toBeVisible({ timeout: 20_000 });
-  await expect(dialog.getByLabel("Ajustes na agenda")).toBeVisible();
-  await expect(
-    dialog.getByText("As visitas já realizadas não foram alteradas."),
-  ).toBeVisible();
-
-  /**
-   * O diálogo tem dois controles que fecham: este, no rodapé, e o "×" que o
-   * primitivo desenha no canto — ambos chamados "Fechar" desde que o rótulo
-   * do leitor de tela passou a ser em português. O do rodapé vem antes na
-   * árvore; o "×" é renderizado depois do conteúdo.
-   */
-  await dialog.getByRole("button", { name: "Fechar" }).first().click();
-  await settled(page);
-
+  await dialog.getByRole("button", { name: "Continuar", exact: true }).click();
+  const saved = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PATCH" &&
+      /rvt\/configurations\/[^/]+$/.test(new URL(response.url()).pathname),
+  );
+  await dialog
+    .getByRole("button", { name: "Salvar configuração", exact: true })
+    .click();
+  expect((await saved).ok()).toBe(true);
+  await expect(dialog).toBeHidden();
   await page.reload();
   await settled(page);
   await expect(page.getByText("Semestral").first()).toBeVisible();
@@ -771,4 +795,114 @@ test("a lista e o detalhe seguem íntegros em 1024 e 768", async ({ page }) => {
   }
 
   assertClean(recorder, "tablet");
+});
+
+test("gerencia visitas, equipamentos e agenda sem sair do RVT", async ({
+  page,
+}) => {
+  const recorder = record(page);
+  await openRvt(page);
+  const created = await createConfiguration(page, {
+    mode: "Uma única vez",
+    type: "Mensal",
+    name: `Gestão RVT ${stamp()}`,
+    recurring: false,
+  });
+  await openConfiguration(page, created.name);
+  await openTab(page, "Visitas");
+  await page
+    .getByRole("button", { name: "Editar visita 001", exact: true })
+    .click();
+  let dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Data *", { exact: true }).fill("2099-10-12");
+  await dialog.getByLabel("Horário *", { exact: true }).fill("14:35");
+  await dialog.getByRole("checkbox").first().uncheck();
+  const saved = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PATCH" &&
+      response.url().includes("/occurrences/"),
+  );
+  await dialog
+    .getByRole("button", { name: "Salvar visita", exact: true })
+    .click();
+  const result = (await (await saved).json()).data;
+  const firstVisit = result.occurrences.find(
+    (visit: { sequence: string }) => visit.sequence === "001",
+  );
+  expect(firstVisit.equipmentIds).toHaveLength(1);
+  expect(firstVisit.scheduledFor).toBe("2099-10-12T17:35:00.000Z");
+  await expect(dialog).toBeHidden();
+  await page.reload();
+  await openTab(page, "Visitas");
+
+  await page
+    .getByRole("button", { name: "Cancelar visita 001", exact: true })
+    .click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Confirmar", exact: true })
+    .click();
+  await expect(page.getByRole("dialog")).toBeHidden();
+  const firstRow = page
+    .getByRole("row")
+    .filter({ has: page.getByRole("cell", { name: "001", exact: true }) });
+  await expect(firstRow.getByText("Cancelada", { exact: true })).toBeVisible();
+  await page
+    .getByRole("button", { name: "Editar visita 001", exact: true })
+    .click();
+  dialog = page.getByRole("dialog");
+  await dialog.getByRole("combobox", { name: "Situação", exact: true }).click();
+  await page.getByRole("option", { name: "Agendada", exact: true }).click();
+  await dialog
+    .getByRole("button", { name: "Salvar visita", exact: true })
+    .click();
+  await expect(dialog).toBeHidden();
+
+  await page
+    .getByRole("button", { name: "Adicionar visita", exact: true })
+    .click();
+  dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Data *", { exact: true }).fill("2099-10-22");
+  await dialog
+    .getByRole("button", { name: "Salvar visita", exact: true })
+    .click();
+  await expect(dialog).toBeHidden();
+  await expect(
+    page.getByRole("cell", { name: "002", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Excluir visita 002", exact: true })
+    .click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Confirmar", exact: true })
+    .click();
+  await expect(page.getByRole("dialog")).toBeHidden();
+  await expect(
+    page.getByRole("cell", { name: "002", exact: true }),
+  ).toHaveCount(0);
+  assertClean(recorder, "gestão de visitas RVT");
+});
+
+test("o histórico agrupa por visita concluída e abre os detalhes em um modal", async ({
+  page,
+}) => {
+  const recorder = record(page);
+  await openRvt(page);
+  await openConfiguration(page, SEEDED.withDocument);
+  await openTab(page, "Histórico");
+  const timeline = page.getByRole("tabpanel", { name: "Histórico" });
+  await timeline
+    .getByRole("button", { name: new RegExp(SEEDED.withDocument) })
+    .click();
+  const dialog = page.getByRole("dialog");
+  await expect(
+    dialog.getByRole("heading", { name: "Detalhes da visita concluída" }),
+  ).toBeVisible();
+  await expect(
+    dialog
+      .getByRole("region", { name: "Equipamentos visitados" })
+      .getByRole("listitem"),
+  ).toHaveCount(3);
+  assertClean(recorder, "histórico de visitas RVT");
 });

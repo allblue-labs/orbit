@@ -18,6 +18,7 @@ import { useActiveScope } from "@/providers/use-active-scope";
 import { rvtService } from "@/services/rvt.service";
 import type {
   CreateRvtConfigurationInput,
+  RvtVisitInput,
   RvtConfigurationQuery,
   RvtOccurrenceQuery,
   RvtTimelineQuery,
@@ -108,7 +109,7 @@ export function useRvtTimeline(id: string, query?: RvtTimelineQuery) {
 export function useCreateRvtConfiguration() {
   return useApiMutation(
     (input: CreateRvtConfigurationInput) => rvtService.create(input),
-    { invalidate: [rvtService.keys.module()] },
+    { invalidate: [rvtService.keys.module(), queryKeys.module("scheduling")] },
   );
 }
 
@@ -184,4 +185,34 @@ export function useRemoveRvtMaintenanceType() {
   return useApiMutation((id: string) => rvtService.removeMaintenanceType(id), {
     onSuccess: invalidate,
   });
+}
+
+export function useManageRvtVisit(configurationId: string) {
+  return useApiMutation(
+    (action: {
+      id?: string;
+      remove?: boolean;
+      input?: Partial<RvtVisitInput>;
+    }) =>
+      action.remove && action.id
+        ? rvtService.removeVisit(configurationId, action.id)
+        : action.id
+          ? rvtService.updateVisit(
+              configurationId,
+              action.id,
+              action.input ?? {},
+            )
+          : rvtService.createVisit(
+              configurationId,
+              action.input as RvtVisitInput,
+            ),
+    {
+      invalidate: [
+        rvtService.keys.module(),
+        queryKeys.module("scheduling"),
+        queryKeys.module("mobile-field"),
+      ],
+      notify: "Visitas atualizadas",
+    },
+  );
 }

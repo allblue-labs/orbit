@@ -1,10 +1,7 @@
-/// O documento de um atendimento.
-///
-/// Etapa separada da execução, e a tela diz isso: um atendimento concluído
-/// aparece como concluído, e o documento como o que ele for — ainda não
-/// emitido, em processamento, disponível ou falho. Nunca "concluído e
-/// assinado" sem fato que sustente.
+/// Entrega do relatório, com emissão automática na conclusão do atendimento.
 library;
+
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -27,9 +24,11 @@ class DocumentSection extends ConsumerStatefulWidget {
     required this.source,
     this.fileName,
     this.subject,
+    this.automatic = false,
   });
 
   final ArtifactSourceRef source;
+  final bool automatic;
 
   /// O nome do arquivo que chega a quem recebe. Sem ele, um nome genérico — o
   /// documento continua abrindo, mas o cliente não sabe o que é antes de abrir.
@@ -44,6 +43,73 @@ class DocumentSection extends ConsumerStatefulWidget {
 
 class _DocumentSectionState extends ConsumerState<DocumentSection> {
   bool _entregando = false;
+  bool _autoRequested = false;
+  Timer? _preparationPoll;
+  int _pollAttempts = 0;
+  @override
+  void dispose() {
+    _preparationPoll?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(DocumentSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.source != widget.source) {
+      _autoRequested = false;
+      _preparationPoll?.cancel();
+      _preparationPoll = null;
+      _pollAttempts = 0;
+    }
+  }
+
+  void _autoIssue(ArtifactState state) {
+    if (!widget.automatic ||
+        _autoRequested ||
+        state.loading ||
+        state.mutating ||
+        state.error != null) {
+      return;
+    }
+    if (state.blockedReasons.contains(
+      FieldArtifactBlockedReason.evidencePending,
+    )) {
+      if (_preparationPoll == null && _pollAttempts < renderPollLimit) {
+        final source = widget.source;
+        _preparationPoll = Timer(renderPollInterval(_pollAttempts++), () {
+          _preparationPoll = null;
+          if (mounted && widget.source == source) {
+            ref.read(artifactControllerProvider(source).notifier).refresh();
+          }
+        });
+      }
+      return;
+    }
+    _preparationPoll?.cancel();
+    _preparationPoll = null;
+    if (!state.allows(FieldArtifactAllowedAction.prepareDocument) &&
+        !state.allows(FieldArtifactAllowedAction.generateDocument)) {
+      return;
+    }
+    _autoRequested = true;
+    final source = widget.source;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && source == widget.source) {
+        ref.read(artifactControllerProvider(source).notifier).issue();
+      }
+    });
+  }
+
+  Future<void> _retryAutomatic() async {
+    final controller = ref.read(
+      artifactControllerProvider(widget.source).notifier,
+    );
+    await controller.refresh();
+    if (mounted) {
+      _autoRequested = false;
+      _autoIssue(ref.read(artifactControllerProvider(widget.source)));
+    }
+  }
 
   /// Baixa e abre a folha do sistema — e-mail, WhatsApp, o que o aparelho tiver.
   ///
@@ -53,7 +119,10 @@ class _DocumentSectionState extends ConsumerState<DocumentSection> {
     if (_entregando) return;
     setState(() => _entregando = true);
     final mensageiro = ScaffoldMessenger.maybeOf(context);
-    final artifactId = ref.read(artifactControllerProvider(widget.source)).artifact?.id;
+    final artifactId = ref
+        .read(artifactControllerProvider(widget.source))
+        .artifact
+        ?.id;
 
     /// Só o iPad usa a origem; é lá que a ausência lança exceção.
     final caixa = context.findRenderObject();
@@ -63,14 +132,16 @@ class _DocumentSectionState extends ConsumerState<DocumentSection> {
 
     try {
       if (artifactId == null) return;
-      await for (final estado in ref
-          .read(documentSharingProvider)
-          .share(
-            artifactId: artifactId,
-            fileName: widget.fileName ?? documentFileNameOf(const ['documento']),
-            subject: widget.subject,
-            origin: origem,
-          )) {
+      await for (final estado
+          in ref
+              .read(documentSharingProvider)
+              .share(
+                artifactId: artifactId,
+                fileName:
+                    widget.fileName ?? documentFileNameOf(const ['documento']),
+                subject: widget.subject,
+                origin: origem,
+              )) {
         if (estado.phase != SharePhase.error) continue;
         mensageiro?.showSnackBar(
           SnackBar(
@@ -94,6 +165,7 @@ class _DocumentSectionState extends ConsumerState<DocumentSection> {
     final source = widget.source;
     final state = ref.watch(artifactControllerProvider(source));
     final controller = ref.read(artifactControllerProvider(source).notifier);
+    _autoIssue(state);
 
     return SectionBlock(
       title: 'Documento',
@@ -102,7 +174,7 @@ class _DocumentSectionState extends ConsumerState<DocumentSection> {
           : Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _Status(state: state),
+                _Status(state: state, automatic: widget.automatic),
 
                 if (state.blockedReasons.isNotEmpty) ...[
                   const SizedBox(height: OrbitSpacing.sm),
@@ -111,7 +183,12 @@ class _DocumentSectionState extends ConsumerState<DocumentSection> {
 
                 if (state.error case final Object error) ...[
                   const SizedBox(height: OrbitSpacing.sm),
-                  SectionError(error: error, onRetry: controller.refresh),
+                  SectionError(
+                    error: error,
+                    onRetry: widget.automatic
+                        ? _retryAutomatic
+                        : controller.refresh,
+                  ),
                 ],
 
                 const SizedBox(height: OrbitSpacing.md),
@@ -120,6 +197,7 @@ class _DocumentSectionState extends ConsumerState<DocumentSection> {
                   controller: controller,
                   onShare: _compartilhar,
                   sharing: _entregando,
+                  automatic: widget.automatic,
                 ),
               ],
             ),
@@ -128,9 +206,10 @@ class _DocumentSectionState extends ConsumerState<DocumentSection> {
 }
 
 class _Status extends StatelessWidget {
-  const _Status({required this.state});
+  const _Status({required this.state, this.automatic = false});
 
   final ArtifactState state;
+  final bool automatic;
 
   @override
   Widget build(BuildContext context) {
@@ -160,7 +239,11 @@ class _Status extends StatelessWidget {
             const SizedBox(width: OrbitSpacing.sm),
             Expanded(
               child: Text(
-                label.label,
+                automatic && state.status == FieldArtifactStatus.notPrepared
+                    ? (state.blockedReasons.isEmpty
+                          ? 'Preparando relatório'
+                          : 'Relatório indisponível')
+                    : label.label,
                 style: const TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
@@ -179,7 +262,9 @@ class _Status extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.only(top: 4),
           child: Text(
-            label.description ?? '',
+            automatic && state.status == FieldArtifactStatus.notPrepared
+                ? 'O atendimento foi concluído. A emissão do relatório é automática.'
+                : label.description ?? '',
             style: const TextStyle(
               fontSize: 13,
               color: OrbitColors.textSecondary,
@@ -292,12 +377,14 @@ class _Actions extends StatelessWidget {
     required this.controller,
     required this.onShare,
     required this.sharing,
+    this.automatic = false,
   });
 
   final ArtifactState state;
   final ArtifactController controller;
   final VoidCallback onShare;
   final bool sharing;
+  final bool automatic;
 
   @override
   Widget build(BuildContext context) {
@@ -317,10 +404,10 @@ class _Actions extends StatelessWidget {
       spacing: OrbitSpacing.sm,
       runSpacing: OrbitSpacing.sm,
       children: [
-        if (podeEmitir)
+        if (!automatic && podeEmitir)
           _Action(
-            label: documentActionLabels[
-                state.status == FieldArtifactStatus.failed
+            label:
+                documentActionLabels[state.status == FieldArtifactStatus.failed
                     ? 'retryDocument'
                     : 'issueDocument']!,
             icon: Icons.description_outlined,
@@ -344,7 +431,7 @@ class _Actions extends StatelessWidget {
             onPressed: onShare,
           ),
 
-        if (state.allows(FieldArtifactAllowedAction.viewDocument))
+        if (!automatic && state.allows(FieldArtifactAllowedAction.viewDocument))
           _Action(
             label: documentActionLabels['viewDocument']!,
             icon: Icons.visibility_outlined,
@@ -360,14 +447,14 @@ class _Actions extends StatelessWidget {
             onPressed: controller.download,
           ),
 
-        /// Atualizar existe sempre: sem notificação de conclusão, é assim que
-        /// a pessoa descobre que o documento ficou pronto.
-        _Action(
-          label: 'Atualizar',
-          icon: Icons.refresh,
-          busy: busy,
-          onPressed: controller.refresh,
-        ),
+        /// Controles manuais ficam nos contextos fora da conclusão do wizard.
+        if (!automatic)
+          _Action(
+            label: 'Atualizar',
+            icon: Icons.refresh,
+            busy: busy,
+            onPressed: controller.refresh,
+          ),
       ],
     );
   }

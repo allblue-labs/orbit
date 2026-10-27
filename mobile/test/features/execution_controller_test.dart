@@ -151,6 +151,21 @@ void main() {
       expect(checklist.items.last.isAnswered, isFalse);
     });
 
+    test(
+      'seleção inicial preserva itens não realizados e não preenche medições',
+      () {
+        final checklist = FieldOperationChecklistContract.fromJson({
+          'id': 'check-1',
+          'items': [
+            {'id': 'new', 'type': 'BOOLEAN'},
+            {'id': 'skipped', 'type': 'BOOLEAN', 'answer': false},
+            {'id': 'temperature', 'type': 'NUMBER'},
+          ],
+        });
+        expect(checklist.defaultAnswers, {'new': true, 'skipped': false});
+      },
+    );
+
     test('obrigatoriedade é apresentação, não autorização', () {
       final checklist = FieldOperationChecklistContract.fromJson({
         'id': 'cl-1',

@@ -11,6 +11,9 @@ describe('CatalogService', () => {
   };
   const service = new CatalogService(
     repository as unknown as CatalogRepository,
+    {} as never,
+    {} as never,
+    {} as never,
   );
 
   beforeEach(() => jest.clearAllMocks());

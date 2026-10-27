@@ -1,3 +1,4 @@
+import { pmocProcedureAnswers } from './pmoc-procedure';
 /**
  * Mapeadores do domínio PMOC.
  *
@@ -244,6 +245,8 @@ export class PmocMapper {
       startedAt: source.startedAt.toISOString(),
       completedAt: source.completedAt?.toISOString() ?? null,
       notes: source.notes,
+      version: source.updatedAt.toISOString(),
+      procedureAnswers: pmocProcedureAnswers(source.operation?.data),
       asset: source.asset,
       responsibleFieldTechnician: source.responsibleFieldTechnician,
       auxiliaryTechnicians:
@@ -256,7 +259,15 @@ export class PmocMapper {
           }
         : null,
       artifactExecution: source.artifactExecution,
-      evidence: source.evidence.map((item) => ({
+      evidence: [
+        ...source.evidence,
+        ...(source.fieldEvidence ?? []).map((item) => ({
+          ...item,
+          kind: item.storageFile.mimeType.startsWith('image/')
+            ? 'PHOTO'
+            : 'DOCUMENT',
+        })),
+      ].map((item) => ({
         id: item.id,
         kind: item.kind,
         caption: item.caption,

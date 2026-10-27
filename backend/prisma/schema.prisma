@@ -4517,6 +4517,8 @@ model RvtConfiguration {
   name                                String    @db.VarChar(220)
   /// O tipo de manutenção contratado — é dele que sai a cadência.
   maintenanceTypeId                   String?   @map("maintenance_type_id") @db.Uuid
+  calendarId                          String?   @map("calendar_id") @db.Uuid
+  startTime                           String    @default("09:00") @map("start_time") @db.VarChar(5)
   scheduleMode                        String    @map("schedule_mode") @db.VarChar(20)
   coverageStart                       DateTime  @map("coverage_start") @db.Date
   coverageEnd                         DateTime? @map("coverage_end") @db.Date
@@ -4567,7 +4569,12 @@ model RvtOccurrence {
   sequenceNumber     Int       @map("sequence_number")
   scheduledFor       DateTime? @map("scheduled_for") @db.Timestamptz(3)
   localScheduledDate DateTime? @map("local_scheduled_date") @db.Date
+  originalScheduledDate DateTime? @map("original_scheduled_date") @db.Date
   status             String    @default("SCHEDULED") @db.VarChar(20)
+  responsibleFieldTechnicianId String? @map("responsible_field_technician_id") @db.Uuid
+  equipmentIds String[] @default([]) @map("equipment_ids") @db.Uuid
+  customized Boolean @default(false)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
   schedulingEventId  String?   @unique @map("scheduling_event_id") @db.Uuid
   createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)

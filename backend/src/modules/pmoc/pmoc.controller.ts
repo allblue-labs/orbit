@@ -45,6 +45,7 @@ import {
   AddPmocCoverageDto,
   AddPmocEquipmentEvidenceDto,
   CompletePmocEquipmentExecutionDto,
+  SavePmocEquipmentWorkDto,
   GeneratePmocEquipmentArtifactDto,
   CompletePmocExecutionDto,
   CreatePmocOperationDto,
@@ -488,7 +489,7 @@ export class PmocController {
    */
   @Post('plans/:id/cycles/:cycleId/equipment/:assetId/executions/mine')
   @Capabilities('pmoc.manage', 'operations.manage')
-  @Permissions('pmoc.execute')
+  // A atribuição é validada pelo serviço para esta execução, sem conceder gestão global.
   @ApiOperation({
     summary: 'Start my own physical execution (field technician)',
   })
@@ -503,6 +504,26 @@ export class PmocController {
       cycleId,
       assetId,
       this.actor(request),
+    );
+  }
+
+  @Patch(
+    'plans/:id/cycles/:cycleId/equipment-executions/:executionId/work/mine',
+  )
+  @Capabilities('pmoc.manage', 'operations.manage')
+  saveEquipmentWork(
+    @Param('id', ParseUUIDv7Pipe) id: string,
+    @Param('cycleId', ParseUUIDv7Pipe) cycleId: string,
+    @Param('executionId', ParseUUIDv7Pipe) executionId: string,
+    @Req() request: IdentityRequest,
+    @Body() input: SavePmocEquipmentWorkDto,
+  ) {
+    return this.pmoc.saveEquipmentWork(
+      id,
+      cycleId,
+      executionId,
+      this.actor(request),
+      input,
     );
   }
 
@@ -541,7 +562,7 @@ export class PmocController {
     'plans/:id/cycles/:cycleId/equipment-executions/:executionId/complete/mine',
   )
   @Capabilities('pmoc.manage', 'operations.manage')
-  @Permissions('pmoc.execute')
+  // A atribuição é validada pelo serviço para esta execução, sem conceder gestão global.
   @ApiOperation({
     summary: 'Complete my own physical execution (field technician)',
   })
@@ -634,7 +655,7 @@ export class PmocController {
    */
   @Post('equipment-executions/:executionId/artifact/generate/mine')
   @Capabilities('pmoc.manage', 'artifact_rendering.render')
-  @Permissions('pmoc.execute')
+  // A atribuição é validada pelo serviço para esta execução, sem conceder gestão global.
   @ApiOperation({
     summary: 'Render the PMOC document of my own execution (field technician)',
   })

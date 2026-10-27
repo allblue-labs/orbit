@@ -172,6 +172,7 @@ class _FolhaState extends State<_Folha> {
   Widget build(BuildContext context) {
     final palette = context.orbit;
     return SingleChildScrollView(
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: const EdgeInsets.fromLTRB(
         OrbitSpacing.gutter,
         0,

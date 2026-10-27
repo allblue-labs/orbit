@@ -33,6 +33,8 @@ class PmocEquipmentExecutionContract {
     required this.asset,
     required this.evidence,
     required this.auxiliaryTechnicians,
+    this.version = '',
+    this.procedureAnswers = const {},
     this.sequenceNumber,
     this.performedAt,
     this.startedAt,
@@ -46,6 +48,11 @@ class PmocEquipmentExecutionContract {
       PmocEquipmentExecutionContract(
         id: json['id'] as String? ?? '',
         status: json['status'] as String? ?? '',
+        version: json['version'] as String? ?? '',
+        procedureAnswers:
+            (json['procedureAnswers'] as Map<String, dynamic>? ?? const {}).map(
+              (key, value) => MapEntry(key, value == true),
+            ),
         sequenceNumber: json['sequenceNumber'] as int?,
         asset: json['asset'] as PmocJson? ?? const {},
         evidence: (json['evidence'] as List<dynamic>? ?? const [])
@@ -66,6 +73,8 @@ class PmocEquipmentExecutionContract {
       );
   final String id;
   final String status;
+  final String version;
+  final Map<String, bool> procedureAnswers;
 
   /// Qual manutenção **deste equipamento** é esta — 1, 2, 3…
   ///

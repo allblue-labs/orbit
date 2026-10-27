@@ -92,6 +92,8 @@ export interface CreateRvtConfigurationInput {
    * tipo, então o que viaja é o id do cadastro, não um código de calendário.
    */
   maintenanceTypeId: string;
+  calendarId?: string | null;
+  startTime?: string;
   scheduleMode: "RECURRING" | "ONE_TIME";
   coverageStart: string;
   coverageEnd?: string;
@@ -99,8 +101,8 @@ export interface CreateRvtConfigurationInput {
   serviceLocation: Record<string, unknown>;
   recurrence?: Record<string, unknown>;
   procedure: Record<string, unknown>;
-  technicalResponsibleUserId?: string;
-  defaultResponsibleFieldTechnicianId?: string;
+  technicalResponsibleUserId?: string | null;
+  defaultResponsibleFieldTechnicianId?: string | null;
   requiresTechnicalResponsible?: boolean;
   equipmentIds?: string[];
 }
@@ -237,3 +239,11 @@ export type UpdateRvtMaintenanceTypeInput = Partial<
   checklistTemplateId?: string | null;
   isActive?: boolean;
 };
+
+export interface RvtVisitInput {
+  scheduledDate: string;
+  startTime?: string;
+  responsibleFieldTechnicianId?: string | null;
+  equipmentIds?: string[];
+  status?: "SCHEDULED" | "CANCELLED";
+}

@@ -52,6 +52,8 @@ class OrbitWizardStep {
     this.complete = false,
     this.lockedReason,
     this.forward,
+    this.terminal = false,
+    this.hideForward = false,
   });
 
   /// O nome da etapa, como a pessoa a chamaria.
@@ -89,6 +91,8 @@ class OrbitWizardStep {
   /// mostrava "Iniciar atendimento" e "Avançar · Execução" juntos, sem nada
   /// dizendo qual vinha primeiro.
   final OrbitWizardForward? forward;
+  final bool terminal;
+  final bool hideForward;
 }
 
 /// A ação do domínio que ocupa o lugar do avanço numa etapa.
@@ -98,6 +102,7 @@ class OrbitWizardForward {
     required this.onPressed,
     this.enabled = true,
     this.pending = false,
+
     /// Avança sozinho depois de a ação dar certo.
     ///
     /// É o que faz "Iniciar atendimento" levar à etapa seguinte sem um segundo
@@ -120,13 +125,17 @@ class OrbitWizard extends StatefulWidget {
     required this.steps,
     this.initialStep = 0,
     this.onStepChanged,
+    this.onBeforeStepChanged,
     this.footer,
     this.contentPadding = EdgeInsets.zero,
+    this.preserveStepState = false,
   });
 
   final List<OrbitWizardStep> steps;
   final int initialStep;
   final ValueChanged<int>? onStepChanged;
+  final Future<bool> Function(int current, int destination)?
+  onBeforeStepChanged;
 
   /// O que fica abaixo do conteúdo, dentro da rolagem — a ação principal do
   /// domínio, quando a etapa é a última.
@@ -134,12 +143,15 @@ class OrbitWizard extends StatefulWidget {
 
   /// Margem do conteúdo de cada etapa; cabeçalho e navegação têm margens próprias.
   final EdgeInsetsGeometry contentPadding;
+  final bool preserveStepState;
 
   @override
   State<OrbitWizard> createState() => OrbitWizardState();
 }
 
 class OrbitWizardState extends State<OrbitWizard> {
+  final Set<int> _visited = {};
+  bool _navigating = false;
   late int _atual = widget.initialStep.clamp(0, widget.steps.length - 1);
 
   @override
@@ -153,11 +165,22 @@ class OrbitWizardState extends State<OrbitWizard> {
     }
   }
 
-  void _ir(int destino) {
-    if (destino < 0 || destino >= widget.steps.length) return;
-    setState(() => _atual = destino);
-    widget.onStepChanged?.call(destino);
+  Future<void> _ir(int destino) async {
+    if (_navigating || destino < 0 || destino >= widget.steps.length) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() => _navigating = true);
+    try {
+      final allowed =
+          await widget.onBeforeStepChanged?.call(_atual, destino) ?? true;
+      if (!mounted || !allowed) return;
+      setState(() => _atual = destino);
+      widget.onStepChanged?.call(destino);
+    } finally {
+      if (mounted) setState(() => _navigating = false);
+    }
   }
+
+  Future<void> goToStep(int index) => _ir(index);
 
   /// A etapa seguinte, ou `null` na última.
   ///
@@ -172,6 +195,7 @@ class OrbitWizardState extends State<OrbitWizard> {
   /// `null` só na última etapa sem ação declarada — aí não há para onde ir nem
   /// o que fazer, e um botão morto é pior que nenhum.
   _Avanco? _avanco(OrbitWizardStep etapa, int? proxima) {
+    if (etapa.hideForward) return null;
     if (etapa.forward case final OrbitWizardForward acao) {
       return _Avanco(
         rotulo: acao.label,
@@ -179,6 +203,7 @@ class OrbitWizardState extends State<OrbitWizard> {
         pendente: acao.pending,
         ehAcao: true,
         tocar: () async {
+          FocusManager.instance.primaryFocus?.unfocus();
           await acao.onPressed();
           /* Avança só se ainda estamos montados e há para onde: a ação pode ter
              mudado a lista de etapas. */
@@ -198,12 +223,27 @@ class OrbitWizardState extends State<OrbitWizard> {
     );
   }
 
+  Widget _content(OrbitWizardStep step) {
+    if (step.lockedReason case final String reason) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: OrbitSpacing.gutter),
+        child: OrbitEmptyState(
+          icon: Icons.lock_clock_outlined,
+          title: 'Ainda não é a hora desta etapa',
+          description: reason,
+        ),
+      );
+    }
+    return Padding(padding: widget.contentPadding, child: step.child);
+  }
+
   @override
   Widget build(BuildContext context) {
     final palette = context.orbit;
+    _visited.add(_atual);
     final etapa = widget.steps[_atual];
     final proxima = _proxima;
-    final anterior = _anterior;
+    final anterior = etapa.terminal ? null : _anterior;
     final avanco = _avanco(etapa, proxima);
 
     return Column(
@@ -223,7 +263,11 @@ class OrbitWizardState extends State<OrbitWizard> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _Trilho(steps: widget.steps, current: _atual, onSelect: _ir),
+              _Trilho(
+                steps: widget.steps,
+                current: _atual,
+                onSelect: etapa.terminal ? null : _ir,
+              ),
               Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: OrbitSpacing.gutter,
@@ -282,19 +326,16 @@ class OrbitWizardState extends State<OrbitWizard> {
         /// evidência, campo de observação —, e deixá-lo operável antes da hora é o que
         /// o travamento existe para evitar. Antes essa proteção vinha de a etapa ser
         /// inalcançável, ao custo de ninguém nunca ler o motivo.
-        if (etapa.lockedReason case final String motivo)
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: OrbitSpacing.gutter,
-            ),
-            child: OrbitEmptyState(
-              icon: Icons.lock_clock_outlined,
-              title: 'Ainda não é a hora desta etapa',
-              description: motivo,
-            ),
-          )
-        else
-          Padding(padding: widget.contentPadding, child: etapa.child),
+        if (widget.preserveStepState) ...[
+          for (var index = 0; index < widget.steps.length; index++)
+            if (_visited.contains(index))
+              Offstage(
+                key: ValueKey(index),
+                offstage: index != _atual,
+                child: _content(widget.steps[index]),
+              ),
+        ] else
+          _content(etapa),
 
         if (widget.footer case final Widget rodape) ...[
           const SizedBox(height: OrbitSpacing.md),
@@ -312,7 +353,7 @@ class OrbitWizardState extends State<OrbitWizard> {
               if (anterior != null)
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: () => _ir(anterior),
+                    onPressed: _navigating ? null : () => _ir(anterior),
                     style: OutlinedButton.styleFrom(
                       minimumSize: const Size(0, 48),
                     ),
@@ -335,7 +376,9 @@ class OrbitWizardState extends State<OrbitWizard> {
                   /// Tonal quando só navega, cheio quando age: o peso
                   /// acompanha a consequência.
                   child: FilledButton(
-                    onPressed: avanco.habilitado ? avanco.tocar : null,
+                    onPressed: avanco.habilitado && !_navigating
+                        ? avanco.tocar
+                        : null,
                     style: FilledButton.styleFrom(
                       minimumSize: const Size(0, 48),
                       backgroundColor: avanco.ehAcao
@@ -378,7 +421,7 @@ class _Trilho extends StatelessWidget {
 
   final List<OrbitWizardStep> steps;
   final int current;
-  final ValueChanged<int> onSelect;
+  final ValueChanged<int>? onSelect;
 
   @override
   Widget build(BuildContext context) {
@@ -399,7 +442,7 @@ class _Trilho extends StatelessWidget {
               index: indice,
               total: steps.length,
               current: indice == current,
-              onTap: () => onSelect(indice),
+              onTap: onSelect == null ? null : () => onSelect!(indice),
             ),
           ],
         ],

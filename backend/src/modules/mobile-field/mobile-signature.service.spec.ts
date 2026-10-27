@@ -213,6 +213,22 @@ describe('MobileSignatureService', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
+  it('permite que o responsável em campo colete o aceite mesmo quando a gestão abriu a execução', async () => {
+    const operation = { ...operationSource(), startedByUserId: 'manager' };
+    const repository = {
+      operation: jest.fn().mockResolvedValue(operation),
+      acknowledgement: jest.fn().mockResolvedValue(null),
+    };
+    const service = new MobileSignatureService(
+      repository as never,
+      {} as never,
+      storageConfig as never,
+    );
+    await expect(
+      service.acknowledgementPreparation(actor, operation.id),
+    ).resolves.toMatchObject({ serviceSummary: 'Manutenção' });
+  });
+
   it('detects stale acknowledgement before persisting', async () => {
     const operation = operationSource();
     const repository = { operation: jest.fn().mockResolvedValue(operation) };
@@ -235,6 +251,7 @@ describe('MobileSignatureService', () => {
   it('uses the actual executor, not an auxiliary, as acknowledgement collector', async () => {
     const operation = operationSource();
     operation.startedByUserId = '01900000-0000-7000-8000-000000000099';
+    operation.responsibleFieldTechnicianId = operation.startedByUserId;
     operation.auxiliaryTechnicians = [{ userId: actor.id }];
     const repository = { operation: jest.fn().mockResolvedValue(operation) };
     const service = new MobileSignatureService(

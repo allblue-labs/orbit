@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import {
   ConflictException,
   EntityNotFoundException,
+  ForbiddenException,
   ValidationException,
 } from '../../exceptions';
 import { SlugHelper } from '../../helpers';
@@ -14,10 +15,19 @@ import type {
   UpdateProductDto,
 } from './catalog.dto';
 import { CatalogRepository } from './catalog.repository';
+import { RlsTransaction } from '../../database';
+import { InventoryService } from '../inventory/inventory.service';
+import { SubscriptionPlanService } from '../subscription-plans/subscription-plan.service';
+import type { AuthenticatedIdentity } from '../identity/domain/identity.types';
 
 @Injectable()
 export class CatalogService {
-  constructor(private readonly repository: CatalogRepository) {}
+  constructor(
+    private readonly repository: CatalogRepository,
+    private readonly inventory: InventoryService,
+    private readonly rls: RlsTransaction,
+    private readonly plans: SubscriptionPlanService,
+  ) {}
 
   listCategories(organizationId: string) {
     return this.repository.listCategories(organizationId);
@@ -81,12 +91,18 @@ export class CatalogService {
     await this.repository.softDeleteCategory(id);
   }
 
-  listProducts(organizationId: string, query: CatalogQueryDto) {
-    return this.repository.listProducts(organizationId, query);
+  async listProducts(organizationId: string, query: CatalogQueryDto) {
+    const result = await this.repository.listProducts(organizationId, query);
+    return {
+      ...result,
+      data: result.data.map((item) =>
+        this.presentProduct(item, query.businessUnitId),
+      ),
+    };
   }
 
-  getProduct(id: string, organizationId: string) {
-    return this.requireProduct(id, organizationId);
+  async getProduct(id: string, organizationId: string) {
+    return this.presentProduct(await this.requireProduct(id, organizationId));
   }
 
   async findAvailableForBusinessUnit(
@@ -103,22 +119,80 @@ export class CatalogService {
     return product;
   }
 
-  async createProduct(organizationId: string, input: CreateProductDto) {
+  async createProduct(
+    organizationId: string,
+    input: CreateProductDto,
+    actor?: AuthenticatedIdentity,
+  ) {
     await this.validateProductReferences(input, organizationId);
+    const quantity = input.initialStock ?? 0;
+    const stockUnitId =
+      input.initialStockBusinessUnitId ??
+      input.businessUnitId ??
+      actor?.businessUnitId;
+    if (quantity > 0) {
+      if (input.kind === 'SERVICE')
+        throw new ValidationException('Serviços não possuem estoque.');
+      if (
+        !actor ||
+        actor.organizationId !== organizationId ||
+        !(
+          actor.isOrganizationOwner ||
+          actor.permissions.includes('*') ||
+          actor.permissions.includes('inventory.manage')
+        )
+      ) {
+        throw new ForbiddenException(
+          'Você não possui permissão para registrar estoque inicial.',
+        );
+      }
+      if (!stockUnitId)
+        throw new ValidationException(
+          'Selecione a organização do estoque inicial.',
+        );
+      if (
+        !actor.isOrganizationOwner &&
+        !actor.businessUnitIds.some((unitId) => unitId === stockUnitId)
+      )
+        throw new ForbiddenException(
+          'A organização do estoque está fora do seu acesso.',
+        );
+      if (input.businessUnitId && input.businessUnitId !== stockUnitId)
+        throw new ValidationException(
+          'O estoque inicial deve pertencer à organização selecionada para o item.',
+        );
+      await this.plans.assertCapabilities(organizationId, ['inventory.manage']);
+    }
     try {
-      return await this.repository.createProduct({
-        organizationId,
-        businessUnitId: input.businessUnitId,
-        categoryId: input.categoryId,
-        kind: input.kind,
-        sku: input.sku?.trim() || null,
-        name: input.name,
-        description: input.description,
-        unit: input.unit?.toUpperCase() ?? 'UN',
-        salePrice: input.salePrice,
-        costPrice: input.costPrice,
-        taxData: input.taxData as Prisma.InputJsonValue | undefined,
-        metadata: input.metadata as Prisma.InputJsonValue | undefined,
+      const create = async () =>
+        this.repository.createProduct({
+          organizationId,
+          businessUnitId: input.businessUnitId,
+          categoryId: input.categoryId,
+          kind: input.kind,
+          sku: input.sku?.trim() || null,
+          name: input.name,
+          description: input.description,
+          unit: input.unit?.toUpperCase() ?? 'UN',
+          salePrice: input.salePrice,
+          costPrice: input.costPrice,
+          taxData: input.taxData as Prisma.InputJsonValue | undefined,
+          metadata: input.metadata as Prisma.InputJsonValue | undefined,
+        });
+      if (quantity <= 0) return this.presentProduct(await create());
+      return await this.rls.runAmbient(async () => {
+        const product = await create();
+        await this.inventory.entry(organizationId, stockUnitId!, actor!.id, {
+          catalogItemId: product.id,
+          businessUnitId: stockUnitId!,
+          quantity,
+          reason: 'Estoque inicial do cadastro',
+          sourceEntityId: product.id,
+        });
+        return this.presentProduct(
+          await this.requireProduct(product.id, organizationId),
+          stockUnitId!,
+        );
       });
     } catch (error) {
       this.rethrowConflict(error, 'Product SKU already exists');
@@ -133,28 +207,30 @@ export class CatalogService {
     await this.requireProduct(id, organizationId);
     await this.validateProductReferences(input, organizationId);
     try {
-      return await this.repository.updateProduct(id, {
-        businessUnit: input.businessUnitId
-          ? { connect: { id: input.businessUnitId } }
-          : input.organizationWide
-            ? { disconnect: true }
-            : undefined,
-        category: input.categoryId
-          ? { connect: { id: input.categoryId } }
-          : input.uncategorized
-            ? { disconnect: true }
-            : undefined,
-        kind: input.kind,
-        sku: input.sku?.trim(),
-        name: input.name,
-        description: input.description,
-        unit: input.unit?.toUpperCase(),
-        salePrice: input.salePrice,
-        costPrice: input.costPrice,
-        taxData: input.taxData as Prisma.InputJsonValue | undefined,
-        metadata: input.metadata as Prisma.InputJsonValue | undefined,
-        status: input.status,
-      });
+      return this.presentProduct(
+        await this.repository.updateProduct(id, {
+          businessUnit: input.businessUnitId
+            ? { connect: { id: input.businessUnitId } }
+            : input.organizationWide
+              ? { disconnect: true }
+              : undefined,
+          category: input.categoryId
+            ? { connect: { id: input.categoryId } }
+            : input.uncategorized
+              ? { disconnect: true }
+              : undefined,
+          kind: input.kind,
+          sku: input.sku?.trim(),
+          name: input.name,
+          description: input.description,
+          unit: input.unit?.toUpperCase(),
+          salePrice: input.salePrice,
+          costPrice: input.costPrice,
+          taxData: input.taxData as Prisma.InputJsonValue | undefined,
+          metadata: input.metadata as Prisma.InputJsonValue | undefined,
+          status: input.status,
+        }),
+      );
     } catch (error) {
       this.rethrowConflict(error, 'Product SKU already exists');
     }
@@ -222,6 +298,30 @@ export class CatalogService {
     const product = await this.repository.findProduct(id, organizationId);
     if (!product) throw new EntityNotFoundException('Product', id);
     return product;
+  }
+
+  private presentProduct<
+    T extends {
+      kind: string;
+      inventoryBalances?: readonly {
+        businessUnitId: string;
+        onHand: unknown;
+        reserved: unknown;
+      }[];
+    },
+  >(product: T, unitId?: string) {
+    const { inventoryBalances = [], ...item } = product;
+    return {
+      ...item,
+      stockAvailable:
+        product.kind === 'SERVICE'
+          ? null
+          : inventoryBalances.some(
+              (balance) =>
+                (!unitId || balance.businessUnitId === unitId) &&
+                Number(balance.onHand) > Number(balance.reserved),
+            ),
+    };
   }
 
   private rethrowConflict(error: unknown, message: string): never {

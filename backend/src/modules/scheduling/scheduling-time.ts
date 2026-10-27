@@ -97,6 +97,7 @@ export function instantFromCivilDate(
   date: string,
   timezone: string,
   hour = 0,
+  minute = 0,
 ): Date {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
   if (!match) throw new ValidationException(`Invalid civil date: ${date}`);
@@ -106,6 +107,7 @@ export function instantFromCivilDate(
       month: Number(match[2]),
       day: Number(match[3]),
       hour,
+      minute,
     },
     timezone,
   );

@@ -165,4 +165,36 @@ describe('PMOC de execução — contagem de manutenção', () => {
     expect(texto).toContain('PMOC-AURORA-001');
     expect(texto).toContain('1 de 4');
   });
+
+  it('imprime os roteiros declarados das unidades sem inventar respostas por item', async () => {
+    const base = entrada({ sequence: 1, total: 4 });
+    const output = await renderer.render({
+      ...base,
+      sections: [],
+      metadata: {
+        ...base.metadata,
+        procedure: { Evaporadora: ['Limpar filtros', 'Verificar dreno'] },
+      },
+    });
+    const text = pdfText(output.bytes);
+    expect(text).toContain('Roteiro da manutenção');
+    expect(text).toContain('Limpar filtros');
+    expect(text).toContain('Previsto no plano');
+  });
+  it('imprime os itens realizados e não realizados do roteiro salvo em campo', async () => {
+    const base = entrada();
+    const output = await renderer.render({
+      ...base,
+      sections: [],
+      metadata: {
+        ...base.metadata,
+        procedure: { Evaporadora: ['Limpar filtros', 'Verificar dreno'] },
+        procedureAnswers: { '0:0': true, '0:1': false },
+      },
+    });
+    const text = pdfText(output.bytes);
+    expect(text).toContain('Realizado');
+    expect(text).toContain('Não realizado');
+    expect(text).not.toContain('Previsto no plano');
+  });
 });

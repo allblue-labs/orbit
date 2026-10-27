@@ -37,7 +37,7 @@ import {
 } from "@/components/ui/table";
 import { useAction } from "@/actions";
 import { ConfirmDialog } from "@/components/financial/confirm.dialog";
-import { CATALOG_STATUS_LABELS, EntityBadge } from "@/entities";
+import { CATALOG_STATUS_LABELS } from "@/entities";
 import {
   useCatalogCategories,
   useCatalogItems,
@@ -58,7 +58,11 @@ import {
 } from "@/workspace";
 import { CatalogItemFormDialog } from "../catalog-item-form.dialog";
 import { CatalogItemSheet } from "../catalog-item.sheet";
-import { PriceLabel, SkuLabel } from "../catalog-presentation";
+import {
+  CatalogAvailabilityBadge,
+  PriceLabel,
+  SkuLabel,
+} from "../catalog-presentation";
 
 const STATUS_OPTIONS = optionsFrom(
   Object.values(ProductStatus),
@@ -139,7 +143,7 @@ export function CatalogItemsTab({
         />
         <FilterSelect
           id={`catalog-${kind}-status`}
-          label="Disponibilidade"
+          label="Situação do cadastro"
           value={list.query.status}
           onChange={(value) =>
             list.setFilter("status", value as CatalogQuery["status"])
@@ -266,11 +270,7 @@ function ItemRow({
       </TableCell>
       <TableCell>
         <div className="space-y-1">
-          <EntityBadge
-            entity="catalog-item"
-            group="status"
-            value={item.status}
-          />
+          <CatalogAvailabilityBadge item={item} />
           <MutationError error={update.error} />
         </div>
       </TableCell>

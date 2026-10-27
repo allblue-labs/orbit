@@ -278,11 +278,23 @@ function EventForm({
         />
       ) : null}
 
+      <p className="text-xs text-muted-foreground">
+        Os campos identificados como obrigatórios precisam ser preenchidos para
+        criar o evento. Os demais são opcionais. O fim deve ser posterior ao
+        início.
+      </p>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2 sm:col-span-2">
-          <Label htmlFor="event-title">Título</Label>
+          <Label htmlFor="event-title">
+            Título{" "}
+            <span className="text-xs font-normal text-muted-foreground">
+              (obrigatório)
+            </span>
+          </Label>
           <Input
             id="event-title"
+            required
+            aria-required="true"
             value={form.title}
             maxLength={SCHEDULING_LIMITS.titleMaxLength}
             onChange={(event) => edit({ title: event.target.value })}
@@ -290,13 +302,18 @@ function EventForm({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="event-calendar">Calendário</Label>
+          <Label htmlFor="event-calendar">
+            Calendário{" "}
+            <span className="text-xs font-normal text-muted-foreground">
+              (obrigatório)
+            </span>
+          </Label>
           <Select
             value={form.calendarId}
             disabled={calendars.length === 0}
             onValueChange={(value) => edit({ calendarId: value })}
           >
-            <SelectTrigger id="event-calendar">
+            <SelectTrigger id="event-calendar" aria-required="true">
               <SelectValue
                 placeholder={
                   calendars.length === 0 ? "Nenhum disponível" : "Selecione"
@@ -314,9 +331,16 @@ function EventForm({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="event-type">Tipo</Label>
+          <Label htmlFor="event-type">
+            Tipo{" "}
+            <span className="text-xs font-normal text-muted-foreground">
+              (obrigatório)
+            </span>
+          </Label>
           <Input
             id="event-type"
+            required
+            aria-required="true"
             list="event-type-options"
             value={form.type}
             maxLength={SCHEDULING_LIMITS.typeMaxLength}
@@ -336,9 +360,16 @@ function EventForm({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="event-start">Início</Label>
+          <Label htmlFor="event-start">
+            Início{" "}
+            <span className="text-xs font-normal text-muted-foreground">
+              (obrigatório)
+            </span>
+          </Label>
           <Input
             id="event-start"
+            required
+            aria-required="true"
             type="datetime-local"
             value={form.startLocal}
             onChange={(event) => edit({ startLocal: event.target.value })}
@@ -346,9 +377,16 @@ function EventForm({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="event-end">Fim</Label>
+          <Label htmlFor="event-end">
+            Fim{" "}
+            <span className="text-xs font-normal text-muted-foreground">
+              (obrigatório)
+            </span>
+          </Label>
           <Input
             id="event-end"
+            required
+            aria-required="true"
             type="datetime-local"
             value={form.endLocal}
             onChange={(event) => edit({ endLocal: event.target.value })}
@@ -502,14 +540,19 @@ function RecurrenceFields({
       {form.recurring ? (
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="space-y-2">
-            <Label htmlFor="event-frequency">Frequência</Label>
+            <Label htmlFor="event-frequency">
+              Frequência{" "}
+              <span className="text-xs font-normal text-muted-foreground">
+                (obrigatória na recorrência)
+              </span>
+            </Label>
             <Select
               value={form.frequency}
               onValueChange={(value) =>
                 onChange({ frequency: value as RecurrenceFrequency })
               }
             >
-              <SelectTrigger id="event-frequency">
+              <SelectTrigger id="event-frequency" aria-required="true">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

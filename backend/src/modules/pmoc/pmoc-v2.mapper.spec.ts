@@ -52,6 +52,20 @@ describe('PMOC V2 public mapping', () => {
         auxiliaryTechnicians: [],
       },
       artifactExecution: null,
+      fieldEvidence: [
+        {
+          id: 'mobile-photo',
+          caption: 'Após limpeza',
+          createdAt: new Date('2026-08-27T10:02:00Z'),
+          storageFile: {
+            id: 'file-mobile',
+            fileName: 'mobile.jpg',
+            mimeType: 'image/jpeg',
+            sizeBytes: 24n,
+            status: 'AVAILABLE',
+          },
+        },
+      ],
       evidence: [
         {
           id: 'evidence',
@@ -69,6 +83,12 @@ describe('PMOC V2 public mapping', () => {
       ],
     });
     expect(result.evidence[0]?.file.sizeBytes).toBe('42');
+    expect(result.evidence[1]).toMatchObject({
+      id: 'mobile-photo',
+      kind: 'PHOTO',
+      caption: 'Após limpeza',
+      file: { sizeBytes: '24' },
+    });
     expect(result.auxiliaryTechnicians).toEqual([]);
     /* A contagem publicada é a do equipamento. Se o mapeador pegasse a do ciclo,
        este número seria 3 — e o relatório afirmaria a terceira manutenção de uma

@@ -22,6 +22,7 @@
  * seu lugar.
  */
 import { Inject, Injectable } from '@nestjs/common';
+import { pmocProcedure, executionPmocProcedure } from './pmoc-procedure';
 import { createHash, randomBytes } from 'node:crypto';
 import { HashHelper } from '../../helpers';
 import {
@@ -61,6 +62,7 @@ import type {
   AddPmocCoverageDto,
   AddPmocEquipmentEvidenceDto,
   CompletePmocEquipmentExecutionDto,
+  SavePmocEquipmentWorkDto,
   GeneratePmocEquipmentArtifactDto,
   CompletePmocExecutionDto,
   CreatePmocOperationDto,
@@ -219,36 +221,13 @@ function capacidadeDeclarada(specifications: unknown) {
  * lista de objetos rotulados — e ignoramos o que não souber ler, porque um
  * roteiro parcial impresso é melhor que uma emissão que falha.
  */
-function roteiroDoPlano(procedure: unknown) {
-  if (!procedure || typeof procedure !== 'object') return [];
-  const grupos: { group: string; items: string[] }[] = [];
-
-  for (const [grupo, valor] of Object.entries(
-    procedure as Record<string, unknown>,
-  )) {
-    const itens = itensDoGrupo(valor);
-    if (itens.length > 0) grupos.push({ group: grupo, items: itens });
-  }
-
-  return grupos;
-}
-
-function itensDoGrupo(valor: unknown): string[] {
-  if (typeof valor === 'string') return valor.trim() ? [valor.trim()] : [];
-  if (!Array.isArray(valor)) return [];
-
-  return valor
-    .map((item) => {
-      if (typeof item === 'string') return item.trim();
-      if (item && typeof item === 'object') {
-        const registro = item as Record<string, unknown>;
-        const rotulo =
-          registro.label ?? registro.name ?? registro.title ?? registro.text;
-        return typeof rotulo === 'string' ? rotulo.trim() : '';
-      }
-      return '';
-    })
-    .filter((item) => item.length > 0);
+function roteiroDoPlano(
+  procedure: unknown,
+  units: Parameters<typeof pmocProcedure>[1] = [],
+) {
+  return Object.entries(pmocProcedure(procedure, units)).map(
+    ([group, items]) => ({ group, items }),
+  );
 }
 
 @Injectable()
@@ -1123,7 +1102,7 @@ export class PmocService {
           name: link.unit.name,
           checklist: link.unit.checklistTemplate?.name ?? undefined,
         })),
-        procedure: roteiroDoPlano(plan.procedure),
+        procedure: roteiroDoPlano(plan.procedure, planUnits),
         legalReference: PMOC_PLAN_LEGAL_REFERENCE,
       },
     });
@@ -1629,14 +1608,12 @@ export class PmocService {
         )
       : null;
     const [fieldTechnicians, auxiliaryTechnicians] = await Promise.all([
-      this.workforce.listProfessionals(
+      this.workforce.listPmocFieldTechnicians(
         actor.organizationId,
-        'FIELD_TECHNICIAN',
         data.plan.businessUnitId,
       ),
-      this.workforce.listProfessionals(
+      this.workforce.listFieldAssistantCandidates(
         actor.organizationId,
-        'FIELD_TECHNICIAN',
         data.plan.businessUnitId,
       ),
     ]);
@@ -1664,7 +1641,11 @@ export class PmocService {
       serviceLocation: data.plan.serviceLocation,
       scope: data.plan.scope,
       serviceTypes: data.plan.serviceTypes,
-      procedure: data.plan.procedure,
+      procedure: executionPmocProcedure(
+        data.existing?.procedureSnapshot,
+        data.plan.procedure,
+        data.plan.units,
+      ),
       /*
        * O roteiro já lido, em grupos.
        *
@@ -1673,7 +1654,13 @@ export class PmocService {
        * leitor no navegador — e garante que a tela mostre exatamente os itens que
        * o PDF vai imprimir, que é o que o técnico confere em campo.
        */
-      procedureGroups: roteiroDoPlano(data.plan.procedure),
+      procedureGroups: roteiroDoPlano(
+        executionPmocProcedure(
+          data.existing?.procedureSnapshot,
+          data.plan.procedure,
+          data.plan.units,
+        ),
+      ),
       technicalResponsible: data.plan.technicalResponsible,
       technicalResponsibleEligibility,
       fieldTechnicians,
@@ -1698,11 +1685,19 @@ export class PmocService {
         : null,
       allowedActions: data.existing
         ? data.existing.status === 'IN_PROGRESS'
-          ? ['COMPLETE', 'ADD_EVIDENCE']
+          ? actor.isOrganizationOwner ||
+            data.existing.responsibleFieldTechnician.id === actor.actorId
+            ? ['COMPLETE', 'ADD_EVIDENCE']
+            : ['VIEW']
           : ['VIEW']
         : blockedReasons.length
           ? []
-          : ['START'],
+          : actor.isOrganizationOwner ||
+              actor.permissions.includes('*') ||
+              actor.permissions.includes('pmoc.manage') ||
+              data.plan.technicianUserId === actor.actorId
+            ? ['START']
+            : [],
     };
   }
 
@@ -1852,11 +1847,16 @@ export class PmocService {
       preparation.plan.businessUnitId,
       true,
     );
-    const professionals = await this.workforce.listProfessionals(
-      actor.organizationId,
-      'FIELD_TECHNICIAN',
-      preparation.plan.businessUnitId,
-    );
+    const [professionals, assistantCandidates] = await Promise.all([
+      this.workforce.listPmocFieldTechnicians(
+        actor.organizationId,
+        preparation.plan.businessUnitId,
+      ),
+      this.workforce.listFieldAssistantCandidates(
+        actor.organizationId,
+        preparation.plan.businessUnitId,
+      ),
+    ]);
     const eligible = new Set(professionals.map((item) => item.id));
     if (!eligible.has(input.responsibleFieldTechnicianId))
       throw new ValidationException(
@@ -1865,7 +1865,10 @@ export class PmocService {
     const auxiliaries = [...new Set(input.auxiliaryTechnicianIds ?? [])].filter(
       (id) => id !== input.responsibleFieldTechnicianId,
     );
-    if (auxiliaries.some((id) => !eligible.has(id)))
+    const eligibleAssistants = new Set(
+      assistantCandidates.map((item) => item.id),
+    );
+    if (auxiliaries.some((id) => !eligibleAssistants.has(id)))
       throw new ValidationException(
         'One or more auxiliary technicians are not eligible for this business unit',
       );
@@ -1880,7 +1883,10 @@ export class PmocService {
       responsibleFieldTechnicianId: input.responsibleFieldTechnicianId,
       auxiliaryTechnicianIds: auxiliaries,
       actorId: actor.actorId,
-      procedureSnapshot: preparation.plan.procedure as never,
+      procedureSnapshot: pmocProcedure(
+        preparation.plan.procedure,
+        preparation.plan.units,
+      ),
       technicalResponsibleSnapshot: {
         userId: preparation.plan.technicalResponsible!.id,
         displayName: preparation.plan.technicalResponsible!.displayName,
@@ -1976,11 +1982,12 @@ export class PmocService {
     input: GeneratePmocEquipmentArtifactDto,
     restrictToTechnicianId: string | null = null,
   ) {
-    this.assertPermission(
-      actor,
-      'artifact_rendering.render',
-      'Generating the PMOC document requires artifact_rendering.render',
-    );
+    if (!restrictToTechnicianId && !actor.isOrganizationOwner)
+      this.assertPermission(
+        actor,
+        'artifact_rendering.render',
+        'Generating the PMOC document requires artifact_rendering.render',
+      );
     const result = await this.repository.createEquipmentArtifact(
       actor.organizationId,
       executionId,
@@ -2023,6 +2030,25 @@ export class PmocService {
     };
   }
 
+  saveEquipmentWork(
+    planId: string,
+    cycleId: string,
+    executionId: string,
+    actor: PmocActor,
+    input: SavePmocEquipmentWorkDto,
+  ) {
+    return this.repository.saveEquipmentWork({
+      ...input,
+      planId,
+      cycleId,
+      executionId,
+      organizationId: actor.organizationId,
+      actorId: actor.actorId,
+      isOwner: actor.isOrganizationOwner,
+      businessUnitIds: actor.businessUnitIds,
+    });
+  }
+
   async completeEquipmentExecution(
     planId: string,
     cycleId: string,
@@ -2055,7 +2081,7 @@ export class PmocService {
       actorId: actor.actorId,
       restrictToTechnicianId: actor.isOrganizationOwner ? null : actor.actorId,
       performedAt,
-      notes: input.notes ?? null,
+      notes: input.notes,
     });
 
     if (result.refused === 'NOT_FOUND') {

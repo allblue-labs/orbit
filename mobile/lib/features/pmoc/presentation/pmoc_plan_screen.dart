@@ -53,10 +53,8 @@ class PmocPlanScreen extends ConsumerWidget {
           ),
           data: (data) => _Plan(
             view: data,
-            canAttend: data.canAttend(
-              actorId: session?.user.id,
-              isOwner: session?.isOwner ?? false,
-            ),
+            actorId: session?.user.id,
+            isOwner: session?.isOwner ?? false,
           ),
         ),
       ),
@@ -65,10 +63,16 @@ class PmocPlanScreen extends ConsumerWidget {
 }
 
 class _Plan extends StatelessWidget {
-  const _Plan({required this.view, required this.canAttend});
+  const _Plan({
+    required this.view,
+    required this.actorId,
+    required this.isOwner,
+  });
 
   final PmocPlanCycleView view;
-  final bool canAttend;
+  final String? actorId;
+  final bool isOwner;
+  bool get canAttend => view.canAttend(actorId: actorId, isOwner: isOwner);
 
   @override
   Widget build(BuildContext context) {
@@ -170,7 +174,11 @@ class _Plan extends StatelessWidget {
                     planId: plan.id,
                     cycleId: cycle.id,
                     item: item,
-                    canAttend: canAttend,
+                    canAttend: view.canAttendEquipment(
+                      item,
+                      actorId: actorId,
+                      isOwner: isOwner,
+                    ),
                   ),
                 ),
             ],
@@ -265,13 +273,11 @@ class _EquipmentCard extends StatelessWidget {
             /// O verbo diz em que ponto está: abrir, continuar ou ver o que foi
             /// registrado. Um "Atender" genérico faria quem já concluiu achar que
             /// vai abrir de novo.
-            child: Text(
-              switch (item.status) {
-                'IN_PROGRESS' => 'Continuar atendimento',
-                'COMPLETED' => 'Ver atendimento e relatório',
-                _ => 'Atender',
-              },
-            ),
+            child: Text(switch (item.status) {
+              'IN_PROGRESS' => 'Continuar atendimento',
+              'COMPLETED' => 'Ver atendimento e relatório',
+              _ => 'Atender',
+            }),
           ),
         ],
       ),

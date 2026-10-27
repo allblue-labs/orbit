@@ -20,6 +20,7 @@ import { queryKeys, type QueryKey } from "@/api/query-keys";
 import type { QueryParams, RequestOptions } from "@/types/api";
 import type {
   CreateRvtConfigurationInput,
+  RvtVisitInput,
   RvtConfiguration,
   RvtConfigurationListItem,
   RvtConfigurationQuery,
@@ -89,6 +90,22 @@ export const rvtService = {
   /* Ocorrências e execução                                            */
   /* ---------------------------------------------------------------- */
 
+  createVisit: (id: string, input: RvtVisitInput): Promise<RvtConfiguration> =>
+    apiClient.post(`${configuration(id)}/occurrences`, input),
+  updateVisit: (
+    id: string,
+    visitId: string,
+    input: Partial<RvtVisitInput>,
+  ): Promise<RvtConfiguration> =>
+    apiClient.patch(
+      `${configuration(id)}/occurrences/${encodeURIComponent(visitId)}`,
+      input,
+    ),
+  removeVisit: (id: string, visitId: string): Promise<RvtConfiguration> =>
+    apiClient.delete(
+      `${configuration(id)}/occurrences/${encodeURIComponent(visitId)}`,
+    ),
+
   occurrences: (
     query?: RvtOccurrenceQuery,
     options?: RequestOptions,
@@ -137,13 +154,10 @@ export const rvtService = {
     ),
 
   removeMaintenanceType: (id: string): Promise<void> =>
-    apiClient.delete<void>(
-      `/rvt/maintenance-types/${encodeURIComponent(id)}`,
-    ),
+    apiClient.delete<void>(`/rvt/maintenance-types/${encodeURIComponent(id)}`),
 
   keys: {
-    maintenanceTypes: (): QueryKey =>
-      queryKeys.query(RVT, "maintenance-types"),
+    maintenanceTypes: (): QueryKey => queryKeys.query(RVT, "maintenance-types"),
     module: (): QueryKey => queryKeys.module(RVT),
     configurations: (query?: RvtConfigurationQuery): QueryKey =>
       queryKeys.list(RVT, query as QueryParams | undefined),

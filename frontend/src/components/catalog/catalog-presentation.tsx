@@ -3,15 +3,31 @@
 /**
  * Apresentação compartilhada do catálogo.
  *
- * Tipo e disponibilidade resolvem pelo **Entity Registry** (`EntityBadge`), o
- * mesmo caminho que operações e equipamentos usam. O que sobra aqui é o que é
- * só do catálogo: dinheiro e unidade de medida.
+ * A situação do cadastro usa o Entity Registry. A disponibilidade física
+ * considera o saldo publicado pelo backend; serviços não possuem estoque.
+ * Dinheiro e unidade de medida compartilham a apresentação neste módulo.
  */
 import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 import { FORMATTERS } from "@/metrics";
 import type { CatalogItem } from "@/types/catalog";
+import { Badge } from "@/components/ui/badge";
+import { EntityBadge } from "@/entities";
+
+export function CatalogAvailabilityBadge({ item }: { item: CatalogItem }) {
+  if (item.status === "INACTIVE")
+    return (
+      <EntityBadge entity="catalog-item" group="status" value={item.status} />
+    );
+  if (item.kind !== "SERVICE") {
+    if (item.stockAvailable === false)
+      return <Badge variant="outline">Sem estoque</Badge>;
+    if (item.stockAvailable !== true)
+      return <Badge variant="outline">Estoque não informado</Badge>;
+  }
+  return <Badge variant="secondary">Disponível</Badge>;
+}
 
 /**
  * Formatação de dinheiro.

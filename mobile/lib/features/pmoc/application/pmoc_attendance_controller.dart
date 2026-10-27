@@ -27,6 +27,7 @@ library;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/contracts/pmoc_contracts.dart';
+import '../../../core/errors/orbit_exception.dart';
 import '../data/pmoc_repository.dart';
 import 'pmoc_providers.dart';
 
@@ -37,7 +38,7 @@ import 'pmoc_providers.dart';
 enum PmocAttendancePhase { loading, ready, sending, error }
 
 /// Qual comando está em voo — para desabilitar exatamente o botão certo.
-enum PmocAttendanceCommand { start, complete, issue }
+enum PmocAttendanceCommand { start, save, complete, issue }
 
 /// O equipamento que está sendo atendido.
 class PmocAttendanceTarget {
@@ -132,7 +133,9 @@ class PmocAttendanceController extends StateNotifier<PmocAttendanceState> {
 
   Future<void> load() async {
     state = state.copyWith(
-      phase: PmocAttendancePhase.loading,
+      phase: state.preparation == null
+          ? PmocAttendancePhase.loading
+          : state.phase,
       clearError: true,
     );
     try {
@@ -168,6 +171,28 @@ class PmocAttendanceController extends StateNotifier<PmocAttendanceState> {
     ),
   );
 
+  Future<bool> saveWork({
+    required Map<String, bool> answers,
+    String? notes,
+  }) async {
+    final execution = state.execution;
+    if (execution == null || state.isBusy || !state.allows('COMPLETE')) {
+      return false;
+    }
+    await _run(
+      PmocAttendanceCommand.save,
+      () => _repository.saveWork(
+        planId: target.planId,
+        cycleId: target.cycleId,
+        executionId: execution.id,
+        expectedVersion: execution.version,
+        answers: answers,
+        notes: notes,
+      ),
+    );
+    return mounted && state.error == null;
+  }
+
   Future<void> complete({DateTime? performedAt, String? notes}) async {
     final atual = state.execution;
     if (atual == null) return;
@@ -186,6 +211,26 @@ class PmocAttendanceController extends StateNotifier<PmocAttendanceState> {
       }
       return resultado;
     });
+  }
+
+  Future<bool> finishAfterConfirmation() async {
+    if (state.execution?.status == PmocEquipmentExecutionStatus.completed) {
+      return true;
+    }
+    await complete();
+    if (!mounted) return false;
+    if (state.error case final Object error) {
+      state = state.copyWith(clearError: true);
+      throw error;
+    }
+    if (state.execution?.status == PmocEquipmentExecutionStatus.completed) {
+      return true;
+    }
+    throw const OrbitException(
+      kind: OrbitErrorKind.http,
+      publicMessage: 'Não foi possível concluir a manutenção. Tente novamente.',
+      code: 'COMPLETION_NOT_CONFIRMED',
+    );
   }
 
   Future<void> issueReport() async {

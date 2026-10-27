@@ -698,16 +698,14 @@ describe('RVT PR-30.1 closure (e2e)', () => {
         `/api/v1/rvt/configurations/${command.configurationId}/timeline`,
       ),
     ).expect(200);
-    const actions = (
-      timeline.body as Envelope<{ data: { type: string }[] }>
-    ).data.data.map((x) => x.type);
-    expect(actions).toEqual(
-      expect.arrayContaining([
-        'RVT_AD_HOC_CREATED',
-        'RVT_EXECUTION_COMPLETED',
-        'RVT_ARTIFACT_CREATED',
-      ]),
-    );
+    const visits = (
+      timeline.body as Envelope<{ data: { id: string; type: string }[] }>
+    ).data.data;
+    expect(visits.some((item) => item.id === execution.id)).toBe(true);
+    expect(
+      visits.every((item) => item.type === 'RVT_EXECUTION_COMPLETED'),
+    ).toBe(true);
+    expect(new Set(visits.map((item) => item.id)).size).toBe(visits.length);
   });
 
   it('allows completion without optional customer acknowledgement', async () => {

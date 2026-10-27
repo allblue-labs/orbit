@@ -24,9 +24,10 @@
  *
  * ## O que não existe, e está declarado
  *
- * Estoque, duração de serviço, Analytics de catálogo e IA por item não têm
+ * Duração de serviço, Analytics de catálogo e IA por item não têm
  * contrato. Cada ausência aparece onde seria consumida, com o motivo — em vez
  * de sumir da tela ou virar número inventado.
+ * Estoque é mantido pelo Inventory Engine; o catálogo consulta sua disponibilidade.
  */
 import { ContentContainer } from "@/components/layout/page-primitives";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";

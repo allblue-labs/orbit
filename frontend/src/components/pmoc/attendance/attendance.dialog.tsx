@@ -9,14 +9,13 @@
  * executar. O dono precisava do aplicativo — ou de ninguém, quando o técnico
  * faltou. Todas as rotas existiam; faltava a porta.
  *
- * ## Quatro passos, quatro requisições
+ * ## Abertura, coleta, revisão e relatório
  *
  * Escalar abre a execução e a ordem de serviço 1:1 dela. O roteiro é o que o
  * plano manda conferir, lido pelo servidor — o mesmo texto que o PDF imprime.
- * Concluir registra quando a manutenção aconteceu. Emitir gera o relatório.
- *
- * São separados porque o servidor os separa: concluir **não** emite, e juntar as
- * duas coisas na tela esconderia que um relatório pode sair depois.
+ * A revisão reúne equipe, roteiro, imagens e observações. Confirmar conclui a
+ * manutenção e solicita o relatório. Uma falha na emissão permite repetir essa
+ * etapa sem concluir o atendimento novamente.
  *
  * ## A autoridade é do servidor
  *
@@ -25,6 +24,8 @@
  * `attendance.model.ts`, com teste.
  */
 import { useState } from "react";
+import { AttendanceEvidence } from "./attendance-evidence";
+import { AttendanceReport } from "./attendance-report";
 import {
   ArrowLeft,
   ArrowRight,
@@ -148,27 +149,9 @@ function Body({
     );
   }
 
-  /*
-   * A `key` faz o passo acompanhar o servidor.
-   *
-   * Depois de abrir, a preparação volta com `COMPLETE` liberado; depois de
-   * concluir, com `VIEW`. Sincronizar isso com um efeito e `setState` é o que o
-   * ESLint proíbe — e com razão: o render passaria por um estado intermediário
-   * errado. Remontar quando o **estado do servidor** muda dá o passo certo de
-   * primeira.
-   *
-   * A chave é o estado, não a resposta: uma releitura que não muda nada mantém a
-   * mesma chave, e quem está digitando as observações não perde o que escreveu.
-   */
-  const serverState = [
-    ...preparation.data.allowedActions,
-    preparation.data.existingExecution?.id ?? "nova",
-    preparation.data.existingExecution?.artifactExecution?.id ?? "sem-doc",
-  ].join("|");
-
   return (
     <Attendance
-      key={serverState}
+      key={`${planId}:${cycleId}:${assetId}`}
       planId={planId}
       cycleId={cycleId}
       assetId={assetId}
@@ -195,13 +178,20 @@ function Attendance({
   const { timeZone } = useTimeZone();
   const execution = preparation.existingExecution;
 
-  const [draft, setDraft] = useState<AttendanceDraft>(() =>
-    emptyDraft(preparation.fieldTechnicians[0]?.id ?? null),
-  );
+  const [draft, setDraft] = useState<AttendanceDraft>(() => ({
+    ...emptyDraft(
+      execution?.responsibleFieldTechnician.id ??
+        preparation.fieldTechnicians[0]?.id ??
+        null,
+    ),
+    auxiliaryTechnicianIds:
+      execution?.auxiliaryTechnicians.map((person) => person.id) ?? [],
+    notes: execution?.notes ?? "",
+  }));
   /*
    * O passo de entrada vem do servidor; daqui em diante o avanço é local dentro
-   * do mesmo estado (roteiro → concluir). Quando o servidor muda de estado, o
-   * componente é remontado com a `key` e este `useState` roda de novo.
+   * do mesmo atendimento. As mutações avançam após confirmação do servidor,
+   * preservando os dados digitados e a navegação de revisão.
    */
   const [step, setStep] = useState<AttendanceStep>(() =>
     currentStep(preparation),
@@ -224,9 +214,22 @@ function Attendance({
   const patch = (changes: Partial<AttendanceDraft>) =>
     setDraft((atual) => ({ ...atual, ...changes }));
 
+  const [uploading, setUploading] = useState(false);
   const issues = stepIssues(step, draft, preparation, timeZone);
-  const pending = start.isPending || complete.isPending || artifact.isPending;
+  const pending =
+    start.isPending || complete.isPending || artifact.isPending || uploading;
   const finished = isFinished(preparation);
+  const previous =
+    ATTENDANCE_STEPS.indexOf(step as (typeof ATTENDANCE_STEPS)[number]) - 1;
+  const confirm = async () => {
+    try {
+      await complete.mutateAsync(completePayload(draft, timeZone));
+      setStep("emitir");
+      await artifact.mutateAsync(undefined);
+    } catch {
+      /* Os hooks preservam a mensagem e permitem repetir somente a etapa que falhou. */
+    }
+  };
 
   return (
     <>
@@ -254,17 +257,34 @@ function Attendance({
             draft={draft}
             preparation={preparation}
             onChange={patch}
+            readOnly={Boolean(execution)}
           />
         ) : step === "roteiro" ? (
           <ProcedureStep
             draft={draft}
             preparation={preparation}
             onChange={patch}
+            evidence={
+              <AttendanceEvidence
+                preparation={preparation}
+                planId={planId}
+                cycleId={cycleId}
+                assetId={assetId}
+                onBusy={setUploading}
+              />
+            }
           />
         ) : step === "concluir" ? (
           <CompleteStep draft={draft} onChange={patch} />
+        ) : step === "resumo" ? (
+          <SummaryStep draft={draft} preparation={preparation} />
         ) : (
-          <IssueStep preparation={preparation} finished={finished} />
+          <>
+            <IssueStep preparation={preparation} finished={finished} />
+            <AttendanceReport
+              artifactId={execution?.artifactExecution?.id ?? null}
+            />
+          </>
         )}
       </div>
 
@@ -284,8 +304,8 @@ function Attendance({
         <Button
           type="button"
           variant="ghost"
-          disabled={step !== "concluir" || pending}
-          onClick={() => setStep("roteiro")}
+          disabled={previous < 0 || step === "emitir" || pending}
+          onClick={() => setStep(ATTENDANCE_STEPS[previous])}
         >
           <ArrowLeft className="size-4" />
           Voltar
@@ -305,14 +325,20 @@ function Attendance({
             <Button
               type="button"
               disabled={issues.length > 0 || pending}
-              onClick={() => start.mutate(startPayload(draft))}
+              onClick={() =>
+                execution
+                  ? setStep("roteiro")
+                  : start.mutate(startPayload(draft), {
+                      onSuccess: () => setStep("roteiro"),
+                    })
+              }
             >
               {pending ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : (
                 <ArrowRight className="size-4" />
               )}
-              Abrir atendimento
+              {execution ? "Continuar" : "Abrir atendimento"}
             </Button>
           ) : step === "roteiro" ? (
             <Button
@@ -327,16 +353,33 @@ function Attendance({
             <Button
               type="button"
               disabled={issues.length > 0 || pending}
-              onClick={() => complete.mutate(completePayload(draft, timeZone))}
+              onClick={() => setStep("resumo")}
             >
               {pending ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : (
                 <Check className="size-4" />
               )}
-              Registrar manutenção
+              Revisar atendimento
             </Button>
-          ) : finished ? null : (
+          ) : step === "resumo" ? (
+            <Button
+              type="button"
+              disabled={
+                issues.length > 0 ||
+                pending ||
+                !preparation.allowedActions.includes("COMPLETE")
+              }
+              onClick={() => void confirm()}
+            >
+              {pending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Check className="size-4" />
+              )}
+              Confirmar e gerar relatório
+            </Button>
+          ) : finished || execution?.status !== "COMPLETED" ? null : (
             <Button
               type="button"
               disabled={pending}
@@ -357,7 +400,10 @@ function Attendance({
 }
 
 function Progress({ current }: { current: AttendanceStep }) {
-  const atual = ATTENDANCE_STEPS.indexOf(current);
+  const atual =
+    current === "emitir"
+      ? ATTENDANCE_STEPS.length
+      : ATTENDANCE_STEPS.indexOf(current);
 
   return (
     <ol className="flex flex-wrap gap-1.5">
@@ -389,7 +435,9 @@ function AssignStep({
   draft,
   preparation,
   onChange,
+  readOnly,
 }: {
+  readOnly: boolean;
   draft: AttendanceDraft;
   preparation: PmocExecutionPreparation;
   onChange: (patch: Partial<AttendanceDraft>) => void;
@@ -411,6 +459,7 @@ function AssignStep({
       <div className="space-y-2">
         <Label htmlFor="attendance-technician">Técnico em campo</Label>
         <Select
+          disabled={readOnly}
           value={draft.responsibleFieldTechnicianId ?? undefined}
           onValueChange={(value) =>
             onChange({ responsibleFieldTechnicianId: value })
@@ -434,6 +483,11 @@ function AssignStep({
         </p>
       </div>
 
+      {readOnly ? (
+        <p className="text-xs text-muted-foreground">
+          A equipe foi registrada na abertura deste atendimento.
+        </p>
+      ) : null}
       {preparation.auxiliaryTechnicians.length > 0 ? (
         <div className="space-y-2">
           <Label>Auxiliares</Label>
@@ -452,6 +506,7 @@ function AssignStep({
                     className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
                   >
                     <Checkbox
+                      disabled={readOnly}
                       checked={marcado}
                       onCheckedChange={() =>
                         onChange({
@@ -488,7 +543,9 @@ function ProcedureStep({
   draft,
   preparation,
   onChange,
+  evidence,
 }: {
+  evidence: React.ReactNode;
   draft: AttendanceDraft;
   preparation: PmocExecutionPreparation;
   onChange: (patch: Partial<AttendanceDraft>) => void;
@@ -545,14 +602,9 @@ function ProcedureStep({
             onChange({ reviewedProcedure: checked === true })
           }
         />
-        <span className="text-sm">
-          Percorri o roteiro acima neste equipamento.
-          <span className="mt-1 block text-xs text-muted-foreground">
-            As evidências fotográficas são anexadas no aplicativo de campo, onde
-            a câmera está. Aqui se registra a manutenção e se emite o relatório.
-          </span>
-        </span>
+        <span className="text-sm">Roteiro conferido</span>
       </label>
+      {evidence}
     </div>
   );
 }
@@ -649,10 +701,99 @@ function IssueStep({
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">
-          A manutenção está registrada. O relatório é a prova de conformidade
-          que o cliente guarda — sem ele, o trabalho existe e a prova não.
+          {execution.status === "COMPLETED"
+            ? "Manutenção registrada. O relatório está sendo preparado ou pode ser emitido novamente abaixo."
+            : "Este atendimento ainda está em andamento. A conclusão é feita pelo técnico atribuído ou pelo proprietário."}
         </p>
       )}
+    </div>
+  );
+}
+
+function SummaryStep({
+  draft,
+  preparation,
+}: {
+  draft: AttendanceDraft;
+  preparation: PmocExecutionPreparation;
+}) {
+  const { timeZone } = useTimeZone();
+  const { formatDateTime } = useDateFormatters();
+  const execution = preparation.existingExecution;
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        Confira os dados antes de concluir a manutenção e solicitar o relatório
+        de execução.
+      </p>
+      <dl className="grid gap-4 rounded-xl border p-4 sm:grid-cols-2">
+        {[
+          ["Plano", `${preparation.plan.code} · ${preparation.plan.name}`],
+          ["Cliente", preparation.customer.name],
+          ["Equipamento", preparation.equipment.name],
+          [
+            "Técnico operacional",
+            execution?.responsibleFieldTechnician.displayName ?? "—",
+          ],
+          [
+            "Auxiliares",
+            execution?.auxiliaryTechnicians
+              .map((person) => person.displayName)
+              .join(", ") || "Nenhum",
+          ],
+          [
+            "Data e hora",
+            draft.performedAt
+              ? formatDateTime(completePayload(draft, timeZone).performedAt!)
+              : "No momento da confirmação",
+          ],
+          ["Roteiro", draft.reviewedProcedure ? "Conferido" : "Não confirmado"],
+          [
+            "Responsável técnico",
+            preparation.technicalResponsible?.displayName ?? "—",
+          ],
+        ].map(([label, value]) => (
+          <div key={label}>
+            <dt className="text-xs text-muted-foreground">{label}</dt>
+            <dd className="mt-1 break-words text-sm">{value}</dd>
+          </div>
+        ))}
+      </dl>
+      <section className="space-y-2">
+        <h4 className="text-sm font-medium">Observações</h4>
+        <p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">
+          {draft.notes.trim() || "Nenhuma observação registrada."}
+        </p>
+      </section>
+      <section className="space-y-2">
+        <h4 className="text-sm font-medium">
+          Evidências ({execution?.evidence.length ?? 0})
+        </h4>
+        {execution?.evidence.length ? (
+          <ul className="space-y-1 text-sm">
+            {execution.evidence.map((item) => (
+              <li key={item.id} className="break-words">
+                {item.file.fileName}
+                {item.caption ? ` — ${item.caption}` : ""}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Nenhuma imagem anexada.
+          </p>
+        )}
+      </section>
+      {(preparation.procedureGroups ?? []).map((group) => (
+        <section key={group.group}>
+          <h4 className="text-sm font-medium">{group.group}</h4>
+          <ul className="list-inside list-disc text-sm text-muted-foreground">
+            {group.items.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </section>
+      ))}
     </div>
   );
 }

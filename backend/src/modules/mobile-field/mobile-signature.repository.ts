@@ -137,10 +137,42 @@ export class MobileSignatureRepository {
   }
 
   operation(organizationId: string, operationId: string) {
-    return this.rls.run((tx) =>
-      tx.operation.findFirst({
+    return this.rls.run(async (tx) => {
+      const operation = await tx.operation.findFirst({
         where: { id: operationId, organizationId, deletedAt: null },
         include: {
+          checklistExecutions: { orderBy: { createdAt: 'asc' } },
+          pmocEquipmentExecution: {
+            select: {
+              procedureSnapshot: true,
+              notes: true,
+              fieldEvidence: {
+                where: { status: 'FINALIZED' },
+                orderBy: { createdAt: 'asc' },
+                select: {
+                  caption: true,
+                  storageFile: { select: { fileName: true } },
+                },
+              },
+            },
+          },
+          materials: {
+            where: { deletedAt: null, origin: 'APPLIED' },
+            orderBy: { createdAt: 'asc' },
+          },
+          history: {
+            where: { action: 'FIELD_NOTE_ADDED' },
+            orderBy: { createdAt: 'asc' },
+          },
+          fieldEvidence: {
+            where: { status: 'FINALIZED' },
+            orderBy: { createdAt: 'asc' },
+            select: {
+              caption: true,
+              storageFile: { select: { fileName: true } },
+            },
+          },
+
           customer: { select: { id: true, legalName: true, tradeName: true } },
           /** O termo de assinatura lista todos os equipamentos atendidos. */
           assets: {
@@ -154,8 +186,31 @@ export class MobileSignatureRepository {
             select: { userId: true },
           },
         },
-      }),
-    );
+      });
+      if (!operation) return null;
+      const rvt = await tx.rvtExecution.findFirst({
+        where: { organizationId, operationId },
+        include: {
+          fieldEvidence: {
+            where: { status: 'FINALIZED' },
+            orderBy: { createdAt: 'asc' },
+            select: {
+              caption: true,
+              storageFile: { select: { fileName: true } },
+            },
+          },
+          equipment: true,
+        },
+      });
+      return {
+        ...operation,
+        fieldEvidence: [
+          ...operation.fieldEvidence,
+          ...(operation.pmocEquipmentExecution?.fieldEvidence ?? []),
+          ...(rvt?.fieldEvidence ?? []),
+        ],
+      };
+    });
   }
 
   acknowledgement(organizationId: string, executionId: string) {
@@ -276,6 +331,23 @@ export class MobileSignatureRepository {
           payloadHash: input.payloadHash,
           capturedByUserId: input.actorId,
           occurredAt: input.occurredAt,
+        },
+      });
+      // A visita técnica também publica este aceite nos relatórios do módulo RVT.
+      await tx.rvtExecution.updateMany({
+        where: {
+          organizationId: input.organizationId,
+          operationId: input.executionId,
+          status: 'IN_PROGRESS',
+        },
+        data: {
+          customerAcknowledgement: {
+            name: input.signerName,
+            storageFileId: input.signatureStorageFileId ?? null,
+            hash: input.signatureSha256 ?? input.contentHash,
+            signedAt: acknowledgement.acknowledgedAt.toISOString(),
+            capturedBy: input.actorId,
+          },
         },
       });
       await tx.operationHistory.create({

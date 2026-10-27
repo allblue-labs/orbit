@@ -33,9 +33,18 @@ export function generateRvtOccurrences(input: {
   coverageStart: string;
   coverageEnd?: string;
   timezone: string;
+  startTime?: string;
 }): OccurrenceCandidate[] {
   assertIanaTimezone(input.timezone);
-  const start = instantFromCivilDate(input.coverageStart, input.timezone, 9);
+  if (input.startTime && !/^([01]\d|2[0-3]):[0-5]\d$/.test(input.startTime))
+    throw new ValidationException('Informe um horário válido para a visita.');
+  const [hour, minute] = (input.startTime ?? '09:00').split(':').map(Number);
+  const start = instantFromCivilDate(
+    input.coverageStart,
+    input.timezone,
+    hour,
+    minute,
+  );
   if (input.scheduleMode === 'ONE_TIME') {
     return [
       {
@@ -62,7 +71,7 @@ export function generateRvtOccurrences(input: {
     );
   }
 
-  const end = instantFromCivilDate(input.coverageEnd, input.timezone, 23);
+  const end = instantFromCivilDate(input.coverageEnd, input.timezone, 23, 59);
   if (end < start)
     throw new ValidationException('coverageEnd must not precede coverageStart');
   const result: OccurrenceCandidate[] = [];
@@ -109,7 +118,16 @@ function addCalendarMonthsClamped(
     Date.UTC(targetYear, targetMonth + 1, 0),
   ).getUTCDate();
   const date = `${String(targetYear).padStart(4, '0')}-${String(targetMonth + 1).padStart(2, '0')}-${String(Math.min(day, lastDay)).padStart(2, '0')}`;
-  return instantFromCivilDate(date, timezone, 9);
+  const time = new Intl.DateTimeFormat('en-GB', {
+    timeZone: timezone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  })
+    .format(instant)
+    .split(':')
+    .map(Number);
+  return instantFromCivilDate(date, timezone, time[0], time[1]);
 }
 
 export function deriveRvtDueState(

@@ -50,6 +50,52 @@ void main() {
   });
   tearDown(() => FlutterError.onError = FlutterError.presentError);
 
+  testWidgets(
+    'preserva o texto ao avançar e voltar sem montar etapas futuras',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: OrbitWizard(
+                preserveStepState: true,
+                steps: [
+                  OrbitWizardStep(title: 'Serviço', child: TextField()),
+                  step('Confirmação'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(find.text('conteúdo de Confirmação'), findsNothing);
+      await tester.enterText(find.byType(TextField), 'Troca do filtro');
+      await tester.tap(find.text('Avançar · Confirmação'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Voltar'));
+      await tester.pumpAndSettle();
+      expect(find.text('Troca do filtro'), findsOneWidget);
+    },
+  );
+
+  testWidgets('não avança quando o salvamento da etapa falha', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: OrbitWizard(
+              onBeforeStepChanged: (_, _) async => false,
+              steps: [step('Serviço'), step('Confirmação')],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Avançar · Confirmação'));
+    await tester.pumpAndSettle();
+    expect(find.text('Etapa 1 de 2'), findsOneWidget);
+  });
+
   testWidgets('diz onde a pessoa está', (tester) async {
     await tester.pumpWidget(host([step('Preparação'), step('Execução')]));
 
@@ -229,9 +275,7 @@ void main() {
   /// domínio vinha num botão próprio ao lado do avanço, e a tela mostrava dois
   /// botões grandes dizendo coisas diferentes sem nada indicando a ordem.
   group('o avanço carrega a ação da etapa', () {
-    testWidgets('a etapa com ação não mostra um segundo botão', (
-      tester,
-    ) async {
+    testWidgets('a etapa com ação não mostra um segundo botão', (tester) async {
       await tester.pumpWidget(
         host([
           OrbitWizardStep(

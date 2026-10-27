@@ -273,7 +273,15 @@ export class MobileFieldService {
         .slice(0, 5),
       capabilities: {
         canScanEquipment: this.has(actor, 'assets.read'),
-        canCreateAdHocRvt: this.has(actor, 'rvt.execute'),
+        canCreateAdHocRvt:
+          this.has(actor, 'rvt.execute') &&
+          (actor.isOrganizationOwner === true ||
+            Boolean(
+              await this.repository.canExecuteRvt(
+                actor.organizationId,
+                actor.id,
+              ),
+            )),
       },
     };
     this.metric('dashboard', started, visible.length);
@@ -742,14 +750,22 @@ export class MobileFieldService {
       const unit = units.get(occurrence.businessUnitId);
       if (!unit) continue;
       const configuration = occurrence.configuration;
-      const actions = this.rvtActions(occurrence, actor);
+      const actions = this.rvtActions(
+        occurrence,
+        actor,
+        source.canExecuteRvt === true || actor.isOrganizationOwner === true,
+      );
       result.push({
         id: `RVT:${occurrence.id}`,
         kind: 'RVT',
         sourceId: occurrence.id,
         schedulingId: occurrence.schedulingEventId,
         title: configuration.name,
-        description: configuration.visitType,
+        description:
+          typeof configuration.procedure?.description === 'string' &&
+          configuration.procedure.description.trim()
+            ? configuration.procedure.description
+            : (configuration.maintenanceType?.label ?? 'Visita técnica'),
         businessUnit: this.party(unit),
         customer: this.customer(customers.get(configuration.customerId)),
         location:
@@ -757,7 +773,7 @@ export class MobileFieldService {
           customers.get(configuration.customerId)?.address ??
           null,
         serviceAddress: null,
-        serviceType: configuration.visitType ?? 'Visita técnica',
+        serviceType: configuration.maintenanceType?.label ?? 'Visita técnica',
         pendingCancellation: null,
         scheduledFor: occurrence.scheduledFor?.toISOString() ?? null,
         scheduledEnd: null,
@@ -769,16 +785,18 @@ export class MobileFieldService {
         ),
         operationalStatus: occurrence.execution?.status ?? occurrence.status,
         priority: null,
-        responsibleFieldTechnician:
-          configuration.defaultResponsibleFieldTechnicianId
-            ? {
-                id: configuration.defaultResponsibleFieldTechnicianId,
-                name: 'Técnico responsável',
-              }
-            : null,
+        responsibleFieldTechnician: occurrence.responsibleFieldTechnicianId
+          ? {
+              id: occurrence.responsibleFieldTechnicianId,
+              name: 'Técnico responsável',
+            }
+          : null,
         auxiliaryTechnicians: [],
-        equipmentSummary: configuration.equipment
-          .map((value: any) => assets.get(value.assetId))
+        equipmentSummary: (occurrence.equipmentIds?.length
+          ? occurrence.equipmentIds
+          : configuration.equipment.map((value: any) => value.assetId)
+        )
+          .map((id: string) => assets.get(id))
           .filter(Boolean)
           .slice(0, 20)
           .map((value: any) => this.equipment(value)),
@@ -872,18 +890,25 @@ export class MobileFieldService {
   private rvtActions(
     source: any,
     actor: MobileFieldActor,
+    eligible: boolean,
   ): MobileFieldAction[] {
     const actions: MobileFieldAction[] = [];
     if (this.has(actor, 'rvt.read')) actions.push('VIEW');
+    const canExecute = eligible && this.has(actor, 'rvt.execute');
+    const owner = actor.isOrganizationOwner === true;
     if (
       !source.execution &&
       source.status === 'SCHEDULED' &&
-      this.has(actor, 'rvt.execute')
+      canExecute &&
+      (owner ||
+        !source.responsibleFieldTechnicianId ||
+        source.responsibleFieldTechnicianId === actor.id)
     )
       actions.push('EXECUTE_RVT');
     if (
       source.execution?.status === 'IN_PROGRESS' &&
-      this.has(actor, 'rvt.execute')
+      canExecute &&
+      (owner || source.execution.responsibleFieldTechnicianId === actor.id)
     )
       actions.push('RESUME', 'ADD_EVIDENCE', 'COMPLETE');
     if (this.has(actor, 'assets.read')) actions.push('SCAN_EQUIPMENT');

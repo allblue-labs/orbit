@@ -199,8 +199,9 @@ class ExecutionController extends StateNotifier<ExecutionState> {
   OfflineCommandEnvelope _envelope(
     FieldOperationAllowedAction action,
     OfflineCommandType type,
-    Map<String, Object?> payload,
-  ) {
+    Map<String, Object?> payload, {
+    String? expectedVersion,
+  }) {
     final current = _intent;
     if (current != null && current.action == action) return current.envelope;
 
@@ -210,7 +211,7 @@ class ExecutionController extends StateNotifier<ExecutionState> {
       idempotencyKey: commandId,
       commandType: type,
       aggregateId: operationId,
-      expectedVersion: state.preparation?.version ?? '',
+      expectedVersion: expectedVersion ?? state.preparation?.version ?? '',
       occurredAt: DateTime.now().toUtc(),
       payload: payload,
       deviceInstanceId: deviceInstanceId,
@@ -228,8 +229,9 @@ class ExecutionController extends StateNotifier<ExecutionState> {
   Future<CommandOutcome?> _run(
     FieldOperationAllowedAction action,
     OfflineCommandType type,
-    Map<String, Object?> payload,
-  ) async {
+    Map<String, Object?> payload, {
+    String? expectedVersion,
+  }) async {
     if (state.isBusy) return null;
     if (!state.allows(action)) return null;
 
@@ -239,7 +241,12 @@ class ExecutionController extends StateNotifier<ExecutionState> {
       clearError: true,
     );
 
-    final envelope = _envelope(action, type, payload);
+    final envelope = _envelope(
+      action,
+      type,
+      payload,
+      expectedVersion: expectedVersion,
+    );
     try {
       await _sync.enqueue(envelope);
       final outcome = await _sync.outcomeOf(envelope.commandId);
@@ -311,6 +318,10 @@ class ExecutionController extends StateNotifier<ExecutionState> {
     state = state.copyWith(pendingCommands: pending);
   }
 
+  void refreshAfterSynchronization() {
+    if (mounted && !state.isBusy && state.pendingCommands.isNotEmpty) load();
+  }
+
   Future<void> start() => _run(
     FieldOperationAllowedAction.start,
     OfflineCommandType.operationStart,
@@ -323,10 +334,78 @@ class ExecutionController extends StateNotifier<ExecutionState> {
     const {},
   );
 
-  Future<void> addNote(String note) => _run(
+  Future<void> completeRvt(String executionId) async {
+    if (state.isBusy || !state.allows(FieldOperationAllowedAction.complete)) {
+      return;
+    }
+    if (state.pendingCommands.isNotEmpty) {
+      state = state.copyWith(
+        error: const OrbitException(
+          kind: OrbitErrorKind.http,
+          publicMessage:
+              'Sincronize os registros pendentes antes de concluir a visita técnica.',
+          code: 'RECORDS_PENDING',
+        ),
+      );
+      return;
+    }
+    state = state.copyWith(
+      phase: ExecutionPhase.mutationPending,
+      pendingAction: FieldOperationAllowedAction.complete,
+      clearError: true,
+    );
+    try {
+      await _repository.completeRvt(executionId);
+      if (mounted) await load();
+    } on Object catch (error) {
+      if (mounted) {
+        state = state.copyWith(
+          phase: ExecutionPhase.error,
+          error: error,
+          clearPending: true,
+        );
+      }
+    }
+  }
+
+  /// O aceite encerra o fluxo. Só confirma conclusão quando o servidor a devolve.
+  Future<bool> finishAfterConfirmation({String? rvtExecutionId}) async {
+    if (state.preparation?.operation.completedAt != null) return true;
+    final pending = await _sync.commandsFor(operationId);
+    if (pending.isNotEmpty) {
+      throw const OrbitException(
+        kind: OrbitErrorKind.http,
+        publicMessage:
+            'Aguarde a sincronização dos registros antes de concluir.',
+        code: 'RECORDS_PENDING',
+      );
+    }
+    if (rvtExecutionId == null) {
+      await complete();
+    } else {
+      await completeRvt(rvtExecutionId);
+    }
+    if (!mounted) return false;
+    if (state.error case final Object error) {
+      state = state.copyWith(phase: ExecutionPhase.ready, clearError: true);
+      throw error;
+    }
+    if (state.preparation?.operation.completedAt != null) return true;
+    if (state.isAwaitingSync(OfflineCommandType.operationComplete)) {
+      return false;
+    }
+    throw const OrbitException(
+      kind: OrbitErrorKind.http,
+      publicMessage:
+          'Não foi possível concluir o atendimento. Tente novamente.',
+      code: 'COMPLETION_NOT_CONFIRMED',
+    );
+  }
+
+  Future<CommandOutcome?> addNote(String note) => _run(
     FieldOperationAllowedAction.addNote,
     OfflineCommandType.operationAddNote,
-    {'note': note},
+    {'note': note, 'visibility': 'CUSTOMER_VISIBLE'},
   );
 
   /// Responde um item do checklist.
@@ -349,8 +428,25 @@ class ExecutionController extends StateNotifier<ExecutionState> {
       OfflineCommandType.operationChecklistUpdate,
       {
         'checklistId': checklistId,
-        'answers': {...checklist.answers, itemId: answer},
+        'answers': {...checklist.defaultAnswers, itemId: answer},
       },
+      expectedVersion: checklist.version,
+    );
+  }
+
+  Future<void> saveChecklist(
+    String checklistId,
+    Map<String, dynamic> answers,
+  ) async {
+    final checklist = state.preparation?.checklist
+        .where((c) => c.id == checklistId)
+        .firstOrNull;
+    if (checklist == null) return;
+    await _run(
+      FieldOperationAllowedAction.updateChecklist,
+      OfflineCommandType.operationChecklistUpdate,
+      {'checklistId': checklist.id, 'answers': answers, 'complete': true},
+      expectedVersion: checklist.version,
     );
   }
 
@@ -382,14 +478,21 @@ class ExecutionController extends StateNotifier<ExecutionState> {
 }
 
 final executionControllerProvider = StateNotifierProvider.autoDispose
-    .family<ExecutionController, ExecutionState, String>(
-      (ref, operationId) => ExecutionController(
+    .family<ExecutionController, ExecutionState, String>((ref, operationId) {
+      final controller = ExecutionController(
         repository: ref.watch(fieldOperationRepositoryProvider),
         sync: ref.watch(syncControllerProvider.notifier),
         deviceInstanceId: ref.watch(deviceInstanceIdProvider).valueOrNull,
         operationId: operationId,
-      ),
-    );
+      );
+      ref.listen(syncControllerProvider.select((value) => value.lastSyncedAt), (
+        previous,
+        next,
+      ) {
+        if (next != null) controller.refreshAfterSynchronization();
+      });
+      return controller;
+    });
 
 /// A linha do tempo do atendimento — fatos persistidos, na ordem publicada.
 final executionTimelineProvider = FutureProvider.autoDispose

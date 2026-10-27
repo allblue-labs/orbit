@@ -193,7 +193,7 @@ export class MobileWalkInRepository {
           sector: input.command.sector ?? null,
           /* O código carrega a origem: quem olha a lista no escritório vê de
              imediato que a ordem nasceu em campo, sem abrir. */
-          code: `AVULSO-${generateUuidV7().slice(0, 13)}`,
+          code: `AVULSO-${generateUuidV7()}`,
           kind: input.command.kind ?? 'MAINTENANCE',
           title: titulo.slice(0, 220),
           description: input.command.description ?? null,
@@ -264,6 +264,23 @@ export class MobileWalkInRepository {
 
     const novo = input.command.customer!;
     const digitos = novo.documentNumber?.replace(/\D/g, '') || null;
+    const documentType = digitos
+      ? (novo.type ?? 'COMPANY') === 'INDIVIDUAL'
+        ? 'CPF'
+        : 'CNPJ'
+      : null;
+    if (digitos) {
+      const duplicate = await tx.customer.findFirst({
+        where: {
+          organizationId: input.organizationId,
+          documentType,
+          documentNumber: digitos,
+          deletedAt: null,
+        },
+        select: { id: true },
+      });
+      if (duplicate) throw new Error('WALK_IN_CUSTOMER_DOCUMENT_EXISTS');
+    }
     const criado = await tx.customer.create({
       data: {
         organizationId: input.organizationId,
@@ -273,11 +290,7 @@ export class MobileWalkInRepository {
         /* O tipo do documento segue o tipo do cliente, e não o comprimento do
            número: quem digitou 11 dígitos num cadastro de empresa errou o
            número, e inverter o cadastro escondria o erro. */
-        documentType: digitos
-          ? (novo.type ?? 'COMPANY') === 'INDIVIDUAL'
-            ? 'CPF'
-            : 'CNPJ'
-          : null,
+        documentType,
         documentNumber: digitos,
         email: novo.email?.toLowerCase() ?? null,
         phone: novo.phone ?? null,
@@ -343,6 +356,27 @@ export class MobileWalkInRepository {
 
     const criados: string[] = [];
     for (const equipamento of input.command.equipment ?? []) {
+      const serialNumber = equipamento.serialNumber?.trim() || null;
+      const identifier = equipamento.identifier?.trim() || null;
+      if (serialNumber || identifier) {
+        const duplicate = await tx.asset.findFirst({
+          where: {
+            organizationId: input.organizationId,
+            deletedAt: null,
+            OR: [
+              ...(serialNumber ? [{ serialNumber }] : []),
+              ...(identifier ? [{ identifier }] : []),
+            ],
+          },
+          select: { serialNumber: true, identifier: true },
+        });
+        if (duplicate)
+          throw new Error(
+            identifier && duplicate.identifier === identifier
+              ? 'WALK_IN_ASSET_IDENTIFIER_EXISTS'
+              : 'WALK_IN_ASSET_SERIAL_EXISTS',
+          );
+      }
       const asset = await tx.asset.create({
         data: {
           organizationId: input.organizationId,
@@ -354,12 +388,12 @@ export class MobileWalkInRepository {
           name: equipamento.name,
           manufacturer: equipamento.manufacturer ?? null,
           model: equipamento.model ?? null,
-          serialNumber: equipamento.serialNumber ?? null,
+          serialNumber,
           location: equipamento.location ?? null,
-          identifier: equipamento.identifier ?? null,
-          identifierType:
-            equipamento.identifierType ??
-            (equipamento.identifier ? 'INTERNAL_CODE' : null),
+          identifier,
+          identifierType: identifier
+            ? (equipamento.identifierType ?? 'INTERNAL_CODE')
+            : null,
           installationAt: equipamento.installationAt,
           warrantyUntil: equipamento.warrantyUntil,
           specifications: equipamento.specifications

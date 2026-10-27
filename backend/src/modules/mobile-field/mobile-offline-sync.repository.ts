@@ -97,7 +97,7 @@ export class MobileOfflineSyncRepository {
   rvtPackage(organizationId: string, occurrenceId: string) {
     return this.rls.run((tx) =>
       tx.rvtOccurrence.findFirst({
-        where: { id: occurrenceId, organizationId },
+        where: { id: occurrenceId, organizationId, deletedAt: null },
         select: {
           id: true,
           status: true,

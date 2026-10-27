@@ -1,3 +1,4 @@
+import { checklistDefaults } from './checklist-defaults';
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
@@ -105,6 +106,11 @@ export class ChecklistService {
     if (!template || !template.isActive) {
       throw new ValidationException('Active checklist template is required');
     }
+    const items = [
+      ...(template.items as Prisma.InputJsonValue[]),
+      ...((input.additionalItems ?? []) as unknown as Prisma.InputJsonValue[]),
+    ];
+    const answers = checklistDefaults(items);
     return this.repository.createExecution(
       {
         organizationId,
@@ -124,12 +130,12 @@ export class ChecklistService {
           key: template.key,
           name: template.name,
           version: template.version,
-          items: [
-            ...(template.items as Prisma.InputJsonValue[]),
-            ...((input.additionalItems ??
-              []) as unknown as Prisma.InputJsonValue[]),
-          ],
+          items,
         },
+        answers,
+        progress: items.length
+          ? Math.round((Object.keys(answers).length / items.length) * 100)
+          : 100,
         notes: input.notes?.trim(),
       },
       actorId,

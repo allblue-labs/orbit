@@ -21,6 +21,7 @@ import { PmocController } from './pmoc.controller';
 import { PmocMapper } from './pmoc.mapper';
 import { PmocRepository } from './pmoc.repository';
 import { PmocService } from './pmoc.service';
+import { PmocWebEvidenceController } from './pmoc-web-evidence.controller';
 
 @Module({
   imports: [
@@ -29,7 +30,11 @@ import { PmocService } from './pmoc.service';
     WorkforceModule,
     ArtifactRenderingModule,
   ],
-  controllers: [PmocController, PmocPublicContractController],
+  controllers: [
+    PmocController,
+    PmocPublicContractController,
+    PmocWebEvidenceController,
+  ],
   providers: [PmocRepository, PmocMapper, PmocService, PmocDueProcessor],
   exports: [PmocService, PmocRepository],
 })

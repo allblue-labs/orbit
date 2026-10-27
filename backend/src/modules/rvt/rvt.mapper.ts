@@ -1,13 +1,21 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-argument */
 import { Injectable } from '@nestjs/common';
+import type {
+  RvtConfigurationReadModel,
+  RvtOccurrenceReadModel,
+  RvtExecutionReadModel,
+  RvtMaintenanceTypeReadModel,
+} from './rvt.read-models';
 import { deriveRvtDueState, formatOccurrenceSequence } from './rvt.domain';
 
 @Injectable()
 export class RvtMapper {
-  occurrence(source: any, timezone: string) {
+  occurrence(source: any, timezone: string): RvtOccurrenceReadModel {
     return {
       id: source.id,
       configurationId: source.configurationId,
+      responsibleFieldTechnicianId: source.responsibleFieldTechnicianId ?? null,
+      equipmentIds: source.equipmentIds ?? [],
       sequenceNumber: source.sequenceNumber,
       sequence: formatOccurrenceSequence(source.sequenceNumber),
       scheduledFor: source.scheduledFor?.toISOString() ?? null,
@@ -31,7 +39,7 @@ export class RvtMapper {
    * entregava um campo com nome diferente do contrato — e como o serviço
    * repassava o retorno do repositório, o compilador não tinha o que reclamar.
    */
-  maintenanceType(source: any) {
+  maintenanceType(source: any): RvtMaintenanceTypeReadModel {
     return {
       id: source.id,
       key: source.key,
@@ -48,7 +56,7 @@ export class RvtMapper {
     } as const;
   }
 
-  configuration(source: any) {
+  configuration(source: any): RvtConfigurationReadModel {
     return {
       id: source.id,
       code: source.code,
@@ -56,6 +64,9 @@ export class RvtMapper {
       maintenanceType: source.maintenanceType
         ? this.maintenanceType(source.maintenanceType)
         : null,
+      calendarId: source.calendarId ?? null,
+      startTime:
+        typeof source.startTime === 'string' ? source.startTime : '09:00',
       scheduleMode: source.scheduleMode,
       status: source.status,
       coverage: {
@@ -92,7 +103,7 @@ export class RvtMapper {
     };
   }
 
-  execution(source: any) {
+  execution(source: any): RvtExecutionReadModel {
     const operation = source.operationId
       ? {
           id: source.operationId,

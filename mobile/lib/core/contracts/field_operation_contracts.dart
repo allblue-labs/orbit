@@ -112,6 +112,9 @@ class FieldOperationChecklistItemContract {
   /// limite do contrato, em vez de espalhar `dynamic` pela árvore.
   final Object? answer;
 
+  bool get isCheck =>
+      const {'BOOLEAN', 'CHECKBOX', 'boolean', 'checkbox'}.contains(type);
+
   bool get isAnswered => switch (answer) {
     null => false,
     final String value => value.trim().isNotEmpty,
@@ -153,6 +156,14 @@ class FieldOperationChecklistContract {
   final String version;
   final List<FieldOperationChecklistItemContract> items;
   final String? notes;
+
+  Map<String, dynamic> get defaultAnswers => {
+    for (final item in items)
+      if (item.answer != null)
+        item.id: item.answer
+      else if (item.isCheck)
+        item.id: true,
+  };
 
   /// Respostas prontas para reenviar: o comando de checklist substitui o mapa
   /// inteiro, então parte-se sempre do que o servidor devolveu.
@@ -269,6 +280,7 @@ class FieldOperationExecutionPreparationContract {
     this.serviceLocation,
     this.responsibleFieldTechnician,
     this.primaryAction,
+    this.materials = const [],
   });
   factory FieldOperationExecutionPreparationContract.fromJson(
     Map<String, dynamic> json,
@@ -299,6 +311,9 @@ class FieldOperationExecutionPreparationContract {
           .whereType<Map<String, dynamic>>()
           .map(FieldOperationChecklistContract.fromJson)
           .toList(growable: false),
+      materials: (json['materials'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .toList(),
       materialPolicy: FieldOperationMaterialPolicyContract.fromJson(
         json['materialPolicy'] as Map<String, dynamic>? ?? const {},
       ),
@@ -344,6 +359,7 @@ class FieldOperationExecutionPreparationContract {
   final List<MobilePartySummaryContract> auxiliaryTechnicians;
   final List<FieldOperationChecklistContract> checklist;
   final FieldOperationMaterialPolicyContract materialPolicy;
+  final List<Map<String, dynamic>> materials;
 
   /// Políticas que pertencem a PRs seguintes — lidas para que a tela saiba o
   /// que **não** oferecer, sem adivinhar.

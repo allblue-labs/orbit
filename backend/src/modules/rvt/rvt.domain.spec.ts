@@ -137,4 +137,56 @@ describe('cadências além de semanal e semestral', () => {
       }),
     ).toThrow(/day or a month interval/);
   });
+  it('preserves a custom hour and minute across monthly cadence and DST', () => {
+    const rows = generateRvtOccurrences({
+      scheduleMode: 'RECURRING',
+      cadence: { intervalDays: null, intervalMonths: 1 },
+      coverageStart: '2027-02-28',
+      coverageEnd: '2027-04-28',
+      timezone: 'America/New_York',
+      startTime: '14:35',
+    });
+    expect(rows).toHaveLength(3);
+    expect(
+      rows.map((row) =>
+        new Intl.DateTimeFormat('en-GB', {
+          timeZone: 'America/New_York',
+          hour: '2-digit',
+          minute: '2-digit',
+          hourCycle: 'h23',
+        }).format(row.scheduledFor),
+      ),
+    ).toEqual(['14:35', '14:35', '14:35']);
+    expect(rows[0]!.scheduledFor.toISOString()).toBe(
+      '2027-02-28T19:35:00.000Z',
+    );
+    expect(rows[1]!.scheduledFor.toISOString()).toBe(
+      '2027-03-28T18:35:00.000Z',
+    );
+  });
+  it('rejects an invalid time before generating visits', () => {
+    expect(() =>
+      generateRvtOccurrences({
+        scheduleMode: 'ONE_TIME',
+        cadence: { intervalDays: null, intervalMonths: 1 },
+        coverageStart: '2027-02-28',
+        timezone: 'America/Recife',
+        startTime: '25:30',
+      }),
+    ).toThrow(/horário válido/);
+  });
+  it('includes a late evening visit on the coverage last day', () => {
+    const rows = generateRvtOccurrences({
+      scheduleMode: 'RECURRING',
+      cadence: { intervalDays: null, intervalMonths: 1 },
+      coverageStart: '2027-01-31',
+      coverageEnd: '2027-01-31',
+      timezone: 'America/Recife',
+      startTime: '23:45',
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.scheduledFor.toISOString()).toBe(
+      '2027-02-01T02:45:00.000Z',
+    );
+  });
 });

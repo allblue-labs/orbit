@@ -12,6 +12,9 @@ const productInclude = {
   businessUnit: {
     select: { id: true, legalName: true, tradeName: true },
   },
+  inventoryBalances: {
+    select: { businessUnitId: true, onHand: true, reserved: true },
+  },
 } satisfies Prisma.ProductInclude;
 
 @Injectable()
@@ -77,17 +80,35 @@ export class CatalogRepository {
       deletedAt: null,
       kind: query.kind,
       categoryId: query.categoryId,
-      businessUnitId: query.businessUnitId,
       status: query.status,
-      ...(query.search
-        ? {
-            OR: [
-              { name: { contains: query.search, mode: 'insensitive' } },
-              { sku: { contains: query.search, mode: 'insensitive' } },
-              { description: { contains: query.search, mode: 'insensitive' } },
-            ],
-          }
-        : {}),
+      AND: [
+        ...(query.businessUnitId
+          ? [
+              {
+                OR: [
+                  { businessUnitId: null },
+                  { businessUnitId: query.businessUnitId },
+                ],
+              },
+            ]
+          : []),
+        ...(query.search
+          ? [
+              {
+                OR: [
+                  { name: { contains: query.search, mode: 'insensitive' } },
+                  { sku: { contains: query.search, mode: 'insensitive' } },
+                  {
+                    description: {
+                      contains: query.search,
+                      mode: 'insensitive',
+                    },
+                  },
+                ],
+              } satisfies Prisma.ProductWhereInput,
+            ]
+          : []),
+      ],
     };
     return this.rls.run(async (transaction) => {
       const data = await transaction.product.findMany({

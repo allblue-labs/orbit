@@ -146,11 +146,11 @@ const rvtSelect = {
   status: true,
   _count: {
     select: {
-      occurrences: true,
+      occurrences: { where: { deletedAt: null } },
     },
   },
   occurrences: {
-    where: { status: { in: ['SCHEDULED', 'IN_PROGRESS'] } },
+    where: { deletedAt: null, status: { in: ['SCHEDULED', 'IN_PROGRESS'] } },
     orderBy: [{ scheduledFor: 'asc' as const }, { id: 'asc' as const }],
     take: 1,
     select: { scheduledFor: true },
@@ -453,6 +453,7 @@ export class CustomerPortalReadRepository {
         select: {
           ...rvtSelect,
           occurrences: {
+            where: { deletedAt: null },
             orderBy: [{ scheduledFor: 'desc' }, { id: 'desc' }],
             take: 50,
             select: {

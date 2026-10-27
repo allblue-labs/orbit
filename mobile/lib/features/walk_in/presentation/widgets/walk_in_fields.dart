@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../../core/theme/orbit_theme.dart';
+import '../../../../core/design/orbit_keyboard.dart';
 
 /// Um campo de texto do roteiro, com rótulo acima.
 class WalkInField extends StatelessWidget {
@@ -77,11 +78,14 @@ class WalkInField extends StatelessWidget {
             ],
             readOnly: readOnly,
             onTap: onTap,
+            onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
             onChanged: onChanged,
             decoration: InputDecoration(
               hintText: hint,
               isDense: true,
-              suffixIcon: suffix,
+              suffixIcon:
+                  suffix ??
+                  (maxLines > 1 ? const OrbitKeyboardDismissButton() : null),
               helperText: helper,
               helperMaxLines: 2,
             ),

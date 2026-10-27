@@ -34,6 +34,11 @@ import '../../../core/widgets/section_states.dart';
 import '../../artifact/data/document_name.dart';
 import '../../evidence/presentation/widgets/evidence_section.dart';
 import '../application/pmoc_attendance_controller.dart';
+import '../../field/application/execution_controller.dart';
+import '../../field/presentation/widgets/attendance_wizard.dart';
+import '../../field/presentation/widgets/attendance_result.dart';
+import '../../field/presentation/widgets/attendance_work_record.dart';
+import '../../signature/presentation/customer_acknowledgement_screen.dart';
 import 'pmoc_document_section.dart';
 import 'pmoc_labels.dart';
 
@@ -55,18 +60,13 @@ class PmocAttendanceScreen extends ConsumerStatefulWidget {
 }
 
 class _PmocAttendanceScreenState extends ConsumerState<PmocAttendanceScreen> {
-  final _notes = TextEditingController();
+  final Map<String, bool> _answers = {};
+  String? _executionId;
 
   /// A pessoa percorreu o roteiro. **Não** é dado do servidor — é confirmação de
   /// quem estava lá, e existe para que registrar a manutenção seja um ato
   /// deliberado e não o terceiro toque seguido.
   bool _roteiroConferido = false;
-
-  @override
-  void dispose() {
-    _notes.dispose();
-    super.dispose();
-  }
 
   PmocAttendanceTarget get _target => PmocAttendanceTarget(
     planId: widget.planId,
@@ -81,6 +81,19 @@ class _PmocAttendanceScreenState extends ConsumerState<PmocAttendanceScreen> {
       pmocAttendanceControllerProvider(_target).notifier,
     );
 
+    final execution = state.execution;
+    if (execution != null && _executionId != execution.id) {
+      _executionId = execution.id;
+      _roteiroConferido = false;
+      _answers.clear();
+      final groups = state.preparation!.procedureGroups;
+      for (var g = 0; g < groups.length; g++) {
+        for (var i = 0; i < groups[g].items.length; i++) {
+          final key = '$g:$i';
+          _answers[key] = execution.procedureAnswers[key] ?? true;
+        }
+      }
+    }
     return Scaffold(
       backgroundColor: context.orbit.background,
       appBar: AppBar(title: const Text('Atendimento de PMOC')),
@@ -98,7 +111,11 @@ class _PmocAttendanceScreenState extends ConsumerState<PmocAttendanceScreen> {
         _ => _Body(
           state: state,
           controller: controller,
-          notes: _notes,
+          answers: _answers,
+          onAnswer: (key, value) => setState(() {
+            _answers[key] = value;
+            _roteiroConferido = false;
+          }),
           reviewed: _roteiroConferido,
           onReviewed: (value) => setState(() => _roteiroConferido = value),
         ),
@@ -107,27 +124,39 @@ class _PmocAttendanceScreenState extends ConsumerState<PmocAttendanceScreen> {
   }
 }
 
-class _Body extends StatelessWidget {
+class _Body extends ConsumerWidget {
   const _Body({
     required this.state,
     required this.controller,
-    required this.notes,
+    required this.answers,
+    required this.onAnswer,
     required this.reviewed,
     required this.onReviewed,
   });
 
   final PmocAttendanceState state;
   final PmocAttendanceController controller;
-  final TextEditingController notes;
+  final Map<String, bool> answers;
+  final void Function(String, bool) onAnswer;
   final bool reviewed;
   final ValueChanged<bool> onReviewed;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final preparation = state.preparation!;
     final execution = state.execution;
     final podeAbrir = state.allows('START');
     final podeConcluir = state.allows('COMPLETE');
+    final operationId = execution?.operation?['id'] as String?;
+    Future<bool> save({String? notes}) async {
+      final saved = await controller.saveWork(answers: answers, notes: notes);
+      if (saved && operationId != null) {
+        await ref
+            .read(executionControllerProvider(operationId).notifier)
+            .load();
+      }
+      return saved;
+    }
 
     final etapas = <OrbitWizardStep>[
       OrbitWizardStep(
@@ -152,9 +181,7 @@ class _Body extends StatelessWidget {
                 ),
                 child: FilledButton(
                   onPressed: state.isBusy ? null : controller.start,
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size(0, 48),
-                  ),
+                  style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
                   child: Text(
                     state.pending == PmocAttendanceCommand.start
                         ? 'Abrindo…'
@@ -185,34 +212,64 @@ class _Body extends StatelessWidget {
           execution: execution,
           reviewed: reviewed,
           onReviewed: onReviewed,
+          answers: answers,
+          onAnswer: onAnswer,
+          enabled: podeConcluir && !state.isBusy,
+          onSave: () async {
+            if (await save()) onReviewed(true);
+          },
           canCapture: state.allows('ADD_EVIDENCE'),
         ),
       ),
 
       OrbitWizardStep(
-        title: 'Registrar',
-        hint: 'O que foi encontrado e feito. Isto sai impresso no relatório.',
-        lockedReason: podeConcluir
-            ? null
-            : 'Percorra o roteiro e confirme a revisão antes de registrar.',
-        complete: execution?.status == PmocEquipmentExecutionStatus.completed,
-        child: _Register(
-          state: state,
-          controller: controller,
-          notes: notes,
-          reviewed: reviewed,
-        ),
+        title: 'Serviço realizado',
+        hint: 'Observações e materiais são opcionais.',
+        lockedReason: operationId == null
+            ? 'Abra o atendimento para registrar o serviço.'
+            : null,
+        child: operationId == null
+            ? const SizedBox.shrink()
+            : AttendanceWorkRecord(
+                key: ValueKey(operationId),
+                operationId: operationId,
+                enabled: podeConcluir,
+                initialNotes: execution?.notes,
+                onSaveNotes: (notes) => save(notes: notes),
+              ),
       ),
-
       OrbitWizardStep(
-        title: 'Relatório',
-        hint: 'Emitir é decisão separada de concluir.',
-        lockedReason:
-            execution?.status == PmocEquipmentExecutionStatus.completed
-            ? null
-            : 'O relatório é emitido depois de o atendimento ser concluído.',
-        complete: state.isFinished,
-        child: _Report(state: state, controller: controller),
+        title: 'Confirmação',
+        hint: 'Apresente ao cliente o resumo e registre o aceite neste espaço.',
+        lockedReason: operationId == null || (!reviewed && podeConcluir)
+            ? 'Salve o roteiro antes de coletar a confirmação do cliente.'
+            : null,
+        child: operationId == null
+            ? const SizedBox.shrink()
+            : CustomerAcknowledgementScreen(
+                key: ValueKey(operationId),
+                operationId: operationId,
+                embedded: true,
+              ),
+      ),
+      OrbitWizardStep(
+        title: 'Conclusão',
+        hint: 'Resumo técnico e relatório da manutenção.',
+        complete: execution?.status == PmocEquipmentExecutionStatus.completed,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (operationId != null)
+              AttendanceTechnicalSummary(
+                operationId: operationId,
+                code: preparation.planCode,
+                technician: execution?.responsibleFieldTechnicianName,
+                completedAt: execution?.completedAt,
+              ),
+            if (execution?.status == PmocEquipmentExecutionStatus.completed)
+              _Report(state: state, controller: controller),
+          ],
+        ),
       ),
     ];
 
@@ -221,9 +278,11 @@ class _Body extends StatelessWidget {
       /// define o passo seguinte.
       onRefresh: () async => state.isBusy ? null : controller.load(),
       child: ListView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: const EdgeInsets.only(bottom: OrbitSpacing.xl),
         children: [
-          if (state.error != null)
+          if (state.error != null &&
+              execution?.status != PmocEquipmentExecutionStatus.completed)
             Padding(
               padding: const EdgeInsets.fromLTRB(
                 OrbitSpacing.md,
@@ -243,14 +302,20 @@ class _Body extends StatelessWidget {
 
           /// O passo inicial é o do servidor: quem reabre a tela com o
           /// atendimento em andamento cai no roteiro, não no contexto.
-          OrbitWizard(
-            key: ValueKey(state.allowedActions.join('|')),
+          AttendanceWizard(
+            operationId: operationId,
+            confirmationStep: 3,
+            completed:
+                execution?.status == PmocEquipmentExecutionStatus.completed,
+            onComplete: controller.finishAfterConfirmation,
             steps: etapas,
             initialStep: podeAbrir
                 ? 0
                 : podeConcluir
                 ? 1
-                : 3,
+                : execution == null
+                ? 0
+                : 4,
           ),
         ],
       ),
@@ -315,7 +380,8 @@ class _Summary extends StatelessWidget {
 
             /// Quem abriu, quando já foi aberto. É histórico, e é o que explica
             /// para o técnico certo por que ele pode concluir — ou não.
-            if (execution?.responsibleFieldTechnicianName case final String quem)
+            if (execution?.responsibleFieldTechnicianName
+                case final String quem)
               _Line(
                 label: 'Atendendo',
                 value:
@@ -337,6 +403,10 @@ class _Procedure extends StatelessWidget {
     required this.reviewed,
     required this.onReviewed,
     required this.canCapture,
+    required this.answers,
+    required this.onAnswer,
+    required this.enabled,
+    required this.onSave,
   });
 
   final PmocExecutionPreparationContract preparation;
@@ -344,6 +414,10 @@ class _Procedure extends StatelessWidget {
   final bool reviewed;
   final ValueChanged<bool> onReviewed;
   final bool canCapture;
+  final Map<String, bool> answers;
+  final void Function(String, bool) onAnswer;
+  final bool enabled;
+  final Future<void> Function() onSave;
 
   @override
   Widget build(BuildContext context) {
@@ -367,21 +441,23 @@ class _Procedure extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                for (final grupo in grupos) ...[
-                  Padding(
-                    padding: const EdgeInsets.only(top: OrbitSpacing.xs),
-                    child: Text(
-                      grupo.group,
-                      style: OrbitType.label.copyWith(color: palette.ink),
-                    ),
+                const Text(
+                  'Os itens vêm marcados. Desmarque o que não foi realizado.',
+                ),
+                for (var g = 0; g < grupos.length; g++) ...[
+                  Text(
+                    grupos[g].group,
+                    style: OrbitType.label.copyWith(color: palette.ink),
                   ),
-                  for (final item in grupo.items)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 4, top: 2),
-                      child: Text(
-                        '• $item',
-                        style: OrbitType.body.copyWith(color: palette.inkMuted),
-                      ),
+                  for (var i = 0; i < grupos[g].items.length; i++)
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      value: answers['$g:$i'] ?? true,
+                      onChanged: enabled
+                          ? (value) => onAnswer('$g:$i', value ?? false)
+                          : null,
+                      title: Text(grupos[g].items[i]),
                     ),
                 ],
               ],
@@ -402,15 +478,9 @@ class _Procedure extends StatelessWidget {
 
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: OrbitSpacing.gutter),
-          child: CheckboxListTile(
-            value: reviewed,
-            onChanged: (value) => onReviewed(value ?? false),
-            contentPadding: EdgeInsets.zero,
-            controlAffinity: ListTileControlAffinity.leading,
-            title: Text(
-              'Percorri o roteiro neste equipamento',
-              style: OrbitType.body.copyWith(color: palette.ink),
-            ),
+          child: OutlinedButton(
+            onPressed: enabled ? onSave : null,
+            child: Text(reviewed ? 'Roteiro salvo' : 'Salvar roteiro'),
           ),
         ),
       ],
@@ -418,197 +488,70 @@ class _Procedure extends StatelessWidget {
   }
 }
 
-/// Observações e o registro da manutenção.
-class _Register extends StatelessWidget {
-  const _Register({
-    required this.state,
-    required this.controller,
-    required this.notes,
-    required this.reviewed,
-  });
-
+/// A emissão é disparada ao entrar no resultado da manutenção concluída.
+class _Report extends StatefulWidget {
+  const _Report({required this.state, required this.controller});
   final PmocAttendanceState state;
   final PmocAttendanceController controller;
-  final TextEditingController notes;
-  final bool reviewed;
+  @override
+  State<_Report> createState() => _ReportState();
+}
+
+class _ReportState extends State<_Report> {
+  bool _requested = false;
+  void _issue() {
+    if (_requested) return;
+    _requested = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.controller.issueReport();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final palette = context.orbit;
-    final concluida =
-        state.execution?.status == PmocEquipmentExecutionStatus.completed;
-
-    if (concluida) {
+    final state = widget.state;
+    final execution = state.execution;
+    final preparation = state.preparation;
+    if (execution?.artifactExecution?['id'] case final String documentId) {
+      return PmocDocumentSection(
+        artifactExecutionId: documentId,
+        fileName: documentFileNameOf([
+          'PMOC',
+          preparation?.planCode ?? '',
+          preparation?.equipmentName ?? '',
+          if (execution?.sequenceNumber case final int number)
+            'manutencao-$number',
+        ]),
+        subject: [
+          'Relatório de PMOC',
+          preparation?.equipmentName,
+          preparation?.customerName,
+        ].whereType<String>().join(' · '),
+      );
+    }
+    if (state.error != null) {
       return SectionBlock(
-        title: 'Manutenção registrada',
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Registrada em '
-              '${OrbitFormat.dateHourOf(state.execution?.performedAt ?? state.execution?.completedAt)}.',
-              style: OrbitType.body.copyWith(color: palette.ink),
-            ),
-            if (state.execution?.notes case final String observacao
-                when observacao.trim().isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: OrbitSpacing.xs),
-                child: Text(
-                  observacao,
-                  style: OrbitType.body.copyWith(color: palette.inkMuted),
-                ),
-              ),
-            if (state.cycleCompleted)
-              Padding(
-                padding: const EdgeInsets.only(top: OrbitSpacing.sm),
-                child: Text(
-                  'Com este, todos os equipamentos do ciclo foram resolvidos — o '
-                  'ciclo foi encerrado e o próximo já está previsto.',
-                  style: OrbitType.caption.copyWith(color: palette.success),
-                ),
-              ),
-          ],
+        title: 'Relatório de execução',
+        child: SectionError(
+          error: state.error!,
+          onRetry: () {
+            _requested = false;
+            _issue();
+          },
         ),
       );
     }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SectionBlock(
-          title: 'Observações e conclusão',
-          child: TextField(
-            controller: notes,
-            maxLines: 5,
-            minLines: 3,
-            textCapitalization: TextCapitalization.sentences,
-            decoration: const InputDecoration(
-              hintText:
-                  'O que foi encontrado e o que foi feito neste equipamento.',
-            ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: OrbitSpacing.gutter,
-            vertical: OrbitSpacing.xs,
-          ),
-          child: Text(
-            /// A hora é a do servidor, e dizer isso evita a pergunta seguinte.
-            /// O relógio do aparelho pode estar errado, e a hora da manutenção é
-            /// registro legal.
-            'A manutenção é registrada com a hora do servidor.',
-            style: OrbitType.caption.copyWith(color: palette.inkSubtle),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: OrbitSpacing.gutter),
-          child: FilledButton(
-            /// Exige a confirmação do roteiro: registrar é o ato que produz o
-            /// documento legal, e ele não pode acontecer por inércia de toques.
-            onPressed: state.isBusy || !reviewed
-                ? null
-                : () => controller.complete(notes: notes.text),
-            style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
-            child: Text(
-              state.pending == PmocAttendanceCommand.complete
-                  ? 'Registrando…'
-                  : 'Registrar manutenção',
-            ),
-          ),
-        ),
-        if (!reviewed)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              OrbitSpacing.gutter,
-              OrbitSpacing.xs,
-              OrbitSpacing.gutter,
-              0,
-            ),
-            child: Text(
-              'Confirme no passo anterior que percorreu o roteiro.',
-              style: OrbitType.caption.copyWith(color: palette.inkSubtle),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-/// A emissão do relatório de execução.
-class _Report extends StatelessWidget {
-  const _Report({required this.state, required this.controller});
-
-  final PmocAttendanceState state;
-  final PmocAttendanceController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.orbit;
-    final execution = state.execution;
-    final emitido = execution?.artifactExecution != null;
-    final preparation = state.preparation;
-
-    /* O nome é o que o cliente vê chegar no WhatsApp: o contrato, o equipamento
-       e qual manutenção é. `documento.pdf` não diz nada a quem recebe — e as
-       regras de limpeza são as mesmas da lista de Documentos, de propósito. */
-    final fileName = documentFileNameOf([
-      'PMOC',
-      preparation?.planCode ?? '',
-      preparation?.equipmentName ?? '',
-      if (execution?.sequenceNumber case final int numero)
-        'manutencao-$numero',
-    ]);
-
-    final subject = [
-      'Relatório de PMOC',
-      preparation?.equipmentName,
-      preparation?.customerName,
-    ].whereType<String>().join(' · ');
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (!emitido)
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: OrbitSpacing.gutter,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'A manutenção está registrada. O relatório de execução é o que '
-                  'o cliente guarda como prova de conformidade.',
-                  style: OrbitType.body.copyWith(color: palette.inkMuted),
-                ),
-                const SizedBox(height: OrbitSpacing.sm),
-                FilledButton(
-                  onPressed: state.isBusy || execution == null
-                      ? null
-                      : controller.issueReport,
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size(0, 48),
-                  ),
-                  child: Text(
-                    state.pending == PmocAttendanceCommand.issue
-                        ? 'Emitindo…'
-                        : 'Emitir relatório',
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-        /// Depois de emitido, o arquivo — da execução de artefato, que é onde o
-        /// documento de PMOC mora.
-        if (execution?.artifactExecution?['id'] case final String documento)
-          PmocDocumentSection(
-            artifactExecutionId: documento,
-            fileName: fileName,
-            subject: subject,
-          ),
-      ],
+    _issue();
+    return const SectionBlock(
+      title: 'Relatório de execução',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Preparando o relatório automaticamente…'),
+          SizedBox(height: OrbitSpacing.sm),
+          LinearProgressIndicator(),
+        ],
+      ),
     );
   }
 }

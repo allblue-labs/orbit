@@ -9,16 +9,17 @@
  */
 import type { ProductKind, ProductStatus } from "@/types/contracts";
 
-export const CATALOG_KIND_LABELS: Readonly<Record<ProductKind | string, string>> =
-  {
-    PRODUCT: "Produto",
-    SERVICE: "Serviço",
-    PART: "Peça",
-  };
+export const CATALOG_KIND_LABELS: Readonly<
+  Record<ProductKind | string, string>
+> = {
+  PRODUCT: "Produto",
+  SERVICE: "Serviço",
+  PART: "Peça",
+};
 
 export const CATALOG_STATUS_LABELS: Readonly<
   Record<ProductStatus | string, string>
 > = {
-  ACTIVE: "Disponível",
-  INACTIVE: "Indisponível",
+  ACTIVE: "Ativo",
+  INACTIVE: "Inativo",
 };

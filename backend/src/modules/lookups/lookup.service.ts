@@ -19,6 +19,41 @@ const BRASIL = 'Brasil';
 
 /** Quanto esperar por um terceiro antes de desistir e deixar digitar à mão. */
 const TIMEOUT_MS = 8_000;
+const COMPANY_CACHE_TTL_MS = 10 * 60_000;
+const COMPANY_CACHE_LIMIT = 500;
+
+interface BrasilCompanyPayload {
+  razao_social?: string;
+  nome_fantasia?: string;
+  email?: string;
+  ddd_telefone_1?: string;
+  descricao_situacao_cadastral?: string;
+  cep?: string;
+  logradouro?: string;
+  numero?: string;
+  complemento?: string;
+  bairro?: string;
+  municipio?: string;
+  uf?: string;
+}
+
+interface OpenCompanyPayload {
+  taxId?: string;
+  company?: { name?: string };
+  alias?: string;
+  status?: { text?: string };
+  phones?: { area?: string; number?: string }[];
+  emails?: { address?: string }[];
+  address?: {
+    zip?: string;
+    street?: string;
+    number?: string;
+    details?: string;
+    district?: string;
+    city?: string;
+    state?: string;
+  };
+}
 
 const UF_PARA_ESTADO: Readonly<Record<string, string>> = {
   AC: 'Acre',
@@ -75,6 +110,16 @@ export class LookupService {
 
   /** BrasilAPI, que publica o cadastro da Receita sem exigir credencial. */
   private readonly brasilApi = 'https://brasilapi.com.br/api/cnpj/v1';
+  private readonly openCnpja = 'https://open.cnpja.com/office';
+  // Somente dados públicos de CNPJ; nenhum cadastro de cliente entra neste cache.
+  private readonly companies = new Map<
+    string,
+    { expiresAt: number; value: CompanyLookupReadModel }
+  >();
+  private readonly companyRequests = new Map<
+    string,
+    Promise<CompanyLookupReadModel>
+  >();
 
   async postalCode(raw: string): Promise<PostalAddressReadModel> {
     const cep = onlyDigits(raw);
@@ -120,20 +165,40 @@ export class LookupService {
         'INVALID_DOCUMENT_NUMBER',
       );
 
-    const payload = await this.get<{
-      razao_social?: string;
-      nome_fantasia?: string;
-      email?: string;
-      ddd_telefone_1?: string;
-      descricao_situacao_cadastral?: string;
-      cep?: string;
-      logradouro?: string;
-      numero?: string;
-      complemento?: string;
-      bairro?: string;
-      municipio?: string;
-      uf?: string;
-    }>(`${this.brasilApi}/${cnpj}`, 'company');
+    const cached = this.companies.get(cnpj);
+    if (cached && cached.expiresAt > Date.now()) return cached.value;
+    this.companies.delete(cnpj);
+    const inFlight = this.companyRequests.get(cnpj);
+    if (inFlight) return inFlight;
+    const request = this.loadCompany(cnpj)
+      .then((value) => {
+        if (this.companies.size >= COMPANY_CACHE_LIMIT) {
+          const oldest = this.companies.keys().next().value;
+          if (oldest) this.companies.delete(oldest);
+        }
+        this.companies.set(cnpj, {
+          expiresAt: Date.now() + COMPANY_CACHE_TTL_MS,
+          value,
+        });
+        return value;
+      })
+      .finally(() => this.companyRequests.delete(cnpj));
+    this.companyRequests.set(cnpj, request);
+    return request;
+  }
+
+  private async loadCompany(cnpj: string): Promise<CompanyLookupReadModel> {
+    let payload: BrasilCompanyPayload;
+    try {
+      payload = await this.get<BrasilCompanyPayload>(
+        `${this.brasilApi}/${cnpj}`,
+        'company-primary',
+      );
+    } catch (error) {
+      // Documento inválido ou não encontrado não dispara nova consulta.
+      if (!(error instanceof ServiceUnavailableException)) throw error;
+      payload = await this.fallbackCompany(cnpj);
+    }
 
     /* Sem razão social não há o que preencher: o provedor respondeu algo que
        não é uma empresa. */
@@ -159,6 +224,36 @@ export class LookupService {
         stateCode: uf,
         country: BRASIL,
       },
+    };
+  }
+
+  /** CNPJá pública: alternativa independente quando a BrasilAPI falha. */
+  private async fallbackCompany(cnpj: string): Promise<BrasilCompanyPayload> {
+    const payload = await this.get<OpenCompanyPayload>(
+      `${this.openCnpja}/${cnpj}`,
+      'company-fallback',
+    );
+    if (
+      !payload?.company?.name?.trim() ||
+      (payload.taxId && payload.taxId !== cnpj)
+    )
+      throw this.unavailable();
+    const phone = payload.phones?.[0];
+    return {
+      razao_social: payload.company.name,
+      nome_fantasia: payload.alias,
+      email: payload.emails?.[0]?.address,
+      ddd_telefone_1: phone
+        ? `${phone.area ?? ''}${phone.number ?? ''}`
+        : undefined,
+      descricao_situacao_cadastral: payload.status?.text,
+      cep: payload.address?.zip,
+      logradouro: payload.address?.street,
+      numero: payload.address?.number,
+      complemento: payload.address?.details,
+      bairro: payload.address?.district,
+      municipio: payload.address?.city,
+      uf: payload.address?.state,
     };
   }
 
@@ -218,7 +313,11 @@ export class LookupService {
     }
 
     try {
-      return (await response.json()) as T;
+      const payload: unknown = await response.json();
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+        throw new Error('Invalid lookup response');
+      }
+      return payload as T;
     } catch {
       this.logger.warn(JSON.stringify({ stage: 'lookup-unparsable', scope }));
       throw this.unavailable();

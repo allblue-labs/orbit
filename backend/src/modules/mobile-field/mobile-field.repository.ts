@@ -16,6 +16,7 @@ export interface MobileFieldProjectionSource {
   rvtOccurrences: readonly any[];
   customers: readonly any[];
   rvtAssets: readonly any[];
+  canExecuteRvt?: boolean;
 }
 
 export type MobileFieldProjectionTarget =
@@ -400,6 +401,20 @@ export class MobileFieldRepository {
           startsAt: true,
           customer: { select: { legalName: true, tradeName: true } },
         },
+      }),
+    );
+  }
+
+  canExecuteRvt(organizationId: string, actorId: string) {
+    return this.rls.run((tx) =>
+      tx.professionalProfile.findFirst({
+        where: {
+          organizationId,
+          userId: actorId,
+          active: true,
+          fieldTechnicianEnabled: true,
+        },
+        select: { id: true },
       }),
     );
   }
@@ -828,9 +843,6 @@ export class MobileFieldRepository {
                 ...(target?.kind === 'RVT' ? { id: target.sourceId } : {}),
                 businessUnitId: { in: scopedIds },
                 status: { notIn: ['COMPLETED', 'CANCELLED'] },
-                ...(filters?.customerId
-                  ? { configuration: { customerId: filters.customerId } }
-                  : {}),
                 ...(filters?.from || filters?.to
                   ? {
                       scheduledFor: {
@@ -839,14 +851,13 @@ export class MobileFieldRepository {
                       },
                     }
                   : {}),
-                OR: [
-                  {
-                    configuration: {
-                      defaultResponsibleFieldTechnicianId: actorId,
-                    },
-                  },
-                  { execution: { responsibleFieldTechnicianId: actorId } },
-                ],
+                deletedAt: null,
+                configuration: {
+                  deletedAt: null,
+                  ...(filters?.customerId
+                    ? { customerId: filters.customerId }
+                    : {}),
+                },
               },
               take: target?.kind === 'RVT' ? 1 : 300,
               orderBy: [{ scheduledFor: 'asc' }, { id: 'asc' }],
@@ -856,6 +867,8 @@ export class MobileFieldRepository {
                 scheduledFor: true,
                 status: true,
                 schedulingEventId: true,
+                responsibleFieldTechnicianId: true,
+                equipmentIds: true,
                 updatedAt: true,
                 configuration: {
                   select: {
@@ -866,6 +879,7 @@ export class MobileFieldRepository {
                     },
                     customerId: true,
                     serviceLocation: true,
+                    procedure: true,
                     timezone: true,
                     defaultResponsibleFieldTechnicianId: true,
                     equipment: {
@@ -915,7 +929,9 @@ export class MobileFieldRepository {
         },
       });
       const rvtAssetIds = rvtOccurrences.flatMap((item) =>
-        item.configuration.equipment.map((equipment) => equipment.assetId),
+        item.equipmentIds.length
+          ? item.equipmentIds
+          : item.configuration.equipment.map((equipment) => equipment.assetId),
       );
       const rvtAssets = await tx.asset.findMany({
         where: {
@@ -940,7 +956,17 @@ export class MobileFieldRepository {
           },
         },
       });
+      const profile = await tx.professionalProfile.findFirst({
+        where: {
+          organizationId,
+          userId: actorId,
+          active: true,
+          fieldTechnicianEnabled: true,
+        },
+        select: { id: true },
+      });
       return {
+        canExecuteRvt: Boolean(profile),
         businessUnits,
         operations,
         pmocCycles,

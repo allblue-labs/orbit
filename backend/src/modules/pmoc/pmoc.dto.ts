@@ -393,6 +393,24 @@ export class StartPmocEquipmentExecutionDto {
   auxiliaryTechnicianIds?: string[];
 }
 
+export class SavePmocEquipmentWorkDto {
+  @ApiProperty()
+  @IsString()
+  @MaxLength(80)
+  expectedVersion!: string;
+
+  @ApiProperty({ description: 'Respostas por chave do roteiro congelado' })
+  @IsObject()
+  answers!: Record<string, boolean>;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(1000)
+  notes?: string;
+}
+
 export class CompletePmocEquipmentExecutionDto {
   @ApiPropertyOptional()
   @IsOptional()

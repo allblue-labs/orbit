@@ -25,6 +25,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/design/orbit_keyboard.dart';
 import '../../../../core/contracts/mobile_evidence_contracts.dart';
 import '../../../../core/errors/orbit_exception.dart';
 import '../../../../core/presentation/field_registry.dart';
@@ -94,8 +95,7 @@ class _SheetState extends ConsumerState<_CancellationSheet> {
   }
 
   bool get _podeEnviar =>
-      !_enviando &&
-      _justificativa.text.trim().length >= _minimoDaJustificativa;
+      !_enviando && _justificativa.text.trim().length >= _minimoDaJustificativa;
 
   Future<void> _anexar(Future<CapturedFile?> Function() escolher) async {
     if (_anexos.length >= _maximoDeFotos) return;
@@ -111,8 +111,8 @@ class _SheetState extends ConsumerState<_CancellationSheet> {
       final conferencia = checkEvidenceFile(arquivo.bytes);
       if (!conferencia.isValid) {
         setState(
-          () => _problema =
-              evidenceFileProblemLabels[conferencia.problem!.name],
+          () =>
+              _problema = evidenceFileProblemLabels[conferencia.problem!.name],
         );
         return;
       }
@@ -184,8 +184,7 @@ class _SheetState extends ConsumerState<_CancellationSheet> {
   @override
   Widget build(BuildContext context) {
     final palette = context.orbit;
-    final faltam =
-        _minimoDaJustificativa - _justificativa.text.trim().length;
+    final faltam = _minimoDaJustificativa - _justificativa.text.trim().length;
 
     return Padding(
       /// O teclado empurra o conteúdo em vez de cobrir o botão.
@@ -196,6 +195,7 @@ class _SheetState extends ConsumerState<_CancellationSheet> {
         bottom: MediaQuery.viewInsetsOf(context).bottom + OrbitSpacing.md,
       ),
       child: SingleChildScrollView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -214,14 +214,18 @@ class _SheetState extends ConsumerState<_CancellationSheet> {
 
             TextField(
               controller: _justificativa,
+              onTapOutside: (_) =>
+                  FocusManager.instance.primaryFocus?.unfocus(),
               maxLines: 4,
               maxLength: 2000,
               autofocus: true,
               textCapitalization: TextCapitalization.sentences,
               enabled: !_enviando,
               decoration: InputDecoration(
+                suffixIcon: OrbitKeyboardDismissButton(),
                 labelText: 'O que aconteceu',
-                hintText: 'Ex.: ninguém no local às 09h; portaria sem '
+                hintText:
+                    'Ex.: ninguém no local às 09h; portaria sem '
                     'autorização de acesso.',
                 /* O contador do campo já mostra o teto; aqui mostramos o piso,
                    que é o que impede o envio. */
@@ -234,12 +238,10 @@ class _SheetState extends ConsumerState<_CancellationSheet> {
             _Anexos(
               anexos: _anexos,
               habilitado: !_enviando && _anexos.length < _maximoDeFotos,
-              onFoto: () => _anexar(
-                ref.read(mediaCaptureSourceProvider).takePhoto,
-              ),
-              onGaleria: () => _anexar(
-                ref.read(mediaCaptureSourceProvider).pickImage,
-              ),
+              onFoto: () =>
+                  _anexar(ref.read(mediaCaptureSourceProvider).takePhoto),
+              onGaleria: () =>
+                  _anexar(ref.read(mediaCaptureSourceProvider).pickImage),
               onRemover: (indice) => setState(() => _anexos.removeAt(indice)),
             ),
 
@@ -318,11 +320,7 @@ class _Anexos extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: 4),
             child: Row(
               children: [
-                Icon(
-                  Icons.photo_outlined,
-                  size: 16,
-                  color: palette.inkSubtle,
-                ),
+                Icon(Icons.photo_outlined, size: 16, color: palette.inkSubtle),
                 const SizedBox(width: OrbitSpacing.xs),
                 Expanded(
                   child: Text(
@@ -348,9 +346,7 @@ class _Anexos extends StatelessWidget {
               child: OutlinedButton.icon(
                 onPressed: habilitado ? onFoto : null,
                 icon: const Icon(Icons.photo_camera_outlined, size: 18),
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(0, 44),
-                ),
+                style: OutlinedButton.styleFrom(minimumSize: const Size(0, 44)),
                 label: const Text('Câmera'),
               ),
             ),
@@ -359,9 +355,7 @@ class _Anexos extends StatelessWidget {
               child: OutlinedButton.icon(
                 onPressed: habilitado ? onGaleria : null,
                 icon: const Icon(Icons.image_outlined, size: 18),
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(0, 44),
-                ),
+                style: OutlinedButton.styleFrom(minimumSize: const Size(0, 44)),
                 label: const Text('Galeria'),
               ),
             ),

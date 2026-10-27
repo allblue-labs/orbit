@@ -98,7 +98,11 @@ export class CatalogController {
     @Req() request: IdentityRequest,
     @Body() input: CreateProductDto,
   ) {
-    return this.catalog.createProduct(this.organizationId(request), input);
+    return this.catalog.createProduct(
+      this.organizationId(request),
+      input,
+      request.identity,
+    );
   }
 
   @Patch('products/:id')

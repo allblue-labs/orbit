@@ -10,10 +10,12 @@
  *
  * ## O que não é decidido aqui
  *
- * - **Disponibilidade na criação.** `CreateProductDto` não tem `status`: o
+ * - **Situação do cadastro na criação.** `CreateProductDto` não tem `status`: o
  *   item nasce `ACTIVE` pelo default do schema. Retirar de circulação é uma
  *   ação posterior, verificada — `POST` com `status` responde
  *   `400 property status should not exist`.
+ *   A disponibilidade física considera o estoque; a quantidade inicial opcional
+ *   registra uma entrada pelo Inventory Engine na transação do cadastro.
  * - **O SKU na criação.** Não é pedido: o servidor o gera, com contagem própria
  *   por fluxo. O campo era opcional e ninguém o preenchia — todo item nascia sem
  *   código. Na edição ele aparece, porque quem importou um catálogo antigo precisa
@@ -62,6 +64,7 @@ import {
   useUpdateCatalogItem,
 } from "@/hooks/catalog/use-catalog";
 import { useActiveScope } from "@/providers/use-active-scope";
+import { useSession } from "@/providers/session-provider";
 import { ProductKind } from "@/types/contracts";
 import {
   CATALOG_LIMITS,
@@ -83,6 +86,8 @@ interface FormState {
   costPrice: string;
   categoryId: string;
   businessUnitId: string;
+  initialStock: string;
+  initialStockBusinessUnitId: string;
 }
 
 function initialState(item: CatalogItem | null, kind: ProductKind): FormState {
@@ -96,6 +101,8 @@ function initialState(item: CatalogItem | null, kind: ProductKind): FormState {
     costPrice: item?.costPrice ?? "",
     categoryId: item?.categoryId ?? "",
     businessUnitId: item?.businessUnitId ?? "",
+    initialStock: "",
+    initialStockBusinessUnitId: "",
   };
 }
 
@@ -152,11 +159,20 @@ function Body({
   defaultKind: ProductKind;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { businessUnits } = useActiveScope();
+  const { businessUnits, businessUnitId } = useActiveScope();
+  const session = useSession();
+  const canSetInitialStock =
+    session.hasPermission("inventory.manage") &&
+    session.hasCapability("inventory.manage");
   const categories = useCatalogCategories();
-  const [form, setForm] = useState<FormState>(() =>
-    initialState(editing, defaultKind),
-  );
+  const [form, setForm] = useState<FormState>(() => ({
+    ...initialState(editing, defaultKind),
+    initialStockBusinessUnitId:
+      businessUnitId ??
+      businessUnits.find((unit) => unit.isPrimary)?.id ??
+      businessUnits[0]?.id ??
+      "",
+  }));
 
   const create = useCreateCatalogItem();
   const update = useUpdateCatalogItem(editing?.id ?? "");
@@ -177,6 +193,17 @@ function Body({
     costPrice: price(form.costPrice),
     categoryId: optional(form.categoryId),
     businessUnitId: optional(form.businessUnitId),
+    ...(!editing &&
+    form.kind !== ProductKind.SERVICE &&
+    canSetInitialStock &&
+    form.initialStock.trim()
+      ? {
+          initialStock: price(form.initialStock),
+          initialStockBusinessUnitId: optional(
+            form.businessUnitId || form.initialStockBusinessUnitId,
+          ),
+        }
+      : {}),
   });
 
   const submit = (event: React.FormEvent) => {
@@ -201,7 +228,12 @@ function Body({
     update.mutate(input, { onSuccess: done });
   };
 
-  const incomplete = form.name.trim().length < CATALOG_LIMITS.nameMinLength;
+  const incomplete =
+    form.name.trim().length < CATALOG_LIMITS.nameMinLength ||
+    (!editing &&
+      form.kind !== ProductKind.SERVICE &&
+      (price(form.initialStock) ?? 0) > 0 &&
+      !(form.businessUnitId || form.initialStockBusinessUnitId));
   const isService = form.kind === ProductKind.SERVICE;
 
   return (
@@ -374,6 +406,60 @@ function Body({
             </SelectContent>
           </Select>
         </Field>
+
+        {!editing && !isService ? (
+          <>
+            <Field
+              label="Estoque inicial (opcional)"
+              htmlFor="catalog-initial-stock"
+              hint={
+                canSetInitialStock
+                  ? "Registra uma entrada no histórico de estoque. Vazio ou zero cadastra o item sem estoque."
+                  : "Seu acesso ou plano não permite registrar entradas de estoque."
+              }
+            >
+              <Input
+                id="catalog-initial-stock"
+                type="number"
+                min={0}
+                max={9999999}
+                step="0.001"
+                inputMode="decimal"
+                disabled={!canSetInitialStock}
+                value={form.initialStock}
+                onChange={(event) => set("initialStock", event.target.value)}
+                placeholder="0"
+              />
+            </Field>
+            <Field
+              label="Organização do estoque inicial"
+              htmlFor="catalog-initial-stock-unit"
+              hint="Obrigatória quando houver quantidade inicial. O item pode continuar compartilhado com toda a organização."
+            >
+              <Select
+                value={
+                  form.businessUnitId || form.initialStockBusinessUnitId || NONE
+                }
+                disabled={!canSetInitialStock || Boolean(form.businessUnitId)}
+                onValueChange={(value) =>
+                  set("initialStockBusinessUnitId", value === NONE ? "" : value)
+                }
+              >
+                <SelectTrigger id="catalog-initial-stock-unit">
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE}>Selecione</SelectItem>
+                  {businessUnits.map((unit) => (
+                    <SelectItem key={unit.id} value={unit.id}>
+                      {unit.tradeName ?? unit.legalName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          </>
+        ) : null}
 
         <Field
           label={isService ? "Descrição do serviço" : "Descrição"}
