@@ -68,6 +68,7 @@ import { executionBlockedLabel, knownBlockedReason } from "@/registry";
 
 import { useTimeZone } from "@/hooks/use-timezone";
 import { useDateFormatters } from "@/hooks/use-date-formatters";
+import { notifySuccess } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import type { PmocExecutionPreparation } from "@/types/pmoc";
 import {
@@ -221,11 +222,19 @@ function Attendance({
   const finished = isFinished(preparation);
   const previous =
     ATTENDANCE_STEPS.indexOf(step as (typeof ATTENDANCE_STEPS)[number]) - 1;
+  const issueAndClose = async () => {
+    await artifact.mutateAsync(undefined);
+    notifySuccess(
+      "Atendimento de PMOC finalizado",
+      "O relatório de execução fica disponível no equipamento atendido.",
+    );
+    onOpenChange(false);
+  };
   const confirm = async () => {
     try {
       await complete.mutateAsync(completePayload(draft, timeZone));
       setStep("emitir");
-      await artifact.mutateAsync(undefined);
+      await issueAndClose();
     } catch {
       /* Os hooks preservam a mensagem e permitem repetir somente a etapa que falhou. */
     }
@@ -383,7 +392,11 @@ function Attendance({
             <Button
               type="button"
               disabled={pending}
-              onClick={() => artifact.mutate(undefined)}
+              onClick={() =>
+                void issueAndClose().catch(() => {
+                  // The mutation error stays visible for a new attempt.
+                })
+              }
             >
               {pending ? (
                 <Loader2 className="size-4 animate-spin" />

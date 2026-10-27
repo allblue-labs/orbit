@@ -28,7 +28,13 @@
  * `docs/pmoc-v2-web.md`.
  */
 import { useState } from "react";
-import { FileDown, Loader2, MoreHorizontal, Pencil } from "lucide-react";
+import {
+  FileDown,
+  Loader2,
+  MoreHorizontal,
+  Pencil,
+  PenLine,
+} from "lucide-react";
 
 import { MutationError } from "@/components/artifact-studio/mutation-error";
 import { ConfirmDialog } from "@/components/financial/confirm.dialog";
@@ -42,11 +48,13 @@ import {
 import {
   useActivatePmocPlan,
   useCancelPmocPlan,
+  useCreatePmocSignatureLink,
   usePmocPlanDocument,
   useSuspendPmocPlan,
 } from "@/hooks/pmoc/use-pmoc";
 import { useSession } from "@/providers/session-provider";
 import type { PmocPlan } from "@/types/pmoc";
+import { PmocSignatureLinkDialog } from "./pmoc-signature-link.dialog";
 import { PmocPlanEditDialog } from "./pmoc-plan-edit.dialog";
 
 /**
@@ -88,6 +96,7 @@ export function PmocPlanActions({ plan }: { plan: PmocPlan }) {
   const cancel = useCancelPmocPlan(plan.id);
 
   const document = usePmocPlanDocument(plan.id);
+  const signatureLink = useCreatePmocSignatureLink();
 
   const [editing, setEditing] = useState(false);
   const [pending, setPending] = useState<string | null>(null);
@@ -107,7 +116,7 @@ export function PmocPlanActions({ plan }: { plan: PmocPlan }) {
 
   return (
     <>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {/* O contrato impresso: partes, vigência, periodicidade, equipamentos
             cobertos e o roteiro de cada unidade. Não é o relatório de execução —
             esse nasce de uma manutenção feita, um por equipamento atendido. */}
@@ -124,6 +133,22 @@ export function PmocPlanActions({ plan }: { plan: PmocPlan }) {
           )}
           Baixar contrato
         </Button>
+
+        {canManage && plan.coveredEquipment > 0 ? (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={signatureLink.isPending}
+            onClick={() => signatureLink.mutate(plan.id)}
+          >
+            {signatureLink.isPending ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <PenLine className="size-3.5" />
+            )}
+            Enviar contrato para assinatura
+          </Button>
+        ) : null}
 
         {canManage ? (
           <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
@@ -180,6 +205,13 @@ export function PmocPlanActions({ plan }: { plan: PmocPlan }) {
         onConfirm={() => {
           mutation?.mutate(undefined, { onSuccess: () => setPending(null) });
         }}
+      />
+
+      <PmocSignatureLinkDialog
+        resultado={signatureLink.data ?? null}
+        error={signatureLink.error}
+        isPending={signatureLink.isPending}
+        onOpenChange={() => signatureLink.reset()}
       />
 
       <PmocPlanEditDialog
