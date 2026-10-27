@@ -205,27 +205,14 @@ describe('Ordem de Serviço premium', () => {
     expect(texto).toContain('3 h 15 min');
   });
 
-  it('omite a coluna do autor quando nenhuma etapa tem autor', async () => {
-    const comAutor = pdfText((await renderer.render(entrada())).bytes);
-    expect(comAutor).toContain('POR QUEM');
-
-    const semAutor = pdfText(
-      (
-        await renderer.render(
-          entrada({
-            operacao: {
-              code: 'OP-000072',
-              openedAt: '24/09/2026, 19:20',
-              completedAt: '25/09/2026, 12:25',
-            },
-          }),
-        )
-      ).bytes,
-    );
-    expect(semAutor).toContain('Andamento do atendimento');
-    /* Uma coluna inteira de traços ocupa um terço da largura para não dizer
-       nada. */
-    expect(semAutor).not.toContain('POR QUEM');
+  it('mantém as datas úteis sem imprimir a trilha de etapas do sistema', async () => {
+    const texto = pdfText((await renderer.render(entrada())).bytes);
+    expect(texto).not.toContain('Andamento do atendimento');
+    expect(texto).not.toContain('POR QUEM');
+    expect(texto).toContain('INÍCIO DO ATENDIMENTO');
+    expect(texto).toContain('CONCLUSÃO DO ATENDIMENTO');
+    expect(texto).toContain('25/09/2026, 09:10');
+    expect(texto).toContain('25/09/2026, 12:25');
   });
 
   it('imprime a data de garantia em pt-BR, nunca em ISO', async () => {
@@ -290,6 +277,6 @@ describe('Ordem de Serviço premium', () => {
     const texto = pdfText(campo.bytes);
     expect(texto).toContain('Ordem de Serviço');
     expect(texto).toContain('Identificação da ordem de serviço');
-    expect(texto).toContain('Andamento do atendimento');
+    expect(texto).not.toContain('Andamento do atendimento');
   });
 });

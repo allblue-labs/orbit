@@ -268,7 +268,7 @@ describe('html-safe', () => {
     expect(formatAnswer(false)).toBe('Não');
     expect(formatAnswer(12.5)).toBe('12.5');
     expect(formatAnswer(['a', 'b'])).toBe('a, b');
-    expect(formatAnswer({ x: 1 })).toBe('{"x":1}');
+    expect(formatAnswer({ x: 1 })).toBe('X: 1');
   });
 
   it('aceita hexadecimal de 3 e 6 dígitos e recusa o resto', () => {

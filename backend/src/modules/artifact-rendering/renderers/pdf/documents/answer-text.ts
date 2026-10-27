@@ -1,9 +1,9 @@
 /**
  * A resposta de um campo, como ela deve sair impressa.
  *
- * `formatAnswer` serve a qualquer renderer e devolve o valor como ele chegou —
- * o que é certo para o HTML e errado para um papel em português. Duas coisas
- * saíam mal e as duas foram vistas numa amostra, não num teste:
+ * `formatAnswer` apresenta respostas simples e estruturadas em todos os
+ * renderers. Este módulo acrescenta a formatação dos tipos de campo do
+ * formulário. Duas coisas saíam mal nas amostras:
  *
  * - **data ISO**: `2026-10-01` num recibo ou num orçamento que o cliente
  *   arquiva é defeito, não tecnicismo;
