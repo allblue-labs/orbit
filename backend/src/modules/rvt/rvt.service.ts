@@ -12,6 +12,8 @@ import { ArtifactRenderService } from '../artifact-rendering/artifact-render.ser
 import { WorkforceService } from '../workforce/workforce.service';
 import type {
   CreateAdHocRvtDto,
+  CreateRvtOccurrenceDto,
+  UpdateRvtOccurrenceDto,
   CreateRvtConfigurationDto,
   RvtConfigurationQueryDto,
   RvtOccurrenceQueryDto,
@@ -32,6 +34,7 @@ import { RvtRepository } from './rvt.repository';
 
 export interface RvtActor {
   organizationId: string;
+  isOrganizationOwner?: boolean;
   actorId: string;
   businessUnitIds: readonly string[];
   permissions: readonly string[];
@@ -185,6 +188,10 @@ export class RvtService {
 
   async create(actor: RvtActor, input: CreateRvtConfigurationDto) {
     this.assertUnit(actor, input.businessUnitId);
+    if (!input.equipmentIds?.length)
+      throw new ValidationException(
+        'Selecione ao menos um equipamento para o RVT.',
+      );
     const tipo = await this.requireMaintenanceType(
       actor.organizationId,
       input.maintenanceTypeId,
@@ -208,7 +215,7 @@ export class RvtService {
     if (query.businessUnitId) this.assertUnit(actor, query.businessUnitId);
     const values = await this.repository.listConfigurations(
       actor.organizationId,
-      query,
+      { ...query, businessUnitIds: actor.businessUnitIds },
     );
     return {
       data: values.filter(Boolean).map((x) => this.mapper.configuration(x)),
@@ -242,6 +249,10 @@ export class RvtService {
 
   async update(id: string, actor: RvtActor, input: UpdateRvtConfigurationDto) {
     const current = await this.get(id, actor);
+    if (input.equipmentIds && !input.equipmentIds.length)
+      throw new ValidationException(
+        'Selecione ao menos um equipamento para o RVT.',
+      );
     const tipo = await this.requireMaintenanceType(
       actor.organizationId,
       input.maintenanceTypeId ?? current.maintenanceType?.id,
@@ -252,6 +263,7 @@ export class RvtService {
       coverageStart: input.coverageStart ?? current.coverage.start,
       coverageEnd: input.coverageEnd ?? current.coverage.end ?? undefined,
       timezone: input.timezone ?? current.timezone,
+      startTime: input.startTime ?? current.startTime,
     };
     const candidates = generateRvtOccurrences(effective);
     try {
@@ -275,10 +287,10 @@ export class RvtService {
   }
   async occurrences(actor: RvtActor, query: RvtOccurrenceQueryDto) {
     if (query.businessUnitId) this.assertUnit(actor, query.businessUnitId);
-    const rows = await this.repository.listOccurrences(
-      actor.organizationId,
-      query,
-    );
+    const rows = await this.repository.listOccurrences(actor.organizationId, {
+      ...query,
+      businessUnitIds: actor.businessUnitIds,
+    });
     return {
       data: rows.map((x) =>
         this.mapper.occurrence(x, x.configuration.timezone),
@@ -294,43 +306,85 @@ export class RvtService {
       actor.organizationId,
       query,
     );
-    const equipment = new Map(
-      result.equipment.map((item) => [item.id, item.name]),
-    );
-    const messages: Record<string, string> = {
-      RVT_CONFIGURATION_CREATED: 'Configuração RVT criada',
-      RVT_OCCURRENCES_RECONCILED: 'Agenda de visitas futuras reconciliada',
-      RVT_EXECUTION_STARTED: 'Visita técnica iniciada',
-      RVT_EXECUTION_UPDATED: 'Dados da visita atualizados',
-      RVT_EQUIPMENT_ADDED: 'Equipamento adicionado à visita',
-      RVT_CONTEXTUAL_EQUIPMENT_REGISTERED:
-        'Novo equipamento cadastrado durante a visita',
-      RVT_CONTEXTUAL_CUSTOMER_REGISTERED:
-        'Novo cliente cadastrado no atendimento',
-      RVT_CUSTOMER_ACKNOWLEDGED: 'Cliente registrou ciência da visita',
-      RVT_EXECUTION_COMPLETED: 'Visita técnica concluída',
-      RVT_ARTIFACT_CREATED: 'Documento RVT gerado',
-      RVT_AD_HOC_CREATED: 'RVT avulso criado e iniciado',
-    };
     return {
       data: result.data.map((item) => ({
         id: item.id,
-        type: item.action,
-        message: messages[item.action] ?? 'Evento da visita técnica',
-        occurredAt: item.createdAt.toISOString(),
+        type: 'RVT_EXECUTION_COMPLETED',
+        message: item.occurrence.configuration.name,
+        occurredAt: (
+          item.performedAt ??
+          item.completedAt ??
+          item.startedAt
+        ).toISOString(),
         actor: item.user
           ? { id: item.user.id, name: item.user.displayName }
           : null,
-        equipment:
-          item.entityId && equipment.has(item.entityId)
-            ? { id: item.entityId, name: equipment.get(item.entityId)! }
-            : null,
-        data: (item.after ?? {}) as Record<string, unknown>,
+        equipment: null,
+        data: {
+          executionId: item.id,
+          sequenceNumber: item.occurrence.sequenceNumber,
+        },
       })),
       nextCursor: result.nextCursor,
       hasNextPage: result.hasNextPage,
     };
   }
+
+  async manageOccurrence(
+    configurationId: string,
+    actor: RvtActor,
+    input: CreateRvtOccurrenceDto | UpdateRvtOccurrenceDto,
+    occurrenceId?: string,
+    remove = false,
+  ) {
+    const configuration = await this.get(configurationId, actor);
+    const current = occurrenceId
+      ? await this.repository.occurrence(occurrenceId, actor.organizationId)
+      : null;
+    if (
+      occurrenceId &&
+      (!current || current.configurationId !== configurationId)
+    )
+      throw new EntityNotFoundException('RvtOccurrence', occurrenceId);
+    let scheduledFor: Date | undefined;
+    let scheduledDate = input.scheduledDate;
+    if (scheduledDate || input.startTime) {
+      scheduledDate ??= current?.localScheduledDate?.toISOString().slice(0, 10);
+      if (!scheduledDate)
+        throw new ValidationException('Informe a data da visita.');
+      const currentTime = current?.scheduledFor
+        ? new Intl.DateTimeFormat('en-GB', {
+            timeZone: configuration.timezone,
+            hour: '2-digit',
+            minute: '2-digit',
+            hourCycle: 'h23',
+          }).format(current.scheduledFor)
+        : configuration.startTime;
+      const [hour, minute] = (input.startTime ?? currentTime)
+        .split(':')
+        .map(Number);
+      scheduledFor = instantFromCivilDate(
+        scheduledDate,
+        configuration.timezone,
+        hour,
+        minute,
+      );
+    }
+    try {
+      await this.repository.manageOccurrence(
+        configurationId,
+        actor.organizationId,
+        actor.actorId,
+        { ...input, scheduledDate, scheduledFor },
+        occurrenceId,
+        remove,
+      );
+      return this.get(configurationId, actor);
+    } catch (error) {
+      this.mapError(error);
+    }
+  }
+
   async preparation(id: string, actor: RvtActor) {
     const occurrence = await this.repository.occurrence(
       id,
@@ -348,8 +402,7 @@ export class RvtService {
         )
       : null;
     const responsibleId =
-      occurrence.configuration.defaultResponsibleFieldTechnicianId ??
-      actor.actorId;
+      occurrence.responsibleFieldTechnicianId ?? actor.actorId;
     const eligibility = await this.workforce.professionalEligibility(
       actor.organizationId,
       responsibleId,
@@ -365,10 +418,25 @@ export class RvtService {
       occurrence.businessUnitId,
     );
     const blockers: string[] = [];
+    if (
+      !actor.isOrganizationOwner &&
+      (!(await this.repository.canExecute(
+        actor.organizationId,
+        actor.actorId,
+        occurrence.businessUnitId,
+      )) ||
+        (responsibleId !== actor.actorId &&
+          !actor.permissions.includes('rvt.manage') &&
+          !actor.permissions.includes('*')))
+    )
+      blockers.push('ACTOR_NOT_ELIGIBLE');
     if (occurrence.status === 'CANCELLED')
       blockers.push('OCCURRENCE_CANCELLED');
     if (occurrence.execution) blockers.push('OCCURRENCE_ALREADY_EXECUTED');
-    if (!eligibility.eligible)
+    if (
+      !eligibility.eligible &&
+      !(actor.isOrganizationOwner && responsibleId === actor.actorId)
+    )
       blockers.push(
         eligibility.blockedReason ?? 'FIELD_TECHNICIAN_NOT_ELIGIBLE',
       );
@@ -406,16 +474,30 @@ export class RvtService {
     );
     if (!occurrence) throw new EntityNotFoundException('RvtOccurrence', id);
     this.assertUnit(actor, occurrence.businessUnitId);
+    await this.assertExecutor(actor, occurrence.businessUnitId);
+    if (
+      !actor.isOrganizationOwner &&
+      occurrence.responsibleFieldTechnicianId &&
+      occurrence.responsibleFieldTechnicianId !== actor.actorId &&
+      !actor.permissions.includes('rvt.manage') &&
+      !actor.permissions.includes('*')
+    )
+      throw new ForbiddenException(
+        'Esta visita está atribuída a outro técnico de campo.',
+      );
     const responsibleId =
       input.responsibleFieldTechnicianId ??
-      occurrence.configuration.defaultResponsibleFieldTechnicianId ??
-      actor.actorId;
+      (actor.isOrganizationOwner
+        ? actor.actorId
+        : (occurrence.responsibleFieldTechnicianId ?? actor.actorId));
     if (
       responsibleId !== actor.actorId &&
+      !actor.isOrganizationOwner &&
+      !actor.permissions.includes('*') &&
       !actor.permissions.includes('rvt.manage')
     )
       throw new ForbiddenException(
-        'Only an RVT manager may assign another field technician',
+        'Somente o proprietário ou um gestor de RVT pode atribuir outro técnico de campo.',
       );
     try {
       const result = await this.repository.startExecution({
@@ -434,7 +516,20 @@ export class RvtService {
     const value = await this.repository.execution(id, actor.organizationId);
     if (!value) throw new EntityNotFoundException('RvtExecution', id);
     this.assertUnit(actor, value.businessUnitId);
-    return this.mapper.execution(value);
+    const result = this.mapper.execution(value);
+    if (
+      !actor.isOrganizationOwner &&
+      (value.responsibleFieldTechnicianId !== actor.actorId ||
+        (!actor.permissions.includes('rvt.execute') &&
+          !actor.permissions.includes('*')) ||
+        !(await this.repository.canExecute(
+          actor.organizationId,
+          actor.actorId,
+          value.businessUnitId,
+        )))
+    )
+      return { ...result, allowedActions: ['VIEW'] };
+    return result;
   }
   async updateExecution(
     id: string,
@@ -575,6 +670,11 @@ export class RvtService {
         'Idempotency-Key must contain 8 to 160 safe characters',
       );
     this.assertUnit(actor, input.businessUnitId);
+    await this.assertExecutor(actor, input.businessUnitId);
+    await this.requireMaintenanceType(
+      actor.organizationId,
+      input.maintenanceTypeId,
+    );
     if (Boolean(input.customerId) === Boolean(input.customer))
       throw new ValidationException(
         'Provide exactly one of customerId or contextual customer',
@@ -582,6 +682,8 @@ export class RvtService {
     if (
       input.responsibleFieldTechnicianId &&
       input.responsibleFieldTechnicianId !== actor.actorId &&
+      !actor.isOrganizationOwner &&
+      !actor.permissions.includes('*') &&
       !actor.permissions.includes('rvt.manage')
     )
       throw new ForbiddenException(
@@ -614,7 +716,28 @@ export class RvtService {
     const value = await this.repository.execution(id, actor.organizationId);
     if (!value) throw new EntityNotFoundException('RvtExecution', id);
     this.assertUnit(actor, value.businessUnitId);
+    await this.assertExecutor(actor, value.businessUnitId);
+    if (
+      !actor.isOrganizationOwner &&
+      value.responsibleFieldTechnicianId !== actor.actorId
+    )
+      throw new ForbiddenException(
+        'Somente o técnico responsável ou o proprietário pode executar esta visita.',
+      );
     return value;
+  }
+  private async assertExecutor(actor: RvtActor, businessUnitId: string) {
+    if (
+      !actor.isOrganizationOwner &&
+      !(await this.repository.canExecute(
+        actor.organizationId,
+        actor.actorId,
+        businessUnitId,
+      ))
+    )
+      throw new ForbiddenException(
+        'Somente o proprietário ou um técnico de campo pode executar uma visita RVT.',
+      );
   }
   private assertUnit(actor: RvtActor, id: string) {
     if (!actor.businessUnitIds.includes(id))
@@ -624,7 +747,7 @@ export class RvtService {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === 'P2002')
         throw new ConflictException(
-          'RVT already exists for this occurrence or identity',
+          'Já existe um RVT com este código ou uma visita nesta data. Confira o código e as visitas agendadas.',
         );
       if (error.code === 'P2025')
         throw new ValidationException(
@@ -632,6 +755,17 @@ export class RvtService {
         );
     }
     if (error instanceof Error) {
+      const messages: Record<string, string> = {
+        RVT_VISIT_ALREADY_STARTED:
+          'A visita já foi iniciada e não pode ser alterada ou excluída.',
+        RVT_VISIT_EQUIPMENT_REQUIRED:
+          'Selecione ao menos um equipamento para a visita.',
+        RVT_VISIT_EQUIPMENT_OUTSIDE_CONFIGURATION:
+          'Os equipamentos devem pertencer à configuração deste RVT.',
+        RVT_CALENDAR_INVALID: 'Selecione uma agenda ativa desta unidade.',
+      };
+      const message = messages[error.message];
+      if (message) throw new ValidationException(message);
       const known = [
         'BUSINESS_UNIT_SCOPE_INVALID',
         'RVT_OCCURRENCE_NOT_STARTABLE',

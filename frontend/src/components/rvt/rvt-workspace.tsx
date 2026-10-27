@@ -63,7 +63,10 @@ export function RvtWorkspace({ configurationId }: { configurationId: string }) {
 
   return (
     <div className="space-y-5">
-      <ConfigurationHeader configuration={configuration.data} />
+      <ConfigurationHeader
+        key={configuration.data.id}
+        configuration={configuration.data}
+      />
 
       <Tabs defaultValue="visao-geral">
         <TabsList>
@@ -83,13 +86,19 @@ export function RvtWorkspace({ configurationId }: { configurationId: string }) {
              * Uma segunda consulta a `/occurrences` traria as mesmas linhas e
              * abriria a chance de as duas listas discordarem na tela.
              */}
-            <RvtOccurrencesPanel occurrences={configuration.data.occurrences} />
+            <RvtOccurrencesPanel
+              key={configuration.data.id}
+              configuration={configuration.data}
+            />
           </TabBoundary>
         </TabsContent>
 
         <TabsContent value="historico">
           <TabBoundary id="rvt-timeline" label="o histórico">
-            <RvtTimelinePanel configurationId={configurationId} />
+            <RvtTimelinePanel
+              key={configurationId}
+              configurationId={configurationId}
+            />
           </TabBoundary>
         </TabsContent>
       </Tabs>
@@ -163,10 +172,28 @@ function ConfigurationOverview({
   configuration: RvtConfiguration;
 }) {
   const { formatDate } = useDateFormatters();
+  const location =
+    configuration.serviceLocation &&
+    typeof configuration.serviceLocation === "object"
+      ? (configuration.serviceLocation as Record<string, unknown>)
+      : {};
+  const address = [
+    location.street,
+    location.number,
+    location.complement,
+    location.city,
+    location.state ?? location.stateCode,
+  ]
+    .filter((value) => typeof value === "string" && value)
+    .join(", ");
   return (
     <div className="space-y-4">
       <dl className="grid gap-4 rounded-xl border border-border p-4 sm:grid-cols-2 lg:grid-cols-3">
         <Field label="Cliente" value={configuration.customer.name} />
+        <Field
+          label="Endereço do atendimento"
+          value={address || "Não informado"}
+        />
         <Field label="Unidade" value={configuration.businessUnit.name} />
         <Field label="Periodicidade" value={recurrenceLabel(configuration)} />
         <Field
@@ -182,6 +209,7 @@ function ConfigurationOverview({
          * Mostrá-lo evita a leitura errada de quem abre a tela de outro estado.
          */}
         <Field label="Fuso horário" value={configuration.timezone} />
+        <Field label="Horário previsto" value={configuration.startTime} />
         <Field
           label="Técnico em Campo padrão"
           value={
@@ -257,7 +285,7 @@ function Field({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
       <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="truncate text-sm">{value}</dd>
+      <dd className="break-words text-sm">{value}</dd>
     </div>
   );
 }

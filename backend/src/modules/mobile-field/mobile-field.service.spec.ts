@@ -676,3 +676,75 @@ function documentRow(renderStatus: string, documentType = 'SERVICE_ORDER') {
     artifactExecution: { renderStatus, customer: null },
   };
 }
+
+describe('RVT demand visibility and execution', () => {
+  function rvtScenario(eligible: boolean, assigned: string | null = actor.id) {
+    const source = { ...emptySource(), canExecuteRvt: eligible };
+    source.businessUnits.push({
+      id: actor.businessUnitIds[0],
+      legalName: 'Recife',
+      tradeName: null,
+      timezone: 'America/Recife',
+    });
+    source.rvtOccurrences.push({
+      id: 'visit',
+      businessUnitId: actor.businessUnitIds[0],
+      status: 'SCHEDULED',
+      scheduledFor: new Date('2099-01-01T12:00:00Z'),
+      schedulingEventId: 'event',
+      updatedAt: new Date(),
+      equipmentIds: [],
+      responsibleFieldTechnicianId: assigned,
+      execution: null,
+      configuration: {
+        id: 'config',
+        name: 'Visita mensal',
+        timezone: 'America/Recife',
+        equipment: [],
+        customerId: 'customer',
+        serviceLocation: {},
+        maintenanceType: { label: 'Mensal' },
+      },
+    });
+    return new MobileFieldService({
+      project: jest.fn().mockResolvedValue(source),
+    } as never);
+  }
+  it('shows an unassigned demand to an auxiliary without execution actions', async () => {
+    const service = rvtScenario(false, 'another');
+    const result = await service.workQueue(
+      { ...actor, permissions: ['rvt.read', 'rvt.execute'] },
+      {},
+    );
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0]!.allowedActions).toEqual(['VIEW']);
+  });
+  it('lets the assigned field technician execute', async () => {
+    const result = await rvtScenario(true).workQueue(
+      { ...actor, permissions: ['rvt.read', 'rvt.execute'] },
+      {},
+    );
+    expect(result.data[0]!.allowedActions).toContain('EXECUTE_RVT');
+  });
+  it('lets another technician view but does not execute someone else demand', async () => {
+    const result = await rvtScenario(true, 'another').workQueue(
+      { ...actor, permissions: ['rvt.read', 'rvt.execute'] },
+      {},
+    );
+    expect(result.data[0]!.allowedActions).toEqual(['VIEW']);
+  });
+  it('allows an eligible technician to start an unassigned visit', async () => {
+    const result = await rvtScenario(true, null).workQueue(
+      { ...actor, permissions: ['rvt.read', 'rvt.execute'] },
+      {},
+    );
+    expect(result.data[0]!.allowedActions).toContain('EXECUTE_RVT');
+  });
+  it('allows the structural owner to execute without requiring a field profile', async () => {
+    const result = await rvtScenario(false, 'another').workQueue(
+      { ...actor, isOrganizationOwner: true, permissions: ['*'] },
+      {},
+    );
+    expect(result.data[0]!.allowedActions).toContain('EXECUTE_RVT');
+  });
+});

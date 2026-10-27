@@ -44,6 +44,7 @@ function servico(
     completedAt?: Date | null;
     completedBy?: { id: string; displayName: string } | null;
   } = {},
+  fieldActor = true,
 ) {
   const source = {
     id: operationId,
@@ -94,7 +95,7 @@ function servico(
 
   const repository = {
     preparation: jest.fn().mockResolvedValue(source),
-    isFieldActor: jest.fn().mockResolvedValue(true),
+    isFieldActor: jest.fn().mockResolvedValue(fieldActor),
     operationMaterials: jest.fn().mockResolvedValue([]),
   };
   const signatures = {
@@ -282,5 +283,22 @@ describe('responsável continua executando', () => {
       'AUXILIARY_TECHNICIAN_READ_ONLY',
     );
     expect(executionEligibility.eligible).toBe(true);
+  });
+});
+
+describe('owner executing an assigned attendance', () => {
+  it('opens the shared wizard without needing a field professional profile', async () => {
+    const owner = {
+      id: responsavelId,
+      organizationId,
+      businessUnitIds: ['01900000-0000-7000-8000-000000000009'],
+      permissions: PERMISSOES,
+      isOrganizationOwner: true,
+    };
+    const preparation = await servico('IN_PROGRESS', {}, false).preparation(
+      owner,
+      operationId,
+    );
+    expect(preparation.allowedActions).toContain('COMPLETE');
   });
 });

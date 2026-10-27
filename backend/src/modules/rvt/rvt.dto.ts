@@ -7,6 +7,8 @@ import {
 import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
+  ArrayMinSize,
+  ArrayUnique,
   IsBoolean,
   IsEmail,
   IsIn,
@@ -54,6 +56,11 @@ export class RvtTimelineQueryDto extends CursorDto {}
 export class CreateRvtConfigurationDto {
   @ApiProperty() @IsUUIDv7() businessUnitId!: string;
   @ApiProperty() @IsUUIDv7() customerId!: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUIDv7() calendarId?: string | null;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  startTime?: string;
   @ApiProperty()
   @Transform(trim)
   @IsString()
@@ -100,11 +107,11 @@ export class CreateRvtConfigurationDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsUUIDv7()
-  technicalResponsibleUserId?: string;
+  technicalResponsibleUserId?: string | null;
   @ApiPropertyOptional()
   @IsOptional()
   @IsUUIDv7()
-  defaultResponsibleFieldTechnicianId?: string;
+  defaultResponsibleFieldTechnicianId?: string | null;
   @ApiPropertyOptional({ default: false })
   @IsOptional()
   @IsBoolean()
@@ -121,13 +128,39 @@ export class CreateRvtConfigurationDto {
 }
 
 export class UpdateRvtConfigurationDto extends PartialType(
-  CreateRvtConfigurationDto,
-) {
-  override businessUnitId?: never;
-  override customerId?: never;
-  override code?: never;
-  override scheduleMode?: never;
+  OmitType(CreateRvtConfigurationDto, [
+    'businessUnitId',
+    'customerId',
+    'code',
+    'scheduleMode',
+  ] as const),
+) {}
+
+export class CreateRvtOccurrenceDto {
+  @ApiPropertyOptional({ enum: ['SCHEDULED', 'CANCELLED'] })
+  @IsOptional()
+  @IsIn(['SCHEDULED', 'CANCELLED'])
+  status?: 'SCHEDULED' | 'CANCELLED';
+  @ApiProperty() @Matches(DATE) scheduledDate!: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  startTime?: string;
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsUUIDv7()
+  responsibleFieldTechnicianId?: string | null;
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
+  @IsUUIDv7({ each: true })
+  equipmentIds?: string[];
 }
+export class UpdateRvtOccurrenceDto extends PartialType(
+  CreateRvtOccurrenceDto,
+) {}
 
 export class StartRvtExecutionDto {
   @ApiPropertyOptional()

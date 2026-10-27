@@ -27,6 +27,8 @@ import {
   CaptureCustomerAcknowledgementDto,
   CompleteRvtExecutionDto,
   CreateAdHocRvtDto,
+  CreateRvtOccurrenceDto,
+  UpdateRvtOccurrenceDto,
   CreateRvtConfigurationDto,
   RegisterRvtEquipmentDto,
   RvtConfigurationQueryDto,
@@ -134,6 +136,40 @@ export class RvtController {
   ) {
     return this.rvt.timeline(id, this.actor(r), q);
   }
+  @Post('configurations/:id/occurrences')
+  @Capabilities('rvt.manage')
+  @Permissions('rvt.manage')
+  createOccurrence(
+    @Req() r: IdentityRequest,
+    @Param('id', ParseUUIDv7Pipe) id: string,
+    @Body() input: CreateRvtOccurrenceDto,
+  ) {
+    return this.rvt.manageOccurrence(id, this.actor(r), input);
+  }
+
+  @Patch('configurations/:id/occurrences/:occurrenceId')
+  @Capabilities('rvt.manage')
+  @Permissions('rvt.manage')
+  updateOccurrence(
+    @Req() r: IdentityRequest,
+    @Param('id', ParseUUIDv7Pipe) id: string,
+    @Param('occurrenceId', ParseUUIDv7Pipe) occurrenceId: string,
+    @Body() input: UpdateRvtOccurrenceDto,
+  ) {
+    return this.rvt.manageOccurrence(id, this.actor(r), input, occurrenceId);
+  }
+
+  @Delete('configurations/:id/occurrences/:occurrenceId')
+  @Capabilities('rvt.manage')
+  @Permissions('rvt.manage')
+  removeOccurrence(
+    @Req() r: IdentityRequest,
+    @Param('id', ParseUUIDv7Pipe) id: string,
+    @Param('occurrenceId', ParseUUIDv7Pipe) occurrenceId: string,
+  ) {
+    return this.rvt.manageOccurrence(id, this.actor(r), {}, occurrenceId, true);
+  }
+
   @Get('occurrences')
   @Capabilities('rvt.read')
   @Permissions('rvt.read')
@@ -259,6 +295,7 @@ export class RvtController {
       throw new ForbiddenException('Organization context required');
     return {
       organizationId: i.organizationId,
+      isOrganizationOwner: i.isOrganizationOwner,
       actorId: i.id,
       businessUnitIds: i.businessUnitIds,
       permissions: i.permissions,

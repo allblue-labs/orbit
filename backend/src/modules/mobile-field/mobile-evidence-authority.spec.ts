@@ -131,3 +131,54 @@ describe('evidência de uma execução de PMOC', () => {
     await expect(autorizar()).resolves.toMatchObject({ denied: true });
   });
 });
+
+describe('RVT evidence ownership', () => {
+  async function authorize(owner: boolean, assigned = true) {
+    const tx = {
+      organizationMembership: {
+        findFirst: jest.fn().mockResolvedValue({
+          role: { permissions: ['rvt.read', 'rvt.execute'] },
+        }),
+      },
+      businessUnitMembership: {
+        findMany: jest.fn().mockResolvedValue([]),
+        findFirst: jest.fn().mockResolvedValue({ id: 'membership' }),
+      },
+      professionalProfile: { findFirst: jest.fn().mockResolvedValue(null) },
+      rvtExecution: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: EXECUCAO,
+          businessUnitId: UNIDADE,
+          status: 'IN_PROGRESS',
+          operationId: null,
+          responsibleFieldTechnicianId: assigned ? TECNICO : 'another',
+        }),
+      },
+    };
+    const repository = new MobileEvidenceRepository({
+      run: (work: (client: typeof tx) => unknown) => work(tx),
+    } as never);
+    return repository.authorizeTarget(
+      {
+        id: TECNICO,
+        organizationId: ORG,
+        businessUnitIds: [UNIDADE],
+        permissions: ['rvt.execute'],
+        isOrganizationOwner: owner,
+      },
+      'RVT_EXECUTION',
+      EXECUCAO,
+    );
+  }
+  it('allows the structural owner executing the visit to attach evidence', async () => {
+    await expect(authorize(true)).resolves.toMatchObject({ denied: false });
+  });
+  it('does not grant execution evidence access to an auxiliary without a field profile', async () => {
+    await expect(authorize(false)).resolves.toMatchObject({ denied: true });
+  });
+  it('does not use ownership to impersonate the actual evidence collector', async () => {
+    await expect(authorize(true, false)).resolves.toMatchObject({
+      denied: true,
+    });
+  });
+});

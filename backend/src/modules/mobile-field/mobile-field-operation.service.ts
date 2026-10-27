@@ -531,7 +531,11 @@ export class MobileFieldOperationService {
       source.businessUnitId,
       actor.id,
     );
-    if (!assigned || !fieldActor || !this.has(actor, 'operations.read'))
+    if (
+      !assigned ||
+      (!fieldActor && actor.isOrganizationOwner !== true) ||
+      !this.has(actor, 'operations.read')
+    )
       throw new EntityNotFoundException('Operation', operationId);
     return source;
   }

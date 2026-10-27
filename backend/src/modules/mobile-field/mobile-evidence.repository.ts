@@ -141,7 +141,7 @@ export class MobileEvidenceRepository {
         context: target,
         readable,
         denied:
-          !profile ||
+          (!profile && actor.isOrganizationOwner !== true) ||
           !membership ||
           !target.assigned ||
           !target.mutable ||
@@ -258,7 +258,7 @@ export class MobileEvidenceRepository {
         select: { id: true },
       });
       if (
-        !profile ||
+        (!profile && actor.isOrganizationOwner !== true) ||
         !membership ||
         !context.assigned ||
         !context.mutable ||
