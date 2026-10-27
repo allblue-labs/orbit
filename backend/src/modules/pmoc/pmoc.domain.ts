@@ -334,9 +334,9 @@ export function isValidPlanCode(value: string): boolean {
  * ## Por que isto é projeção, e não leitura
  *
  * Os ciclos do PMOC são **rolantes**: ativar o plano cria o primeiro, e cada
- * conclusão cria o seguinte a partir da data em que o trabalho foi de fato
- * feito. É o desenho certo — a próxima manutenção conta a partir da última
- * real, não de um calendário que ninguém cumpriu.
+ * conclusão cria o seguinte. Em atrasos, a periodicidade conta da data real
+ * do atendimento; em antecipações, do vencimento do ciclo atendido. Assim o
+ * próximo vencimento sempre avança e não colide com um ciclo já registrado.
  *
  * O efeito colateral é que nada no sistema respondia *"quantas visitas este
  * plano vai ter"* antes da primeira ser executada. Esta função responde, sem

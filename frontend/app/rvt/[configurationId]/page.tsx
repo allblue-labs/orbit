@@ -1,4 +1,5 @@
 import { RvtWorkspace } from "@/components/rvt/rvt-workspace";
+import { RvtBackLink } from "@/components/rvt/rvt-back-link";
 import { WorkspacePage } from "@/workspace";
 
 /**
@@ -18,6 +19,7 @@ export default async function RvtConfigurationPage({
       description="Configuração, visitas previstas e histórico."
       activeLabel="Detalhe"
       suspense={false}
+      action={<RvtBackLink />}
     >
       <RvtWorkspace configurationId={configurationId} />
     </WorkspacePage>

@@ -14,9 +14,7 @@
  * Não há "Gerar documento" nesta tela: **configuração não é documento**. O RVT
  * emitido nasce da execução, e é de lá que se chega até ele.
  */
-import Link from "next/link";
-import { ROUTES } from "@/lib/routes";
-import { ArrowLeft, Pencil } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { useState } from "react";
 
 import { PanelError } from "@/components/panels";
@@ -119,12 +117,6 @@ function ConfigurationHeader({
 
   return (
     <header className="space-y-3 rounded-xl border border-border p-4">
-      <Button variant="ghost" size="sm" className="-ml-2" asChild>
-        <Link href={`${ROUTES.operations}?secao=rvt`}>
-          <ArrowLeft className="size-4" />
-          Voltar para RVT
-        </Link>
-      </Button>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="truncate text-lg font-semibold">

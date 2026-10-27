@@ -25,7 +25,7 @@
  * pipeline canônico de artefatos — esta tela não renderiza PDF.
  */
 import { useState } from "react";
-import { FileText, Images, Package, Route, UserRound } from "lucide-react";
+import { FileText, Images, Package, UserRound } from "lucide-react";
 import Link from "next/link";
 
 import { DocumentViewer } from "@/components/documents/document-viewer";
@@ -101,12 +101,6 @@ function ExecutionHeader({ execution }: { execution: RvtExecution }) {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <ExecutionStatusBadge status={execution.status} />
-          <Button asChild variant="ghost" size="sm">
-            <Link href={ROUTES.rvt}>
-              <Route className="size-3.5" />
-              Visitas técnicas
-            </Link>
-          </Button>
         </div>
       </div>
 
