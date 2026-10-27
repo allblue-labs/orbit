@@ -160,6 +160,7 @@ Cenario cenario(
   Backend backend, {
   String operationId = 'op-1',
   bool embedded = false,
+  Widget? screenOverride,
   double textScale = 1.0,
   double width = 390,
 }) {
@@ -204,16 +205,18 @@ Cenario cenario(
       ),
       child: MaterialApp(
         theme: OrbitTheme.light(),
-        home: embedded
-            ? Scaffold(
-                body: SingleChildScrollView(
-                  child: CustomerAcknowledgementScreen(
-                    operationId: operationId,
-                    embedded: true,
-                  ),
-                ),
-              )
-            : CustomerAcknowledgementScreen(operationId: operationId),
+        home:
+            screenOverride ??
+            (embedded
+                ? Scaffold(
+                    body: SingleChildScrollView(
+                      child: CustomerAcknowledgementScreen(
+                        operationId: operationId,
+                        embedded: true,
+                      ),
+                    ),
+                  )
+                : CustomerAcknowledgementScreen(operationId: operationId)),
       ),
     ),
   );

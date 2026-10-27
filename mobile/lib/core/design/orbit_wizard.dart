@@ -52,6 +52,8 @@ class OrbitWizardStep {
     this.complete = false,
     this.lockedReason,
     this.forward,
+    this.terminal = false,
+    this.hideForward = false,
   });
 
   /// O nome da etapa, como a pessoa a chamaria.
@@ -89,6 +91,8 @@ class OrbitWizardStep {
   /// mostrava "Iniciar atendimento" e "Avançar · Execução" juntos, sem nada
   /// dizendo qual vinha primeiro.
   final OrbitWizardForward? forward;
+  final bool terminal;
+  final bool hideForward;
 }
 
 /// A ação do domínio que ocupa o lugar do avanço numa etapa.
@@ -176,6 +180,8 @@ class OrbitWizardState extends State<OrbitWizard> {
     }
   }
 
+  Future<void> goToStep(int index) => _ir(index);
+
   /// A etapa seguinte, ou `null` na última.
   ///
   /// Sempre a vizinha — nenhuma busca por "a próxima alcançável". Era essa busca que
@@ -189,6 +195,7 @@ class OrbitWizardState extends State<OrbitWizard> {
   /// `null` só na última etapa sem ação declarada — aí não há para onde ir nem
   /// o que fazer, e um botão morto é pior que nenhum.
   _Avanco? _avanco(OrbitWizardStep etapa, int? proxima) {
+    if (etapa.hideForward) return null;
     if (etapa.forward case final OrbitWizardForward acao) {
       return _Avanco(
         rotulo: acao.label,
@@ -236,7 +243,7 @@ class OrbitWizardState extends State<OrbitWizard> {
     _visited.add(_atual);
     final etapa = widget.steps[_atual];
     final proxima = _proxima;
-    final anterior = _anterior;
+    final anterior = etapa.terminal ? null : _anterior;
     final avanco = _avanco(etapa, proxima);
 
     return Column(
@@ -256,7 +263,11 @@ class OrbitWizardState extends State<OrbitWizard> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _Trilho(steps: widget.steps, current: _atual, onSelect: _ir),
+              _Trilho(
+                steps: widget.steps,
+                current: _atual,
+                onSelect: etapa.terminal ? null : _ir,
+              ),
               Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: OrbitSpacing.gutter,
@@ -410,7 +421,7 @@ class _Trilho extends StatelessWidget {
 
   final List<OrbitWizardStep> steps;
   final int current;
-  final ValueChanged<int> onSelect;
+  final ValueChanged<int>? onSelect;
 
   @override
   Widget build(BuildContext context) {
@@ -431,7 +442,7 @@ class _Trilho extends StatelessWidget {
               index: indice,
               total: steps.length,
               current: indice == current,
-              onTap: () => onSelect(indice),
+              onTap: onSelect == null ? null : () => onSelect!(indice),
             ),
           ],
         ],

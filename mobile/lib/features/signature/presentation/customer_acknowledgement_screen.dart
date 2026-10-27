@@ -22,10 +22,12 @@ class CustomerAcknowledgementScreen extends ConsumerStatefulWidget {
     super.key,
     required this.operationId,
     this.embedded = false,
+    this.onConfirmed,
   });
 
   final String operationId;
   final bool embedded;
+  final Future<void> Function()? onConfirmed;
 
   @override
   ConsumerState<CustomerAcknowledgementScreen> createState() =>
@@ -48,6 +50,8 @@ class _CustomerAcknowledgementScreenState
   /// que ainda não saiu do aparelho é a promessa mais fácil de quebrar num
   /// aplicativo de campo.
   _AcceptedState? _accepted;
+  String? _ackCommandId;
+  bool _resuming = false;
 
   /// Trocar de atendimento apaga o que foi coletado.
   ///
@@ -68,6 +72,8 @@ class _CustomerAcknowledgementScreenState
         _accepted = null;
         _failure = null;
         _sending = false;
+        _ackCommandId = null;
+        _resuming = false;
       });
     }
   }
@@ -150,6 +156,7 @@ class _CustomerAcknowledgementScreenState
       }
 
       final commandId = newCommandId();
+      _ackCommandId = commandId;
       if (!mounted || widget.operationId != operationId) return;
       await sync.enqueue(
         OfflineCommandEnvelope(
@@ -179,6 +186,7 @@ class _CustomerAcknowledgementScreenState
             const SnackBar(content: Text('Confirmação do cliente registrada.')),
           );
           ref.invalidate(acknowledgementPreparationProvider(operationId));
+          await widget.onConfirmed?.call();
 
         case CommandPendingOutcome():
           setState(() => _accepted = _AcceptedState.pending);
@@ -207,8 +215,45 @@ class _CustomerAcknowledgementScreenState
     }
   }
 
+  Future<void> _resumePendingConfirmation() async {
+    final commandId = _ackCommandId;
+    if (_resuming || commandId == null || _accepted != _AcceptedState.pending) {
+      return;
+    }
+    final operationId = widget.operationId;
+    _resuming = true;
+    try {
+      final outcome = await ref
+          .read(syncControllerProvider.notifier)
+          .outcomeOf(commandId);
+      if (!mounted || widget.operationId != operationId) return;
+      if (outcome is CommandConfirmed) {
+        setState(() => _accepted = _AcceptedState.confirmed);
+        ref.invalidate(acknowledgementPreparationProvider(operationId));
+        await widget.onConfirmed?.call();
+      } else if (outcome is CommandBlocked) {
+        _pad.limpar();
+        setState(() {
+          _accepted = null;
+          _failure = outcome.message;
+        });
+        ref.invalidate(acknowledgementPreparationProvider(operationId));
+      }
+    } finally {
+      if (mounted && operationId == widget.operationId) _resuming = false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    ref.listen(syncControllerProvider.select((value) => value.lastSyncedAt), (
+      previous,
+      next,
+    ) {
+      if (next != null && _accepted == _AcceptedState.pending) {
+        _resumePendingConfirmation();
+      }
+    });
     ref.listen(acknowledgementPreparationProvider(widget.operationId), (
       previous,
       next,

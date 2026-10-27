@@ -36,6 +36,7 @@ import '../../evidence/presentation/widgets/evidence_section.dart';
 import '../application/pmoc_attendance_controller.dart';
 import '../../field/application/execution_controller.dart';
 import '../../field/presentation/widgets/attendance_wizard.dart';
+import '../../field/presentation/widgets/attendance_result.dart';
 import '../../field/presentation/widgets/attendance_work_record.dart';
 import '../../signature/presentation/customer_acknowledgement_screen.dart';
 import 'pmoc_document_section.dart';
@@ -147,12 +148,6 @@ class _Body extends ConsumerWidget {
     final podeAbrir = state.allows('START');
     final podeConcluir = state.allows('COMPLETE');
     final operationId = execution?.operation?['id'] as String?;
-    final pendingRecords =
-        operationId != null &&
-        ref
-            .watch(executionControllerProvider(operationId))
-            .pendingCommands
-            .isNotEmpty;
     Future<bool> save({String? notes}) async {
       final saved = await controller.saveWork(answers: answers, notes: notes);
       if (saved && operationId != null) {
@@ -258,37 +253,23 @@ class _Body extends ConsumerWidget {
               ),
       ),
       OrbitWizardStep(
-        title: 'Finalização',
-        hint: 'Conclua a manutenção após conferir os registros.',
-        child: SectionBlock(
-          title: 'Concluir atendimento',
-          child: Text(
-            pendingRecords
-                ? 'Há registros aguardando sincronização. Sincronize antes de concluir a manutenção.'
-                : execution?.status == PmocEquipmentExecutionStatus.completed
-                ? 'Manutenção registrada. O relatório está disponível na próxima etapa.'
-                : 'O roteiro, as observações, os materiais e o aceite ficam vinculados a este equipamento.',
-          ),
+        title: 'Conclusão',
+        hint: 'Resumo técnico e relatório da manutenção.',
+        complete: execution?.status == PmocEquipmentExecutionStatus.completed,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (operationId != null)
+              AttendanceTechnicalSummary(
+                operationId: operationId,
+                code: preparation.planCode,
+                technician: execution?.responsibleFieldTechnicianName,
+                completedAt: execution?.completedAt,
+              ),
+            if (execution?.status == PmocEquipmentExecutionStatus.completed)
+              _Report(state: state, controller: controller),
+          ],
         ),
-        forward: podeConcluir
-            ? OrbitWizardForward(
-                label: 'Concluir manutenção',
-                enabled: reviewed && !state.isBusy && !pendingRecords,
-                pending: state.pending == PmocAttendanceCommand.complete,
-                onPressed: () => controller.complete(),
-              )
-            : null,
-      ),
-
-      OrbitWizardStep(
-        title: 'Relatório',
-        hint: 'Emitir é decisão separada de concluir.',
-        lockedReason:
-            execution?.status == PmocEquipmentExecutionStatus.completed
-            ? null
-            : 'O relatório é emitido depois de o atendimento ser concluído.',
-        complete: state.isFinished,
-        child: _Report(state: state, controller: controller),
       ),
     ];
 
@@ -300,7 +281,8 @@ class _Body extends ConsumerWidget {
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: const EdgeInsets.only(bottom: OrbitSpacing.xl),
         children: [
-          if (state.error != null)
+          if (state.error != null &&
+              execution?.status != PmocEquipmentExecutionStatus.completed)
             Padding(
               padding: const EdgeInsets.fromLTRB(
                 OrbitSpacing.md,
@@ -323,6 +305,9 @@ class _Body extends ConsumerWidget {
           AttendanceWizard(
             operationId: operationId,
             confirmationStep: 3,
+            completed:
+                execution?.status == PmocEquipmentExecutionStatus.completed,
+            onComplete: controller.finishAfterConfirmation,
             steps: etapas,
             initialStep: podeAbrir
                 ? 0
@@ -330,7 +315,7 @@ class _Body extends ConsumerWidget {
                 ? 1
                 : execution == null
                 ? 0
-                : 5,
+                : 4,
           ),
         ],
       ),
@@ -503,77 +488,70 @@ class _Procedure extends StatelessWidget {
   }
 }
 
-/// A emissão do relatório de execução.
-class _Report extends StatelessWidget {
+/// A emissão é disparada ao entrar no resultado da manutenção concluída.
+class _Report extends StatefulWidget {
   const _Report({required this.state, required this.controller});
-
   final PmocAttendanceState state;
   final PmocAttendanceController controller;
+  @override
+  State<_Report> createState() => _ReportState();
+}
+
+class _ReportState extends State<_Report> {
+  bool _requested = false;
+  void _issue() {
+    if (_requested) return;
+    _requested = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.controller.issueReport();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final palette = context.orbit;
+    final state = widget.state;
     final execution = state.execution;
-    final emitido = execution?.artifactExecution != null;
     final preparation = state.preparation;
-
-    /* O nome é o que o cliente vê chegar no WhatsApp: o contrato, o equipamento
-       e qual manutenção é. `documento.pdf` não diz nada a quem recebe — e as
-       regras de limpeza são as mesmas da lista de Documentos, de propósito. */
-    final fileName = documentFileNameOf([
-      'PMOC',
-      preparation?.planCode ?? '',
-      preparation?.equipmentName ?? '',
-      if (execution?.sequenceNumber case final int numero) 'manutencao-$numero',
-    ]);
-
-    final subject = [
-      'Relatório de PMOC',
-      preparation?.equipmentName,
-      preparation?.customerName,
-    ].whereType<String>().join(' · ');
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (!emitido)
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: OrbitSpacing.gutter,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'A manutenção está registrada. O relatório de execução é o que '
-                  'o cliente guarda como prova de conformidade.',
-                  style: OrbitType.body.copyWith(color: palette.inkMuted),
-                ),
-                const SizedBox(height: OrbitSpacing.sm),
-                FilledButton(
-                  onPressed: state.isBusy || execution == null
-                      ? null
-                      : controller.issueReport,
-                  style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
-                  child: Text(
-                    state.pending == PmocAttendanceCommand.issue
-                        ? 'Emitindo…'
-                        : 'Emitir relatório',
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-        /// Depois de emitido, o arquivo — da execução de artefato, que é onde o
-        /// documento de PMOC mora.
-        if (execution?.artifactExecution?['id'] case final String documento)
-          PmocDocumentSection(
-            artifactExecutionId: documento,
-            fileName: fileName,
-            subject: subject,
-          ),
-      ],
+    if (execution?.artifactExecution?['id'] case final String documentId) {
+      return PmocDocumentSection(
+        artifactExecutionId: documentId,
+        fileName: documentFileNameOf([
+          'PMOC',
+          preparation?.planCode ?? '',
+          preparation?.equipmentName ?? '',
+          if (execution?.sequenceNumber case final int number)
+            'manutencao-$number',
+        ]),
+        subject: [
+          'Relatório de PMOC',
+          preparation?.equipmentName,
+          preparation?.customerName,
+        ].whereType<String>().join(' · '),
+      );
+    }
+    if (state.error != null) {
+      return SectionBlock(
+        title: 'Relatório de execução',
+        child: SectionError(
+          error: state.error!,
+          onRetry: () {
+            _requested = false;
+            _issue();
+          },
+        ),
+      );
+    }
+    _issue();
+    return const SectionBlock(
+      title: 'Relatório de execução',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Preparando o relatório automaticamente…'),
+          SizedBox(height: OrbitSpacing.sm),
+          LinearProgressIndicator(),
+        ],
+      ),
     );
   }
 }

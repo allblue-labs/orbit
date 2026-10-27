@@ -27,6 +27,7 @@ library;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/contracts/pmoc_contracts.dart';
+import '../../../core/errors/orbit_exception.dart';
 import '../data/pmoc_repository.dart';
 import 'pmoc_providers.dart';
 
@@ -210,6 +211,26 @@ class PmocAttendanceController extends StateNotifier<PmocAttendanceState> {
       }
       return resultado;
     });
+  }
+
+  Future<bool> finishAfterConfirmation() async {
+    if (state.execution?.status == PmocEquipmentExecutionStatus.completed) {
+      return true;
+    }
+    await complete();
+    if (!mounted) return false;
+    if (state.error case final Object error) {
+      state = state.copyWith(clearError: true);
+      throw error;
+    }
+    if (state.execution?.status == PmocEquipmentExecutionStatus.completed) {
+      return true;
+    }
+    throw const OrbitException(
+      kind: OrbitErrorKind.http,
+      publicMessage: 'Não foi possível concluir a manutenção. Tente novamente.',
+      code: 'COMPLETION_NOT_CONFIRMED',
+    );
   }
 
   Future<void> issueReport() async {

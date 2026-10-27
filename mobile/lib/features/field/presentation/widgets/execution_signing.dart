@@ -1,21 +1,4 @@
-/// Assinatura e aceite — **duas** coisas, dois cartões.
-///
-/// Juntá-las num único bloco chamado "Assinaturas" seria a forma mais rápida de
-/// apagar a distinção que o domínio mantém:
-///
-/// ```text
-/// assinatura profissional → do usuário, vale em qualquer documento que assine
-/// aceite do cliente       → deste atendimento, registra quem recebeu
-/// ```
-///
-/// Concluir o atendimento não é nenhuma das duas.
-///
-/// ## O documento saiu daqui
-///
-/// Ele mora na etapa de finalização, e não nesta. A política dele é
-/// `eligibleAfterCompletion`: antes de concluir, a emissão é recusada pelo
-/// servidor. Oferecê-la aqui — uma etapa antes — convidava a tentar emitir cedo e
-/// ler um bloqueio que a própria ordem das etapas já evitava.
+/// Confirmação do cliente e assinatura profissional no mesmo fluxo de atendimento.
 library;
 
 import 'package:flutter/material.dart';
@@ -33,9 +16,11 @@ class ExecutionSigningSections extends ConsumerWidget {
     super.key,
     required this.operationId,
     required this.preparation,
+    this.onConfirmed,
   });
 
   final String operationId;
+  final Future<void> Function()? onConfirmed;
   final FieldOperationExecutionPreparationContract preparation;
 
   @override
@@ -49,6 +34,7 @@ class ExecutionSigningSections extends ConsumerWidget {
           key: ValueKey(operationId),
           operationId: operationId,
           embedded: true,
+          onConfirmed: onConfirmed,
         ),
       ],
     );
