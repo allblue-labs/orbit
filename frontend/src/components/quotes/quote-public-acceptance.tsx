@@ -157,7 +157,11 @@ function ProposalContent({
           onClick={() => download.mutate()}
         >
           <Download className="size-4" />
-          {download.isPending ? "Baixando…" : "Baixar orçamento em PDF"}
+          {download.isPending
+            ? "Baixando…"
+            : data.response?.decision === "APPROVE"
+              ? "Baixar orçamento assinado em PDF"
+              : "Baixar orçamento em PDF"}
         </Button>
         <MutationError error={download.error} />
       </section>

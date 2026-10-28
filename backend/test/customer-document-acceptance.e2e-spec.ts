@@ -1,4 +1,6 @@
 import { PrismaClient } from '@prisma/client';
+import { PDFDocument } from 'pdf-lib';
+import { QuoteAcceptedDocumentService } from '../src/modules/quotes/quote-accepted-document.service';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { randomUUID } from 'node:crypto';
 import sharp from 'sharp';
@@ -191,6 +193,7 @@ describe('aceite público de propostas com RLS real', () => {
       repository,
       new QuoteMapper(),
       files,
+      new QuoteAcceptedDocumentService(),
     );
     pmocRepository = new PmocRepository(
       rls,
@@ -322,6 +325,7 @@ describe('aceite público de propostas com RLS real', () => {
   });
   it('aprova uma única vez mesmo com respostas simultâneas; preserva assinatura, auditoria e outbox', async () => {
     const { quote, link } = await proposal();
+    const original = await acceptance.document(link.token);
     const results = await Promise.all([
       acceptance.respond(link.token, approve(), { ip: '127.0.0.1' }),
       acceptance.respond(link.token, approve(), {}),
@@ -356,6 +360,25 @@ describe('aceite público de propostas com RLS real', () => {
       quotes.document(quote.id, tenants[0]!.organizationId),
     );
     expect(signedPdf.bytes.subarray(0, 4).toString()).toBe('%PDF');
+    const downloaded = await acceptance.document(link.token);
+    const originalPdf = await PDFDocument.load(original.bytes);
+    const downloadedPdf = await PDFDocument.load(downloaded.bytes);
+    expect(downloadedPdf.getPageCount()).toBe(originalPdf.getPageCount() + 1);
+    expect(downloaded.bytes).not.toEqual(original.bytes);
+    // A assinatura pública é aplicada sobre o PDF congelado, mesmo se o cadastro mudar.
+    await admin.customer.update({
+      where: { id: tenants[0]!.customerId },
+      data: { legalName: 'Cadastro alterado depois do aceite' },
+    });
+    expect(
+      (
+        await PDFDocument.load((await acceptance.document(link.token)).bytes)
+      ).getPageCount(),
+    ).toBe(originalPdf.getPageCount() + 1);
+    await admin.customer.update({
+      where: { id: tenants[0]!.customerId },
+      data: { legalName: 'Cliente local' },
+    });
     await expect(
       acceptance.respond(
         link.token,
@@ -375,6 +398,7 @@ describe('aceite público de propostas com RLS real', () => {
     'registra %s e aplica a transição correspondente sem evento de aprovação',
     async (decision) => {
       const { quote, link } = await proposal();
+      const original = await acceptance.document(link.token);
       const reason = 'Precisamos rever as condições. '.repeat(25);
       await acceptance.respond(
         link.token,
@@ -385,6 +409,9 @@ describe('aceite público de propostas com RLS real', () => {
         (await admin.quote.findUniqueOrThrow({ where: { id: quote.id } }))
           .status,
       ).toBe(decision === 'REJECT' ? 'REJECTED' : 'DRAFT');
+      expect((await acceptance.document(link.token)).bytes).toEqual(
+        original.bytes,
+      );
       expect((await acceptance.read(link.token)).response).toMatchObject({
         decision,
         reason: reason.trim(),

@@ -28,7 +28,7 @@ import 'widgets/execution_signing.dart';
 import 'widgets/attendance_work_record.dart';
 import 'widgets/attendance_wizard.dart';
 
-class OperationExecutionScreen extends ConsumerWidget {
+class OperationExecutionScreen extends ConsumerStatefulWidget {
   const OperationExecutionScreen({
     super.key,
     required this.operationId,
@@ -39,7 +39,44 @@ class OperationExecutionScreen extends ConsumerWidget {
   final String? rvtExecutionId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<OperationExecutionScreen> createState() =>
+      _OperationExecutionScreenState();
+}
+
+class _OperationExecutionScreenState
+    extends ConsumerState<OperationExecutionScreen> {
+  bool _preparing = true;
+  int _entrySequence = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _prepare();
+    });
+  }
+
+  @override
+  void didUpdateWidget(OperationExecutionScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.operationId != widget.operationId) _prepare();
+  }
+
+  Future<void> _prepare() async {
+    final sequence = ++_entrySequence;
+    setState(() => _preparing = true);
+    await ref
+        .read(executionControllerProvider(widget.operationId).notifier)
+        .prepareForAttendance();
+    if (mounted && sequence == _entrySequence) {
+      setState(() => _preparing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final operationId = widget.operationId;
+    final rvtExecutionId = widget.rvtExecutionId;
     final state = ref.watch(executionControllerProvider(operationId));
     final controller = ref.read(
       executionControllerProvider(operationId).notifier,
@@ -61,24 +98,53 @@ class OperationExecutionScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: switch (state.phase) {
-        ExecutionPhase.loading => const Padding(
-          padding: EdgeInsets.all(OrbitSpacing.gutter),
-          child: SectionLoading(lines: 6),
-        ),
-        ExecutionPhase.error when state.preparation == null => ListView(
-          padding: const EdgeInsets.all(OrbitSpacing.gutter),
-          children: [
-            SectionError(error: state.error!, onRetry: controller.load),
-          ],
-        ),
-        _ => _Body(
-          state: state,
-          controller: controller,
-          operationId: operationId,
-          rvtExecutionId: rvtExecutionId,
-        ),
-      },
+      body: _preparing
+          ? const Padding(
+              padding: EdgeInsets.all(OrbitSpacing.gutter),
+              child: SectionLoading(lines: 6),
+            )
+          : switch (state.phase) {
+              ExecutionPhase.loading => const Padding(
+                padding: EdgeInsets.all(OrbitSpacing.gutter),
+                child: SectionLoading(lines: 6),
+              ),
+              ExecutionPhase.error when state.preparation == null => ListView(
+                padding: const EdgeInsets.all(OrbitSpacing.gutter),
+                children: [
+                  SectionError(error: state.error!, onRetry: _prepare),
+                ],
+              ),
+              _ when state.allows(FieldOperationAllowedAction.start) => ListView(
+                padding: const EdgeInsets.all(OrbitSpacing.gutter),
+                children: [
+                  if (state.error != null)
+                    SectionError(error: state.error!, onRetry: _prepare)
+                  else
+                    SectionBlock(
+                      title: 'Início do atendimento pendente',
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'O início precisa ser confirmado pelo servidor antes de preencher e concluir o atendimento. Confira sua conexão.',
+                          ),
+                          const SizedBox(height: OrbitSpacing.md),
+                          FilledButton(
+                            onPressed: _prepare,
+                            child: const Text('Tentar novamente'),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+              _ => _Body(
+                state: state,
+                controller: controller,
+                operationId: operationId,
+                rvtExecutionId: rvtExecutionId,
+              ),
+            },
     );
   }
 }

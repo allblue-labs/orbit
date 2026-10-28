@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { MutationError } from "@/components/artifact-studio/mutation-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Wrench } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -54,6 +56,7 @@ export function QuoteConvertDialog({
     auxiliaryIds: [] as string[],
     addressId: quote.serviceAddress?.id ?? "",
     sector: "",
+    amountVisibleInField: false,
   });
   const edit = (patch: Partial<typeof form>) =>
     setForm((current) => ({ ...current, ...patch }));
@@ -90,6 +93,7 @@ export function QuoteConvertDialog({
                 auxiliaryTechnicianIds: form.auxiliaryIds,
                 customerAddressId: form.addressId || undefined,
                 sector: form.sector.trim() || undefined,
+                amountVisibleInField: form.amountVisibleInField,
               };
               void schedule.checkAndRun(
                 {
@@ -115,6 +119,71 @@ export function QuoteConvertDialog({
             </DialogDescription>
           </DialogHeader>
           <fieldset className="space-y-5" disabled={pending}>
+            <section className="space-y-4 rounded-xl border border-border bg-muted/20 p-4">
+              <div>
+                <h3 className="text-sm font-semibold">
+                  Equipamentos do orçamento
+                </h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Os equipamentos abaixo serão incluídos na operação.
+                </p>
+              </div>
+              {quote.assets.length ? (
+                <ul className="grid gap-2 sm:grid-cols-2">
+                  {quote.assets.map((asset) => (
+                    <li
+                      key={asset.id}
+                      className="flex min-w-0 items-start gap-3 rounded-lg border border-border bg-background p-3"
+                    >
+                      <Wrench className="mt-0.5 size-4 shrink-0 text-primary" />
+                      <div className="min-w-0 break-words text-sm">
+                        <p className="font-medium">{asset.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {[asset.identifier, asset.location]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Este orçamento não possui equipamentos vinculados.
+                </p>
+              )}
+              <div className="border-t border-border pt-4">
+                <p className="text-xs text-muted-foreground">
+                  Valor aprovado no orçamento
+                </p>
+                <p className="mt-1 text-2xl font-semibold text-primary">
+                  {new Intl.NumberFormat("pt-BR", {
+                    style: "currency",
+                    currency: quote.currency,
+                  }).format(Number(quote.total))}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  O valor da operação será obtido deste orçamento.
+                </p>
+              </div>
+              <div className="flex items-start gap-3 rounded-lg bg-background p-3">
+                <Checkbox
+                  id="quote-convert-amount-visible"
+                  checked={form.amountVisibleInField}
+                  onCheckedChange={(checked) =>
+                    edit({ amountVisibleInField: checked === true })
+                  }
+                />
+                <div className="space-y-1">
+                  <Label htmlFor="quote-convert-amount-visible">
+                    Permitir que o técnico em campo veja o valor
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Desmarcado, o valor fica oculto no atendimento em campo.
+                  </p>
+                </div>
+              </div>
+            </section>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="quote-convert-kind">Tipo de serviço</Label>

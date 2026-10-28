@@ -4,7 +4,11 @@
 
 O modal de conversão permite escolher técnico operacional, auxiliares elegíveis da unidade, início e término previstos, endereço cadastrado do cliente e setor. O endereço da proposta vem preenchido. O valor e os equipamentos aprovados são preservados.
 
+Os equipamentos vinculados e o total aprovado aparecem no modal para conferência. O valor continua vindo do orçamento; não é copiado como valor manual. A opção **Permitir que o técnico em campo veja o valor** começa desmarcada e é gravada na operação.
+
 A conversão usa a criação canônica de operações: valida referências/equipe, reserva o número da OS, registra participações, cota e eventos. A criação e o vínculo com a proposta confirmam na mesma transação; repetir a conversão devolve a mesma operação.
+
+Notificações destinadas a outra pessoa são enfileiradas em `mobile.notification.materialize` e processadas pelo worker existente no escopo do destinatário. Isso respeita a RLS das caixas privadas e dos dispositivos sem invalidar a transação da conversão. O worker de jobs deve permanecer ativo (`JOBS_WORKER_ENABLED`, padrão `true`). Não há novas migrações ou variáveis obrigatórias para este ajuste.
 
 ## Confirmação da agenda
 

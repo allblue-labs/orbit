@@ -8,11 +8,8 @@
  * As datas úteis do atendimento aparecem na identificação. As etapas internas
  * e a trilha de auditoria ficam no sistema, fora do documento entregue ao cliente.
  *
- * ## Pendência é o que gera o retorno
- *
- * Sai em bloco próprio e por último, antes das assinaturas: é o item que o
- * cliente precisa ver antes de assinar, e é o que agenda o próximo
- * atendimento. Diluída no meio dos procedimentos, ela é assinada sem ser lida.
+ * As observações ficam em bloco próprio logo após a solicitação do cliente,
+ * antes dos equipamentos e do registro da execução.
  *
  * ## Materiais são texto, e continuam texto
  *
@@ -77,11 +74,11 @@ export function composeServiceOrder(
   cliente(document, context, theme);
   equipe(document, context, theme);
   solicitacao(document, input, context, theme);
+  observacoes(document, input, theme);
   equipamentos(document, input, context, theme);
   execucao(document, input, theme);
   checklist(document, input, theme);
   evidencias(document, input, theme);
-  pendencias(document, input, theme);
   const garantia = valorDoCampo(input, 'garantia');
   if (garantia) {
     sectionTitle(document, 'Garantia do serviço', theme);
@@ -103,13 +100,12 @@ function identificacao(
     { label: 'Situação', value: situacao(input.execution.status) },
     {
       label: 'Tipo de serviço',
-      value: valorDoCampo(input, 'tipo_servico') ?? natureza(operacao?.kind),
+      value: natureza(valorDoCampo(input, 'tipo_servico') ?? operacao?.kind),
     },
     { label: 'Prioridade', value: prioridade(operacao?.priority) },
     { label: 'Agendamento', value: operacao?.scheduledFor },
     { label: 'Início do atendimento', value: operacao?.startedAt },
     { label: 'Setor', value: operacao?.sector },
-    { label: 'Assunto', value: operacao?.title ?? input.execution.title },
   ];
 
   sectionTitle(document, 'Identificação da ordem de serviço', theme);
@@ -384,21 +380,17 @@ function evidencias(
 }
 
 /**
- * O que ficou faltando.
- *
- * Imediatamente antes das assinaturas de propósito: é o último texto que quem
- * assina lê, e é o que justifica o próximo atendimento. Observações gerais da
- * execução entram no mesmo bloco quando existem, porque o leitor procura as
- * duas coisas no mesmo lugar — o que sobrou para fazer.
+ * Observações, solicitações adicionais e recomendações do atendimento.
+ * Preserva os registros existentes, junto à solicitação inicial do cliente.
  */
-function pendencias(
+function observacoes(
   document: Doc,
   input: RenderInput,
   theme: DocumentTheme,
 ): void {
   const texto = valorDoCampo(input, 'pendencias');
-  const observacoes = input.metadata.executionNotes;
-  const notas = typeof observacoes === 'string' ? observacoes.trim() : '';
+  const notasExecucao = input.metadata.executionNotes;
+  const notas = typeof notasExecucao === 'string' ? notasExecucao.trim() : '';
   /**
    * O que o cliente pediu em campo.
    *
@@ -431,7 +423,7 @@ function pendencias(
   ].join('\n\n');
   if (!texto && !notas && !solicitacoes && !recomendacoes) return;
 
-  sectionTitle(document, 'Pendências e observações', theme);
+  sectionTitle(document, 'Observações', theme);
   if (texto) {
     noteBlock(document, texto, theme, { title: 'Pendências' });
   }
@@ -511,11 +503,15 @@ function natureza(kind?: string): string | undefined {
   const rotulos: Readonly<Record<string, string>> = {
     CORRECTIVE: 'Corretiva',
     PREVENTIVE: 'Preventiva',
+    MAINTENANCE: 'Manutenção',
     INSTALLATION: 'Instalação',
     INSPECTION: 'Inspeção',
+    DELIVERY: 'Entrega',
+    OTHER: 'Outro',
     EMERGENCY: 'Emergencial',
   };
-  return rotulos[kind] ?? kind;
+  const codigo = kind.trim().toUpperCase();
+  return Object.hasOwn(rotulos, codigo) ? rotulos[codigo] : kind;
 }
 
 function prioridade(priority?: string): string | undefined {

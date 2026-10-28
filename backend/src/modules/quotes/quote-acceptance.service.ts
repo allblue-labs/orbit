@@ -16,6 +16,7 @@ import { FileObjectService } from '../storage/file-object.service';
 import { QuoteService } from './quote.service';
 import { QuoteMapper } from './quote.mapper';
 import { QuoteRepository } from './quote.repository';
+import { QuoteAcceptedDocumentService } from './quote-accepted-document.service';
 import type { QuoteAcceptanceResponseDto } from './quote-acceptance.dto';
 import type {
   QuoteAcceptanceReadModel,
@@ -40,6 +41,7 @@ export class QuoteAcceptanceService {
     private readonly repository: QuoteRepository,
     private readonly mapper: QuoteMapper,
     private readonly files: FileObjectService,
+    private readonly acceptedDocuments: QuoteAcceptedDocumentService,
   ) {}
 
   async create(id: string, organizationId: string, actorId: string) {
@@ -200,11 +202,41 @@ export class QuoteAcceptanceService {
           status: 'AVAILABLE',
         },
       });
-      const bytes = await this.files.read(file.bucket, file.objectKey);
+      let bytes = await this.files.read(file.bucket, file.objectKey);
       if (FileObjectService.hash(bytes) !== file.sha256)
         throw new ConflictException(
           'Não foi possível conferir o documento enviado.',
         );
+      if (
+        link.decision === 'APPROVE' &&
+        link.respondedAt &&
+        link.signatureFileId &&
+        link.consentAccepted
+      ) {
+        const signatureFile = await tx.storageFile.findFirstOrThrow({
+          where: {
+            id: link.signatureFileId,
+            organizationId: link.organizationId,
+            status: 'AVAILABLE',
+            mimeType: 'image/png',
+          },
+        });
+        const signature = await this.files.read(
+          signatureFile.bucket,
+          signatureFile.objectKey,
+        );
+        if (FileObjectService.hash(signature) !== signatureFile.sha256)
+          throw new ConflictException(
+            'Não foi possível conferir a assinatura do cliente.',
+          );
+        bytes = await this.acceptedDocuments.render(bytes, {
+          code: (link.snapshot as unknown as QuoteAcceptanceSnapshot).code,
+          signerName: link.signerName!,
+          signedAt: link.respondedAt,
+          originalSha256: file.sha256,
+          signature,
+        });
+      }
       return {
         bytes,
         fileName: `orcamento-${(link.snapshot as unknown as QuoteAcceptanceSnapshot).code.replace(/[^A-Za-z0-9_-]/g, '_')}.pdf`,

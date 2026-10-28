@@ -457,6 +457,7 @@ describe('QuoteService', () => {
       customerAddressId: 'address-selected',
       sector: 'Recepção',
       scheduledStart,
+      amountVisibleInField: true,
     });
     expect(create).toHaveBeenCalledWith(
       'org-id',
@@ -469,6 +470,7 @@ describe('QuoteService', () => {
         auxiliaryTechnicianIds: ['aux'],
         scheduledStart,
         sector: 'Recepção',
+        amountVisibleInField: true,
         data: { quoteId: 'quote-id', source: 'QUOTE' },
       }),
     );

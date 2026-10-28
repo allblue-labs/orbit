@@ -4,6 +4,7 @@ import {
   ArrayMaxSize,
   ArrayUnique,
   IsArray,
+  IsBoolean,
   IsDate,
   IsIn,
   IsInt,
@@ -401,6 +402,11 @@ export class CancelQuoteDto {
  * A criação usa as mesmas validações e a mesma transação da operação direta.
  */
 export class ConvertQuoteDto {
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  amountVisibleInField?: boolean;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsUUIDv7()

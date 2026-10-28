@@ -143,6 +143,11 @@ test("cliente confere, baixa e aprova com assinatura no celular sem login", asyn
     }),
   ).toBeVisible();
   await expect(page.locator("canvas")).toHaveCount(0);
+  const signedDownload = page.waitForEvent("download");
+  await page
+    .getByRole("button", { name: "Baixar orçamento assinado em PDF" })
+    .click();
+  await signedDownload;
   expect(writes).toHaveLength(1);
   expect(writes[0]).toMatchObject({
     decision: "APPROVE",
@@ -181,6 +186,9 @@ for (const [option, submit, confirmation, decision] of [
     await expect(
       page.getByRole("heading", { name: confirmation, exact: true }),
     ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Baixar orçamento assinado em PDF" }),
+    ).toHaveCount(0);
     expect(writes).toHaveLength(1);
     expect(writes[0]).toMatchObject({
       decision,

@@ -667,6 +667,7 @@ describe('Quotes (e2e)', () => {
           scheduledStart: '2026-11-20T13:00:00Z',
           scheduledEnd: '2026-11-20T14:00:00Z',
           sector: 'Recepção',
+          amountVisibleInField: true,
         })
         .expect(201),
     );
@@ -680,6 +681,8 @@ describe('Quotes (e2e)', () => {
       '2026-11-20T13:00:00.000Z',
     );
     expect(operation.status).toBe('SCHEDULED');
+    expect(operation.amountVisibleInField).toBe(true);
+    expect(operation.manualAmount).toBeNull();
     expect(operation.sector).toBe('Recepção');
     expect(operation.assets.map((item) => item.assetId)).toEqual([asset.id]);
     expect(operation.users.map((item) => item.userId)).toContain(
@@ -690,6 +693,113 @@ describe('Quotes (e2e)', () => {
         where: { entityId: operation.id, type: 'operation.created' },
       }),
     ).toBe(1);
+  }, 90000);
+
+  it('converte e notifica outro técnico e seu auxiliar sem violar a RLS nem abortar a transação', async () => {
+    const unit = await prisma.businessUnit.findUniqueOrThrow({
+      where: { id: tenant.businessUnitId },
+    });
+    const assignees: string[] = [];
+    for (const roleKey of ['FIELD_TECHNICIAN', 'ASSISTANT_TECHNICIAN']) {
+      const role = await prisma.role.findFirstOrThrow({
+        where: {
+          key: roleKey,
+          organizationId: unit.organizationId,
+          deletedAt: null,
+        },
+      });
+      const email = `quotes.assigned.${randomUUID()}@orbit.local`;
+      const user = await prisma.user.create({
+        data: {
+          email,
+          normalizedEmail: email,
+          firstName: 'Equipe',
+          lastName: 'Teste',
+          displayName: `Equipe ${roleKey}`,
+          status: 'ACTIVE',
+          organizationMemberships: {
+            create: { organizationId: unit.organizationId, roleId: role.id },
+          },
+          businessUnitMemberships: {
+            create: {
+              organizationId: unit.organizationId,
+              businessUnitId: unit.id,
+              roleId: role.id,
+            },
+          },
+          professionalProfiles: {
+            create: {
+              organizationId: unit.organizationId,
+              fieldTechnicianEnabled: roleKey === 'FIELD_TECHNICIAN',
+            },
+          },
+        },
+      });
+      assignees.push(user.id);
+    }
+    const quote = await createQuote(tenant);
+    await auth(http().post(`/api/v1/quotes/${quote.id}/items`), tenant.token)
+      .send({ description: 'Atendimento', quantity: 1, unitPrice: 275 })
+      .expect(201);
+    await auth(
+      http().post(`/api/v1/quotes/${quote.id}/send`),
+      tenant.token,
+    ).expect(201);
+    await auth(
+      http().post(`/api/v1/quotes/${quote.id}/approve`),
+      tenant.token,
+    ).expect(201);
+    const converted = body(
+      await auth(
+        http().post(`/api/v1/quotes/${quote.id}/convert-to-operation`),
+        tenant.token,
+      )
+        .send({
+          responsibleFieldTechnicianId: assignees[0],
+          auxiliaryTechnicianIds: [assignees[1]],
+          amountVisibleInField: true,
+        })
+        .expect(201),
+    );
+    const operationId = converted.operation!.id;
+    expect(
+      await prisma.backgroundJob.count({
+        where: {
+          organizationId: unit.organizationId,
+          queue: 'mobile.notification.materialize',
+          payload: { path: ['resourceId'], equals: operationId },
+        },
+      }),
+    ).toBe(2);
+    await worker.tick();
+    await worker.tick();
+    const notifications = await prisma.notification.findMany({
+      where: {
+        organizationId: unit.organizationId,
+        type: 'WORK_ASSIGNED',
+        payload: { path: ['resourceId'], equals: operationId },
+      },
+    });
+    expect(notifications.map((item) => item.recipientUserId).sort()).toEqual(
+      assignees.sort(),
+    );
+    const response = await auth(
+      http().get(`/api/v1/operations/${operationId}`),
+      tenant.token,
+    ).expect(200);
+    expect(
+      (
+        response.body as Envelope<{
+          manualAmount: string | null;
+          amountVisibleInField: boolean;
+        }>
+      ).data,
+    ).toMatchObject({ manualAmount: null, amountVisibleInField: true });
+    expect(
+      (
+        await prisma.quote.findUniqueOrThrow({ where: { id: quote.id } })
+      ).total.toFixed(2),
+    ).toBe('275.00');
   }, 90000);
 
   it('avisa sobre operações e recorrências a até dez minutos sem impedir a criação e sem vazar outra organização', async () => {
