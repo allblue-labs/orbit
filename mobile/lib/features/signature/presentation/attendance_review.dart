@@ -16,7 +16,12 @@ class AttendanceReview extends StatelessWidget {
     final palette = context.orbit;
     final groups = reviewGroups(preparation.serviceSummary);
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: OrbitSpacing.gutter),
+      padding: const EdgeInsets.fromLTRB(
+        OrbitSpacing.gutter,
+        OrbitSpacing.lg,
+        OrbitSpacing.gutter,
+        0,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

@@ -46,6 +46,9 @@ function setup(seed: Partial<State> = {}) {
     async (work: (tx: unknown) => Promise<unknown>) => {
       const state = structuredClone(committed);
       const tx = {
+        organization: {
+          findUnique: jest.fn().mockResolvedValue({ settings: null }),
+        },
         state,
         $queryRawUnsafe: jest.fn().mockResolvedValue([]),
         $executeRaw: jest.fn().mockResolvedValue(0),

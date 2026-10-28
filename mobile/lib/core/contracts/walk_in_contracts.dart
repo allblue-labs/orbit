@@ -260,6 +260,7 @@ class WalkInResultContract {
   const WalkInResultContract({
     required this.operationId,
     required this.replayed,
+    this.awaitingAuthorization = false,
   });
 
   factory WalkInResultContract.fromJson(Map<String, dynamic> json) {
@@ -268,10 +269,12 @@ class WalkInResultContract {
     return WalkInResultContract(
       operationId: json['operationId'] as String? ?? '',
       replayed: idempotency['replayed'] as bool? ?? false,
+      awaitingAuthorization: json['awaitingAuthorization'] as bool? ?? false,
     );
   }
 
   final String operationId;
+  final bool awaitingAuthorization;
 
   /// O servidor reconheceu a chave e devolveu a ordem que já existia.
   ///

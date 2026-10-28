@@ -32,6 +32,10 @@ import {
   Repeat,
   Trash2,
   UserRound,
+  Building2,
+  Phone,
+  Mail,
+  Wrench,
   Users,
   XCircle,
 } from "lucide-react";
@@ -53,8 +57,14 @@ import {
   useSchedulingEventTimeline,
   useUpdateSchedulingEvent,
 } from "@/hooks/scheduling/use-scheduling";
-import { formatZonedDateTime, formatZonedTime } from "@/lib/scheduling";
+import { formatZonedDateTime } from "@/lib/scheduling";
 import { ROUTES } from "@/lib/routes";
+import { formatDate } from "@/lib/formatters";
+import {
+  allocationStatusLabel,
+  schedulingAddress,
+  schedulingHistoryLabel,
+} from "./event-presentation";
 import { allocationRoleLabel } from "@/registry";
 import type { SchedulingEventDetail } from "@/types/scheduling";
 import {
@@ -78,7 +88,7 @@ export function EventDetailSheet({
 }) {
   return (
     <Sheet open={eventId !== null} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
+      <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
         {eventId ? (
           <EventDetailBody
             eventId={eventId}
@@ -149,20 +159,28 @@ function EventDetailBody({
           ) : null}
         </div>
 
-        <section className="space-y-1">
+        <section className="space-y-2 rounded-xl border border-border bg-muted/30 p-4">
+          <h3 className="text-xs font-semibold uppercase text-muted-foreground">
+            Data e horário
+          </h3>
           <p className="flex items-center gap-2 text-sm">
             <CalendarClock
               className="size-4 shrink-0 text-muted-foreground"
               aria-hidden
             />
-            {event.allDay ? (
-              <>Dia todo · {formatZonedDateTime(event.startsAt, zone)}</>
-            ) : (
-              <>
-                {formatZonedDateTime(event.startsAt, zone)} —{" "}
-                {formatZonedTime(event.endsAt, zone)}
-              </>
-            )}
+            <span className="min-w-0">
+              {event.allDay ? (
+                <>
+                  Dia todo · {formatDate(event.startsAt, zone)} até{" "}
+                  {formatDate(new Date(Date.parse(event.endsAt) - 1), zone)}
+                </>
+              ) : (
+                <>
+                  {formatZonedDateTime(event.startsAt, zone)} —{" "}
+                  {formatZonedDateTime(event.endsAt, zone)}
+                </>
+              )}
+            </span>
           </p>
           <p className="pl-6 text-xs text-muted-foreground">
             Horários no fuso: {zone}
@@ -172,10 +190,25 @@ function EventDetailBody({
           </p>
         </section>
 
-        {event.description ? (
-          <p className="text-sm whitespace-pre-wrap text-muted-foreground">
-            {event.description}
+        {event.businessUnit ? (
+          <p className="flex items-center gap-2 text-sm">
+            <Building2
+              className="size-4 shrink-0 text-muted-foreground"
+              aria-hidden
+            />
+            {event.businessUnit.tradeName ?? event.businessUnit.legalName}
           </p>
+        ) : null}
+
+        {event.description ? (
+          <section className="space-y-2">
+            <h3 className="text-xs font-semibold uppercase text-muted-foreground">
+              Descrição do agendamento
+            </h3>
+            <p className="text-sm whitespace-pre-wrap break-words">
+              {event.description}
+            </p>
+          </section>
         ) : null}
 
         {event.recurrence ? (
@@ -187,6 +220,16 @@ function EventDetailBody({
         <Allocations event={event} />
 
         <Timeline query={timeline} zone={zone} />
+
+        <section className="space-y-1 border-t border-border pt-4 text-xs text-muted-foreground">
+          {event.createdBy ? (
+            <p>Criado por {event.createdBy.displayName}</p>
+          ) : null}
+          <p>Cadastrado em {formatZonedDateTime(event.createdAt, zone)}</p>
+          <p>
+            Última atualização em {formatZonedDateTime(event.updatedAt, zone)}
+          </p>
+        </section>
 
         {canManage ? (
           <section className="space-y-2 border-t border-border pt-4">
@@ -294,56 +337,138 @@ function LinkedRecords({
   event: SchedulingEventDetail;
   operationId: string | null;
 }) {
-  const hasAny = operationId ?? event.customer ?? event.asset ?? event.location;
+  const eventAddress = schedulingAddress(event.location);
+  const customerAddress = schedulingAddress(
+    event.customer?.addresses?.[0] ?? event.customer?.address,
+  );
+  const address = eventAddress.length ? eventAddress : customerAddress;
+  const hasAny =
+    operationId ??
+    event.customer ??
+    event.asset ??
+    event.location ??
+    event.sourceEntityId;
   if (!hasAny) return null;
 
   return (
     <section className="space-y-2 border-t border-border pt-4">
       <h3 className="text-xs font-medium text-muted-foreground uppercase">
-        Vínculos
+        Cliente e atendimento
       </h3>
 
       {operationId ? (
         <Button size="sm" variant="outline" asChild>
           <Link href={`${ROUTES.operations}/${operationId}`}>
             <Link2 className="size-4" />
-            Abrir no Operations Workspace
+            Ver operação
             <ExternalLink className="size-3" aria-hidden />
           </Link>
         </Button>
       ) : event.sourceEntityId ? (
         <p className="text-xs text-muted-foreground">
-          Origem: {event.sourceModule} · {event.sourceEntityType}
+          Origem:{" "}
+          {(
+            {
+              pmoc: "PMOC",
+              rvt: "Visita técnica",
+              scheduling: "Agenda",
+              operations: "Operação",
+            } as Record<string, string>
+          )[event.sourceModule] ?? "Agenda"}
         </p>
       ) : null}
 
       {event.customer ? (
-        <p className="text-sm">
-          <span className="text-muted-foreground">Cliente: </span>
-          {event.customer.tradeName ?? event.customer.legalName}
-        </p>
+        <div className="space-y-2 rounded-xl border border-border p-4">
+          <p className="flex items-center gap-2 text-sm font-medium">
+            <UserRound className="size-4 text-primary" aria-hidden />
+            {event.customer.tradeName ?? event.customer.legalName}
+          </p>
+          {event.customer.tradeName &&
+          event.customer.tradeName !== event.customer.legalName ? (
+            <p className="text-xs text-muted-foreground">
+              {event.customer.legalName}
+            </p>
+          ) : null}
+          {event.customer.phone ? (
+            <a
+              className="flex items-center gap-2 text-sm hover:underline"
+              href={`tel:${event.customer.phone}`}
+            >
+              <Phone className="size-3.5 shrink-0" aria-hidden />
+              {event.customer.phone}
+            </a>
+          ) : null}
+          {event.customer.email ? (
+            <a
+              className="flex items-center gap-2 break-all text-sm hover:underline"
+              href={`mailto:${event.customer.email}`}
+            >
+              <Mail className="size-3.5 shrink-0" aria-hidden />
+              {event.customer.email}
+            </a>
+          ) : null}
+          {eventAddress.length > 0 &&
+          customerAddress.length > 0 &&
+          eventAddress.join("\n") !== customerAddress.join("\n") ? (
+            <div className="space-y-1 border-t border-border pt-2 text-xs text-muted-foreground">
+              <p className="font-medium">Endereço cadastrado do cliente</p>
+              {customerAddress.map((line, index) => (
+                <p key={index}>{line}</p>
+              ))}
+            </div>
+          ) : null}
+        </div>
       ) : null}
 
       {event.asset ? (
-        <p className="text-sm">
-          <span className="text-muted-foreground">Ativo: </span>
-          {event.asset.name}
+        <div className="space-y-1 rounded-xl border border-border p-4 text-sm">
+          <p className="flex items-center gap-2 font-medium">
+            <Wrench className="size-4 text-primary" aria-hidden />
+            {event.asset.name}
+          </p>
           {event.asset.identifier ? (
             <span className="ml-1 font-mono text-xs text-muted-foreground">
               {event.asset.identifier}
             </span>
           ) : null}
-        </p>
+          {event.asset.manufacturer || event.asset.model ? (
+            <p>
+              {[event.asset.manufacturer, event.asset.model]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          ) : null}
+          {event.asset.serialNumber ? (
+            <p className="text-xs text-muted-foreground">
+              Número de série: {event.asset.serialNumber}
+            </p>
+          ) : null}
+          {event.asset.location ? (
+            <p className="text-xs text-muted-foreground">
+              Setor/localização: {event.asset.location}
+            </p>
+          ) : null}
+        </div>
       ) : null}
 
-      {event.location ? (
-        <p className="flex items-start gap-2 text-xs text-muted-foreground">
-          <MapPin className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-          <span className="font-mono break-all">
-            {JSON.stringify(event.location)}
-          </span>
-        </p>
-      ) : null}
+      <div className="space-y-2 rounded-xl border border-border p-4">
+        <h4 className="flex items-center gap-2 text-sm font-medium">
+          <MapPin className="size-4 text-primary" aria-hidden />
+          {eventAddress.length ? "Local do atendimento" : "Endereço do cliente"}
+        </h4>
+        {address.length ? (
+          <address className="space-y-1 text-sm not-italic break-words">
+            {address.map((line, index) => (
+              <p key={index}>{line}</p>
+            ))}
+          </address>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Endereço não informado.
+          </p>
+        )}
+      </div>
     </section>
   );
 }
@@ -364,7 +489,7 @@ function Allocations({ event }: { event: SchedulingEventDetail }) {
     <section className="space-y-2 border-t border-border pt-4">
       <h3 className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase">
         <Users className="size-3.5" aria-hidden />
-        Alocações
+        Equipe e recursos
       </h3>
 
       {event.allocations.length === 0 ? (
@@ -386,7 +511,11 @@ function Allocations({ event }: { event: SchedulingEventDetail }) {
                 {allocation.user?.displayName ??
                   allocation.asset?.name ??
                   allocation.resourceKey ??
-                  allocation.resourceType}
+                  (allocation.resourceType === "USER"
+                    ? "Pessoa alocada"
+                    : allocation.resourceType === "ASSET"
+                      ? "Equipamento"
+                      : "Recurso")}
               </span>
               {allocationRoleLabel(allocation.role) ? (
                 <Badge variant="secondary" className="text-[10px]">
@@ -394,7 +523,7 @@ function Allocations({ event }: { event: SchedulingEventDetail }) {
                 </Badge>
               ) : null}
               <Badge variant="outline" className="text-[10px]">
-                {allocation.status}
+                {allocationStatusLabel(allocation.status)}
               </Badge>
             </li>
           ))}
@@ -427,7 +556,7 @@ function Timeline({
         <ol className="space-y-2">
           {query.data?.history.map((entry) => (
             <li key={entry.id} className="text-xs">
-              <p className="text-sm">{entry.action}</p>
+              <p className="text-sm">{schedulingHistoryLabel(entry.action)}</p>
               <p className="text-muted-foreground">
                 {entry.actor ? `${entry.actor.name} · ` : ""}
                 {formatZonedDateTime(entry.createdAt, zone)}

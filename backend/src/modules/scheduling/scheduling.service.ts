@@ -1233,6 +1233,7 @@ export class SchedulingService {
     const id = '__proposed__';
     return {
       id,
+      businessUnit: null,
       organizationId: '',
       businessUnitId: input.businessUnitId ?? null,
       calendarId: input.calendarId,

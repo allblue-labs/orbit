@@ -185,6 +185,24 @@ void main() {
   });
 
   group('resultado do comando', () {
+    test(
+      'lê a espera por aprovação e mantém compatibilidade com resposta anterior',
+      () {
+        expect(
+          WalkInResultContract.fromJson({
+            'operationId': 'op-1',
+            'awaitingAuthorization': true,
+          }).awaitingAuthorization,
+          isTrue,
+        );
+        expect(
+          WalkInResultContract.fromJson({
+            'operationId': 'op-1',
+          }).awaitingAuthorization,
+          isFalse,
+        );
+      },
+    );
     test('lê a ordem aberta e a marca de reenvio', () {
       final resultado = WalkInResultContract.fromJson({
         'operationId': 'op-1',
