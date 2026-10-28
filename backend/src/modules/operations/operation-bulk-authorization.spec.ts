@@ -41,6 +41,7 @@ describe('autorização em lote', () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     );
     return { service, repository };
   };

@@ -183,6 +183,7 @@ async function setup(
         {
           id: "template-maintenance",
           name: "Manutenção",
+          isGeneral: true,
           items: [
             {
               key: "filter",
@@ -490,10 +491,10 @@ test("reuses address creation and checklist in the wizard on mobile", async ({
     name: "Novo endereço de atendimento",
     exact: true,
   });
-  await address.getByLabel("Nome deste lugar", { exact: true }).fill("Matriz");
-  await address.getByLabel("Logradouro", { exact: true }).fill("Rua da Aurora");
+  await address.locator("#address-label").fill("Matriz");
+  await address.locator("#address-street").fill("Rua da Aurora");
   await address.getByLabel("Número", { exact: true }).fill("100");
-  await address.getByLabel("Cidade", { exact: true }).fill("Recife");
+  await address.locator("#address-city").fill("Recife");
   await address
     .getByLabel("Complemento", { exact: true })
     .fill("Bloco B, sala 3");
@@ -510,9 +511,7 @@ test("reuses address creation and checklist in the wizard on mobile", async ({
   ).toBeVisible();
   const next = dialog.getByRole("button", { name: "Continuar", exact: true });
   await next.click();
-  await dialog
-    .getByLabel("Título", { exact: true })
-    .fill("Manutenção na matriz");
+  await dialog.locator("#operation-title").fill("Manutenção na matriz");
   await next.click();
   await next.click();
   await expect(
@@ -521,7 +520,9 @@ test("reuses address creation and checklist in the wizard on mobile", async ({
   await dialog
     .getByLabel("Acrescentar item só para este atendimento", { exact: true })
     .fill("Conferir acesso ao bloco");
-  await dialog.getByRole("button", { name: "Adicionar", exact: true }).click();
+  await dialog
+    .getByRole("button", { name: "Adicionar item", exact: true })
+    .click();
   await next.click();
   await expect(
     dialog.getByText("Entrada ao lado da farmácia", { exact: true }),
@@ -548,14 +549,15 @@ test("reuses address creation and checklist in the wizard on mobile", async ({
   await expect
     .poll(
       () =>
-        writes.find((write) =>
-          write.path.endsWith("/operations/operation-new/checklists"),
-        )?.body,
+        writes.find((write) => write.path === "/api/orbit/operations")?.body
+          .checklists,
     )
-    .toMatchObject({
-      templateId: "template-maintenance",
-      additionalItems: [{ label: "Conferir acesso ao bloco" }],
-    });
+    .toMatchObject([
+      {
+        templateId: "template-maintenance",
+        additionalItems: [{ label: "Conferir acesso ao bloco" }],
+      },
+    ]);
   expect(
     writes.find((write) => write.path === "/api/orbit/operations")?.body,
   ).toMatchObject({

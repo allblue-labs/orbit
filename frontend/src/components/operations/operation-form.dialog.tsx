@@ -57,7 +57,7 @@ import { schedulingReferencesService } from "@/services/scheduling-references.se
 import {
   useAddOperationAuxiliary,
   useCreateOperation,
-  useChecklistTemplateForKind,
+  useChecklistTemplateSelection,
   useRemoveOperationAuxiliary,
   useReplaceOperationResponsible,
   useUpdateOperation,
@@ -65,7 +65,6 @@ import {
 import { zonedParts } from "@/lib/scheduling";
 import { ArrowLeft, ArrowRight, Check, X } from "lucide-react";
 
-import { useStartOperationChecklist } from "@/hooks/operations/use-operations";
 import {
   useFieldAssistants,
   useFieldTechnicians,
@@ -161,7 +160,6 @@ function OperationForm({
   const session = useSession();
   const { businessUnitId } = useActiveScope();
   const create = useCreateOperation();
-  const checklist = useStartOperationChecklist();
   const update = useUpdateOperation(editing?.id ?? "");
   /* Os três comandos de atribuição: o `PATCH` não troca técnicos. */
   const replaceResponsible = useReplaceOperationResponsible(editing?.id ?? "");
@@ -242,14 +240,50 @@ function OperationForm({
 
   const [step, setStep] = useState(0);
   const reducedMotion = useReducedMotion();
-  const templateQuery = useChecklistTemplateForKind(
-    editing ? null : (form.kind as OperationKind),
+  const canSelectChecklists =
+    session.hasPermission("checklists.read") &&
+    session.hasPermission("checklists.execute") &&
+    session.hasCapability("checklists.execute");
+  const templateQuery = useChecklistTemplateSelection(
+    !editing && canSelectChecklists,
   );
-  const checklistTemplateId = templateQuery.template?.id ?? null;
-  const issues = operationStepIssues(editing ? 4 : step, form, timeZone);
-  const valid = operationStepIssues(4, form, timeZone).length === 0;
+  const templates = templateQuery.data ?? [];
+  const [checklistSelection, setChecklistSelection] = useState<string[] | null>(
+    null,
+  );
+  const selectedChecklistIds = !canSelectChecklists
+    ? []
+    : (checklistSelection ??
+      templates
+        .filter((template) => template.isGeneral)
+        .map((template) => template.id));
+  const selectChecklists = (ids: string[]) => {
+    setChecklistSelection(ids);
+    if (!ids.length) edit({ checklistExtras: [] });
+  };
+  const checklistIssues = editing
+    ? []
+    : selectedChecklistIds.length > 20
+      ? ["Selecione até 20 checklists para este atendimento."]
+      : selectedChecklistIds.some(
+            (id) => !templates.some((template) => template.id === id),
+          )
+        ? [
+            "Remova os checklists indisponíveis e escolha os modelos atuais do catálogo.",
+          ]
+        : [];
+  const issues = [
+    ...operationStepIssues(editing ? 4 : step, form, timeZone),
+    ...(step >= 3 ? checklistIssues : []),
+  ];
+  const valid =
+    operationStepIssues(4, form, timeZone).length === 0 &&
+    checklistIssues.length === 0;
   const pending = mutation.isPending || equipePendente;
-  const checklistLoading = !editing && templateQuery.isPending;
+  const checklistLoading =
+    !editing &&
+    canSelectChecklists &&
+    (templateQuery.isPending || Boolean(templateQuery.error));
 
   const submit = () => {
     if (!valid || pending || (!editing && (step !== 4 || checklistLoading)))
@@ -275,26 +309,16 @@ function OperationForm({
       return;
     }
 
-    create.mutate(buildPayload(form, timeZone, "criar"), {
-      /**
-       * O checklist começa **depois** da operação, porque precisa do id dela.
-       *
-       * A falha em anexar não desfaz a criação e não segura a tela: o
-       * atendimento existe, e o checklist pode ser iniciado por dentro dele.
-       * Fechar só depois da segunda chamada faria uma indisponibilidade do
-       * checklist parecer falha ao criar o atendimento.
-       */
-      onSuccess: (operation) => {
-        if (checklistTemplateId) {
-          checklist.mutate({
-            operationId: operation.id,
-            templateId: checklistTemplateId,
-            additionalItems: form.checklistExtras,
-          });
-        }
-        onClose();
+    create.mutate(
+      {
+        ...buildPayload(form, timeZone, "criar"),
+        checklists: selectedChecklistIds.map((templateId, index) => ({
+          templateId,
+          additionalItems: index === 0 ? form.checklistExtras : [],
+        })),
       },
-    });
+      { onSuccess: onClose },
+    );
   };
 
   const groups = [
@@ -349,7 +373,9 @@ function OperationForm({
     </div>,
     <div key="service" className="grid gap-4 sm:grid-cols-2">
       <div className="space-y-2 sm:col-span-2">
-        <Label htmlFor="operation-title" required>Título</Label>
+        <Label htmlFor="operation-title" required>
+          Título
+        </Label>
         <Input
           id="operation-title"
           value={form.title}
@@ -359,7 +385,9 @@ function OperationForm({
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="operation-code" required>Código</Label>
+        <Label htmlFor="operation-code" required>
+          Código
+        </Label>
         <Input
           id="operation-code"
           value={form.code}
@@ -370,10 +398,12 @@ function OperationForm({
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="operation-kind" required>Tipo</Label>
+        <Label htmlFor="operation-kind" required>
+          Tipo
+        </Label>
         <Select
           value={form.kind}
-          onValueChange={(value) => edit({ kind: value, checklistExtras: [] })}
+          onValueChange={(value) => edit({ kind: value })}
         >
           <SelectTrigger id="operation-kind">
             <SelectValue />
@@ -408,7 +438,9 @@ function OperationForm({
     <div key="schedule" className="grid gap-4 sm:grid-cols-2">
       {session.businessUnits.length > 1 || !form.businessUnitId ? (
         <div className="space-y-2 sm:col-span-2">
-          <Label htmlFor="operation-unit" required>Unidade responsável</Label>
+          <Label htmlFor="operation-unit" required>
+            Unidade responsável
+          </Label>
           <Select
             value={form.businessUnitId}
             onValueChange={(value) =>
@@ -434,7 +466,9 @@ function OperationForm({
         </div>
       ) : null}
       <div className="space-y-2">
-        <Label htmlFor="operation-start" required={Boolean(form.endLocal)}>Início previsto</Label>
+        <Label htmlFor="operation-start" required={Boolean(form.endLocal)}>
+          Início previsto
+        </Label>
         <Input
           id="operation-start"
           type="datetime-local"
@@ -526,10 +560,15 @@ function OperationForm({
         </div>
       </div>
 
-      {!editing ? (
+      {!editing && canSelectChecklists ? (
         <div className="sm:col-span-2">
           <OperationChecklistField
-            kind={(form.kind || null) as OperationKind | null}
+            templates={templates}
+            selectedIds={selectedChecklistIds}
+            onChangeSelected={selectChecklists}
+            isPending={templateQuery.isPending}
+            error={templateQuery.error}
+            onRetry={() => void templateQuery.refetch()}
             extras={form.checklistExtras}
             onChangeExtras={(items) => edit({ checklistExtras: [...items] })}
           />
@@ -630,7 +669,11 @@ function OperationForm({
                   )?.legalName ??
                   "Unidade selecionada"
                 }
-                hasChecklist={Boolean(checklistTemplateId)}
+                checklistNames={selectedChecklistIds.map(
+                  (id) =>
+                    templates.find((template) => template.id === id)?.name ??
+                    "Checklist indisponível",
+                )}
               />
             )}
           </motion.div>

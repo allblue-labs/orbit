@@ -1775,6 +1775,9 @@ model ChecklistTemplate {
   /// tipos é do domínio e cresce sem migração de enum.
   operationKind String? @map("operation_kind") @db.VarChar(40)
 
+  /// Sugerido inicialmente em qualquer nova operação; a seleção pode ser removida.
+  isGeneral Boolean @default(false) @map("is_general")
+
   description        String?   @db.Text
   version            Int       @default(1)
   items              Json      @default("[]") @db.JsonB

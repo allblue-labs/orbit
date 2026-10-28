@@ -42,7 +42,8 @@ export class ChecklistService {
       key: input.key.trim().toUpperCase(),
       name: input.name.trim(),
       description: input.description?.trim(),
-      operationKind: input.operationKind,
+      operationKind: input.isGeneral ? null : input.operationKind,
+      isGeneral: input.isGeneral ?? false,
       items: items as unknown as Prisma.InputJsonValue,
       isActive: input.isActive ?? true,
     });
@@ -61,7 +62,13 @@ export class ChecklistService {
         name: input.name?.trim() ?? current.name,
         description: input.description?.trim() ?? current.description,
         /// A nova versão herda o vínculo, salvo quando o pedido o troca.
-        operationKind: input.operationKind ?? current.operationKind,
+        operationKind:
+          (input.isGeneral ?? current.isGeneral)
+            ? null
+            : input.operationKind !== undefined
+              ? input.operationKind
+              : current.operationKind,
+        isGeneral: input.isGeneral ?? current.isGeneral,
         items: this.validateItems(
           input.items ?? currentItems,
         ) as unknown as Prisma.InputJsonValue,
@@ -71,7 +78,9 @@ export class ChecklistService {
     return this.repository.updateTemplate(id, {
       name: input.name?.trim(),
       description: input.description?.trim(),
-      operationKind: input.operationKind,
+      operationKind:
+        (input.isGeneral ?? current.isGeneral) ? null : input.operationKind,
+      isGeneral: input.isGeneral,
       isActive: input.isActive,
     });
   }
@@ -110,6 +119,15 @@ export class ChecklistService {
       ...(template.items as Prisma.InputJsonValue[]),
       ...((input.additionalItems ?? []) as unknown as Prisma.InputJsonValue[]),
     ];
+    const keys = items.map((item) =>
+      String((item as { key: string }).key)
+        .trim()
+        .toLowerCase(),
+    );
+    if (new Set(keys).size !== keys.length)
+      throw new ValidationException(
+        'Os itens adicionais não podem repetir uma chave do checklist.',
+      );
     const answers = checklistDefaults(items);
     return this.repository.createExecution(
       {

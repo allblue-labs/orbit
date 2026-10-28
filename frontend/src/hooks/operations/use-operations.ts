@@ -27,7 +27,6 @@ import {
   operationIntelligenceService,
   operationsService,
 } from "@/services/operations.service";
-import type { OperationKind } from "@/types/contracts";
 import type {
   AssignOperationUserInput,
   ChangeOperationStatusInput,
@@ -395,37 +394,6 @@ export function useRemoveOperationAttachment(id: string) {
 /* ------------------------------------------------------------------ */
 
 /**
- * O modelo de checklist deste tipo de atendimento.
- *
- * Só consulta quando há um tipo escolhido: sem ele, a pergunta não existe —
- * e uma consulta sem filtro traria o catálogo inteiro para escolher um.
- *
- * Devolve o primeiro ativo. Se a organização tiver mais de um modelo para o
- * mesmo tipo, é o catálogo que está ambíguo, e resolver isso adivinhando aqui
- * esconderia o problema de quem pode corrigi-lo.
- */
-export function useChecklistTemplateForKind(kind: OperationKind | null) {
-  const query = useApiQuery(
-    checklistTemplatesService.keys.list({
-      operationKind: kind ?? undefined,
-      isActive: true,
-      limit: 1,
-    }),
-    ({ signal }) =>
-      checklistTemplatesService.list(
-        { operationKind: kind!, isActive: true, limit: 1 },
-        { signal },
-      ),
-    { enabled: Boolean(kind) },
-  );
-
-  return {
-    ...query,
-    template: query.data?.data?.[0] ?? null,
-  };
-}
-
-/**
  * O catálogo de modelos de checklist, ativos.
  *
  * Para quem **escolhe** um roteiro — o cadastro de unidade, por exemplo — e
@@ -440,6 +408,14 @@ export function useChecklistTemplates() {
         { signal },
       ),
     CACHE.stable,
+  );
+}
+
+export function useChecklistTemplateSelection(enabled = true) {
+  return useApiQuery(
+    [...checklistTemplatesService.keys.module(), "operation-selection"],
+    ({ signal }) => checklistTemplatesService.selection({ signal }),
+    { ...CACHE.fresh, enabled },
   );
 }
 

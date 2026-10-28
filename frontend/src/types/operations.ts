@@ -90,6 +90,7 @@ export interface OperationQuery {
  * do servidor.
  */
 export interface CreateOperationInput {
+  checklists?: readonly StartChecklistInput[];
   /** Optional manual service value. Null restores the linked quote value. */
   manualAmount?: number | null;
   businessUnitId: string;
@@ -130,7 +131,9 @@ export interface CreateOperationInput {
 }
 
 /** `PATCH /operations/:id` (`UpdateOperationDto` — `PartialType`). */
-export type UpdateOperationInput = Partial<CreateOperationInput>;
+export type UpdateOperationInput = Partial<
+  Omit<CreateOperationInput, "checklists">
+>;
 
 /** Limites declarados pelo `class-validator` no `CreateOperationDto`. */
 export const OPERATION_LIMITS = {
@@ -165,9 +168,8 @@ export interface ChecklistTemplateRef {
 /**
  * Modelo de checklist (`GET /checklist-templates`).
  *
- * `operationKind` é o vínculo com o tipo de atendimento. Nulo significa que o
- * modelo serve a qualquer tipo — é o que todo modelo era antes de a coluna
- * existir.
+ * `operationKind` organiza o catálogo por tipo de atendimento.
+ * `isGeneral` define a seleção inicial, removível, nas novas operações.
  */
 export interface ChecklistTemplate {
   id: string;
@@ -175,12 +177,14 @@ export interface ChecklistTemplate {
   name: string;
   description: string | null;
   operationKind: OperationKind | null;
+  isGeneral: boolean;
   version: number;
   isActive: boolean;
   items: readonly ChecklistItem[];
 }
 
 export interface ChecklistTemplateQuery {
+  latestOnly?: boolean;
   operationKind?: OperationKind;
   isActive?: boolean;
   search?: string;
@@ -350,16 +354,16 @@ export const CHECKLIST_ITEM_TYPES = [
 
 /** `POST /checklist-templates`. */
 export interface CreateChecklistTemplateInput {
+  isGeneral?: boolean;
   key: string;
   name: string;
   description?: string;
   /**
    * O tipo de atendimento a que o roteiro pertence.
    *
-   * É o que faz o formulário de nova operação achar o roteiro ao escolher o
-   * tipo. Omitido, o roteiro serve a qualquer tipo.
+   * Referência para organizar o catálogo; isGeneral define a seleção inicial.
    */
-  operationKind?: OperationKind;
+  operationKind?: OperationKind | null;
   items: readonly ChecklistItem[];
   isActive?: boolean;
 }

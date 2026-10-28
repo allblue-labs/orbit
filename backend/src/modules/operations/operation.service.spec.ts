@@ -50,6 +50,7 @@ describe('OperationService', () => {
     workforce as unknown as WorkforceRepository,
     semCota,
     files as never,
+    {} as never,
   );
 
   beforeEach(() => {

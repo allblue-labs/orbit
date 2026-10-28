@@ -27,6 +27,7 @@ import {
 import { generateUuidV7 } from '../../utils';
 import { FileObjectService } from '../storage/file-object.service';
 import type { OperationFieldRecordReadModel } from './operation.read-models';
+import { ChecklistService } from './checklist.service';
 
 @Injectable()
 export class OperationService {
@@ -39,6 +40,7 @@ export class OperationService {
     private readonly entitlements: EntitlementService,
     /** Assina as URLs das imagens do registro de campo. */
     private readonly files: FileObjectService,
+    private readonly checklists: ChecklistService,
     @Optional()
     private readonly mobileNotifications?: MobileNotificationService,
   ) {}
@@ -75,6 +77,11 @@ export class OperationService {
       input.auxiliaryTechnicianIds ?? [],
     );
     const auxiliares = input.auxiliaryTechnicianIds ?? [];
+    if (input.checklists?.length)
+      await this.entitlements.assertCapability(
+        organizationId,
+        'checklists.execute',
+      );
     try {
       /**
        * A ordem de serviço é a unidade comercial de OS.
@@ -97,8 +104,8 @@ export class OperationService {
         organizationId,
         UsageResource.SERVICE_ORDERS_CREATED,
         (criada: { id: string }) => ({ type: 'OPERATION', id: criada.id }),
-        () =>
-          this.repository.create(
+        async () => {
+          const created = await this.repository.create(
             {
               organizationId,
               businessUnitId: input.businessUnitId,
@@ -128,7 +135,20 @@ export class OperationService {
             this.json({ code: input.code, title: input.title }),
             auxiliares,
             assetIds,
-          ),
+          );
+          // guardUsage mantém uma transação ambiente: qualquer falha ao
+          // vincular os modelos desfaz a operação e o consumo da cota juntos.
+          for (const selection of input.checklists ?? [])
+            await this.checklists.start(
+              created.id,
+              organizationId,
+              actorId,
+              selection,
+            );
+          return input.checklists?.length
+            ? this.get(created.id, organizationId)
+            : created;
+        },
       );
       const recipients = [
         input.responsibleFieldTechnicianId,

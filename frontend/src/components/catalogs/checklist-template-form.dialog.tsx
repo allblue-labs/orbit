@@ -3,12 +3,8 @@
 /**
  * Cadastro de um roteiro de atendimento.
  *
- * ## Por que o tipo de atendimento importa tanto
- *
- * `operationKind` é o que faz o formulário de nova operação **achar** o
- * roteiro: escolher "Manutenção" traz o roteiro de manutenção, sem seletor de
- * checklist. Um roteiro sem tipo serve a qualquer um e não aparece sozinho em
- * lugar nenhum — é uma escolha legítima, e a tela diz o que ela custa.
+ * Modelos gerais são sugeridos nas novas operações. Os demais podem ser
+ * adicionados manualmente, com o tipo de atendimento como referência.
  *
  * ## A chave não é o nome
  *
@@ -106,6 +102,7 @@ function Body({
 
   const [name, setName] = useState(template?.name ?? "");
   const [description, setDescription] = useState(template?.description ?? "");
+  const [isGeneral, setIsGeneral] = useState(template?.isGeneral ?? false);
   const [kind, setKind] = useState<string>(
     template?.operationKind ?? QUALQUER_TIPO,
   );
@@ -155,9 +152,9 @@ function Body({
     const payload = {
       name: name.trim(),
       description: description.trim() || undefined,
-      ...(kind === QUALQUER_TIPO
-        ? {}
-        : { operationKind: kind as CreateKind }),
+      isGeneral,
+      operationKind:
+        isGeneral || kind === QUALQUER_TIPO ? null : (kind as CreateKind),
       items,
     };
     const fechar = () => onOpenChange(false);
@@ -174,16 +171,20 @@ function Body({
   return (
     <form onSubmit={submit} className="space-y-5">
       <DialogHeader>
-        <DialogTitle>{template ? "Editar roteiro" : "Novo roteiro"}</DialogTitle>
+        <DialogTitle>
+          {template ? "Editar roteiro" : "Novo roteiro"}
+        </DialogTitle>
         <DialogDescription>
-          Os itens que o técnico percorre em campo. Quem cria o atendimento
-          recebe este roteiro ao escolher o tipo.
+          Defina os itens que o técnico percorre em campo e quando este roteiro
+          será sugerido.
         </DialogDescription>
       </DialogHeader>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2 sm:col-span-2">
-          <Label required htmlFor="template-name">Nome</Label>
+          <Label required htmlFor="template-name">
+            Nome
+          </Label>
           <Input
             id="template-name"
             value={name}
@@ -193,9 +194,37 @@ function Body({
           />
         </div>
 
+        <div className="space-y-3 rounded-xl border border-primary/20 bg-primary/5 p-4 sm:col-span-2">
+          <div className="flex items-start gap-3">
+            <Checkbox
+              id="template-general"
+              checked={isGeneral}
+              onCheckedChange={(checked) => setIsGeneral(checked === true)}
+              aria-describedby="template-general-help"
+            />
+            <div className="space-y-1">
+              <Label htmlFor="template-general" className="cursor-pointer">
+                Checklist geral
+              </Label>
+              <p
+                id="template-general-help"
+                className="text-xs text-muted-foreground"
+              >
+                Serve para qualquer tipo de atendimento e vem selecionado nas
+                novas operações. O owner pode removê-lo ou escolher outros
+                modelos.
+              </p>
+            </div>
+          </div>
+        </div>
+
         <div className="space-y-2 sm:col-span-2">
           <Label htmlFor="template-kind">Tipo de atendimento</Label>
-          <Select value={kind} onValueChange={setKind}>
+          <Select
+            value={isGeneral ? QUALQUER_TIPO : kind}
+            onValueChange={setKind}
+            disabled={isGeneral}
+          >
             <SelectTrigger id="template-kind">
               <SelectValue />
             </SelectTrigger>
@@ -209,9 +238,11 @@ function Body({
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">
-            {kind === QUALQUER_TIPO
-              ? "Sem tipo, o roteiro não aparece sozinho no formulário de atendimento."
-              : `Quem escolher "${operationKindLabel(kind)}" recebe este roteiro.`}
+            {isGeneral
+              ? "Disponível para qualquer atendimento, com seleção inicial automática."
+              : kind === QUALQUER_TIPO
+                ? "Disponível para seleção manual em qualquer atendimento."
+                : `Modelo de referência para ${operationKindLabel(kind)}. A inclusão no atendimento é manual.`}
           </p>
         </div>
 
