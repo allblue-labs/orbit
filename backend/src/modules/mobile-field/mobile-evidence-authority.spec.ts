@@ -37,6 +37,9 @@ function bancada({
   hasMembership?: boolean;
 }) {
   const tx = {
+    organization: {
+      findUnique: jest.fn().mockResolvedValue({ settings: null }),
+    },
     organizationMembership: {
       findFirst: jest.fn().mockResolvedValue({ role: { permissions } }),
     },
@@ -135,6 +138,9 @@ describe('evidência de uma execução de PMOC', () => {
 describe('RVT evidence ownership', () => {
   async function authorize(owner: boolean, assigned = true) {
     const tx = {
+      organization: {
+        findUnique: jest.fn().mockResolvedValue({ settings: null }),
+      },
       organizationMembership: {
         findFirst: jest.fn().mockResolvedValue({
           role: { permissions: ['rvt.read', 'rvt.execute'] },

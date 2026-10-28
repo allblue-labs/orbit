@@ -37,6 +37,10 @@ describe("o dia civil da fila", () => {
   it("sem data, não há dia", () => {
     expect(diaCivil(null, RECIFE)).toBeNull();
   });
+  it("preserva o dia de vencimento do PMOC sem deslocá-lo pelo fuso", () => {
+    expect(diaCivil("2026-10-30", RECIFE)).toBe("2026-10-30");
+    expect(diaCivil("2026-10-30", "Pacific/Kiritimati")).toBe("2026-10-30");
+  });
 });
 
 describe("o agrupamento da fila", () => {

@@ -5,6 +5,7 @@ import { generateUuidV7 } from '../../utils';
 import type { MobileFieldActor } from './mobile-field.service';
 import type { FieldEvidenceTarget } from './mobile-evidence.read-models';
 import { mobileEvidencePolicy } from './mobile-evidence.config';
+import { assignmentAuthorizationRequired } from '../operations/recurring-authorization';
 
 type TargetContext = {
   type: FieldEvidenceTarget;
@@ -497,6 +498,9 @@ export class MobileEvidenceRepository {
     type: FieldEvidenceTarget,
     id: string,
   ): Promise<TargetContext | null> {
+    const requiresAuthorization =
+      actor.isOrganizationOwner !== true &&
+      (await assignmentAuthorizationRequired(tx, actor.organizationId));
     if (type === 'OPERATION') {
       const value = await tx.operation.findFirst({
         where: {
@@ -504,6 +508,7 @@ export class MobileEvidenceRepository {
           organizationId: actor.organizationId,
           businessUnitId: { in: [...actor.businessUnitIds] },
           deletedAt: null,
+          ...(requiresAuthorization ? { authorizedAt: { not: null } } : {}),
         },
         select: {
           id: true,
@@ -537,6 +542,9 @@ export class MobileEvidenceRepository {
           id,
           organizationId: actor.organizationId,
           businessUnitId: { in: [...actor.businessUnitIds] },
+          ...(requiresAuthorization
+            ? { cycle: { authorizedAt: { not: null } } }
+            : {}),
         },
         select: {
           id: true,
@@ -575,6 +583,9 @@ export class MobileEvidenceRepository {
         id,
         organizationId: actor.organizationId,
         businessUnitId: { in: [...actor.businessUnitIds] },
+        ...(requiresAuthorization
+          ? { occurrence: { authorizedAt: { not: null } } }
+          : {}),
       },
       select: {
         id: true,

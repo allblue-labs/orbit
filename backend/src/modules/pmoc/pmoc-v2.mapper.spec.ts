@@ -33,6 +33,7 @@ describe('PMOC V2 public mapping', () => {
       sequenceNumber: 1,
       performedAt: null,
       startedAt: new Date('2026-08-27T10:00:00Z'),
+      updatedAt: new Date('2026-08-27T10:00:00Z'),
       completedAt: null,
       notes: null,
       procedureSnapshot: {},

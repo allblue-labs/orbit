@@ -31,6 +31,7 @@ import type {
 import { MobileEvidenceRepository } from './mobile-evidence.repository';
 import { MobileSignatureRepository } from './mobile-signature.repository';
 import { formatServiceOrderNumber } from '../operations/service-order-number';
+import { requiresAssignmentAuthorization } from '../operations/operation-authorization';
 
 type OperationPreparation = NonNullable<
   Awaited<ReturnType<MobileFieldOperationRepository['preparation']>>
@@ -521,6 +522,12 @@ export class MobileFieldOperationService {
       actor.organizationId,
     );
     if (!source) throw new EntityNotFoundException('Operation', operationId);
+    if (
+      !actor.isOrganizationOwner &&
+      requiresAssignmentAuthorization(source.organization?.settings) &&
+      !source.authorizedAt
+    )
+      throw new EntityNotFoundException('Operation', operationId);
     const assigned =
       source.responsibleFieldTechnicianId === actor.id ||
       source.auxiliaryTechnicians.some(

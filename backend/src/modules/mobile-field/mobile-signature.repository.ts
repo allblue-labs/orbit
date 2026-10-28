@@ -141,6 +141,7 @@ export class MobileSignatureRepository {
       const operation = await tx.operation.findFirst({
         where: { id: operationId, organizationId, deletedAt: null },
         include: {
+          organization: { select: { settings: true } },
           checklistExecutions: { orderBy: { createdAt: 'asc' } },
           pmocEquipmentExecution: {
             select: {

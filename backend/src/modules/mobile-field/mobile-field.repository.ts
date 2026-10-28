@@ -707,6 +707,7 @@ export class MobileFieldRepository {
           : await tx.pmocExecution.findMany({
               where: {
                 organizationId,
+                ...recorteDeAutorizacao,
                 ...(target?.kind === 'PMOC' ? { id: target.sourceId } : {}),
                 status: { notIn: ['COMPLETED', 'CANCELLED'] },
 
@@ -729,8 +730,10 @@ export class MobileFieldRepository {
                   ...(filters?.customerId
                     ? { customerId: filters.customerId }
                     : {}),
-                  OR: [
-                    {
+                },
+                OR: [
+                  {
+                    plan: {
                       technicianUserId: actorId,
                       technician: {
                         professionalProfiles: {
@@ -742,17 +745,13 @@ export class MobileFieldRepository {
                         },
                       },
                     },
-                    {
-                      executions: {
-                        some: {
-                          equipmentExecutions: {
-                            some: { responsibleFieldTechnicianId: actorId },
-                          },
-                        },
-                      },
+                  },
+                  {
+                    equipmentExecutions: {
+                      some: { responsibleFieldTechnicianId: actorId },
                     },
-                  ],
-                },
+                  },
+                ],
               },
               take: target?.kind === 'PMOC' ? 1 : 300,
               orderBy: [{ dueOn: 'asc' }, { id: 'asc' }],
@@ -840,6 +839,7 @@ export class MobileFieldRepository {
           : await tx.rvtOccurrence.findMany({
               where: {
                 organizationId,
+                ...recorteDeAutorizacao,
                 ...(target?.kind === 'RVT' ? { id: target.sourceId } : {}),
                 businessUnitId: { in: scopedIds },
                 status: { notIn: ['COMPLETED', 'CANCELLED'] },

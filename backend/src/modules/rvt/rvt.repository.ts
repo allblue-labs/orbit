@@ -1,9 +1,11 @@
 import { checklistDefaults } from '../operations/checklist-defaults';
+import { assignmentAuthorizationRequired } from '../operations/recurring-authorization';
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument, orbit/no-concurrent-transaction-queries */
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import { RlsTransaction } from '../../database';
+import { ForbiddenException } from '../../exceptions';
 import { generateUuidV7 } from '../../utils';
 import type { OccurrenceCandidate } from './rvt.domain';
 
@@ -451,6 +453,8 @@ export class RvtRepository {
             localScheduledDate: this.date(target.localDate),
             schedulingEventId,
             equipmentIds: input.equipmentIds,
+            authorizedAt: null,
+            authorizedById: null,
             responsibleFieldTechnicianId: effective.responsible,
           },
         });
@@ -588,12 +592,19 @@ export class RvtRepository {
   }
 
   occurrence(id: string, organizationId: string) {
-    return this.rls.run((tx) =>
-      tx.rvtOccurrence.findFirst({
+    return this.rls.run(async (tx) => {
+      const occurrence = await tx.rvtOccurrence.findFirst({
         where: { id, organizationId, deletedAt: null },
         include: { execution: { select: { id: true } }, configuration: true },
-      }),
-    );
+      });
+      return occurrence
+        ? {
+            ...occurrence,
+            assignmentAuthorizationRequired:
+              await assignmentAuthorizationRequired(tx, organizationId),
+          }
+        : null;
+    });
   }
 
   listOccurrences(organizationId: string, query: any) {
@@ -785,6 +796,8 @@ export class RvtRepository {
               status: remove ? 'CANCELLED' : input.status,
               customized: true,
               deletedAt: remove ? new Date() : null,
+              authorizedAt: null,
+              authorizedById: null,
             },
           })
         : await tx.rvtOccurrence.create({
@@ -861,6 +874,7 @@ export class RvtRepository {
     actorId: string;
     responsibleId: string;
     auxiliaries: string[];
+    authorizationBypass?: boolean;
   }) {
     return this.rls.run(async (tx) => {
       const target = await tx.rvtOccurrence.findFirstOrThrow({
@@ -872,6 +886,7 @@ export class RvtRepository {
         select: { configurationId: true },
       });
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`rvt:configuration:${target.configurationId}`}))`;
+      await tx.$executeRaw`SELECT id FROM rvt_occurrences WHERE id=${input.occurrenceId}::uuid AND organization_id=${input.organizationId}::uuid FOR UPDATE`;
       const occurrence = await tx.rvtOccurrence.findFirstOrThrow({
         where: {
           id: input.occurrenceId,
@@ -907,6 +922,18 @@ export class RvtRepository {
           execution: true,
         },
       });
+      const authorizationRequired = await assignmentAuthorizationRequired(
+        tx,
+        input.organizationId,
+      );
+      if (
+        authorizationRequired &&
+        !occurrence.authorizedAt &&
+        !input.authorizationBypass
+      )
+        throw new ForbiddenException(
+          'A visita ainda aguarda autorização do proprietário.',
+        );
       if (occurrence.execution)
         return { id: occurrence.execution.id, created: false };
       if (occurrence.status !== 'SCHEDULED')
@@ -948,6 +975,10 @@ export class RvtRepository {
           startedByUserId: input.actorId,
           createdById: input.actorId,
           responsibleFieldTechnicianId: input.responsibleId,
+          authorizedAt:
+            occurrence.authorizedAt ??
+            (authorizationRequired ? null : new Date()),
+          authorizedById: occurrence.authorizedById,
           data: { source: 'RVT', occurrenceId: occurrence.id },
           users: {
             create: {
@@ -1483,6 +1514,10 @@ export class RvtRepository {
           })
         : null;
       return Object.assign(execution, {
+        assignmentAuthorizationRequired: await assignmentAuthorizationRequired(
+          tx,
+          organizationId,
+        ),
         fieldTechnicianName:
           users.find((x) => x.id === execution.responsibleFieldTechnicianId)
             ?.displayName ?? '',

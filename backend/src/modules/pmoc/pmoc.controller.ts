@@ -33,7 +33,7 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
-import { Permissions } from '../../decorators';
+import { Permissions, Surfaces } from '../../decorators';
 import { ForbiddenException } from '../../exceptions';
 import { ParseUUIDv7Pipe } from '../../pipes';
 import type { IdentityRequest } from '../identity/infrastructure/jwt-authentication.guard';
@@ -434,6 +434,7 @@ export class PmocController {
   }
 
   @Get('plans/:id/cycles/:cycleId/equipment/:assetId/execution-preparation')
+  @Surfaces('WEB', 'API', 'MOBILE')
   @Capabilities('pmoc.read')
   @ApiOperation({
     summary: 'Authoritative PMOC execution preparation for Web and Mobile',
@@ -487,6 +488,7 @@ export class PmocController {
    * era dele.
    */
   @Post('plans/:id/cycles/:cycleId/equipment/:assetId/executions/mine')
+  @Surfaces('MOBILE', 'WEB', 'API')
   @Capabilities('pmoc.manage', 'operations.manage')
   // A atribuição é validada pelo serviço para esta execução, sem conceder gestão global.
   @ApiOperation({
@@ -509,6 +511,7 @@ export class PmocController {
   @Patch(
     'plans/:id/cycles/:cycleId/equipment-executions/:executionId/work/mine',
   )
+  @Surfaces('MOBILE', 'WEB', 'API')
   @Capabilities('pmoc.manage', 'operations.manage')
   saveEquipmentWork(
     @Param('id', ParseUUIDv7Pipe) id: string,
@@ -560,6 +563,7 @@ export class PmocController {
   @Post(
     'plans/:id/cycles/:cycleId/equipment-executions/:executionId/complete/mine',
   )
+  @Surfaces('MOBILE', 'WEB', 'API')
   @Capabilities('pmoc.manage', 'operations.manage')
   // A atribuição é validada pelo serviço para esta execução, sem conceder gestão global.
   @ApiOperation({
@@ -653,6 +657,7 @@ export class PmocController {
    * execução**, e não contra o plano: o documento sai com o nome de quem assina.
    */
   @Post('equipment-executions/:executionId/artifact/generate/mine')
+  @Surfaces('MOBILE', 'WEB', 'API')
   @Capabilities('pmoc.manage', 'artifact_rendering.render')
   // A atribuição é validada pelo serviço para esta execução, sem conceder gestão global.
   @ApiOperation({

@@ -69,6 +69,8 @@ export function diaCivil(
   timeZone: string,
 ): string | null {
   if (!scheduledStart) return null;
+  // Vencimentos PMOC são dias civis, sem horário nem conversão de fuso.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(scheduledStart)) return scheduledStart;
   const parts = zonedParts(new Date(scheduledStart), timeZone);
   const pad = (value: number) => String(value).padStart(2, "0");
   return `${parts.year}-${pad(parts.month)}-${pad(parts.day)}`;

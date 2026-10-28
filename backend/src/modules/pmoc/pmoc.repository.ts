@@ -48,6 +48,7 @@ import {
 } from './pmoc.domain';
 import type { FrequencyUnit } from './pmoc.domain';
 import { nextPmocDueOnSql } from './pmoc-schedule.sql';
+import { assignmentAuthorizationRequired } from '../operations/recurring-authorization';
 import type {
   PmocAnalyticsQueryDto,
   PmocPlanQueryDto,
@@ -674,6 +675,27 @@ export class PmocRepository {
         data,
         select: planView,
       });
+      if (
+        data.technician !== undefined ||
+        data.serviceLocation !== undefined ||
+        data.procedure !== undefined ||
+        data.scope !== undefined ||
+        data.serviceTypes !== undefined
+      ) {
+        await tx.pmocExecution.updateMany({
+          where: {
+            planId: id,
+            organizationId,
+            status: 'PENDING',
+            equipmentExecutions: { none: {} },
+          },
+          data: {
+            authorizedAt: null,
+            authorizedById: null,
+            updatedAt: new Date(),
+          },
+        });
+      }
       await this.audit(tx, id, organizationId, actorId, action, before, {
         status: plan.status,
         nextDueOn: plan.nextDueOn,
@@ -1246,7 +1268,14 @@ export class PmocRepository {
       if (!plan) return null;
       const cycle = await tx.pmocExecution.findFirst({
         where: { id: cycleId, planId, organizationId },
-        select: { id: true, dueOn: true, status: true, sequenceNumber: true },
+        select: {
+          id: true,
+          dueOn: true,
+          status: true,
+          sequenceNumber: true,
+          authorizedAt: true,
+          authorizedById: true,
+        },
       });
       const coverage = await tx.pmocEquipmentCoverage.findFirst({
         where: { planId, organizationId, assetId, deletedAt: null },
@@ -1316,6 +1345,10 @@ export class PmocRepository {
         existing,
         technicalResponsibleSignature: signature,
         technicalResponsibleCredential: credential,
+        assignmentAuthorizationRequired: await assignmentAuthorizationRequired(
+          tx,
+          organizationId,
+        ),
       };
     });
   }
@@ -1375,9 +1408,30 @@ export class PmocRepository {
     technicalResponsibleSnapshot: Prisma.InputJsonValue;
     code: string;
     title: string;
+    authorizationBypass?: boolean;
   }) {
     return this.rls.run(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`pmoc:equipment:${input.cycleId}:${input.coverageId}`}))`;
+      await tx.$executeRaw`SELECT id FROM pmoc_executions WHERE id=${input.cycleId}::uuid AND organization_id=${input.organizationId}::uuid FOR UPDATE`;
+      const cycle = await tx.pmocExecution.findFirstOrThrow({
+        where: {
+          id: input.cycleId,
+          planId: input.planId,
+          organizationId: input.organizationId,
+        },
+      });
+      const authorizationRequired = await assignmentAuthorizationRequired(
+        tx,
+        input.organizationId,
+      );
+      if (
+        authorizationRequired &&
+        !cycle.authorizedAt &&
+        !input.authorizationBypass
+      )
+        throw new ForbiddenException(
+          'O ciclo PMOC ainda aguarda autorização do proprietário.',
+        );
       const existing = await tx.pmocEquipmentExecution.findUnique({
         where: {
           cycleId_coverageId: {
@@ -1404,6 +1458,9 @@ export class PmocRepository {
           status: 'IN_PROGRESS',
           priority: 'NORMAL',
           responsibleFieldTechnicianId: input.responsibleFieldTechnicianId,
+          authorizedAt:
+            cycle.authorizedAt ?? (authorizationRequired ? null : new Date()),
+          authorizedById: cycle.authorizedById,
           startedByUserId: input.actorId,
           startedAt: new Date(),
           createdById: input.actorId,
@@ -2085,6 +2142,7 @@ export class PmocRepository {
         },
         include: {
           operation: true,
+          cycle: true,
           plan: {
             include: { units: { include: { unit: { include: unitView } } } },
           },
@@ -2097,6 +2155,14 @@ export class PmocRepository {
         throw new EntityNotFoundException(
           'PmocEquipmentExecution',
           input.executionId,
+        );
+      if (
+        !input.isOwner &&
+        !execution.cycle.authorizedAt &&
+        (await assignmentAuthorizationRequired(tx, input.organizationId))
+      )
+        throw new ForbiddenException(
+          'O ciclo PMOC ainda aguarda autorização do proprietário.',
         );
       if (
         !input.isOwner &&
@@ -2171,6 +2237,23 @@ export class PmocRepository {
   }) {
     return this.rls.run(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`pmoc:cycle-completion:${input.cycleId}`}))`;
+      if (
+        input.restrictToTechnicianId &&
+        (await assignmentAuthorizationRequired(tx, input.organizationId))
+      ) {
+        const cycle = await tx.pmocExecution.findFirst({
+          where: {
+            id: input.cycleId,
+            organizationId: input.organizationId,
+            planId: input.planId,
+          },
+          select: { authorizedAt: true },
+        });
+        if (!cycle?.authorizedAt)
+          throw new ForbiddenException(
+            'O ciclo PMOC ainda aguarda autorização do proprietário.',
+          );
+      }
       const claimed = await tx.pmocEquipmentExecution.updateMany({
         where: {
           id: input.executionId,

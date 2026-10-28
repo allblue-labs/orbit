@@ -66,7 +66,7 @@ export const OPERATIONS_REFRESH = {
 } as const;
 
 /** Lista paginada. A unidade ativa entra como filtro quando não há escolha explícita. */
-export function useOperationsList(query: OperationQuery) {
+export function useOperationsList(query: OperationQuery, enabled = true) {
   const { businessUnitId } = useActiveScope();
   const scopedQuery = useMemo<OperationQuery>(
     () => ({
@@ -81,6 +81,7 @@ export function useOperationsList(query: OperationQuery) {
     ({ signal }) => operationsService.list(scopedQuery, { signal }),
     {
       ...OPERATIONS_REFRESH.list,
+      enabled,
       /** Mantém a página anterior visível durante a troca de página. */
       placeholderData: (previous) => previous,
     },
