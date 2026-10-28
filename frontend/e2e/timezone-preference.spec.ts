@@ -200,6 +200,25 @@ async function fixture(
   return { profile, reads, writes };
 }
 
+test("novo evento identifica obrigatórios em português e mantém os opcionais livres", async ({ page }) => {
+  await fixture(page);
+  await page.goto("/agenda");
+  await page.getByRole("button", { name: "Novo evento", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Novo evento na agenda" });
+  for (const id of ["event-title", "event-calendar", "event-type", "event-start", "event-end"]) {
+    await expect(dialog.locator(`label[for="${id}"]`)).toContainText("(obrigatório)");
+    await expect(dialog.locator(`#${id}`)).toHaveAttribute("aria-required", "true");
+  }
+  await expect(dialog.locator('label[for="event-description"]')).not.toContainText("obrigatório");
+  await expect(dialog.getByRole("button", { name: "Criar evento", exact: true })).toBeDisabled();
+  await expect(dialog.getByRole("status")).toContainText("Preencha os campos obrigatórios");
+  await dialog.locator("#event-title").fill("Manutenção agendada");
+  await expect(dialog.getByRole("button", { name: "Criar evento", exact: true })).toBeEnabled();
+  await dialog.getByRole("checkbox", { name: "Evento recorrente", exact: true }).check();
+  await expect(dialog.locator('label[for="event-frequency"]')).toContainText("(obrigatório)");
+  await expect(dialog.locator('label[for="event-count"]')).not.toContainText("obrigatório");
+});
+
 test("saving the preference propagates to settings, new calendars and HTTP context", async ({
   page,
 }) => {

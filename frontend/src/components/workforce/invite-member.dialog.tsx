@@ -102,7 +102,7 @@ function Body({ onOpenChange }: { onOpenChange: (open: boolean) => void }) {
 
       <div className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="invite-email">E-mail</Label>
+          <Label required htmlFor="invite-email">E-mail</Label>
           <Input
             id="invite-email"
             type="email"

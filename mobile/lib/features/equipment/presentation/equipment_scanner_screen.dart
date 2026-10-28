@@ -15,6 +15,8 @@
 /// de memória à noite.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -55,13 +57,10 @@ class EquipmentScannerScreen extends ConsumerStatefulWidget {
 
   /// Devolver o token em vez de mostrar o resultado aqui.
   ///
-  /// A câmera precisa da tela inteira — não há como enquadrar uma etiqueta
-  /// numa folha de 40% da altura. Mas o **resultado** não precisa: quem abriu
-  /// o leitor a partir da tela inicial volta para ela, e o equipamento surge
-  /// numa folha por cima, sem trocar de contexto.
+  /// Disponível para fluxos que precisam apenas escolher um equipamento.
   ///
-  /// Quando `false`, o leitor continua se bastando: resolve e mostra ali
-  /// mesmo, que é o certo para quem entrou pelo caminho do leitor.
+  /// Quando `false`, resolve e abre a ficha na própria tela. A Home usa este
+  /// modo para não perder a leitura quando seus dados são recarregados.
   final bool returnsToken;
 
   @override
@@ -97,18 +96,23 @@ class _EquipmentScannerScreenState
       if (valor == null) continue;
       final token = equipmentQrToken(valor);
       if (token != null) {
-        if (widget.returnsToken) {
-          context.pop(token);
-          return;
-        }
-        setState(() {
-          _token = token;
-          _naoReconhecido = false;
-        });
+        _aceitar(token);
         return;
       }
     }
     if (!_naoReconhecido) setState(() => _naoReconhecido = true);
+  }
+
+  void _aceitar(String token) {
+    if (_token != null || !mounted) return;
+    // Trava antes de navegar: várias detecções no mesmo frame não podem
+    // remover duas rotas nem perder o resultado da leitura.
+    setState(() {
+      _token = token;
+      _naoReconhecido = false;
+    });
+    unawaited(_controller.stop());
+    if (widget.returnsToken) context.pop(token);
   }
 
   void _limpar() => setState(() {
@@ -121,50 +125,50 @@ class _EquipmentScannerScreenState
     final token = _token;
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: token == null ? Colors.black : context.orbit.background,
       appBar: AppBar(
-        title: const Text('Ler etiqueta'),
-        actions: [
-          IconButton(
-            onPressed: () => _controller.toggleTorch(),
-            icon: const Icon(Icons.flashlight_on_outlined),
-            tooltip: 'Lanterna',
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                MobileScanner(
-                  controller: _controller,
-                  onDetect: _aoDetectar,
-                  errorBuilder: (context, error) =>
-                      _CameraIndisponivel(error: error),
+        title: Text(token == null ? 'Ler etiqueta' : 'Equipamento'),
+        actions: token != null
+            ? null
+            : [
+                IconButton(
+                  onPressed: () => _controller.toggleTorch(),
+                  icon: const Icon(Icons.flashlight_on_outlined),
+                  tooltip: 'Lanterna',
                 ),
-                const _Mira(),
-                if (_naoReconhecido && token == null)
-                  const Align(
-                    alignment: Alignment.bottomCenter,
-                    child: _Aviso(
-                      texto: 'Este código não é uma etiqueta do Orbit.',
-                    ),
+              ],
+      ),
+      // Retirar o MobileScanner da árvore encerra a câmera. A ficha usa a
+      // tela inteira e não pode ser coberta por uma nova leitura.
+      body: token != null
+          ? _Resultado(key: ValueKey(token), token: token, onFechar: _limpar)
+          : Column(
+              children: [
+                Expanded(
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      MobileScanner(
+                        controller: _controller,
+                        onDetect: _aoDetectar,
+                        errorBuilder: (context, error) =>
+                            _CameraIndisponivel(error: error),
+                      ),
+                      const _Mira(),
+                      if (_naoReconhecido && token == null)
+                        const Align(
+                          alignment: Alignment.bottomCenter,
+                          child: _Aviso(
+                            texto: 'Este código não é uma etiqueta do Orbit.',
+                          ),
+                        ),
+                    ],
                   ),
+                ),
+
+                _EntradaManualBotao(onRead: _aceitar),
               ],
             ),
-          ),
-
-          /// O resultado ocupa a metade de baixo, onde o polegar alcança.
-          if (token != null)
-            Expanded(
-              child: _Resultado(token: token, onFechar: _limpar),
-            )
-          else
-            const _EntradaManualBotao(),
-        ],
-      ),
     );
   }
 }
@@ -246,7 +250,9 @@ class _CameraIndisponivel extends StatelessWidget {
 
 /// Abre a digitação do código quando a câmera não resolve.
 class _EntradaManualBotao extends StatelessWidget {
-  const _EntradaManualBotao();
+  const _EntradaManualBotao({required this.onRead});
+
+  final ValueChanged<String> onRead;
 
   @override
   Widget build(BuildContext context) => ColoredBox(
@@ -259,7 +265,12 @@ class _EntradaManualBotao extends StatelessWidget {
           onPressed: () => showModalBottomSheet<void>(
             context: context,
             isScrollControlled: true,
-            builder: (_) => const EquipmentManualEntrySheet(),
+            builder: (sheetContext) => EquipmentManualEntrySheet(
+              onRead: (token) {
+                Navigator.of(sheetContext).pop();
+                onRead(token);
+              },
+            ),
           ),
           icon: const Icon(Icons.keyboard_alt_outlined, size: 18),
           label: const Text('Digitar o código da etiqueta'),
@@ -271,7 +282,9 @@ class _EntradaManualBotao extends StatelessWidget {
 
 /// Digitar o código, para quando a câmera não resolve.
 class EquipmentManualEntrySheet extends ConsumerStatefulWidget {
-  const EquipmentManualEntrySheet({super.key});
+  const EquipmentManualEntrySheet({super.key, this.onRead});
+
+  final ValueChanged<String>? onRead;
 
   @override
   ConsumerState<EquipmentManualEntrySheet> createState() =>
@@ -292,6 +305,10 @@ class _EquipmentManualEntrySheetState
 
   void _confirmar() {
     final token = equipmentQrToken(_campo.text);
+    if (token != null && widget.onRead != null) {
+      widget.onRead!(token);
+      return;
+    }
     setState(() {
       _token = token;
       _invalido = token == null;
@@ -382,6 +399,7 @@ Future<void> showEquipmentSheet(BuildContext context, String token) {
 
 class _Resultado extends ConsumerWidget {
   const _Resultado({
+    super.key,
     required this.token,
     required this.onFechar,
     this.scrollController,
@@ -408,6 +426,7 @@ class _Resultado extends ConsumerWidget {
             child: SectionLoading(lines: 4),
           ),
           error: (error, _) => ListView(
+            controller: scrollController,
             padding: const EdgeInsets.all(OrbitSpacing.gutter),
             children: [
               SectionError(
@@ -419,6 +438,7 @@ class _Resultado extends ConsumerWidget {
             ],
           ),
           data: (dados) => _Equipamento(
+            token: token,
             equipment: dados,
             onFechar: onFechar,
             scrollController: scrollController,
@@ -431,112 +451,500 @@ class _Resultado extends ConsumerWidget {
 
 class _Equipamento extends StatelessWidget {
   const _Equipamento({
+    required this.token,
     required this.equipment,
     required this.onFechar,
     this.scrollController,
   });
 
   final EquipmentQrResolvedContract equipment;
+  final String token;
   final VoidCallback onFechar;
   final ScrollController? scrollController;
 
   @override
   Widget build(BuildContext context) {
     final palette = context.orbit;
-    final identificacao = [
-      equipment.brand,
-      equipment.model,
-      if (equipment.serialNumber case final String serie) 'nº $serie',
-    ].whereType<String>().where((parte) => parte.isNotEmpty).join(' · ');
+    final customer = equipment.customer;
+    final contact = [
+      customer?.contactName,
+      customer?.contactPhone,
+    ].whereType<String>().where((value) => value.trim().isNotEmpty).join('\n');
 
     return ListView(
+      key: const ValueKey('equipment-details-scroll'),
       controller: scrollController,
-      padding: const EdgeInsets.only(bottom: OrbitSpacing.lg),
+      padding: const EdgeInsets.fromLTRB(
+        OrbitSpacing.gutter,
+        OrbitSpacing.md,
+        OrbitSpacing.gutter,
+        OrbitSpacing.lg,
+      ),
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            OrbitSpacing.md,
-            OrbitSpacing.md,
-            OrbitSpacing.md,
-            OrbitSpacing.sm,
-          ),
+        OrbitCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                equipment.name,
-                style: OrbitType.sectionTitle.copyWith(color: palette.ink),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(OrbitSpacing.ms),
+                    decoration: BoxDecoration(
+                      color: palette.accentSoft,
+                      borderRadius: OrbitRadius.field,
+                    ),
+                    child: Icon(
+                      Icons.air_outlined,
+                      color: palette.accent,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: OrbitSpacing.ms),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Equipamento identificado',
+                          style: OrbitType.caption.copyWith(
+                            color: palette.inkSubtle,
+                          ),
+                        ),
+                        const SizedBox(height: OrbitSpacing.xs),
+                        Text(
+                          equipment.name,
+                          style: OrbitType.screenTitle.copyWith(
+                            color: palette.ink,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              if (identificacao.isNotEmpty) ...[
-                const SizedBox(height: 2),
-                Text(
-                  identificacao,
-                  style: OrbitType.caption.copyWith(color: palette.inkMuted),
+              const SizedBox(height: OrbitSpacing.md),
+              Wrap(
+                spacing: OrbitSpacing.sm,
+                runSpacing: OrbitSpacing.sm,
+                children: [
+                  if (equipment.code.isNotEmpty)
+                    OrbitStatusBadge(
+                      label: equipment.code,
+                      tone: OrbitTone.info,
+                    ),
+                  OrbitStatusBadge(
+                    label: equipment.availability.active ? 'Ativo' : 'Inativo',
+                    tone: equipment.availability.active
+                        ? OrbitTone.success
+                        : OrbitTone.neutral,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: OrbitSpacing.lg),
+        _EquipmentSection(
+          title: 'Identificação',
+          icon: Icons.info_outline_rounded,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final columns =
+                  constraints.maxWidth >= 280 &&
+                      MediaQuery.textScalerOf(context).scale(1) <= 1.3
+                  ? 2
+                  : 1;
+              return Wrap(
+                spacing: OrbitSpacing.md,
+                runSpacing: OrbitSpacing.md,
+                children: [
+                  for (final (index, field) in [
+                    ('Fabricante', equipment.brand),
+                    ('Modelo', equipment.model),
+                    ('Número de série', equipment.serialNumber),
+                  ].indexed)
+                    SizedBox(
+                      width: index == 2
+                          ? constraints.maxWidth
+                          : (constraints.maxWidth -
+                                    OrbitSpacing.md * (columns - 1)) /
+                                columns,
+                      child: _EquipmentText(
+                        label: field.$1,
+                        text: field.$2?.trim().isNotEmpty == true
+                            ? field.$2!
+                            : 'Não informado',
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: OrbitSpacing.lg),
+        _EquipmentSection(
+          title: 'Cliente e instalação',
+          icon: Icons.business_outlined,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _EquipmentInfo(
+                icon: Icons.person_outline_rounded,
+                label: 'Cliente',
+                value: customer?.name ?? 'Sem cliente vinculado',
+              ),
+              const SizedBox(height: OrbitSpacing.md),
+              _EquipmentInfo(
+                icon: Icons.place_outlined,
+                label: 'Local de instalação',
+                value: equipment.serviceLocation?.trim().isNotEmpty == true
+                    ? equipment.serviceLocation!
+                    : 'Não informado',
+              ),
+              if (equipment.sector?.trim().isNotEmpty == true) ...[
+                const SizedBox(height: OrbitSpacing.md),
+                _EquipmentInfo(
+                  icon: Icons.meeting_room_outlined,
+                  label: 'Setor',
+                  value: equipment.sector!,
+                ),
+              ],
+              if (contact.isNotEmpty) ...[
+                const SizedBox(height: OrbitSpacing.md),
+                _EquipmentInfo(
+                  icon: Icons.contact_phone_outlined,
+                  label: 'Contato no local',
+                  value: contact,
                 ),
               ],
             ],
           ),
         ),
-
-        if (equipment.customer case final cliente?)
-          OrbitListRow(
-            title: cliente.name,
-            subtitle: [
-              equipment.serviceLocation,
-              equipment.sector,
-            ].whereType<String>().join(' · '),
-            detail: cliente.contactName,
-          ),
-
-        if (equipment.lastService case final ultimo?)
-          OrbitListRow(
-            title: 'Último atendimento',
-            subtitle: ultimo.type,
-            detail: OrbitFormat.dateHourOf(ultimo.date),
-          ),
-
-        if (equipment.nextMaintenance case final proxima?)
-          OrbitListRow(
-            title: 'Próxima manutenção',
-            detail: OrbitFormat.dateHourOf(proxima),
-          ),
-
-        /// As ações vêm do servidor e são mostradas como **o que é permitido**,
-        /// não como botões: as telas que as executam ainda são as do
-        /// atendimento, e um botão que leva a lugar nenhum é pior do que
-        /// nenhum botão.
-        if (equipment.allowedActions.isNotEmpty)
-          OrbitSection(
-            title: 'Permitido para você',
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: OrbitSpacing.gutter,
-              ),
-              child: Wrap(
-                spacing: OrbitSpacing.sm,
-                runSpacing: OrbitSpacing.sm,
-                children: [
-                  for (final acao in equipment.allowedActions)
-                    OrbitStatusBadge(
-                      label: equipmentFieldActionLabel(acao),
-                      tone: OrbitTone.info,
-                    ),
-                ],
-              ),
+        if (equipment.lastService != null ||
+            equipment.nextMaintenance != null) ...[
+          const SizedBox(height: OrbitSpacing.lg),
+          _EquipmentSection(
+            title: 'Manutenção',
+            icon: Icons.event_available_outlined,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (equipment.lastService case final last?)
+                  _EquipmentInfo(
+                    icon: Icons.check_circle_outline_rounded,
+                    label: 'Último atendimento',
+                    value:
+                        '${OrbitFormat.dateHourOf(last.date)}\n${agendaEventTypeLabel(last.type) ?? 'Atendimento'}',
+                  ),
+                if (equipment.lastService != null &&
+                    equipment.nextMaintenance != null)
+                  const SizedBox(height: OrbitSpacing.md),
+                if (equipment.nextMaintenance case final next?)
+                  _EquipmentInfo(
+                    icon: Icons.calendar_month_outlined,
+                    label: 'Próxima manutenção',
+                    value: OrbitFormat.dateHourOf(next),
+                  ),
+              ],
             ),
           ),
-
-        const SizedBox(height: OrbitSpacing.md),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: OrbitSpacing.gutter),
-          child: OutlinedButton.icon(
-            onPressed: onFechar,
-            icon: const Icon(Icons.qr_code_scanner, size: 18),
-            label: const Text('Ler outra etiqueta'),
-            style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48)),
+        ],
+        if (equipment.allowedActions.contains(
+          EquipmentFieldAction.viewHistory,
+        )) ...[
+          const SizedBox(height: OrbitSpacing.lg),
+          _ServiceHistory(key: ValueKey(token), token: token),
+        ],
+        const SizedBox(height: OrbitSpacing.lg),
+        OutlinedButton.icon(
+          onPressed: onFechar,
+          icon: const Icon(Icons.qr_code_scanner, size: 18),
+          label: const Text('Ler outra etiqueta', textAlign: TextAlign.center),
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(
+              horizontal: OrbitSpacing.md,
+              vertical: OrbitSpacing.md,
+            ),
           ),
         ),
       ],
     );
   }
+}
+
+class _EquipmentSection extends StatelessWidget {
+  const _EquipmentSection({
+    required this.title,
+    required this.icon,
+    required this.child,
+  });
+  final String title;
+  final IconData icon;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => OrbitCard(
+    padding: const EdgeInsets.all(OrbitSpacing.md),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _EquipmentSectionHeading(title: title, icon: icon),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: OrbitSpacing.md),
+          child: Divider(height: 1, color: context.orbit.border),
+        ),
+        child,
+      ],
+    ),
+  );
+}
+
+class _EquipmentSectionHeading extends StatelessWidget {
+  const _EquipmentSectionHeading({required this.title, required this.icon});
+  final String title;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Icon(icon, size: 20, color: context.orbit.accent),
+      const SizedBox(width: OrbitSpacing.sm),
+      Expanded(
+        child: Text(
+          title,
+          style: OrbitType.sectionTitle.copyWith(color: context.orbit.ink),
+        ),
+      ),
+    ],
+  );
+}
+
+class _EquipmentText extends StatelessWidget {
+  const _EquipmentText({required this.label, required this.text});
+  final String label;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        label,
+        style: OrbitType.caption.copyWith(color: context.orbit.inkSubtle),
+      ),
+      const SizedBox(height: OrbitSpacing.xs),
+      Text(
+        text,
+        style: OrbitType.body.copyWith(
+          color: context.orbit.ink,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    ],
+  );
+}
+
+class _EquipmentInfo extends StatelessWidget {
+  const _EquipmentInfo({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Padding(
+        padding: const EdgeInsets.only(top: 2),
+        child: Icon(icon, size: 18, color: context.orbit.inkSubtle),
+      ),
+      const SizedBox(width: OrbitSpacing.ms),
+      Expanded(
+        child: _EquipmentText(label: label, text: value),
+      ),
+    ],
+  );
+}
+
+class _ServiceHistory extends ConsumerStatefulWidget {
+  const _ServiceHistory({super.key, required this.token});
+  final String token;
+
+  @override
+  ConsumerState<_ServiceHistory> createState() => _ServiceHistoryState();
+}
+
+class _ServiceHistoryState extends ConsumerState<_ServiceHistory> {
+  int _page = 1;
+
+  @override
+  Widget build(BuildContext context) {
+    final request = (widget.token, _page);
+    final history = ref.watch(equipmentServiceHistoryProvider(request));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const _EquipmentSectionHeading(
+          title: 'Histórico de atendimentos',
+          icon: Icons.home_repair_service_outlined,
+        ),
+        const SizedBox(height: OrbitSpacing.sm),
+        Text(
+          'Serviços concluídos neste equipamento.',
+          style: OrbitType.caption.copyWith(color: context.orbit.inkSubtle),
+        ),
+        const SizedBox(height: OrbitSpacing.md),
+        history.when(
+          loading: () => const OrbitCard(child: SectionLoading(lines: 3)),
+          error: (error, _) => OrbitCard(
+            child: SectionError(
+              error: error,
+              onRetry: () =>
+                  ref.invalidate(equipmentServiceHistoryProvider(request)),
+            ),
+          ),
+          data: (data) => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (data.items.isEmpty)
+                OrbitCard(
+                  child: Text(
+                    'Nenhum atendimento concluído para este equipamento.',
+                    style: OrbitType.body.copyWith(
+                      color: context.orbit.inkMuted,
+                    ),
+                  ),
+                ),
+              for (final item in data.items) ...[
+                _AttendanceCard(item: item),
+                const SizedBox(height: OrbitSpacing.ms),
+              ],
+              if (data.totalPages > 1)
+                OrbitCard(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: OrbitSpacing.sm,
+                    vertical: OrbitSpacing.xs,
+                  ),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        tooltip: 'Atendimentos mais recentes',
+                        onPressed: _page > 1
+                            ? () => setState(() => _page--)
+                            : null,
+                        icon: const Icon(Icons.chevron_left),
+                      ),
+                      Expanded(
+                        child: Text(
+                          'Página ${data.page} de ${data.totalPages}',
+                          textAlign: TextAlign.center,
+                          style: OrbitType.caption.copyWith(
+                            color: context.orbit.inkMuted,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Atendimentos mais antigos',
+                        onPressed: _page < data.totalPages
+                            ? () => setState(() => _page++)
+                            : null,
+                        icon: const Icon(Icons.chevron_right),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AttendanceCard extends StatelessWidget {
+  const _AttendanceCard({required this.item});
+  final EquipmentServiceHistoryItem item;
+
+  @override
+  Widget build(BuildContext context) => OrbitCard(
+    padding: const EdgeInsets.all(OrbitSpacing.md),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Wrap(
+          spacing: OrbitSpacing.sm,
+          runSpacing: OrbitSpacing.sm,
+          children: [
+            OrbitStatusBadge(
+              label: agendaEventTypeLabel(item.type) ?? 'Ordem de serviço',
+              tone: OrbitTone.info,
+            ),
+            const OrbitStatusBadge(label: 'Concluído', tone: OrbitTone.success),
+          ],
+        ),
+        const SizedBox(height: OrbitSpacing.ms),
+        Text(
+          item.title,
+          style: OrbitType.itemTitle.copyWith(color: context.orbit.ink),
+        ),
+        if (item.code.isNotEmpty) ...[
+          const SizedBox(height: OrbitSpacing.xs),
+          Text(
+            item.code,
+            style: OrbitType.caption.copyWith(color: context.orbit.inkSubtle),
+          ),
+        ],
+        const SizedBox(height: OrbitSpacing.md),
+        _EquipmentInfo(
+          icon: Icons.event_available_outlined,
+          label: 'Realizado em',
+          value: OrbitFormat.dateHourOf(item.completedAt),
+        ),
+        if (item.technicianName?.trim().isNotEmpty == true) ...[
+          const SizedBox(height: OrbitSpacing.ms),
+          _EquipmentInfo(
+            icon: Icons.engineering_outlined,
+            label: 'Técnico em campo',
+            value: item.technicianName!,
+          ),
+        ],
+        if (item.description?.trim().isNotEmpty == true ||
+            item.observations.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: OrbitSpacing.md),
+            child: Divider(height: 1, color: context.orbit.border),
+          ),
+          if (item.description?.trim().isNotEmpty == true)
+            _EquipmentText(label: 'Descrição', text: item.description!),
+          if (item.description?.trim().isNotEmpty == true &&
+              item.observations.isNotEmpty)
+            const SizedBox(height: OrbitSpacing.md),
+          if (item.observations.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.all(OrbitSpacing.ms),
+              decoration: BoxDecoration(
+                color: context.orbit.surfaceMuted,
+                borderRadius: OrbitRadius.field,
+              ),
+              child: _EquipmentText(
+                label: 'Observações do atendimento',
+                text: item.observations.join('\n\n'),
+              ),
+            ),
+        ] else ...[
+          const SizedBox(height: OrbitSpacing.ms),
+          Text(
+            'Sem descrição ou observações registradas.',
+            style: OrbitType.caption.copyWith(color: context.orbit.inkSubtle),
+          ),
+        ],
+      ],
+    ),
+  );
 }

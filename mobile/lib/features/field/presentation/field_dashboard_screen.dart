@@ -48,7 +48,6 @@ import '../../authentication/domain/session.dart';
 import '../../documents/presentation/documents_screen.dart'
     show documentStateBadge;
 import '../../operations/data/operations_repository.dart' show CachedResult;
-import '../../equipment/presentation/equipment_scanner_screen.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../notifications/domain/deep_link.dart';
 import '../../profile/presentation/my_avatar.dart';
@@ -1092,18 +1091,9 @@ class _QuickActions extends StatelessWidget {
           icon: Icons.qr_code_scanner,
           label: 'QR',
 
-          /// A câmera precisa da tela inteira; o **resultado** não. O leitor
-          /// devolve o token e o equipamento aparece numa folha por cima da
-          /// home — quem só queria saber "que equipamento é este" não troca
-          /// de contexto por uma pergunta de dois segundos.
-          onTap: () async {
-            final token = await context.push<String>(
-              OrbitRoutes.scanner,
-              extra: const EquipmentScannerRequest(returnsToken: true),
-            );
-            if (token == null || !context.mounted) return;
-            await showEquipmentSheet(context, token);
-          },
+          // A ficha abre no leitor, sem depender do contexto da Home,
+          // que é reconstruído ao atualizar os dados no retorno de uma rota.
+          onTap: () => context.push<void>(OrbitRoutes.scanner),
         ),
 
       /// PMOC **não** é atalho daqui.

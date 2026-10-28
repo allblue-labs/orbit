@@ -272,7 +272,7 @@ function ParametersForm({
       <form onSubmit={submit} className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="report-from">Início do período</Label>
+            <Label required htmlFor="report-from">Início do período</Label>
             <Input
               id="report-from"
               type="date"
@@ -282,7 +282,7 @@ function ParametersForm({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="report-to">Fim do período</Label>
+            <Label required htmlFor="report-to">Fim do período</Label>
             <Input
               id="report-to"
               type="date"

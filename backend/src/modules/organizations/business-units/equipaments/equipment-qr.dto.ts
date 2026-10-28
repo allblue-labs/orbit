@@ -1,5 +1,21 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsOptional } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
+
+export class EquipmentServiceHistoryQueryDto {
+  @ApiPropertyOptional({ default: 1 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page = 1;
+
+  @ApiPropertyOptional({ default: 10 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  limit = 10;
+}
 
 export class EquipmentQrRenderQueryDto {
   @ApiPropertyOptional({ enum: ['svg', 'png', 'pdf'], default: 'svg' })

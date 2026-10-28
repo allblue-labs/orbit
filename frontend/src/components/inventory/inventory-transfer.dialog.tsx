@@ -209,7 +209,7 @@ function Body({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="transfer-quantity">Quantidade ({item.unit})</Label>
+          <Label required htmlFor="transfer-quantity">Quantidade ({item.unit})</Label>
           <Input
             id="transfer-quantity"
             inputMode="decimal"

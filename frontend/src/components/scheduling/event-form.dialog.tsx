@@ -285,12 +285,7 @@ function EventForm({
       </p>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2 sm:col-span-2">
-          <Label htmlFor="event-title">
-            Título{" "}
-            <span className="text-xs font-normal text-muted-foreground">
-              (obrigatório)
-            </span>
-          </Label>
+          <Label htmlFor="event-title" required>Título</Label>
           <Input
             id="event-title"
             required
@@ -302,12 +297,7 @@ function EventForm({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="event-calendar">
-            Calendário{" "}
-            <span className="text-xs font-normal text-muted-foreground">
-              (obrigatório)
-            </span>
-          </Label>
+          <Label htmlFor="event-calendar" required>Calendário</Label>
           <Select
             value={form.calendarId}
             disabled={calendars.length === 0}
@@ -331,12 +321,7 @@ function EventForm({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="event-type">
-            Tipo{" "}
-            <span className="text-xs font-normal text-muted-foreground">
-              (obrigatório)
-            </span>
-          </Label>
+          <Label htmlFor="event-type" required>Tipo</Label>
           <Input
             id="event-type"
             required
@@ -360,12 +345,7 @@ function EventForm({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="event-start">
-            Início{" "}
-            <span className="text-xs font-normal text-muted-foreground">
-              (obrigatório)
-            </span>
-          </Label>
+          <Label htmlFor="event-start" required>Início</Label>
           <Input
             id="event-start"
             required
@@ -377,12 +357,7 @@ function EventForm({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="event-end">
-            Fim{" "}
-            <span className="text-xs font-normal text-muted-foreground">
-              (obrigatório)
-            </span>
-          </Label>
+          <Label htmlFor="event-end" required>Fim</Label>
           <Input
             id="event-end"
             required
@@ -503,6 +478,11 @@ function EventForm({
       )}
 
       <DialogFooter>
+        {!valid ? (
+          <p role="status" className="mr-auto max-w-sm text-xs text-muted-foreground">
+            Preencha os campos obrigatórios. O título precisa ter ao menos dois caracteres e o fim deve ser posterior ao início.
+          </p>
+        ) : null}
         <Button variant="ghost" onClick={onClose}>
           Cancelar
         </Button>
@@ -540,12 +520,7 @@ function RecurrenceFields({
       {form.recurring ? (
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="space-y-2">
-            <Label htmlFor="event-frequency">
-              Frequência{" "}
-              <span className="text-xs font-normal text-muted-foreground">
-                (obrigatória na recorrência)
-              </span>
-            </Label>
+            <Label htmlFor="event-frequency" required>Frequência</Label>
             <Select
               value={form.frequency}
               onValueChange={(value) =>

@@ -57,4 +57,12 @@ class EquipmentQrRepository {
     );
     return EquipmentQrResolvedContract.fromJson(data);
   }
+
+  Future<EquipmentServiceHistoryPage> history(String token, int page) async {
+    final data = await _client.get<Map<String, dynamic>>(
+      '/assets/qr/${Uri.encodeComponent(token)}/service-history',
+      query: {'page': page, 'limit': 10},
+    );
+    return EquipmentServiceHistoryPage.fromJson(data);
+  }
 }

@@ -175,6 +175,7 @@ export class EquipmentQrRepository {
         where: {
           organizationId,
           deletedAt: null,
+          status: 'COMPLETED',
           /** O atendimento aponta para os equipamentos pela tabela de vínculo. */
           assets: { some: { assetId: equipmentId } },
         },
@@ -235,6 +236,64 @@ export class EquipmentQrRepository {
         },
       });
       return { lastService, coverages, rvtExecutions };
+    });
+  }
+
+  serviceHistory(input: {
+    equipmentId: string;
+    organizationId: string;
+    businessUnitId: string;
+    page: number;
+    limit: number;
+  }) {
+    return this.rls.run(async (tx) => {
+      const where: Prisma.OperationWhereInput = {
+        organizationId: input.organizationId,
+        businessUnitId: input.businessUnitId,
+        deletedAt: null,
+        status: 'COMPLETED',
+        assets: { some: { assetId: input.equipmentId } },
+      };
+      const total = await tx.operation.count({ where });
+      const rows = await tx.operation.findMany({
+        where,
+        orderBy: [{ completedAt: 'desc' }, { id: 'desc' }],
+        skip: (input.page - 1) * input.limit,
+        take: input.limit,
+        select: {
+          id: true,
+          code: true,
+          title: true,
+          kind: true,
+          completedAt: true,
+          description: true,
+          responsibleFieldTechnician: { select: { displayName: true } },
+          pmocEquipmentExecution: { select: { notes: true } },
+          history: {
+            where: { action: 'FIELD_NOTE_ADDED' },
+            orderBy: { createdAt: 'asc' },
+            select: { details: true },
+          },
+        },
+      });
+      const visits = rows.length
+        ? await tx.rvtExecution.findMany({
+            where: {
+              organizationId: input.organizationId,
+              businessUnitId: input.businessUnitId,
+              operationId: { in: rows.map((row) => row.id) },
+              status: 'COMPLETED',
+              equipment: { some: { assetId: input.equipmentId } },
+            },
+            select: {
+              operationId: true,
+              observations: true,
+              recommendations: true,
+              freeTextRecommendation: true,
+            },
+          })
+        : [];
+      return { rows, visits, total };
     });
   }
 }

@@ -20,3 +20,10 @@ final equipmentByQrProvider = FutureProvider.autoDispose
     .family<EquipmentQrResolvedContract, String>(
       (ref, token) => ref.watch(equipmentQrRepositoryProvider).resolve(token),
     );
+
+final equipmentServiceHistoryProvider = FutureProvider.autoDispose
+    .family<EquipmentServiceHistoryPage, (String, int)>(
+      (ref, request) => ref
+          .watch(equipmentQrRepositoryProvider)
+          .history(request.$1, request.$2),
+    );

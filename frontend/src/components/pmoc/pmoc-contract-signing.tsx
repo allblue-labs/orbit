@@ -344,7 +344,7 @@ function FormularioDeAssinatura({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5 sm:col-span-2">
-          <Label htmlFor="signerName">Nome de quem assina</Label>
+          <Label required htmlFor="signerName">Nome de quem assina</Label>
           <Input
             id="signerName"
             value={signerName}

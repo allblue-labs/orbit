@@ -232,7 +232,7 @@ function Body({ onOpenChange }: { onOpenChange: (open: boolean) => void }) {
       {step === 0 ? (
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="member-first-name">Nome</Label>
+            <Label required htmlFor="member-first-name">Nome</Label>
             <Input
               id="member-first-name"
               value={firstName}
@@ -242,7 +242,7 @@ function Body({ onOpenChange }: { onOpenChange: (open: boolean) => void }) {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="member-last-name">Sobrenome</Label>
+            <Label required htmlFor="member-last-name">Sobrenome</Label>
             <Input
               id="member-last-name"
               value={lastName}
@@ -251,7 +251,7 @@ function Body({ onOpenChange }: { onOpenChange: (open: boolean) => void }) {
             />
           </div>
           <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="member-email">
+            <Label required htmlFor="member-email">
               {useOrgDomain && domain ? "Nome de entrada" : "E-mail"}
             </Label>
 

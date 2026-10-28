@@ -24,7 +24,10 @@ import {
 } from '../../../subscription-plans/plan-access';
 import { AssetQueryDto, CreateAssetDto, UpdateAssetDto } from './asset.dto';
 import { AssetService } from './asset.service';
-import { EquipmentQrRenderQueryDto } from './equipment-qr.dto';
+import {
+  EquipmentQrRenderQueryDto,
+  EquipmentServiceHistoryQueryDto,
+} from './equipment-qr.dto';
 import { EquipmentQrService } from './equipment-qr.service';
 
 @ApiTags('Assets')
@@ -62,6 +65,18 @@ export class AssetController {
   })
   resolveQr(@Param('token') token: string, @Req() request: IdentityRequest) {
     return this.equipmentQr.resolve(token, this.actor(request));
+  }
+
+  @Get('qr/:token/service-history')
+  @Surfaces('WEB', 'MOBILE', 'API')
+  @Capabilities('assets.read')
+  @Permissions('assets.read', 'operations.history.read')
+  serviceHistory(
+    @Param('token') token: string,
+    @Req() request: IdentityRequest,
+    @Query() query: EquipmentServiceHistoryQueryDto,
+  ) {
+    return this.equipmentQr.serviceHistory(token, this.actor(request), query);
   }
 
   @Get(':id/qr')

@@ -230,7 +230,7 @@ function Body({
 
       <div className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="automation-name">Nome</Label>
+          <Label required htmlFor="automation-name">Nome</Label>
           <Input
             id="automation-name"
             value={name}

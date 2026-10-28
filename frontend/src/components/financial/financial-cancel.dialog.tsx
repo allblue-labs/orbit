@@ -91,7 +91,7 @@ function Body({
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="financial-cancel-reason">Motivo</Label>
+        <Label required htmlFor="financial-cancel-reason">Motivo</Label>
         <Textarea
           id="financial-cancel-reason"
           value={reason}

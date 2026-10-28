@@ -250,7 +250,7 @@ function Body({
       </DialogHeader>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Nome" htmlFor="catalog-name" className="sm:col-span-2">
+        <Field label="Nome" htmlFor="catalog-name" className="sm:col-span-2" required>
           <Input
             id="catalog-name"
             value={form.name}
@@ -504,6 +504,7 @@ function Field({
   hint,
   className,
   children,
+  required,
 }: {
   label: string;
   /**
@@ -515,11 +516,12 @@ function Field({
   hint?: string;
   className?: string;
   children: React.ReactNode;
+  required?: boolean;
 }) {
   return (
     <div className={`space-y-2 ${className ?? ""}`}>
       {htmlFor ? (
-        <Label htmlFor={htmlFor}>{label}</Label>
+        <Label htmlFor={htmlFor} required={required}>{label}</Label>
       ) : (
         <span className="text-sm font-medium leading-none">{label}</span>
       )}

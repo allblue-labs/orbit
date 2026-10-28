@@ -65,7 +65,7 @@ export function QuoteReasonDialog({
           </DialogHeader>
 
           <div className="space-y-2">
-            <Label htmlFor="quote-reason">Motivo</Label>
+            <Label required htmlFor="quote-reason">Motivo</Label>
             <Textarea
               id="quote-reason"
               value={reason}

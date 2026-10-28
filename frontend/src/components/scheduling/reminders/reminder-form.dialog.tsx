@@ -225,9 +225,10 @@ function ReminderForm({
 
       <div className="grid gap-4">
         <div className="space-y-2">
-          <Label htmlFor="reminder-title">O que lembrar</Label>
+          <Label htmlFor="reminder-title" required>O que lembrar</Label>
           <Input
             id="reminder-title"
+            required
             value={form.title}
             maxLength={SCHEDULING_LIMITS.titleMaxLength}
             placeholder="Ex.: retorno após instalação"
@@ -237,9 +238,10 @@ function ReminderForm({
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="reminder-type">Tipo de operação</Label>
+            <Label htmlFor="reminder-type" required>Tipo de operação</Label>
             <Input
               id="reminder-type"
+              required
               list="reminder-type-options"
               value={form.type}
               maxLength={SCHEDULING_LIMITS.typeMaxLength}
@@ -259,9 +261,10 @@ function ReminderForm({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="reminder-when">Quando lembrar</Label>
+            <Label htmlFor="reminder-when" required>Quando lembrar</Label>
             <Input
               id="reminder-when"
+              required
               type="datetime-local"
               value={form.whenLocal}
               onChange={(event) => edit({ whenLocal: event.target.value })}
@@ -307,14 +310,14 @@ function ReminderForm({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="reminder-frequency">Unidade</Label>
+                <Label htmlFor="reminder-frequency" required>Unidade</Label>
                 <Select
                   value={form.frequency}
                   onValueChange={(value) =>
                     edit({ frequency: value as RecurrenceFrequency })
                   }
                 >
-                  <SelectTrigger id="reminder-frequency">
+                  <SelectTrigger id="reminder-frequency" aria-required="true">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
