@@ -46,11 +46,19 @@
  *    neste repositório.
  */
 import { useState } from "react";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Check, ChevronsUpDown } from "lucide-react";
 
 import { MutationError } from "@/components/artifact-studio/mutation-error";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import {
   Dialog,
   DialogContent,
@@ -69,6 +77,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   useCreateSchedulingEvent,
   useUpdateSchedulingEvent,
@@ -155,6 +168,87 @@ interface FormState {
   interval: string;
   byWeekday: readonly number[];
   count: string;
+}
+
+/**
+ * Sugestões reabertas e texto livre no mesmo controle.
+ *
+ * O `datalist` nativo fechava após uma seleção e alguns navegadores não
+ * voltavam a mostrar as demais opções. Este combobox conserva o contrato de
+ * tipo livre, mas torna cada sugestão sempre acessível pelo gatilho.
+ */
+function EventTypePicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (nextOpen) setSearch("");
+      }}
+    >
+      <PopoverTrigger asChild>
+        <Button
+          id="event-type"
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          aria-required="true"
+          className="w-full justify-between font-mono text-sm font-normal"
+        >
+          <span className="truncate">{value || "Selecione ou digite"}</span>
+          <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-[--radix-popover-trigger-width] p-0"
+        align="start"
+      >
+        <Command>
+          <CommandInput
+            placeholder="Buscar ou digitar um tipo…"
+            value={search}
+            maxLength={SCHEDULING_LIMITS.typeMaxLength}
+            onValueChange={(nextValue) => {
+              setSearch(nextValue);
+              onChange(nextValue.toUpperCase());
+            }}
+          />
+          <CommandList>
+            <CommandEmpty>O tipo digitado será usado ao salvar.</CommandEmpty>
+            <CommandGroup>
+              {SUGGESTED_EVENT_TYPES.map((type) => (
+                <CommandItem
+                  key={type}
+                  value={type}
+                  onSelect={() => {
+                    onChange(type);
+                    setOpen(false);
+                  }}
+                >
+                  <Check
+                    className={
+                      value === type ? "size-4 opacity-100" : "size-4 opacity-0"
+                    }
+                  />
+                  {type}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 function EventForm({
@@ -321,26 +415,16 @@ function EventForm({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="event-type" required>Tipo</Label>
-          <Input
-            id="event-type"
-            required
-            aria-required="true"
-            list="event-type-options"
+          <Label htmlFor="event-type" required>
+            Tipo
+          </Label>
+          <EventTypePicker
             value={form.type}
-            maxLength={SCHEDULING_LIMITS.typeMaxLength}
-            onChange={(event) =>
-              edit({ type: event.target.value.toUpperCase() })
-            }
-            className="font-mono text-sm"
+            onChange={(type) => edit({ type })}
           />
-          <datalist id="event-type-options">
-            {SUGGESTED_EVENT_TYPES.map((type) => (
-              <option key={type} value={type} />
-            ))}
-          </datalist>
           <p className="text-xs text-muted-foreground">
-            Texto livre: apenas o formato é conferido.
+            Escolha uma sugestão ou digite outro tipo. Apenas o formato é
+            conferido.
           </p>
         </div>
 
