@@ -15,128 +15,156 @@ class AttendanceReview extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.orbit;
     final groups = reviewGroups(preparation.serviceSummary);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                palette.accent.withValues(alpha: .12),
-                palette.accent.withValues(alpha: .03),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: OrbitSpacing.gutter),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  palette.accent.withValues(alpha: .12),
+                  palette.accent.withValues(alpha: .03),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.fact_check_outlined,
+                  color: palette.accent,
+                  size: 32,
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Confira antes de confirmar',
+                        style: OrbitType.sectionTitle.copyWith(
+                          color: palette.ink,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Revise o serviço com quem recebeu o atendimento. Depois, informe o nome e colete a assinatura.',
+                        style: OrbitType.body.copyWith(color: palette.inkMuted),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
-            borderRadius: BorderRadius.circular(20),
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          const SizedBox(height: 20),
+          Row(
             children: [
-              Icon(Icons.fact_check_outlined, color: palette.accent, size: 32),
-              const SizedBox(width: 14),
+              Icon(Icons.person_outline, size: 20, color: palette.inkMuted),
+              const SizedBox(width: 10),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Confira antes de confirmar',
-                      style: OrbitType.sectionTitle.copyWith(
-                        color: palette.ink,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Revise o serviço com quem recebeu o atendimento. Depois, informe o nome e colete a assinatura.',
-                      style: OrbitType.body.copyWith(color: palette.inkMuted),
-                    ),
-                  ],
+                child: Text(
+                  preparation.customerName ?? 'Cliente do atendimento',
+                  style: OrbitType.body.copyWith(fontWeight: FontWeight.w600),
                 ),
               ),
             ],
           ),
-        ),
-        const SizedBox(height: 20),
-        Row(
-          children: [
-            Icon(Icons.person_outline, size: 20, color: palette.inkMuted),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                preparation.customerName ?? 'Cliente do atendimento',
-                style: OrbitType.body.copyWith(fontWeight: FontWeight.w600),
-              ),
-            ),
-          ],
-        ),
-        if (preparation.performedAt != null)
-          Padding(
-            padding: const EdgeInsets.only(left: 30, top: 6),
-            child: Row(
-              children: [
-                Icon(Icons.schedule, size: 14, color: palette.inkMuted),
-                const SizedBox(width: 6),
-                Flexible(
-                  child: Text(
-                    OrbitFormat.dateHourOf(preparation.performedAt),
-                    style: OrbitType.caption.copyWith(color: palette.inkMuted),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        if (preparation.equipment.isNotEmpty) ...[
-          const SizedBox(height: 24),
-          _ReviewHeading(
-            icon: Icons.devices_other_outlined,
-            title: 'Equipamentos atendidos',
-            count: preparation.equipment.length,
-          ),
-          const SizedBox(height: 10),
-          for (final item in preparation.equipment)
+          if (preparation.performedAt != null)
             Padding(
-              padding: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.only(left: 30, top: 6),
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
-                    Icons.settings_outlined,
-                    size: 18,
-                    color: palette.inkMuted,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(item.name, style: OrbitType.body),
-                        if (item.code.isNotEmpty && item.code != item.id)
-                          Text(
-                            item.code,
-                            style: OrbitType.caption.copyWith(
-                              color: palette.inkMuted,
-                            ),
-                          ),
-                      ],
+                  Icon(Icons.schedule, size: 14, color: palette.inkMuted),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      OrbitFormat.dateHourOf(preparation.performedAt),
+                      style: OrbitType.caption.copyWith(
+                        color: palette.inkMuted,
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
-        ],
-        for (final group in groups) ...[
-          const SizedBox(height: 18),
-          const Divider(height: 1),
-          const SizedBox(height: 18),
-          _ReviewHeading(icon: group.icon, title: group.title),
-          const SizedBox(height: 12),
-          for (final line in group.lines)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: _ReviewLine(text: line),
+          if (preparation.equipment.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            _ReviewHeading(
+              icon: Icons.devices_other_outlined,
+              title: 'Equipamentos atendidos',
+              count: preparation.equipment.length,
             ),
+            const SizedBox(height: 10),
+            for (final item in preparation.equipment)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.settings_outlined,
+                      size: 18,
+                      color: palette.inkMuted,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(item.name, style: OrbitType.body),
+                          if (item.code.isNotEmpty && item.code != item.id)
+                            Text(
+                              item.code,
+                              style: OrbitType.caption.copyWith(
+                                color: palette.inkMuted,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+          for (final group in groups) ...[
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: palette.surface,
+                borderRadius: OrbitRadius.card,
+                border: Border.all(
+                  color: palette.accent.withValues(alpha: .12),
+                ),
+                boxShadow: OrbitShadow.card,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _ReviewHeading(icon: group.icon, title: group.title),
+                  if (group.lines.isNotEmpty) ...[
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 12),
+                      child: Divider(height: 1),
+                    ),
+                    for (final line in group.lines)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: _ReviewLine(text: line),
+                      ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
         ],
-        const SizedBox(height: 16),
-      ],
+      ),
     );
   }
 }

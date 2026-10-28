@@ -1,4 +1,9 @@
-import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+import {
+  ApiProperty,
+  ApiPropertyOptional,
+  PartialType,
+  OmitType,
+} from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -17,6 +22,7 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateNested,
 } from 'class-validator';
 import {
   OperationKind,
@@ -24,6 +30,7 @@ import {
   OperationStatus,
 } from '../../../contracts';
 import { IsUUIDv7 } from '../../../validators';
+import { StartChecklistExecutionDto } from '../checklist.dto';
 
 const trim = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.trim() : value;
@@ -112,6 +119,15 @@ export class OperationQueryDto {
 }
 
 export class CreateOperationDto {
+  @ApiPropertyOptional({ type: [StartChecklistExecutionDto] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ArrayUnique((item: StartChecklistExecutionDto) => item.templateId)
+  @ValidateNested({ each: true })
+  @Type(() => StartChecklistExecutionDto)
+  checklists?: StartChecklistExecutionDto[];
+
   /** Explicit manual value; null restores the linked quote as the source. */
   @ApiPropertyOptional({ nullable: true, minimum: 0, maximum: 999999999999.99 })
   @IsOptional()
@@ -238,7 +254,9 @@ export class CreateOperationDto {
   auxiliaryTechnicianIds?: string[];
 }
 
-export class UpdateOperationDto extends PartialType(CreateOperationDto) {}
+export class UpdateOperationDto extends PartialType(
+  OmitType(CreateOperationDto, ['checklists'] as const),
+) {}
 
 /**
  * Autorizar várias atribuições de uma vez.

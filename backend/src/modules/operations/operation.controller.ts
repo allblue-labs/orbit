@@ -38,6 +38,7 @@ import {
 } from './dto/operation.dto';
 import { OperationService } from './operation.service';
 import { OperationReadModelMapper } from './operation.mapper';
+import { AuthorizationService } from '../../common/authorization.service';
 
 @ApiTags('Operations')
 @Controller('operations')
@@ -46,6 +47,7 @@ export class OperationController {
   constructor(
     private readonly operations: OperationService,
     private readonly readModels: OperationReadModelMapper,
+    private readonly authorization: AuthorizationService,
   ) {}
 
   @Get()
@@ -136,6 +138,15 @@ export class OperationController {
     @Req() request: IdentityRequest,
     @Body() input: CreateOperationDto,
   ) {
+    if (
+      input.checklists?.length &&
+      !this.authorization.hasPermissions(request.identity!, [
+        'checklists.execute',
+      ])
+    )
+      throw new ForbiddenException(
+        'Você não possui permissão para vincular checklists ao atendimento.',
+      );
     return this.readModels.details(
       await this.operations.create(
         this.organizationId(request),

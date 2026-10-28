@@ -84,16 +84,18 @@ export class CreateChecklistTemplateDto {
   description?: string;
 
   /**
-   * O tipo de atendimento a que este modelo pertence.
-   *
-   * Omitido, o modelo serve a qualquer tipo — é o que todo modelo era antes
-   * desta coluna existir, e continua valendo. Quando presente, é o que faz o
-   * formulário de nova operação achar o checklist ao escolher o tipo.
+   * Tipo de atendimento de referência para organizar o catálogo.
+   * A seleção inicial na operação depende de isGeneral e pode ser removida.
    */
   @ApiPropertyOptional({ enum: Object.values(OperationKind) })
   @IsOptional()
   @IsIn(Object.values(OperationKind))
-  operationKind?: OperationKind;
+  operationKind?: OperationKind | null;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  isGeneral?: boolean;
 
   @IsArray()
   @ArrayMinSize(1)
@@ -112,6 +114,17 @@ export class UpdateChecklistTemplateDto extends PartialType(
 ) {}
 
 export class ChecklistTemplateQueryDto {
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }): unknown =>
+    value === 'true' || value === true
+      ? true
+      : value === 'false' || value === false
+        ? false
+        : value,
+  )
+  @IsBoolean()
+  latestOnly?: boolean;
+
   @IsOptional()
   @IsString()
   @MaxLength(180)

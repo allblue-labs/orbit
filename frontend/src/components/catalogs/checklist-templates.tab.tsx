@@ -26,7 +26,7 @@ import { operationKindLabel } from "@/components/operations/operation-badges";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  useChecklistTemplates,
+  useChecklistTemplateSelection,
   useRemoveChecklistTemplate,
 } from "@/hooks/operations/use-operations";
 import type { ChecklistTemplate } from "@/types/operations";
@@ -46,7 +46,7 @@ interface Filtros {
 
 export function ChecklistTemplatesTab() {
   const list = useListController<Filtros>({ limit: 100 });
-  const templates = useChecklistTemplates();
+  const templates = useChecklistTemplateSelection();
   const remove = useRemoveChecklistTemplate();
 
   const [editando, setEditando] = useState<ChecklistTemplate | "new" | null>(
@@ -54,7 +54,7 @@ export function ChecklistTemplatesTab() {
   );
   const [removendo, setRemovendo] = useState<ChecklistTemplate | null>(null);
 
-  const todos = useMemo(() => templates.data?.data ?? [], [templates.data]);
+  const todos = useMemo(() => templates.data ?? [], [templates.data]);
 
   const filtrados = useMemo(() => {
     const termo = list.query.search?.toLowerCase() ?? "";
@@ -89,8 +89,8 @@ export function ChecklistTemplatesTab() {
         <div>
           <p className="text-sm font-medium">Roteiros de atendimento</p>
           <p className="text-sm text-muted-foreground">
-            O que o técnico percorre em campo. Quem cria o atendimento recebe o
-            roteiro do tipo escolhido.
+            Modelos para selecionar nos atendimentos. Marque como geral para
+            sugerir nas novas operações.
           </p>
         </div>
         <Button size="sm" onClick={() => setEditando("new")}>
@@ -150,9 +150,13 @@ export function ChecklistTemplatesTab() {
                 />
 
                 <div className="min-w-0 flex-1">
-                  <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                  <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
                     {roteiro.name}
-                    {roteiro.operationKind ? (
+                    {roteiro.isGeneral ? (
+                      <Badge variant="secondary" className="text-[10px]">
+                        Geral · seleção inicial
+                      </Badge>
+                    ) : roteiro.operationKind ? (
                       <Badge variant="outline" className="text-[10px]">
                         {operationKindLabel(roteiro.operationKind)}
                       </Badge>
@@ -166,7 +170,7 @@ export function ChecklistTemplatesTab() {
                         inativo
                       </Badge>
                     )}
-                  </p>
+                  </div>
                   <p className="text-xs text-muted-foreground">
                     {`${roteiro.items.length} ${
                       roteiro.items.length === 1 ? "item" : "itens"

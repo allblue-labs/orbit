@@ -19,13 +19,13 @@ export function OperationReviewStep({
   customerLabel,
   timeZone,
   unitLabel,
-  hasChecklist,
+  checklistNames,
 }: {
   form: OperationFormState;
   customerLabel?: string;
   timeZone: string;
   unitLabel: string;
-  hasChecklist: boolean;
+  checklistNames: readonly string[];
 }) {
   const addresses = useCustomerAddresses(form.customerId || null, true);
   const assets = useAssetsList(
@@ -104,10 +104,10 @@ export function OperationReviewStep({
                 .join(", ")
             : "Nenhum selecionado"}
         </Entry>
-        <Entry label="Checklist">
-          {hasChecklist
-            ? "Modelo do tipo de atendimento"
-            : "Sem modelo vinculado"}
+        <Entry label="Checklists">
+          {checklistNames.length
+            ? checklistNames.join(", ")
+            : "Nenhum selecionado"}
           {form.checklistExtras.length
             ? ` · ${form.checklistExtras.length} item(ns) adicional(is)`
             : ""}

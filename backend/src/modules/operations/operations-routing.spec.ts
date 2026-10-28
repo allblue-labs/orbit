@@ -5,6 +5,7 @@ import type { NextFunction, Request, Response } from 'express';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { configureApiVersioning } from '../../configure-api';
+import { AuthorizationService } from '../../common/authorization.service';
 import { ChecklistService } from './checklist.service';
 import { OperationCancellationService } from './operation-cancellation.service';
 import { OperationReadModelMapper } from './operation.mapper';
@@ -39,6 +40,7 @@ describe('Operations HTTP routing', () => {
     const moduleRef = await Test.createTestingModule({
       controllers,
       providers: [
+        AuthorizationService,
         { provide: OperationService, useValue: operations },
         { provide: OperationReadModelMapper, useValue: readModels },
         { provide: ChecklistService, useValue: {} },

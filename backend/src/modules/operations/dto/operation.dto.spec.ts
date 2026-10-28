@@ -3,6 +3,35 @@ import { validate } from 'class-validator';
 import { CreateOperationDto, UpdateOperationDto } from './operation.dto';
 
 describe('operation manual amount contract', () => {
+  it('aceita vários checklists, mas recusa duplicatas, ids inválidos e mais de vinte modelos', async () => {
+    const templateId = '01900000-0000-7000-8000-000000000002';
+    const base = {
+      businessUnitId: '01900000-0000-7000-8000-000000000001',
+      code: 'OS-1',
+      title: 'Visita',
+      kind: 'MAINTENANCE',
+    };
+    expect(
+      await validate(
+        plainToInstance(CreateOperationDto, {
+          ...base,
+          checklists: [{ templateId }],
+        }),
+      ),
+    ).toEqual([]);
+    for (const checklists of [
+      [{ templateId }, { templateId }],
+      [{ templateId: 'invalid' }],
+      Array.from({ length: 21 }, () => ({ templateId })),
+    ]) {
+      const errors = await validate(
+        plainToInstance(CreateOperationDto, { ...base, checklists }),
+      );
+      expect(errors.some((error) => error.property === 'checklists')).toBe(
+        true,
+      );
+    }
+  });
   it.each([undefined, null, 0, 0.01, 1250.5, 999999999999.99])(
     'accepts an optional nonnegative amount %s',
     async (manualAmount) => {

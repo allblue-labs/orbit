@@ -297,6 +297,26 @@ const CHECKLIST_TEMPLATES_RESOURCE = "checklist-templates";
  * execução é o que acontece num atendimento.
  */
 export const checklistTemplatesService = {
+  /** Carrega todas as páginas, somente a versão atual de cada modelo ativo. */
+  selection: async (options?: RequestOptions): Promise<ChecklistTemplate[]> => {
+    const templates: ChecklistTemplate[] = [];
+    let page = 1;
+    let totalPages = 1;
+    do {
+      const result = await apiClient.get<PaginatedResult<ChecklistTemplate>>(
+        "/checklist-templates",
+        {
+          ...options,
+          query: { isActive: true, latestOnly: true, limit: 100, page },
+        },
+      );
+      templates.push(...result.data);
+      totalPages = result.meta.totalPages;
+      page++;
+    } while (page <= totalPages);
+    return templates;
+  },
+
   list: (
     query?: ChecklistTemplateQuery,
     options?: RequestOptions,

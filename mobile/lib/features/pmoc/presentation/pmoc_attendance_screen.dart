@@ -210,14 +210,9 @@ class _Body extends ConsumerWidget {
         child: _Procedure(
           preparation: preparation,
           execution: execution,
-          reviewed: reviewed,
-          onReviewed: onReviewed,
           answers: answers,
           onAnswer: onAnswer,
           enabled: podeConcluir && !state.isBusy,
-          onSave: () async {
-            if (await save()) onReviewed(true);
-          },
           canCapture: state.allows('ADD_EVIDENCE'),
         ),
       ),
@@ -242,7 +237,7 @@ class _Body extends ConsumerWidget {
         title: 'Confirmação',
         hint: 'Apresente ao cliente o resumo e registre o aceite neste espaço.',
         lockedReason: operationId == null || (!reviewed && podeConcluir)
-            ? 'Salve o roteiro antes de coletar a confirmação do cliente.'
+            ? 'Avance pela etapa de roteiro antes de coletar a confirmação do cliente.'
             : null,
         child: operationId == null
             ? const SizedBox.shrink()
@@ -304,6 +299,20 @@ class _Body extends ConsumerWidget {
           /// atendimento em andamento cai no roteiro, não no contexto.
           AttendanceWizard(
             operationId: operationId,
+            evidenceTarget: execution == null
+                ? null
+                : FieldEvidenceTargetRef(
+                    type: FieldEvidenceTarget.pmocEquipmentExecution,
+                    id: execution.id,
+                  ),
+            onBeforeStepChanged: (from, to) async {
+              if (from <= 1 && to > 1 && podeConcluir) {
+                final saved = await save();
+                if (saved) onReviewed(true);
+                return saved;
+              }
+              return true;
+            },
             confirmationStep: 3,
             completed:
                 execution?.status == PmocEquipmentExecutionStatus.completed,
@@ -400,24 +409,18 @@ class _Procedure extends StatelessWidget {
   const _Procedure({
     required this.preparation,
     required this.execution,
-    required this.reviewed,
-    required this.onReviewed,
     required this.canCapture,
     required this.answers,
     required this.onAnswer,
     required this.enabled,
-    required this.onSave,
   });
 
   final PmocExecutionPreparationContract preparation;
   final PmocEquipmentExecutionContract? execution;
-  final bool reviewed;
-  final ValueChanged<bool> onReviewed;
   final bool canCapture;
   final Map<String, bool> answers;
   final void Function(String, bool) onAnswer;
   final bool enabled;
-  final Future<void> Function() onSave;
 
   @override
   Widget build(BuildContext context) {
@@ -442,7 +445,7 @@ class _Procedure extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Os itens vêm marcados. Desmarque o que não foi realizado.',
+                  'Os itens vêm marcados. Desmarque o que não foi realizado. O roteiro será salvo ao avançar.',
                 ),
                 for (var g = 0; g < grupos.length; g++) ...[
                   Text(
@@ -475,14 +478,6 @@ class _Procedure extends StatelessWidget {
             ),
             canCapture: canCapture,
           ),
-
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: OrbitSpacing.gutter),
-          child: OutlinedButton(
-            onPressed: enabled ? onSave : null,
-            child: Text(reviewed ? 'Roteiro salvo' : 'Salvar roteiro'),
-          ),
-        ),
       ],
     );
   }

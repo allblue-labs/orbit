@@ -35,16 +35,70 @@ class ExecutionChecklist extends StatefulWidget {
   final bool enabled;
   final ChecklistAnswer onAnswer;
   final ValueChanged<String>? onConfirm;
-  final void Function(String, Map<String, dynamic>)? onSave;
+  final Future<bool> Function(String, Map<String, dynamic>)? onSave;
   final Set<String> pendingIds;
   @override
-  State<ExecutionChecklist> createState() => _ExecutionChecklistState();
+  State<ExecutionChecklist> createState() => ExecutionChecklistState();
 }
 
-class _ExecutionChecklistState extends State<ExecutionChecklist> {
+class ExecutionChecklistState extends State<ExecutionChecklist> {
   final Map<String, Map<String, dynamic>> _drafts = {};
+  bool _saving = false;
+  String? _error;
   Map<String, dynamic> _answers(FieldOperationChecklistContract checklist) =>
       _drafts.putIfAbsent(checklist.id, () => checklist.defaultAnswers);
+
+  Future<bool> saveDraft() async {
+    if (_saving) return false;
+    final pending = widget.checklists
+        .where(
+          (item) =>
+              item.status == 'IN_PROGRESS' &&
+              !widget.pendingIds.contains(item.id),
+        )
+        .toList();
+    if (pending.isEmpty) return true;
+    if (!widget.enabled) return false;
+    final drafts = {
+      for (final item in pending)
+        item.id: Map<String, dynamic>.of(_answers(item)),
+    };
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      for (final item in pending) {
+        final saved = widget.onSave != null
+            ? await widget.onSave!(item.id, drafts[item.id]!)
+            : widget.onConfirm != null;
+        if (widget.onSave == null && saved) {
+          widget.onConfirm!(item.id);
+        }
+        if (!saved) {
+          if (mounted) {
+            setState(
+              () => _error =
+                  'Não foi possível salvar o checklist. Confira o aviso e tente avançar novamente.',
+            );
+          }
+          return false;
+        }
+      }
+      return true;
+    } on Object {
+      if (mounted) {
+        setState(
+          () => _error =
+              'Não foi possível salvar o checklist. Tente avançar novamente.',
+        );
+      }
+      return false;
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   @override
   void didUpdateWidget(ExecutionChecklist oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -63,6 +117,12 @@ class _ExecutionChecklistState extends State<ExecutionChecklist> {
   Widget build(BuildContext context) {
     return Column(
       children: [
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.all(OrbitSpacing.gutter),
+            child: Text(_error!, style: TextStyle(color: context.orbit.danger)),
+          ),
+        if (_saving) const LinearProgressIndicator(),
         for (final checklist in widget.checklists)
           SectionBlock(
             title: checklist.name,
@@ -71,7 +131,7 @@ class _ExecutionChecklistState extends State<ExecutionChecklist> {
               children: [
                 /// Contagem é leitura, não autorização.
                 Text(
-                  '${checklist.items.where((item) => item.isAnswered).length}'
+                  '${widget.onSave == null ? checklist.items.where((item) => item.isAnswered).length : _answers(checklist).values.where((answer) => answer != null).length}'
                   ' de ${checklist.items.length} itens',
                   style: const TextStyle(
                     fontSize: 12,
@@ -87,6 +147,7 @@ class _ExecutionChecklistState extends State<ExecutionChecklist> {
                     item: item,
                     enabled:
                         widget.enabled &&
+                        !_saving &&
                         checklist.status == 'IN_PROGRESS' &&
                         !widget.pendingIds.contains(checklist.id),
                     currentAnswer: widget.onSave == null
@@ -104,22 +165,7 @@ class _ExecutionChecklistState extends State<ExecutionChecklist> {
                     checklist.status == 'IN_PROGRESS') ...[
                   const SizedBox(height: OrbitSpacing.sm),
                   const Text(
-                    'Os itens vêm marcados. Desmarque o que não foi realizado e confirme o checklist.',
-                  ),
-                  OutlinedButton(
-                    onPressed:
-                        widget.enabled &&
-                            !widget.pendingIds.contains(checklist.id)
-                        ? () {
-                            FocusManager.instance.primaryFocus?.unfocus();
-                            if (widget.onSave case final save?) {
-                              save(checklist.id, Map.of(_answers(checklist)));
-                            } else {
-                              widget.onConfirm?.call(checklist.id);
-                            }
-                          }
-                        : null,
-                    child: const Text('Confirmar checklist'),
+                    'Os itens vêm marcados. Desmarque o que não foi realizado. Suas respostas serão salvas ao avançar.',
                   ),
                 ],
               ],

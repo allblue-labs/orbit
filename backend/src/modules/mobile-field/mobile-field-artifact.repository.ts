@@ -36,10 +36,12 @@ export interface FrozenFieldDocument {
     id: string;
     title: string;
     order: number;
+    type?: string;
     fields: readonly {
       id: string;
       label: string;
       order: number;
+      type?: string;
       value: unknown;
     }[];
   }[];

@@ -40,7 +40,8 @@ class AttendanceWorkRecordState extends ConsumerState<AttendanceWorkRecord> {
   Future<bool> saveDraft() async {
     final text = _notes.text.trim();
     if (_saving) return false;
-    if (text.isEmpty || text == _savedText || !widget.enabled) return true;
+    if (text == _savedText || !widget.enabled) return true;
+    if (text.isEmpty && widget.onSaveNotes == null) return true;
     var successful = false;
     FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
@@ -127,9 +128,8 @@ class AttendanceWorkRecordState extends ConsumerState<AttendanceWorkRecord> {
                 ),
               ),
               if (canNote)
-                OutlinedButton(
-                  onPressed: _saving || state.isBusy ? null : saveDraft,
-                  child: Text(_saving ? 'Salvando…' : 'Salvar observação'),
+                Text(
+                  _saving ? 'Salvando…' : 'A observação será salva ao avançar.',
                 ),
               if (_message != null) Text(_message!),
             ],

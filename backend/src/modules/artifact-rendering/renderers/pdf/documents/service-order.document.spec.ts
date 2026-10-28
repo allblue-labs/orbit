@@ -199,10 +199,12 @@ describe('Ordem de Serviço premium', () => {
     expect(aceite).toBeGreaterThan(pendencia);
   });
 
-  it('imprime a duração calculada, sem obrigar o leitor a subtrair', async () => {
+  it('omite duração e conclusão do atendimento do documento entregue ao cliente', async () => {
     const texto = pdfText((await renderer.render(entrada())).bytes);
 
-    expect(texto).toContain('3 h 15 min');
+    expect(texto).not.toContain('3 h 15 min');
+    expect(texto).not.toContain('DURAÇÃO DO ATENDIMENTO');
+    expect(texto).not.toContain('CONCLUSÃO DO ATENDIMENTO');
   });
 
   it('mantém as datas úteis sem imprimir a trilha de etapas do sistema', async () => {
@@ -210,9 +212,8 @@ describe('Ordem de Serviço premium', () => {
     expect(texto).not.toContain('Andamento do atendimento');
     expect(texto).not.toContain('POR QUEM');
     expect(texto).toContain('INÍCIO DO ATENDIMENTO');
-    expect(texto).toContain('CONCLUSÃO DO ATENDIMENTO');
+    expect(texto).not.toContain('CONCLUSÃO DO ATENDIMENTO');
     expect(texto).toContain('25/09/2026, 09:10');
-    expect(texto).toContain('25/09/2026, 12:25');
   });
 
   it('imprime a data de garantia em pt-BR, nunca em ISO', async () => {

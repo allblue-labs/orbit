@@ -28,6 +28,23 @@ export class ChecklistRepository {
         : {}),
     };
     return this.rls.run(async (tx) => {
+      if (query.latestOnly) {
+        // O máximo considera também versões inativas/excluídas: desativar o
+        // modelo atual não pode fazer uma versão antiga reaparecer na seleção.
+        const latest = await tx.checklistTemplate.groupBy({
+          by: ['key'],
+          where: { organizationId },
+          _max: { version: true },
+        });
+        where.AND = [
+          {
+            OR: latest.map((row) => ({
+              key: row.key,
+              version: row._max.version ?? 1,
+            })),
+          },
+        ];
+      }
       const data = await tx.checklistTemplate.findMany({
         where,
         orderBy: [{ key: 'asc' }, { version: 'desc' }],
