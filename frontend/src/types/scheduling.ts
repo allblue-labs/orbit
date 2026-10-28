@@ -185,11 +185,11 @@ export type AvailabilityKind = (typeof AVAILABILITY_KINDS)[number];
  * tem. Estas são sugestões oferecidas no formulário.
  */
 export const SUGGESTED_EVENT_TYPES = [
-  "VISITA_TECNICA",
+  "VISITA TÉCNICA",
   "PMOC",
-  "MANUTENCAO",
-  "INSTALACAO",
-  "INSPECAO",
+  "MANUTENÇÃO",
+  "INSTALAÇÃO",
+  "INSPEÇÃO",
   "COMPROMISSO",
   "BLOQUEIO",
 ] as const;
