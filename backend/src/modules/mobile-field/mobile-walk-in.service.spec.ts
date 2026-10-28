@@ -40,7 +40,11 @@ function bancada(permissions: readonly string[] = ['operations.create']) {
     customerAssets: jest.fn().mockResolvedValue([]),
     /* Tipado para que o teste possa olhar o `payloadHash` sem `any`. */
     create: jest.fn<
-      Promise<{ operationId: string; created: boolean }>,
+      Promise<{
+        operationId: string;
+        created: boolean;
+        awaitingAuthorization?: boolean;
+      }>,
       [{ businessUnitId: string; payloadHash: string }]
     >(() => Promise.resolve({ operationId: ORDEM, created: true })),
   };
@@ -57,6 +61,25 @@ function bancada(permissions: readonly string[] = ['operations.create']) {
 const novoCliente = { legalName: 'Clima Norte LTDA' };
 
 describe('atendimento avulso', () => {
+  it.each([false, true])(
+    'publica a espera por autorização sem impedir o owner de atender (owner=%s)',
+    async (owner) => {
+      const { service, repository, actor } = bancada();
+      repository.create.mockResolvedValue({
+        operationId: ORDEM,
+        created: true,
+        awaitingAuthorization: true,
+      });
+      await expect(
+        service.create({ ...actor, isOrganizationOwner: owner }, CHAVE, {
+          customer: novoCliente,
+        }),
+      ).resolves.toMatchObject({
+        operationId: ORDEM,
+        awaitingAuthorization: !owner,
+      });
+    },
+  );
   it('o perfil real de Técnico Operacional pode criar avulso sem criação geral', async () => {
     const role = ASSIGNABLE_TEAM_ROLES.find(
       (item) => item.key === FIELD_TECHNICIAN_ROLE_KEY,
@@ -111,6 +134,7 @@ describe('atendimento avulso', () => {
       service.create(actor, CHAVE, { customer: novoCliente }),
     ).resolves.toEqual({
       operationId: ORDEM,
+      awaitingAuthorization: false,
       idempotency: { key: CHAVE, replayed: false },
     });
   });
@@ -192,6 +216,7 @@ describe('atendimento avulso', () => {
       service.create(actor, CHAVE, { customer: novoCliente }),
     ).resolves.toEqual({
       operationId: ORDEM,
+      awaitingAuthorization: false,
       idempotency: { key: CHAVE, replayed: true },
     });
   });

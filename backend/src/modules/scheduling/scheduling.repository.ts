@@ -15,8 +15,47 @@ const eventInclude = {
       asset: { select: { id: true, name: true, identifier: true } },
     },
   },
-  customer: { select: { id: true, legalName: true, tradeName: true } },
-  asset: { select: { id: true, name: true, identifier: true } },
+  businessUnit: { select: { id: true, legalName: true, tradeName: true } },
+  customer: {
+    select: {
+      id: true,
+      legalName: true,
+      tradeName: true,
+      phone: true,
+      email: true,
+      address: true,
+      addresses: {
+        where: { deletedAt: null },
+        orderBy: [
+          { isPrimary: 'desc' as const },
+          { createdAt: 'asc' as const },
+        ],
+        take: 1,
+        select: {
+          label: true,
+          street: true,
+          number: true,
+          complement: true,
+          district: true,
+          city: true,
+          stateCode: true,
+          postalCode: true,
+          notes: true,
+        },
+      },
+    },
+  },
+  asset: {
+    select: {
+      id: true,
+      name: true,
+      identifier: true,
+      model: true,
+      manufacturer: true,
+      location: true,
+      serialNumber: true,
+    },
+  },
   createdBy: { select: { id: true, displayName: true } },
 } satisfies Prisma.SchedulingEventInclude;
 

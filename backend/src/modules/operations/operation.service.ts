@@ -28,6 +28,7 @@ import { generateUuidV7 } from '../../utils';
 import { FileObjectService } from '../storage/file-object.service';
 import type { OperationFieldRecordReadModel } from './operation.read-models';
 import { ChecklistService } from './checklist.service';
+import { PlanCapability } from '../subscription-plans/catalog/plan-catalog.types';
 
 @Injectable()
 export class OperationService {
@@ -80,7 +81,7 @@ export class OperationService {
     if (input.checklists?.length)
       await this.entitlements.assertCapability(
         organizationId,
-        'checklists.execute',
+        PlanCapability.OPERATIONS,
       );
     try {
       /**

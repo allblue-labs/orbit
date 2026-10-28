@@ -161,6 +161,9 @@ export class MobileWalkInService {
       );
       return {
         operationId: result.operationId,
+        awaitingAuthorization:
+          actor.isOrganizationOwner !== true &&
+          result.awaitingAuthorization === true,
         idempotency: { key: idempotencyKey, replayed: !result.created },
       };
     } catch (error) {

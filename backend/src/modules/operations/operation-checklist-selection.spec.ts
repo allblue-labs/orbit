@@ -3,6 +3,8 @@ import { OperationController } from './operation.controller';
 import { OperationService } from './operation.service';
 import type { IdentityRequest } from '../identity/infrastructure/jwt-authentication.guard';
 import type { CreateOperationDto } from './dto/operation.dto';
+import { PlanCode } from '../subscription-plans/catalog/plan-catalog.types';
+import { planDefinition } from '../subscription-plans/catalog/plan-registry';
 
 const input: CreateOperationDto = {
   businessUnitId: 'unit',
@@ -12,7 +14,7 @@ const input: CreateOperationDto = {
   checklists: [{ templateId: 'general' }, { templateId: 'specific' }],
 };
 
-function harness(fail = false) {
+function harness(fail = false, plan = PlanCode.ESSENTIAL) {
   let ambient = false;
   const repository = {
     findBusinessUnit: jest.fn().mockResolvedValue({ id: 'unit' }),
@@ -26,7 +28,11 @@ function harness(fail = false) {
     }),
   };
   const entitlements = {
-    assertCapability: jest.fn().mockResolvedValue(undefined),
+    assertCapability: jest.fn((_organizationId: string, capability: string) => {
+      if (!planDefinition(plan).capabilities.includes(capability))
+        return Promise.reject(new Error('Seu plano não inclui este recurso.'));
+      return Promise.resolve();
+    }),
     guardUsage: jest.fn(
       async (
         _org: string,
@@ -72,12 +78,22 @@ function harness(fail = false) {
 }
 
 describe('seleção de checklists na criação da operação', () => {
+  it.each(Object.values(PlanCode))(
+    'cria uma operação com checklist no plano %s',
+    async (plan) => {
+      const { service, checklists } = harness(false, plan);
+      await expect(
+        service.create('org', 'owner', input),
+      ).resolves.toMatchObject({ id: 'operation' });
+      expect(checklists.start).toHaveBeenCalledTimes(2);
+    },
+  );
   it('vincula somente os modelos escolhidos dentro da transação ambiente e retorna os vínculos', async () => {
     const { service, checklists, entitlements } = harness();
     const operation = await service.create('org', 'owner', input);
     expect(entitlements.assertCapability).toHaveBeenCalledWith(
       'org',
-      'checklists.execute',
+      'OPERATIONS',
     );
     expect(checklists.start).toHaveBeenNthCalledWith(
       1,

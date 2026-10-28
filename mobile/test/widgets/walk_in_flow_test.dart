@@ -50,6 +50,7 @@ class Backend {
   final requests = <RequestOptions>[];
   Future<ResponseBody> Function(RequestOptions)? lookup;
   bool failNextCreate = false;
+  bool awaitingAuthorization = false;
   Map<String, String>? conflictNextCreate;
   List<RequestOptions> get creates =>
       requests.where((r) => r.method == 'POST' && r.path == base).toList();
@@ -95,8 +96,13 @@ class Backend {
               'id': 'equip-1',
               'name': 'Split já cadastrado',
               'manufacturer': 'Marca A',
+              'location': 'Sala técnica',
             },
-            {'id': 'equip-2', 'name': 'Central já cadastrada'},
+            {
+              'id': 'equip-2',
+              'name': 'Central já cadastrada',
+              'location': 'Recepção',
+            },
           ],
         }),
       );
@@ -116,7 +122,12 @@ class Backend {
           status: 400,
         );
       }
-      return jsonResponse(envelope({'operationId': 'op-nova'}));
+      return jsonResponse(
+        envelope({
+          'operationId': 'op-nova',
+          'awaitingAuthorization': awaitingAuthorization,
+        }),
+      );
     }
     if (request.path == '/mobile/field/work-queue') {
       return jsonResponse(
@@ -260,6 +271,101 @@ Future<void> equipment(WidgetTester tester, String name) async {
 }
 
 void main() {
+  for (final freshCustomer in [false, true]) {
+    testWidgets(
+      'cadastro aguarda aprovação sem abrir uma execução bloqueada (novo cliente=$freshCustomer)',
+      (tester) async {
+        final backend = Backend()..awaitingAuthorization = true;
+        await open(
+          tester,
+          backend,
+          initial: freshCustomer
+              ? null
+              : OrbitRoutes.walkIn(
+                  customerId: 'cliente-1',
+                  customerName: 'Cliente existente',
+                ),
+        );
+        if (freshCustomer) {
+          await fresh(tester);
+          await fill(tester, 'Razão social', 'Cliente novo');
+          await tap(tester, 'Avançar · Equipamentos');
+          await equipment(tester, 'Split novo');
+        } else {
+          await tap(tester, 'Avançar · Equipamentos');
+          await tap(tester, 'Split já cadastrado');
+        }
+        await tap(tester, 'Avançar · Atendimento');
+        await tap(tester, 'Abrir atendimento');
+        expect(find.text('Aguardando autorização'), findsOneWidget);
+        expect(find.text('Execução op-nova'), findsNothing);
+        expect(backend.creates, hasLength(1));
+        await tap(tester, 'Ir para Atendimentos');
+        expect(find.text('Aguardando autorização'), findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+  testWidgets(
+    'equipamento cadastrado preenche o setor e alterações manuais sobrevivem à troca da seleção',
+    (tester) async {
+      await open(
+        tester,
+        Backend(),
+        initial: OrbitRoutes.walkIn(
+          customerId: 'cliente-1',
+          customerName: 'Cliente existente',
+        ),
+      );
+      await tap(tester, 'Avançar · Equipamentos');
+      await tap(tester, 'Split já cadastrado');
+      await tap(tester, 'Avançar · Atendimento');
+      expect(valueOf(tester, 'Setor'), 'Sala técnica');
+      await fill(tester, 'Setor', 'Sala 20');
+      await tap(tester, 'Voltar');
+      await tap(tester, 'Central já cadastrada');
+      await tap(tester, 'Avançar · Atendimento');
+      expect(valueOf(tester, 'Setor'), 'Sala 20');
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
+    'equipamentos em setores diferentes deixam a escolha para o técnico',
+    (tester) async {
+      await open(
+        tester,
+        Backend(),
+        initial: OrbitRoutes.walkIn(
+          customerId: 'cliente-1',
+          customerName: 'Cliente existente',
+        ),
+      );
+      await tap(tester, 'Avançar · Equipamentos');
+      await tap(tester, 'Split já cadastrado');
+      await tap(tester, 'Central já cadastrada');
+      await tap(tester, 'Avançar · Atendimento');
+      expect(valueOf(tester, 'Setor'), isEmpty);
+    },
+  );
+  testWidgets(
+    'localização do equipamento novo também preenche o setor do atendimento',
+    (tester) async {
+      final backend = Backend();
+      await open(tester, backend);
+      await fresh(tester);
+      await tap(tester, 'Pessoa física');
+      await fill(tester, 'Nome', 'Maria');
+      await tap(tester, 'Avançar · Equipamentos');
+      await tap(tester, 'Acrescentar equipamento');
+      await fill(tester, 'Nome do equipamento', 'Split novo');
+      await fill(tester, 'Onde fica', 'Quarto');
+      await tap(tester, 'Acrescentar');
+      await tap(tester, 'Avançar · Atendimento');
+      expect(valueOf(tester, 'Setor'), 'Quarto');
+      await tap(tester, 'Abrir atendimento');
+      expect((backend.creates.single.data as Map)['sector'], 'Quarto');
+    },
+  );
   for (final initial in [OrbitRoutes.workQueue, '/clientes']) {
     testWidgets(
       'acesso atualizado exibe o botão em $initial com token antigo',

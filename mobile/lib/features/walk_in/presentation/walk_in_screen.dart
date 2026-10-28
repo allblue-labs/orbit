@@ -113,6 +113,8 @@ class _WalkInScreenState extends ConsumerState<WalkInScreen> {
   final _titulo = TextEditingController();
   final _descricao = TextEditingController();
   final _setor = TextEditingController();
+  bool _setorEditado = false;
+  bool _aguardandoAutorizacao = false;
 
   bool _abrindo = false;
   OrbitException? _erro;
@@ -158,6 +160,25 @@ class _WalkInScreenState extends ConsumerState<WalkInScreen> {
   /// O cliente pré-selecionado conta como escolhido mesmo antes de a carteira
   /// carregar: a etapa seguinte não deve esperar uma consulta para liberar.
   String? get _clienteId => widget.customerId ?? _escolhido?.id;
+
+  void _sincronizarSetor() {
+    if (_setorEditado) return;
+    final existentes = _origem != WalkInOrigin.existing || _clienteId == null
+        ? const <WalkInEquipmentContract>[]
+        : ref.read(walkInEquipmentProvider(_clienteId!)).valueOrNull ??
+              const <WalkInEquipmentContract>[];
+    final locais = <String>{
+      for (final equipamento in existentes)
+        if (_selecionados.contains(equipamento.id) &&
+            (equipamento.location?.trim().isNotEmpty ?? false))
+          equipamento.location!.trim(),
+      for (final equipamento in _novosEquipamentos)
+        if (equipamento.location?.trim().isNotEmpty ?? false)
+          equipamento.location!.trim(),
+    };
+    final setor = locais.length == 1 ? locais.single : '';
+    _setor.text = setor.length > 120 ? setor.substring(0, 120) : setor;
+  }
 
   WalkInDraft get _rascunho => WalkInDraft(
     origin: _origem ?? WalkInOrigin.existing,
@@ -210,6 +231,9 @@ class _WalkInScreenState extends ConsumerState<WalkInScreen> {
     _cepRequest++;
     setState(() {
       _origem = value;
+      _setorEditado = false;
+      _setor.clear();
+      _sincronizarSetor();
       _consultandoDocumento = false;
       _consultandoCep = false;
       _avisoDocumento = null;
@@ -408,6 +432,11 @@ class _WalkInScreenState extends ConsumerState<WalkInScreen> {
       ref.invalidate(workQueueControllerProvider);
       ref.invalidate(fieldDashboardProvider);
 
+      if (resultado.awaitingAuthorization) {
+        setState(() => _aguardandoAutorizacao = true);
+        return;
+      }
+
       /* Entra direto na execução: abrir o atendimento e começar a executá-lo
          são o mesmo gesto para quem está no local. */
       context.go(OrbitRoutes.operationExecution(resultado.operationId));
@@ -431,6 +460,32 @@ class _WalkInScreenState extends ConsumerState<WalkInScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_aguardandoAutorizacao) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Atendimento cadastrado')),
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(OrbitSpacing.gutter),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const OrbitEmptyState(
+                  icon: Icons.hourglass_top_rounded,
+                  title: 'Aguardando autorização',
+                  description:
+                      'O atendimento foi cadastrado com sucesso. O proprietário precisa autorizá-lo em Operações → Pendências. Após a liberação, ele aparecerá em Atendimentos para você iniciar.',
+                ),
+                const SizedBox(height: OrbitSpacing.lg),
+                FilledButton(
+                  onPressed: () => context.go(OrbitRoutes.workQueue),
+                  child: const Text('Ir para Atendimentos'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     final etapas = <OrbitWizardStep>[
       if (widget.customerId == null) _etapaOrigem(),
       _etapaCliente(),
@@ -618,6 +673,8 @@ class _WalkInScreenState extends ConsumerState<WalkInScreen> {
             /* Trocar de cliente invalida a seleção de equipamentos: eles são
                de outro parque. */
             _selecionados.clear();
+            _setorEditado = false;
+            _setor.clear();
           }),
         ),
       ),
@@ -682,6 +739,7 @@ class _WalkInScreenState extends ConsumerState<WalkInScreen> {
               selecionados: _selecionados,
               onAlternar: (id) => setState(() {
                 if (!_selecionados.remove(id)) _selecionados.add(id);
+                _sincronizarSetor();
               }),
             ),
 
@@ -696,8 +754,10 @@ class _WalkInScreenState extends ConsumerState<WalkInScreen> {
               _NovoEquipamentoCard(
                 key: ValueKey('walk-in.equipment.$indice'),
                 equipamento: equipamento,
-                onRemove: () =>
-                    setState(() => _novosEquipamentos.removeAt(indice)),
+                onRemove: () => setState(() {
+                  _novosEquipamentos.removeAt(indice);
+                  _sincronizarSetor();
+                }),
               ),
           ],
 
@@ -706,7 +766,10 @@ class _WalkInScreenState extends ConsumerState<WalkInScreen> {
             onPressed: () async {
               final novo = await showWalkInEquipmentSheet(context);
               if (novo != null && mounted) {
-                setState(() => _novosEquipamentos.add(novo));
+                setState(() {
+                  _novosEquipamentos.add(novo);
+                  _sincronizarSetor();
+                });
               }
             },
             icon: const Icon(Icons.add, size: 18),
@@ -736,6 +799,7 @@ class _WalkInScreenState extends ConsumerState<WalkInScreen> {
         titulo: _titulo,
         descricao: _descricao,
         setor: _setor,
+        onSetor: (_) => _setorEditado = true,
         onNatureza: (valor) => setState(() => _natureza = valor),
         onPrioridade: (valor) => setState(() => _prioridade = valor),
         bloqueio: rascunho.blockedReason,
@@ -1229,6 +1293,7 @@ class _FormularioDoAtendimento extends StatelessWidget {
     required this.titulo,
     required this.descricao,
     required this.setor,
+    required this.onSetor,
     required this.onNatureza,
     required this.onPrioridade,
     required this.bloqueio,
@@ -1239,6 +1304,7 @@ class _FormularioDoAtendimento extends StatelessWidget {
   final TextEditingController titulo;
   final TextEditingController descricao;
   final TextEditingController setor;
+  final ValueChanged<String> onSetor;
   final ValueChanged<String> onNatureza;
   final ValueChanged<String> onPrioridade;
   final String? bloqueio;
@@ -1316,6 +1382,10 @@ class _FormularioDoAtendimento extends StatelessWidget {
         WalkInField(
           label: 'Setor',
           controller: setor,
+          maxLength: 120,
+          onChanged: onSetor,
+          helper:
+              'Preenchido a partir da localização do equipamento quando há um único setor. Você pode alterar ou complementar.',
           hint: 'Recepção, sala 2, cobertura',
         ),
 
