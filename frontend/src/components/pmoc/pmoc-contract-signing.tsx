@@ -31,6 +31,7 @@ import {
   Repeat,
   ShieldCheck,
   Wrench,
+  Download,
 } from "lucide-react";
 
 import { MutationError } from "@/components/artifact-studio/mutation-error";
@@ -66,6 +67,7 @@ export function PmocContractSigning({ token }: { token: string }) {
     queryKey: ["pmoc-public-contract", token],
     queryFn: () => pmocContractService.read(token),
     retry: false,
+    gcTime: 0,
     refetchOnWindowFocus: false,
   });
 
@@ -113,12 +115,32 @@ function Conteudo({
    * porque `contrato.state` é o valor de quando a página abriu.
    */
   const [assinado, setAssinado] = useState(false);
+  const download = useMutation({
+    mutationFn: () => pmocContractService.document(token),
+  });
   const etapa = assinado ? "CONCLUIDO" : etapaDoContrato(contrato.state);
 
   return (
     <Moldura emitente={contrato.emitter.name}>
       <div className="space-y-6">
         <ResumoDoContrato contrato={contrato} />
+        {contrato.documentAvailable &&
+        ["VALIDO", "JA_ASSINADO"].includes(contrato.state) ? (
+          <div className="space-y-2">
+            <Button
+              className="w-full sm:w-auto"
+              variant="outline"
+              disabled={download.isPending}
+              onClick={() => download.mutate()}
+            >
+              <Download className="size-4" />
+              {download.isPending
+                ? "Baixando…"
+                : "Baixar contrato completo em PDF"}
+            </Button>
+            <MutationError error={download.error} />
+          </div>
+        ) : null}
 
         {etapa === "ASSINAR" ? (
           <FormularioDeAssinatura
@@ -344,7 +366,9 @@ function FormularioDeAssinatura({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5 sm:col-span-2">
-          <Label required htmlFor="signerName">Nome de quem assina</Label>
+          <Label required htmlFor="signerName">
+            Nome de quem assina
+          </Label>
           <Input
             id="signerName"
             value={signerName}

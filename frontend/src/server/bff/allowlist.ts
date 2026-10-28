@@ -103,17 +103,32 @@ const PUBLIC_ENDPOINTS: ReadonlySet<string> = new Set([
  * normalização deixa passar amarraria este padrão a esse detalhe de `inspectPath`.
  * Quem segue para o backend é o caminho original — a caixa do token sobrevive.
  */
-const PUBLIC_ENDPOINT_PATTERNS: readonly { method: HttpMethod; path: RegExp }[] =
-  [
-    {
-      method: "GET",
-      path: /^\/public\/pmoc\/contracts\/[A-Za-z0-9_-]{32,128}$/,
-    },
-    {
-      method: "POST",
-      path: /^\/public\/pmoc\/contracts\/[A-Za-z0-9_-]{32,128}\/signature$/,
-    },
-  ];
+const PUBLIC_ENDPOINT_PATTERNS: readonly {
+  method: HttpMethod;
+  path: RegExp;
+}[] = [
+  {
+    method: "GET",
+    path: /^\/public\/pmoc\/contracts\/[A-Za-z0-9_-]{32,128}$/,
+  },
+  {
+    method: "POST",
+    path: /^\/public\/pmoc\/contracts\/[A-Za-z0-9_-]{32,128}\/signature$/,
+  },
+  {
+    method: "GET",
+    path: /^\/public\/pmoc\/contracts\/[A-Za-z0-9_-]{32,128}\/document$/,
+  },
+  { method: "GET", path: /^\/public\/quotes\/proposals\/[A-Za-z0-9_-]{64}$/ },
+  {
+    method: "GET",
+    path: /^\/public\/quotes\/proposals\/[A-Za-z0-9_-]{64}\/document$/,
+  },
+  {
+    method: "POST",
+    path: /^\/public\/quotes\/proposals\/[A-Za-z0-9_-]{64}\/response$/,
+  },
+];
 
 export type PathVerdict =
   | { allowed: true; requiresSession: boolean }

@@ -49,6 +49,7 @@ import {
 } from "@/hooks/quotes/use-quotes";
 import { ROUTES } from "@/lib/routes";
 import { OPERATION_KIND_LABELS, type Quote } from "@/types/quotes";
+import { QuoteCustomerAcceptance } from "./quote-customer-acceptance";
 
 type Pending = "reject" | "cancel" | "convert" | null;
 
@@ -92,14 +93,21 @@ export function QuoteActions({ quote }: { quote: Quote }) {
 
   if (!anything) {
     return (
-      <p className="text-sm text-muted-foreground">
-        Não há ação disponível para esta proposta agora.
-      </p>
+      <div className="space-y-3">
+        <QuoteCustomerAcceptance quote={quote} canGenerate={false} />
+        <p className="text-sm text-muted-foreground">
+          Não há ação disponível para esta proposta agora.
+        </p>
+      </div>
     );
   }
 
   return (
     <div className="space-y-3">
+      <QuoteCustomerAcceptance
+        quote={quote}
+        canGenerate={send.allowed && ["DRAFT", "SENT"].includes(quote.status)}
+      />
       <div className="flex flex-wrap gap-2">
         {showSend ? (
           <Button

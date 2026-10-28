@@ -299,8 +299,29 @@ export class PmocRepository {
     tokenHash: string;
     expiresAt: Date;
     createdById: string;
+    expectedVersion: Date;
+    publicSummary: Prisma.InputJsonValue;
+    documentBucket: string;
+    documentObjectKey: string;
+    documentSha256: string;
   }) {
     return this.rls.run(async (tx) => {
+      await tx.$executeRaw`SELECT id FROM pmoc_plans WHERE id=${data.planId}::uuid AND organization_id=${data.organizationId}::uuid FOR UPDATE`;
+      const current = await tx.pmocPlan.findFirst({
+        where: {
+          id: data.planId,
+          organizationId: data.organizationId,
+          deletedAt: null,
+        },
+        select: { updatedAt: true },
+      });
+      if (
+        !current ||
+        current.updatedAt.getTime() !== data.expectedVersion.getTime()
+      )
+        throw new ConflictException(
+          'O contrato mudou durante a geração. Atualize e gere outro link.',
+        );
       await tx.pmocPlanSignatureLink.updateMany({
         where: {
           planId: data.planId,
@@ -317,6 +338,10 @@ export class PmocRepository {
           tokenHash: data.tokenHash,
           expiresAt: data.expiresAt,
           createdById: data.createdById,
+          publicSummary: data.publicSummary,
+          documentBucket: data.documentBucket,
+          documentObjectKey: data.documentObjectKey,
+          documentSha256: data.documentSha256,
         },
         select: { id: true, expiresAt: true, createdAt: true },
       });
@@ -327,7 +352,12 @@ export class PmocRepository {
   latestSignature(planId: string, organizationId: string) {
     return this.rls.run((tx) =>
       tx.pmocPlanSignatureLink.findFirst({
-        where: { planId, organizationId, signedAt: { not: null } },
+        where: {
+          planId,
+          organizationId,
+          signedAt: { not: null },
+          revokedAt: null,
+        },
         orderBy: { signedAt: 'desc' },
         select: {
           signerName: true,
@@ -364,8 +394,21 @@ export class PmocRepository {
         signer_name: string | null;
         signed_at: Date | null;
         expires_at: Date;
+        document_available: boolean;
       }[]
     >`SELECT * FROM app_pmoc_signature_link_read(${tokenHash})`;
+    return rows[0] ?? null;
+  }
+
+  async publicSignatureDocument(tokenHash: string) {
+    const rows = await this.prisma.$queryRaw<
+      {
+        bucket: string;
+        object_key: string;
+        sha256: string;
+        plan_code: string;
+      }[]
+    >`SELECT * FROM app_pmoc_signature_document(${tokenHash})`;
     return rows[0] ?? null;
   }
 
@@ -675,6 +718,11 @@ export class PmocRepository {
         data,
         select: planView,
       });
+      if (action === 'PMOC_PLAN_UPDATED' || action === 'PMOC_PLAN_CANCELLED')
+        await tx.pmocPlanSignatureLink.updateMany({
+          where: { organizationId, planId: id, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
       if (
         data.technician !== undefined ||
         data.serviceLocation !== undefined ||
@@ -2418,6 +2466,18 @@ export class PmocRepository {
     actorId: string;
   }) {
     return this.rls.run(async (tx) => {
+      await tx.pmocPlan.update({
+        where: { id: input.planId },
+        data: { updatedAt: new Date() },
+      });
+      await tx.pmocPlanSignatureLink.updateMany({
+        where: {
+          planId: input.planId,
+          organizationId: input.organizationId,
+          revokedAt: null,
+        },
+        data: { revokedAt: new Date() },
+      });
       const coverage = await tx.pmocEquipmentCoverage.create({
         data: {
           organizationId: input.organizationId,
@@ -2475,6 +2535,14 @@ export class PmocRepository {
         data: { deletedAt: new Date() },
       });
       if (removed.count === 0) return false;
+      await tx.pmocPlan.update({
+        where: { id: planId },
+        data: { updatedAt: new Date() },
+      });
+      await tx.pmocPlanSignatureLink.updateMany({
+        where: { planId, organizationId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
       await this.audit(
         tx,
         planId,
@@ -3124,9 +3192,15 @@ export class PmocRepository {
       isActive?: boolean;
     },
   ) {
-    return this.rls.run((tx) =>
-      tx.pmocUnit.update({ where: { id }, data, include: unitView }),
-    );
+    return this.rls.run(async (tx) => {
+      const unit = await tx.pmocUnit.update({
+        where: { id },
+        data,
+        include: unitView,
+      });
+      await this.invalidateUnitContracts(tx, id);
+      return unit;
+    });
   }
 
   /**
@@ -3137,12 +3211,35 @@ export class PmocRepository {
    * deixaria o histórico sem nome.
    */
   softDeleteUnit(id: string) {
-    return this.rls.run((tx) =>
-      tx.pmocUnit.update({
+    return this.rls.run(async (tx) => {
+      const unit = await tx.pmocUnit.update({
         where: { id },
         data: { deletedAt: new Date(), isActive: false },
-      }),
-    );
+      });
+      await this.invalidateUnitContracts(tx, id);
+      return unit;
+    });
+  }
+
+  private async invalidateUnitContracts(
+    tx: Prisma.TransactionClient,
+    unitId: string,
+  ) {
+    const plans = await tx.pmocPlanUnit.findMany({
+      where: { unitId },
+      select: { planId: true },
+    });
+    const ids = plans.map(({ planId }) => planId).sort();
+    // A atualização do plano invalida a versão usada durante a geração do PDF.
+    for (const id of ids)
+      await tx.pmocPlan.update({
+        where: { id },
+        data: { updatedAt: new Date() },
+      });
+    await tx.pmocPlanSignatureLink.updateMany({
+      where: { planId: { in: ids }, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
   }
 
   /**

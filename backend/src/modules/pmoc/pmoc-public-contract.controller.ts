@@ -2,16 +2,20 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   Headers,
   Ip,
   Param,
   Post,
+  Res,
+  StreamableFile,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public } from '../../decorators';
 import { ValidationException } from '../../exceptions';
 import { SignPmocContractDto } from './pmoc.dto';
 import { PmocService } from './pmoc.service';
+import type { Response } from 'express';
 
 /**
  * O contrato do PMOC visto por quem vai assiná-lo.
@@ -30,10 +34,8 @@ import { PmocService } from './pmoc.service';
  *
  * ## O token não aparece em log
  *
- * Ele vem no caminho, e o interceptor de log registra caminhos. É uma troca
- * consciente: o alternativo seria recebê-lo no corpo de um `GET`, que nem todo cliente
- * HTTP permite. O que o log vê é o hash de nada — o token em claro —, então a
- * mitigação real é a validade curta e a revogação ao gerar outro.
+ * O redator de caminhos sensíveis remove o token antes do registro em log.
+ * As respostas não permitem cache; o link tem validade curta e pode ser revogado.
  */
 @ApiTags('PMOC — contrato público')
 @Controller('public/pmoc/contracts')
@@ -42,9 +44,27 @@ export class PmocPublicContractController {
 
   @Get(':token')
   @Public()
+  @Header('Cache-Control', 'no-store')
+  @Header('Referrer-Policy', 'no-referrer')
   @ApiOperation({ summary: 'O resumo do contrato que o link abre' })
   read(@Param('token') token: string) {
     return this.pmoc.publicContract(token);
+  }
+
+  @Get(':token/document')
+  @Public()
+  async document(
+    @Param('token') token: string,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const document = await this.pmoc.publicContractDocument(token);
+    response.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="${document.fileName}"`,
+      'Cache-Control': 'no-store',
+      'Referrer-Policy': 'no-referrer',
+    });
+    return new StreamableFile(document.bytes);
   }
 
   /**
@@ -55,6 +75,8 @@ export class PmocPublicContractController {
    */
   @Post(':token/signature')
   @Public()
+  @Header('Cache-Control', 'no-store')
+  @Header('Referrer-Policy', 'no-referrer')
   @ApiOperation({ summary: 'Coleta a assinatura digital do contratante' })
   sign(
     @Param('token') token: string,

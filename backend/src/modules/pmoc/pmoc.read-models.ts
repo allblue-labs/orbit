@@ -366,6 +366,7 @@ export interface PmocSignatureLinkReadModel {
  * não mantenha a sua própria tradução de cada recusa.
  */
 export interface PmocPublicContractReadModel {
+  readonly documentAvailable?: boolean;
   readonly state: PmocSignatureLinkStateReadModel;
   readonly reason: string | null;
   readonly plan: {

@@ -156,6 +156,35 @@ export class QuoteRepository {
     private readonly events: DomainEventEmitter,
   ) {}
 
+  latestCustomerSignature(quoteId: string, organizationId: string) {
+    return this.rls.run(async (tx) => {
+      const acceptance = await tx.quoteAcceptanceLink.findFirst({
+        where: {
+          quoteId,
+          organizationId,
+          decision: 'APPROVE',
+          signatureFileId: { not: null },
+        },
+        orderBy: { respondedAt: 'desc' },
+      });
+      if (!acceptance?.signatureFileId) return null;
+      const file = await tx.storageFile.findFirst({
+        where: {
+          id: acceptance.signatureFileId,
+          organizationId,
+          status: 'AVAILABLE',
+        },
+      });
+      return file
+        ? {
+            signerName: acceptance.signerName!,
+            signedAt: acceptance.respondedAt!,
+            file,
+          }
+        : null;
+    });
+  }
+
   /* ---------------------------------------------------------------- */
   /* Leitura                                                           */
   /* ---------------------------------------------------------------- */
@@ -761,7 +790,7 @@ export class QuoteRepository {
     id: string;
     organizationId: string;
     businessUnitId: string;
-    actorId: string;
+    actorId: string | null;
     from: readonly string[];
     to: string;
     /**
@@ -1233,7 +1262,7 @@ export class QuoteRepository {
     tx: PrismaTransactionClient,
     organizationId: string,
     businessUnitId: string,
-    actorId: string,
+    actorId: string | null,
     action: string,
     entityId: string,
     before: Record<string, unknown> | null,

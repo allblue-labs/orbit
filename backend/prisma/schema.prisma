@@ -124,6 +124,8 @@ model User {
   operationCancellationsResolved     OperationCancellationRequest[] @relation("OperationCancellationResolvedBy")
   operationMaterialsCreated          OperationMaterial[]            @relation("OperationMaterialCreatedBy")
 
+  createdQuoteAcceptanceLinks QuoteAcceptanceLink[] @relation("QuoteAcceptanceCreatedBy")
+
   @@index([status, deletedAt])
   @@map("users")
 }
@@ -355,6 +357,8 @@ model Organization {
   operationCancellationRequests OperationCancellationRequest[]
   operationMaterials            OperationMaterial[]
 
+  quoteAcceptanceLinks QuoteAcceptanceLink[]
+
   @@index([ownerUserId, status])
   @@index([planId, subscriptionStatus])
   @@map("organizations")
@@ -439,6 +443,8 @@ model BusinessUnit {
   commissionPayments            CommissionPayment[]
   operationCancellationRequests OperationCancellationRequest[]
   operationMaterials            OperationMaterial[]
+
+  quoteAcceptanceLinks QuoteAcceptanceLink[]
 
   @@unique([organizationId, slug])
   @@index([organizationId, documentType, documentNumber], map: "business_units_org_document_idx")
@@ -2161,6 +2167,9 @@ model StorageFile {
   fieldEvidenceUploads   FieldEvidenceUpload[]
   fieldEvidence          FieldEvidence[]
 
+  quoteAcceptanceDocuments QuoteAcceptanceLink[] @relation("QuoteAcceptanceDocument")
+  quoteAcceptanceSignatures QuoteAcceptanceLink[] @relation("QuoteAcceptanceSignature")
+
   @@unique([provider, bucket, objectKey])
   @@index([organizationId, status, createdAt])
   @@map("storage_files")
@@ -3737,6 +3746,8 @@ model Quote {
   items          QuoteItem[]
   assets         QuoteAsset[]
 
+  acceptanceLinks QuoteAcceptanceLink[]
+
   @@unique([organizationId, number])
   @@index([organizationId, businessUnitId, status, createdAt])
   @@index([organizationId, customerId, createdAt])
@@ -4284,6 +4295,11 @@ model PmocPlanSignatureLink {
   createdById    String    @map("created_by_id") @db.Uuid
   revokedAt      DateTime? @map("revoked_at") @db.Timestamptz(3)
 
+  /// Resumo e documento congelados no momento de enviar o contrato.
+  publicSummary     Json?   @map("public_summary") @db.JsonB
+  documentBucket    String? @map("document_bucket") @db.VarChar(160)
+  documentObjectKey String? @map("document_object_key") @db.Text
+  documentSha256    String? @map("document_sha256") @db.Char(64)
   /// Quando o contratante assinou. Nulo enquanto o link está pendente.
   signedAt        DateTime? @map("signed_at") @db.Timestamptz(3)
   /// Quem declarou assinar — nome e documento são digitados por ele.
@@ -4817,4 +4833,40 @@ model AccountDocumentRegistration {
 
   @@index([organizationId], map: "account_document_registrations_org_idx")
   @@map("account_document_registrations")
+}
+
+/// A proposta enviada é imutável; a resposta pública fica ligada a esta versão.
+model QuoteAcceptanceLink {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  organizationId    String    @map("organization_id") @db.Uuid
+  businessUnitId    String    @map("business_unit_id") @db.Uuid
+  quoteId           String    @map("quote_id") @db.Uuid
+  tokenHash         String    @unique @map("token_hash") @db.Char(64)
+  quoteVersion      DateTime  @map("quote_version") @db.Timestamptz(3)
+  snapshot          Json      @db.JsonB
+  documentFileId    String    @map("document_file_id") @db.Uuid
+  signatureFileId   String?   @map("signature_file_id") @db.Uuid
+  expiresAt         DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt         DateTime? @map("revoked_at") @db.Timestamptz(3)
+  decision          String?   @db.VarChar(24)
+  respondedAt       DateTime? @map("responded_at") @db.Timestamptz(3)
+  signerName        String?   @map("signer_name") @db.VarChar(180)
+  signerDocument    String?   @map("signer_document") @db.VarChar(40)
+  signerEmail       String?   @map("signer_email") @db.VarChar(180)
+  reason            String?   @db.VarChar(2000)
+  responseIp        String?   @map("response_ip") @db.VarChar(64)
+  responseUserAgent String?   @map("response_user_agent") @db.VarChar(400)
+  consentAccepted   Boolean   @default(false) @map("consent_accepted")
+  createdById       String    @map("created_by_id") @db.Uuid
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  quote Quote @relation(fields: [quoteId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  documentFile StorageFile @relation("QuoteAcceptanceDocument", fields: [documentFileId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  signatureFile StorageFile? @relation("QuoteAcceptanceSignature", fields: [signatureFileId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdBy User @relation("QuoteAcceptanceCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId, quoteId, createdAt])
+  @@map("quote_acceptance_links")
 }
