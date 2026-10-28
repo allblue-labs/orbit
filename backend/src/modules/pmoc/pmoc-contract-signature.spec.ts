@@ -45,13 +45,23 @@ describe('assinatura pública do contrato de PMOC', () => {
     } = {},
   ) => {
     const repository = {
-      find: jest
-        .fn()
-        .mockResolvedValue(
-          options.plano === undefined
-            ? { id: 'plan-1', code: 'PMOC-0001', _count: { coverages: 7 } }
-            : options.plano,
-        ),
+      find: jest.fn().mockResolvedValue(
+        options.plano === undefined
+          ? {
+              id: 'plan-1',
+              code: 'PMOC-0001',
+              name: 'Edifício Aurora',
+              updatedAt: new Date('2026-10-04T12:00:00Z'),
+              startsOn: new Date('2026-01-01'),
+              endsOn: null,
+              frequencyAmount: 3,
+              frequencyUnit: 'MONTHS',
+              customer: { legalName: 'Ed. Aurora' },
+              businessUnit: { legalName: 'Clima Norte' },
+              _count: { coverages: 7 },
+            }
+          : options.plano,
+      ),
       createSignatureLink: jest.fn().mockResolvedValue({
         id: 'link-1',
         expiresAt: new Date('2026-10-07T12:00:00.000Z'),
@@ -82,6 +92,10 @@ describe('assinatura pública do contrato de PMOC', () => {
       undefined as never,
       storage as never,
     );
+    jest.spyOn(service, 'document').mockResolvedValue({
+      bytes: Buffer.from('%PDF-1.7 frozen contract'),
+      fileName: 'contrato.pdf',
+    });
     return { service, repository, storage };
   };
 

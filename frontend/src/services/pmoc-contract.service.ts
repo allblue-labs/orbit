@@ -20,6 +20,7 @@
  * link.
  */
 import { apiClient } from "@/api/client";
+import { downloadAndSave } from "@/api/transfer";
 import type {
   PmocContractSignatureResult,
   PmocPublicContract,
@@ -30,6 +31,8 @@ const base = (token: string) =>
   `/public/pmoc/contracts/${encodeURIComponent(token)}`;
 
 export const pmocContractService = {
+  document: (token: string) =>
+    downloadAndSave(`${base(token)}/document`, { retries: 0 }),
   /**
    * O resumo que o link abre.
    *

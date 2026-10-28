@@ -199,8 +199,10 @@ function EventForm({
     }));
   }
 
-  const edit = (patch: Partial<FormState>) =>
+  const edit = (patch: Partial<FormState>) => {
+    setAcknowledgeConflicts(false);
     setForm((current) => ({ ...current, ...patch }));
+  };
 
   const conflictRefusal =
     mutation.error instanceof ApiError && mutation.error.status === 409
@@ -285,7 +287,9 @@ function EventForm({
       </p>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2 sm:col-span-2">
-          <Label htmlFor="event-title" required>Título</Label>
+          <Label htmlFor="event-title" required>
+            Título
+          </Label>
           <Input
             id="event-title"
             required
@@ -297,7 +301,9 @@ function EventForm({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="event-calendar" required>Calendário</Label>
+          <Label htmlFor="event-calendar" required>
+            Calendário
+          </Label>
           <Select
             value={form.calendarId}
             disabled={calendars.length === 0}
@@ -321,7 +327,9 @@ function EventForm({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="event-type" required>Tipo</Label>
+          <Label htmlFor="event-type" required>
+            Tipo
+          </Label>
           <Input
             id="event-type"
             required
@@ -345,7 +353,9 @@ function EventForm({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="event-start" required>Início</Label>
+          <Label htmlFor="event-start" required>
+            Início
+          </Label>
           <Input
             id="event-start"
             required
@@ -357,7 +367,9 @@ function EventForm({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="event-end" required>Fim</Label>
+          <Label htmlFor="event-end" required>
+            Fim
+          </Label>
           <Input
             id="event-end"
             required
@@ -479,8 +491,12 @@ function EventForm({
 
       <DialogFooter>
         {!valid ? (
-          <p role="status" className="mr-auto max-w-sm text-xs text-muted-foreground">
-            Preencha os campos obrigatórios. O título precisa ter ao menos dois caracteres e o fim deve ser posterior ao início.
+          <p
+            role="status"
+            className="mr-auto max-w-sm text-xs text-muted-foreground"
+          >
+            Preencha os campos obrigatórios. O título precisa ter ao menos dois
+            caracteres e o fim deve ser posterior ao início.
           </p>
         ) : null}
         <Button variant="ghost" onClick={onClose}>
@@ -520,7 +536,9 @@ function RecurrenceFields({
       {form.recurring ? (
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="space-y-2">
-            <Label htmlFor="event-frequency" required>Frequência</Label>
+            <Label htmlFor="event-frequency" required>
+              Frequência
+            </Label>
             <Select
               value={form.frequency}
               onValueChange={(value) =>

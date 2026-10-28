@@ -2,5 +2,8 @@
 export function redactSensitivePath(path: string | undefined): string | null {
   if (!path) return null;
   const pathname = path.split('?', 1)[0] ?? path;
-  return pathname.replace(/(\/assets\/qr\/)[^/?]+/g, '$1[REDACTED]');
+  return pathname.replace(
+    /(\/assets\/qr\/|\/public\/pmoc\/contracts\/|\/public\/quotes\/proposals\/)[^/?]+/g,
+    '$1[REDACTED]',
+  );
 }

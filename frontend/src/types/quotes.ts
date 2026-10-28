@@ -147,6 +147,10 @@ export interface QuoteReasonInput {
 
 /** `POST /quotes/:id/convert-to-operation`. */
 export interface ConvertQuoteInput {
+  responsibleFieldTechnicianId?: string;
+  auxiliaryTechnicianIds?: string[];
+  customerAddressId?: string;
+  sector?: string;
   kind?: string;
   priority?: string;
   scheduledStart?: string;

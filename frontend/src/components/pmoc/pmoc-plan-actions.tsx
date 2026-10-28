@@ -146,7 +146,7 @@ export function PmocPlanActions({ plan }: { plan: PmocPlan }) {
             ) : (
               <PenLine className="size-3.5" />
             )}
-            Enviar contrato para assinatura
+            Gerar link de assinatura (opcional)
           </Button>
         ) : null}
 

@@ -77,6 +77,7 @@ export const NOTIFICATIONS_REFRESH = {
   list: {
     staleTime: CACHE.live.staleTime,
     refetchInterval: NOTIFICATIONS_POLL_MS,
+    refetchOnWindowFocus: true,
     /** O contador precisa continuar andando com a aba em segundo plano. */
     refetchIntervalInBackground: false,
   },

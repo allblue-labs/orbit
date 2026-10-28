@@ -29,6 +29,7 @@
     "modules/organizations/business-units/equipaments/equipment-qr.read-models.ts",
     "modules/organizations/organization.read-models.ts",
     "modules/pmoc/pmoc.read-models.ts",
+    "modules/quotes/quote-acceptance.read-models.ts",
     "modules/quotes/quote.read-models.ts",
     "modules/rvt/rvt.read-models.ts",
     "modules/scheduling/scheduling.read-models.ts",

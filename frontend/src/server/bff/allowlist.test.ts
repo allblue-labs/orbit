@@ -23,6 +23,28 @@ const TOKEN =
   "Ab3-_xYz01234567890123456789012345678901234567890123456789012xZ_";
 
 describe("inspectPath", () => {
+  const quoteToken = "Ab3_".repeat(16);
+  it.each([
+    [`/public/quotes/proposals/${quoteToken}`, "GET"],
+    [`/public/quotes/proposals/${quoteToken}/document`, "GET"],
+    [`/public/quotes/proposals/${quoteToken}/response`, "POST"],
+    [`/public/pmoc/contracts/${quoteToken}/document`, "GET"],
+  ] as const)("libera somente o comando público %s %s", (path, method) => {
+    expect(inspectPath(path, method)).toEqual({
+      allowed: true,
+      requiresSession: false,
+    });
+  });
+  it.each([
+    [`/public/quotes/proposals/${quoteToken}/response`, "GET"],
+    [`/public/quotes/proposals/${quoteToken}/document`, "POST"],
+    [`/public/quotes/proposals/${quoteToken}/other`, "GET"],
+    [`/public/quotes/proposals/${quoteToken.slice(1)}`, "GET"],
+    [`/public/quotes/proposals`, "GET"],
+    [`/quotes/0001/acceptance-link`, "POST"],
+  ] as const)("preserva a sessão para a rota vizinha %s %s", (path, method) => {
+    expect(inspectPath(path, method)).toMatchObject({ requiresSession: true });
+  });
   it("encaminha o contrato público sem exigir sessão", () => {
     expect(inspectPath(`/public/pmoc/contracts/${TOKEN}`, "GET")).toEqual({
       allowed: true,
