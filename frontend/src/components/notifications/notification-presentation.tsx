@@ -68,6 +68,26 @@ const CATEGORIES: Readonly<Record<string, CategoryPresentation>> = {
   SUBSCRIPTION: { label: "Plano", icon: CreditCard, color: "text-sky-400" },
   INTEGRATION: { label: "Integração", icon: Plug, color: "text-fuchsia-400" },
   AI: { label: "Inteligência", icon: Cpu, color: "text-amber-400" },
+  QUOTE_CUSTOMER_APPROVED: {
+    label: "Orçamento aprovado",
+    icon: ClipboardCheck,
+    color: "text-emerald-400",
+  },
+  QUOTE_CUSTOMER_REJECTED: {
+    label: "Orçamento recusado",
+    icon: FileText,
+    color: "text-rose-400",
+  },
+  QUOTE_CUSTOMER_CHANGES_REQUESTED: {
+    label: "Alterações no orçamento",
+    icon: FileText,
+    color: "text-amber-400",
+  },
+  PMOC_CONTRACT_SIGNED: {
+    label: "Contrato PMOC assinado",
+    icon: ClipboardCheck,
+    color: "text-emerald-400",
+  },
 };
 
 const FALLBACK: CategoryPresentation = {

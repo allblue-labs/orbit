@@ -17,6 +17,8 @@ O banco guarda somente o SHA-256 do token. O acesso público se limita ao docume
 
 ## Publicação
 
+Aprovação com assinatura, recusa, solicitação de alterações e assinatura do contrato PMOC geram um aviso ao owner da organização nas tabelas `notifications` e `notification_deliveries`, na mesma transação do aceite. Repetir a confirmação não gera outro aviso. As notificações identificam o cliente e o documento, incluem o motivo quando informado e abrem os detalhes pela navegação da central. O sino e a página de notificações usam a consulta periódica já existente (`NEXT_PUBLIC_NOTIFICATIONS_POLL_MS`, padrão de 60 segundos), além da atualização ao voltar à página. A integração requer também a migração `20261028190000_customer_acceptance_owner_notifications`.
+
 Aplicar a migração `20261028180000_customer_document_acceptance` pelo migrator antes de publicar a API e o frontend atualizados. Não são necessárias novas variáveis de ambiente; os arquivos utilizam o armazenamento já configurado. Os links usam o domínio público do navegador de quem os gera.
 
 Links antigos do PMOC continuam aceitos, mas apenas os links gerados após esta migração incluem a cópia congelada para download na página pública.

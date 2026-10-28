@@ -35,6 +35,9 @@ import { HashHelper } from '../src/helpers';
 import { PmocRepository } from '../src/modules/pmoc/pmoc.repository';
 import { PmocService, type PmocActor } from '../src/modules/pmoc/pmoc.service';
 import { PmocPlanDocumentService } from '../src/modules/artifact-rendering/pmoc-plan-document.service';
+import { NotificationRepository } from '../src/modules/notifications/notification.repository';
+import { NotificationQueryDto } from '../src/modules/notifications/notification.dto';
+import { ParseUUIDv7Pipe } from '../src/pipes';
 
 // Banco, RLS, transições, arquivo registrado e outbox reais. Apenas o bucket é
 // em memória: nenhuma credencial ou infraestrutura de produção é utilizada.
@@ -49,6 +52,8 @@ describe('aceite público de propostas com RLS real', () => {
   let pmoc: PmocService;
   let pmocRepository: PmocRepository;
   let userId: string;
+  let otherUserId: string;
+  let inbox: NotificationRepository;
   let signatureBase64: string;
   let sequence = 0;
   const tenants: {
@@ -109,6 +114,18 @@ describe('aceite público de propostas com RLS real', () => {
       },
     });
     userId = user.id;
+    otherUserId = (
+      await admin.user.create({
+        data: {
+          email: `quotes.acceptance.operator.${suffix}@orbit.local`,
+          normalizedEmail: `quotes.acceptance.operator.${suffix}@orbit.local`,
+          firstName: 'Operador',
+          lastName: 'Teste',
+          displayName: 'Operador Teste',
+          status: 'ACTIVE',
+        },
+      })
+    ).id;
     const plan = await admin.plan.findFirstOrThrow();
     for (const label of ['local', 'foreign']) {
       const organization = await admin.organization.create({
@@ -148,6 +165,7 @@ describe('aceite público de propostas com RLS real', () => {
       runtime as PrismaService,
       new RlsContextProvider(contextService),
     );
+    inbox = new NotificationRepository(rls);
     const jobs = new BackgroundJobQueue(runtime as PrismaService, rls);
     const repository = new QuoteRepository(
       rls,
@@ -202,9 +220,10 @@ describe('aceite público de propostas com RLS real', () => {
       where: { id: { in: tenants.map((t) => t.organizationId) } },
     });
     if (userId) await admin.user.delete({ where: { id: userId } });
+    if (otherUserId) await admin.user.delete({ where: { id: otherUserId } });
     await disconnectAdminPrisma();
   });
-  async function proposal() {
+  async function proposal(authorId = userId) {
     const tenant = tenants[0]!;
     const number = ++sequence;
     const quote = await admin.quote.create({
@@ -212,7 +231,7 @@ describe('aceite público de propostas com RLS real', () => {
         organizationId: tenant.organizationId,
         businessUnitId: tenant.unitId,
         customerId: tenant.customerId,
-        createdById: userId,
+        createdById: authorId,
         number,
         code: `ORC-${number}`,
         title: 'Manutenção preventiva',
@@ -243,6 +262,41 @@ describe('aceite público de propostas com RLS real', () => {
     consentAccepted: true,
     signatureBase64,
   });
+  async function notices(entityId: string) {
+    return admin.notification.findMany({
+      where: {
+        organizationId: tenants[0]!.organizationId,
+        payload: { path: ['entityId'], equals: entityId },
+      },
+      include: { deliveries: true },
+    });
+  }
+  async function expectNotice(
+    entityId: string,
+    type: string,
+    entityType = 'quote',
+  ) {
+    const rows = await notices(entityId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      recipientUserId: userId,
+      organizationId: tenants[0]!.organizationId,
+      type,
+      channels: ['IN_APP'],
+      status: 'SENT',
+      readAt: null,
+      payload: { entityType, entityId, customerName: 'Cliente local' },
+    });
+    expect(rows[0]!.deliveries).toHaveLength(1);
+    expect(rows[0]!.deliveries[0]).toMatchObject({
+      recipientUserId: userId,
+      channel: 'IN_APP',
+      status: 'SENT',
+      provider: 'orbit-database',
+    });
+    expect(new ParseUUIDv7Pipe().transform(rows[0]!.id)).toBe(rows[0]!.id);
+    return rows[0]!;
+  }
 
   it('envia rascunho, congela resumo/PDF e guarda somente o hash do segredo', async () => {
     const { quote, link } = await proposal();
@@ -282,6 +336,11 @@ describe('aceite público de propostas com RLS real', () => {
     });
     expect(approved.status).toBe('APPROVED');
     expect(approved.decidedById).toBeNull();
+    const notification = await expectNotice(
+      quote.id,
+      'QUOTE_CUSTOMER_APPROVED',
+    );
+    expect(JSON.stringify(notification)).not.toContain(link.token);
     expect(
       await admin.domainEvent.count({
         where: { entityId: quote.id, type: 'quote.approved' },
@@ -334,6 +393,19 @@ describe('aceite público de propostas com RLS real', () => {
           where: { entityId: quote.id, type: 'quote.approved' },
         }),
       ).toBe(0);
+      const notification = await expectNotice(
+        quote.id,
+        decision === 'REJECT'
+          ? 'QUOTE_CUSTOMER_REJECTED'
+          : 'QUOTE_CUSTOMER_CHANGES_REQUESTED',
+      );
+      expect(notification.body).toContain(reason.trim());
+      await acceptance.respond(
+        link.token,
+        { decision, signerName: 'Cliente Teste', reason },
+        {},
+      );
+      expect(await notices(quote.id)).toHaveLength(1);
       if (decision === 'REQUEST_CHANGES') {
         const next = await owner(() =>
           acceptance.create(quote.id, tenants[0]!.organizationId, userId),
@@ -343,6 +415,11 @@ describe('aceite público de propostas com RLS real', () => {
         expect((await acceptance.read(link.token)).response?.decision).toBe(
           'REQUEST_CHANGES',
         );
+        await acceptance.respond(next.token, approve(), {});
+        expect((await notices(quote.id)).map((n) => n.type).sort()).toEqual([
+          'QUOTE_CUSTOMER_APPROVED',
+          'QUOTE_CUSTOMER_CHANGES_REQUESTED',
+        ]);
       }
     },
   );
@@ -371,6 +448,7 @@ describe('aceite público de propostas com RLS real', () => {
         })
       ).signatureFileId,
     ).toBeNull();
+    expect(await notices(quote.id)).toHaveLength(0);
   });
   it('desfaz status, auditoria, arquivo e outbox se a persistência da resposta falhar', async () => {
     const { quote, link } = await proposal();
@@ -388,6 +466,7 @@ describe('aceite público de propostas com RLS real', () => {
       (await admin.quote.findUniqueOrThrow({ where: { id: quote.id } })).status,
     ).toBe('SENT');
     expect((await acceptance.read(link.token)).response).toBeNull();
+    expect(await notices(quote.id)).toHaveLength(0);
     expect(
       await admin.storageFile.count({
         where: { organizationId: tenants[0]!.organizationId },
@@ -406,6 +485,30 @@ describe('aceite público de propostas com RLS real', () => {
         where: { entityId: quote.id, action: 'QUOTE_APPROVED' },
       }),
     ).toBe(0);
+  });
+  it('não confirma aprovação sem o aviso persistido e permite tentar novamente após falha da base', async () => {
+    const { quote, link } = await proposal();
+    // NOT VALID preserva os avisos anteriores, mas simula falha na próxima
+    // escrita. Suíte serial e banco isolado; a restrição sai mesmo se falhar.
+    await admin.$executeRaw`ALTER TABLE notifications ADD CONSTRAINT e2e_customer_notice_write_failure CHECK (type <> 'QUOTE_CUSTOMER_APPROVED') NOT VALID`;
+    try {
+      await expect(
+        acceptance.respond(link.token, approve(), {}),
+      ).rejects.toThrow();
+      expect(
+        (await admin.quote.findUniqueOrThrow({ where: { id: quote.id } }))
+          .status,
+      ).toBe('SENT');
+      expect((await acceptance.read(link.token)).response).toBeNull();
+      expect(await notices(quote.id)).toHaveLength(0);
+      expect(
+        await admin.domainEvent.count({ where: { entityId: quote.id } }),
+      ).toBe(0);
+    } finally {
+      await admin.$executeRaw`ALTER TABLE notifications DROP CONSTRAINT e2e_customer_notice_write_failure`;
+    }
+    await acceptance.respond(link.token, approve(), {});
+    await expectNotice(quote.id, 'QUOTE_CUSTOMER_APPROVED');
   });
   it('revoga link pendente anterior e impede aceite/download de links expirados ou alterados', async () => {
     const { quote, link } = await proposal();
@@ -473,6 +576,48 @@ describe('aceite público de propostas com RLS real', () => {
       );
     await Promise.all([acceptance.read(link.token), foreignRead()]);
     expect(contexts.get()).toBeUndefined();
+  });
+  it('avisa o owner mesmo se outra pessoa criou a proposta; lista no sino/central e marca lida sem vazar para outro usuário ou tenant', async () => {
+    const { quote, link } = await proposal(otherUserId);
+    await acceptance.respond(link.token, approve(), {});
+    const notification = await expectNotice(
+      quote.id,
+      'QUOTE_CUSTOMER_APPROVED',
+    );
+    const tenant = tenants[0]!;
+    const query = new NotificationQueryDto();
+    query.type = 'QUOTE_CUSTOMER_APPROVED';
+    const list = await owner(() =>
+      inbox.list(tenant.organizationId, userId, query),
+    );
+    expect(list.data.map((n) => n.id)).toContain(notification.id);
+    expect(list.unread).toBeGreaterThan(0);
+    const otherUserInbox = await owner(() =>
+      contexts.run(
+        new RequestContext({
+          ...contexts.get()!,
+          userId: otherUserId as UUID,
+          roles: [],
+        }),
+        () => inbox.list(tenant.organizationId, otherUserId, query),
+      ),
+    );
+    expect(otherUserInbox.data).toEqual([]);
+    const otherTenant = await owner(
+      () => inbox.list(tenants[1]!.organizationId, userId, query),
+      tenants[1],
+    );
+    expect(otherTenant.data).toEqual([]);
+    expect(await runtime.notification.count()).toBe(0);
+    await owner(() =>
+      inbox.markRead(notification.id, tenant.organizationId, userId),
+    );
+    query.unreadOnly = true;
+    const read = await owner(() =>
+      inbox.list(tenant.organizationId, userId, query),
+    );
+    expect(read.data.map((n) => n.id)).not.toContain(notification.id);
+    expect(read.unread).toBe(list.unread - 1);
   });
   it('congela e baixa contrato PMOC, coleta aceite opcional e conserva a prova anterior após alteração', async () => {
     const tenant = tenants[0]!;
@@ -543,6 +688,7 @@ describe('aceite público de propostas com RLS real', () => {
     const row = await admin.pmocPlanSignatureLink.findFirstOrThrow({
       where: { planId: plan.id },
     });
+    await expectNotice(plan.id, 'PMOC_CONTRACT_SIGNED', 'pmoc-plan');
     const original = await pmoc.publicContractDocument(link.token);
     await owner(() =>
       pmocRepository.update(
@@ -601,5 +747,6 @@ describe('aceite público de propostas com RLS real', () => {
         })
       ).state,
     ).toBe('REVOGADO');
+    expect(await notices(plan.id)).toHaveLength(1);
   });
 });
