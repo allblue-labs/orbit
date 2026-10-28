@@ -116,6 +116,11 @@ const entries = [
     'Os dados foram alterados. Atualize e tente novamente.',
   ],
   [
+    'SCHEDULING_CONFLICT',
+    HttpStatus.CONFLICT,
+    'Há um conflito na agenda da equipe ou dos recursos selecionados. Verifique também os intervalos de até 10 minutos e confirme se deseja agendar mesmo assim.',
+  ],
+  [
     'REGISTRATION_DOCUMENT_ALREADY_EXISTS',
     HttpStatus.CONFLICT,
     'Este CPF ou CNPJ já está vinculado a uma conta do Orbit. Entre na conta existente para continuar a assinatura ou cadastrar outras organizações, conforme os limites do plano. Se precisar de ajuda para recuperar o acesso, contate o suporte.',

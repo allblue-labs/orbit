@@ -26,9 +26,11 @@ import {
   QuotePublicAcceptanceController,
 } from './quote-acceptance.controller';
 import { QuoteAcceptanceService } from './quote-acceptance.service';
+import { OperationsModule } from '../operations/operations.module';
 
 @Module({
   imports: [
+    OperationsModule,
     PrismaModule,
     SubscriptionPlansModule,
     FinancialModule,

@@ -15,12 +15,16 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { StorageModule } from '../storage/storage.module';
 import { RecurringAuthorizationController } from './recurring-authorization.controller';
 import { RecurringAuthorizationService } from './recurring-authorization.service';
+import { OperationScheduleService } from './operation-schedule.service';
+import { OperationScheduleController } from './operation-schedule.controller';
+import { RecurrenceEngine } from '../scheduling/recurrence.engine';
 
 @Module({
   /* `StorageModule` porque o registro de campo assina as URLs das imagens: a
      evidência e a assinatura do cliente moram no storage, não no banco. */
   imports: [WorkforceModule, NotificationsModule, StorageModule],
   controllers: [
+    OperationScheduleController,
     // Register this static path before OperationController's GET /operations/:id.
     OperationCancellationController,
     RecurringAuthorizationController,
@@ -28,6 +32,8 @@ import { RecurringAuthorizationService } from './recurring-authorization.service
     ChecklistController,
   ],
   providers: [
+    OperationScheduleService,
+    RecurrenceEngine,
     OperationRepository,
     OperationService,
     OperationStorageService,
@@ -42,6 +48,7 @@ import { RecurringAuthorizationService } from './recurring-authorization.service
      quem cria o pedido — a rota dele vive em `mobile-field`, e a regra de quem
      pode pedir mora aqui, junto do domínio de operações. */
   exports: [
+    OperationScheduleService,
     OperationService,
     OperationRepository,
     ChecklistService,

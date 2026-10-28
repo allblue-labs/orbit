@@ -54,7 +54,7 @@ describe('walk-in equipment contract and persistence', () => {
   });
 
   it.each([false, true])(
-    'persists equipment and respects assignment authorization (required=%s)',
+    'persists equipment and releases a self-started attendance (organization authorization required=%s)',
     async (required) => {
       const tx = {
         organization: {
@@ -127,7 +127,7 @@ describe('walk-in equipment contract and persistence', () => {
       expect(result).toEqual({
         operationId: 'operation-1',
         created: true,
-        awaitingAuthorization: required,
+        awaitingAuthorization: false,
       });
       expect(tx.asset.create).toHaveBeenCalledTimes(2);
       expect(tx.asset.create).toHaveBeenNthCalledWith(1, {
@@ -155,8 +155,8 @@ describe('walk-in equipment contract and persistence', () => {
         expect.objectContaining({
           customerId: CUSTOMER,
           businessUnitId: UNIT,
-          authorizedAt: required ? null : expect.any(Date),
-          authorizedById: required ? null : 'actor',
+          authorizedAt: expect.any(Date),
+          authorizedById: 'actor',
         }),
         'actor',
         expect.objectContaining({ assetCount: 3 }),

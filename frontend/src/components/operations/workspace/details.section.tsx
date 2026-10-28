@@ -15,6 +15,8 @@ import { Badge } from "@/components/ui/badge";
 
 import { useDateFormatters } from "@/hooks/use-date-formatters";
 import type { Operation } from "@/types/operations";
+import { operationAdditionalInformation } from "../operation-additional-information";
+import Link from "next/link";
 import {
   operationKindLabel,
   operationPriorityLabel,
@@ -234,8 +236,8 @@ export function ScheduleSection({ query }: { query: PanelQuery<Operation> }) {
 /**
  * Campos livres (`location` e `data`).
  *
- * O backend guarda ambos como JSON sem esquema — o que o tenant gravou é o
- * que aparece, sem interpretação do frontend.
+ * Apresenta os campos úteis com rótulos, sem expor referências internas ou
+ * repetir o registro técnico que já aparece nos demais painéis.
  */
 export function AdditionalDataSection({
   query,
@@ -246,20 +248,39 @@ export function AdditionalDataSection({
     <PanelFrame
       panelId="operation-additional"
       title="Informações adicionais"
-      description="Campos livres da organização"
+      description="Origem, localização e orientações do atendimento"
     >
       <PanelState
         query={query}
         loadingRows={2}
         emptyMessage="Nenhuma informação adicional registrada."
         isEmpty={(operation) =>
-          !hasContent(operation.location) && !hasContent(operation.data)
+          operationAdditionalInformation(operation.location, operation.data)
+            .length === 0 && !quoteOrigin(operation.data)
         }
       >
         {(operation) => (
           <div className="space-y-4">
-            <JsonBlock label="Localização" value={operation.location} />
-            <JsonBlock label="Dados" value={operation.data} />
+            {quoteOrigin(operation.data) ? (
+              <Link
+                className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+                href={`/orcamentos/${quoteOrigin(operation.data)}`}
+              >
+                Ver orçamento de origem
+              </Link>
+            ) : null}
+            <dl className="grid gap-4 sm:grid-cols-2">
+              {operationAdditionalInformation(
+                operation.location,
+                operation.data,
+              ).map((row, index) => (
+                <Field key={`${row.label}-${index}`} label={row.label}>
+                  <span className="break-words whitespace-pre-wrap">
+                    {row.value}
+                  </span>
+                </Field>
+              ))}
+            </dl>
           </div>
         )}
       </PanelState>
@@ -267,26 +288,10 @@ export function AdditionalDataSection({
   );
 }
 
-function hasContent(value: unknown): boolean {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    Object.keys(value as Record<string, unknown>).length > 0
-  );
-}
-
-function JsonBlock({ label, value }: { label: string; value: unknown }) {
-  if (!hasContent(value)) return null;
-  return (
-    <div className="space-y-1.5">
-      <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-        {label}
-      </p>
-      <pre className="glass max-h-56 overflow-auto rounded-lg p-3 font-mono text-xs">
-        {JSON.stringify(value, null, 2)}
-      </pre>
-    </div>
-  );
+function quoteOrigin(value: unknown): string | null {
+  if (!value || typeof value !== "object" || !("quoteId" in value)) return null;
+  const id = value.quoteId;
+  return typeof id === "string" && /^[0-9a-f-]{36}$/i.test(id) ? id : null;
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {

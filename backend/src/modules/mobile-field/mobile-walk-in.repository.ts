@@ -228,8 +228,10 @@ export class MobileWalkInRepository {
            * Reatribuir depois é decisão do escritório, pela tela de operações.
            */
           responsibleFieldTechnicianId: input.actorId,
-          authorizedAt: requiresAuthorization ? null : new Date(),
-          authorizedById: requiresAuthorization ? null : input.actorId,
+          // O próprio técnico abriu para si em campo: não é uma atribuição
+          // pendente do escritório, mesmo quando a organização exige aprovação.
+          authorizedAt: new Date(),
+          authorizedById: input.actorId,
           createdById: input.actorId,
           location: endereco
             ? Prisma.JsonNull
@@ -259,7 +261,7 @@ export class MobileWalkInRepository {
       return {
         operationId: operation.id,
         created: true,
-        awaitingAuthorization: requiresAuthorization,
+        awaitingAuthorization: false,
       };
     });
   }

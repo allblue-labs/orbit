@@ -24,22 +24,6 @@ import { useRouter } from "next/navigation";
 
 import { MutationError } from "@/components/artifact-studio/mutation-error";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/financial/confirm.dialog";
 import { QuoteReasonDialog } from "./quote-reason.dialog";
 import { useAction } from "@/actions";
@@ -48,7 +32,8 @@ import {
   useQuoteTransition,
 } from "@/hooks/quotes/use-quotes";
 import { ROUTES } from "@/lib/routes";
-import { OPERATION_KIND_LABELS, type Quote } from "@/types/quotes";
+import { type Quote } from "@/types/quotes";
+import { QuoteConvertDialog } from "./quote-convert.dialog";
 import { QuoteCustomerAcceptance } from "./quote-customer-acceptance";
 
 type Pending = "reject" | "cancel" | "convert" | null;
@@ -132,7 +117,13 @@ export function QuoteActions({ quote }: { quote: Quote }) {
         ) : null}
 
         {showConvert ? (
-          <Button size="sm" onClick={() => setPending("convert")}>
+          <Button
+            size="sm"
+            onClick={() => {
+              transition.reset();
+              setPending("convert");
+            }}
+          >
             <convert.definition.icon className="size-4" />
             {convert.label}
           </Button>
@@ -218,120 +209,20 @@ export function QuoteActions({ quote }: { quote: Quote }) {
         }
       />
 
-      <ConvertDialog
+      <QuoteConvertDialog
         quote={quote}
         open={pending === "convert"}
         onOpenChange={(open) => !open && setPending(null)}
         isPending={transition.isPending}
-        onConfirm={(kind, priority) =>
+        mutationError={transition.error}
+        onConfirm={(convert) =>
           transition.mutate(
-            { action: "convert", convert: { kind, priority } },
+            { action: "convert", convert },
             { onSuccess: () => setPending(null) },
           )
         }
       />
     </div>
-  );
-}
-
-/**
- * Conversão em operação.
- *
- * Pergunta só o que o orçamento não sabe: tipo de serviço e prioridade.
- * Técnico, agenda e execução **não são escolhidos aqui** — o contrato de
- * operações os trata como decisões posteriores, e adivinhá-los produziria uma
- * ordem de serviço que ninguém combinou.
- */
-function ConvertDialog({
-  quote,
-  open,
-  onOpenChange,
-  isPending,
-  onConfirm,
-}: {
-  quote: Quote;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  isPending: boolean;
-  onConfirm: (kind: string, priority: string) => void;
-}) {
-  const [kind, setKind] = useState("MAINTENANCE");
-  const [priority, setPriority] = useState("NORMAL");
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            onConfirm(kind, priority);
-          }}
-          className="space-y-5"
-        >
-          <DialogHeader>
-            <DialogTitle>Converter em operação</DialogTitle>
-            <DialogDescription>
-              Abre a ordem de serviço de {quote.code} para{" "}
-              {quote.customer.displayName}. Repetir não cria uma segunda: a
-              mesma proposta é devolvida.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="quote-convert-kind">Tipo de serviço</Label>
-              <Select value={kind} onValueChange={setKind}>
-                <SelectTrigger id="quote-convert-kind">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(OPERATION_KIND_LABELS).map(
-                    ([value, label]) => (
-                      <SelectItem key={value} value={value}>
-                        {label}
-                      </SelectItem>
-                    ),
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="quote-convert-priority">Prioridade</Label>
-              <Select value={priority} onValueChange={setPriority}>
-                <SelectTrigger id="quote-convert-priority">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="LOW">Baixa</SelectItem>
-                  <SelectItem value="NORMAL">Normal</SelectItem>
-                  <SelectItem value="HIGH">Alta</SelectItem>
-                  <SelectItem value="URGENT">Urgente</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <p className="rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground">
-            Técnico, agenda e execução não são atribuídos aqui — a operação
-            nasce aberta, e essas decisões acontecem no Workspace de operações.
-          </p>
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => onOpenChange(false)}
-            >
-              Voltar
-            </Button>
-            <Button type="submit" disabled={isPending}>
-              {isPending ? "Convertendo…" : "Converter"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
   );
 }
 

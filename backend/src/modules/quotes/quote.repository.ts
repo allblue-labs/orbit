@@ -23,6 +23,7 @@
  */
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { ConflictException } from '../../exceptions';
 import { PaginationHelper, RlsTransaction } from '../../database';
 import type { PrismaTransactionClient } from '../../database/prisma.types';
 import { generateUuidV7 } from '../../utils';
@@ -30,7 +31,6 @@ import { DomainEventEmitter } from '../automations/domain-event.emitter';
 import { BackgroundJobQueue } from '../jobs/background-job.queue';
 import { JOB_QUEUES } from '../jobs/background-job.types';
 import type { QuoteQueryDto } from './quote.dto';
-import { allocateServiceOrderNumber } from '../operations/service-order-number';
 
 const actor = { select: { id: true, displayName: true } } as const;
 
@@ -900,21 +900,24 @@ export class QuoteRepository {
    *
    * Devolve `null` quando outra transação venceu.
    */
-  convert(input: {
-    quoteId: string;
-    organizationId: string;
-    businessUnitId: string;
-    customerId: string;
-    actorId: string;
-    code: string;
-    kind: string;
-    priority: string;
-    title: string;
-    description: string;
-    scheduledStart?: Date | null;
-    scheduledEnd?: Date | null;
-  }) {
-    return this.rls.run(async (tx) => {
+  convert(
+    input: {
+      quoteId: string;
+      organizationId: string;
+      businessUnitId: string;
+      customerId: string;
+      actorId: string;
+      code: string;
+      kind: string;
+      priority: string;
+      title: string;
+      description: string;
+      scheduledStart?: Date | null;
+      scheduledEnd?: Date | null;
+    },
+    createOperation: () => Promise<{ id: string; code: string }>,
+  ) {
+    return this.rls.runAmbient(async (tx) => {
       /**
        * Serializa as conversões deste orçamento.
        *
@@ -925,51 +928,23 @@ export class QuoteRepository {
        * sem criar nada para depois desfazer.
        */
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`quote:convert:${input.quoteId}`}))`;
+      await tx.$executeRaw`SELECT id FROM quotes WHERE id=${input.quoteId}::uuid AND organization_id=${input.organizationId}::uuid FOR UPDATE`;
 
       const current = await tx.quote.findFirst({
         where: { id: input.quoteId, deletedAt: null },
-        select: { operationId: true },
+        select: { operationId: true, status: true },
       });
       if (!current) return null;
       if (current.operationId) return this.reload(tx, input.quoteId);
 
-      /* Orçamento aprovado vira ordem de serviço, e ordem de serviço tem número
-         próprio — a mesma contagem da criação direta, e não uma paralela. */
-      const serviceOrderNumber = await allocateServiceOrderNumber(
-        tx,
-        input.organizationId,
-      );
+      if (current.status !== 'APPROVED')
+        throw new ConflictException(
+          'Somente um orçamento aprovado pode gerar uma operação.',
+        );
 
-      const operation = await tx.operation.create({
-        data: {
-          id: generateUuidV7(),
-          organizationId: input.organizationId,
-          serviceOrderNumber,
-          businessUnitId: input.businessUnitId,
-          customerId: input.customerId,
-          code: input.code,
-          kind: input.kind,
-          title: input.title,
-          description: input.description,
-          status: input.scheduledStart ? 'SCHEDULED' : 'OPEN',
-          priority: input.priority,
-          scheduledStart: input.scheduledStart ?? null,
-          scheduledEnd: input.scheduledEnd ?? null,
-          createdById: input.actorId,
-          /** Rastro do lado da operação: de onde este trabalho veio. */
-          data: { quoteId: input.quoteId },
-        },
-      });
-
-      await tx.operationHistory.create({
-        data: {
-          operationId: operation.id,
-          userId: input.actorId,
-          action: 'CREATED',
-          toStatus: operation.status,
-          details: { quoteId: input.quoteId, origin: 'QUOTE' },
-        },
-      });
+      // A criação canônica reserva OS/cota, valida endereço e equipe,
+      // registra participações e emite os eventos na mesma transação.
+      const operation = await createOperation();
 
       const claimed = await tx.quote.updateMany({
         where: { id: input.quoteId, operationId: null, deletedAt: null },

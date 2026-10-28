@@ -176,6 +176,7 @@ describe('aceite público de propostas com RLS real', () => {
       repository,
       new QuoteDocumentService(),
       storage as unknown as StorageProvider,
+      undefined as never, // Este cenário não converte orçamentos em operações.
     );
     const files = new FileObjectService(
       storage as unknown as StorageProvider,
