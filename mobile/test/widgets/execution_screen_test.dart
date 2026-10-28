@@ -3,6 +3,9 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:orbit_operator/core/design/orbit_wizard.dart';
+import 'package:orbit_operator/features/field/presentation/widgets/attendance_wizard.dart';
 import 'package:orbit_operator/core/contracts/field_operation_contracts.dart';
 import 'package:orbit_operator/core/presentation/field_registry.dart';
 import 'package:orbit_operator/features/field/presentation/widgets/execution_checklist.dart';
@@ -110,17 +113,35 @@ void main() {
     });
 
     testWidgets(
-      'confirma todos os itens em um único registro e preserva os desmarcados',
+      'salva os itens ao avançar, preservando os desmarcados, sem botão de salvar',
       (tester) async {
         Map<String, dynamic>? saved;
         await tester.pumpWidget(
-          host(
-            ExecutionChecklist(
-              checklists: [checklist()],
-              enabled: true,
-              onAnswer: (_, _, _) =>
-                  fail('Os rascunhos não devem gerar comandos por item'),
-              onSave: (_, answers) => saved = answers,
+          ProviderScope(
+            child: host(
+              AttendanceWizard(
+                confirmationStep: 2,
+                steps: [
+                  OrbitWizardStep(
+                    title: 'Checklist',
+                    child: ExecutionChecklist(
+                      checklists: [checklist()],
+                      enabled: true,
+                      onAnswer: (_, _, _) => fail(
+                        'Os rascunhos não devem gerar comandos por item',
+                      ),
+                      onSave: (_, answers) async {
+                        saved = answers;
+                        return true;
+                      },
+                    ),
+                  ),
+                  const OrbitWizardStep(
+                    title: 'Evidências',
+                    child: Text('Fotos do atendimento'),
+                  ),
+                ],
+              ),
             ),
           ),
         );
@@ -132,9 +153,13 @@ void main() {
         );
         await tester.tap(find.text('Dreno desobstruído'));
         await tester.pump();
-        await tester.ensureVisible(find.text('Confirmar checklist'));
-        await tester.tap(find.text('Confirmar checklist'));
+        expect(saved, isNull);
+        expect(find.text('Confirmar checklist'), findsNothing);
+        await tester.ensureVisible(find.text('Avançar · Evidências'));
+        await tester.tap(find.text('Avançar · Evidências'));
+        await tester.pumpAndSettle();
         expect(saved, {'i1': true, 'i2': false});
+        expect(find.text('Fotos do atendimento'), findsOneWidget);
       },
     );
 

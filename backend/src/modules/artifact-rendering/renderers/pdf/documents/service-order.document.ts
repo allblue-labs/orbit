@@ -33,7 +33,10 @@ import {
   type TableColumn,
 } from '../kit/blocks';
 import { photoGrid, signatureBlock } from '../kit/media-blocks';
-import type { DocumentContext } from '../kit/document-context';
+import type {
+  DocumentContext,
+  DocumentEquipment,
+} from '../kit/document-context';
 import type { DocumentTheme } from '../kit/theme';
 import type {
   RenderFieldInput,
@@ -64,23 +67,6 @@ const COLUNAS_DO_MATERIAL: readonly TableColumn[] = [
   { header: 'Origem', weight: 1.6, align: 'center' },
 ];
 
-/** Campos que saem em lugar próprio e não devem repetir no resíduo. */
-const CAMPOS_PROPRIOS = new Set([
-  'tipo_servico',
-  'descricao',
-  'inicio',
-  'termino',
-  'procedimentos',
-  'materiais',
-  'pendencias',
-  'fotos',
-  'cliente',
-  'documento',
-  'endereco',
-  'contato',
-  'data',
-]);
-
 export function composeServiceOrder(
   document: Doc,
   input: RenderInput,
@@ -91,12 +77,16 @@ export function composeServiceOrder(
   cliente(document, context, theme);
   equipe(document, context, theme);
   solicitacao(document, input, context, theme);
-  equipamentos(document, context, theme);
+  equipamentos(document, input, context, theme);
   execucao(document, input, theme);
   checklist(document, input, theme);
-  respostasLivres(document, input, theme);
   evidencias(document, input, theme);
   pendencias(document, input, theme);
+  const garantia = valorDoCampo(input, 'garantia');
+  if (garantia) {
+    sectionTitle(document, 'Garantia do serviço', theme);
+    noteBlock(document, garantia, theme);
+  }
   assinaturas(document, input, theme);
 }
 
@@ -118,8 +108,6 @@ function identificacao(
     { label: 'Prioridade', value: prioridade(operacao?.priority) },
     { label: 'Agendamento', value: operacao?.scheduledFor },
     { label: 'Início do atendimento', value: operacao?.startedAt },
-    { label: 'Conclusão do atendimento', value: operacao?.completedAt },
-    { label: 'Duração do atendimento', value: operacao?.duration },
     { label: 'Setor', value: operacao?.sector },
     { label: 'Assunto', value: operacao?.title ?? input.execution.title },
   ];
@@ -196,10 +184,13 @@ function solicitacao(
 
 function equipamentos(
   document: Doc,
+  input: RenderInput,
   context: DocumentContext,
   theme: DocumentTheme,
 ): void {
-  const lista = context.equipment ?? [];
+  const lista = context.equipment?.length
+    ? context.equipment
+    : equipamentosRegistrados(input);
   if (lista.length === 0) return;
 
   sectionTitle(document, 'Equipamentos atendidos', theme);
@@ -218,6 +209,36 @@ function equipamentos(
     theme,
     { continuationLabel: '(continuação)' },
   );
+}
+
+/** Snapshots antigos podem conter o equipamento apenas nas respostas. */
+function equipamentosRegistrados(input: RenderInput): DocumentEquipment[] {
+  return input.sections
+    .flatMap((section) => section.fields)
+    .flatMap((field) => {
+      if (
+        field.hidden ||
+        !/^equipamento/i.test(field.label) ||
+        !Array.isArray(field.value)
+      )
+        return [];
+      return field.value
+        .filter(isRecord)
+        .map((item) => ({
+          name: textoDe(item.nome) || textoDe(item.name),
+          manufacturer: textoDe(item.fabricante) || textoDe(item.manufacturer),
+          model: textoDe(item.modelo) || textoDe(item.model),
+          sector: textoDe(item.local) || textoDe(item.location),
+          identifier: [
+            textoDe(item.identificador) || textoDe(item.identifier),
+            textoDe(item.serie) || textoDe(item.serialNumber),
+          ]
+            .filter(Boolean)
+            .join(' / '),
+          capacity: textoDe(item.capacidade) || textoDe(item.capacity),
+        }))
+        .filter((item) => item.name);
+    });
 }
 
 /** Procedimentos e materiais — o que de fato foi feito. */
@@ -340,41 +361,6 @@ function checklist(
   }
 }
 
-function respostasLivres(
-  document: Doc,
-  input: RenderInput,
-  theme: DocumentTheme,
-): void {
-  const verificacao = new Set(secoesDeVerificacao(input).map((s) => s.id));
-
-  const itens: DefinitionItem[] = [...input.sections]
-    .sort((esquerda, direita) => esquerda.order - direita.order)
-    .filter((secao) => !verificacao.has(secao.id))
-    /* A seção de materiais sai em tabela própria. Sem este corte, a mesma lista
-       reaparecia aqui como objeto serializado — `[object Object]` repetido tantas
-       vezes quantos materiais houvesse. */
-    .filter((secao) => secao.id !== 'materiais')
-    .flatMap((secao) =>
-      [...secao.fields]
-        .filter((campo) => !campo.hidden && !CAMPOS_PROPRIOS.has(campo.id))
-        .sort((esquerda, direita) => esquerda.order - direita.order)
-        .map((campo) => {
-          const texto = answerText(campo);
-          return {
-            label: campo.unit ? `${campo.label} (${campo.unit})` : campo.label,
-            value: texto,
-            full: texto.length > 60,
-          };
-        }),
-    )
-    .filter((item) => item.value);
-
-  if (itens.length === 0) return;
-
-  sectionTitle(document, 'Outras informações registradas', theme);
-  definitionCard(document, itens, theme);
-}
-
 function evidencias(
   document: Doc,
   input: RenderInput,
@@ -382,7 +368,9 @@ function evidencias(
 ): void {
   const fotos = input.evidence ?? [];
   if (fotos.length === 0) return;
-  sectionTitle(document, 'Registro fotográfico', theme, { espacoMinimo: 200 });
+  sectionTitle(document, 'Evidências do atendimento', theme, {
+    espacoMinimo: 200,
+  });
   photoGrid(
     document,
     fotos.map((item) => ({
@@ -421,7 +409,27 @@ function pendencias(
    */
   const pedidos = input.metadata.customerRequests;
   const solicitacoes = typeof pedidos === 'string' ? pedidos.trim() : '';
-  if (!texto && !notas && !solicitacoes) return;
+  const recomendacoes = [
+    ...new Set(
+      input.sections
+        .flatMap((section) => section.fields)
+        .filter(
+          (field) =>
+            !field.hidden &&
+            /^recomenda/i.test(field.label) &&
+            typeof field.value === 'string',
+        )
+        .map((field) => answerText(field))
+        .filter(
+          (value) =>
+            value &&
+            value !== texto &&
+            value !== notas &&
+            value !== solicitacoes,
+        ),
+    ),
+  ].join('\n\n');
+  if (!texto && !notas && !solicitacoes && !recomendacoes) return;
 
   sectionTitle(document, 'Pendências e observações', theme);
   if (texto) {
@@ -435,6 +443,8 @@ function pendencias(
   if (notas) {
     noteBlock(document, notas, theme, { title: 'Observações da execução' });
   }
+  if (recomendacoes)
+    noteBlock(document, recomendacoes, theme, { title: 'Recomendações' });
 }
 
 function assinaturas(

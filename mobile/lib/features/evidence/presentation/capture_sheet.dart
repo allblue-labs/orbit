@@ -132,6 +132,7 @@ class _CaptureSheetState extends ConsumerState<_CaptureSheet> {
       );
 
       await ref.read(mediaUploadControllerProvider.notifier).enqueue(media);
+      unawaited(ref.read(mediaUploadControllerProvider.notifier).process());
 
       if (mounted) Navigator.of(context).pop();
     } finally {

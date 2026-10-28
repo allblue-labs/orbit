@@ -434,20 +434,21 @@ class ExecutionController extends StateNotifier<ExecutionState> {
     );
   }
 
-  Future<void> saveChecklist(
+  Future<bool> saveChecklist(
     String checklistId,
     Map<String, dynamic> answers,
   ) async {
     final checklist = state.preparation?.checklist
         .where((c) => c.id == checklistId)
         .firstOrNull;
-    if (checklist == null) return;
-    await _run(
+    if (checklist == null) return false;
+    final outcome = await _run(
       FieldOperationAllowedAction.updateChecklist,
       OfflineCommandType.operationChecklistUpdate,
       {'checklistId': checklist.id, 'answers': answers, 'complete': true},
       expectedVersion: checklist.version,
     );
+    return outcome is CommandConfirmed || outcome is CommandPendingOutcome;
   }
 
   /// Registra material e devolve o desfecho a quem chamou.

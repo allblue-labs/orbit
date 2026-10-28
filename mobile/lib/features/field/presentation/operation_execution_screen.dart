@@ -302,6 +302,12 @@ class _Body extends StatelessWidget {
 
           AttendanceWizard(
             steps: etapas,
+            evidenceTarget: FieldEvidenceTargetRef(
+              type: rvtExecutionId == null
+                  ? FieldEvidenceTarget.operation
+                  : FieldEvidenceTarget.rvtExecution,
+              id: rvtExecutionId ?? operationId,
+            ),
             confirmationStep: 3,
             operationId: operationId,
             completed: preparation.operation.completedAt != null,

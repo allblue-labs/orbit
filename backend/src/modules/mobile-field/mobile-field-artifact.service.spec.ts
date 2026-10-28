@@ -10,6 +10,66 @@ const actor: MobileFieldActor = {
 };
 
 describe('MobileFieldArtifactService', () => {
+  it('congela os checklists escolhidos para a OS com as respostas verdadeiras e falsas', async () => {
+    const source = operacao(87) as {
+      source: { checklistExecutions: unknown[] };
+    };
+    source.source.checklistExecutions = [
+      {
+        id: 'general',
+        templateSnapshot: {
+          name: 'Geral',
+          items: [{ key: 'clean', label: 'Limpar filtro', type: 'BOOLEAN' }],
+        },
+        answers: { clean: true },
+      },
+      {
+        id: 'specific',
+        templateSnapshot: {
+          name: 'Dreno',
+          items: [
+            { key: 'drain', label: 'Desobstruir dreno', type: 'BOOLEAN' },
+          ],
+        },
+        answers: { drain: false },
+      },
+    ];
+    const repository = {
+      source: jest.fn().mockResolvedValue(source),
+      existing: jest.fn().mockResolvedValue(null),
+      freeze: jest.fn().mockResolvedValue(artifact('NOT_RENDERED')),
+    };
+    const service = new MobileFieldArtifactService(
+      repository as never,
+      {} as never,
+      {} as never,
+    );
+    await service.freeze(
+      actor,
+      'OPERATION',
+      '01900000-0000-7000-8000-000000000012',
+    );
+    const calls = repository.freeze.mock.calls as [
+      {
+        snapshot: {
+          sections: {
+            type?: string;
+            title: string;
+            fields: { value: unknown }[];
+          }[];
+        };
+      },
+    ][];
+    expect(
+      calls[0]![0].snapshot.sections.filter(
+        (section) => section.type === 'CHECKLIST',
+      ),
+    ).toMatchObject([
+      { title: 'Geral', fields: [{ value: true }] },
+      { title: 'Dreno', fields: [{ value: false }] },
+    ]);
+  });
+
   it('projects PMOC readiness without replacing its existing preparation flow', async () => {
     const repository = {
       source: jest.fn().mockResolvedValue({

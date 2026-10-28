@@ -432,6 +432,28 @@ export class MobileFieldArtifactService {
             observacao: item.notes,
           })),
         }),
+        ...(operation.checklistExecutions ?? []).map((checklist, index) => {
+          const snapshot = this.record(checklist.templateSnapshot);
+          const answers = this.record(checklist.answers);
+          const items = Array.isArray(snapshot.items) ? snapshot.items : [];
+          return {
+            id: `checklist-${checklist.id}`,
+            title: String(snapshot.name ?? 'Checklist do atendimento'),
+            order: 6 + index,
+            type: 'CHECKLIST',
+            fields: items.map((raw, position) => {
+              const item = this.record(raw);
+              const key = String(item.key ?? position);
+              return {
+                id: key,
+                label: String(item.label ?? key),
+                order: position + 1,
+                type: String(item.type ?? 'BOOLEAN'),
+                value: answers[key] ?? null,
+              };
+            }),
+          };
+        }),
       ],
       signatures: [
         {

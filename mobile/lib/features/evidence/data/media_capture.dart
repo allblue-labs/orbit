@@ -13,6 +13,7 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart' show PlatformException;
 import 'package:image_picker/image_picker.dart';
+import 'evidence_image.dart';
 
 /// Um arquivo escolhido, ainda em memória, antes de qualquer decisão.
 final class CapturedFile {
@@ -70,14 +71,16 @@ class PlatformMediaCaptureSource implements MediaCaptureSource {
       );
       if (picked == null) return null;
       return CapturedFile(
-        bytes: await picked.readAsBytes(),
-        filename: picked.name,
+        bytes: await prepareEvidenceImage(await picked.readAsBytes()),
+        filename: evidenceJpegName(picked.name),
         origin: source == ImageSource.camera
             ? CaptureOrigin.camera
             : CaptureOrigin.gallery,
       );
     } on PlatformException catch (error) {
       throw CaptureException(_problemOf(error));
+    } on FormatException {
+      throw const CaptureException(CaptureProblem.failed);
     }
   }
 

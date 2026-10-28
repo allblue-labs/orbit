@@ -98,6 +98,14 @@ void main() {
     expect(find.byIcon(Icons.remove_circle_outline), findsOneWidget);
     expect(find.byIcon(Icons.inventory_2_outlined), findsOneWidget);
     expect(find.byIcon(Icons.photo_library_outlined), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('Equipamentos atendidos')).dx,
+      greaterThanOrEqualTo(20),
+    );
+    expect(
+      tester.getTopLeft(find.text('• Limpar filtro: Realizado')).dx,
+      greaterThanOrEqualTo(36),
+    );
     expect(layoutError, isNull);
   });
 

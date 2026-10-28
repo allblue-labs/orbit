@@ -189,13 +189,13 @@ export class ArtifactRenderAssembler {
         id: text(section.id, `secao_${index + 1}`),
         title: text(section.title, `Seção ${index + 1}`),
         order: numeric(section.order, index + 1),
-        type: 'FORM',
+        type: text(section.type, 'FORM'),
         fields: fields.map((item, position) => {
           const field = record(item);
           return {
             id: text(field.id, `campo_${position + 1}`),
             label: text(field.label, `Campo ${position + 1}`),
-            type: 'TEXT',
+            type: text(field.type, 'TEXT'),
             order: numeric(field.order, position + 1),
             required: false,
             hidden: false,
@@ -232,6 +232,27 @@ export class ArtifactRenderAssembler {
         };
       },
     );
+    // O aceite pertence ao cliente presente, separado da assinatura profissional.
+    // Tanto a identidade quanto a imagem vêm do mesmo snapshot congelado.
+    const acknowledgement = record(frozen.customerAcknowledgement);
+    if (text(acknowledgement.signerName)) {
+      const asset = source.assets.get(
+        text(acknowledgement.signatureStorageFileId),
+      );
+      signatures.push({
+        slotId: 'customer_acknowledgement',
+        label: 'Aceite do cliente',
+        signerRole: 'CUSTOMER',
+        signedAs: 'CUSTOMER',
+        required: false,
+        order: signatures.length + 1,
+        signerName: text(acknowledgement.signerName),
+        signedAt: text(acknowledgement.acknowledgedAt),
+        signatureHash: text(acknowledgement.signatureSha256) || undefined,
+        signatureImage: asset?.bytes,
+        signatureImageMimeType: asset?.mimeType,
+      });
+    }
     const evidence = rawEvidence.map((raw, index) => {
       const item = record(raw);
       const asset = source.assets.get(text(item.storageFileId));

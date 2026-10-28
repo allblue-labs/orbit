@@ -13,6 +13,7 @@ import '../../../core/media/media_type.dart';
 import '../../sync/data/command_journal.dart' show CommandScope;
 import 'local_media.dart';
 import 'media_store.dart';
+import 'evidence_image.dart';
 
 /// O que impede usar este arquivo.
 enum EvidenceFileProblem { empty, tooLarge, unsupportedType }
@@ -89,6 +90,12 @@ Future<LocalMedia> intakeEvidence({
   String? localMediaId,
   String? caption,
 }) async {
+  if (mimeType.startsWith('image/') &&
+      (bytes.length > evidencePhotoMaxBytes || mimeType == 'image/webp')) {
+    bytes = await prepareEvidenceImage(bytes);
+    mimeType = 'image/jpeg';
+    filename = evidenceJpegName(filename);
+  }
   final id = localMediaId ?? newLocalMediaId();
   final path = await files.persist(id, extensionForMime(mimeType), bytes);
 
