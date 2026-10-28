@@ -103,9 +103,10 @@ describe('autoridade para abrir o próprio atendimento', () => {
         .mockResolvedValue(preparacao(technicianUserId)),
       startEquipmentExecution: jest.fn(),
     };
+    const mapper = { equipmentExecution: jest.fn() };
     const service = new PmocService(
       repository as never,
-      { equipmentExecution: jest.fn() } as never,
+      mapper as never,
       undefined as never,
       undefined as never,
       undefined as never,
@@ -113,7 +114,7 @@ describe('autoridade para abrir o próprio atendimento', () => {
       /* Storage: estes testes não imprimem documento, e o dublê diz isso. */
       undefined as never,
     );
-    return { service, repository };
+    return { service, repository, mapper };
   }
 
   const abrir = (service: PmocService, quem: PmocActor) =>
@@ -131,6 +132,44 @@ describe('autoridade para abrir o próprio atendimento', () => {
     );
     expect(repository.startEquipmentExecution).not.toHaveBeenCalled();
   });
+  it.each([false, true])(
+    'exige autorização do ciclo antes de ler ou atender (approved=%s)',
+    async (approved) => {
+      const { service, repository } = servicoDeAbertura(TECNICO);
+      repository.executionPreparation.mockResolvedValue({
+        ...preparacao(TECNICO),
+        assignmentAuthorizationRequired: true,
+        cycle: {
+          ...preparacao(TECNICO).cycle,
+          authorizedAt: approved ? new Date() : null,
+        },
+      });
+      const delegate = jest
+        .spyOn(service, 'startEquipmentExecution')
+        .mockResolvedValue(undefined as never);
+      const technician = {
+        ...ator(TECNICO),
+        permissions: ['pmoc.read', 'pmoc.execute'],
+      };
+      if (approved) {
+        await abrir(service, technician);
+        expect(delegate).toHaveBeenCalled();
+      } else {
+        await expect(abrir(service, technician)).rejects.toBeInstanceOf(
+          EntityNotFoundException,
+        );
+        await expect(
+          service.equipmentExecutionPreparation(
+            'plan-1',
+            'cycle-1',
+            'asset-1',
+            technician,
+          ),
+        ).rejects.toBeInstanceOf(EntityNotFoundException);
+        expect(delegate).not.toHaveBeenCalled();
+      }
+    },
+  );
 
   it('recusa quando o plano não tem técnico atribuído', async () => {
     const { service } = servicoDeAbertura(null);
@@ -177,7 +216,7 @@ describe('autoridade para abrir o próprio atendimento', () => {
   });
 
   it('retoma a execução atribuída mesmo se o plano prevê outro técnico, sem permissões globais', async () => {
-    const { service, repository } = servicoDeAbertura(OUTRO);
+    const { service, repository, mapper } = servicoDeAbertura(OUTRO);
     const existing = {
       id: 'execution-1',
       responsibleFieldTechnician: { id: TECNICO },
@@ -185,13 +224,11 @@ describe('autoridade para abrir o próprio atendimento', () => {
     repository.executionPreparation.mockResolvedValue({
       ...preparacao(OUTRO),
       existing,
-    } as never);
-    const mapper = jest
-      .spyOn((service as any).mapper, 'equipmentExecution')
-      .mockReturnValue(existing);
+    });
+    mapper.equipmentExecution.mockReturnValue(existing);
     const result = await abrir(service, { ...ator(TECNICO), permissions: [] });
     expect(result).toEqual({ created: false, execution: existing });
-    expect(mapper).toHaveBeenCalledWith(existing);
+    expect(mapper.equipmentExecution).toHaveBeenCalledWith(existing);
     expect(repository.startEquipmentExecution).not.toHaveBeenCalled();
   });
 
@@ -200,7 +237,7 @@ describe('autoridade para abrir o próprio atendimento', () => {
     repository.executionPreparation.mockResolvedValue({
       ...preparacao(TECNICO),
       existing: { responsibleFieldTechnician: { id: OUTRO } },
-    } as never);
+    });
     await expect(abrir(service, ator(TECNICO))).rejects.toBeInstanceOf(
       ForbiddenException,
     );

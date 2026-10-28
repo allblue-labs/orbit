@@ -34,6 +34,7 @@ export class MobileFieldOperationRepository {
       tx.operation.findFirst({
         where: { id: operationId, organizationId, deletedAt: null },
         include: {
+          organization: { select: { settings: true } },
           businessUnit: {
             select: {
               id: true,

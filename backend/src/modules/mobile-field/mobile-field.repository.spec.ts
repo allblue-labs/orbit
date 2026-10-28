@@ -2,61 +2,89 @@
 import { MobileFieldRepository } from './mobile-field.repository';
 
 describe('MobileFieldRepository projection bounds', () => {
-  it('reserves a bounded query for unscheduled work instead of hiding it behind history', async () => {
-    const tx = {
-      businessUnit: {
-        findMany: jest.fn().mockResolvedValue([
-          {
-            id: '01900000-0000-7000-8000-000000000001',
-            legalName: 'Recife',
-            tradeName: null,
-            timezone: 'America/Recife',
-          },
-        ]),
-      },
-      /* A fila consulta a preferência de autorização da organização antes de
+  it.each([false, true])(
+    'reserves bounded queries and applies authorization consistently (required=%s)',
+    async (required) => {
+      const tx = {
+        professionalProfile: {
+          findFirst: jest.fn().mockResolvedValue({ id: 'profile' }),
+        },
+        businessUnit: {
+          findMany: jest.fn().mockResolvedValue([
+            {
+              id: '01900000-0000-7000-8000-000000000001',
+              legalName: 'Recife',
+              tradeName: null,
+              timezone: 'America/Recife',
+            },
+          ]),
+        },
+        /* A fila consulta a preferência de autorização da organização antes de
          montar o `where` — sem este duplo o repositório quebra no acesso. */
-      organization: {
-        findUnique: jest.fn().mockResolvedValue({ settings: null }),
-      },
-      operation: { findMany: jest.fn().mockResolvedValue([]) },
-      pmocExecution: { findMany: jest.fn().mockResolvedValue([]) },
-      rvtOccurrence: { findMany: jest.fn().mockResolvedValue([]) },
-      customer: { findMany: jest.fn().mockResolvedValue([]) },
-      asset: { findMany: jest.fn().mockResolvedValue([]) },
-    };
-    const rls = { run: (work: (client: typeof tx) => unknown) => work(tx) };
-    const repository = new MobileFieldRepository(rls as never);
+        organization: {
+          findUnique: jest.fn().mockResolvedValue({
+            settings: {
+              operations: { requireAssignmentAuthorization: required },
+            },
+          }),
+        },
+        operation: { findMany: jest.fn().mockResolvedValue([]) },
+        pmocExecution: { findMany: jest.fn().mockResolvedValue([]) },
+        rvtOccurrence: { findMany: jest.fn().mockResolvedValue([]) },
+        customer: { findMany: jest.fn().mockResolvedValue([]) },
+        asset: { findMany: jest.fn().mockResolvedValue([]) },
+      };
+      const rls = { run: (work: (client: typeof tx) => unknown) => work(tx) };
+      const repository = new MobileFieldRepository(rls as never);
 
-    await repository.project(
-      '01900000-0000-7000-8000-000000000002',
-      '01900000-0000-7000-8000-000000000003',
-      ['01900000-0000-7000-8000-000000000001'],
-    );
+      await repository.project(
+        '01900000-0000-7000-8000-000000000002',
+        '01900000-0000-7000-8000-000000000003',
+        ['01900000-0000-7000-8000-000000000001'],
+      );
 
-    expect(tx.operation.findMany).toHaveBeenCalledTimes(4);
-    expect(
-      tx.operation.findMany.mock.calls.map(([query]) => ({
-        take: query.take as number,
-        scheduledStart: (query.where as { scheduledStart?: unknown })
-          .scheduledStart,
-      })),
-    ).toEqual([
-      { take: 125, scheduledStart: undefined },
-      {
-        take: 125,
-        scheduledStart: expect.objectContaining({ lte: expect.any(Date) }),
-      },
-      {
-        take: 125,
-        scheduledStart: expect.objectContaining({ gt: expect.any(Date) }),
-      },
-      { take: 125, scheduledStart: null },
-    ]);
-  });
+      expect(tx.operation.findMany).toHaveBeenCalledTimes(4);
+      for (const method of [
+        tx.operation.findMany,
+        tx.pmocExecution.findMany,
+        tx.rvtOccurrence.findMany,
+      ]) {
+        expect(method).toHaveBeenCalled();
+        for (const [query] of method.mock.calls) {
+          expect(query.where.organizationId).toBe(
+            '01900000-0000-7000-8000-000000000002',
+          );
+          expect(query.where.authorizedAt).toEqual(
+            required ? { not: null } : undefined,
+          );
+        }
+      }
+      expect(
+        tx.operation.findMany.mock.calls.map(([query]) => ({
+          take: query.take as number,
+          scheduledStart: (query.where as { scheduledStart?: unknown })
+            .scheduledStart,
+        })),
+      ).toEqual([
+        { take: 125, scheduledStart: undefined },
+        {
+          take: 125,
+          scheduledStart: expect.objectContaining({ lte: expect.any(Date) }),
+        },
+        {
+          take: 125,
+          scheduledStart: expect.objectContaining({ gt: expect.any(Date) }),
+        },
+        { take: 125, scheduledStart: null },
+      ]);
+    },
+  );
 
   it('loads one canonical operation directly under the assignment scope', async () => {
     const tx = {
+      professionalProfile: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'profile' }),
+      },
       businessUnit: {
         findMany: jest.fn().mockResolvedValue([
           {
@@ -116,6 +144,9 @@ describe('MobileFieldRepository projection bounds', () => {
    */
   it('a fila só traz o que está atribuído a quem pergunta — como responsável ou auxiliar', async () => {
     const tx = {
+      professionalProfile: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'profile' }),
+      },
       businessUnit: {
         findMany: jest.fn().mockResolvedValue([
           {
@@ -165,6 +196,9 @@ describe('MobileFieldRepository projection bounds', () => {
    */
   it('o recorte de auxiliar ignora quem foi removido', async () => {
     const tx = {
+      professionalProfile: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'profile' }),
+      },
       businessUnit: {
         findMany: jest.fn().mockResolvedValue([
           {

@@ -35,6 +35,9 @@ function bancada({
   hasMembership?: boolean;
 }) {
   const tx = {
+    organization: {
+      findUnique: jest.fn().mockResolvedValue({ settings: null }),
+    },
     organizationMembership: {
       findFirst: jest.fn().mockResolvedValue({ role: { permissions } }),
     },

@@ -669,6 +669,7 @@ export class MobileFieldService {
         const execution = cycle.equipmentExecutions.find(
           (value: any) => value.coverageId === coverage.id,
         );
+        if (!execution && cycle.plan.technician?.id !== actor.id) continue;
         if (
           execution &&
           execution.responsibleFieldTechnician.id !== actor.id &&

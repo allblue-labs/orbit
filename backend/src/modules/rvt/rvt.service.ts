@@ -31,6 +31,7 @@ import {
 } from '../scheduling/scheduling-time';
 import { RvtMapper } from './rvt.mapper';
 import { RvtRepository } from './rvt.repository';
+import { managesRecurringAssignments } from '../operations/recurring-authorization';
 
 export interface RvtActor {
   organizationId: string;
@@ -391,6 +392,7 @@ export class RvtService {
       actor.organizationId,
     );
     if (!occurrence) throw new EntityNotFoundException('RvtOccurrence', id);
+    this.assertAuthorized(actor, occurrence);
     this.assertUnit(actor, occurrence.businessUnitId);
     const configuration = await this.get(occurrence.configurationId, actor);
     const execution = occurrence.execution
@@ -473,6 +475,7 @@ export class RvtService {
       actor.organizationId,
     );
     if (!occurrence) throw new EntityNotFoundException('RvtOccurrence', id);
+    this.assertAuthorized(actor, occurrence);
     this.assertUnit(actor, occurrence.businessUnitId);
     await this.assertExecutor(actor, occurrence.businessUnitId);
     if (
@@ -506,6 +509,7 @@ export class RvtService {
         actorId: actor.actorId,
         responsibleId,
         auxiliaries: [...new Set(input.auxiliaryTechnicianIds ?? [])],
+        authorizationBypass: managesRecurringAssignments(actor, 'RVT'),
       });
       return this.execution(result.id, actor);
     } catch (e) {
@@ -515,6 +519,10 @@ export class RvtService {
   async execution(id: string, actor: RvtActor) {
     const value = await this.repository.execution(id, actor.organizationId);
     if (!value) throw new EntityNotFoundException('RvtExecution', id);
+    this.assertAuthorized(actor, {
+      ...value.occurrence,
+      assignmentAuthorizationRequired: value.assignmentAuthorizationRequired,
+    });
     this.assertUnit(actor, value.businessUnitId);
     const result = this.mapper.execution(value);
     if (
@@ -715,6 +723,10 @@ export class RvtService {
   private async ensureExecution(id: string, actor: RvtActor) {
     const value = await this.repository.execution(id, actor.organizationId);
     if (!value) throw new EntityNotFoundException('RvtExecution', id);
+    this.assertAuthorized(actor, {
+      ...value.occurrence,
+      assignmentAuthorizationRequired: value.assignmentAuthorizationRequired,
+    });
     this.assertUnit(actor, value.businessUnitId);
     await this.assertExecutor(actor, value.businessUnitId);
     if (
@@ -742,6 +754,20 @@ export class RvtService {
   private assertUnit(actor: RvtActor, id: string) {
     if (!actor.businessUnitIds.includes(id))
       throw new ForbiddenException('Business unit scope invalid');
+  }
+  private assertAuthorized(
+    actor: RvtActor,
+    source: {
+      authorizedAt?: Date | null;
+      assignmentAuthorizationRequired?: boolean;
+    },
+  ) {
+    if (
+      !managesRecurringAssignments(actor, 'RVT') &&
+      source.assignmentAuthorizationRequired &&
+      !source.authorizedAt
+    )
+      throw new EntityNotFoundException('Visita RVT');
   }
   private mapError(error: unknown): never {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {

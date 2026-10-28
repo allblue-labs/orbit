@@ -90,6 +90,7 @@ import type {
 } from './pmoc.read-models';
 import { instantFromCivilDate } from '../scheduling/scheduling-time';
 import { PmocRepository } from './pmoc.repository';
+import { managesRecurringAssignments } from '../operations/recurring-authorization';
 import { WorkforceService } from '../workforce/workforce.service';
 import { ArtifactRenderService } from '../artifact-rendering/artifact-render.service';
 import { PmocPlanDocumentService } from '../artifact-rendering/pmoc-plan-document.service';
@@ -1600,6 +1601,12 @@ export class PmocService {
     if (!data)
       throw new EntityNotFoundException('PmocEquipmentCoverage', assetId);
     this.assertUnitInScope(actor, data.plan.businessUnitId);
+    if (
+      !managesRecurringAssignments(actor, 'PMOC') &&
+      data.assignmentAuthorizationRequired &&
+      !data.cycle.authorizedAt
+    )
+      throw new EntityNotFoundException('Execução PMOC', cycleId);
     const assigned = data.existing
       ? data.existing.responsibleFieldTechnician.id === actor.actorId
       : data.plan.technicianUserId === actor.actorId;
@@ -1819,6 +1826,12 @@ export class PmocService {
      * o escalado faltou.
      */
     this.assertUnitInScope(actor, preparation.plan.businessUnitId);
+    if (
+      !managesRecurringAssignments(actor, 'PMOC') &&
+      preparation.assignmentAuthorizationRequired &&
+      !preparation.cycle.authorizedAt
+    )
+      throw new EntityNotFoundException('Execução PMOC', cycleId);
     const assignedTo =
       preparation.existing?.responsibleFieldTechnician.id ??
       preparation.plan.technicianUserId;
@@ -1925,6 +1938,7 @@ export class PmocService {
         preparation.cycle.dueOn,
       ),
       title: `${preparation.plan.name} — ${preparation.coverage.asset.name}`,
+      authorizationBypass: managesRecurringAssignments(actor, 'PMOC'),
     });
     if (result.created && this.mobileNotifications) {
       for (const recipientUserId of [

@@ -102,6 +102,7 @@ export function OperationAuthorizationSection({
   timeZone?: string;
 } = {}) {
   const organization = useOrganization();
+  const session = useSession();
 
   if (organization.isPending) return <PanelLoading rows={4} />;
   if (organization.error) {
@@ -126,7 +127,15 @@ export function OperationAuthorizationSection({
         sozinha —, e uma fila sempre vazia faria parecer que algo está travado.
       */}
       {showQueue && enabled ? (
-        <AuthorizationQueuePanel timeZone={timeZone ?? "America/Sao_Paulo"} />
+        <>
+          <AuthorizationQueuePanel timeZone={timeZone ?? "America/Sao_Paulo"} />
+          {session.hasPermission("operations.assign") ? (
+            <AuthorizationQueuePanel
+              recurring
+              timeZone={timeZone ?? "America/Sao_Paulo"}
+            />
+          ) : null}
+        </>
       ) : null}
 
       {/*
@@ -214,17 +223,18 @@ function AuthorizationForm({ organization }: { organization: Organization }) {
               de autorizado.
             </li>
             <li>
-              · A liberação fica no próprio atendimento, na aba Equipe, para
-              quem pode atribuir.
+              · Autorize OS, visitas RVT e ciclos PMOC na aba Pendências de
+              Operações. A autorização de um ciclo PMOC vale para seus
+              equipamentos.
             </li>
             <li>
-              · Revogar tira o atendimento da fila de novo — o que já foi
-              executado permanece.
+              · Revogar a autorização de uma OS tira o atendimento da fila de
+              novo — o que já foi executado permanece.
             </li>
           </ul>
           <p className="text-xs text-muted-foreground">
-            O que já está atribuído hoje continua visível: ligar a exigência
-            vale para o que for atribuído daqui em diante.
+            Com a exigência ligada, visitas RVT e ciclos PMOC sem autorização
+            aguardam sua aprovação antes de aparecerem no aplicativo.
           </p>
         </div>
 

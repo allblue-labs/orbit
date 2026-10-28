@@ -13,6 +13,8 @@ import { OperationCancellationService } from './operation-cancellation.service';
 import { WorkforceModule } from '../workforce/workforce.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { StorageModule } from '../storage/storage.module';
+import { RecurringAuthorizationController } from './recurring-authorization.controller';
+import { RecurringAuthorizationService } from './recurring-authorization.service';
 
 @Module({
   /* `StorageModule` porque o registro de campo assina as URLs das imagens: a
@@ -21,6 +23,7 @@ import { StorageModule } from '../storage/storage.module';
   controllers: [
     // Register this static path before OperationController's GET /operations/:id.
     OperationCancellationController,
+    RecurringAuthorizationController,
     OperationController,
     ChecklistController,
   ],
@@ -33,6 +36,7 @@ import { StorageModule } from '../storage/storage.module';
     OperationReadModelMapper,
     OperationCancellationRepository,
     OperationCancellationService,
+    RecurringAuthorizationService,
   ],
   /* `OperationCancellationService` sai do módulo porque o aplicativo de campo é
      quem cria o pedido — a rota dele vive em `mobile-field`, e a regra de quem

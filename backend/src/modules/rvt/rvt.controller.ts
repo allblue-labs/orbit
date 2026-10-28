@@ -13,7 +13,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Permissions } from '../../decorators';
+import { Permissions, Surfaces } from '../../decorators';
 import { ForbiddenException } from '../../exceptions';
 import { ParseUUIDv7Pipe } from '../../pipes';
 import type { IdentityRequest } from '../identity/infrastructure/jwt-authentication.guard';
@@ -177,6 +177,7 @@ export class RvtController {
     return this.rvt.occurrences(this.actor(r), q);
   }
   @Get('occurrences/:id/preparation')
+  @Surfaces('WEB', 'API', 'MOBILE')
   @Capabilities('rvt.execute')
   @Permissions('rvt.execute')
   preparation(
@@ -186,6 +187,7 @@ export class RvtController {
     return this.rvt.preparation(id, this.actor(r));
   }
   @Post('occurrences/:id/start')
+  @Surfaces('WEB', 'API', 'MOBILE')
   @Capabilities('rvt.execute')
   @Permissions('rvt.execute')
   start(
@@ -206,6 +208,7 @@ export class RvtController {
     return this.rvt.adHoc(this.actor(r), idempotencyKey, i);
   }
   @Get('executions/:id')
+  @Surfaces('WEB', 'API', 'MOBILE')
   @Capabilities('rvt.read')
   @Permissions('rvt.read')
   execution(
@@ -265,6 +268,7 @@ export class RvtController {
     return this.rvt.acknowledge(id, this.actor(r), i);
   }
   @Post('executions/:id/complete')
+  @Surfaces('WEB', 'API', 'MOBILE')
   @Capabilities('rvt.execute')
   @Permissions('rvt.execute')
   complete(

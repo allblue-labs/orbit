@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { PmocRepository } from './pmoc.repository';
 import {
   ConflictException,
@@ -15,11 +16,19 @@ function fixture() {
     updatedAt: new Date('2026-10-27T12:00:00Z'),
     procedureSnapshot: { Evaporadora: ['Limpar filtro', 'Verificar dreno'] },
     operation: { id: 'operation-1', data: { preserved: 'value' } },
+    cycle: { authorizedAt: null },
     plan: { procedure: {}, units: [] },
   };
   const tx = {
+    organization: {
+      findUnique: jest.fn().mockResolvedValue({ settings: null }),
+    },
+    pmocExecution: {
+      findFirst: jest.fn().mockResolvedValue({ authorizedAt: null }),
+    },
     $executeRaw: jest.fn(),
     pmocEquipmentExecution: {
+      updateMany: jest.fn(),
       findFirst: jest.fn().mockResolvedValue(execution),
       update: jest.fn(),
     },
@@ -47,6 +56,35 @@ function fixture() {
   return { repository, tx, execution, input };
 }
 describe('registro do roteiro de PMOC', () => {
+  it('impede gravação direta enquanto o ciclo aguarda aprovação', async () => {
+    const { repository, tx, input } = fixture();
+    tx.organization.findUnique.mockResolvedValue({
+      settings: { operations: { requireAssignmentAuthorization: true } },
+    });
+    await expect(repository.saveEquipmentWork(input)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    expect(tx.operation.update).not.toHaveBeenCalled();
+  });
+  it('impede conclusão direta enquanto o ciclo aguarda aprovação', async () => {
+    const { repository, tx, input } = fixture();
+    tx.organization.findUnique.mockResolvedValue({
+      settings: { operations: { requireAssignmentAuthorization: true } },
+    });
+    await expect(
+      repository.completeEquipmentExecution({
+        organizationId: input.organizationId,
+        planId: input.planId,
+        cycleId: input.cycleId,
+        executionId: input.executionId,
+        actorId: input.actorId,
+        restrictToTechnicianId: input.actorId,
+        performedAt: new Date(),
+        notes: undefined,
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(tx.pmocEquipmentExecution.updateMany).not.toHaveBeenCalled();
+  });
   it('salva itens não realizados, notas e preserva os demais dados da operação', async () => {
     const { repository, tx, input } = fixture();
     await repository.saveEquipmentWork(input);

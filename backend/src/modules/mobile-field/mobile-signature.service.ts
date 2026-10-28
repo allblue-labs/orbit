@@ -1,4 +1,5 @@
 import { attendanceSummary } from './attendance-summary';
+import { requiresAssignmentAuthorization } from '../operations/operation-authorization';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import {
@@ -407,6 +408,14 @@ export class MobileSignatureService {
     const operation = await this.repository.operation(actor.organizationId, id);
     if (!operation || !actor.businessUnitIds.includes(operation.businessUnitId))
       throw new ForbiddenException('Atendimento fora do contexto permitido');
+    if (
+      !actor.isOrganizationOwner &&
+      requiresAssignmentAuthorization(operation.organization?.settings) &&
+      !operation.authorizedAt
+    )
+      throw new ForbiddenException(
+        'Este atendimento ainda aguarda autorização do proprietário.',
+      );
     const actual =
       operation.completedByUserId ??
       operation.responsibleFieldTechnicianId ??

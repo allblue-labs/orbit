@@ -71,7 +71,10 @@ function scenario(visit: any = current) {
     asset: {
       count: jest.fn().mockImplementation(({ where }) => where.id.in.length),
     },
-    organization: { findFirst: jest.fn().mockResolvedValue(null) },
+    organization: {
+      findFirst: jest.fn().mockResolvedValue(null),
+      findUnique: jest.fn().mockResolvedValue({ settings: null }),
+    },
     organizationMembership: {
       findFirst: jest.fn().mockResolvedValue({ id: 'member' }),
     },
@@ -337,6 +340,47 @@ describe('RVT execution authority', () => {
     expect(repository.startExecution).toHaveBeenCalledWith(
       expect.objectContaining({ responsibleId: 'tech' }),
     );
+  });
+  it.each([false, true])(
+    'only opens an assigned visit after approval when required (approved=%s)',
+    async (approved) => {
+      const { repository, service } = setup();
+      repository.occurrence.mockResolvedValue({
+        ...current,
+        businessUnitId: 'unit',
+        configuration,
+        assignmentAuthorizationRequired: true,
+        authorizedAt: approved ? new Date() : null,
+      });
+      if (approved) {
+        await service.start('visit', actor, {});
+        expect(repository.startExecution).toHaveBeenCalled();
+      } else {
+        await expect(service.start('visit', actor, {})).rejects.toThrow(
+          /Visita RVT/,
+        );
+        await expect(service.preparation('visit', actor)).rejects.toThrow(
+          /Visita RVT/,
+        );
+        expect(repository.startExecution).not.toHaveBeenCalled();
+      }
+    },
+  );
+  it('prevents reading or editing an unapproved execution directly', async () => {
+    const { repository, service } = setup();
+    repository.execution.mockResolvedValue({
+      id: 'execution',
+      businessUnitId: 'unit',
+      assignmentAuthorizationRequired: true,
+      occurrence: { authorizedAt: null },
+    });
+    await expect(service.execution('execution', actor)).rejects.toThrow(
+      /Visita RVT/,
+    );
+    await expect(
+      service.updateExecution('execution', actor, {}),
+    ).rejects.toThrow(/Visita RVT/);
+    expect(repository.updateExecution).not.toHaveBeenCalled();
   });
   it('rejects auxiliary execution even with a manually granted execute permission', async () => {
     const { repository, service } = setup(false);

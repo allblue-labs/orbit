@@ -4356,6 +4356,8 @@ model PmocExecution {
   dueOn          DateTime @map("due_on") @db.Date
   status         String   @default("PENDING") @db.VarChar(20)
   sequenceNumber Int      @default(1) @map("sequence_number")
+  authorizedAt   DateTime? @map("authorized_at") @db.Timestamptz(3)
+  authorizedById String? @map("authorized_by_id") @db.Uuid
 
   /// A ordem de serviço que cumpriu o ciclo. Única: um ciclo, uma ordem.
   operationId         String? @unique @map("operation_id") @db.Uuid
@@ -4382,6 +4384,7 @@ model PmocExecution {
   @@unique([planId, sequenceNumber])
   @@index([organizationId, planId, dueOn])
   @@index([organizationId, status, dueOn])
+  @@index([organizationId, authorizedAt, status], map: "pmoc_executions_authorization_idx")
   @@map("pmoc_executions")
 }
 
@@ -4577,6 +4580,8 @@ model RvtOccurrence {
   responsibleFieldTechnicianId String? @map("responsible_field_technician_id") @db.Uuid
   equipmentIds String[] @default([]) @map("equipment_ids") @db.Uuid
   customized Boolean @default(false)
+  authorizedAt DateTime? @map("authorized_at") @db.Timestamptz(3)
+  authorizedById String? @map("authorized_by_id") @db.Uuid
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
   schedulingEventId  String?   @unique @map("scheduling_event_id") @db.Uuid
   createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -4589,6 +4594,7 @@ model RvtOccurrence {
   @@unique([configurationId, localScheduledDate])
   @@index([organizationId, businessUnitId, status, scheduledFor])
   @@index([organizationId, configurationId, scheduledFor])
+  @@index([organizationId, authorizedAt, status], map: "rvt_occurrences_authorization_idx")
   @@map("rvt_occurrences")
 }
 

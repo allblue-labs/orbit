@@ -26,6 +26,13 @@
  * que nunca viu.
  */
 import { useMemo, useState } from "react";
+import Link from "next/link";
+import { ROUTES } from "@/lib/routes";
+import { queryKeys } from "@/api/query-keys";
+import { useApiQuery } from "@/hooks/api/use-api-query";
+import { useApiMutation } from "@/hooks/api/use-api-mutation";
+import { CACHE } from "@/hooks/api/cache-policy";
+import { recurringAuthorizationsService } from "@/services/recurring-authorizations.service";
 import { CalendarCheck, ShieldCheck, Users } from "lucide-react";
 
 import { MutationError } from "@/components/artifact-studio/mutation-error";
@@ -53,7 +60,13 @@ import {
 } from "@/workspace";
 import { agruparFila } from "./authorization-queue";
 
-export function AuthorizationQueuePanel({ timeZone }: { timeZone: string }) {
+export function AuthorizationQueuePanel({
+  timeZone,
+  recurring = false,
+}: {
+  timeZone: string;
+  recurring?: boolean;
+}) {
   const { formatDateTime } = useDateFormatters();
   const { businessUnitId, businessUnits } = useActiveScope();
   const list = useListController<OperationQuery>({ limit: 50 });
@@ -84,8 +97,49 @@ export function AuthorizationQueuePanel({ timeZone }: { timeZone: string }) {
     [list.query, businessUnitId],
   );
 
-  const pendentes = useOperationsList(query);
-  const itens = useMemo(() => pendentes.data?.data ?? [], [pendentes.data]);
+  const operations = useOperationsList(query, !recurring);
+  const recurringQuery = {
+    page: query.page,
+    businessUnitId: query.businessUnitId,
+    assignedUserId: query.assignedUserId,
+    search: query.search,
+  };
+  const recurringQueue = useApiQuery(
+    queryKeys.list("recurring-authorizations", recurringQuery),
+    ({ signal }) =>
+      recurringAuthorizationsService.list(recurringQuery, { signal }),
+    { ...CACHE.live, enabled: recurring },
+  );
+  const authorizeRecurring = useApiMutation(
+    recurringAuthorizationsService.authorize,
+    {
+      invalidate: [
+        queryKeys.module("recurring-authorizations"),
+        queryKeys.module("operations"),
+        queryKeys.module("pmoc"),
+        queryKeys.module("rvt"),
+      ],
+      notify: "Atendimentos autorizados para o aplicativo.",
+    },
+  );
+  const recurringItems = useMemo(
+    () =>
+      new Map(
+        (recurringQueue.data?.data ?? []).map((item) => [
+          `${item.kind}:${item.id}`,
+          item,
+        ]),
+      ),
+    [recurringQueue.data],
+  );
+  const pendentes = recurring ? recurringQueue : operations;
+  const itens = useMemo(
+    () =>
+      recurring
+        ? [...recurringItems.entries()].map(([id, item]) => ({ ...item, id }))
+        : (operations.data?.data ?? []),
+    [recurring, recurringItems, operations.data],
+  );
   const meta = pendentes.data?.meta;
   const grupos = useMemo(() => agruparFila(itens, timeZone), [itens, timeZone]);
 
@@ -94,19 +148,42 @@ export function AuthorizationQueuePanel({ timeZone }: { timeZone: string }) {
 
   const autorizar = (chave: string, ids: readonly string[]) => {
     setEnviando(chave);
-    authorize.mutate(ids, { onSettled: () => setEnviando(null) });
+    if (recurring) {
+      authorizeRecurring.mutate(
+        ids
+          .map((id) => recurringItems.get(id)!)
+          .map(({ id, kind, version }) => ({ id, kind, version })),
+        { onSettled: () => setEnviando(null) },
+      );
+    } else authorize.mutate(ids, { onSettled: () => setEnviando(null) });
   };
 
   return (
     <PanelFrame
-      panelId="operations-authorization-queue"
-      title="Esperando autorização"
-      description="Atendimentos atribuídos que ainda não chegaram ao aplicativo de quem vai executar."
+      panelId={
+        recurring
+          ? "recurring-authorization-queue"
+          : "operations-authorization-queue"
+      }
+      title={
+        recurring
+          ? "Visitas RVT e ciclos PMOC aguardando autorização"
+          : "Esperando autorização"
+      }
+      description={
+        recurring
+          ? "Libere cada visita ou ciclo atribuído antes de disponibilizá-lo no aplicativo. A autorização do ciclo PMOC abrange seus equipamentos."
+          : "Atendimentos atribuídos que ainda não chegaram ao aplicativo de quem vai executar."
+      }
     >
       <div className="space-y-5">
         <FilterBar onClear={list.reset} canClear={list.isFiltered}>
           <SearchField
-            id="authorization-search"
+            id={
+              recurring
+                ? "recurring-authorization-search"
+                : "authorization-search"
+            }
             value={list.searchTerm}
             onChange={list.setSearchTerm}
             placeholder="Código, título ou descrição"
@@ -114,7 +191,11 @@ export function AuthorizationQueuePanel({ timeZone }: { timeZone: string }) {
           />
 
           <FilterSelect
-            id="authorization-technician"
+            id={
+              recurring
+                ? "recurring-authorization-technician"
+                : "authorization-technician"
+            }
             label="Técnico"
             value={list.query.assignedUserId}
             onChange={(value) => list.setFilter("assignedUserId", value)}
@@ -127,7 +208,11 @@ export function AuthorizationQueuePanel({ timeZone }: { timeZone: string }) {
 
           {businessUnits.length > 1 && !businessUnitId ? (
             <FilterSelect
-              id="authorization-unit"
+              id={
+                recurring
+                  ? "recurring-authorization-unit"
+                  : "authorization-unit"
+              }
               label="Unidade"
               value={list.query.businessUnitId}
               onChange={(value) => list.setFilter("businessUnitId", value)}
@@ -148,7 +233,9 @@ export function AuthorizationQueuePanel({ timeZone }: { timeZone: string }) {
           />
         </div>
 
-        <MutationError error={authorize.error} />
+        <MutationError
+          error={recurring ? authorizeRecurring.error : authorize.error}
+        />
 
         <ListState
           isPending={pendentes.isPending}
@@ -241,13 +328,31 @@ export function AuthorizationQueuePanel({ timeZone }: { timeZone: string }) {
                             className="flex flex-wrap items-center justify-between gap-2 text-sm"
                           >
                             <span className="flex min-w-0 flex-wrap items-baseline gap-2">
-                              <EntityLink entity="operation" id={item.id}>
-                                {item.serviceOrderCode ?? item.code}
-                              </EntityLink>
+                              {recurring ? (
+                                <>
+                                  <Badge variant="outline">
+                                    {recurringItems.get(item.id)?.kind}
+                                  </Badge>
+                                  <Link
+                                    className="text-primary hover:underline"
+                                    href={`${recurringItems.get(item.id)?.kind === "PMOC" ? ROUTES.pmoc : ROUTES.rvt}/${recurringItems.get(item.id)?.parentId}`}
+                                  >
+                                    {item.code}
+                                  </Link>
+                                </>
+                              ) : (
+                                <EntityLink entity="operation" id={item.id}>
+                                  {item.serviceOrderCode ?? item.code}
+                                </EntityLink>
+                              )}
                               <span className="truncate">{item.title}</span>
                               {item.scheduledStart ? (
                                 <span className="text-xs text-muted-foreground">
-                                  {formatDateTime(item.scheduledStart)}
+                                  {/^\d{4}-\d{2}-\d{2}$/.test(
+                                    item.scheduledStart,
+                                  )
+                                    ? diaLegivel(item.scheduledStart)
+                                    : formatDateTime(item.scheduledStart)}
                                 </span>
                               ) : null}
                             </span>

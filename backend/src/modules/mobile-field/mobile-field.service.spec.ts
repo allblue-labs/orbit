@@ -331,6 +331,7 @@ describe('contexto de navegação do PMOC', () => {
         id: '01900000-0000-7000-8000-0000000000p1'.replace('p', 'a'),
         code: 'PMOC-1',
         name: 'Anual',
+        technician: { id: actor.id, displayName: 'Técnico' },
         customerId: null,
         businessUnitId: actor.businessUnitIds[0],
         serviceLocation: null,
@@ -782,6 +783,19 @@ describe('PMOC assignment authorizes the field work item', () => {
               qrIdentities: [],
             },
           },
+          ...(existingAssignee
+            ? [
+                {
+                  id: 'other-coverage',
+                  asset: {
+                    id: 'other-asset',
+                    name: 'Outro equipamento',
+                    status: 'ACTIVE',
+                    qrIdentities: [],
+                  },
+                },
+              ]
+            : []),
         ],
       },
       equipmentExecutions: existingAssignee
@@ -809,6 +823,7 @@ describe('PMOC assignment authorizes the field work item', () => {
   });
   it('offers resume and completion to the execution assignee instead of the plan technician', async () => {
     const queue = await scenario(actor.id).workQueue(actor, {});
+    expect(queue.data).toHaveLength(1);
     expect(queue.data[0]?.allowedActions).toEqual([
       'VIEW',
       'RESUME',
