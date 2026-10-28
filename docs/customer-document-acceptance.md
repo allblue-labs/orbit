@@ -5,6 +5,7 @@
 - No orçamento, abra as ações e use **Gerar link de aprovação**. Um rascunho precisa ter itens e valor para ser enviado. Copie o endereço ou abra a opção de compartilhamento por WhatsApp.
 - O cliente abre `/proposta/<token>` sem login, confere o resumo, baixa o PDF e escolhe aprovar, recusar ou pedir alterações. Aprovação exige nome, assinatura e confirmação de aceite. Recusa e alterações exigem nome e motivo.
 - A aprovação muda o orçamento para **Aprovado** e mantém os eventos financeiros e de automação existentes. A recusa muda para **Recusado**. Um pedido de alterações devolve o orçamento para **Rascunho**; revise e gere outro link.
+- Após assinar e aprovar, o mesmo botão passa a oferecer **Baixar orçamento assinado em PDF**. O download mantém as páginas da proposta congelada e acrescenta uma página de aceite com a assinatura centralizada, nome, data e hash da proposta original. Antes da aprovação, após recusa ou pedido de alterações, o download contém somente a proposta original. Essa regra também é aplicada pela API e vale para links de orçamento já aprovados.
 - No PMOC, use **Gerar link de assinatura (opcional)**. O cliente abre `/contrato/<token>`, lê o resumo, baixa o contrato completo e assina. O aceite não ativa nem executa o PMOC; continua opcional. A assinatura coletada aparece na emissão do contrato pela plataforma.
 
 ## Validade e integridade

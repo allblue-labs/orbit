@@ -931,11 +931,8 @@ export class QuoteService {
    * algo que ninguém contratou. Só uma vez: `operationId` guarda o resultado, e
    * repetir devolve a operação existente em vez de criar a segunda.
    *
-   * **Nada é inventado.** Técnico, execução, checklist e agenda não são
-   * atribuídos: o contrato de `Operation` os trata como decisões posteriores, e
-   * escolhê-los aqui produziria uma ordem de serviço que ninguém combinou. O
-   * que a conversão sabe é quem é o cliente, qual a unidade e o que foi
-   * proposto.
+   * Cliente, equipamentos e valor vêm da proposta aprovada. Endereço, agenda,
+   * equipe e visibilidade do valor são confirmados no modal de conversão.
    */
   async convert(
     id: string,
@@ -971,6 +968,7 @@ export class QuoteService {
       sector: input.sector,
       responsibleFieldTechnicianId: input.responsibleFieldTechnicianId,
       auxiliaryTechnicianIds: input.auxiliaryTechnicianIds,
+      amountVisibleInField: input.amountVisibleInField ?? false,
       code,
       kind: input.kind ?? 'MAINTENANCE',
       priority: input.priority ?? 'NORMAL',

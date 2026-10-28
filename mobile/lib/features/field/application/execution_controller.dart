@@ -161,6 +161,8 @@ class ExecutionController extends StateNotifier<ExecutionState> {
 
   final String operationId;
   final String? deviceInstanceId;
+  int _loadSequence = 0;
+  Future<void>? _preparingAttendance;
 
   /// A intenção em curso, guardada **inteira**.
   ///
@@ -174,10 +176,11 @@ class ExecutionController extends StateNotifier<ExecutionState> {
 
   /// Relê o estado autoritativo. É o que fecha todo comando.
   Future<void> load() async {
+    final sequence = ++_loadSequence;
     try {
       final preparation = await _repository.preparation(operationId);
       final pending = await _sync.commandsFor(operationId);
-      if (!mounted) return;
+      if (!mounted || sequence != _loadSequence) return;
       state = ExecutionState(
         phase: ExecutionPhase.ready,
         preparation: preparation,
@@ -185,8 +188,64 @@ class ExecutionController extends StateNotifier<ExecutionState> {
         pendingCommands: pending,
       );
     } on Object catch (error) {
-      if (!mounted) return;
+      if (!mounted || sequence != _loadSequence) return;
       state = state.copyWith(phase: ExecutionPhase.error, error: error);
+    }
+  }
+
+  /// Entrar no wizard é uma intenção de executar, diferente de consultar a ficha.
+  /// O avulso nasce aberto; usa o mesmo comando de início dos atribuídos antes
+  /// de liberar as etapas. Só envia START quando a API publica essa ação.
+  Future<void> prepareForAttendance() {
+    final running = _preparingAttendance;
+    if (running != null) return running;
+    final run = _prepareForAttendance().whenComplete(
+      () => _preparingAttendance = null,
+    );
+    _preparingAttendance = run;
+    return run;
+  }
+
+  Future<void> _prepareForAttendance() async {
+    if (state.isBusy) return;
+    await load();
+    if (!mounted || state.error != null || state.isBusy) return;
+    final pendingStart = state.pendingCommands
+        .where(
+          (command) =>
+              command.envelope.commandType == OfflineCommandType.operationStart,
+        )
+        .firstOrNull;
+    if (pendingStart != null) {
+      if (pendingStart.isBlocking) {
+        state = state.copyWith(
+          phase: ExecutionPhase.error,
+          error: OrbitException(
+            kind: OrbitErrorKind.http,
+            publicMessage: CommandBlocked(pendingStart).message,
+            code: pendingStart.receipt?.error?.code ?? 'SYNC_BLOCKED',
+          ),
+        );
+        return;
+      }
+      // O botão de tentar novamente reenvia a mesma intenção persistida.
+      await _sync.sync(manual: true);
+      await load();
+      if (!mounted ||
+          state.error != null ||
+          state.isBusy ||
+          state.pendingCommands.any(
+            (command) =>
+                command.envelope.commandType ==
+                OfflineCommandType.operationStart,
+          )) {
+        return;
+      }
+    }
+    if (state.preparation?.eligible == true &&
+        state.allows(FieldOperationAllowedAction.start) &&
+        !state.isAwaitingSync(OfflineCommandType.operationStart)) {
+      await start();
     }
   }
 
@@ -370,14 +429,44 @@ class ExecutionController extends StateNotifier<ExecutionState> {
 
   /// O aceite encerra o fluxo. Só confirma conclusão quando o servidor a devolve.
   Future<bool> finishAfterConfirmation({String? rvtExecutionId}) async {
+    if (state.isBusy) {
+      throw const OrbitException(
+        kind: OrbitErrorKind.http,
+        publicMessage: 'Aguarde o registro em andamento antes de concluir.',
+        code: 'COMMAND_IN_PROGRESS',
+      );
+    }
+    // O aceite e as outras etapas podem ter alterado a versão ou as ações
+    // desde a última preparação. Nunca concluir a partir desse estado antigo.
+    await load();
+    if (!mounted) return false;
+    if (state.error case final Object error) throw error;
     if (state.preparation?.operation.completedAt != null) return true;
     final pending = await _sync.commandsFor(operationId);
+    if (!mounted) return false;
     if (pending.isNotEmpty) {
+      if (pending.every(
+        (command) =>
+            command.envelope.commandType ==
+                OfflineCommandType.operationComplete &&
+            !command.isBlocking,
+      )) {
+        return false;
+      }
       throw const OrbitException(
         kind: OrbitErrorKind.http,
         publicMessage:
             'Aguarde a sincronização dos registros antes de concluir.',
         code: 'RECORDS_PENDING',
+      );
+    }
+    if (!state.allows(FieldOperationAllowedAction.complete)) {
+      throw OrbitException(
+        kind: OrbitErrorKind.http,
+        publicMessage: state.allows(FieldOperationAllowedAction.start)
+            ? 'O atendimento ainda não foi iniciado. Volte a Atendimentos e abra-o novamente para continuar.'
+            : 'Este atendimento não está liberado para conclusão. Confira os registros e sua permissão de execução.',
+        code: 'COMPLETION_NOT_ALLOWED',
       );
     }
     if (rvtExecutionId == null) {

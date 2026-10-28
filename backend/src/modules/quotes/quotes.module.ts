@@ -26,6 +26,7 @@ import {
   QuotePublicAcceptanceController,
 } from './quote-acceptance.controller';
 import { QuoteAcceptanceService } from './quote-acceptance.service';
+import { QuoteAcceptedDocumentService } from './quote-accepted-document.service';
 import { OperationsModule } from '../operations/operations.module';
 
 @Module({
@@ -52,6 +53,7 @@ import { OperationsModule } from '../operations/operations.module';
     QuoteFinancialProcessor,
     QuoteEmissionService,
     QuoteAcceptanceService,
+    QuoteAcceptedDocumentService,
   ],
   exports: [QuoteService],
 })

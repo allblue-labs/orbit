@@ -10,15 +10,13 @@ async function setup(page: Page) {
     roles: [],
     exp: Math.floor(Date.now() / 1000) + 3600,
   };
-  await page
-    .context()
-    .addCookies([
-      {
-        name: "orbit_access",
-        value: `preview.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.preview`,
-        url: test.info().project.use.baseURL as string,
-      },
-    ]);
+  await page.context().addCookies([
+    {
+      name: "orbit_access",
+      value: `preview.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.preview`,
+      url: test.info().project.use.baseURL as string,
+    },
+  ]);
   const quote = {
     id: "quote-1",
     number: 42,
@@ -42,7 +40,14 @@ async function setup(page: Page) {
       summary: "Rua da Aurora, 20",
     },
     responsible: null,
-    assets: [],
+    assets: [
+      {
+        id: "asset-1",
+        name: "Split recepção",
+        identifier: "EQP-000001",
+        location: "Recepção",
+      },
+    ],
     items: [],
     itemCount: 1,
     transitions: {
@@ -160,6 +165,15 @@ test("conversão coleta equipe, endereço e agenda; conflito pede confirmação 
   const modal = page.getByRole("dialog", {
     name: "Converter orçamento em operação",
   });
+  await expect(
+    modal.getByText("Split recepção", { exact: true }),
+  ).toBeVisible();
+  await expect(modal.getByText("R$ 100,00", { exact: true })).toBeVisible();
+  const visibility = modal.getByRole("checkbox", {
+    name: "Permitir que o técnico em campo veja o valor",
+  });
+  await expect(visibility).not.toBeChecked();
+  await visibility.check();
   await expect(modal.locator("#operation-address")).toContainText(
     "Loja Centro",
   );
@@ -204,6 +218,7 @@ test("conversão coleta equipe, endereço e agenda; conflito pede confirmação 
     auxiliaryTechnicianIds: ["aux"],
     customerAddressId: "address-1",
     sector: "Recepção",
+    amountVisibleInField: true,
     scheduledStart: "2026-11-20T16:00:00.000Z",
     scheduledEnd: "2026-11-20T17:00:00.000Z",
   });

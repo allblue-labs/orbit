@@ -89,7 +89,7 @@ describe('ArtifactPremiumPdfRenderer', () => {
 
     expect(saida.bytes.subarray(0, 5).toString()).toBe('%PDF-');
     expect(saida.format).toBe('PDF');
-    expect(saida.rendererVersion).toBe('2.0.2');
+    expect(saida.rendererVersion).toBe('2.0.3');
     expect(saida.metadata.documentKind).toBe('PMOC');
   });
 
