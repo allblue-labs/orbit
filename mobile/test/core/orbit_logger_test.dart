@@ -9,6 +9,24 @@ import 'package:orbit_operator/core/observability/orbit_logger.dart';
 import 'package:orbit_operator/core/storage/token_storage.dart';
 
 void main() {
+  test('retira credenciais, assinatura, query e fragmento das URLs', () {
+    const url =
+        'https://user:password@storage.example.test/object?signature=private&key=customer#secret';
+    final redacted = OrbitLogger.redact({
+      'path': url,
+      'nested': [
+        {'url': url, 'signature': 'private'},
+      ],
+      'X-Amz-Signature': 'private',
+    });
+    expect(redacted['path'], '/object');
+    expect(redacted['nested'], [
+      {'url': '/object', 'signature': '***'},
+    ]);
+    expect(redacted['X-Amz-Signature'], '***');
+    expect(OrbitLogger.safePath('/objects?signature=private'), '/objects');
+    expect(OrbitLogger.safePath('https://['), '[caminho indisponível]');
+  });
   test('mascara chaves sensíveis', () {
     final redacted = OrbitLogger.redact({
       'method': 'POST',

@@ -183,6 +183,61 @@ Future<LocalMedia> capture(MemoryMediaFileStore files) => intakeEvidence(
 );
 
 void main() {
+  test(
+    'recupera mídias válidas e preserva metadados e bytes danificados',
+    () async {
+      final file = MemoryJournalFile();
+      final files = MemoryMediaFileStore();
+      final media = await capture(files);
+      final protectedPath = await files.persist('damaged', '.png', [5, 6]);
+      final broken = {'path': protectedPath, 'scope': scope.toJson()};
+      final raw = jsonEncode({
+        'version': 1,
+        'media': [broken, media.toJson()],
+      });
+      await file.write(raw);
+      final harness = build(Backend(), file: file, files: files);
+      await harness.controller.restore();
+      expect(harness.controller.state.needsRecovery, isTrue);
+      expect(harness.controller.state.pending, 1);
+      expect(await file.read(), raw);
+      await harness.controller.process(manual: true);
+      final reopened = await MediaQueue(file: file, files: files).read();
+      expect(reopened.media, isEmpty);
+      expect(reopened.recovery.single.value, broken);
+      expect(await files.read(protectedPath), [5, 6]);
+      expect(harness.controller.state.needsRecovery, isTrue);
+      expect(
+        harness.controller.state.hasWork,
+        isTrue,
+        reason: 'a interface não deve anunciar que tudo foi sincronizado',
+      );
+      harness.controller.dispose();
+    },
+  );
+
+  test(
+    'fila de mídia ilegível permanece preservada após nova captura',
+    () async {
+      for (final raw in ['{incompleto', '{"version":2,"media":["futuro"]}']) {
+        final file = MemoryJournalFile();
+        await file.write(raw);
+        final files = MemoryMediaFileStore();
+        final queue = MediaQueue(file: file, files: files);
+        expect((await queue.read()).recovery.single.value, raw);
+        expect(await file.read(), raw);
+        final media = await capture(files);
+        await queue.enqueue(media);
+        await queue.mark(media.localMediaId, (m) => m.copyWith(attempts: 1));
+        await queue.detectOrphans();
+        final reopened = await MediaQueue(file: file, files: files).read();
+        expect(reopened.media.single.localMediaId, media.localMediaId);
+        expect(reopened.recovery.single.value, raw);
+        expect(await files.exists(media.path), isTrue);
+      }
+    },
+  );
+
   group('os três passos', () {
     test('reservar, enviar os bytes e finalizar', () async {
       final backend = Backend();

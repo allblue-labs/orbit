@@ -31,6 +31,7 @@ import 'package:orbit_operator/features/authentication/data/auth_repository.dart
 import 'package:orbit_operator/features/authentication/domain/session.dart';
 import 'package:orbit_operator/features/documents/application/documents_providers.dart';
 import 'package:orbit_operator/features/profile/application/profile_providers.dart';
+import 'package:orbit_operator/features/legal/data/legal_repository.dart';
 
 import '../support/fakes.dart';
 import '../support/scripted_adapter.dart';
@@ -211,6 +212,48 @@ void main() {
     );
     auth.use(session(user));
   }
+
+  test(
+    'contexto sem sessão lê documentos públicos sem abrir o cliente privado',
+    () async {
+      custom = (request) async {
+        expect(request.path, '/legal/documents/privacidade');
+        expect(
+          request.headers.keys.map((k) => k.toLowerCase()),
+          isNot(contains('authorization')),
+        );
+        return jsonResponse(
+          envelope({
+            'title': 'Política de Privacidade',
+            'version': '1',
+            'effectiveAt': '2026-10-26',
+            'provider': {'name': 'Allblue Labs'},
+            'sections': [],
+          }),
+        );
+      };
+      auth.out();
+      final anonymous = runtime(null);
+      expect(
+        (await anonymous.container.read(
+          legalDocumentProvider(LegalDocumentKind.privacy).future,
+        )).title,
+        'Política de Privacidade',
+      );
+      await expectLater(
+        anonymous.container
+            .read(apiClientProvider)
+            .get<dynamic>('/identity/me'),
+        throwsA(
+          isA<OrbitException>().having(
+            (e) => e.code,
+            'code',
+            'SESSION_CHANGED',
+          ),
+        ),
+      );
+    },
+  );
 
   test(
     'troca de usuário na mesma organização não reutiliza avatar nem documentos',

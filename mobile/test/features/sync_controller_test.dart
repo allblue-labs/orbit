@@ -186,6 +186,41 @@ class DelayedInitialPull extends Backend {
 
 void main() {
   test(
+    'registros ilegíveis exigem recuperação sem impedir envio dos válidos',
+    () async {
+      final file = MemoryJournalFile();
+      final valid = PendingCommand(
+        envelope: envelope(1),
+        scope: scope,
+        state: PendingCommandState.pending,
+        enqueuedAt: DateTime.now(),
+      );
+      final raw = jsonEncode({
+        'version': 1,
+        'commands': ['quebrado', valid.toJson()],
+        'receipts': [],
+      });
+      await file.write(raw);
+      final backend = Backend(
+        onPush: (commands) => [receipt(1, 'APPLIED')],
+        onPull: (_) => pullPage(),
+      );
+      final harness = build(backend, journalFile: file);
+      await harness.controller.restore();
+      expect(harness.controller.state.needsRecovery, isTrue);
+      expect(harness.controller.state.pending, 1);
+      await harness.controller.sync(manual: true);
+      expect(backend.pushes.single, hasLength(1));
+      expect(backend.pushes.single.single['commandId'], uuid(1));
+      expect(harness.controller.state.needsAttention, isTrue);
+      expect(
+        (await CommandJournal(file: file).read()).recovery.single.value,
+        'quebrado',
+      );
+      harness.controller.dispose();
+    },
+  );
+  test(
     'envia na primeira tentativa o início enfileirado durante um pull em andamento',
     () async {
       final backend = DelayedInitialPull();

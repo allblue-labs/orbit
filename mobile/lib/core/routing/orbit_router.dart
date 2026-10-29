@@ -36,6 +36,8 @@ import '../../features/scheduling/presentation/agenda_screen.dart';
 import '../../features/documents/presentation/documents_screen.dart';
 import '../../features/equipment/presentation/equipment_scanner_screen.dart';
 import '../../features/customers/presentation/customers_screen.dart';
+import '../../features/legal/data/legal_repository.dart';
+import '../../features/legal/presentation/legal_document_screen.dart';
 import '../../features/notifications/presentation/notifications_screen.dart';
 import 'app_shell.dart';
 import 'orbit_page_route.dart';
@@ -43,6 +45,8 @@ import 'orbit_page_route.dart';
 abstract final class OrbitRoutes {
   static const splash = '/';
   static const login = '/login';
+  static const privacy = '/legal/privacidade';
+  static const terms = '/legal/termos';
 
   /// Troca obrigatória de senha — irmã do login, fora do shell.
   static const changePassword = '/definir-senha';
@@ -150,6 +154,11 @@ final routerProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final auth = ref.read(authControllerProvider);
       final location = state.matchedLocation;
+      // Somente estes documentos públicos passam sem autenticação, inclusive
+      // durante a restauração e a troca obrigatória de senha.
+      if (location == OrbitRoutes.privacy || location == OrbitRoutes.terms) {
+        return null;
+      }
 
       if (auth is AuthRestoring) {
         return location == OrbitRoutes.splash ? null : OrbitRoutes.splash;
@@ -178,6 +187,16 @@ final routerProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
+      OrbitPageRoute(
+        path: OrbitRoutes.privacy,
+        builder: (_, _) =>
+            const LegalDocumentScreen(kind: LegalDocumentKind.privacy),
+      ),
+      OrbitPageRoute(
+        path: OrbitRoutes.terms,
+        builder: (_, _) =>
+            const LegalDocumentScreen(kind: LegalDocumentKind.terms),
+      ),
       OrbitPageRoute(
         path: OrbitRoutes.splash,
         builder: (context, state) => const SplashScreen(),

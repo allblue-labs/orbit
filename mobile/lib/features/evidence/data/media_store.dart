@@ -20,6 +20,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../sync/data/command_journal.dart' show CommandScope;
 import '../../sync/data/journal_file.dart';
+import '../../sync/data/local_queue_recovery.dart';
 import 'local_media.dart';
 
 /// Onde os arquivos ficam.
@@ -132,25 +133,31 @@ String extensionForMime(String mimeType) => switch (mimeType) {
 };
 
 final class MediaQueueSnapshot {
-  const MediaQueueSnapshot({this.media = const []});
+  const MediaQueueSnapshot({this.media = const [], this.recovery = const []});
 
   final List<LocalMedia> media;
+  final List<LocalQueueRecovery> recovery;
 
   Map<String, Object?> toJson() => {
     'version': 1,
     'media': media.map((value) => value.toJson()).toList(),
+    if (recovery.isNotEmpty)
+      'recovery': recovery.map((value) => value.toJson()).toList(),
   };
 
-  factory MediaQueueSnapshot.fromJson(Map<String, Object?> json) =>
-      MediaQueueSnapshot(
-        media: (json['media'] as List<Object?>? ?? const [])
-            .map(
-              (value) => LocalMedia.fromJson(
-                Map<String, Object?>.from(value! as Map<Object?, Object?>),
-              ),
-            )
-            .toList(),
-      );
+  factory MediaQueueSnapshot.fromJson(Map<String, Object?> json) {
+    if (json['version'] != null && json['version'] != 1) {
+      throw const FormatException('Versão local não reconhecida.');
+    }
+    final recovery = readQueueRecovery(json['recovery']);
+    final media = readQueueEntries(
+      json['media'],
+      source: 'media',
+      parse: LocalMedia.fromJson,
+      recovery: recovery,
+    );
+    return MediaQueueSnapshot(media: media, recovery: recovery);
+  }
 }
 
 /// A fila, com escrita serializada.
@@ -163,11 +170,18 @@ class MediaQueue {
   final MediaFileStore _files;
 
   MediaQueueSnapshot? _cache;
+  Future<MediaQueueSnapshot>? _reading;
   Future<void> _tail = Future.value();
 
   MediaFileStore get files => _files;
 
-  Future<MediaQueueSnapshot> read() async {
+  Future<MediaQueueSnapshot> read() {
+    final cached = _cache;
+    if (cached != null) return Future.value(cached);
+    return _reading ??= _load().whenComplete(() => _reading = null);
+  }
+
+  Future<MediaQueueSnapshot> _load() async {
     final cached = _cache;
     if (cached != null) return cached;
     final raw = await _file.read();
@@ -177,11 +191,9 @@ class MediaQueue {
         Map<String, Object?>.from(jsonDecode(raw) as Map<Object?, Object?>),
       );
     } on Object {
-      /// Metadados ilegíveis: os arquivos continuam no disco, mas sem registro
-      /// o app não sabe a que atendimento pertencem. Recomeça vazio em vez de
-      /// travar na abertura; a varredura de órfãos cuida do resto.
-      await _file.write(jsonEncode(const MediaQueueSnapshot().toJson()));
-      return _cache = const MediaQueueSnapshot();
+      return _cache = MediaQueueSnapshot(
+        recovery: [LocalQueueRecovery(source: 'mediaQueue', value: raw)],
+      );
     }
   }
 
@@ -189,7 +201,12 @@ class MediaQueue {
     MediaQueueSnapshot Function(MediaQueueSnapshot current) change,
   ) {
     final completer = _tail.then((_) async {
-      final next = change(await read());
+      final current = await read();
+      final changed = change(current);
+      final next = MediaQueueSnapshot(
+        media: changed.media,
+        recovery: current.recovery,
+      );
       await _file.write(jsonEncode(next.toJson()));
       return _cache = next;
     });

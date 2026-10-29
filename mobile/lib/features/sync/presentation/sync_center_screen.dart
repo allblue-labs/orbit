@@ -40,6 +40,7 @@ class _SyncCenterScreenState extends ConsumerState<SyncCenterScreen> {
   Widget build(BuildContext context) {
     final sync = ref.watch(syncControllerProvider);
     final commands = ref.watch(pendingCommandsProvider);
+    final media = ref.watch(mediaUploadControllerProvider);
 
     return Scaffold(
       backgroundColor: context.orbit.background,
@@ -61,6 +62,16 @@ class _SyncCenterScreenState extends ConsumerState<SyncCenterScreen> {
           ),
           children: [
             _Status(state: sync),
+            if (sync.needsRecovery || media.needsRecovery)
+              const Padding(
+                padding: EdgeInsets.only(top: OrbitSpacing.md),
+                child: OrbitPanel(
+                  tone: OrbitTone.warning,
+                  child: Text(
+                    'Alguns registros locais não puderam ser lidos. As informações originais foram preservadas neste aparelho para recuperação. Fale com o suporte antes de remover os dados do aplicativo.',
+                  ),
+                ),
+              ),
             _NoticeVisibilityControls(
               showHidden: _showHidden,
               onToggle: () => setState(() => _showHidden = !_showHidden),
@@ -393,7 +404,10 @@ class _Status extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        syncPhaseLabels[state.phase.name] ?? 'Sincronização',
+                        state.needsRecovery
+                            ? 'Recuperação necessária'
+                            : syncPhaseLabels[state.phase.name] ??
+                                  'Sincronização',
                         style: OrbitType.itemTitle.copyWith(color: palette.ink),
                       ),
                       const SizedBox(height: 3),

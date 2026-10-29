@@ -35,6 +35,7 @@ class SyncState {
     this.conflicts = 0,
     this.rejected = 0,
     this.expired = 0,
+    this.needsRecovery = false,
     this.lastSyncedAt,
     this.error,
   });
@@ -48,6 +49,7 @@ class SyncState {
   final int conflicts;
   final int rejected;
   final int expired;
+  final bool needsRecovery;
 
   final DateTime? lastSyncedAt;
   final Object? error;
@@ -55,7 +57,8 @@ class SyncState {
   bool get isSyncing => phase == SyncPhase.syncing;
 
   /// Algo parado esperando decisão humana.
-  bool get needsAttention => conflicts + rejected + expired > 0;
+  bool get needsAttention =>
+      conflicts + rejected + expired > 0 || needsRecovery;
 
   bool get hasWork => pending > 0 || needsAttention;
 
@@ -65,6 +68,7 @@ class SyncState {
     int? conflicts,
     int? rejected,
     int? expired,
+    bool? needsRecovery,
     DateTime? lastSyncedAt,
     Object? error,
     bool clearError = false,
@@ -74,6 +78,7 @@ class SyncState {
     conflicts: conflicts ?? this.conflicts,
     rejected: rejected ?? this.rejected,
     expired: expired ?? this.expired,
+    needsRecovery: needsRecovery ?? this.needsRecovery,
     lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
     error: clearError ? null : (error ?? this.error),
   );
@@ -514,6 +519,7 @@ class SyncController extends StateNotifier<SyncState> {
     final mine = snapshot.commands.where((value) => value.scope.matches(scope));
     state = state.copyWith(
       pending: mine.where((value) => value.isSendable).length,
+      needsRecovery: snapshot.recovery.isNotEmpty,
       conflicts: mine
           .where((value) => value.state == PendingCommandState.conflict)
           .length,

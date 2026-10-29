@@ -460,7 +460,7 @@ class OrbitApiClient {
   /// O que a falha diz para o log — e só para ele.
   OrbitDiagnostics _diagnosticar(DioException error) => OrbitDiagnostics(
     transport: error.type.name,
-    path: error.requestOptions.path,
+      path: OrbitLogger.safePath(error.requestOptions.path),
     statusCode: error.response?.statusCode,
     cause: error.error,
   );

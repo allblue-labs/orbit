@@ -552,10 +552,12 @@ Future<void> logout(BuildContext context, WidgetRef ref) async {
       builder: (context) => AlertDialog(
         title: const Text('Sair com ações não sincronizadas?'),
         content: Text(
-          '${sync.pending + sync.conflicts + sync.rejected + sync.expired} '
-          'ação(ões) ainda não chegaram ao servidor. Elas ficam guardadas '
-          'neste aparelho e serão enviadas quando você entrar de novo com '
-          'esta mesma conta.',
+          sync.needsRecovery
+              ? 'Há registros locais que precisam de recuperação. Eles permanecerão preservados neste aparelho após sair da conta.'
+              : '${sync.pending + sync.conflicts + sync.rejected + sync.expired} '
+                    'ação(ões) ainda não chegaram ao servidor. Elas ficam guardadas '
+                    'neste aparelho e serão enviadas quando você entrar de novo com '
+                    'esta mesma conta.',
         ),
         actions: [
           TextButton(

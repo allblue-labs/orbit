@@ -52,9 +52,74 @@ ResponseBody _json(Map<String, dynamic> body, {int status = 200}) {
 
 String _encode(Map<String, dynamic> body) => jsonEncode(body);
 
+class _RecordingLogger extends OrbitLogger {
+  _RecordingLogger() : super(isProduction: true);
+  final events = <Map<String, Object?>?>[];
+  @override
+  void info(String message, {Map<String, Object?>? data}) => events.add(data);
+}
+
 void main() {
   final environment = OrbitEnvironment.fromDefines();
   const logger = OrbitLogger(isProduction: true);
+
+  for (final method in ['GET', 'PUT']) {
+    for (final status in [200, 403]) {
+      test(
+        '$method assinado ($status) mantém assinatura só na requisição',
+        () async {
+          final logs = _RecordingLogger();
+          final adapter = _ScriptedAdapter(
+            (_) async => ResponseBody.fromBytes([1, 2], status),
+          );
+          final client = OrbitApiClient.create(
+            environment: environment,
+            storage: InMemoryTokenStorage(
+              const TokenPair(
+                accessToken: 'secret-token',
+                refreshToken: 'secret-refresh',
+                expiresIn: 900,
+              ),
+            ),
+            logger: logs,
+            dio: Dio()..httpClientAdapter = adapter,
+          );
+          final url = Uri.parse(
+            'https://storage.example.test/object?signature=private-signature&key=customer-path',
+          );
+          final request = method == 'GET'
+              ? client.getBytes(url: url)
+              : client.putBytes(url: url, bytes: [1, 2], headers: {});
+          if (status == 200) {
+            await request;
+          } else {
+            await expectLater(
+              request,
+              throwsA(
+                isA<OrbitException>().having(
+                  (e) => e.diagnostics?.path,
+                  'diagnostic path',
+                  '/object',
+                ),
+              ),
+            );
+          }
+          expect(
+            adapter.requests.single.uri.queryParameters['signature'],
+            'private-signature',
+          );
+          expect(
+            adapter.requests.single.headers.keys.map((e) => e.toLowerCase()),
+            isNot(contains('authorization')),
+          );
+          expect(logs.events, isNotEmpty);
+          expect(logs.events.toString(), isNot(contains('private-signature')));
+          expect(logs.events.toString(), isNot(contains('customer-path')));
+          expect(logs.events.map((e) => e?['path']), everyElement('/object'));
+        },
+      );
+    }
+  }
 
   ({OrbitApiClient client, _ScriptedAdapter adapter, _ScriptedAdapter plain})
   build({

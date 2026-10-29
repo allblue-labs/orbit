@@ -13,6 +13,7 @@ import '../features/artifact/data/document_file.dart';
 import '../features/authentication/application/auth_controller.dart';
 import '../features/authentication/domain/session.dart';
 import '../features/notifications/application/push_providers.dart';
+import '../features/legal/data/legal_repository.dart';
 import '../features/sync/application/sync_providers.dart';
 import '../features/evidence/application/evidence_providers.dart'
     show mediaQueueProvider;
@@ -74,6 +75,9 @@ class SessionRuntime {
         sharedPreferencesProvider.overrideWithValue(preferences),
         connectivityProvider.overrideWithValue(root.read(connectivityProvider)),
         apiClientProvider.overrideWithValue(client),
+        legalRepositoryProvider.overrideWithValue(
+          root.read(legalRepositoryProvider),
+        ),
         readCacheProvider.overrideWithValue(cache),
         // These journals already carry an explicit owner on every entry. Share
         // their serialized stores, never a running controller, across sessions.

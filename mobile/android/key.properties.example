@@ -1,0 +1,6 @@
+# Copie para key.properties, ignorado pelo Git. Caminho absoluto recomendado.
+# Não coloque a chave ou as senhas no repositório.
+storeFile=/CAMINHO/PRIVADO/orbit-upload.jks
+storePassword=PREENCHA_LOCALMENTE
+keyAlias=orbit-upload
+keyPassword=PREENCHA_LOCALMENTE

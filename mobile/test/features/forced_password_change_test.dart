@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:orbit_operator/core/contracts/session_contracts.dart';
 import 'package:orbit_operator/core/network/session_authenticator.dart';
 import 'package:orbit_operator/core/observability/orbit_logger.dart';
@@ -59,8 +60,11 @@ final _direitos = Entitlements.fromJson(const {
 
 void main() {
   late _MockAuthRepository repositorio;
+  late SharedPreferences preferences;
 
-  setUp(() {
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    preferences = await SharedPreferences.getInstance();
     repositorio = _MockAuthRepository();
     when(
       () => repositorio.loadProfile(),
@@ -132,7 +136,10 @@ void main() {
     );
 
     final container = ProviderContainer(
-      overrides: [authControllerProvider.overrideWith((ref) => controlador)],
+      overrides: [
+        authControllerProvider.overrideWith((ref) => controlador),
+        sharedPreferencesProvider.overrideWithValue(preferences),
+      ],
     );
     addTearDown(container.dispose);
 
@@ -176,7 +183,10 @@ void main() {
     );
 
     final container = ProviderContainer(
-      overrides: [authControllerProvider.overrideWith((ref) => controlador)],
+      overrides: [
+        authControllerProvider.overrideWith((ref) => controlador),
+        sharedPreferencesProvider.overrideWithValue(preferences),
+      ],
     );
     addTearDown(container.dispose);
 
@@ -193,7 +203,10 @@ void main() {
       currentPassword: 'provisoria',
       newPassword: 'a-minha-agora',
     );
-    await tester.pumpAndSettle();
+    // A home pode manter loaders das consultas reais. O que este teste
+    // verifica é a transição de rota após trocar a credencial.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
 
     expect(
       router.routerDelegate.currentConfiguration.uri.path,

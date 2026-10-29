@@ -211,7 +211,7 @@ class LoggingInterceptor extends Interceptor {
       'http',
       data: {
         'method': options.method,
-        'path': options.path,
+        'path': OrbitLogger.safePath(options.path),
         'status': status,
         'durationMs': duration,
         'requestId': options.headers[ContextHeaders.requestId],
@@ -276,7 +276,7 @@ class ErrorMappingInterceptor extends Interceptor {
 
       /// Só o caminho. A query carrega identificadores e filtros, e nada disso
       /// é necessário para correlacionar com o log do servidor.
-      path: err.requestOptions.path,
+      path: OrbitLogger.safePath(err.requestOptions.path),
       statusCode: err.response?.statusCode,
       cause: err.error,
     );
