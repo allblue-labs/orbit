@@ -36,6 +36,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Loader2, Search, Users } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { MutationError } from "@/components/artifact-studio/mutation-error";
 import { Input } from "@/components/ui/input";
 import {
   Popover,
@@ -56,6 +57,7 @@ export function CustomerPicker({
   /** Rótulo da opção que limpa a escolha. Ausente, não há como limpar. */
   anyLabel,
   disabled = false,
+  required = false,
 }: {
   id: string;
   value: string | undefined;
@@ -64,6 +66,7 @@ export function CustomerPicker({
   placeholder?: string;
   anyLabel?: string;
   disabled?: boolean;
+  required?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [term, setTerm] = useState("");
@@ -99,6 +102,10 @@ export function CustomerPicker({
           type="button"
           variant="outline"
           disabled={disabled}
+          role="combobox"
+          aria-expanded={open}
+          aria-haspopup="dialog"
+          aria-required={required || undefined}
           className="w-full justify-start font-normal"
         >
           <Users
@@ -122,6 +129,7 @@ export function CustomerPicker({
               aria-hidden
             />
             <Input
+              aria-label="Buscar cliente"
               value={term}
               onChange={(event) => setTerm(event.target.value)}
               placeholder="Buscar por nome ou documento"
@@ -131,19 +139,36 @@ export function CustomerPicker({
           </div>
         </div>
 
-        <Results
-          customers={customers}
-          value={value}
-          anyLabel={anyLabel}
-          isPending={query.isPending}
-          isFetchingNextPage={query.isFetchingNextPage}
-          hasNextPage={query.hasNextPage}
-          onLoadMore={() => void query.fetchNextPage()}
-          onPick={(customer) => {
-            onChange(customer);
-            setOpen(false);
-          }}
-        />
+        {query.isError ? (
+          <div className="space-y-3 p-3">
+            <p className="text-sm font-medium">
+              Não foi possível carregar os clientes.
+            </p>
+            <MutationError error={query.error} />
+            <Button
+              type="button"
+              variant="outline"
+              disabled={query.isFetching}
+              onClick={() => void query.refetch()}
+            >
+              Tentar novamente
+            </Button>
+          </div>
+        ) : (
+          <Results
+            customers={customers}
+            value={value}
+            anyLabel={anyLabel}
+            isPending={query.isPending}
+            isFetchingNextPage={query.isFetchingNextPage}
+            hasNextPage={query.hasNextPage}
+            onLoadMore={() => void query.fetchNextPage()}
+            onPick={(customer) => {
+              onChange(customer);
+              setOpen(false);
+            }}
+          />
+        )}
       </PopoverContent>
     </Popover>
   );
@@ -206,7 +231,11 @@ function Results({
   }
 
   return (
-    <div className="max-h-72 overflow-y-auto p-1">
+    <div
+      role="group"
+      aria-label="Clientes encontrados"
+      className="max-h-72 overflow-y-auto p-1"
+    >
       {anyLabel ? (
         <Option
           label={anyLabel}

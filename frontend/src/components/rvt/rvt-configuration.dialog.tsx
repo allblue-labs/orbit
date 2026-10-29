@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { MutationError } from "@/components/artifact-studio/mutation-error";
 import { PostalCodeField } from "@/components/address/postal-code-field";
+import { CustomerPicker } from "@/components/customers/customer-picker";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -30,10 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  useCustomersList,
-  useCustomerAddresses,
-} from "@/hooks/customers/use-customers";
+import { useCustomerAddresses } from "@/hooks/customers/use-customers";
 import { useAssetsList } from "@/hooks/assets/use-assets";
 import {
   useCreateRvtConfiguration,
@@ -93,11 +91,6 @@ export function RvtConfigurationForm({
   );
   const timezone = configuration?.timezone ?? timeZone;
   const [step, setStep] = useState(0);
-  const [customerSearch, setCustomerSearch] = useState("");
-  const customers = useCustomersList({
-    search: customerSearch || undefined,
-    limit: 100,
-  });
   const [customerId, setCustomerId] = useState(
     configuration?.customer.id ?? "",
   );
@@ -284,52 +277,33 @@ export function RvtConfigurationForm({
                 }))}
               />
             )}
-            {!configuration && (
-              <Input
-                aria-label="Buscar cliente"
-                placeholder="Buscar cliente pelo nome ou documento"
-                value={customerSearch}
-                onChange={(event) => setCustomerSearch(event.target.value)}
+            <div className="space-y-2">
+              <Label htmlFor="rvt-customer">Cliente *</Label>
+              <CustomerPicker
+                id="rvt-customer"
+                value={customerId || undefined}
+                selectedLabel={customerName || undefined}
+                required
+                disabled={Boolean(configuration)}
+                onChange={(customer) => {
+                  if (customer?.id === customerId) return;
+                  setCustomerId(customer?.id ?? "");
+                  setAddressId("");
+                  setEquipment([]);
+                  setEquipmentPage(1);
+                  setCustomerName(
+                    customer?.tradeName || customer?.legalName || "",
+                  );
+                  setLocation({
+                    ...record(customer?.address),
+                    state:
+                      record(customer?.address).stateCode ??
+                      record(customer?.address).state ??
+                      "",
+                  });
+                }}
               />
-            )}
-            <RvtSelect
-              label="Cliente *"
-              value={customerId}
-              disabled={Boolean(configuration)}
-              onChange={(id) => {
-                setCustomerId(id);
-                setAddressId("");
-                setEquipment([]);
-                setEquipmentPage(1);
-                const customer = customers.data?.data.find(
-                  (item) => item.id === id,
-                );
-                setCustomerName(
-                  customer?.tradeName || customer?.legalName || "",
-                );
-                setLocation({
-                  ...record(customer?.address),
-                  state:
-                    record(customer?.address).stateCode ??
-                    record(customer?.address).state ??
-                    "",
-                });
-              }}
-              options={
-                configuration
-                  ? [
-                      {
-                        id: configuration.customer.id,
-                        label: configuration.customer.name,
-                      },
-                    ]
-                  : (customers.data?.data ?? []).map((item) => ({
-                      id: item.id,
-                      label: item.tradeName || item.legalName,
-                    }))
-              }
-            />
-            <MutationError error={customers.error} />
+            </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field
                 label="Código *"
