@@ -22,7 +22,6 @@ import {
 } from '../subscription-plans/plan-access';
 import {
   CreateNotificationDto,
-  NotificationPreferenceDto,
   NotificationQueryDto,
   RegisterPushSubscriptionDto,
   UnregisterPushSubscriptionDto,
@@ -40,27 +39,6 @@ export class NotificationController {
   @Permissions('notifications.read')
   list(@Req() req: IdentityRequest, @Query() query: NotificationQueryDto) {
     return this.notifications.list(this.org(req), req.identity!.id, query);
-  }
-
-  @Get('preferences')
-  @Capabilities('notifications.read')
-  @Permissions('notifications.read')
-  preferences(@Req() req: IdentityRequest) {
-    return this.notifications.preferences(this.org(req), req.identity!.id);
-  }
-
-  @Patch('preferences')
-  @Capabilities('notifications.read')
-  @Permissions('notifications.read')
-  setPreference(
-    @Req() req: IdentityRequest,
-    @Body() input: NotificationPreferenceDto,
-  ) {
-    return this.notifications.preference(
-      this.org(req),
-      req.identity!.id,
-      input,
-    );
   }
 
   @Post('push-subscriptions')
