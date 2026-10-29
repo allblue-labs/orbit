@@ -17,6 +17,8 @@ import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
@@ -594,6 +596,437 @@ describe('Quotes (e2e)', () => {
       where: { data: { path: ['quoteId'], equals: quote.id } },
     });
     expect(operations).toBe(1);
+  }, 90000);
+
+  it('converte preservando endereço e equipamentos, atribui técnico e agenda pela criação canônica', async () => {
+    const unit = await prisma.businessUnit.findUniqueOrThrow({
+      where: { id: tenant.businessUnitId },
+    });
+    const org = await prisma.organization.findUniqueOrThrow({
+      where: { id: unit.organizationId },
+    });
+    await prisma.professionalProfile.upsert({
+      where: {
+        organizationId_userId: {
+          organizationId: org.id,
+          userId: org.ownerUserId,
+        },
+      },
+      create: {
+        organizationId: org.id,
+        userId: org.ownerUserId,
+        fieldTechnicianEnabled: true,
+      },
+      update: { fieldTechnicianEnabled: true },
+    });
+    const address = await prisma.customerAddress.create({
+      data: {
+        organizationId: org.id,
+        customerId: tenant.customerId,
+        label: 'Loja Centro',
+        street: 'Rua da Aurora',
+        city: 'Recife',
+        stateCode: 'PE',
+      },
+    });
+    const asset = await prisma.asset.create({
+      data: {
+        organizationId: org.id,
+        businessUnitId: unit.id,
+        customerId: tenant.customerId,
+        name: 'Split recepção',
+        category: 'EQUIPMENT',
+      },
+    });
+    const quote = await createQuote(tenant);
+    await prisma.quote.update({
+      where: { id: quote.id },
+      data: {
+        serviceAddressId: address.id,
+        assets: { create: { assetId: asset.id } },
+      },
+    });
+    await auth(http().post(`/api/v1/quotes/${quote.id}/items`), tenant.token)
+      .send({ description: 'Manutenção', quantity: 1, unitPrice: 100 })
+      .expect(201);
+    await auth(
+      http().post(`/api/v1/quotes/${quote.id}/send`),
+      tenant.token,
+    ).expect(201);
+    await auth(
+      http().post(`/api/v1/quotes/${quote.id}/approve`),
+      tenant.token,
+    ).expect(201);
+    const converted = body(
+      await auth(
+        http().post(`/api/v1/quotes/${quote.id}/convert-to-operation`),
+        tenant.token,
+      )
+        .send({
+          responsibleFieldTechnicianId: org.ownerUserId,
+          scheduledStart: '2026-11-20T13:00:00Z',
+          scheduledEnd: '2026-11-20T14:00:00Z',
+          sector: 'Recepção',
+          amountVisibleInField: true,
+        })
+        .expect(201),
+    );
+    const operation = await prisma.operation.findUniqueOrThrow({
+      where: { id: converted.operation!.id },
+      include: { assets: true, users: true },
+    });
+    expect(operation.customerAddressId).toBe(address.id);
+    expect(operation.responsibleFieldTechnicianId).toBe(org.ownerUserId);
+    expect(operation.scheduledStart?.toISOString()).toBe(
+      '2026-11-20T13:00:00.000Z',
+    );
+    expect(operation.status).toBe('SCHEDULED');
+    expect(operation.amountVisibleInField).toBe(true);
+    expect(operation.manualAmount).toBeNull();
+    expect(operation.sector).toBe('Recepção');
+    expect(operation.assets.map((item) => item.assetId)).toEqual([asset.id]);
+    expect(operation.users.map((item) => item.userId)).toContain(
+      org.ownerUserId,
+    );
+    expect(
+      await prisma.domainEvent.count({
+        where: { entityId: operation.id, type: 'operation.created' },
+      }),
+    ).toBe(1);
+  }, 90000);
+
+  it('converte e notifica outro técnico e seu auxiliar sem violar a RLS nem abortar a transação', async () => {
+    const unit = await prisma.businessUnit.findUniqueOrThrow({
+      where: { id: tenant.businessUnitId },
+    });
+    const assignees: string[] = [];
+    for (const roleKey of ['FIELD_TECHNICIAN', 'ASSISTANT_TECHNICIAN']) {
+      const role = await prisma.role.findFirstOrThrow({
+        where: {
+          key: roleKey,
+          organizationId: unit.organizationId,
+          deletedAt: null,
+        },
+      });
+      const email = `quotes.assigned.${randomUUID()}@orbit.local`;
+      const user = await prisma.user.create({
+        data: {
+          email,
+          normalizedEmail: email,
+          firstName: 'Equipe',
+          lastName: 'Teste',
+          displayName: `Equipe ${roleKey}`,
+          status: 'ACTIVE',
+          organizationMemberships: {
+            create: { organizationId: unit.organizationId, roleId: role.id },
+          },
+          businessUnitMemberships: {
+            create: {
+              organizationId: unit.organizationId,
+              businessUnitId: unit.id,
+              roleId: role.id,
+            },
+          },
+          professionalProfiles: {
+            create: {
+              organizationId: unit.organizationId,
+              fieldTechnicianEnabled: roleKey === 'FIELD_TECHNICIAN',
+            },
+          },
+        },
+      });
+      assignees.push(user.id);
+    }
+    const quote = await createQuote(tenant);
+    await auth(http().post(`/api/v1/quotes/${quote.id}/items`), tenant.token)
+      .send({ description: 'Atendimento', quantity: 1, unitPrice: 275 })
+      .expect(201);
+    await auth(
+      http().post(`/api/v1/quotes/${quote.id}/send`),
+      tenant.token,
+    ).expect(201);
+    await auth(
+      http().post(`/api/v1/quotes/${quote.id}/approve`),
+      tenant.token,
+    ).expect(201);
+    const converted = body(
+      await auth(
+        http().post(`/api/v1/quotes/${quote.id}/convert-to-operation`),
+        tenant.token,
+      )
+        .send({
+          responsibleFieldTechnicianId: assignees[0],
+          auxiliaryTechnicianIds: [assignees[1]],
+          amountVisibleInField: true,
+        })
+        .expect(201),
+    );
+    const operationId = converted.operation!.id;
+    expect(
+      await prisma.backgroundJob.count({
+        where: {
+          organizationId: unit.organizationId,
+          queue: 'mobile.notification.materialize',
+          payload: { path: ['resourceId'], equals: operationId },
+        },
+      }),
+    ).toBe(2);
+    await worker.tick();
+    await worker.tick();
+    const notifications = await prisma.notification.findMany({
+      where: {
+        organizationId: unit.organizationId,
+        type: 'WORK_ASSIGNED',
+        payload: { path: ['resourceId'], equals: operationId },
+      },
+    });
+    expect(notifications.map((item) => item.recipientUserId).sort()).toEqual(
+      assignees.sort(),
+    );
+    const response = await auth(
+      http().get(`/api/v1/operations/${operationId}`),
+      tenant.token,
+    ).expect(200);
+    expect(
+      (
+        response.body as Envelope<{
+          manualAmount: string | null;
+          amountVisibleInField: boolean;
+        }>
+      ).data,
+    ).toMatchObject({ manualAmount: null, amountVisibleInField: true });
+    expect(
+      (
+        await prisma.quote.findUniqueOrThrow({ where: { id: quote.id } })
+      ).total.toFixed(2),
+    ).toBe('275.00');
+  }, 90000);
+
+  it('avisa sobre operações e recorrências a até dez minutos sem impedir a criação e sem vazar outra organização', async () => {
+    const unit = await prisma.businessUnit.findUniqueOrThrow({
+      where: { id: tenant.businessUnitId },
+    });
+    const org = await prisma.organization.findUniqueOrThrow({
+      where: { id: unit.organizationId },
+    });
+    await prisma.professionalProfile.upsert({
+      where: {
+        organizationId_userId: {
+          organizationId: org.id,
+          userId: org.ownerUserId,
+        },
+      },
+      create: {
+        organizationId: org.id,
+        userId: org.ownerUserId,
+        fieldTechnicianEnabled: true,
+      },
+      update: { fieldTechnicianEnabled: true },
+    });
+    const operation = await prisma.operation.create({
+      data: {
+        organizationId: org.id,
+        businessUnitId: unit.id,
+        code: 'AGENDA-AVISO',
+        kind: 'MAINTENANCE',
+        title: 'Visita já agendada',
+        createdById: org.ownerUserId,
+        responsibleFieldTechnicianId: org.ownerUserId,
+        scheduledStart: new Date('2026-12-02T13:00:00Z'),
+        scheduledEnd: new Date('2026-12-02T14:00:00Z'),
+      },
+    });
+    const check = async (scheduledStart: string, extra: object = {}) => {
+      const result = await auth(
+        http().post('/api/v1/operations/schedule-check'),
+        tenant.token,
+      )
+        .send({ userIds: [org.ownerUserId], scheduledStart, ...extra })
+        .expect(201);
+      return (result.body as Envelope<{ title: string }[]>).data;
+    };
+    expect(await check('2026-12-02T14:10:00Z')).toHaveLength(1);
+    expect(await check('2026-12-02T14:10:01Z')).toHaveLength(0);
+    expect(await check('2026-12-03T13:00:00Z')).toHaveLength(0);
+    expect(
+      await check('2026-12-02T13:00:00Z', { excludeOperationId: operation.id }),
+    ).toHaveLength(0);
+    await auth(http().post('/api/v1/operations'), tenant.token)
+      .send({
+        businessUnitId: unit.id,
+        code: 'AGENDA-CONFIRMADA',
+        kind: 'MAINTENANCE',
+        title: 'Atendimento confirmado mesmo com conflito',
+        responsibleFieldTechnicianId: org.ownerUserId,
+        scheduledStart: '2026-12-02T13:05:00Z',
+      })
+      .expect(201);
+    const foreign = await auth(
+      http().post('/api/v1/operations/schedule-check'),
+      neighbour.token,
+    )
+      .send({
+        userIds: [org.ownerUserId],
+        scheduledStart: '2026-12-02T13:00:00Z',
+      })
+      .expect(201);
+    expect((foreign.body as Envelope<unknown[]>).data).toEqual([]);
+    const calendar = await prisma.schedulingCalendar.create({
+      data: {
+        organizationId: org.id,
+        businessUnitId: unit.id,
+        key: 'schedule-notice',
+        name: 'Agenda de teste',
+      },
+    });
+    const event = await prisma.schedulingEvent.create({
+      data: {
+        organizationId: org.id,
+        businessUnitId: unit.id,
+        calendarId: calendar.id,
+        createdById: org.ownerUserId,
+        title: 'Visita diária',
+        type: 'OPERATION',
+        sourceModule: 'manual',
+        sourceEntityType: 'EVENT',
+        startsAt: new Date('2026-12-01T10:00:00Z'),
+        endsAt: new Date('2026-12-01T11:00:00Z'),
+        timezone: 'UTC',
+        allocations: {
+          create: { resourceType: 'USER', userId: org.ownerUserId },
+        },
+        recurrence: {
+          create: {
+            frequency: 'DAILY',
+            timezone: 'UTC',
+            until: new Date('2026-12-31'),
+            exceptions: [new Date('2026-12-03T10:00:00Z')],
+          },
+        },
+      },
+    });
+    expect(await check('2026-12-02T11:05:00Z')).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ title: 'Visita diária' }),
+      ]),
+    );
+    const calendarInput = {
+      calendarId: calendar.id,
+      businessUnitId: unit.id,
+      title: 'Agenda próxima confirmada',
+      type: 'OPERATION',
+      startsAt: '2026-12-02T11:05:00Z',
+      endsAt: '2026-12-02T12:00:00Z',
+      timezone: 'UTC',
+      sourceModule: 'manual',
+      sourceEntityType: 'EVENT',
+      allocations: [{ resourceType: 'USER', userId: org.ownerUserId }],
+    };
+    const warning = await auth(
+      http().post('/api/v1/scheduling/events'),
+      tenant.token,
+    )
+      .send(calendarInput)
+      .expect(409);
+    const warningError = (
+      warning.body as { error: { code: string; message: string } }
+    ).error;
+    expect(warningError.code).toBe('SCHEDULING_CONFLICT');
+    expect(warningError.message).toContain('10 minutos');
+    const confirmed = await auth(
+      http().post('/api/v1/scheduling/events'),
+      tenant.token,
+    )
+      .send({ ...calendarInput, allowConflicts: true })
+      .expect(201);
+    await prisma.schedulingEvent.update({
+      where: { id: (confirmed.body as Envelope<{ id: string }>).data.id },
+      data: { deletedAt: new Date() },
+    });
+    expect(await check('2026-12-03T11:05:00Z')).toHaveLength(0);
+    expect(
+      await check('2026-12-02T11:05:00Z', { excludeEventId: event.id }),
+    ).toHaveLength(0);
+    await prisma.schedulingEvent.update({
+      where: { id: event.id },
+      data: { status: 'CANCELLED' },
+    });
+    expect(await check('2026-12-02T11:05:00Z')).toHaveLength(0);
+  }, 90000);
+
+  it('retira pendências legadas abertas pelo próprio técnico sem alterar liberações revogadas pelo escritório', async () => {
+    const unit = await prisma.businessUnit.findUniqueOrThrow({
+      where: { id: tenant.businessUnitId },
+    });
+    const org = await prisma.organization.findUniqueOrThrow({
+      where: { id: unit.organizationId },
+    });
+    const operations: string[] = [];
+    for (const type of ['walkin', 'revoked', 'office']) {
+      const op = await prisma.operation.create({
+        data: {
+          organizationId: org.id,
+          businessUnitId: unit.id,
+          customerId: tenant.customerId,
+          createdById: org.ownerUserId,
+          responsibleFieldTechnicianId: org.ownerUserId,
+          code: `LEGADO-${type}`,
+          title: 'Atendimento legado',
+          kind: 'MAINTENANCE',
+          data: { source: type === 'office' ? 'WEB' : 'MOBILE_WALK_IN' },
+        },
+      });
+      operations.push(op.id);
+      if (type !== 'office')
+        await prisma.operationWalkInCommand.create({
+          data: {
+            organizationId: org.id,
+            businessUnitId: unit.id,
+            actorId: org.ownerUserId,
+            idempotencyKey: `legacy-${op.id}`,
+            payloadHash: 'f'.repeat(64),
+            operationId: op.id,
+            customerId: tenant.customerId,
+          },
+        });
+      if (type === 'revoked')
+        await prisma.operationHistory.create({
+          data: {
+            operationId: op.id,
+            userId: org.ownerUserId,
+            action: 'ASSIGNMENT_AUTHORIZATION_REVOKED',
+          },
+        });
+    }
+    const migration = await readFile(
+      join(
+        __dirname,
+        '../prisma/migrations/20261028200000_self_started_walk_in_authorization/migration.sql',
+      ),
+      'utf8',
+    );
+    await prisma.$executeRawUnsafe(migration);
+    expect(
+      (
+        await prisma.operation.findUniqueOrThrow({
+          where: { id: operations[0] },
+        })
+      ).authorizedAt,
+    ).not.toBeNull();
+    for (const id of operations.slice(1))
+      expect(
+        (await prisma.operation.findUniqueOrThrow({ where: { id } }))
+          .authorizedAt,
+      ).toBeNull();
+    const response = await auth(
+      http().get('/api/v1/operations?pendingAuthorization=true&limit=100'),
+      tenant.token,
+    ).expect(200);
+    const ids = (
+      response.body as Envelope<{ data: { id: string }[] }>
+    ).data.data.map((op) => op.id);
+    expect(ids).not.toContain(operations[0]);
+    expect(ids).toEqual(expect.arrayContaining(operations.slice(1)));
   }, 90000);
 
   it('não converte o que não foi aprovado', async () => {

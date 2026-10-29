@@ -34,6 +34,9 @@ import {
   type StorageProvider,
 } from '../storage/storage.types';
 import { Prisma } from '@prisma/client';
+import { OperationService } from '../operations/operation.service';
+import type { CreateOperationDto } from '../operations/dto/operation.dto';
+import { createHash } from 'node:crypto';
 import {
   ConflictException,
   EntityNotFoundException,
@@ -182,6 +185,7 @@ export class QuoteService {
     private readonly repository: QuoteRepository,
     private readonly documents: QuoteDocumentService,
     @Inject(STORAGE_PROVIDER) private readonly storage: StorageProvider,
+    private readonly operations: OperationService,
   ) {}
 
   /* ---------------------------------------------------------------- */
@@ -222,6 +226,25 @@ export class QuoteService {
        antes de haver escolha. */
     const endereco = fonte.serviceAddress ?? fonte.customer.addresses[0];
     const responsavel = await this.responsibleSignature(fonte.responsible);
+    const acceptance = await this.repository.latestCustomerSignature(
+      id,
+      organizationId,
+    );
+    const customerSignature = acceptance
+      ? await this.storage.get({
+          bucket: acceptance.file.bucket,
+          objectKey: acceptance.file.objectKey,
+        })
+      : undefined;
+    if (
+      acceptance &&
+      customerSignature &&
+      createHash('sha256').update(customerSignature).digest('hex') !==
+        acceptance.file.sha256
+    )
+      throw new ConflictException(
+        'Não foi possível conferir a assinatura do cliente.',
+      );
     const validUntil = fonte.validUntil
       ? toDateOnlyString(fonte.validUntil)
       : undefined;
@@ -248,6 +271,18 @@ export class QuoteService {
         website: unidade?.website ?? undefined,
       },
       quote: {
+        acceptance: acceptance
+          ? {
+              signerName: acceptance.signerName,
+              signedAt: new Intl.DateTimeFormat('pt-BR', {
+                timeZone: unidade?.timezone ?? 'America/Sao_Paulo',
+                dateStyle: 'short',
+                timeStyle: 'short',
+              }).format(acceptance.signedAt),
+              signatureImage: customerSignature,
+              signatureImageMimeType: acceptance.file.mimeType,
+            }
+          : undefined,
         quote: {
           code: fonte.code,
           title: fonte.title,
@@ -896,11 +931,8 @@ export class QuoteService {
    * algo que ninguém contratou. Só uma vez: `operationId` guarda o resultado, e
    * repetir devolve a operação existente em vez de criar a segunda.
    *
-   * **Nada é inventado.** Técnico, execução, checklist e agenda não são
-   * atribuídos: o contrato de `Operation` os trata como decisões posteriores, e
-   * escolhê-los aqui produziria uma ordem de serviço que ninguém combinou. O
-   * que a conversão sabe é quem é o cliente, qual a unidade e o que foi
-   * proposto.
+   * Cliente, equipamentos e valor vêm da proposta aprovada. Endereço, agenda,
+   * equipe e visibilidade do valor são confirmados no modal de conversão.
    */
   async convert(
     id: string,
@@ -928,20 +960,41 @@ export class QuoteService {
 
     const code = await this.operationCode(organizationId, quote.code);
 
-    const converted = await this.repository.convert({
-      quoteId: id,
-      organizationId,
+    const creation: CreateOperationDto = {
       businessUnitId: quote.businessUnit.id,
       customerId: quote.customer.id,
-      actorId,
+      customerAddressId: input.customerAddressId ?? quote.serviceAddress?.id,
+      assetIds: quote.assets.map(({ asset }) => asset.id),
+      sector: input.sector,
+      responsibleFieldTechnicianId: input.responsibleFieldTechnicianId,
+      auxiliaryTechnicianIds: input.auxiliaryTechnicianIds,
+      amountVisibleInField: input.amountVisibleInField ?? false,
       code,
       kind: input.kind ?? 'MAINTENANCE',
       priority: input.priority ?? 'NORMAL',
       title: quote.title,
       description: `Originado do orçamento ${quote.code}.`,
-      scheduledStart: input.scheduledStart ?? null,
-      scheduledEnd: input.scheduledEnd ?? null,
-    });
+      scheduledStart: input.scheduledStart,
+      scheduledEnd: input.scheduledEnd,
+      data: { quoteId: id, source: 'QUOTE' },
+    };
+    const converted = await this.repository.convert(
+      {
+        quoteId: id,
+        organizationId,
+        businessUnitId: quote.businessUnit.id,
+        customerId: quote.customer.id,
+        actorId,
+        code,
+        kind: input.kind ?? 'MAINTENANCE',
+        priority: input.priority ?? 'NORMAL',
+        title: quote.title,
+        description: `Originado do orçamento ${quote.code}.`,
+        scheduledStart: input.scheduledStart ?? null,
+        scheduledEnd: input.scheduledEnd ?? null,
+      },
+      () => this.operations.create(organizationId, actorId, creation),
+    );
 
     /**
      * Perdeu a corrida: outra requisição converteu primeiro, e a operação

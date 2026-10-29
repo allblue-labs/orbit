@@ -120,8 +120,25 @@ export interface SchedulingEventDetail {
     id: string;
     legalName: string;
     tradeName: string | null;
+    phone?: string | null;
+    email?: string | null;
+    address?: unknown;
+    addresses?: readonly unknown[];
   } | null;
-  asset: { id: string; name: string; identifier: string | null } | null;
+  businessUnit?: {
+    id: string;
+    legalName: string;
+    tradeName: string | null;
+  } | null;
+  asset: {
+    id: string;
+    name: string;
+    identifier: string | null;
+    manufacturer?: string | null;
+    model?: string | null;
+    location?: string | null;
+    serialNumber?: string | null;
+  } | null;
   createdBy: { id: string; displayName: string } | null;
 }
 

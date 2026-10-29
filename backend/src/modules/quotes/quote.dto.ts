@@ -2,7 +2,9 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
+  ArrayUnique,
   IsArray,
+  IsBoolean,
   IsDate,
   IsIn,
   IsInt,
@@ -396,13 +398,38 @@ export class CancelQuoteDto {
 /**
  * Conversão em operação.
  *
- * Aceita **apenas** o que o contrato de `Operation` já exige e o que um
- * orçamento não sabe: tipo de serviço e agendamento opcional. Técnico,
- * execução e checklist não são inventados aqui — o `CreateOperationDto` os
- * trata como atribuições posteriores, e adivinhá-los produziria uma ordem de
- * serviço que ninguém combinou.
+ * Complementa a proposta com a previsão, o endereço e a equipe de campo.
+ * A criação usa as mesmas validações e a mesma transação da operação direta.
  */
 export class ConvertQuoteDto {
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  amountVisibleInField?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUIDv7()
+  responsibleFieldTechnicianId?: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ArrayUnique()
+  @IsUUIDv7({ each: true })
+  auxiliaryTechnicianIds?: string[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUIDv7()
+  customerAddressId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  sector?: string;
   @ApiPropertyOptional({
     enum: ['INSTALLATION', 'MAINTENANCE', 'INSPECTION', 'DELIVERY', 'OTHER'],
     default: 'MAINTENANCE',

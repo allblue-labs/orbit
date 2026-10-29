@@ -54,6 +54,12 @@ type Doc = PDFKit.PDFDocument;
 
 /** O que o documento do orçamento precisa saber. Montado pelo serviço. */
 export interface QuoteDocumentInput {
+  readonly acceptance?: {
+    readonly signerName: string;
+    readonly signedAt: string;
+    readonly signatureImage?: Buffer;
+    readonly signatureImageMimeType?: string;
+  };
   readonly quote: {
     readonly code: string;
     readonly title: string;
@@ -447,8 +453,15 @@ function aceite(
       },
       {
         label: 'Aceite do cliente',
-        signerName: input.customer.name ?? input.customer.legalName,
-        roleLabel: 'Data: ____ / ____ / ________',
+        signerName:
+          input.acceptance?.signerName ??
+          input.customer.name ??
+          input.customer.legalName,
+        roleLabel: input.acceptance
+          ? `Aceito em ${input.acceptance.signedAt}`
+          : 'Data: ____ / ____ / ________',
+        image: input.acceptance?.signatureImage,
+        imageMimeType: input.acceptance?.signatureImageMimeType,
       },
     ],
     theme,

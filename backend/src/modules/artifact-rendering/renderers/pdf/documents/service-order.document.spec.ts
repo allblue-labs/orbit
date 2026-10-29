@@ -3,7 +3,7 @@
  *
  * É o documento mais emitido e o mais contestado, então o que se testa aqui é
  * o que a contestação alcança: a equipe inteira impressa (e não um nome só), a
- * pendência que precisa ser lida antes da assinatura, e os códigos de enum do
+ * observação junto à solicitação, e os códigos de enum do
  * banco que não podem chegar ao cliente.
  */
 import { ArtifactPremiumPdfRenderer } from '../artifact-premium-pdf.renderer';
@@ -175,6 +175,43 @@ describe('Ordem de Serviço premium', () => {
     for (const codigo of ['CORRECTIVE', 'HIGH', 'COMPLETED']) {
       expect(texto).not.toContain(codigo);
     }
+    for (const [kind, rotulo] of [
+      ['INSTALLATION', 'Instalação'],
+      ['MAINTENANCE', 'Manutenção'],
+      ['INSPECTION', 'Inspeção'],
+      ['DELIVERY', 'Entrega'],
+      ['OTHER', 'Outro'],
+    ]) {
+      for (const noFormulario of [false, true]) {
+        const input = entrada({ operacao: { kind } });
+        const sections = noFormulario
+          ? input.sections.map((section, index) =>
+              index === 0
+                ? {
+                    ...section,
+                    fields: [
+                      ...section.fields,
+                      {
+                        id: 'tipo_servico',
+                        label: 'Tipo de serviço',
+                        type: 'SELECT',
+                        order: 2,
+                        required: false,
+                        hidden: false,
+                        value: kind,
+                      },
+                    ],
+                  }
+                : section,
+            )
+          : input.sections;
+        const pdf = pdfText(
+          (await renderer.render({ ...input, sections })).bytes,
+        );
+        expect(pdf).toContain(rotulo);
+        expect(pdf).not.toContain(kind);
+      }
+    }
   });
 
   it('separa o que foi pedido do que foi feito', async () => {
@@ -186,17 +223,26 @@ describe('Ordem de Serviço premium', () => {
     expect(texto).toContain('MATERIAIS APLICADOS');
   });
 
-  it('põe a pendência depois da execução e antes do aceite', async () => {
+  it('põe Observações logo após a solicitação e antes dos equipamentos e da execução', async () => {
     const texto = pdfText((await renderer.render(entrada())).bytes);
 
     const execucao = texto.indexOf('PROCEDIMENTOS REALIZADOS');
+    const solicitacao = texto.indexOf(
+      'Unidade do quarto liga e não refrigera.',
+    );
+    const observacoes = texto.indexOf('Observações');
+    const equipamentos = texto.indexOf('Equipamentos atendidos');
     const pendencia = texto.indexOf('Isolamento da suíte');
     const aceite = texto.indexOf('Aceite');
 
     expect(execucao).toBeGreaterThan(-1);
-    /* É o último texto que quem assina lê, e é o que agenda o retorno. */
-    expect(pendencia).toBeGreaterThan(execucao);
+    expect(solicitacao).toBeGreaterThan(-1);
+    expect(observacoes).toBeGreaterThan(solicitacao);
+    expect(pendencia).toBeGreaterThan(observacoes);
+    expect(equipamentos).toBeGreaterThan(pendencia);
+    expect(execucao).toBeGreaterThan(equipamentos);
     expect(aceite).toBeGreaterThan(pendencia);
+    expect(texto).not.toContain('Pendências e observações');
   });
 
   it('omite duração e conclusão do atendimento do documento entregue ao cliente', async () => {
@@ -205,6 +251,7 @@ describe('Ordem de Serviço premium', () => {
     expect(texto).not.toContain('3 h 15 min');
     expect(texto).not.toContain('DURAÇÃO DO ATENDIMENTO');
     expect(texto).not.toContain('CONCLUSÃO DO ATENDIMENTO');
+    expect(texto).not.toContain('ASSUNTO');
   });
 
   it('mantém as datas úteis sem imprimir a trilha de etapas do sistema', async () => {

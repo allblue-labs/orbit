@@ -1,6 +1,18 @@
 import { redactSensitivePath } from './redact-sensitive-path';
 
 describe('redactSensitivePath', () => {
+  it.each(['public/quotes/proposals', 'public/pmoc/contracts'])(
+    'oculta os tokens de %s inclusive nos comandos e downloads',
+    (route) => {
+      for (const suffix of ['', '/document', '/response', '/signature']) {
+        expect(
+          redactSensitivePath(
+            `/api/v1/${route}/secret-token${suffix}?signature=secret`,
+          ),
+        ).toBe(`/api/v1/${route}/[REDACTED]${suffix}`);
+      }
+    },
+  );
   it('never leaves Equipment QR tokens in logged paths', () => {
     expect(
       redactSensitivePath(

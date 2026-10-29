@@ -278,3 +278,9 @@ export interface OperationFieldAcknowledgementReadModel {
    */
   summary: unknown;
 }
+export interface OperationScheduleWarningReadModel {
+  userName: string;
+  title: string;
+  startsAt: string;
+  endsAt: string | null;
+}

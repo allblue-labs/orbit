@@ -274,6 +274,10 @@ export class PmocService {
    */
   async createSignatureLink(id: string, actor: PmocActor) {
     const plan = await this.plan(id, actor);
+    if (plan.status === 'CANCELLED')
+      throw new ConflictException(
+        'Um contrato cancelado não pode receber um link de assinatura.',
+      );
     if (plan._count.coverages === 0) {
       throw new ConflictException(
         'A PMOC plan needs at least one covered equipment before it can be signed',
@@ -281,12 +285,36 @@ export class PmocService {
     }
 
     const token = randomBytes(48).toString('base64url');
+    const document = await this.document(id, actor);
+    const documentObjectKey = `pmoc-contract-documents/${generateUuidV7()}.pdf`;
+    await this.storage.put({
+      bucket: this.storage.defaultBucket,
+      objectKey: documentObjectKey,
+      body: document.bytes,
+      mimeType: 'application/pdf',
+    });
     const link = await this.repository.createSignatureLink({
       organizationId: actor.organizationId,
       planId: plan.id,
       tokenHash: HashHelper.sha256(token),
       expiresAt: validadeDoLink(),
       createdById: actor.actorId,
+      expectedVersion: plan.updatedAt,
+      documentBucket: this.storage.defaultBucket,
+      documentObjectKey,
+      documentSha256: createHash('sha256').update(document.bytes).digest('hex'),
+      publicSummary: {
+        code: plan.code,
+        name: plan.name,
+        startsOn: toDateOnly(plan.startsOn),
+        endsOn: plan.endsOn ? toDateOnly(plan.endsOn) : null,
+        frequencyAmount: plan.frequencyAmount,
+        frequencyUnit: plan.frequencyUnit,
+        coveredEquipment: plan._count.coverages,
+        technicalResponsible: plan.technicalResponsible?.displayName ?? null,
+        customerName: plan.customer.tradeName ?? plan.customer.legalName,
+        emitterName: plan.businessUnit.tradeName ?? plan.businessUnit.legalName,
+      },
     });
 
     return {
@@ -335,6 +363,26 @@ export class PmocService {
           }
         : null,
       expiresAt: linha.expires_at.toISOString(),
+      documentAvailable: linha.document_available === true,
+    };
+  }
+
+  async publicContractDocument(token: string) {
+    const file = await this.repository.publicSignatureDocument(
+      HashHelper.sha256(token),
+    );
+    if (!file) throw new EntityNotFoundException('Contrato');
+    const bytes = await this.storage.get({
+      bucket: file.bucket,
+      objectKey: file.object_key,
+    });
+    if (createHash('sha256').update(bytes).digest('hex') !== file.sha256)
+      throw new ConflictException(
+        'Não foi possível conferir o documento do contrato.',
+      );
+    return {
+      bytes,
+      fileName: `contrato-${file.plan_code.replace(/[^A-Za-z0-9_-]/g, '_')}.pdf`,
     };
   }
 
@@ -380,7 +428,7 @@ export class PmocService {
     const sha256 = createHash('sha256').update(input.signature).digest('hex');
     /* A chave carrega o hash do token, e não o id do plano: ela não pode revelar
        qual contrato é, porque o bucket é compartilhado pela organização. */
-    const objectKey = `pmoc-contract-signatures/${tokenHash}.png`;
+    const objectKey = `pmoc-contract-signatures/${tokenHash}/${generateUuidV7()}.png`;
     const bucket = this.storage.defaultBucket;
 
     await this.storage.put({

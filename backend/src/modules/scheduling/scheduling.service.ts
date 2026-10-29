@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
   ConflictException,
@@ -38,6 +38,7 @@ import {
   localViewRange,
 } from './scheduling-time';
 import { OperationService } from '../operations/operation.service';
+import { OperationScheduleService } from '../operations/operation-schedule.service';
 import { WorkforceRepository } from '../workforce/workforce.repository';
 
 type SchedulingEventRecord = NonNullable<
@@ -51,6 +52,7 @@ export class SchedulingService {
     private readonly recurrence: RecurrenceEngine,
     private readonly operations: OperationService,
     private readonly workforce: WorkforceRepository,
+    @Optional() private readonly scheduleAdvisory?: OperationScheduleService,
   ) {}
 
   listCalendars(organizationId: string, businessUnitId?: string) {
@@ -164,6 +166,11 @@ export class SchedulingService {
       allocations,
     });
     this.assertConflicts(conflicts, input.allowConflicts);
+    await this.assertTechnicianSchedule(
+      organizationId,
+      { ...input, allocations },
+      input.allowConflicts,
+    );
     return this.repository.createEvent(
       {
         organizationId,
@@ -224,6 +231,12 @@ export class SchedulingService {
       id,
     );
     this.assertConflicts(conflicts, input.allowConflicts);
+    await this.assertTechnicianSchedule(
+      organizationId,
+      merged,
+      input.allowConflicts,
+      id,
+    );
     return this.repository.updateEvent(
       id,
       {
@@ -444,6 +457,12 @@ export class SchedulingService {
       eventId,
     );
     this.assertConflicts(conflicts, input.allowConflicts);
+    await this.assertTechnicianSchedule(
+      organizationId,
+      proposed,
+      input.allowConflicts,
+      eventId,
+    );
     return this.repository.addAllocation(
       {
         eventId,
@@ -1233,6 +1252,7 @@ export class SchedulingService {
     const id = '__proposed__';
     return {
       id,
+      businessUnit: null,
       organizationId: '',
       businessUnitId: input.businessUnitId ?? null,
       calendarId: input.calendarId,
@@ -1382,7 +1402,35 @@ export class SchedulingService {
     );
     if (critical.length && !allowConflicts)
       throw new ConflictException(
-        `Scheduling conflict detected: ${critical[0]!.message}`,
+        `Conflito de agenda: ${critical[0]!.message} Confirme para agendar mesmo assim.`,
+        'SCHEDULING_CONFLICT',
+      );
+  }
+
+  private async assertTechnicianSchedule(
+    organizationId: string,
+    input: CreateEventDto,
+    allowConflicts?: boolean,
+    excludeEventId?: string,
+  ) {
+    const userIds = (input.allocations ?? [])
+      .map((item) => item.userId)
+      .filter((id): id is string => Boolean(id));
+    if (allowConflicts || !userIds.length || !this.scheduleAdvisory) return;
+    const warnings = await this.scheduleAdvisory.check(organizationId, {
+      userIds,
+      scheduledStart: input.startsAt,
+      scheduledEnd: input.endsAt,
+      excludeEventId,
+      excludeOperationId:
+        input.sourceModule.toLowerCase() === 'operations'
+          ? input.sourceEntityId
+          : undefined,
+    });
+    if (warnings.length)
+      throw new ConflictException(
+        `O técnico ${warnings[0]!.userName} já possui um atendimento nesse horário ou com intervalo de até 10 minutos. Confirme para agendar mesmo assim.`,
+        'SCHEDULING_CONFLICT',
       );
   }
 

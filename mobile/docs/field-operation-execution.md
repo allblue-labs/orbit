@@ -28,6 +28,14 @@ checklist, políticas de material, evidência e artefato, `allowedTransitions`,
 confere que `version`, `status` e `startedAt` não mudaram: se a leitura mexesse
 no domínio, a versão mudaria.
 
+Entrar no wizard de execução é uma intenção de iniciar o atendimento. A tela
+relê a preparação e, se a API publicar `START`, envia esse comando pelo journal
+antes de liberar as etapas. Isso cobre o botão **Iniciar atendimento** para
+cliente novo ou existente, que cria a operação em `OPEN`. Atendimentos já em
+andamento não recebem outro início. Consultar somente a ficha continua sem
+mudar o atendimento. Falhas de início mantêm o wizard bloqueado; repetir usa
+a mesma intenção persistida.
+
 ## Comandos
 
 Nunca há atualização genérica de status. Não existe `PATCH {status:
@@ -133,6 +141,13 @@ prometê-las aqui seria mentir. Há teste que reprova a promessa.
 
 `startedBy` e `completedBy` são **histórico**: quem executou pode ser outra
 pessoa que a atualmente escalada, e trocar um pelo outro apagaria o fato.
+
+No wizard atual, o aceite do cliente chama a conclusão automaticamente. Antes
+do comando, o app relê versão e ações para não usar dados anteriores ao aceite.
+Uma conclusão pendente de sincronização não recebe o check de concluído nem
+gera uma segunda intenção. Recusas preservam a mensagem do servidor. Ao
+retomar um atendimento antigo ainda em `OPEN`, a tela executa o início
+autorizado antes de apresentar as etapas, sem recriar cliente ou operação.
 
 ## Fronteira
 

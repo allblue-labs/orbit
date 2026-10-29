@@ -18,7 +18,7 @@ export class MobilePushRepository {
     intent: MobileNotificationIntent,
     resolved: ResolvedMobileNotification,
   ) {
-    return this.rls.run(async (tx) => {
+    return this.rls.runAmbient(async (tx) => {
       const recipient = await tx.organizationMembership.findFirst({
         where: {
           organizationId: intent.organizationId,

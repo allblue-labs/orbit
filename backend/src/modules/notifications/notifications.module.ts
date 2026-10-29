@@ -13,6 +13,7 @@ import { MobileDeviceRepository } from './mobile-device.repository';
 import { MobileDeviceService } from './mobile-device.service';
 import { MobileNotificationPolicy } from './mobile-notification.policy';
 import { MobileNotificationService } from './mobile-notification.service';
+import { MobileNotificationProcessor } from './mobile-notification.processor';
 import { MobilePushMetrics } from './mobile-push.metrics';
 import { MobilePushProcessor } from './mobile-push.processor';
 import {
@@ -34,6 +35,7 @@ import { MobilePushRepository } from './mobile-push.repository';
     MobileDeviceService,
     MobileNotificationPolicy,
     MobileNotificationService,
+    MobileNotificationProcessor,
     MobilePushRepository,
     MobilePushProcessor,
     MobilePushMetrics,

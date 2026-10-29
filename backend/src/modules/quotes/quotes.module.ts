@@ -21,9 +21,17 @@ import { QuoteService } from './quote.service';
 import { StorageModule } from '../storage/storage.module';
 import { ArtifactRenderingModule } from '../artifact-rendering/artifact-rendering.module';
 import { ArtifactExecutionModule } from '../artifact-executions/artifact-execution.module';
+import {
+  QuoteAcceptanceController,
+  QuotePublicAcceptanceController,
+} from './quote-acceptance.controller';
+import { QuoteAcceptanceService } from './quote-acceptance.service';
+import { QuoteAcceptedDocumentService } from './quote-accepted-document.service';
+import { OperationsModule } from '../operations/operations.module';
 
 @Module({
   imports: [
+    OperationsModule,
     PrismaModule,
     SubscriptionPlansModule,
     FinancialModule,
@@ -33,13 +41,19 @@ import { ArtifactExecutionModule } from '../artifact-executions/artifact-executi
     /* Emitir o documento da proposta é criar uma execução de artefato. */
     ArtifactExecutionModule,
   ],
-  controllers: [QuoteController],
+  controllers: [
+    QuoteAcceptanceController,
+    QuotePublicAcceptanceController,
+    QuoteController,
+  ],
   providers: [
     QuoteRepository,
     QuoteService,
     QuoteMapper,
     QuoteFinancialProcessor,
     QuoteEmissionService,
+    QuoteAcceptanceService,
+    QuoteAcceptedDocumentService,
   ],
   exports: [QuoteService],
 })

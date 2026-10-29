@@ -45,6 +45,7 @@ import {
 
 import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { actionAuthority } from "@/registry";
+import { useScheduleConfirmation } from "@/hooks/operations/use-schedule-confirmation";
 import type { Operation, OperationListItem } from "@/types/operations";
 
 /** Linha de pessoa: nome à esquerda, contexto e ação à direita. */
@@ -89,6 +90,18 @@ export function OperationTeamPanel({
   const replace = useReplaceOperationResponsible(operation.id);
   const addAuxiliary = useAddOperationAuxiliary(operation.id);
   const removeAuxiliary = useRemoveOperationAuxiliary(operation.id);
+  const schedule = useScheduleConfirmation();
+  const checkAssignment = (userId: string, action: () => void) => {
+    void schedule.checkAndRun(
+      {
+        userIds: [userId],
+        scheduledStart: operation.scheduledStart,
+        scheduledEnd: operation.scheduledEnd,
+        excludeOperationId: operation.id,
+      },
+      action,
+    );
+  };
 
   const [promoting, setPromoting] = useState<{
     userId: string;
@@ -135,13 +148,17 @@ export function OperationTeamPanel({
                   businessUnitId={operation.businessUnit.id}
                   excludeUserIds={[responsible.id]}
                   emptyLabel={NO_FIELD_TECHNICIAN}
-                  disabled={replace.isPending}
-                  onSelect={(candidate) => replace.mutate(candidate.id)}
+                  disabled={replace.isPending || schedule.checking}
+                  onSelect={(candidate) =>
+                    checkAssignment(candidate.id, () =>
+                      replace.mutate(candidate.id),
+                    )
+                  }
                 >
                   <Button
                     variant="ghost"
                     size="sm"
-                    disabled={replace.isPending}
+                    disabled={replace.isPending || schedule.checking}
                   >
                     {replace.isPending ? "Trocando…" : "Trocar"}
                   </Button>
@@ -159,13 +176,17 @@ export function OperationTeamPanel({
                 businessUnitId={operation.businessUnit.id}
                 excludeUserIds={assigned}
                 emptyLabel={NO_FIELD_TECHNICIAN}
-                disabled={replace.isPending}
-                onSelect={(candidate) => replace.mutate(candidate.id)}
+                disabled={replace.isPending || schedule.checking}
+                onSelect={(candidate) =>
+                  checkAssignment(candidate.id, () =>
+                    replace.mutate(candidate.id),
+                  )
+                }
               >
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={replace.isPending}
+                  disabled={replace.isPending || schedule.checking}
                 >
                   <Plus className="size-3.5" />
                   Definir responsável
@@ -191,13 +212,17 @@ export function OperationTeamPanel({
               businessUnitId={operation.businessUnit.id}
               excludeUserIds={assigned}
               emptyLabel={NO_FIELD_TECHNICIAN}
-              disabled={addAuxiliary.isPending}
-              onSelect={(candidate) => addAuxiliary.mutate(candidate.id)}
+              disabled={addAuxiliary.isPending || schedule.checking}
+              onSelect={(candidate) =>
+                checkAssignment(candidate.id, () =>
+                  addAuxiliary.mutate(candidate.id),
+                )
+              }
             >
               <Button
                 variant="ghost"
                 size="sm"
-                disabled={addAuxiliary.isPending}
+                disabled={addAuxiliary.isPending || schedule.checking}
               >
                 <Plus className="size-3.5" />
                 {addAuxiliary.isPending ? "Adicionando…" : "Adicionar"}
@@ -231,7 +256,7 @@ export function OperationTeamPanel({
                         <Button
                           variant="ghost"
                           size="sm"
-                          disabled={replace.isPending}
+                          disabled={replace.isPending || schedule.checking}
                           onClick={() =>
                             setPromoting({
                               userId: entry.userId,
@@ -305,6 +330,7 @@ export function OperationTeamPanel({
       ) : null}
 
       <MutationError error={error} />
+      {schedule.confirmation}
 
       <ConfirmDialog
         open={promoting !== null}

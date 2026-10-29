@@ -4,6 +4,7 @@ import { RlsTransaction } from '../../database';
 import { generateUuidV7 } from '../../utils';
 import { OperationRepository } from '../operations/operation.repository';
 import type { CreateWalkInOperationDto } from './mobile-walk-in.dto';
+import { assignmentAuthorizationRequired } from '../operations/recurring-authorization';
 
 /**
  * O atendimento avulso, numa transação.
@@ -143,6 +144,10 @@ export class MobileWalkInRepository {
   }) {
     return this.rls.run(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`operation:walk-in:${input.organizationId}:${input.actorId}:${input.idempotencyKey}`}))`;
+      const requiresAuthorization = await assignmentAuthorizationRequired(
+        tx,
+        input.organizationId,
+      );
 
       const registrado = await tx.operationWalkInCommand.findUnique({
         where: {
@@ -157,7 +162,23 @@ export class MobileWalkInRepository {
       if (registrado) {
         if (registrado.payloadHash !== input.payloadHash)
           throw new Error('WALK_IN_IDEMPOTENCY_PAYLOAD_MISMATCH');
-        return { operationId: registrado.operationId, created: false };
+        const operation = requiresAuthorization
+          ? await tx.operation.findFirst({
+              where: {
+                id: registrado.operationId,
+                organizationId: input.organizationId,
+                businessUnitId: input.businessUnitId,
+                deletedAt: null,
+              },
+              select: { authorizedAt: true },
+            })
+          : null;
+        return {
+          operationId: registrado.operationId,
+          created: false,
+          awaitingAuthorization:
+            requiresAuthorization && !operation?.authorizedAt,
+        };
       }
 
       const unit = await tx.businessUnit.findFirst({
@@ -207,6 +228,10 @@ export class MobileWalkInRepository {
            * Reatribuir depois é decisão do escritório, pela tela de operações.
            */
           responsibleFieldTechnicianId: input.actorId,
+          // O próprio técnico abriu para si em campo: não é uma atribuição
+          // pendente do escritório, mesmo quando a organização exige aprovação.
+          authorizedAt: new Date(),
+          authorizedById: input.actorId,
           createdById: input.actorId,
           location: endereco
             ? Prisma.JsonNull
@@ -233,7 +258,11 @@ export class MobileWalkInRepository {
         },
       });
 
-      return { operationId: operation.id, created: true };
+      return {
+        operationId: operation.id,
+        created: true,
+        awaitingAuthorization: false,
+      };
     });
   }
 

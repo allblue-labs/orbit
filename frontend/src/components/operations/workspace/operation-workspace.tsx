@@ -9,7 +9,7 @@
  *
  * As leituras compartilhadas acontecem uma única vez aqui — `GET /operations/:id`
  * já traz unidade, cliente, ativo, equipe, anexos e resumo dos checklists, e é
- * distribuído por props. Timeline, histórico, checklists e IA têm endpoints
+ * distribuído por props. Timeline, checklists e IA têm endpoints
  * próprios e cadências próprias.
  */
 import Link from "next/link";
@@ -24,7 +24,6 @@ import {
   useOperation,
   useOperationChecklists,
   useOperationFieldRecord,
-  useOperationHistory,
   useOperationIntelligence,
   useOperationTimeline,
 } from "@/hooks/operations/use-operations";
@@ -46,7 +45,7 @@ import {
 import { IntelligenceSection } from "./intelligence.section";
 import { MaterialsSection } from "./materials.section";
 import { StatusSection } from "./status.section";
-import { HistorySection, TimelineSection } from "./timeline.section";
+import { TimelineSection } from "./timeline.section";
 import { useSession } from "@/providers/session-provider";
 import { PRODUCT_CAPABILITY, PRODUCT_FEATURE } from "@/registry/product-access";
 
@@ -62,7 +61,6 @@ export function OperationWorkspace({ operationId }: { operationId: string }) {
     );
   const operation = useOperation(operationId);
   const timeline = useOperationTimeline(operationId);
-  const history = useOperationHistory(operationId);
   const checklists = useOperationChecklists(operationId);
   const fieldRecord = useOperationFieldRecord(operationId);
   const intelligence = useOperationIntelligence(
@@ -113,7 +111,6 @@ export function OperationWorkspace({ operationId }: { operationId: string }) {
           onClick={() => {
             void operation.refetch();
             void timeline.refetch();
-            void history.refetch();
             void checklists.refetch();
             void fieldRecord.refetch();
             if (canUseIntelligence) void intelligence.refetch();
@@ -156,7 +153,6 @@ export function OperationWorkspace({ operationId }: { operationId: string }) {
             operationId={operationId}
             query={operationQuery}
           />
-          <HistorySection query={toPanelQuery(history)} />
         </div>
       </div>
     </ContentContainer>

@@ -91,6 +91,7 @@ describe('QuoteService', () => {
     repository as unknown as QuoteRepository,
     documents,
     storage as unknown as StorageProvider,
+    { create: jest.fn() } as never,
   );
 
   beforeEach(() => {
@@ -424,6 +425,55 @@ describe('QuoteService', () => {
         scheduledEnd: new Date('2026-09-10T08:00:00Z'),
       }),
     ).rejects.toBeInstanceOf(ValidationException);
+  });
+
+  it('usa a criação canônica para preservar equipamento, endereço, agenda e equipe na conversão', async () => {
+    const source = quote({
+      status: 'APPROVED',
+      serviceAddress: { id: 'address-original' },
+      assets: [{ asset: { id: 'asset-1' } }],
+    });
+    repository.find.mockResolvedValue(source);
+    repository.nextOperationCode.mockResolvedValue('OS-ORC-000001');
+    const create = jest
+      .fn()
+      .mockResolvedValue({ id: 'op', code: 'OS-ORC-000001' });
+    const subject = new QuoteService(
+      repository as never,
+      documents,
+      storage as never,
+      { create } as never,
+    );
+    repository.convert.mockImplementationOnce(
+      async (_input: unknown, command: () => Promise<unknown>) => {
+        await command();
+        return source;
+      },
+    );
+    const scheduledStart = new Date('2026-11-10T13:00:00Z');
+    await subject.convert('quote-id', 'org-id', 'user-id', {
+      responsibleFieldTechnicianId: 'tech',
+      auxiliaryTechnicianIds: ['aux'],
+      customerAddressId: 'address-selected',
+      sector: 'Recepção',
+      scheduledStart,
+      amountVisibleInField: true,
+    });
+    expect(create).toHaveBeenCalledWith(
+      'org-id',
+      'user-id',
+      expect.objectContaining({
+        customerId: 'customer-id',
+        assetIds: ['asset-1'],
+        customerAddressId: 'address-selected',
+        responsibleFieldTechnicianId: 'tech',
+        auxiliaryTechnicianIds: ['aux'],
+        scheduledStart,
+        sector: 'Recepção',
+        amountVisibleInField: true,
+        data: { quoteId: 'quote-id', source: 'QUOTE' },
+      }),
+    );
   });
 
   it('quem perde a corrida da conversão recebe o resultado existente', async () => {
