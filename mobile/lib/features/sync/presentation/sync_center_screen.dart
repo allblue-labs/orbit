@@ -9,7 +9,10 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/providers.dart'
+    show uploadTasksProvider, uploadQueueProvider;
 import '../../../core/contracts/mobile_offline_sync_contracts.dart';
+import '../../../core/uploads/upload_task.dart';
 import '../../../core/presentation/field_registry.dart';
 import '../../../core/presentation/orbit_format.dart';
 import '../../../core/design/orbit_primitives.dart';
@@ -18,14 +21,23 @@ import '../../../core/widgets/section_states.dart';
 import '../../evidence/application/evidence_providers.dart';
 import '../application/sync_controller.dart';
 import '../application/sync_providers.dart';
+import '../application/sync_notice_preferences.dart';
 import '../data/command_journal.dart';
 import 'widgets/pending_badge.dart';
+import 'widgets/sync_notice_action.dart';
 
-class SyncCenterScreen extends ConsumerWidget {
+class SyncCenterScreen extends ConsumerStatefulWidget {
   const SyncCenterScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SyncCenterScreen> createState() => _SyncCenterScreenState();
+}
+
+class _SyncCenterScreenState extends ConsumerState<SyncCenterScreen> {
+  bool _showHidden = false;
+
+  @override
+  Widget build(BuildContext context) {
     final sync = ref.watch(syncControllerProvider);
     final commands = ref.watch(pendingCommandsProvider);
 
@@ -38,6 +50,7 @@ class SyncCenterScreen extends ConsumerWidget {
           await ref
               .read(mediaUploadControllerProvider.notifier)
               .process(manual: true);
+          await ref.read(uploadQueueProvider).process();
         },
         child: ListView(
           padding: const EdgeInsets.fromLTRB(
@@ -48,11 +61,15 @@ class SyncCenterScreen extends ConsumerWidget {
           ),
           children: [
             _Status(state: sync),
+            _NoticeVisibilityControls(
+              showHidden: _showHidden,
+              onToggle: () => setState(() => _showHidden = !_showHidden),
+            ),
             const SizedBox(height: OrbitSpacing.lg),
             commands.when(
               loading: () => const SectionLoading(lines: 3),
               error: (error, _) => SectionError(error: error),
-              data: (value) => _Queue(commands: value),
+              data: (value) => _Queue(commands: value, showHidden: _showHidden),
             ),
 
             const SizedBox(height: OrbitSpacing.lg),
@@ -60,7 +77,74 @@ class SyncCenterScreen extends ConsumerWidget {
             /// Evidências têm seção própria: são outra fila, com outra
             /// política. Uma frase só ("3 itens pendentes") faria o técnico
             /// achar que enviar a foto resolveu o checklist.
-            const _MediaQueueSection(),
+            _MediaQueueSection(showHidden: _showHidden),
+            _LegacyUploadsSection(showHidden: _showHidden),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NoticeVisibilityControls extends ConsumerWidget {
+  const _NoticeVisibilityControls({
+    required this.showHidden,
+    required this.onToggle,
+  });
+  final bool showHidden;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final preferences = ref.watch(syncNoticePreferencesProvider);
+    final keys = [
+      ...?ref.watch(pendingCommandsProvider).valueOrNull?.map(commandNoticeKey),
+      ...?ref.watch(allPendingMediaProvider).valueOrNull?.map(mediaNoticeKey),
+      ...?(ref
+          .watch(uploadTasksProvider)
+          .valueOrNull
+          ?.where((task) => task.isActive || task.status == UploadStatus.failed)
+          .map(uploadNoticeKey)),
+    ];
+    final hidden = keys.where(preferences.hidden.contains).length;
+    final dismissed = keys.any(preferences.dismissedBanners.contains);
+    if (hidden == 0 && !dismissed) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: OrbitSpacing.md),
+      child: OrbitPanel(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Os avisos ocultos continuam registrados. Ocultar não cancela '
+              'envios nem apaga arquivos.',
+              style: OrbitType.caption.copyWith(color: context.orbit.inkMuted),
+            ),
+            if (hidden > 0)
+              TextButton.icon(
+                onPressed: onToggle,
+                icon: Icon(
+                  showHidden
+                      ? Icons.visibility_off_outlined
+                      : Icons.visibility_outlined,
+                ),
+                label: Text(
+                  showHidden
+                      ? 'Deixar de mostrar avisos ocultos'
+                      : 'Mostrar avisos ocultos ($hidden)',
+                ),
+              ),
+            if (dismissed)
+              TextButton.icon(
+                onPressed: () => saveNoticePreference(
+                  context,
+                  () => ref
+                      .read(syncNoticePreferencesProvider.notifier)
+                      .restoreBanners(),
+                ),
+                icon: const Icon(Icons.notifications_active_outlined),
+                label: const Text('Reexibir avisos da barra'),
+              ),
           ],
         ),
       ),
@@ -70,11 +154,13 @@ class SyncCenterScreen extends ConsumerWidget {
 
 /// As evidências que ainda não viraram Evidence canônica.
 class _MediaQueueSection extends ConsumerWidget {
-  const _MediaQueueSection();
+  const _MediaQueueSection({required this.showHidden});
+  final bool showHidden;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final media = ref.watch(allPendingMediaProvider);
+    final hidden = ref.watch(syncNoticePreferencesProvider).hidden;
 
     /// Cartão, como o resto da tela. Solto sobre o fundo, este bloco era o
     /// único texto sem contenção — parecia rodapé, não seção.
@@ -90,37 +176,119 @@ class _MediaQueueSection extends ConsumerWidget {
               style: OrbitType.body.copyWith(color: context.orbit.inkMuted),
             );
           }
+          final visible = items
+              .where(
+                (item) => showHidden || !hidden.contains(mediaNoticeKey(item)),
+              )
+              .toList();
+          if (visible.isEmpty) {
+            return const Text('Os avisos destas evidências estão ocultos.');
+          }
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              for (final value in items)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: Wrap(
-                    spacing: OrbitSpacing.sm,
-                    runSpacing: 4,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      Text(
-                        value.filename,
-                        style: OrbitType.body.copyWith(
-                          color: context.orbit.ink,
-                        ),
-                      ),
-                      if (value.isBlocked)
-                        BlockedBadge(
-                          label: evidenceStateLabels[value.state.name]!.label,
-                        )
-                      else
-                        PendingBadge(
-                          label: evidenceStateLabels[value.state.name]!.label,
-                        ),
-                    ],
-                  ),
+              for (final value in visible)
+                _EvidenceNoticeTile(
+                  filename: value.filename,
+                  blocked: value.isBlocked,
+                  label: evidenceStateLabels[value.state.name]!.label,
+                  message: value.failureMessage,
+                  noticeKey: mediaNoticeKey(value),
                 ),
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _EvidenceNoticeTile extends StatelessWidget {
+  const _EvidenceNoticeTile({
+    required this.filename,
+    required this.blocked,
+    required this.label,
+    required this.noticeKey,
+    this.message,
+  });
+  final String filename;
+  final bool blocked;
+  final String label;
+  final String noticeKey;
+  final String? message;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: OrbitSpacing.sm),
+    child: OrbitPanel(
+      tone: blocked ? OrbitTone.warning : OrbitTone.neutral,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            filename,
+            style: OrbitType.itemTitle.copyWith(color: context.orbit.ink),
+          ),
+          const SizedBox(height: OrbitSpacing.sm),
+          if (blocked)
+            BlockedBadge(label: label)
+          else
+            PendingBadge(label: label),
+          if (message case final text? when text.isNotEmpty) ...[
+            const SizedBox(height: OrbitSpacing.sm),
+            Text(
+              text,
+              style: OrbitType.caption.copyWith(color: context.orbit.inkMuted),
+            ),
+          ],
+          if (blocked) SyncNoticeAction(noticeKey: noticeKey),
+        ],
+      ),
+    ),
+  );
+}
+
+class _LegacyUploadsSection extends ConsumerWidget {
+  const _LegacyUploadsSection({required this.showHidden});
+  final bool showHidden;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tasks =
+        (ref.watch(uploadTasksProvider).valueOrNull ?? const <UploadTask>[])
+            .where(
+              (task) => task.isActive || task.status == UploadStatus.failed,
+            )
+            .toList();
+    if (tasks.isEmpty) return const SizedBox.shrink();
+    final hidden = ref.watch(syncNoticePreferencesProvider).hidden;
+    final visible = tasks
+        .where((task) => showHidden || !hidden.contains(uploadNoticeKey(task)))
+        .toList();
+    return Padding(
+      padding: const EdgeInsets.only(top: OrbitSpacing.lg),
+      child: _Secao(
+        titulo: 'Outros envios de evidências',
+        child: visible.isEmpty
+            ? const Text('Os avisos destes envios estão ocultos.')
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final task in visible)
+                    _EvidenceNoticeTile(
+                      filename: task.fileName,
+                      blocked: task.status == UploadStatus.failed,
+                      label: switch (task.status) {
+                        UploadStatus.failed => 'Falha no envio',
+                        UploadStatus.uploading => 'Enviando',
+                        UploadStatus.retrying => 'Aguardando nova tentativa',
+                        _ => 'Aguardando envio',
+                      },
+                      message: task.lastError,
+                      noticeKey: uploadNoticeKey(task),
+                    ),
+                ],
+              ),
       ),
     );
   }
@@ -279,13 +447,14 @@ class _Status extends ConsumerWidget {
   }
 }
 
-class _Queue extends StatelessWidget {
-  const _Queue({required this.commands});
+class _Queue extends ConsumerWidget {
+  const _Queue({required this.commands, required this.showHidden});
 
   final List<PendingCommand> commands;
+  final bool showHidden;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     if (commands.isEmpty) {
       return const OrbitEmptyState(
         icon: Icons.cloud_done_outlined,
@@ -294,10 +463,21 @@ class _Queue extends StatelessWidget {
       );
     }
 
+    final hidden = ref.watch(syncNoticePreferencesProvider).hidden;
+    final visible = commands
+        .where(
+          (command) =>
+              showHidden || !hidden.contains(commandNoticeKey(command)),
+        )
+        .toList();
+    if (visible.isEmpty) {
+      return const Text('Os avisos destas ações estão ocultos.');
+    }
+
     /// O que travou vem primeiro: é o que precisa de alguém.
     final ordered = [
-      ...commands.where((value) => value.isBlocking),
-      ...commands.where((value) => !value.isBlocking),
+      ...visible.where((value) => value.isBlocking),
+      ...visible.where((value) => !value.isBlocking),
     ];
 
     return Column(
@@ -378,13 +558,16 @@ class _CommandTile extends ConsumerWidget {
             /// Uma intenção ainda pendente pode estar em voo neste instante.
             if (blocked) ...[
               const SizedBox(height: OrbitSpacing.sm),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: () => _confirmDiscard(context, ref),
-                  icon: const Icon(Icons.delete_outline, size: 18),
-                  label: const Text('Descartar esta ação'),
-                ),
+              Wrap(
+                spacing: OrbitSpacing.sm,
+                children: [
+                  SyncNoticeAction(noticeKey: commandNoticeKey(command)),
+                  TextButton.icon(
+                    onPressed: () => _confirmDiscard(context, ref),
+                    icon: const Icon(Icons.delete_outline, size: 18),
+                    label: const Text('Descartar esta ação'),
+                  ),
+                ],
               ),
             ],
           ],

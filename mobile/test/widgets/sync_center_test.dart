@@ -1,24 +1,35 @@
 /// A tela de sincronização, lida por quem fez o trabalho.
 library;
 
+import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:orbit_operator/app/providers.dart'
+    show sharedPreferencesProvider, uploadTasksProvider, apiClientProvider;
 import 'package:orbit_operator/core/config/environment.dart';
 import 'package:orbit_operator/core/contracts/mobile_offline_sync_contracts.dart';
+import 'package:orbit_operator/core/contracts/mobile_evidence_contracts.dart';
+import 'package:orbit_operator/core/widgets/sync_indicator.dart';
 import 'package:orbit_operator/core/network/orbit_api_client.dart';
 import 'package:orbit_operator/core/observability/orbit_logger.dart';
 import 'package:orbit_operator/core/theme/orbit_theme.dart';
+import 'package:orbit_operator/core/uploads/upload_task.dart';
+import 'package:orbit_operator/features/evidence/data/local_media.dart';
+import 'package:orbit_operator/features/evidence/data/media_store.dart';
 import 'package:orbit_operator/features/evidence/application/evidence_providers.dart';
 import 'package:orbit_operator/features/sync/application/sync_controller.dart';
 import 'package:orbit_operator/features/sync/application/sync_providers.dart';
+import 'package:orbit_operator/features/sync/application/sync_notice_preferences.dart';
 import 'package:orbit_operator/features/sync/data/command_journal.dart';
 import 'package:orbit_operator/features/sync/data/journal_file.dart';
 import 'package:orbit_operator/features/sync/data/sync_projection.dart';
 import 'package:orbit_operator/features/sync/data/sync_repository.dart';
 import 'package:orbit_operator/features/sync/presentation/sync_center_screen.dart';
+import 'package:orbit_operator/features/sync/presentation/widgets/sync_status_bar.dart';
 
 import '../support/fakes.dart';
 import '../support/scripted_adapter.dart';
@@ -104,6 +115,10 @@ Future<Widget> host(
   Harness? harness,
   double textScale = 1.0,
   double width = 400,
+  SharedPreferences? preferences,
+  List<LocalMedia> media = const [],
+  List<UploadTask> uploads = const [],
+  bool showBars = false,
 }) async {
   final backend = harness ?? Harness();
   final dio = Dio()..httpClientAdapter = ScriptedAdapter(backend.call);
@@ -130,13 +145,27 @@ Future<Widget> host(
     onReconciled: () {},
   );
   await controller.restore();
+  final mediaQueue = MediaQueue(
+    file: MemoryJournalFile(),
+    files: MemoryMediaFileStore(),
+  );
+  for (final item in media) {
+    (mediaQueue.files as MemoryMediaFileStore).files[item.path] =
+        Uint8List.fromList([1, 2, 3]);
+    await mediaQueue.enqueue(item);
+  }
 
   return ProviderScope(
     overrides: [
       commandScopeProvider.overrideWithValue(scope),
+      apiClientProvider.overrideWithValue(client),
       commandJournalProvider.overrideWithValue(journal),
       syncControllerProvider.overrideWith((ref) => controller),
-      allPendingMediaProvider.overrideWith((ref) async => const []),
+      sharedPreferencesProvider.overrideWithValue(
+        preferences ?? await SharedPreferences.getInstance(),
+      ),
+      mediaQueueProvider.overrideWithValue(mediaQueue),
+      uploadTasksProvider.overrideWith((ref) => Stream.value(uploads)),
     ],
     child: MediaQuery(
       data: MediaQueryData(
@@ -145,7 +174,15 @@ Future<Widget> host(
       ),
       child: MaterialApp(
         theme: OrbitTheme.light(),
-        home: const SyncCenterScreen(),
+        home: showBars
+            ? const Scaffold(
+                body: SyncCenterScreen(),
+                bottomNavigationBar: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [SyncStatusBar(), SyncIndicator()],
+                ),
+              )
+            : const SyncCenterScreen(),
       ),
     ),
   );
@@ -156,10 +193,190 @@ void main() {
 
   Object? layoutError;
   setUp(() {
+    SharedPreferences.setMockInitialValues({});
     layoutError = null;
     FlutterError.onError = (details) => layoutError ??= details.exception;
   });
   tearDown(() => FlutterError.onError = FlutterError.presentError);
+
+  LocalMedia capture() => LocalMedia(
+    localMediaId: 'photo-1',
+    scope: scope,
+    target: const FieldEvidenceTargetRef(
+      type: FieldEvidenceTarget.operation,
+      id: 'op-a',
+    ),
+    path: '/memoria/photo-1.jpg',
+    filename: 'evidencia.jpg',
+    mimeType: 'image/jpeg',
+    sizeBytes: 3,
+    sha256: 'hash',
+    capturedAt: DateTime.utc(2026, 10, 29),
+    category: EvidenceCategory.general,
+    source: EvidenceSource.camera,
+    state: LocalMediaState.rejected,
+    idempotencyKey: 'photo-1',
+    failureCode: 'FILE_TOO_LARGE',
+    failureMessage: 'A imagem ultrapassa o tamanho permitido.',
+  );
+
+  testWidgets('oculta e reexibe aviso de ação sem descartar o comando', (
+    tester,
+  ) async {
+    final preferences = await SharedPreferences.getInstance();
+    final commands = [command(state: PendingCommandState.rejected)];
+    await tester.pumpWidget(
+      await host(commands, preferences: preferences, showBars: true),
+    );
+    await tester.pumpAndSettle();
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(SyncCenterScreen)),
+    );
+    await tester.ensureVisible(find.text('Ocultar aviso'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ocultar aviso'));
+    await tester.pumpAndSettle();
+    expect(find.text('Checklist atualizado'), findsNothing);
+    expect(find.byTooltip('Ocultar aviso da barra'), findsNothing);
+    expect(
+      (await container.read(commandJournalProvider).read()).commands,
+      hasLength(1),
+    );
+    expect(container.read(syncControllerProvider).rejected, 1);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(
+      await host(commands, preferences: preferences, showBars: true),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Checklist atualizado'), findsNothing);
+    await tester.tap(find.text('Mostrar avisos ocultos (1)'));
+    await tester.pumpAndSettle();
+    expect(find.text('Checklist atualizado'), findsOneWidget);
+    await tester.ensureVisible(find.text('Reexibir aviso'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Reexibir aviso'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Ocultar aviso da barra'), findsOneWidget);
+    expect(layoutError, isNull);
+  });
+
+  testWidgets('ocultar falha de evidência preserva o arquivo e sua fila', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      await host(const [], media: [capture()], showBars: true),
+    );
+    await tester.pumpAndSettle();
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(SyncCenterScreen)),
+    );
+    expect(find.text('1 evidência precisa da sua atenção'), findsOneWidget);
+    await tester.ensureVisible(find.text('Ocultar aviso'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ocultar aviso'));
+    await tester.pumpAndSettle();
+    final queue = container.read(mediaQueueProvider);
+    expect(await queue.forScope(scope), hasLength(1));
+    expect(await queue.files.exists(capture().path), isTrue);
+    expect(find.text('evidencia.jpg'), findsNothing);
+    expect(find.byTooltip('Ocultar aviso da barra'), findsNothing);
+    expect(container.read(syncNoticePreferencesProvider).hidden, {
+      mediaNoticeKey(capture()),
+    });
+    await tester.ensureVisible(find.text('Mostrar avisos ocultos (1)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Mostrar avisos ocultos (1)'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('evidencia.jpg'));
+    expect(
+      find.text('A imagem ultrapassa o tamanho permitido.'),
+      findsOneWidget,
+    );
+    expect(layoutError, isNull);
+  });
+
+  testWidgets(
+    'dispensa a faixa, mantém a lista e avisa um item novo com a mesma contagem',
+    (tester) async {
+      final preferences = await SharedPreferences.getInstance();
+      final commands = [command(state: PendingCommandState.conflict)];
+      await tester.pumpWidget(
+        await host(commands, preferences: preferences, showBars: true),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Ocultar aviso da barra'));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Ocultar aviso da barra'), findsNothing);
+      expect(find.text('Checklist atualizado'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpWidget(
+        await host(commands, preferences: preferences, showBars: true),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Ocultar aviso da barra'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpWidget(
+        await host(
+          [command(id: 2, state: PendingCommandState.conflict)],
+          preferences: preferences,
+          showBars: true,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Ocultar aviso da barra'), findsOneWidget);
+      expect(layoutError, isNull);
+    },
+  );
+
+  testWidgets(
+    'envio antigo também pode ter a faixa dispensada e o aviso ocultado',
+    (tester) async {
+      final upload = UploadTask(
+        id: 'upload-old',
+        operationId: 'op-a',
+        filePath: '/foto.jpg',
+        fileName: 'foto-antiga.jpg',
+        mimeType: 'image/jpeg',
+        sizeInBytes: 3,
+        createdAt: DateTime.utc(2026, 10, 29),
+        status: UploadStatus.failed,
+        lastError: 'Não foi possível enviar esta imagem.',
+      );
+      await tester.pumpWidget(
+        await host(const [], uploads: [upload], showBars: true),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Ocultar aviso de envio'));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Ocultar aviso de envio'), findsNothing);
+      await tester.drag(find.byType(ListView), const Offset(0, -500));
+      await tester.pumpAndSettle();
+      expect(find.text('foto-antiga.jpg'), findsOneWidget);
+      await tester.drag(find.byType(ListView), const Offset(0, 1000));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Reexibir avisos da barra'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Reexibir avisos da barra'));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Ocultar aviso de envio'), findsOneWidget);
+      await tester.drag(find.byType(ListView), const Offset(0, -500));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Ocultar aviso'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Ocultar aviso'));
+      await tester.pumpAndSettle();
+      expect(find.text('foto-antiga.jpg'), findsNothing);
+      expect(find.byTooltip('Ocultar aviso de envio'), findsNothing);
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(SyncCenterScreen)),
+      );
+      expect(
+        container.read(uploadTasksProvider).requireValue.single.status,
+        UploadStatus.failed,
+      );
+      expect(layoutError, isNull);
+    },
+  );
 
   testWidgets('fila vazia diz que tudo chegou', (tester) async {
     await tester.pumpWidget(await host(const []));

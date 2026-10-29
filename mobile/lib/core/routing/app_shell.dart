@@ -61,7 +61,7 @@ class AppShell extends StatelessWidget {
       bottomNavigationBar: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Estado da fila de evidências, sempre visível durante o trabalho.
+          // Avisos das filas, dispensáveis sem interromper os envios.
           const SyncStatusBar(),
           const SyncIndicator(),
           OrbitBottomNav(
