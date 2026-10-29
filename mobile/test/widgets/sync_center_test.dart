@@ -243,6 +243,16 @@ void main() {
       hasLength(1),
     );
     expect(container.read(syncControllerProvider).rejected, 1);
+    expect(
+      find.text('Aviso ocultado. O registro foi preservado.'),
+      findsOneWidget,
+    );
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Aviso ocultado. O registro foi preservado.'),
+      findsNothing,
+    );
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpWidget(
       await host(commands, preferences: preferences, showBars: true),
@@ -256,6 +266,25 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Reexibir aviso'));
     await tester.pumpAndSettle();
+    expect(find.byTooltip('Ocultar aviso da barra'), findsOneWidget);
+    expect(layoutError, isNull);
+  });
+
+  testWidgets('permite desfazer antes do aviso desaparecer', (tester) async {
+    await tester.pumpWidget(
+      await host([
+        command(state: PendingCommandState.rejected),
+      ], showBars: true),
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Ocultar aviso'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ocultar aviso'));
+    await tester.pumpAndSettle();
+    expect(find.text('Checklist atualizado'), findsNothing);
+    await tester.tap(find.text('Desfazer'));
+    await tester.pumpAndSettle();
+    expect(find.text('Checklist atualizado'), findsOneWidget);
     expect(find.byTooltip('Ocultar aviso da barra'), findsOneWidget);
     expect(layoutError, isNull);
   });

@@ -49,8 +49,13 @@ class SyncNoticeAction extends ConsumerWidget {
               : controller.hide(noticeKey),
         );
         if (!saved || hidden || !context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
+        final messenger = ScaffoldMessenger.of(context);
+        messenger.clearSnackBars();
+        messenger.showSnackBar(
           SnackBar(
+            duration: const Duration(seconds: 2),
+            persist: false,
+            showCloseIcon: true,
             content: const Text('Aviso ocultado. O registro foi preservado.'),
             action: SnackBarAction(
               label: 'Desfazer',

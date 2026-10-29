@@ -19,6 +19,7 @@ import '../../../app/providers.dart';
 import '../../../core/errors/orbit_exception.dart';
 import '../../../core/theme/orbit_theme.dart';
 import '../../../core/widgets/orbit_brand.dart';
+import 'logout_confirmation.dart';
 
 /// O mínimo que o backend aceita em `ChangePasswordDto`.
 const int _tamanhoMinimo = 12;
@@ -220,9 +221,7 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                         key: const Key('change-password.logout'),
                         onPressed: _submitting
                             ? null
-                            : () => ref
-                                  .read(authControllerProvider.notifier)
-                                  .logout(),
+                            : () => confirmLogout(context, ref),
                         child: const Text('Sair'),
                       ),
                     ],
