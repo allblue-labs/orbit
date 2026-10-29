@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import '../errors/orbit_exception.dart';
 import '../presentation/field_registry.dart';
 import '../theme/orbit_theme.dart';
+import '../design/orbit_loading.dart';
 
 /// Um bloco de seção: título, apoio e conteúdo.
 ///
@@ -144,38 +145,7 @@ class SectionLoading extends StatelessWidget {
   final int lines;
 
   @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: List.generate(
-        lines,
-        (index) => Padding(
-          padding: const EdgeInsets.only(bottom: OrbitSpacing.sm),
-          child: _Shimmer(widthFactor: index == 0 ? 0.6 : 1),
-        ),
-      ),
-    );
-  }
-}
-
-class _Shimmer extends StatelessWidget {
-  const _Shimmer({required this.widthFactor});
-
-  final double widthFactor;
-
-  @override
-  Widget build(BuildContext context) {
-    return FractionallySizedBox(
-      alignment: Alignment.centerLeft,
-      widthFactor: widthFactor,
-      child: Container(
-        height: 14,
-        decoration: BoxDecoration(
-          color: OrbitColors.surface.withValues(alpha: 0.7),
-          borderRadius: BorderRadius.circular(7),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => OrbitSkeleton(lines: lines);
 }
 
 class SectionEmpty extends StatelessWidget {
@@ -219,7 +189,7 @@ class SectionEmpty extends StatelessWidget {
 /// - **409** é dado que mudou por baixo. A saída é reler, e o botão diz isso.
 /// - **404** é ausência neutra: nada sobre outro tenant, outra unidade ou
 ///   registro revogado — distinguir os casos vira um oráculo.
-/// - **rede** é o aparelho, não o servidor.
+/// - **rede** significa que a conexão com o serviço falhou; não prova falta de internet.
 ///
 /// O `requestId` aparece discreto quando o erro é inesperado. Não é para o
 /// usuário entender: é para ele conseguir dizer ao suporte qual foi a
@@ -268,7 +238,7 @@ class SectionError extends StatelessWidget {
         children: [
           Icon(
             isOffline
-                ? Icons.wifi_off_rounded
+                ? Icons.cloud_off_outlined
                 : isConflict
                 ? Icons.sync_problem
                 : Icons.error_outline,
@@ -350,7 +320,7 @@ class StaleDataBanner extends StatelessWidget {
           const SizedBox(width: OrbitSpacing.sm),
           Expanded(
             child: Text(
-              'Sem conexão — mostrando dados salvos $label.',
+              'Não foi possível atualizar — mostrando dados salvos $label.',
               style: const TextStyle(fontSize: 12, color: OrbitColors.warning),
             ),
           ),

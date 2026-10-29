@@ -9,6 +9,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
+import 'package:crypto/crypto.dart';
 
 import 'upload_task.dart';
 import 'upload_queue.dart';
@@ -23,6 +24,21 @@ class FileUploadQueueStore implements UploadQueueStore {
   final String _fileName;
 
   Directory? _directory;
+  Future<void> _writing = Future.value();
+
+  Future<void> _preserve(File file, String raw) async {
+    final digest = sha256.convert(utf8.encode(raw));
+    final archive = File('${file.path}.recovery.$digest');
+    if (await archive.exists()) return;
+    final staging = await file.parent.createTemp('.queue-recovery-');
+    try {
+      final temporary = File('${staging.path}/original');
+      await temporary.writeAsString(raw, flush: true);
+      await temporary.rename(archive.path);
+    } finally {
+      await staging.delete(recursive: true);
+    }
+  }
 
   Future<File> _file() async {
     final directory = _directory ??= await getApplicationSupportDirectory();
@@ -34,28 +50,48 @@ class FileUploadQueueStore implements UploadQueueStore {
 
   @override
   Future<List<UploadTask>> load() async {
+    final file = await _file();
+    if (!await file.exists()) return const [];
+    final raw = await file.readAsString();
+    Object? decoded;
     try {
-      final file = await _file();
-      if (!file.existsSync()) return const [];
-      final decoded = jsonDecode(await file.readAsString());
-      if (decoded is! List) return const [];
-      return decoded
-          .whereType<Map<String, dynamic>>()
-          .map(UploadTask.fromJson)
-          .toList(growable: false);
+      decoded = jsonDecode(raw);
     } on Object {
-      // Fila corrompida não pode impedir o app de abrir: recomeça vazia.
+      await _preserve(file, raw);
       return const [];
     }
+    if (decoded is! List) {
+      await _preserve(file, raw);
+      return const [];
+    }
+    final tasks = <UploadTask>[];
+    var invalid = false;
+    for (final entry in decoded) {
+      try {
+        tasks.add(UploadTask.fromJson(Map<String, dynamic>.from(entry as Map)));
+      } on Object {
+        invalid = true;
+      }
+    }
+    if (invalid) await _preserve(file, raw);
+    return tasks;
   }
 
   @override
-  Future<void> save(List<UploadTask> tasks) async {
-    final file = await _file();
-    await file.writeAsString(
-      jsonEncode(tasks.map((task) => task.toJson()).toList()),
-      flush: true,
-    );
+  Future<void> save(List<UploadTask> tasks) {
+    final next = _writing.then((_) async {
+      // Mesmo um save anterior ao restore deve preservar o arquivo ilegível.
+      await load();
+      final file = await _file();
+      final temporary = File('${file.path}.tmp');
+      await temporary.writeAsString(
+        jsonEncode(tasks.map((task) => task.toJson()).toList()),
+        flush: true,
+      );
+      await temporary.rename(file.path);
+    });
+    _writing = next.then((_) {}, onError: (Object _) {});
+    return next;
   }
 }
 

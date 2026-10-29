@@ -1,7 +1,42 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+val uploadSigningFile = rootProject.file("key.properties")
+val uploadSigning = Properties().apply {
+    if (uploadSigningFile.isFile) uploadSigningFile.inputStream().use { load(it) }
+}
+fun signingValue(property: String, environment: String): String? =
+    System.getenv(environment)?.takeIf { it.isNotBlank() }
+        ?: uploadSigning.getProperty(property)?.takeIf { it.isNotBlank() }
+
+val uploadStorePath = signingValue("storeFile", "ORBIT_ANDROID_KEYSTORE_PATH")
+val uploadStorePassword = signingValue("storePassword", "ORBIT_ANDROID_STORE_PASSWORD")
+val uploadKeyAlias = signingValue("keyAlias", "ORBIT_ANDROID_KEY_ALIAS")
+val uploadKeyPassword = signingValue("keyPassword", "ORBIT_ANDROID_KEY_PASSWORD")
+val uploadSigningReady = listOf(uploadStorePath, uploadStorePassword, uploadKeyAlias, uploadKeyPassword)
+    .all { it != null }
+
+// Debug continues to work without credentials. Every release entry point,
+// including flutter run --release, must use the configured upload key.
+val validateUploadSigning = tasks.register("validateOrbitUploadSigning") {
+    doLast {
+        if (!uploadSigningReady) throw GradleException(
+            "Configure a chave de upload em android/key.properties ou nas variáveis ORBIT_ANDROID_*. Consulte docs/android-store-release.md."
+        )
+        if (!rootProject.file(uploadStorePath!!).isFile) throw GradleException(
+            "O arquivo da chave de upload não foi encontrado. Verifique storeFile sem publicar credenciais."
+        )
+    }
+}
+tasks.configureEach {
+    if (name == "preReleaseBuild" || name.startsWith("validateSigningRelease")) {
+        dependsOn(validateUploadSigning)
+    }
 }
 
 android {
@@ -15,7 +50,6 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.allbluelabs.orbit_operator"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
@@ -25,11 +59,20 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("release") {
+            if (uploadSigningReady) {
+                storeFile = rootProject.file(uploadStorePath!!)
+                storePassword = uploadStorePassword
+                keyAlias = uploadKeyAlias
+                keyPassword = uploadKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 }

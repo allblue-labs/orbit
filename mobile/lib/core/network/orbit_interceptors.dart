@@ -38,10 +38,15 @@ abstract final class ContextHeaders {
 /// O `RequestIdInterceptor` do NestJS aceita o id que enviamos e o devolve na
 /// resposta — é o que permite casar um erro no aparelho com o log do servidor.
 class RequestContextInterceptor extends Interceptor {
-  RequestContextInterceptor({required this.locale, required this.timezone});
+  RequestContextInterceptor({
+    required this.locale,
+    required this.timezone,
+    this.timezoneProvider,
+  });
 
   final String locale;
   final String timezone;
+  final String Function()? timezoneProvider;
 
   static final _random = Random.secure();
 
@@ -49,7 +54,8 @@ class RequestContextInterceptor extends Interceptor {
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
     options.headers[ContextHeaders.requestId] ??= newRequestId();
     options.headers[ContextHeaders.locale] ??= locale;
-    options.headers[ContextHeaders.timezone] ??= timezone;
+    options.headers[ContextHeaders.timezone] ??=
+        timezoneProvider?.call() ?? timezone;
     options.headers[ContextHeaders.client] ??= 'MOBILE';
     handler.next(options);
   }
@@ -211,7 +217,7 @@ class LoggingInterceptor extends Interceptor {
       'http',
       data: {
         'method': options.method,
-        'path': options.path,
+        'path': OrbitLogger.safePath(options.path),
         'status': status,
         'durationMs': duration,
         'requestId': options.headers[ContextHeaders.requestId],
@@ -276,7 +282,7 @@ class ErrorMappingInterceptor extends Interceptor {
 
       /// Só o caminho. A query carrega identificadores e filtros, e nada disso
       /// é necessário para correlacionar com o log do servidor.
-      path: err.requestOptions.path,
+      path: OrbitLogger.safePath(err.requestOptions.path),
       statusCode: err.response?.statusCode,
       cause: err.error,
     );

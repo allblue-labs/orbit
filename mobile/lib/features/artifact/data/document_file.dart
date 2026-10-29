@@ -63,7 +63,8 @@ abstract interface class DocumentFileStore {
 }
 
 class TemporaryDocumentFileStore implements DocumentFileStore {
-  TemporaryDocumentFileStore({this.scopeKey});
+  TemporaryDocumentFileStore({this.scopeKey, Directory? directory})
+    : _directory = directory;
 
   final String? scopeKey;
   bool _closed = false;
@@ -92,18 +93,23 @@ class TemporaryDocumentFileStore implements DocumentFileStore {
     if (fileName.isEmpty || fileName == '.' || fileName == '..') {
       throw const FormatException('Nome de documento inválido');
     }
-    final file = File('${directory.path}/$fileName');
+    // O nome continua legível para compartilhar. Cada download possui seu
+    // próprio diretório, inclusive versões diferentes com nomes idênticos.
+    final download = await directory.createTemp('documento-');
+    final file = File('${download.path}/$fileName');
 
     /// Temporário e rename, como no resto do app: um PDF pela metade no lugar
     /// do definitivo abriria como arquivo corrompido.
     final temporary = File('${file.path}.tmp');
-    await temporary.writeAsBytes(bytes, flush: true);
-    await temporary.rename(file.path);
-    if (_closed) {
-      await delete(file.path);
-      throw SessionAuthenticator.changed;
+    try {
+      await temporary.writeAsBytes(bytes, flush: true);
+      await temporary.rename(file.path);
+      if (_closed) throw SessionAuthenticator.changed;
+      return file.path;
+    } on Object {
+      if (await download.exists()) await download.delete(recursive: true);
+      rethrow;
     }
-    return file.path;
   }
 
   @override
@@ -117,6 +123,12 @@ class TemporaryDocumentFileStore implements DocumentFileStore {
     if (!path.startsWith('${(await _dir()).path}/')) return;
     final file = File(path);
     if (await file.exists()) await file.delete();
+    final directory = await _dir();
+    if (file.parent.path != directory.path &&
+        await file.parent.exists() &&
+        await file.parent.list().isEmpty) {
+      await file.parent.delete();
+    }
   }
 
   @override
@@ -133,10 +145,11 @@ class TemporaryDocumentFileStore implements DocumentFileStore {
 /// Armazenamento em memória — para teste, e só.
 class MemoryDocumentFileStore implements DocumentFileStore {
   final files = <String, List<int>>{};
+  int _sequence = 0;
 
   @override
   Future<String> write(String fileName, List<int> bytes) async {
-    final path = '/temporario/$fileName';
+    final path = '/temporario/${++_sequence}/$fileName';
     files[path] = bytes;
     return path;
   }

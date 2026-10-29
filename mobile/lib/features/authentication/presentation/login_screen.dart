@@ -6,6 +6,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import '../../legal/presentation/legal_document_screen.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/providers.dart';
@@ -244,6 +245,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         onPressed: _submitting ? null : _pedirRecuperacao,
                         child: const Text('Esqueci minha senha'),
                       ),
+                      const LegalLinks(),
                     ],
                   ),
                 ),

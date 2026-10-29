@@ -39,6 +39,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'orbit_motion.dart';
 
 import '../theme/orbit_theme.dart';
 import 'orbit_primitives.dart';
@@ -332,10 +333,16 @@ class OrbitWizardState extends State<OrbitWizard> {
               Offstage(
                 key: ValueKey(index),
                 offstage: index != _atual,
-                child: _content(widget.steps[index]),
+                child: TickerMode(
+                  enabled: index == _atual,
+                  child: OrbitReveal(
+                    active: index == _atual,
+                    child: _content(widget.steps[index]),
+                  ),
+                ),
               ),
         ] else
-          _content(etapa),
+          OrbitReveal(key: ValueKey(_atual), child: _content(etapa)),
 
         if (widget.footer case final Widget rodape) ...[
           const SizedBox(height: OrbitSpacing.md),

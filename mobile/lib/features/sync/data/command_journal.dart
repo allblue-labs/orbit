@@ -17,6 +17,7 @@ import 'dart:convert';
 
 import '../../../core/contracts/mobile_offline_sync_contracts.dart';
 import 'journal_file.dart';
+import 'local_queue_recovery.dart';
 
 /// Em que ponto a intenção está — do lado de cá.
 ///
@@ -189,34 +190,47 @@ final class SyncReceipt {
 
 /// O conteúdo inteiro do journal.
 final class JournalSnapshot {
-  const JournalSnapshot({this.commands = const [], this.receipts = const []});
+  const JournalSnapshot({
+    this.commands = const [],
+    this.receipts = const [],
+    this.recovery = const [],
+  });
 
   final List<PendingCommand> commands;
   final List<SyncReceipt> receipts;
+  final List<LocalQueueRecovery> recovery;
 
   Map<String, Object?> toJson() => {
     'version': 1,
     'commands': commands.map((value) => value.toJson()).toList(),
     'receipts': receipts.map((value) => value.toJson()).toList(),
+    if (recovery.isNotEmpty)
+      'recovery': recovery.map((value) => value.toJson()).toList(),
   };
 
-  factory JournalSnapshot.fromJson(Map<String, Object?> json) =>
-      JournalSnapshot(
-        commands: (json['commands'] as List<Object?>? ?? const [])
-            .map(
-              (value) => PendingCommand.fromJson(
-                Map<String, Object?>.from(value! as Map<Object?, Object?>),
-              ),
-            )
-            .toList(),
-        receipts: (json['receipts'] as List<Object?>? ?? const [])
-            .map(
-              (value) => SyncReceipt.fromJson(
-                Map<String, Object?>.from(value! as Map<Object?, Object?>),
-              ),
-            )
-            .toList(),
-      );
+  factory JournalSnapshot.fromJson(Map<String, Object?> json) {
+    if (json['version'] != null && json['version'] != 1) {
+      throw const FormatException('Versão local não reconhecida.');
+    }
+    final recovery = readQueueRecovery(json['recovery']);
+    final commands = readQueueEntries(
+      json['commands'],
+      source: 'commands',
+      parse: PendingCommand.fromJson,
+      recovery: recovery,
+    );
+    final receipts = readQueueEntries(
+      json['receipts'],
+      source: 'receipts',
+      parse: SyncReceipt.fromJson,
+      recovery: recovery,
+    );
+    return JournalSnapshot(
+      commands: commands,
+      receipts: receipts,
+      recovery: recovery,
+    );
+  }
 }
 
 /// Retenção local, espelhando `mobile-sync-retention.ts`.
@@ -233,12 +247,19 @@ class CommandJournal {
 
   final JournalFile _file;
   JournalSnapshot? _cache;
+  Future<JournalSnapshot>? _reading;
 
   /// Um escritor por vez. Duas gravações concorrentes sobre o mesmo arquivo
   /// produziriam a última a vencer — e a perdida seria um comando do usuário.
   Future<void> _tail = Future.value();
 
-  Future<JournalSnapshot> read() async {
+  Future<JournalSnapshot> read() {
+    final cached = _cache;
+    if (cached != null) return Future.value(cached);
+    return _reading ??= _load().whenComplete(() => _reading = null);
+  }
+
+  Future<JournalSnapshot> _load() async {
     final cached = _cache;
     if (cached != null) return cached;
     final raw = await _file.read();
@@ -248,11 +269,11 @@ class CommandJournal {
         Map<String, Object?>.from(jsonDecode(raw) as Map<Object?, Object?>),
       );
     } on Object {
-      /// Journal ilegível é perda de trabalho, e apagá-lo em silêncio seria
-      /// esconder isso. Preserva-se o arquivo para diagnóstico e segue-se com
-      /// fila vazia, em vez de travar o app na abertura.
-      await _file.write(jsonEncode(const JournalSnapshot().toJson()));
-      return _cache = const JournalSnapshot();
+      // Nenhuma escrita na leitura. Até o texto ilegível é preservado; uma
+      // futura mutação o inclui em recovery, junto das novas intenções válidas.
+      return _cache = JournalSnapshot(
+        recovery: [LocalQueueRecovery(source: 'journal', value: raw)],
+      );
     }
   }
 
@@ -261,7 +282,13 @@ class CommandJournal {
     JournalSnapshot Function(JournalSnapshot current) change,
   ) {
     final completer = _tail.then((_) async {
-      final next = change(await read());
+      final current = await read();
+      final changed = change(current);
+      final next = JournalSnapshot(
+        commands: changed.commands,
+        receipts: changed.receipts,
+        recovery: current.recovery,
+      );
       await _file.write(jsonEncode(next.toJson()));
       return _cache = next;
     });

@@ -12,7 +12,7 @@
 ///
 /// ```text
 /// instante   → um ponto no tempo. Vem em ISO com fuso; exibir no fuso local
-///              do aparelho é correto, porque é o mesmo ponto para todos.
+///              preferido da conta é correto, porque é o mesmo ponto para todos.
 /// data civil → um dia no calendário de alguém. `2026-09-01` não é um
 ///              instante: só significa algo dentro de um fuso.
 /// ```

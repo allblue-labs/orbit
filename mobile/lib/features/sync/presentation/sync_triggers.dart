@@ -18,6 +18,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/providers.dart';
 import '../../evidence/application/evidence_providers.dart';
+import '../../profile/application/profile_providers.dart';
+import '../../profile/application/notification_settings_providers.dart';
 import '../application/sync_providers.dart';
 
 class SyncTriggers extends ConsumerStatefulWidget {
@@ -70,6 +72,20 @@ class _SyncTriggersState extends ConsumerState<SyncTriggers>
   Future<void> _sync() async {
     if (!mounted) return;
     if (ref.read(commandScopeProvider) == null) return;
+    // A failed personal read must not remain cached after a network handover
+    // or returning to the app. Keep successful values and in-flight reads.
+    if (ref.exists(avatarBytesProvider)) {
+      final avatar = ref.read(avatarBytesProvider);
+      if (avatar.hasError && !avatar.isLoading) {
+        ref.invalidate(avatarBytesProvider);
+      }
+    }
+    if (ref.exists(notificationPreferencesProvider)) {
+      final preferences = ref.read(notificationPreferencesProvider);
+      if (preferences.hasError && !preferences.isLoading) {
+        ref.invalidate(notificationPreferencesProvider);
+      }
+    }
     await ref.read(syncControllerProvider.notifier).sync();
     if (!mounted) return;
     await ref.read(mediaUploadControllerProvider.notifier).process();

@@ -1,7 +1,10 @@
 /// A tela de execução mostra o que o servidor permitiu — nada além.
 library;
 
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:orbit_operator/core/design/orbit_wizard.dart';
@@ -62,6 +65,65 @@ void main() {
   tearDown(() => FlutterError.onError = FlutterError.presentError);
 
   group('checklist', () {
+    for (final enabled in [true, false]) {
+      testWidgets('ação acessível do checklist (habilitado=$enabled)', (
+        tester,
+      ) async {
+        final semantics = tester.ensureSemantics();
+        try {
+          final key = GlobalKey<ExecutionChecklistState>();
+          final saved = <Map<String, dynamic>>[];
+          await tester.pumpWidget(
+            host(
+              ExecutionChecklist(
+                key: key,
+                checklists: [checklist()],
+                enabled: enabled,
+                onAnswer: (_, _, _) {},
+                onSave: (_, answers) async {
+                  saved.add(Map.of(answers));
+                  return true;
+                },
+              ),
+            ),
+          );
+          final node = tester.getSemantics(
+            find.bySemanticsLabel('Filtro limpo, obrigatório'),
+          );
+          expect(
+            node.getSemanticsData().hasAction(SemanticsAction.tap),
+            enabled,
+          );
+          if (enabled) {
+            tester.binding.performSemanticsAction(
+              ui.SemanticsActionEvent(
+                viewId: tester.view.viewId,
+                nodeId: node.id,
+                type: SemanticsAction.tap,
+              ),
+            );
+            await tester.pump();
+            expect(
+              tester
+                  .getSemantics(
+                    find.bySemanticsLabel('Filtro limpo, obrigatório'),
+                  )
+                  .getSemanticsData()
+                  .flagsCollection
+                  .isChecked,
+              ui.CheckedState.isFalse,
+            );
+            expect(await key.currentState!.saveDraft(), isTrue);
+            await tester.pump();
+            expect(saved.single['i1'], isFalse);
+          } else {
+            expect(saved, isEmpty);
+          }
+        } finally {
+          semantics.dispose();
+        }
+      });
+    }
     testWidgets('mostra itens, obrigatoriedade e contagem', (tester) async {
       await tester.pumpWidget(
         host(

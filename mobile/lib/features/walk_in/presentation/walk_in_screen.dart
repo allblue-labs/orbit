@@ -37,6 +37,7 @@ import '../../field/application/field_providers.dart';
 import '../../../core/contracts/walk_in_contracts.dart';
 import '../../../core/design/orbit_primitives.dart';
 import '../../../core/design/orbit_wizard.dart';
+import '../../../core/design/orbit_loading.dart';
 import '../../../core/errors/orbit_exception.dart';
 import '../../../core/routing/orbit_router.dart';
 import '../../../core/theme/orbit_theme.dart';
@@ -511,51 +512,57 @@ class _WalkInScreenState extends ConsumerState<WalkInScreen> {
             ),
           ],
         ),
-        body: ListView(
-          controller: _scroll,
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          padding: const EdgeInsets.only(bottom: OrbitSpacing.xl),
-          children: [
-            if (_erro != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  OrbitSpacing.md,
-                  OrbitSpacing.md,
-                  OrbitSpacing.md,
-                  0,
+        body: OrbitBusyOverlay(
+          busy: _abrindo,
+          title: 'Abrindo atendimento',
+          message:
+              'Salvando os dados do cliente e dos equipamentos. Aguarde um instante.',
+          child: ListView(
+            controller: _scroll,
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: const EdgeInsets.only(bottom: OrbitSpacing.xl),
+            children: [
+              if (_erro != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    OrbitSpacing.md,
+                    OrbitSpacing.md,
+                    OrbitSpacing.md,
+                    0,
+                  ),
+                  child: _erro!.isConflict
+                      ? OrbitCard(
+                          tone: OrbitTone.warning,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Revise os dados do atendimento',
+                                style: OrbitType.sectionTitle.copyWith(
+                                  color: context.orbit.ink,
+                                ),
+                              ),
+                              const SizedBox(height: OrbitSpacing.sm),
+                              Text(
+                                _erro!.publicMessage,
+                                style: OrbitType.body.copyWith(
+                                  color: context.orbit.inkMuted,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : SectionError(error: _erro!, onRetry: _abrir),
                 ),
-                child: _erro!.isConflict
-                    ? OrbitCard(
-                        tone: OrbitTone.warning,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Revise os dados do atendimento',
-                              style: OrbitType.sectionTitle.copyWith(
-                                color: context.orbit.ink,
-                              ),
-                            ),
-                            const SizedBox(height: OrbitSpacing.sm),
-                            Text(
-                              _erro!.publicMessage,
-                              style: OrbitType.body.copyWith(
-                                color: context.orbit.inkMuted,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    : SectionError(error: _erro!, onRetry: _abrir),
+              OrbitWizard(
+                key: const ValueKey('walk-in-wizard'),
+                steps: etapas,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: OrbitSpacing.gutter,
+                ),
               ),
-            OrbitWizard(
-              key: const ValueKey('walk-in-wizard'),
-              steps: etapas,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: OrbitSpacing.gutter,
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

@@ -78,6 +78,24 @@ class SettingsScreen extends ConsumerWidget {
               ),
             ],
           ),
+          const SizedBox(height: OrbitSpacing.lg),
+          OrbitSettingsGroup(
+            title: 'Termos e privacidade',
+            children: [
+              OrbitSettingsRow(
+                icon: Icons.privacy_tip_outlined,
+                label: 'Política de Privacidade',
+                description: 'Como os seus dados são tratados',
+                onTap: () => context.push(OrbitRoutes.privacy),
+              ),
+              OrbitSettingsRow(
+                icon: Icons.description_outlined,
+                label: 'Termos de Uso',
+                description: 'Condições de uso do Orbit',
+                onTap: () => context.push(OrbitRoutes.terms),
+              ),
+            ],
+          ),
         ],
       ),
     );

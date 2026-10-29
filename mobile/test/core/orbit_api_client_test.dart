@@ -52,9 +52,74 @@ ResponseBody _json(Map<String, dynamic> body, {int status = 200}) {
 
 String _encode(Map<String, dynamic> body) => jsonEncode(body);
 
+class _RecordingLogger extends OrbitLogger {
+  _RecordingLogger() : super(isProduction: true);
+  final events = <Map<String, Object?>?>[];
+  @override
+  void info(String message, {Map<String, Object?>? data}) => events.add(data);
+}
+
 void main() {
   final environment = OrbitEnvironment.fromDefines();
   const logger = OrbitLogger(isProduction: true);
+
+  for (final method in ['GET', 'PUT']) {
+    for (final status in [200, 403]) {
+      test(
+        '$method assinado ($status) mantém assinatura só na requisição',
+        () async {
+          final logs = _RecordingLogger();
+          final adapter = _ScriptedAdapter(
+            (_) async => ResponseBody.fromBytes([1, 2], status),
+          );
+          final client = OrbitApiClient.create(
+            environment: environment,
+            storage: InMemoryTokenStorage(
+              const TokenPair(
+                accessToken: 'secret-token',
+                refreshToken: 'secret-refresh',
+                expiresIn: 900,
+              ),
+            ),
+            logger: logs,
+            dio: Dio()..httpClientAdapter = adapter,
+          );
+          final url = Uri.parse(
+            'https://storage.example.test/object?signature=private-signature&key=customer-path',
+          );
+          final request = method == 'GET'
+              ? client.getBytes(url: url)
+              : client.putBytes(url: url, bytes: [1, 2], headers: {});
+          if (status == 200) {
+            await request;
+          } else {
+            await expectLater(
+              request,
+              throwsA(
+                isA<OrbitException>().having(
+                  (e) => e.diagnostics?.path,
+                  'diagnostic path',
+                  '/object',
+                ),
+              ),
+            );
+          }
+          expect(
+            adapter.requests.single.uri.queryParameters['signature'],
+            'private-signature',
+          );
+          expect(
+            adapter.requests.single.headers.keys.map((e) => e.toLowerCase()),
+            isNot(contains('authorization')),
+          );
+          expect(logs.events, isNotEmpty);
+          expect(logs.events.toString(), isNot(contains('private-signature')));
+          expect(logs.events.toString(), isNot(contains('customer-path')));
+          expect(logs.events.map((e) => e?['path']), everyElement('/object'));
+        },
+      );
+    }
+  }
 
   ({OrbitApiClient client, _ScriptedAdapter adapter, _ScriptedAdapter plain})
   build({
@@ -87,6 +152,150 @@ void main() {
     expect(data['id'], 'op-1');
     expect(data['code'], 'OP-1');
   });
+
+  test('repete uma leitura após falha transitória de conexão', () async {
+    var attempts = 0;
+    final setup = build(
+      onRequest: (request) async {
+        if (++attempts == 1) {
+          throw DioException(
+            requestOptions: request,
+            type: DioExceptionType.connectionError,
+          );
+        }
+        return _json(envelope({'id': 'op-1'}));
+      },
+    );
+    expect(await setup.client.get<dynamic>('/operations/op-1'), {'id': 'op-1'});
+    expect(attempts, 2);
+  });
+
+  test(
+    'download de avatar repete sem enviar token para URL assinada',
+    () async {
+      var attempts = 0;
+      final setup = build(
+        onRequest: (request) async {
+          if (++attempts == 1) {
+            throw DioException(
+              requestOptions: request,
+              type: DioExceptionType.connectionError,
+            );
+          }
+          return ResponseBody.fromBytes([1, 2, 3], 200);
+        },
+      );
+      final result = await setup.client.getBytes(
+        url: Uri.parse('https://storage.example.test/avatar?signature=private'),
+      );
+      expect(result.bytes, [1, 2, 3]);
+      expect(attempts, 2);
+      for (final request in setup.adapter.requests) {
+        expect(
+          request.headers.keys.map((key) => key.toLowerCase()),
+          isNot(contains('authorization')),
+        );
+        expect(request.uri.queryParameters['signature'], 'private');
+      }
+    },
+  );
+
+  test('limita a duas tentativas quando a conexão não retorna', () async {
+    var attempts = 0;
+    final setup = build(
+      onRequest: (request) async {
+        attempts++;
+        throw DioException(
+          requestOptions: request,
+          type: DioExceptionType.connectionError,
+        );
+      },
+    );
+    await expectLater(
+      setup.client.get<dynamic>('/operations'),
+      throwsA(isA<OrbitException>()),
+    );
+    expect(attempts, 2);
+  });
+
+  for (final method in ['POST', 'PATCH', 'PUT', 'DELETE']) {
+    test('não repete $method após perda de conexão', () async {
+      var attempts = 0;
+      final setup = build(
+        onRequest: (request) async {
+          attempts++;
+          throw DioException(
+            requestOptions: request,
+            type: DioExceptionType.connectionError,
+          );
+        },
+      );
+      final request = switch (method) {
+        'POST' => setup.client.post<dynamic>('/operations'),
+        'PATCH' => setup.client.patch<dynamic>('/operations/1'),
+        'PUT' => setup.client.put<dynamic>('/operations/1'),
+        _ => setup.client.delete<dynamic>('/operations/1'),
+      };
+      await expectLater(request, throwsA(isA<OrbitException>()));
+      expect(attempts, 1);
+    });
+  }
+
+  test('não repete leitura após cancelamento durante a pausa', () async {
+    final token = CancelToken();
+    final failed = Completer<void>();
+    final setup = build(
+      onRequest: (request) async {
+        failed.complete();
+        throw DioException(
+          requestOptions: request,
+          type: DioExceptionType.connectionError,
+        );
+      },
+    );
+    final result = setup.client.get<dynamic>('/operations', cancelToken: token);
+    final assertion = expectLater(
+      result,
+      throwsA(
+        isA<OrbitException>().having((e) => e.isCancelled, 'cancelled', true),
+      ),
+    );
+    await failed.future;
+    token.cancel();
+    await assertion;
+    expect(setup.adapter.requests, hasLength(1));
+  });
+
+  test(
+    'não repete uma leitura como outra conta após troca da sessão',
+    () async {
+      final failed = Completer<void>();
+      final setup = build(
+        onRequest: (request) async {
+          failed.complete();
+          throw DioException(
+            requestOptions: request,
+            type: DioExceptionType.connectionError,
+          );
+        },
+      );
+      final result = setup.client.scoped().get<dynamic>('/private-A');
+      final assertion = expectLater(
+        result,
+        throwsA(
+          isA<OrbitException>().having(
+            (e) => e.code,
+            'code',
+            'SESSION_CHANGED',
+          ),
+        ),
+      );
+      await failed.future;
+      await setup.client.authenticator.clearSession();
+      await assertion;
+      expect(setup.adapter.requests, hasLength(1));
+    },
+  );
 
   test(
     '401 atrasado não reexecuta a requisição da conta anterior como o novo usuário',
@@ -394,7 +603,8 @@ void main() {
 
       expect(erro.publicMessage, isNot(contains('192.168.1.233')));
       expect(erro.publicMessage, isNot(contains('6001')));
-      expect(erro.publicMessage, contains('conexão com a internet'));
+      expect(erro.publicMessage, contains('conectar ao Orbit'));
+      expect(erro.publicMessage, isNot(contains('Sem conexão')));
     });
 
     test('sem destino informado, a mensagem é a mesma', () async {

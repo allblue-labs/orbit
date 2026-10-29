@@ -30,6 +30,7 @@ import '../../../core/design/orbit_settings_list.dart';
 import '../../../core/routing/orbit_router.dart';
 import '../../../core/theme/orbit_theme.dart';
 import '../../authentication/domain/session.dart';
+import '../../authentication/presentation/logout_confirmation.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../signature/application/signature_providers.dart';
 import '../../sync/application/sync_controller.dart';
@@ -179,7 +180,7 @@ class ProfileScreen extends ConsumerWidget {
                 icon: Icons.logout_rounded,
                 label: 'Sair da conta',
                 tone: palette.danger,
-                onTap: () => logout(context, ref),
+                onTap: () => confirmLogout(context, ref),
               ),
             ],
           ),
@@ -527,52 +528,4 @@ class _ContadorDeAvisos extends ConsumerWidget {
       ],
     );
   }
-}
-
-/* ------------------------------------------------------------------ */
-/* Sair                                                                */
-/* ------------------------------------------------------------------ */
-
-/// Sair da conta, sem levar o trabalho de ninguém junto.
-///
-/// Duas decisões distintas:
-///
-/// - **A projeção do servidor é apagada.** O próprio pacote de campo vem
-///   marcado `purgeOnLogout: true`, e ele carrega nome de cliente, endereço e
-///   histórico. Isso não fica num aparelho depois que a pessoa sai dele.
-/// - **A fila de comandos permanece.** Apagá-la seria destruir o registro de um
-///   trabalho que aconteceu de verdade só porque alguém tocou "Sair" antes de
-///   pegar sinal. Ela fica presa ao escopo de quem a criou, então o próximo a
-///   entrar não a vê nem a envia.
-Future<void> logout(BuildContext context, WidgetRef ref) async {
-  final sync = ref.read(syncControllerProvider);
-  if (sync.hasWork) {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Sair com ações não sincronizadas?'),
-        content: Text(
-          '${sync.pending + sync.conflicts + sync.rejected + sync.expired} '
-          'ação(ões) ainda não chegaram ao servidor. Elas ficam guardadas '
-          'neste aparelho e serão enviadas quando você entrar de novo com '
-          'esta mesma conta.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Continuar conectado'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Sair mesmo assim'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-  }
-
-  // Authentication owns device revocation and session data cleanup for every
-  // exit path, including the mandatory password-change screen.
-  await ref.read(authControllerProvider.notifier).logout();
 }

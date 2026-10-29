@@ -29,6 +29,7 @@ import 'package:flutter/foundation.dart';
 import '../../../core/contracts/mobile_push_device_contracts.dart';
 import '../../../core/observability/orbit_logger.dart';
 import '../../../core/push/push_channel.dart';
+import '../../../core/time/orbit_timezone.dart';
 import '../data/mobile_device_repository.dart';
 
 class PushRegistrar {
@@ -38,18 +39,21 @@ class PushRegistrar {
     required OrbitLogger logger,
     required Future<String> Function() deviceInstanceId,
     required Future<String> Function() appVersion,
+    String Function()? timezone,
     this.retryDelay = const Duration(seconds: 30),
   }) : _source = source,
        _repository = repository,
        _logger = logger,
        _deviceInstanceId = deviceInstanceId,
-       _appVersion = appVersion;
+       _appVersion = appVersion,
+       _timezone = timezone ?? (() => OrbitTimezone.resolve().name);
 
   final PushTokenSource _source;
   final MobileDeviceRepository _repository;
   final OrbitLogger _logger;
   final Future<String> Function() _deviceInstanceId;
   final Future<String> Function() _appVersion;
+  final String Function() _timezone;
 
   final Duration retryDelay;
   StreamSubscription<String>? _refresh;
@@ -134,7 +138,7 @@ class PushRegistrar {
           pushToken: token,
           appVersion: version,
           locale: PlatformDispatcher.instance.locale.toLanguageTag(),
-          timezone: DateTime.now().timeZoneName,
+          timezone: _timezone(),
         ),
       );
       if (!_active || generation != _generation) return;

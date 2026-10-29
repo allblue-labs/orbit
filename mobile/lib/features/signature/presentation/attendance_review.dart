@@ -88,7 +88,9 @@ class AttendanceReview extends StatelessWidget {
                   const SizedBox(width: 6),
                   Flexible(
                     child: Text(
-                      OrbitFormat.dateHourOf(preparation.performedAt),
+                      OrbitFormat.of(
+                        context,
+                      ).dateHourOf(preparation.performedAt),
                       style: OrbitType.caption.copyWith(
                         color: palette.inkMuted,
                       ),

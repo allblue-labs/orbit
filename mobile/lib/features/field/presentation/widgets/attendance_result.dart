@@ -108,7 +108,9 @@ class AttendanceTechnicalSummary extends ConsumerWidget {
             Text(code!, style: const TextStyle(fontWeight: FontWeight.w600)),
           if (technician != null) Text('Técnico: $technician'),
           if (completedAt != null)
-            Text('Concluído em ${OrbitFormat.dateHourOf(completedAt)}'),
+            Text(
+              'Concluído em ${OrbitFormat.of(context).dateHourOf(completedAt)}',
+            ),
           const SizedBox(height: OrbitSpacing.sm),
           summary.when(
             loading: () => const SectionLoading(lines: 3),

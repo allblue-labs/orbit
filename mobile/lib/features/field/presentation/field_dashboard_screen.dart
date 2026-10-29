@@ -324,7 +324,7 @@ class _Home extends ConsumerWidget {
             eyebrow: 'Em andamento',
             title: emAndamento.customer?.name ?? emAndamento.title,
             subtitle: emAndamento.customer == null ? null : emAndamento.title,
-            meta: _metaDoDestaque(emAndamento),
+            meta: _metaDoDestaque(context, emAndamento),
             onTap: () =>
                 context.push(OrbitRoutes.workItemDetail(emAndamento.id)),
             action: OrbitHeroButton(
@@ -372,9 +372,12 @@ class _Home extends ConsumerWidget {
   }
 
   /// A linha de contexto do destaque: horário, equipamento e unidade.
-  static String? _metaDoDestaque(MobileWorkItemContract item) {
+  static String? _metaDoDestaque(
+    BuildContext context,
+    MobileWorkItemContract item,
+  ) {
     final partes = [
-      scheduleText(item),
+      scheduleText(item, format: OrbitFormat.of(context)),
       if (item.equipmentSummary.isNotEmpty)
         equipmentText(item.equipmentSummary),
       item.businessUnit.name,
@@ -786,7 +789,7 @@ class _RecentWorkState extends State<_RecentWork> {
         for (final item in itens)
           OrbitListRow(
             key: ValueKey(item.id),
-            leading: OrbitFormat.weekdayAndDay(item.completedAt),
+            leading: OrbitFormat.of(context).weekdayAndDay(item.completedAt),
             title: item.customerName ?? item.title,
             subtitle: item.customerName == null ? null : item.title,
             detail: [
@@ -797,7 +800,7 @@ class _RecentWorkState extends State<_RecentWork> {
               label: 'Concluído',
               tone: OrbitTone.success,
             ),
-            onTap: () => context.push(OrbitRoutes.operationDetail(item.id)),
+            onTap: () => context.push(OrbitRoutes.operationExecution(item.id)),
           ),
       ],
     );
@@ -907,7 +910,7 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.orbit;
-    final agora = now ?? DateTime.now();
+    final agora = OrbitFormat.of(context).at(now ?? DateTime.now());
     final primeiroNome = userName?.trim().split(' ').first;
 
     return Padding(
@@ -1164,7 +1167,7 @@ class _DocumentRow extends StatelessWidget {
     ),
     title: document.label,
     subtitle: document.customerName,
-    detail: OrbitFormat.dateHourOf(document.createdAt),
+    detail: OrbitFormat.of(context).dateHourOf(document.createdAt),
     status: documentStateBadge(document),
     onTap: () => context.go(OrbitRoutes.documents),
   );

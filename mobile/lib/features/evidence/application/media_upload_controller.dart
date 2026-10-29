@@ -35,6 +35,7 @@ class MediaSyncState {
     this.phase = MediaSyncPhase.idle,
     this.pending = 0,
     this.blocked = 0,
+    this.needsRecovery = false,
     this.progress,
     this.error,
   });
@@ -46,6 +47,7 @@ class MediaSyncState {
 
   /// Recusadas ou sem arquivo — precisam de uma pessoa.
   final int blocked;
+  final bool needsRecovery;
 
   /// Progresso do envio em curso, 0..1. `null` quando nada está subindo.
   final double? progress;
@@ -53,12 +55,13 @@ class MediaSyncState {
   final Object? error;
 
   bool get isUploading => phase == MediaSyncPhase.uploading;
-  bool get hasWork => pending > 0 || blocked > 0;
+  bool get hasWork => pending > 0 || blocked > 0 || needsRecovery;
 
   MediaSyncState copyWith({
     MediaSyncPhase? phase,
     int? pending,
     int? blocked,
+    bool? needsRecovery,
     double? progress,
     Object? error,
     bool clearProgress = false,
@@ -67,6 +70,7 @@ class MediaSyncState {
     phase: phase ?? this.phase,
     pending: pending ?? this.pending,
     blocked: blocked ?? this.blocked,
+    needsRecovery: needsRecovery ?? this.needsRecovery,
     progress: clearProgress ? null : (progress ?? this.progress),
     error: clearError ? null : (error ?? this.error),
   );
@@ -356,11 +360,13 @@ class MediaUploadController extends StateNotifier<MediaSyncState> {
   }
 
   Future<void> _refreshCounts() async {
-    final queue = await _queue.forScope(scope);
+    final snapshot = await _queue.read();
     if (!mounted) return;
+    final queue = snapshot.media.where((item) => item.scope.matches(scope));
     state = state.copyWith(
       pending: queue.where((value) => value.isSendable).length,
       blocked: queue.where((value) => value.isBlocked).length,
+      needsRecovery: snapshot.recovery.isNotEmpty,
     );
   }
 

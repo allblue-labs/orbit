@@ -32,6 +32,7 @@ import '../../../core/contracts/mobile_field_contracts.dart';
 import '../../../core/design/orbit_primitives.dart';
 import '../../../core/design/orbit_screen_header.dart';
 import '../../../core/presentation/orbit_format.dart';
+import '../../../core/time/orbit_timezone.dart';
 import '../../../core/theme/orbit_theme.dart';
 import '../../../core/widgets/section_states.dart';
 import '../application/documents_providers.dart';
@@ -469,13 +470,27 @@ class _Lista extends StatelessWidget {
             ? null
             : state.items[index + 1];
 
-        final dia = rotuloDoDia(documento.createdAt, agora: agora);
+        final dia = rotuloDoDia(
+          documento.createdAt,
+          agora: agora,
+          format: OrbitFormat.of(context),
+        );
         final abreGrupo =
             anterior == null ||
-            rotuloDoDia(anterior.createdAt, agora: agora) != dia;
+            rotuloDoDia(
+                  anterior.createdAt,
+                  agora: agora,
+                  format: OrbitFormat.of(context),
+                ) !=
+                dia;
         final fechaGrupo =
             proximo == null ||
-            rotuloDoDia(proximo.createdAt, agora: agora) != dia;
+            rotuloDoDia(
+                  proximo.createdAt,
+                  agora: agora,
+                  format: OrbitFormat.of(context),
+                ) !=
+                dia;
 
         final palette = context.orbit;
 
@@ -536,14 +551,19 @@ class _Lista extends StatelessWidget {
 ///
 /// Os dois primeiros existem porque é assim que alguém em campo pensa a data
 /// do documento que acabou de emitir — "a OS de ontem", nunca "a OS de 10/09".
-String rotuloDoDia(DateTime instante, {DateTime? agora}) {
-  final local = instante.toLocal();
-  final hoje = (agora ?? DateTime.now()).toLocal();
-  final dias = DateTime(
+String rotuloDoDia(
+  DateTime instante, {
+  DateTime? agora,
+  OrbitDateTimeFormat? format,
+}) {
+  final clock = format ?? OrbitDateTimeFormat(OrbitTimezone.resolve());
+  final local = clock.at(instante);
+  final hoje = clock.at(agora ?? DateTime.now());
+  final dias = DateTime.utc(
     hoje.year,
     hoje.month,
     hoje.day,
-  ).difference(DateTime(local.year, local.month, local.day)).inDays;
+  ).difference(DateTime.utc(local.year, local.month, local.day)).inDays;
 
   if (dias == 0) return 'Hoje';
   if (dias == 1) return 'Ontem';
@@ -759,7 +779,7 @@ class _DocumentRowState extends ConsumerState<DocumentRow> {
                           ),
                           const SizedBox(width: OrbitSpacing.sm),
                           Text(
-                            OrbitFormat.hourOf(documento.createdAt),
+                            OrbitFormat.of(context).hourOf(documento.createdAt),
                             style: OrbitType.numeric.copyWith(
                               fontSize: 12.5,
                               color: palette.inkSubtle,
@@ -782,7 +802,7 @@ class _DocumentRowState extends ConsumerState<DocumentRow> {
                     /// perder o fim — o ícone à esquerda já diz o tipo.
                     if (empilhado)
                       Text(
-                        OrbitFormat.hourOf(documento.createdAt),
+                        OrbitFormat.of(context).hourOf(documento.createdAt),
                         style: OrbitType.numeric.copyWith(
                           fontSize: 12.5,
                           color: palette.inkSubtle,

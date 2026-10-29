@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/contracts/operation_contracts.dart';
 import '../../../../core/design/orbit_primitives.dart';
+import '../../../../core/presentation/orbit_format.dart';
 import '../../../../core/theme/orbit_theme.dart';
 import 'status_badge.dart';
 
@@ -38,7 +39,7 @@ class OperationTile extends StatelessWidget {
     final contexto = [
       operation.code,
       OperationKind.label(operation.kind),
-      if (schedule != null) _formatDate(schedule),
+      if (schedule != null) OrbitFormat.of(context).dateHourOf(schedule),
       if (tom != null) OperationPriority.label(operation.priority),
     ].join(' · ');
 
@@ -124,14 +125,5 @@ class OperationTile extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  static String _formatDate(DateTime value) {
-    final local = value.toLocal();
-    final day = local.day.toString().padLeft(2, '0');
-    final month = local.month.toString().padLeft(2, '0');
-    final hour = local.hour.toString().padLeft(2, '0');
-    final minute = local.minute.toString().padLeft(2, '0');
-    return '$day/$month $hour:$minute';
   }
 }

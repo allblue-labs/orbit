@@ -2,6 +2,7 @@
 library;
 
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -156,7 +157,93 @@ build(
   );
 }
 
+class DelayedInitialPull extends Backend {
+  DelayedInitialPull()
+    : super(
+        onPush: (commands) => commands
+            .map(
+              (command) => <String, Object?>{
+                'commandId': command['commandId'],
+                'commandType': command['commandType'],
+                'status': 'APPLIED',
+                'serverVersion': '2026-09-01T11:00:00.000Z',
+              },
+            )
+            .toList(),
+        onPull: (_) => pullPage(),
+      );
+  final entered = Completer<void>();
+  final release = Completer<void>();
+  @override
+  Future<ResponseBody> call(RequestOptions options) async {
+    if (options.uri.path.endsWith('/sync/pull') && !entered.isCompleted) {
+      entered.complete();
+      await release.future;
+    }
+    return super.call(options);
+  }
+}
+
 void main() {
+  test(
+    'registros ilegíveis exigem recuperação sem impedir envio dos válidos',
+    () async {
+      final file = MemoryJournalFile();
+      final valid = PendingCommand(
+        envelope: envelope(1),
+        scope: scope,
+        state: PendingCommandState.pending,
+        enqueuedAt: DateTime.now(),
+      );
+      final raw = jsonEncode({
+        'version': 1,
+        'commands': ['quebrado', valid.toJson()],
+        'receipts': [],
+      });
+      await file.write(raw);
+      final backend = Backend(
+        onPush: (commands) => [receipt(1, 'APPLIED')],
+        onPull: (_) => pullPage(),
+      );
+      final harness = build(backend, journalFile: file);
+      await harness.controller.restore();
+      expect(harness.controller.state.needsRecovery, isTrue);
+      expect(harness.controller.state.pending, 1);
+      await harness.controller.sync(manual: true);
+      expect(backend.pushes.single, hasLength(1));
+      expect(backend.pushes.single.single['commandId'], uuid(1));
+      expect(harness.controller.state.needsAttention, isTrue);
+      expect(
+        (await CommandJournal(file: file).read()).recovery.single.value,
+        'quebrado',
+      );
+      harness.controller.dispose();
+    },
+  );
+  test(
+    'envia na primeira tentativa o início enfileirado durante um pull em andamento',
+    () async {
+      final backend = DelayedInitialPull();
+      final harness = build(backend);
+      addTearDown(harness.controller.dispose);
+      final background = harness.controller.sync();
+      await backend.entered.future;
+      final starting = harness.controller.enqueue(
+        envelope(1, type: OfflineCommandType.operationStart, payload: const {}),
+      );
+      for (var attempt = 0; attempt < 50; attempt++) {
+        if ((await harness.journal.read()).commands.isNotEmpty) break;
+        await Future<void>.delayed(Duration.zero);
+      }
+      backend.release.complete();
+      await Future.wait([background, starting]);
+      expect(backend.pushes, hasLength(1));
+      expect(
+        await harness.controller.outcomeOf(uuid(1)),
+        isA<CommandConfirmed>(),
+      );
+    },
+  );
   for (final foreign in [
     const CommandScope(
       userId: 'u2',

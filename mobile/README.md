@@ -34,6 +34,10 @@ make build-ios-prod
 A URL nunca é constante de código: chega por `--dart-define-from-file` e é lida em
 `core/config/environment.dart`.
 
+Antes do primeiro release Android, configure a chave de upload conforme o
+[guia de publicação no Google Play](docs/android-store-release.md).
+Builds release exigem assinatura própria; debug funciona sem essa configuração.
+
 ### Para onde apontar
 
 | Alvo                            | `ORBIT_API_URL`                                                                       |

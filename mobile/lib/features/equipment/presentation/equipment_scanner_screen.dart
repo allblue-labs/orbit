@@ -635,7 +635,7 @@ class _Equipamento extends StatelessWidget {
                     icon: Icons.check_circle_outline_rounded,
                     label: 'Último atendimento',
                     value:
-                        '${OrbitFormat.dateHourOf(last.date)}\n${agendaEventTypeLabel(last.type) ?? 'Atendimento'}',
+                        '${OrbitFormat.of(context).dateHourOf(last.date)}\n${agendaEventTypeLabel(last.type) ?? 'Atendimento'}',
                   ),
                 if (equipment.lastService != null &&
                     equipment.nextMaintenance != null)
@@ -644,7 +644,7 @@ class _Equipamento extends StatelessWidget {
                   _EquipmentInfo(
                     icon: Icons.calendar_month_outlined,
                     label: 'Próxima manutenção',
-                    value: OrbitFormat.dateHourOf(next),
+                    value: OrbitFormat.of(context).dateHourOf(next),
                   ),
               ],
             ),
@@ -904,7 +904,7 @@ class _AttendanceCard extends StatelessWidget {
         _EquipmentInfo(
           icon: Icons.event_available_outlined,
           label: 'Realizado em',
-          value: OrbitFormat.dateHourOf(item.completedAt),
+          value: OrbitFormat.of(context).dateHourOf(item.completedAt),
         ),
         if (item.technicianName?.trim().isNotEmpty == true) ...[
           const SizedBox(height: OrbitSpacing.ms),

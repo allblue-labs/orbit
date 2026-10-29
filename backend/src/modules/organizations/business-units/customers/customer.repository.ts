@@ -23,23 +23,25 @@ export class CustomerRepository {
 
   list(organizationId: string, query: CustomerQueryDto) {
     const pagination = PaginationHelper.normalize(query.page, query.limit);
+    const search = query.search?.trim();
+    // Only a document-shaped term may match its normalized digits. Using an
+    // empty string here matches every customer with a document, hiding the
+    // actual name matches beyond the first page.
+    const document =
+      search && /^[\d./\s-]+$/.test(search) ? search.replace(/\D/g, '') : '';
     const where: Prisma.CustomerWhereInput = {
       organizationId,
       deletedAt: null,
       type: query.type,
       status: query.status,
-      ...(query.search
+      ...(search
         ? {
             OR: [
-              { legalName: { contains: query.search, mode: 'insensitive' } },
-              { tradeName: { contains: query.search, mode: 'insensitive' } },
-              {
-                documentNumber: {
-                  contains: query.search.replace(/\D/g, ''),
-                },
-              },
-              { email: { contains: query.search, mode: 'insensitive' } },
-              { phone: { contains: query.search } },
+              { legalName: { contains: search, mode: 'insensitive' } },
+              { tradeName: { contains: search, mode: 'insensitive' } },
+              ...(document ? [{ documentNumber: { contains: document } }] : []),
+              { email: { contains: search, mode: 'insensitive' } },
+              { phone: { contains: search } },
             ],
           }
         : {}),

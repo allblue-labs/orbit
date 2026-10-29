@@ -57,12 +57,12 @@ async function createConfiguration(
       .getByRole("option", { name: scenarioUnitName, exact: true })
       .click();
   }
-  await dialog.getByLabel("Buscar cliente").fill(scenarioCustomerName);
   await dialog
     .getByRole("combobox", { name: "Cliente *", exact: true })
     .click();
+  await page.getByLabel("Buscar cliente").fill(scenarioCustomerName);
   await page
-    .getByRole("option", { name: scenarioCustomerName, exact: true })
+    .getByRole("button", { name: scenarioCustomerName, exact: true })
     .click();
   await dialog.getByLabel("Código *", { exact: true }).fill(code);
   await dialog

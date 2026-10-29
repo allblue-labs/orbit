@@ -395,7 +395,7 @@ class _Summary extends StatelessWidget {
                 label: 'Atendendo',
                 value:
                     '$quem'
-                    '${execution?.startedAt == null ? '' : ' · ${OrbitFormat.dateHourOf(execution!.startedAt)}'}',
+                    '${execution?.startedAt == null ? '' : ' · ${OrbitFormat.of(context).dateHourOf(execution!.startedAt)}'}',
               ),
           ],
         ),

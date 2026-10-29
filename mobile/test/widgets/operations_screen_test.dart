@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:orbit_operator/app/providers.dart';
 import 'package:orbit_operator/core/config/environment.dart';
 import 'package:orbit_operator/core/network/orbit_api_client.dart';
@@ -70,6 +71,7 @@ Widget wrap(Future<ResponseBody> Function(RequestOptions) handler) {
 }
 
 void main() {
+  setUpAll(() => initializeDateFormatting('pt_BR'));
   testWidgets('lista as operações devolvidas pelo backend', (tester) async {
     await tester.pumpWidget(
       wrap(
@@ -113,9 +115,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    /// Fora de produção a mensagem também nomeia o destino — é o que revela
-    /// uma URL mal configurada, que é a causa quase sempre.
-    expect(find.textContaining('Sem conexão'), findsOneWidget);
+    expect(
+      find.textContaining('Não foi possível conectar ao Orbit'),
+      findsOneWidget,
+    );
     expect(find.text('Tentar novamente'), findsOneWidget);
   });
 

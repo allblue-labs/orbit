@@ -230,7 +230,10 @@ Cenario cenario(
 /// `Picture.toImage` e `Image.toByteData`, que precisam do laço de eventos
 /// real. Sob o relógio falso do teste a exportação nunca completa, e o envio
 /// ficaria parado esperando um `Future` que ninguém resolve.
-Future<void> confirmarComAssinatura(WidgetTester tester) async {
+Future<void> confirmarComAssinatura(
+  WidgetTester tester,
+  Backend backend,
+) async {
   final alvo = find.text('Confirmar atendimento');
   await tester.scrollUntilVisible(
     alvo,
@@ -249,11 +252,29 @@ Future<void> confirmarComAssinatura(WidgetTester tester) async {
     /// O laço alterna espera real e `pump`: parte da cadeia só avança quando
     /// o widget reconstrói, e um `delayed` único deixaria o envio parado no
     /// meio do caminho.
-    for (var i = 0; i < 20; i++) {
+    // Aguarda o término observado, em vez de supor que a conversão nativa
+    // sempre termina em um segundo, inclusive sob carga da suíte completa.
+    for (var i = 0; i < 100; i++) {
       await Future<void>.delayed(const Duration(milliseconds: 50));
       await tester.pump();
+      final reloaded =
+          backend.paths
+              .where(
+                (path) =>
+                    path.endsWith('/customer-acknowledgement/preparation'),
+              )
+              .length >=
+          2;
+      if (reloaded && find.text('Registrando…').evaluate().isEmpty) break;
     }
   });
+  expect(find.text('Registrando…'), findsNothing);
+  expect(
+    backend.paths
+        .where((path) => path.endsWith('/customer-acknowledgement/preparation'))
+        .length,
+    greaterThanOrEqualTo(2),
+  );
   await tester.pumpAndSettle();
 }
 
@@ -314,7 +335,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField), 'Maria Zeladora');
       await assinar(tester);
-      await confirmarComAssinatura(tester);
+      await confirmarComAssinatura(tester, backend);
       expect(
         backend.acknowledgements.single['signatureStorageFileId'],
         'file-cliente-1',
@@ -399,7 +420,7 @@ void main() {
 
     await tester.enterText(find.byType(TextField), 'Maria Zeladora');
     await assinar(tester);
-    await confirmarComAssinatura(tester);
+    await confirmarComAssinatura(tester, backend);
 
     /// A trilha do arquivo diz o que ele é. Registrar a assinatura de um
     /// cliente como assinatura profissional seria uma linha falsa na auditoria.
@@ -419,7 +440,7 @@ void main() {
 
     await tester.enterText(find.byType(TextField), 'Maria Zeladora');
     await assinar(tester);
-    await confirmarComAssinatura(tester);
+    await confirmarComAssinatura(tester, backend);
 
     expect(backend.acknowledgements, hasLength(1));
     final comando = backend.acknowledgements.single;

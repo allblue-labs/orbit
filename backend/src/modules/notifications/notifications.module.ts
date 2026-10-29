@@ -5,6 +5,7 @@ import {
   PushNotificationProvider,
 } from './notification-delivery.providers';
 import { NotificationController } from './notification.controller';
+import { NotificationPreferencesController } from './notification-preferences.controller';
 import { NotificationGateway } from './notification.gateway';
 import { NotificationRepository } from './notification.repository';
 import { NotificationService } from './notification.service';
@@ -24,7 +25,11 @@ import { MobilePushRepository } from './mobile-push.repository';
 
 @Module({
   imports: [IdentityModule],
-  controllers: [NotificationController, MobileDeviceController],
+  controllers: [
+    NotificationPreferencesController,
+    NotificationController,
+    MobileDeviceController,
+  ],
   providers: [
     NotificationRepository,
     NotificationService,

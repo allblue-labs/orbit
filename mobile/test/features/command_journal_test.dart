@@ -175,9 +175,88 @@ void main() {
 
     test('journal ilegível não trava o app nem apaga em silêncio', () async {
       final file = MemoryJournalFile();
-      await file.write('{isto não é json');
+      const original = '{isto não é json';
+      await file.write(original);
       final journal = CommandJournal(file: file);
-      expect((await journal.read()).commands, isEmpty);
+      final snapshot = await journal.read();
+      expect(snapshot.commands, isEmpty);
+      expect(snapshot.recovery.single.value, original);
+      expect(await file.read(), original);
+      await journal.enqueue(pending(envelope()));
+      final reopened = await CommandJournal(file: file).read();
+      expect(reopened.commands, hasLength(1));
+      expect(reopened.recovery.single.value, original);
+    });
+
+    test(
+      'isola registros inválidos sem perder comandos nem recibos válidos',
+      () async {
+        final file = MemoryJournalFile();
+        final receipt = SyncReceipt(
+          commandId: 'already-done',
+          scope: scope,
+          result: result(OfflineCommandStatus.applied),
+          resolvedAt: DateTime.utc(2026, 9, 1),
+        );
+        final broken = {
+          'envelope': 'fragmento original',
+          'observacao': 'preservar',
+        };
+        final original = jsonEncode({
+          'version': 1,
+          'commands': [pending(envelope()).toJson(), broken],
+          'receipts': [42, receipt.toJson()],
+        });
+        await file.write(original);
+        final journal = CommandJournal(file: file);
+        final snapshot = await journal.read();
+        expect(snapshot.commands, hasLength(1));
+        expect(snapshot.receipts.single.commandId, 'already-done');
+        expect(snapshot.recovery.map((e) => e.value), [broken, 42]);
+        expect(
+          await file.read(),
+          original,
+          reason: 'ler não regrava o original',
+        );
+
+        await journal.mark(
+          envelope().commandId,
+          (c) => c.copyWith(attempts: 1),
+        );
+        await journal.resolve(
+          commandId: envelope().commandId,
+          scope: scope,
+          result: result(OfflineCommandStatus.applied),
+          at: DateTime.utc(2026, 9, 2),
+        );
+        await journal.enqueue(pending(envelope(id: 'second')));
+        await journal.discard('second');
+        await journal.cleanup(DateTime.utc(2027, 1, 1));
+        final reopened = await CommandJournal(file: file).read();
+        expect(reopened.commands, isEmpty);
+        expect(reopened.recovery.map((e) => e.value), [broken, 42]);
+        expect(
+          (await CommandJournal(file: file).read()).recovery,
+          hasLength(2),
+          reason: 'reabrir não duplica os registros preservados',
+        );
+      },
+    );
+
+    test('versão desconhecida é preservada integralmente', () async {
+      final file = MemoryJournalFile();
+      final original = jsonEncode({
+        'version': 2,
+        'commands': ['formato futuro'],
+      });
+      await file.write(original);
+      final journal = CommandJournal(file: file);
+      expect((await journal.read()).recovery.single.value, original);
+      await journal.cleanup(DateTime.utc(2026));
+      expect(
+        (await CommandJournal(file: file).read()).recovery.single.value,
+        original,
+      );
     });
   });
 

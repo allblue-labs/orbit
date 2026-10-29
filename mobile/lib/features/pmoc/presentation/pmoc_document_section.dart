@@ -180,7 +180,7 @@ class _PmocDocumentSectionState extends ConsumerState<PmocDocumentSection> {
                 children: [
                   Expanded(
                     child: Text(
-                      'Emitido em ${OrbitFormat.dateHourOf(revisao.issuedAt)}',
+                      'Emitido em ${OrbitFormat.of(context).dateHourOf(revisao.issuedAt)}',
                       style: OrbitType.body.copyWith(color: palette.ink),
                     ),
                   ),

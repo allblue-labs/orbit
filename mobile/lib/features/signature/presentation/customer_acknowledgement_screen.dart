@@ -507,7 +507,7 @@ class _PreviousAcknowledgement extends StatelessWidget {
           style: const TextStyle(fontSize: 14, color: OrbitColors.textPrimary),
         ),
         Text(
-          OrbitFormat.dateHourOf(existing.acknowledgedAt),
+          OrbitFormat.of(context).dateHourOf(existing.acknowledgedAt),
           style: const TextStyle(
             fontSize: 12,
             color: OrbitColors.textSecondary,

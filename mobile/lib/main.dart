@@ -6,6 +6,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -15,6 +16,7 @@ import 'core/storage/read_cache.dart';
 import 'features/artifact/data/document_file.dart';
 import 'core/routing/orbit_router.dart';
 import 'core/theme/orbit_theme.dart';
+import 'core/presentation/orbit_format.dart';
 import 'features/authentication/domain/session.dart';
 import 'features/notifications/application/push_providers.dart';
 import 'features/notifications/domain/deep_link.dart';
@@ -53,14 +55,17 @@ class OrbitOperatorApp extends ConsumerStatefulWidget {
   ConsumerState<OrbitOperatorApp> createState() => _OrbitOperatorAppState();
 }
 
-class _OrbitOperatorAppState extends ConsumerState<OrbitOperatorApp> {
+class _OrbitOperatorAppState extends ConsumerState<OrbitOperatorApp>
+    with WidgetsBindingObserver {
   StreamSubscription<String>? _avisosTocados;
   SessionRuntime? _runtime;
   Object? _runtimeIdentity;
+  bool _refreshingProfile = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // Restaura a sessão guardada.
       ref.read(authControllerProvider.notifier).restore();
@@ -79,9 +84,33 @@ class _OrbitOperatorAppState extends ConsumerState<OrbitOperatorApp> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _avisosTocados?.cancel();
     _runtime?.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed &&
+        !_refreshingProfile &&
+        ref.read(authControllerProvider) is AuthAuthenticated) {
+      unawaited(_refreshProfile());
+    }
+  }
+
+  Future<void> _refreshProfile() async {
+    _refreshingProfile = true;
+    final auth = ref.read(authControllerProvider.notifier);
+    final logger = ref.read(loggerProvider);
+    try {
+      // Inclui preferências alteradas na web enquanto o app estava em segundo plano.
+      await auth.refreshProfile();
+    } on Object {
+      logger.warning('Não foi possível atualizar as preferências da conta.');
+    } finally {
+      _refreshingProfile = false;
+    }
   }
 
   void _abrirAviso(String caminho) {
@@ -131,11 +160,17 @@ class _OrbitOperatorAppState extends ConsumerState<OrbitOperatorApp> {
         child: Consumer(
           builder: (context, scopedRef, _) => MaterialApp.router(
             title: 'Orbit Operator',
+            locale: const Locale('pt', 'BR'),
+            supportedLocales: const [Locale('pt', 'BR')],
+            localizationsDelegates: GlobalMaterialLocalizations.delegates,
             scaffoldMessengerKey: scopedRef.watch(
               notificationMessengerKeyProvider,
             ),
-            builder: (context, child) => ForegroundNotifications(
-              child: child ?? const SizedBox.shrink(),
+            builder: (context, child) => OrbitTimeScope(
+              timezone: scopedRef.watch(userTimezoneProvider),
+              child: ForegroundNotifications(
+                child: child ?? const SizedBox.shrink(),
+              ),
             ),
             debugShowCheckedModeBanner: false,
             theme: OrbitTheme.light(),

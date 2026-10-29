@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/contracts/field_operation_contracts.dart';
 import '../../../core/design/orbit_primitives.dart';
 import '../../../core/design/orbit_wizard.dart';
+import '../../../core/design/orbit_loading.dart';
 import '../../../core/presentation/field_registry.dart';
 import '../../../core/theme/orbit_theme.dart';
 import '../../../core/widgets/section_states.dart';
@@ -27,16 +28,19 @@ import 'widgets/execution_checklist.dart';
 import 'widgets/execution_signing.dart';
 import 'widgets/attendance_work_record.dart';
 import 'widgets/attendance_wizard.dart';
+import 'work_item_detail_screen.dart';
 
 class OperationExecutionScreen extends ConsumerStatefulWidget {
   const OperationExecutionScreen({
     super.key,
     required this.operationId,
     this.rvtExecutionId,
+    this.startOnOpen = true,
   });
 
   final String operationId;
   final String? rvtExecutionId;
+  final bool startOnOpen;
 
   @override
   ConsumerState<OperationExecutionScreen> createState() =>
@@ -65,9 +69,14 @@ class _OperationExecutionScreenState
   Future<void> _prepare() async {
     final sequence = ++_entrySequence;
     setState(() => _preparing = true);
-    await ref
-        .read(executionControllerProvider(widget.operationId).notifier)
-        .prepareForAttendance();
+    final controller = ref.read(
+      executionControllerProvider(widget.operationId).notifier,
+    );
+    if (widget.startOnOpen) {
+      await controller.prepareForAttendance();
+    } else {
+      await controller.load();
+    }
     if (mounted && sequence == _entrySequence) {
       setState(() => _preparing = false);
     }
@@ -81,6 +90,18 @@ class _OperationExecutionScreenState
     final controller = ref.read(
       executionControllerProvider(operationId).notifier,
     );
+
+    // Links antigos consultam a ficha atual. Só um início explícito pode
+    // registrar START; consultar um atendimento agendado não o inicia.
+    if (!_preparing &&
+        !widget.startOnOpen &&
+        state.preparation != null &&
+        !const {
+          'COMPLETED',
+          'CANCELLED',
+        }.contains(state.preparation!.operation.status)) {
+      return WorkItemDetailScreen(workItemId: 'SERVICE_OPERATION:$operationId');
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -99,14 +120,14 @@ class _OperationExecutionScreenState
         ],
       ),
       body: _preparing
-          ? const Padding(
-              padding: EdgeInsets.all(OrbitSpacing.gutter),
-              child: SectionLoading(lines: 6),
+          ? const OrbitLoadingState(
+              title: 'Preparando atendimento',
+              message: 'Confirmando o início no servidor. Aguarde um instante.',
             )
           : switch (state.phase) {
-              ExecutionPhase.loading => const Padding(
-                padding: EdgeInsets.all(OrbitSpacing.gutter),
-                child: SectionLoading(lines: 6),
+              ExecutionPhase.loading => const OrbitLoadingState(
+                title: 'Carregando atendimento',
+                message: 'Buscando os dados para continuar.',
               ),
               ExecutionPhase.error when state.preparation == null => ListView(
                 padding: const EdgeInsets.all(OrbitSpacing.gutter),

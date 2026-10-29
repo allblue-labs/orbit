@@ -190,7 +190,7 @@ class _ConfirmedTile extends ConsumerWidget {
                 ),
                 Text(
                   '${evidenceCategoryLabel(evidenceCategoryWire(evidence.category))}'
-                  ' · ${OrbitFormat.dateHourOf(evidence.uploadedAt)}',
+                  ' · ${OrbitFormat.of(context).dateHourOf(evidence.uploadedAt)}',
                   style: const TextStyle(
                     fontSize: 12,
                     color: OrbitColors.textSecondary,

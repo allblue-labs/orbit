@@ -7,11 +7,13 @@ library;
 
 import 'dart:async';
 import 'dart:io';
+import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_operator/core/errors/orbit_exception.dart';
 import 'package:orbit_operator/core/observability/orbit_logger.dart';
 import 'package:orbit_operator/core/uploads/upload_queue.dart';
+import 'package:orbit_operator/core/uploads/upload_queue_store.dart';
 import 'package:orbit_operator/core/uploads/upload_task.dart';
 
 /// Armazenamento em memória, com contagem de gravações.
@@ -63,6 +65,51 @@ void main() {
   tearDown(() {
     if (_tempDir.existsSync()) _tempDir.deleteSync(recursive: true);
   });
+
+  test(
+    'persistência legada isola item inválido e arquiva o original antes de salvar',
+    () async {
+      final task = buildTask();
+      final original = jsonEncode([
+        task.toJson(),
+        {'filePath': '/preservar.jpg'},
+      ]);
+      final file = File('${_tempDir.path}/upload_queue.json');
+      await file.writeAsString(original);
+      final store = FileUploadQueueStore(directory: _tempDir);
+      expect((await store.load()).single.id, task.id);
+      expect(await file.readAsString(), original);
+      await store.save([task.copyWith(attempts: 1)]);
+      final reopened = FileUploadQueueStore(directory: _tempDir);
+      expect((await reopened.load()).single.attempts, 1);
+      final archives = _tempDir
+          .listSync()
+          .whereType<File>()
+          .where((f) => f.path.contains('.recovery.'))
+          .toList();
+      expect(archives, hasLength(1));
+      expect(await archives.single.readAsString(), original);
+      expect(File(task.filePath).existsSync(), isTrue);
+    },
+  );
+
+  test(
+    'save anterior ao restore também protege fila legada ilegível',
+    () async {
+      const original = '{documento interrompido';
+      final file = File('${_tempDir.path}/upload_queue.json');
+      await file.writeAsString(original);
+      final store = FileUploadQueueStore(directory: _tempDir);
+      await store.save([buildTask()]);
+      expect((await store.load()).single.id, 'task-1');
+      final archives = _tempDir
+          .listSync()
+          .whereType<File>()
+          .where((f) => f.path.contains('.recovery.'))
+          .toList();
+      expect(await archives.single.readAsString(), original);
+    },
+  );
 
   test('envia e marca como concluída, apagando o arquivo local', () async {
     final store = _MemoryStore();

@@ -51,6 +51,7 @@ class Backend {
   Future<ResponseBody> Function(RequestOptions)? lookup;
   bool failNextCreate = false;
   bool awaitingAuthorization = false;
+  Future<void> Function()? beforeCreate;
   Map<String, String>? conflictNextCreate;
   List<RequestOptions> get creates =>
       requests.where((r) => r.method == 'POST' && r.path == base).toList();
@@ -108,6 +109,7 @@ class Backend {
       );
     }
     if (request.method == 'POST' && request.path == base) {
+      await beforeCreate?.call();
       if (conflictNextCreate case final conflict?) {
         conflictNextCreate = null;
         return jsonResponse(
@@ -271,6 +273,43 @@ Future<void> equipment(WidgetTester tester, String name) async {
 }
 
 void main() {
+  for (final novo in [false, true]) {
+    testWidgets(
+      'mostra progresso e bloqueia envio duplicado ao abrir (cliente novo=$novo)',
+      (tester) async {
+        final gate = Completer<void>();
+        final backend = Backend()..beforeCreate = () => gate.future;
+        await open(tester, backend);
+        if (novo) {
+          await fresh(tester);
+          await fill(tester, 'Razão social', 'Cliente em campo');
+          await tap(tester, 'Avançar · Equipamentos');
+          await equipment(tester, 'Split novo');
+        } else {
+          await tap(tester, 'Criar para cliente existente');
+          await tap(tester, 'Avançar · Cliente');
+          await tap(tester, 'Cliente existente');
+          await tap(tester, 'Avançar · Equipamentos');
+          await tap(tester, 'Split já cadastrado');
+        }
+        await tap(tester, 'Avançar · Atendimento');
+        await tester.ensureVisible(find.text('Abrir atendimento'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Abrir atendimento'));
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(find.text('Abrindo atendimento'), findsOneWidget);
+        expect(backend.creates, hasLength(1));
+        expect(find.byType(CircularProgressIndicator), findsWidgets);
+        await tester.tap(find.byType(FilledButton).last, warnIfMissed: false);
+        expect(backend.creates, hasLength(1));
+        gate.complete();
+        await tester.pumpAndSettle();
+        expect(find.text('Execução op-nova'), findsOneWidget);
+        expect(find.text('Tentar novamente'), findsNothing);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
   for (final freshCustomer in [false, true]) {
     testWidgets(
       'cadastro aguarda aprovação sem abrir uma execução bloqueada (novo cliente=$freshCustomer)',

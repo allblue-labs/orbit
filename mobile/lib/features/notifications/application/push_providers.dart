@@ -27,6 +27,7 @@ final pushRegistrarProvider = Provider<PushRegistrar>((ref) {
     source: ref.watch(pushTokenSourceProvider),
     repository: ref.watch(mobileDeviceRepositoryProvider),
     logger: ref.watch(loggerProvider),
+    timezone: () => ref.read(userTimezoneProvider).name,
     deviceInstanceId: () async =>
         deviceInstanceId(ref.read(sharedPreferencesProvider)),
     appVersion: () async {
