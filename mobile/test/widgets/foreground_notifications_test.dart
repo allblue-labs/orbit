@@ -19,7 +19,7 @@ void main() {
     (tester) async {
       var requests = 0;
       var hasNewAssignment = false;
-      final createdAt = DateTime.now().toUtc().add(const Duration(seconds: 1));
+      late DateTime createdAt;
       Future<ResponseBody> handle(RequestOptions options) async {
         requests++;
         return jsonResponse({
@@ -80,6 +80,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(requests, 1);
       expect(find.text('Novo atendimento atribuído'), findsNothing);
+      createdAt = DateTime.now().toUtc();
       hasNewAssignment = true;
       await tester.pump(const Duration(seconds: 12));
       await tester.pumpAndSettle();

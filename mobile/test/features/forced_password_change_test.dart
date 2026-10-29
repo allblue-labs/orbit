@@ -72,6 +72,13 @@ void main() {
       () => repositorio.loadEntitlements(),
     ).thenAnswer((_) async => _direitos);
     when(() => repositorio.loadProductAccess()).thenAnswer((_) async => null);
+    when(() => repositorio.loadAccess()).thenAnswer(
+      (_) async => const SessionAccess(
+        permissions: ['operations.read'],
+        surfaceAccess: ['MOBILE'],
+        unitIds: ['unit-1'],
+      ),
+    );
     when(
       () => repositorio.login(
         email: any(named: 'email'),

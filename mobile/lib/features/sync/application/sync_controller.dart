@@ -173,7 +173,23 @@ class SyncController extends StateNotifier<SyncState> {
     );
     await _journal.enqueue(command);
     await _refreshCounts();
+    final joinedExistingCycle = _inFlight != null;
     await sync();
+    if (joinedExistingCycle && mounted && state.phase == SyncPhase.idle) {
+      final snapshot = await _journal.read();
+      if (!mounted) return command;
+      final unattempted = snapshot.commands.any(
+        (pending) =>
+            pending.scope.matches(scope) &&
+            pending.envelope.commandId == envelope.commandId &&
+            pending.isSendable &&
+            pending.attempts == 0,
+      );
+      // A rodada compartilhada pode já ter passado pelo push quando a nova
+      // intenção entrou no journal. Nesse caso, completa o envio neste toque.
+      // Comandos tentados/recusados e o backoff continuam sendo respeitados.
+      if (unattempted) await sync();
+    }
     return command;
   }
 

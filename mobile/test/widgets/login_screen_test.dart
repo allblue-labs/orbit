@@ -43,6 +43,9 @@ void main() {
     when(() => repository.loadOrganization()).thenAnswer((_) async => null);
     when(() => repository.loadEntitlements()).thenAnswer((_) async => null);
     when(() => repository.loadProductAccess()).thenAnswer((_) async => null);
+    when(
+      () => repository.loadAccess(),
+    ).thenAnswer((_) async => const SessionAccess());
   });
 
   testWidgets('exibe a marca e os campos de acesso', (tester) async {

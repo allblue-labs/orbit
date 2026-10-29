@@ -38,6 +38,7 @@ import '../../features/equipment/presentation/equipment_scanner_screen.dart';
 import '../../features/customers/presentation/customers_screen.dart';
 import '../../features/notifications/presentation/notifications_screen.dart';
 import 'app_shell.dart';
+import 'orbit_page_route.dart';
 
 abstract final class OrbitRoutes {
   static const splash = '/';
@@ -177,15 +178,15 @@ final routerProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
-      GoRoute(
+      OrbitPageRoute(
         path: OrbitRoutes.splash,
         builder: (context, state) => const SplashScreen(),
       ),
-      GoRoute(
+      OrbitPageRoute(
         path: OrbitRoutes.login,
         builder: (context, state) => const LoginScreen(),
       ),
-      GoRoute(
+      OrbitPageRoute(
         path: OrbitRoutes.changePassword,
         builder: (context, state) => const ChangePasswordScreen(),
       ),
@@ -199,7 +200,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       /// ou nenhuma. A recusa é um `assert`, então o aplicativo **não abria** —
       /// e nenhum teste de widget percebeu, porque todos montam telas
       /// diretamente e nunca constroem o roteador.
-      GoRoute(
+      OrbitPageRoute(
         path: OrbitRoutes.scanner,
         builder: (context, state) => EquipmentScannerScreen(
           returnsToken: EquipmentScannerRequest.fromExtra(
@@ -212,7 +213,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       /// e volta para onde estava. Por isso é **irmã** dele, e não filha —
       /// uma sub-rota direta de `ShellRoute` não pode carregar a chave do
       /// navegador raiz, e o `go_router` recusa a árvore inteira se carregar.
-      GoRoute(
+      OrbitPageRoute(
         path: OrbitRoutes.notifications,
         parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const NotificationsScreen(),
@@ -226,17 +227,17 @@ final routerProvider = Provider<GoRouter>((ref) {
       /// ela está onde não está. Por isso é **irmã** dele, com o navegador raiz:
       /// tela inteira, com voltar, e o trabalho do atendimento sem uma barra de
       /// abas convidando a sair no meio.
-      GoRoute(
+      OrbitPageRoute(
         path: OrbitRoutes.pmoc,
         parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const PmocPlansScreen(),
         routes: [
-          GoRoute(
+          OrbitPageRoute(
             path: ':planId',
             builder: (context, state) =>
                 PmocPlanScreen(planId: state.pathParameters['planId'] ?? ''),
             routes: [
-              GoRoute(
+              OrbitPageRoute(
                 path: 'ciclos/:cycleId/equipamentos/:assetId/atendimento',
                 builder: (context, state) => PmocAttendanceScreen(
                   planId: state.pathParameters['planId'] ?? '',
@@ -255,20 +256,20 @@ final routerProvider = Provider<GoRouter>((ref) {
           child: AppShell(location: state.matchedLocation, child: child),
         ),
         routes: [
-          GoRoute(
+          OrbitPageRoute(
             path: OrbitRoutes.home,
 
             /// One operational mobile product. Permissions change data and
             /// actions; they never select a parallel visual application.
             builder: (context, state) => const FieldDashboardScreen(),
           ),
-          GoRoute(
+          OrbitPageRoute(
             path: OrbitRoutes.workQueue,
             builder: (context, state) => const WorkQueueScreen(),
             routes: [
               /// Antes de `:id`, senão o caminho seria lido como um id de
               /// item — e `avulso` viraria um item inexistente.
-              GoRoute(
+              OrbitPageRoute(
                 path: 'avulso',
                 parentNavigatorKey: rootNavigatorKey,
                 builder: (context, state) => WalkInScreen(
@@ -276,7 +277,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                   customerName: state.uri.queryParameters['nome'],
                 ),
               ),
-              GoRoute(
+              OrbitPageRoute(
                 path: 'execucao/:operationId',
                 parentNavigatorKey: rootNavigatorKey,
                 builder: (context, state) => OperationExecutionScreen(
@@ -284,7 +285,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                   rvtExecutionId: state.uri.queryParameters['rvt'],
                 ),
                 routes: [
-                  GoRoute(
+                  OrbitPageRoute(
                     path: 'aceite',
                     parentNavigatorKey: rootNavigatorKey,
                     builder: (context, state) => CustomerAcknowledgementScreen(
@@ -293,7 +294,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                   ),
                 ],
               ),
-              GoRoute(
+              OrbitPageRoute(
                 path: ':id',
 
                 /// Fora do shell: o contexto do item ocupa a tela inteira.
@@ -306,11 +307,11 @@ final routerProvider = Provider<GoRouter>((ref) {
               ),
             ],
           ),
-          GoRoute(
+          OrbitPageRoute(
             path: OrbitRoutes.operations,
             builder: (context, state) => const OperationsScreen(),
             routes: [
-              GoRoute(
+              OrbitPageRoute(
                 path: ':id',
                 // Fora do shell: o detalhe ocupa a tela inteira.
                 parentNavigatorKey: rootNavigatorKey,
@@ -320,28 +321,28 @@ final routerProvider = Provider<GoRouter>((ref) {
               ),
             ],
           ),
-          GoRoute(
+          OrbitPageRoute(
             path: OrbitRoutes.agenda,
             builder: (context, state) => const AgendaScreen(),
           ),
-          GoRoute(
+          OrbitPageRoute(
             path: OrbitRoutes.documents,
             builder: (context, state) => const DocumentsScreen(),
           ),
-          GoRoute(
+          OrbitPageRoute(
             path: OrbitRoutes.customers,
             builder: (context, state) => const CustomersScreen(),
           ),
-          GoRoute(
+          OrbitPageRoute(
             path: OrbitRoutes.profile,
             builder: (context, state) => const ProfileScreen(),
             routes: [
-              GoRoute(
+              OrbitPageRoute(
                 path: 'assinatura',
                 parentNavigatorKey: rootNavigatorKey,
                 builder: (context, state) => const MySignatureScreen(),
               ),
-              GoRoute(
+              OrbitPageRoute(
                 path: 'sincronizacao',
                 parentNavigatorKey: rootNavigatorKey,
                 builder: (context, state) => const SyncCenterScreen(),
@@ -350,7 +351,7 @@ final routerProvider = Provider<GoRouter>((ref) {
               /// Neta da `ShellRoute`, e não filha — por isso pode carregar
               /// a chave do navegador raiz. Numa filha direta do shell essa
               /// mesma chave derruba o aplicativo na abertura.
-              GoRoute(
+              OrbitPageRoute(
                 path: 'configuracoes',
                 parentNavigatorKey: rootNavigatorKey,
                 builder: (context, state) => const SettingsScreen(),

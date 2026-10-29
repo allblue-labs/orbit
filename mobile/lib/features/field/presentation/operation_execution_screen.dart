@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/contracts/field_operation_contracts.dart';
 import '../../../core/design/orbit_primitives.dart';
 import '../../../core/design/orbit_wizard.dart';
+import '../../../core/design/orbit_loading.dart';
 import '../../../core/presentation/field_registry.dart';
 import '../../../core/theme/orbit_theme.dart';
 import '../../../core/widgets/section_states.dart';
@@ -99,14 +100,14 @@ class _OperationExecutionScreenState
         ],
       ),
       body: _preparing
-          ? const Padding(
-              padding: EdgeInsets.all(OrbitSpacing.gutter),
-              child: SectionLoading(lines: 6),
+          ? const OrbitLoadingState(
+              title: 'Preparando atendimento',
+              message: 'Confirmando o início no servidor. Aguarde um instante.',
             )
           : switch (state.phase) {
-              ExecutionPhase.loading => const Padding(
-                padding: EdgeInsets.all(OrbitSpacing.gutter),
-                child: SectionLoading(lines: 6),
+              ExecutionPhase.loading => const OrbitLoadingState(
+                title: 'Carregando atendimento',
+                message: 'Buscando os dados para continuar.',
               ),
               ExecutionPhase.error when state.preparation == null => ListView(
                 padding: const EdgeInsets.all(OrbitSpacing.gutter),
