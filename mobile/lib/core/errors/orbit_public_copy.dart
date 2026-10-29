@@ -25,10 +25,9 @@ library;
 abstract final class OrbitPublicCopy {
   /// Sem rede, ou servidor inalcançável.
   ///
-  /// Fala de conexão, e não de servidor: do lado de quem lê, os dois casos se
-  /// resolvem do mesmo jeito — conferir a internet e tentar de novo.
+  /// Uma falha ao alcançar o serviço não prova que o aparelho está sem internet.
   static const offline =
-      'Sem conexão. Verifique sua conexão com a internet e tente novamente.';
+      'Não foi possível conectar ao Orbit agora. Tente novamente em instantes.';
 
   /// A conexão abriu e a resposta não veio a tempo.
   ///

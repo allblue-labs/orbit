@@ -28,8 +28,13 @@ class PlatformConnectivityMonitor implements ConnectivityMonitor {
       results.any((result) => result != ConnectivityResult.none);
 
   @override
-  Stream<bool> get onStatusChange =>
-      _connectivity.onConnectivityChanged.map(_hasNetwork).distinct();
+  Stream<bool> get onStatusChange => _connectivity.onConnectivityChanged
+      .distinct(
+        (previous, next) =>
+            previous.length == next.length &&
+            previous.toSet().containsAll(next),
+      )
+      .map(_hasNetwork);
 
   @override
   Future<bool> isOnline() async =>

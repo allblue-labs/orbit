@@ -171,11 +171,14 @@ class OrbitApiClient {
     CancelToken? cancelToken,
     bool isPublic = false,
   }) => _send<T>(
-    () => _dio.get<dynamic>(
-      path,
-      queryParameters: _clean(query),
+    () => _retryRead(
+      () => _dio.get<dynamic>(
+        path,
+        queryParameters: _clean(query),
+        cancelToken: cancelToken,
+        options: _options(isPublic),
+      ),
       cancelToken: cancelToken,
-      options: _options(isPublic),
     ),
   );
 
@@ -345,22 +348,25 @@ class OrbitApiClient {
     final generation = authenticator.generation;
     final boundedToken = cancellation?._token ?? cancelToken ?? CancelToken();
     try {
-      final response = await _dio.getUri<List<int>>(
-        resolveBackendUrl(url, _apiBase),
-        cancelToken: boundedToken,
-        onReceiveProgress: (received, total) {
-          if (maxBytes != null && (received > maxBytes || total > maxBytes)) {
-            boundedToken.cancel();
-          }
-          if (total > 0) onProgress?.call(received / total);
-        },
-        options: Options(
-          headers: headers.isEmpty ? null : headers,
-          responseType: ResponseType.bytes,
+      final response = await _retryRead(
+        () => _dio.getUri<List<int>>(
+          resolveBackendUrl(url, _apiBase),
+          cancelToken: boundedToken,
+          onReceiveProgress: (received, total) {
+            if (maxBytes != null && (received > maxBytes || total > maxBytes)) {
+              boundedToken.cancel();
+            }
+            if (total > 0) onProgress?.call(received / total);
+          },
+          options: Options(
+            headers: headers.isEmpty ? null : headers,
+            responseType: ResponseType.bytes,
 
-          /// Sem interceptor de sessão: a URL assinada é a credencial.
-          extra: _requestExtra(isPublic),
+            /// Sem interceptor de sessão: a URL assinada é a credencial.
+            extra: _requestExtra(isPublic),
+          ),
         ),
+        cancelToken: boundedToken,
       );
       _checkGeneration(generation);
       if (maxBytes != null && (response.data?.length ?? 0) > maxBytes) {
@@ -456,6 +462,39 @@ class OrbitApiClient {
         code: 'NETWORK',
         diagnostics: _diagnosticar(error),
       );
+    }
+  }
+
+  /// A network handover may break a pooled connection. Retry a read once after
+  /// a short pause; writes, HTTP refusals and TLS errors must not be replayed.
+  Future<Response<T>> _retryRead<T>(
+    Future<Response<T>> Function() request, {
+    CancelToken? cancelToken,
+  }) async {
+    final generation = authenticator.generation;
+    void checkCancellation() {
+      if (cancelToken?.isCancelled ?? false) {
+        throw const OrbitException(
+          kind: OrbitErrorKind.cancelled,
+          publicMessage: OrbitPublicCopy.cancelled,
+          code: 'REQUEST_CANCELLED',
+        );
+      }
+    }
+
+    try {
+      return await request();
+    } on DioException catch (error) {
+      _checkGeneration(generation);
+      final mapped = error.error;
+      if (mapped is! OrbitException || mapped.kind != OrbitErrorKind.network) {
+        rethrow;
+      }
+      checkCancellation();
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      _checkGeneration(generation);
+      checkCancellation();
+      return request();
     }
   }
 

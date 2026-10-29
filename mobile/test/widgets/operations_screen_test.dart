@@ -115,9 +115,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    /// Fora de produção a mensagem também nomeia o destino — é o que revela
-    /// uma URL mal configurada, que é a causa quase sempre.
-    expect(find.textContaining('Sem conexão'), findsOneWidget);
+    expect(
+      find.textContaining('Não foi possível conectar ao Orbit'),
+      findsOneWidget,
+    );
     expect(find.text('Tentar novamente'), findsOneWidget);
   });
 

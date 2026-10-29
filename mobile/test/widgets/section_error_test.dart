@@ -89,7 +89,7 @@ void main() {
       ),
     );
 
-    expect(find.byIcon(Icons.wifi_off_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.cloud_off_outlined), findsOneWidget);
 
     /// O usuário resolve sozinho; a referência seria ruído.
     expect(find.textContaining('Referência'), findsNothing);
