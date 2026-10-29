@@ -18,6 +18,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/contracts/mobile_field_contracts.dart';
 import '../../../../core/design/orbit_primitives.dart';
 import '../../../../core/presentation/field_registry.dart';
+import '../../../../core/presentation/orbit_format.dart';
 import '../../../../core/routing/orbit_router.dart';
 import '../../../../core/theme/orbit_theme.dart';
 import 'work_item_row.dart'
@@ -111,7 +112,10 @@ class _Folha extends StatelessWidget {
           padding: EdgeInsets.zero,
           child: Column(
             children: [
-              _Dado(rotulo: 'Quando', valor: scheduleText(item)),
+              _Dado(
+                rotulo: 'Quando',
+                valor: scheduleText(item, format: OrbitFormat.of(context)),
+              ),
               const OrbitRowDivider(),
               _Dado(rotulo: 'Natureza', valor: workItemKindLabel(item.kind)),
               if (locationText(item) case final local?

@@ -28,16 +28,19 @@ import 'widgets/execution_checklist.dart';
 import 'widgets/execution_signing.dart';
 import 'widgets/attendance_work_record.dart';
 import 'widgets/attendance_wizard.dart';
+import 'work_item_detail_screen.dart';
 
 class OperationExecutionScreen extends ConsumerStatefulWidget {
   const OperationExecutionScreen({
     super.key,
     required this.operationId,
     this.rvtExecutionId,
+    this.startOnOpen = true,
   });
 
   final String operationId;
   final String? rvtExecutionId;
+  final bool startOnOpen;
 
   @override
   ConsumerState<OperationExecutionScreen> createState() =>
@@ -66,9 +69,14 @@ class _OperationExecutionScreenState
   Future<void> _prepare() async {
     final sequence = ++_entrySequence;
     setState(() => _preparing = true);
-    await ref
-        .read(executionControllerProvider(widget.operationId).notifier)
-        .prepareForAttendance();
+    final controller = ref.read(
+      executionControllerProvider(widget.operationId).notifier,
+    );
+    if (widget.startOnOpen) {
+      await controller.prepareForAttendance();
+    } else {
+      await controller.load();
+    }
     if (mounted && sequence == _entrySequence) {
       setState(() => _preparing = false);
     }
@@ -82,6 +90,18 @@ class _OperationExecutionScreenState
     final controller = ref.read(
       executionControllerProvider(operationId).notifier,
     );
+
+    // Links antigos consultam a ficha atual. Só um início explícito pode
+    // registrar START; consultar um atendimento agendado não o inicia.
+    if (!_preparing &&
+        !widget.startOnOpen &&
+        state.preparation != null &&
+        !const {
+          'COMPLETED',
+          'CANCELLED',
+        }.contains(state.preparation!.operation.status)) {
+      return WorkItemDetailScreen(workItemId: 'SERVICE_OPERATION:$operationId');
+    }
 
     return Scaffold(
       appBar: AppBar(

@@ -367,10 +367,10 @@ class _EventRow extends StatelessWidget {
     ].join(' · ');
 
     return OrbitListRow(
-      leading: OrbitFormat.hourOf(event.startsAt),
+      leading: OrbitFormat.of(context).hourOf(event.startsAt),
       title: event.title,
       subtitle: contexto.isEmpty ? null : contexto,
-      detail: 'até ${OrbitFormat.hourOf(event.endsAt)}',
+      detail: 'até ${OrbitFormat.of(context).hourOf(event.endsAt)}',
       tone: prioridade == null ? null : OrbitTone.warning,
 
       /// A seta é da própria linha; aqui o espaço da direita fica para o selo

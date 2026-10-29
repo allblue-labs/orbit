@@ -179,6 +179,7 @@ class BusinessUnit {
     this.isPrimary = false,
     this.city,
     this.stateCode,
+    this.timezone,
   });
 
   factory BusinessUnit.fromJson(Map<String, dynamic> json) => BusinessUnit(
@@ -188,6 +189,7 @@ class BusinessUnit {
     isPrimary: json['isPrimary'] as bool? ?? false,
     city: json['city'] as String?,
     stateCode: json['stateCode'] as String?,
+    timezone: json['timezone'] as String?,
   );
 
   final String id;
@@ -196,6 +198,7 @@ class BusinessUnit {
   final bool isPrimary;
   final String? city;
   final String? stateCode;
+  final String? timezone;
 
   String get name => tradeName ?? legalName;
 }

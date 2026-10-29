@@ -107,14 +107,14 @@ class _Folha extends ConsumerWidget {
                       const OrbitRowDivider(),
                       _Dado(
                         rotulo: 'Próximo',
-                        valor: OrbitFormat.dateHourOf(proximo),
+                        valor: OrbitFormat.of(context).dateHourOf(proximo),
                       ),
                     ],
                     if (cliente.lastServiceAt case final ultimo?) ...[
                       const OrbitRowDivider(),
                       _Dado(
                         rotulo: 'Última visita',
-                        valor: OrbitFormat.dateHourOf(ultimo),
+                        valor: OrbitFormat.of(context).dateHourOf(ultimo),
                       ),
                     ],
                   ],

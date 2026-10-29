@@ -13,6 +13,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/contracts/operation_contracts.dart';
 import '../../../core/theme/orbit_theme.dart';
+import '../../../core/presentation/orbit_format.dart';
 import '../../../core/widgets/section_states.dart';
 import '../application/operations_providers.dart';
 import 'widgets/evidence_section.dart';
@@ -192,26 +193,23 @@ class _ScheduleSection extends StatelessWidget {
         children: [
           _Field(
             label: 'Início previsto',
-            value: _format(operation.scheduledStart),
+            value: OrbitFormat.of(context).dateHourOf(operation.scheduledStart),
           ),
           _Field(
             label: 'Término previsto',
-            value: _format(operation.scheduledEnd),
+            value: OrbitFormat.of(context).dateHourOf(operation.scheduledEnd),
           ),
-          _Field(label: 'Início real', value: _format(operation.startedAt)),
-          _Field(label: 'Conclusão', value: _format(operation.completedAt)),
+          _Field(
+            label: 'Início real',
+            value: OrbitFormat.of(context).dateHourOf(operation.startedAt),
+          ),
+          _Field(
+            label: 'Conclusão',
+            value: OrbitFormat.of(context).dateHourOf(operation.completedAt),
+          ),
         ],
       ),
     );
-  }
-
-  static String _format(DateTime? value) {
-    if (value == null) return '—';
-    final local = value.toLocal();
-    return '${local.day.toString().padLeft(2, '0')}/'
-        '${local.month.toString().padLeft(2, '0')} '
-        '${local.hour.toString().padLeft(2, '0')}:'
-        '${local.minute.toString().padLeft(2, '0')}';
   }
 }
 
@@ -495,7 +493,9 @@ class _TimelineRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final at = entry.createdAt?.toLocal();
+    final at = entry.createdAt == null
+        ? null
+        : OrbitFormat.of(context).at(entry.createdAt!);
     return Padding(
       padding: const EdgeInsets.only(bottom: OrbitSpacing.sm),
       child: Row(

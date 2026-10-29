@@ -248,7 +248,9 @@ class _DocumentOpenSheetState extends ConsumerState<DocumentOpenSheet> {
                             _Dado(rotulo: 'Cliente', valor: cliente),
                           _Dado(
                             rotulo: 'Emitido em',
-                            valor: OrbitFormat.dateHourOf(documento.createdAt),
+                            valor: OrbitFormat.of(
+                              context,
+                            ).dateHourOf(documento.createdAt),
                           ),
 
                           /// O nome do arquivo é o que o cliente vê chegar no

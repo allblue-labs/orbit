@@ -227,7 +227,7 @@ class _Status extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: OrbitSpacing.sm),
               child: Text(
-                'Atualizada em ${OrbitFormat.dateHourOf(status.updatedAt)}',
+                'Atualizada em ${OrbitFormat.of(context).dateHourOf(status.updatedAt)}',
                 style: const TextStyle(
                   fontSize: 12,
                   color: OrbitColors.textSecondary,

@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/config/environment.dart';
+import '../core/contracts/session_contracts.dart' show BusinessUnit;
 import '../core/location/location_service.dart';
 import '../core/network/connectivity_monitor.dart';
 import '../core/network/orbit_api_client.dart';
@@ -16,6 +17,7 @@ import '../core/observability/orbit_logger.dart';
 import '../core/storage/read_cache.dart';
 import '../core/storage/device_identity.dart';
 import '../core/storage/token_storage.dart';
+import '../core/time/orbit_timezone.dart';
 import '../core/uploads/evidence_capture.dart';
 import '../core/uploads/upload_executor.dart';
 import '../core/uploads/upload_queue.dart';
@@ -58,11 +60,14 @@ final locationServiceProvider = Provider<LocationService>(
   (ref) => const GeolocatorLocationService(),
 );
 
-final apiClientProvider = Provider<OrbitApiClient>((ref) {
+final Provider<OrbitApiClient> apiClientProvider = Provider<OrbitApiClient>((
+  ref,
+) {
   return OrbitApiClient.create(
     environment: ref.watch(environmentProvider),
     storage: ref.watch(tokenStorageProvider),
     logger: ref.watch(loggerProvider),
+    timezoneProvider: () => ref.read(userTimezoneProvider).name,
   );
 });
 
@@ -128,6 +133,20 @@ final authControllerProvider = StateNotifierProvider<AuthController, AuthState>(
 final sessionProvider = Provider<OrbitSession?>((ref) {
   final state = ref.watch(authControllerProvider);
   return state is AuthAuthenticated ? state.session : null;
+});
+
+final userTimezoneProvider = Provider<OrbitTimezone>((ref) {
+  final session = ref.watch(sessionProvider);
+  final units = session?.organization?.businessUnits ?? const <BusinessUnit>[];
+  return OrbitTimezone.resolve([
+    session?.user.timezone,
+    units
+        .where((unit) => unit.id == session?.businessUnitId)
+        .firstOrNull
+        ?.timezone,
+    units.where((unit) => unit.isPrimary).firstOrNull?.timezone,
+    if (units.isNotEmpty) units.first.timezone,
+  ]);
 });
 
 final operationsRepositoryProvider = Provider<OperationsRepository>(

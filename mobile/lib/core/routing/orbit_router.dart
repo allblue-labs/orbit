@@ -25,8 +25,6 @@ import '../../features/signature/presentation/customer_acknowledgement_screen.da
 import '../../features/signature/presentation/my_signature_screen.dart';
 import '../../features/sync/presentation/sync_center_screen.dart';
 import '../../features/sync/presentation/sync_triggers.dart';
-import '../../features/operations/presentation/operation_detail_screen.dart';
-import '../../features/operations/presentation/operations_screen.dart';
 import '../../features/pmoc/presentation/pmoc_attendance_screen.dart';
 import '../../features/pmoc/presentation/pmoc_plan_screen.dart';
 import '../../features/pmoc/presentation/pmoc_plans_screen.dart';
@@ -328,14 +326,19 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           OrbitPageRoute(
             path: OrbitRoutes.operations,
-            builder: (context, state) => const OperationsScreen(),
+            builder: (context, state) => const WorkQueueScreen(),
+            redirect: (context, state) =>
+                state.uri.path == OrbitRoutes.operations
+                ? OrbitRoutes.workQueue
+                : null,
             routes: [
               OrbitPageRoute(
                 path: ':id',
                 // Fora do shell: o detalhe ocupa a tela inteira.
                 parentNavigatorKey: rootNavigatorKey,
-                builder: (context, state) => OperationDetailScreen(
+                builder: (context, state) => OperationExecutionScreen(
                   operationId: state.pathParameters['id']!,
+                  startOnOpen: false,
                 ),
               ),
             ],

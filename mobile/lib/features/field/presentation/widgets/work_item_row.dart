@@ -65,14 +65,14 @@ class WorkItemRow extends StatelessWidget {
 
     return Semantics(
       button: true,
-      label: semanticLabel(item),
+      label: semanticLabel(item, format: OrbitFormat.of(context)),
 
       /// `excludeSemantics`: o rótulo acima já diz a linha inteira na ordem
       /// que importa. Sem isso o leitor de tela lê tudo duas vezes, em duas
       /// ordens diferentes.
       excludeSemantics: true,
       child: OrbitListRow(
-        leading: scheduleColumn(item),
+        leading: scheduleColumn(item, format: OrbitFormat.of(context)),
         title: item.customer?.name ?? item.title,
 
         /// O que é o serviço. Antes esta linha trazia só "Atendimento" — o
@@ -83,6 +83,7 @@ class WorkItemRow extends StatelessWidget {
         detail: _apoio(assignment, locationText(item)),
         emphasis: emphasis,
         tone: dueToneOf(item.dueState),
+
         /// Um pedido de cancelamento em aberto vence o prazo na etiqueta.
         ///
         /// A situação do atendimento não muda ao pedir — quem decide é o
@@ -132,9 +133,13 @@ class WorkItemRow extends StatelessWidget {
 ///
 /// Sem data agendada não se inventa uma: "Sem data" é a informação correta, e
 /// o servidor já disse isso em `dueState`.
-String scheduleText(MobileWorkItemContract item) => item.scheduledFor == null
+String scheduleText(
+  MobileWorkItemContract item, {
+  OrbitDateTimeFormat? format,
+}) => item.scheduledFor == null
     ? 'Sem data'
-    : OrbitFormat.hourOf(item.scheduledFor);
+    : (format?.hourOf(item.scheduledFor) ??
+          OrbitFormat.hourOf(item.scheduledFor));
 
 /// O mesmo horário, na largura da coluna da esquerda.
 ///
@@ -142,8 +147,13 @@ String scheduleText(MobileWorkItemContract item) => item.scheduledFor == null
 /// coluna de texto onde deveria haver uma coluna de números. O travessão diz a
 /// mesma coisa visualmente; quem usa leitor de tela ouve `scheduleText`, que
 /// continua dizendo a frase inteira.
-String scheduleColumn(MobileWorkItemContract item) =>
-    item.scheduledFor == null ? '—' : OrbitFormat.hourOf(item.scheduledFor);
+String scheduleColumn(
+  MobileWorkItemContract item, {
+  OrbitDateTimeFormat? format,
+}) => item.scheduledFor == null
+    ? '—'
+    : (format?.hourOf(item.scheduledFor) ??
+          OrbitFormat.hourOf(item.scheduledFor));
 
 /// A função de quem está lendo, derivada dos campos publicados.
 FieldAssignment assignmentOf(
@@ -183,9 +193,12 @@ String equipmentText(List<MobileEquipmentSummaryContract> equipment) =>
     : '${equipment.length} equipamentos';
 
 /// O que um leitor de tela anuncia.
-String semanticLabel(MobileWorkItemContract item) => [
+String semanticLabel(
+  MobileWorkItemContract item, {
+  OrbitDateTimeFormat? format,
+}) => [
   workItemKindLabel(item.kind),
   dueStateLabel(item.dueState),
-  scheduleText(item),
+  scheduleText(item, format: format),
   item.customer?.name ?? item.title,
 ].where((part) => part.isNotEmpty).join(', ');

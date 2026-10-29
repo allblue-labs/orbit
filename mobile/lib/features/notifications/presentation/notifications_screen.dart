@@ -248,7 +248,7 @@ class _AvisoRow extends ConsumerWidget {
                     ],
                     const SizedBox(height: 6),
                     Text(
-                      OrbitFormat.dateHourOf(aviso.createdAt),
+                      OrbitFormat.of(context).dateHourOf(aviso.createdAt),
                       style: OrbitType.caption.copyWith(
                         color: palette.inkSubtle,
                       ),

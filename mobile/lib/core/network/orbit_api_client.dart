@@ -42,6 +42,7 @@ class OrbitApiClient {
     required OrbitLogger logger,
     String locale = 'pt-BR',
     String timezone = 'America/Recife',
+    String Function()? timezoneProvider,
     Dio? dio,
     Dio? retryDio,
   }) {
@@ -66,6 +67,7 @@ class OrbitApiClient {
     final context = RequestContextInterceptor(
       locale: locale,
       timezone: timezone,
+      timezoneProvider: timezoneProvider,
     );
     plain.interceptors.addAll([
       context,
@@ -460,7 +462,7 @@ class OrbitApiClient {
   /// O que a falha diz para o log — e só para ele.
   OrbitDiagnostics _diagnosticar(DioException error) => OrbitDiagnostics(
     transport: error.type.name,
-      path: OrbitLogger.safePath(error.requestOptions.path),
+    path: OrbitLogger.safePath(error.requestOptions.path),
     statusCode: error.response?.statusCode,
     cause: error.error,
   );

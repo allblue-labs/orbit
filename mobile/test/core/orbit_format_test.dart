@@ -31,17 +31,9 @@ void main() {
   });
 
   group('instante', () {
-    test('a hora é exibida no relógio de quem lê', () {
+    test('o fuso padrão é explícito e independe do aparelho', () {
       final instant = DateTime.utc(2026, 9, 1, 15, 30);
-
-      /// O teste roda no fuso do ambiente; o que se prova é a consistência
-      /// entre o que o formatador diz e o que `toLocal()` resolve — não um
-      /// horário fixo, que amarraria o teste a uma máquina.
-      final local = instant.toLocal();
-      final expected =
-          '${local.hour.toString().padLeft(2, '0')}:'
-          '${local.minute.toString().padLeft(2, '0')}';
-      expect(OrbitFormat.hourOf(instant), expected);
+      expect(OrbitFormat.hourOf(instant), '12:30');
     });
 
     test('ausência vira traço, não texto vazio nem "null"', () {

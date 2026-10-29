@@ -17,6 +17,13 @@ import 'package:orbit_operator/core/observability/orbit_logger.dart';
 import 'package:orbit_operator/core/storage/read_cache.dart';
 import 'package:orbit_operator/core/storage/token_storage.dart';
 import 'package:orbit_operator/core/push/push_channel.dart';
+import 'package:orbit_operator/core/presentation/orbit_format.dart';
+import 'package:orbit_operator/features/authentication/presentation/login_screen.dart';
+import 'package:orbit_operator/features/notifications/presentation/foreground_notifications.dart';
+import 'package:orbit_operator/core/routing/orbit_router.dart';
+import 'package:orbit_operator/features/field/presentation/operation_execution_screen.dart';
+import 'package:orbit_operator/features/field/presentation/work_queue_screen.dart';
+import 'package:go_router/go_router.dart';
 import 'package:orbit_operator/main.dart';
 import 'package:orbit_operator/features/notifications/application/push_providers.dart';
 import 'package:orbit_operator/features/sync/application/sync_providers.dart';
@@ -213,6 +220,89 @@ void main() {
     auth.use(session(user));
   }
 
+  testWidgets(
+    'componentes nativos do Flutter usam pt-BR mesmo no aparelho em inglês',
+    (tester) async {
+      auth.out();
+      tester.platformDispatcher.localeTestValue = const Locale('en', 'US');
+      addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: root,
+          child: const OrbitOperatorApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final context = tester.element(find.byType(LoginScreen));
+      final material = MaterialLocalizations.of(context);
+      expect(Localizations.localeOf(context), const Locale('pt', 'BR'));
+      expect(material.cancelButtonLabel.toLowerCase(), 'cancelar');
+      expect(material.copyButtonLabel.toLowerCase(), 'copiar');
+      final date = showDatePicker(
+        context: context,
+        initialDate: DateTime(2026, 10, 29),
+        firstDate: DateTime(2026),
+        lastDate: DateTime(2027),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Select date'), findsNothing);
+      await tester.tap(find.text(material.cancelButtonLabel));
+      await tester.pumpAndSettle();
+      expect(await date, isNull);
+    },
+  );
+
+  testWidgets(
+    'retornar ao app recarrega a preferência do perfil sem trocar o contexto',
+    (tester) async {
+      auth.use(
+        session('A').copyWith(
+          user: const OrbitUser(
+            id: 'A',
+            email: 'A@example.test',
+            displayName: 'A',
+            timezone: 'Asia/Tokyo',
+          ),
+        ),
+      );
+      custom = (request) async {
+        if (request.path == '/identity/me') {
+          return jsonResponse(
+            envelope({
+              'id': 'A',
+              'email': 'A@example.test',
+              'displayName': 'A',
+              'timezone': 'America/Manaus',
+            }),
+          );
+        }
+        return jsonResponse(envelope({}));
+      };
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: root,
+          child: const OrbitOperatorApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final appContext = tester.element(find.byType(ForegroundNotifications));
+      expect(
+        OrbitFormat.of(appContext).hourOf(DateTime.utc(2026, 10, 29, 15)),
+        '00:00',
+      );
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(root.read(userTimezoneProvider).name, 'America/Manaus');
+      expect(
+        OrbitFormat.of(
+          tester.element(find.byType(ForegroundNotifications)),
+        ).hourOf(DateTime.utc(2026, 10, 29, 15)),
+        '11:00',
+      );
+    },
+  );
+
   test(
     'contexto sem sessão lê documentos públicos sem abrir o cliente privado',
     () async {
@@ -254,6 +344,49 @@ void main() {
       );
     },
   );
+
+  testWidgets('link antigo usa o atendimento atual sem iniciar uma operação', (
+    tester,
+  ) async {
+    final pending = Completer<ResponseBody>();
+    final requests = <RequestOptions>[];
+    custom = (request) async {
+      requests.add(request);
+      if (request.path.endsWith('/execution-preparation')) {
+        return pending.future;
+      }
+      return jsonResponse(envelope({}));
+    };
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: root,
+        child: const OrbitOperatorApp(),
+      ),
+    );
+    await tester.pump();
+    final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
+    (app.routerConfig as GoRouter).go(OrbitRoutes.operations);
+    await tester.pumpAndSettle();
+    expect(find.byType(WorkQueueScreen), findsOneWidget);
+    (app.routerConfig as GoRouter).go(OrbitRoutes.operationDetail('op-1'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(OperationExecutionScreen), findsOneWidget);
+    expect(
+      tester
+          .widget<OperationExecutionScreen>(
+            find.byType(OperationExecutionScreen),
+          )
+          .startOnOpen,
+      isFalse,
+    );
+    expect(requests.where((r) => r.method != 'GET'), isEmpty);
+    expect(requests.any((r) => r.path == '/operations/op-1'), isFalse);
+    await tester.pumpWidget(const SizedBox());
+    pending.complete(jsonResponse(envelope({})));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
 
   test(
     'troca de usuário na mesma organização não reutiliza avatar nem documentos',

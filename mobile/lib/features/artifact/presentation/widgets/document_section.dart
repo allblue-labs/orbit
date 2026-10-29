@@ -278,7 +278,7 @@ class _Status extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: OrbitSpacing.sm),
             child: Text(
-              'Emitido em ${OrbitFormat.dateHourOf(at)}',
+              'Emitido em ${OrbitFormat.of(context).dateHourOf(at)}',
               style: const TextStyle(
                 fontSize: 12,
                 color: OrbitColors.textSecondary,

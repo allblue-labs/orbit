@@ -32,6 +32,8 @@ Future<void> showEditProfileSheet(BuildContext context) =>
       builder: (_) => const EditProfileSheet(),
     );
 
+final avatarImagePickerProvider = Provider<ImagePicker>((ref) => ImagePicker());
+
 class EditProfileSheet extends ConsumerStatefulWidget {
   const EditProfileSheet({super.key});
 
@@ -41,6 +43,7 @@ class EditProfileSheet extends ConsumerStatefulWidget {
 
 class _EditProfileSheetState extends ConsumerState<EditProfileSheet> {
   final _formulario = GlobalKey<FormState>();
+  bool _pickingPhoto = false;
   late final TextEditingController _nome;
   late final TextEditingController _sobrenome;
   late final TextEditingController _exibicao;
@@ -102,39 +105,58 @@ class _EditProfileSheetState extends ConsumerState<EditProfileSheet> {
   /// Agora o PNG é produzido pelo enquadramento, e o tipo sai de
   /// `detectMimeType` sobre os bytes que de fato vão subir. Nenhum palpite.
   Future<void> _trocarFoto(ImageSource origem) async {
-    final arquivo = await ImagePicker().pickImage(
-      source: origem,
+    if (_pickingPhoto) return;
+    setState(() => _pickingPhoto = true);
+    try {
+      final arquivo = await ref
+          .read(avatarImagePickerProvider)
+          .pickImage(
+            source: origem,
 
-      /// Reduzido na captura: uma foto de 12 MP vira avatar de 88 pixels, e
-      /// subir o original gasta o pacote de dados de quem está em campo.
-      maxWidth: 1024,
-      maxHeight: 1024,
-      imageQuality: 85,
-    );
-    if (arquivo == null || !mounted) return;
+            /// Reduzido na captura: uma foto de 12 MP vira avatar de 88 pixels, e
+            /// subir o original gasta o pacote de dados de quem está em campo.
+            maxWidth: 1024,
+            maxHeight: 1024,
+            imageQuality: 85,
+          );
+      if (arquivo == null || !mounted) return;
 
-    final original = await arquivo.readAsBytes();
-    if (!mounted) return;
+      final original = await arquivo.readAsBytes();
+      if (!mounted) return;
 
-    final recortada = await showAvatarCropSheet(context, bytes: original);
-    /* Desistiu do enquadramento: nada sobe. */
-    if (recortada == null || !mounted) return;
+      final recortada = await showAvatarCropSheet(context, bytes: original);
+      /* Desistiu do enquadramento: nada sobe. */
+      if (recortada == null || !mounted) return;
 
-    final tipo = detectMimeType(recortada);
-    if (tipo == null) {
-      _avisar('Não foi possível preparar a imagem.');
-      return;
+      final tipo = detectMimeType(recortada);
+      if (tipo == null) {
+        _avisar('Não foi possível preparar a imagem.');
+        return;
+      }
+
+      final ok = await ref
+          .read(profileEditControllerProvider.notifier)
+          .changePhoto(
+            bytes: recortada,
+            fileName: 'avatar.png',
+            mimeType: tipo,
+          );
+      if (!mounted) return;
+      if (!ok) _reclamar('Não foi possível atualizar sua foto.');
+    } on PlatformException catch (error) {
+      if (!mounted) return;
+      final denied =
+          error.code.contains('denied') || error.code.contains('restricted');
+      _avisar(
+        denied
+            ? 'Não foi possível acessar ${origem == ImageSource.camera ? 'a câmera' : 'suas fotos'}. Confira as permissões nas configurações do aparelho.'
+            : 'Não foi possível selecionar a foto. Tente novamente.',
+      );
+    } on Object {
+      if (mounted) _avisar('Não foi possível abrir a foto. Tente novamente.');
+    } finally {
+      if (mounted) setState(() => _pickingPhoto = false);
     }
-
-    final ok = await ref
-        .read(profileEditControllerProvider.notifier)
-        .changePhoto(
-          bytes: recortada,
-          fileName: 'avatar.png',
-          mimeType: tipo,
-        );
-    if (!mounted) return;
-    if (!ok) _reclamar('Não foi possível atualizar sua foto.');
   }
 
   /// Um aviso que não vem de uma mutação, então não tem erro a consultar.
@@ -170,14 +192,12 @@ class _EditProfileSheetState extends ConsumerState<EditProfileSheet> {
     return valor.isEmpty ? null : valor;
   }
 
-
-
   @override
   Widget build(BuildContext context) {
     final palette = context.orbit;
     final usuario = ref.watch(sessionProvider)?.user;
     final estado = ref.watch(profileEditControllerProvider);
-    final ocupado = estado.isLoading;
+    final ocupado = estado.isLoading || _pickingPhoto;
 
     return SafeArea(
       top: false,

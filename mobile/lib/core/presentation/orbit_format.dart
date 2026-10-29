@@ -7,7 +7,7 @@
 /// ## Instante e data civil não se formatam igual
 ///
 /// Um **instante** (`DateTime`) é o mesmo ponto no tempo para todo mundo;
-/// exibi-lo no relógio de quem lê está certo, e é o que `hourOf` faz.
+/// exibi-lo na preferência de fuso da conta é o que `of(context)` faz.
 ///
 /// Uma **data civil** ([CivilDate]) é um dia no calendário de alguém. Ela chega
 /// decidida pelo backend, no fuso da unidade, e aqui só vira texto. Não há
@@ -16,10 +16,15 @@
 library;
 
 import 'package:intl/intl.dart';
+import 'package:flutter/widgets.dart';
 
 import '../time/civil_time.dart';
+import '../time/orbit_timezone.dart';
 
 abstract final class OrbitFormat {
+  static OrbitDateTimeFormat of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<OrbitTimeScope>()?.format ??
+      OrbitDateTimeFormat(OrbitTimezone.resolve());
   static final _dayMonth = DateFormat("dd 'de' MMM", 'pt_BR');
   static final _fullDate = DateFormat("dd 'de' MMMM 'de' y", 'pt_BR');
   static final _shortDate = DateFormat('dd/MM/y', 'pt_BR');
@@ -46,19 +51,18 @@ abstract final class OrbitFormat {
 
   /// `sexta-feira, 06 de setembro` — o cabeçalho de "hoje".
   ///
-  /// Recebe um **instante** e o lê no relógio do aparelho, de propósito: é a
-  /// única data da interface que descreve onde a pessoa está agora, e não um
-  /// prazo da operação. Prazo continua vindo decidido do servidor.
+  /// Variante sem contexto usa o padrão da aplicação. Nas telas, use
+  /// `of(context)` para acompanhar a preferência da conta ativa.
   static String weekdayAndDay(DateTime instant) =>
-      _weekdayDay.format(instant.toLocal());
+      OrbitDateTimeFormat(OrbitTimezone.resolve()).weekdayAndDay(instant);
 
   /// A hora de um **instante**, no relógio de quem está lendo.
   static String hourOf(DateTime? instant) =>
-      instant == null ? '--:--' : _hour.format(instant.toLocal());
+      OrbitDateTimeFormat(OrbitTimezone.resolve()).hourOf(instant);
 
   /// Dia e hora de um **instante**, no relógio de quem está lendo.
   static String dateHourOf(DateTime? instant) =>
-      instant == null ? '—' : _dateHour.format(instant.toLocal());
+      OrbitDateTimeFormat(OrbitTimezone.resolve()).dateHourOf(instant);
 
   /// `R$ 1.234,56`.
   static String currency(num? value) =>
@@ -74,4 +78,28 @@ abstract final class OrbitFormat {
     if (meters < 1000) return '${meters.round()} m';
     return '${_decimal.format(meters / 1000)} km';
   }
+}
+
+class OrbitDateTimeFormat {
+  const OrbitDateTimeFormat(this.timezone);
+  final OrbitTimezone timezone;
+  DateTime at(DateTime instant) => timezone.at(instant);
+  String hourOf(DateTime? instant) =>
+      instant == null ? '--:--' : OrbitFormat._hour.format(at(instant));
+  String dateHourOf(DateTime? instant) =>
+      instant == null ? '—' : OrbitFormat._dateHour.format(at(instant));
+  String weekdayAndDay(DateTime instant) =>
+      OrbitFormat._weekdayDay.format(at(instant));
+}
+
+class OrbitTimeScope extends InheritedWidget {
+  OrbitTimeScope({
+    super.key,
+    required OrbitTimezone timezone,
+    required super.child,
+  }) : format = OrbitDateTimeFormat(timezone);
+  final OrbitDateTimeFormat format;
+  @override
+  bool updateShouldNotify(OrbitTimeScope oldWidget) =>
+      oldWidget.format.timezone.name != format.timezone.name;
 }

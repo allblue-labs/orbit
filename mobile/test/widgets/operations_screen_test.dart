@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:orbit_operator/app/providers.dart';
 import 'package:orbit_operator/core/config/environment.dart';
 import 'package:orbit_operator/core/network/orbit_api_client.dart';
@@ -70,6 +71,7 @@ Widget wrap(Future<ResponseBody> Function(RequestOptions) handler) {
 }
 
 void main() {
+  setUpAll(() => initializeDateFormatting('pt_BR'));
   testWidgets('lista as operações devolvidas pelo backend', (tester) async {
     await tester.pumpWidget(
       wrap(

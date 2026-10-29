@@ -221,7 +221,7 @@ class _Capa extends StatelessWidget {
                 child: Text(
                   item.scheduledFor == null
                       ? 'Sem data programada'
-                      : OrbitFormat.dateHourOf(item.scheduledFor),
+                      : OrbitFormat.of(context).dateHourOf(item.scheduledFor),
                   style: OrbitType.body.copyWith(
                     color: palette.ink,
                     fontWeight: FontWeight.w600,
@@ -621,7 +621,7 @@ class _PedidoEnviado extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Enviado em ${OrbitFormat.dateHourOf(pedido.requestedAt)}. '
+            'Enviado em ${OrbitFormat.of(context).dateHourOf(pedido.requestedAt)}. '
             'O responsável decide se remarca, troca o técnico ou cancela.',
             style: OrbitType.body.copyWith(color: palette.inkMuted),
           ),

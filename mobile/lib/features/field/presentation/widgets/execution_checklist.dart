@@ -226,6 +226,7 @@ class _ChecklistTile extends StatelessWidget {
       container: true,
       checked: checked,
       enabled: enabled,
+      onTap: enabled ? () => onChanged(!checked) : null,
       label: '${item.label}${item.required ? ', obrigatório' : ''}',
       excludeSemantics: true,
       child: InkWell(

@@ -9,6 +9,7 @@ class OrbitPageRoute extends GoRoute {
     required super.path,
     required Widget Function(BuildContext, GoRouterState) builder,
     super.parentNavigatorKey,
+    super.redirect,
     super.routes,
   }) : super(
          pageBuilder: (context, state) => orbitPage(

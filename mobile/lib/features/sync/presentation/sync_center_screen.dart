@@ -421,7 +421,7 @@ class _Status extends ConsumerWidget {
                         const SizedBox(height: 6),
                         Text(
                           'Última sincronização em '
-                          '${OrbitFormat.dateHourOf(at)}',
+                          '${OrbitFormat.of(context).dateHourOf(at)}',
                           style: OrbitType.caption.copyWith(
                             color: palette.inkSubtle,
                           ),
@@ -563,7 +563,7 @@ class _CommandTile extends ConsumerWidget {
                       },
                       errorCode: command.receipt?.error?.code,
                     )
-                  : 'Registrado em ${OrbitFormat.dateHourOf(command.enqueuedAt)}. '
+                  : 'Registrado em ${OrbitFormat.of(context).dateHourOf(command.enqueuedAt)}. '
                         'Será enviado quando houver conexão.',
               style: OrbitType.caption.copyWith(color: context.orbit.inkMuted),
             ),
