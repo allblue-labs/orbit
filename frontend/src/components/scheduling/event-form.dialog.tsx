@@ -124,6 +124,13 @@ const WEEKDAYS = [
   { value: 6, label: "S" },
 ];
 
+const RECURRENCE_FREQUENCY_LABELS = {
+  DAILY: "Diariamente",
+  WEEKLY: "Semanalmente",
+  MONTHLY: "Mensalmente",
+  CUSTOM: "Personalizada",
+} as const;
+
 export function EventFormDialog({
   open,
   editing,
@@ -695,7 +702,7 @@ function RecurrenceFields({
                   (frequency) => frequency !== "CUSTOM",
                 ).map((frequency) => (
                   <SelectItem key={frequency} value={frequency}>
-                    {frequency}
+                    {RECURRENCE_FREQUENCY_LABELS[frequency]}
                   </SelectItem>
                 ))}
               </SelectContent>
