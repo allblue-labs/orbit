@@ -236,10 +236,15 @@ function OperationForm({
 
   const [step, setStep] = useState(0);
   const reducedMotion = useReducedMotion();
+  /*
+   * A criação aceita checklists quando o papel permite executá-los. A
+   * capability `checklists.execute` não é requisito desse endpoint; mantê-la
+   * aqui escondia o seletor em fluxos válidos de atendimento avulso e por
+   * cliente.
+   */
   const canSelectChecklists =
     session.hasPermission("checklists.read") &&
-    session.hasPermission("checklists.execute") &&
-    session.hasCapability("checklists.execute");
+    session.hasPermission("checklists.execute");
   const templateQuery = useChecklistTemplateSelection(
     !editing && canSelectChecklists,
   );

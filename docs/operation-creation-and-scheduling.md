@@ -22,6 +22,15 @@ Ao iniciar para cliente cadastrado ou novo cliente, o próprio técnico já rece
 
 Aplicar a migração `20261028200000_self_started_walk_in_authorization` para corrigir pendências antigas comprovadamente abertas pelo próprio atendente. A migração preserva reatribuições e revogações explícitas do escritório.
 
+## Checklists na criação
+
+No wizard de criação, tanto no atendimento avulso quanto no iniciado a partir
+de um cliente, a escolha de checklist depende das permissões `checklists.read`
+e `checklists.execute`. A interface não exige a capability
+`checklists.execute`, pois ela não é requerida pelo endpoint de criação da
+operação. Assim, quem tem as permissões necessárias pode adicionar o checklist
+individual sem alterar os demais fluxos ou permissões.
+
 ## Detalhes
 
 A linha do tempo permanece como o registro da evolução do atendimento. O painel Histórico foi retirado da página. Informações adicionais apresentam campos legíveis e um link ao orçamento de origem, filtrando IDs, hashes e metadados técnicos.
