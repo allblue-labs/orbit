@@ -93,6 +93,7 @@ model User {
   auditLogs                          AuditLog[]
   invitationsSent                    IdentityInvitation[]           @relation("InvitationInviter")
   passwordResetTokens                PasswordResetToken[]
+  emailVerification                  EmailVerificationToken?
   mfaFactors                         MfaFactor[]
   createdArtifactTemplates           ArtifactTemplate[]             @relation("ArtifactTemplateCreatedBy")
   createdArtifactVersions            ArtifactTemplateVersion[]      @relation("ArtifactTemplateVersionCreatedBy")
@@ -163,6 +164,20 @@ model MfaFactor {
 
   @@index([userId, type, deletedAt])
   @@map("mfa_factors")
+}
+
+model EmailVerificationToken {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  userId    String    @unique @map("user_id") @db.Uuid
+  email     String    @db.VarChar(320)
+  tokenHash String    @unique @map("token_hash") @db.VarChar(64)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@map("email_verification_tokens")
 }
 
 model PasswordResetToken {

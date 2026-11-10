@@ -1,5 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
-import nodemailer, { type Transporter } from 'nodemailer';
+import { Injectable } from '@nestjs/common';
+import { EmailService } from '../email/email.service';
+import { InfrastructureException } from '../../exceptions';
 import webpush from 'web-push';
 
 export type DeliveryResult = {
@@ -10,48 +11,17 @@ export type DeliveryResult = {
 
 @Injectable()
 export class EmailNotificationProvider {
-  private readonly logger = new Logger(EmailNotificationProvider.name);
-  private readonly transporter?: Transporter;
-
-  constructor() {
-    if (process.env.SMTP_HOST) {
-      this.transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
-        port: Number(process.env.SMTP_PORT ?? 587),
-        secure: process.env.SMTP_SECURE === 'true',
-        auth: process.env.SMTP_USER
-          ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD }
-          : undefined,
-      });
-    }
-  }
+  constructor(private readonly email: EmailService) {}
 
   async send(input: {
     to: string;
     subject: string;
     text: string;
   }): Promise<DeliveryResult> {
-    if (!this.transporter) {
-      this.logger.warn('SMTP is not configured; email delivery skipped');
-      return { status: 'SKIPPED', provider: 'smtp-unconfigured' };
-    }
-    const result: unknown = await this.transporter.sendMail({
-      from: process.env.EMAIL_FROM ?? 'Orbit <no-reply@orbit.local>',
-      to: input.to,
-      subject: input.subject,
-      text: input.text,
-    });
-    return {
-      status: 'SENT',
-      provider: 'smtp',
-      providerMessageId:
-        typeof result === 'object' &&
-        result !== null &&
-        'messageId' in result &&
-        typeof result.messageId === 'string'
-          ? result.messageId
-          : undefined,
-    };
+    const result = await this.email.send(input);
+    if (result.status === 'FAILED')
+      throw new InfrastructureException('Email notification delivery failed');
+    return result;
   }
 }
 

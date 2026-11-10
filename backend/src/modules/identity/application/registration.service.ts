@@ -11,6 +11,7 @@ import { RegistrationRepository } from '../infrastructure/registration.repositor
 import type { RegisterOrganizationDto } from '../presentation/dto/identity.dto';
 import type { SessionMetadata } from '../domain/identity.types';
 import { SubscriptionProvisioningService } from '../../subscription-plans/subscriptions/subscription-provisioning.service';
+import { EmailVerificationService } from './email-verification.service';
 
 @Injectable()
 export class RegistrationService {
@@ -19,6 +20,7 @@ export class RegistrationService {
     private readonly authentication: AuthenticationService,
     @Inject(HASH_PROVIDER) private readonly hashes: IHashProvider,
     private readonly subscriptions: SubscriptionProvisioningService,
+    private readonly verification?: EmailVerificationService,
   ) {}
 
   async register(input: RegisterOrganizationDto, metadata: SessionMetadata) {
@@ -48,6 +50,7 @@ export class RegistrationService {
         metadata,
       );
       if (!created) throw new ValidationException('Invalid plan');
+      await this.verification?.sendWelcome(created.userId);
       /**
        * A assinatura nasce junto com a organização.
        *

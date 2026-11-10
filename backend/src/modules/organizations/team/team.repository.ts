@@ -72,12 +72,8 @@ export class TeamRepository {
           lastName: input.lastName,
           displayName: `${input.firstName} ${input.lastName}`.trim(),
           status: 'ACTIVE',
-          /**
-           * Verificado na criação: quem cadastra é o dono da organização, que
-           * já conhece a pessoa. Exigir confirmação por e-mail travaria o
-           * técnico sem e-mail — o caso que motivou a senha temporária.
-           */
-          emailVerifiedAt: new Date(),
+          // Verification records possession of the mailbox, independently of mobile access.
+          emailVerifiedAt: null,
           credential: {
             create: {
               passwordHash: input.passwordHash,

@@ -13,6 +13,7 @@ describe('PlatformAdministrationService', () => {
     plansAndModules: jest.fn(),
   };
   const registration = { register: jest.fn() };
+  const verification = { sendWelcome: jest.fn().mockResolvedValue(undefined) };
   const hashes = {
     hash: jest.fn().mockResolvedValue('hash'),
     verify: jest.fn().mockResolvedValue(true),
@@ -21,12 +22,16 @@ describe('PlatformAdministrationService', () => {
     repository as never,
     registration as never,
     hashes,
+    verification as never,
   );
 
   beforeEach(() => jest.clearAllMocks());
 
   it('provisions the first tenant owner through the shared onboarding boundary', async () => {
-    registration.register.mockResolvedValue({ organizationId: 'org-1' });
+    registration.register.mockResolvedValue({
+      organizationId: 'org-1',
+      userId: 'owner-1',
+    });
     repository.findOrganization.mockResolvedValue({ id: 'org-1' });
     await expect(
       service.createTenant('admin-1', {
@@ -52,6 +57,7 @@ describe('PlatformAdministrationService', () => {
         subscriptionStatus: 'TRIALING',
       }),
     ).resolves.toEqual({ id: 'org-1' });
+    expect(verification.sendWelcome).toHaveBeenCalledWith('owner-1');
     expect(registration.register).toHaveBeenCalledWith(
       expect.objectContaining({
         email: 'owner@example.com',

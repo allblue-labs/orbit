@@ -15,9 +15,10 @@ saída interpolada pode materializar segredos no terminal ou no CI.
    correção explícitas.
 4. Injete os valores de `.env.example` pelo secret manager. Nenhum placeholder
    é aceito para JWT, AES ou trial fingerprint.
-   `SMTP_HOST`, `EMAIL_FROM` e `IDENTITY_PUBLIC_WEB_URL` também são obrigatórios:
-   convites e recuperação de senha são fluxos publicados e não usam adapter
-   silencioso em produção.
+   `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`,
+   `AWS_SES_FROM_EMAIL` e `IDENTITY_PUBLIC_WEB_URL` também são obrigatórios:
+   e-mails transacionais usam exclusivamente Amazon SES. Consulte
+   `backend/docs/amazon-ses.md` para configurar a identidade e o acesso de produção.
 5. Mantenha `CUSTOMER_PORTAL_ENABLED=false`. O portal é dormant nesta release.
 6. Para produção pública, use TLS no edge, `FRONTEND_ORIGIN` exata e
    `AUTH_COOKIE_SECURE=true`. `ALLOW_INSECURE_LOCAL_COOKIES` é somente para um

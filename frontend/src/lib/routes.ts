@@ -20,6 +20,8 @@ export const ROUTES = {
   forgotPassword: "/recuperar-senha",
   resetPassword: "/redefinir-senha",
   invitation: "/convite",
+  /** Public with or without a session; the token proves mailbox ownership. */
+  emailVerification: "/confirmar-email",
   /**
    * O contrato do PMOC aberto por link temporário.
    *

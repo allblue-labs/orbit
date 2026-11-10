@@ -31,7 +31,7 @@ Channels:
 
 - `IN_APP`: durable database inbox.
 - `REALTIME`: authenticated Socket.IO event.
-- `EMAIL`: SMTP through Nodemailer.
+- `EMAIL`: Amazon SES through the shared `EmailService`.
 - `PUSH`: standards-based Web Push through VAPID.
 
 The Socket.IO namespace is `/notifications`, accepts only the websocket
@@ -51,13 +51,15 @@ Main routes:
 
 Future `scheduledAt` notifications remain `PENDING`; the deployment scheduler
 must call the idempotent dispatch route when they are due. Delivery attempts,
-provider identifiers and errors remain auditable. SMTP or VAPID that is not
-configured produces `SKIPPED`, not a false success.
+provider identifiers and errors remain auditable. SES failures produce `FAILED`;
+missing SES configuration prevents production startup. Email is `SKIPPED` only
+under `NODE_ENV=test`. VAPID that is not configured also produces `SKIPPED`.
 
 ## Configuration
 
-Email uses `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`,
-`SMTP_PASSWORD`, and `EMAIL_FROM`.
+Email uses `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` and
+`AWS_SES_FROM_EMAIL`; temporary credentials also use `AWS_SESSION_TOKEN`.
+See `amazon-ses.md` for setup and least-privilege permissions.
 
 Push uses `VAPID_SUBJECT`, `VAPID_PUBLIC_KEY`, and `VAPID_PRIVATE_KEY`.
 WebSocket origin is restricted by `FRONTEND_ORIGIN`.

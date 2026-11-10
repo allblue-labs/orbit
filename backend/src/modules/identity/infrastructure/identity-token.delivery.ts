@@ -1,83 +1,53 @@
 import { Injectable } from '@nestjs/common';
-import nodemailer, { type SendMailOptions } from 'nodemailer';
 import { InfrastructureException } from '../../../exceptions';
-import type {
+import { EmailService } from '../../email/email.service';
+import { actionEmail } from '../../email/email-template';
+import {
   IdentityTokenPurpose,
-  IIdentityTokenDelivery,
+  type IIdentityTokenDelivery,
 } from '../domain/identity.types';
-import { IdentityTokenPurpose as Purpose } from '../domain/identity.types';
 import { identityTokenLink } from '../domain/identity-links';
 
-/**
- * Safe default until an email provider is connected. It deliberately does not
- * log or expose secrets. Production deployments should replace this provider.
- */
+/** Identity and notifications share the sender; tokens never enter logs. */
 @Injectable()
-export class NoopIdentityTokenDelivery implements IIdentityTokenDelivery {
-  deliver(
-    purpose: IdentityTokenPurpose,
-    recipient: string,
-    token: string,
-  ): Promise<void> {
-    void purpose;
-    void recipient;
-    void token;
-    return Promise.resolve();
-  }
-}
+export class TransactionalIdentityTokenDelivery implements IIdentityTokenDelivery {
+  constructor(private readonly email: EmailService) {}
 
-/**
- * Production delivery for the already-public invitation and password recovery
- * flows. Tokens exist only in the HTTPS link sent to the intended recipient;
- * neither the token nor the provider response is logged.
- */
-@Injectable()
-export class SmtpIdentityTokenDelivery implements IIdentityTokenDelivery {
   async deliver(
     purpose: IdentityTokenPurpose,
     recipient: string,
     token: string,
   ): Promise<void> {
-    const invitation = purpose === Purpose.INVITATION;
-    /** O mesmo montador que o link compartilhável usa — uma rota só. */
-    const link = identityTokenLink(purpose, token);
-
-    const options: SendMailOptions = {
-      from: this.required('EMAIL_FROM'),
+    const copy = {
+      EMAIL_VERIFICATION: {
+        title: 'Bem-vindo ao Orbit! Confirme seu e-mail',
+        introduction:
+          'Sua conta foi criada. Confirme seu endereço de e-mail para manter seus dados de acesso atualizados e receber as comunicações do Orbit.',
+        action: 'Confirmar meu e-mail',
+        expiry:
+          'Este link é exclusivo, pode ser usado uma única vez e expira em 24 horas.',
+      },
+      PASSWORD_RESET: {
+        title: 'Redefinição de senha do Orbit',
+        introduction:
+          'Recebemos uma solicitação para redefinir sua senha. Use o botão abaixo para escolher uma nova senha com segurança.',
+        action: 'Redefinir minha senha',
+        expiry:
+          'Este link é temporário e pode ser usado uma única vez. Se você não fez a solicitação, sua senha permanece a mesma.',
+      },
+      INVITATION: {
+        title: 'Você foi convidado para o Orbit',
+        introduction:
+          'Você recebeu um convite para participar de uma equipe no Orbit. Aceite o convite e defina sua senha.',
+        action: 'Aceitar convite',
+        expiry: 'Este convite expira em 7 dias.',
+      },
+    }[purpose];
+    const result = await this.email.send({
       to: recipient,
-      subject: invitation
-        ? 'Você foi convidado para o Orbit'
-        : 'Redefinição de senha do Orbit',
-      text: invitation
-        ? `Use este link para aceitar o convite e definir sua senha:\n\n${link}\n\nSe você não esperava este convite, ignore esta mensagem.`
-        : `Use este link para redefinir sua senha:\n\n${link}\n\nSe você não solicitou a alteração, ignore esta mensagem.`,
-    };
-
-    try {
-      await this.send(options);
-    } catch {
-      throw new InfrastructureException('Identity token delivery failed');
-    }
-  }
-
-  protected async send(options: SendMailOptions): Promise<void> {
-    const user = process.env.SMTP_USER?.trim();
-    const password = process.env.SMTP_PASSWORD?.trim();
-    const transporter = nodemailer.createTransport({
-      host: this.required('SMTP_HOST'),
-      port: Number(process.env.SMTP_PORT ?? 587),
-      secure: process.env.SMTP_SECURE === 'true',
-      requireTLS: process.env.SMTP_SECURE !== 'true',
-      auth: user && password ? { user, pass: password } : undefined,
+      ...actionEmail({ ...copy, link: identityTokenLink(purpose, token) }),
     });
-    await transporter.sendMail(options);
-  }
-
-  private required(key: string): string {
-    const value = process.env[key]?.trim();
-    if (!value) {
-      throw new InfrastructureException(`${key} is required`);
-    }
-    return value;
+    if (result.status === 'FAILED')
+      throw new InfrastructureException('Identity token delivery failed');
   }
 }

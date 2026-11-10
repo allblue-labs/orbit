@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { EmailModule } from '../email/email.module';
 import { IdentityModule } from '../identity/identity.module';
 import {
   EmailNotificationProvider,
@@ -24,7 +25,7 @@ import {
 import { MobilePushRepository } from './mobile-push.repository';
 
 @Module({
-  imports: [IdentityModule],
+  imports: [IdentityModule, EmailModule],
   controllers: [
     NotificationPreferencesController,
     NotificationController,

@@ -7,13 +7,37 @@ const valid = (): NodeJS.ProcessEnv => ({
   TRIAL_FINGERPRINT_SECRET: 't'.repeat(48),
   ENCRYPTION_KEY: Buffer.alloc(32, 7).toString('base64'),
   FRONTEND_ORIGIN: 'https://app.example.test',
-  SMTP_HOST: 'smtp.example.test',
-  SMTP_PORT: '587',
-  EMAIL_FROM: 'Orbit <no-reply@example.test>',
+  AWS_REGION: 'us-east-1',
+  AWS_ACCESS_KEY_ID: 'environment-access-key',
+  AWS_SECRET_ACCESS_KEY: 'environment-secret-key',
+  AWS_SES_FROM_EMAIL: 'no-reply@example.test',
   IDENTITY_PUBLIC_WEB_URL: 'https://app.example.test',
 });
 
 describe('release environment', () => {
+  it('SES utiliza somente as credenciais explícitas de ambiente', () => {
+    expect(() =>
+      validateReleaseEnvironment({ ...valid(), AWS_PROFILE: 'ignored' }),
+    ).not.toThrow();
+  });
+  it.each([
+    'AWS_REGION',
+    'AWS_ACCESS_KEY_ID',
+    'AWS_SECRET_ACCESS_KEY',
+    'AWS_SES_FROM_EMAIL',
+  ])('SES exige %s em produção', (key) => {
+    const env = valid();
+    delete env[key];
+    expect(() => validateReleaseEnvironment(env)).toThrow(key);
+  });
+  it('recusa remetente inválido e região inválida', () => {
+    expect(() =>
+      validateReleaseEnvironment({ ...valid(), AWS_SES_FROM_EMAIL: 'invalid' }),
+    ).toThrow(/AWS_SES_FROM_EMAIL/);
+    expect(() =>
+      validateReleaseEnvironment({ ...valid(), AWS_REGION: 'invalid' }),
+    ).toThrow(/AWS_REGION/);
+  });
   it('accepts explicit production secrets and origins', () => {
     expect(() => validateReleaseEnvironment(valid())).not.toThrow();
   });
@@ -23,8 +47,6 @@ describe('release environment', () => {
     'TRIAL_FINGERPRINT_SECRET',
     'ENCRYPTION_KEY',
     'FRONTEND_ORIGIN',
-    'SMTP_HOST',
-    'EMAIL_FROM',
     'IDENTITY_PUBLIC_WEB_URL',
   ])('fails closed when %s is missing', (key) => {
     const environment = valid();
@@ -34,10 +56,7 @@ describe('release environment', () => {
     );
   });
 
-  it('rejects incomplete SMTP auth and insecure public identity URLs', () => {
-    expect(() =>
-      validateReleaseEnvironment({ ...valid(), SMTP_USER: 'orbit' }),
-    ).toThrow(/configured together/);
+  it('rejects insecure public identity URLs', () => {
     expect(() =>
       validateReleaseEnvironment({
         ...valid(),

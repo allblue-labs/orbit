@@ -25,6 +25,7 @@ import { generateTemporaryPassword } from './temporary-password';
 import { AuthorizationService } from '../../../common';
 import { isKnownPermission, ROLE_SURFACES } from '../team-roles';
 import { executesFieldWork } from '../../workforce/field-eligibility';
+import { EmailVerificationService } from '../../identity/application/email-verification.service';
 
 /** Quanto tempo o link de definição de senha vale. */
 const VALIDADE_DO_LINK_MS = 24 * 60 * 60_000;
@@ -52,6 +53,7 @@ export class TeamService {
     @Inject(HASH_PROVIDER) private readonly hashes: IHashProvider,
     @Inject(IDENTITY_TOKEN_DELIVERY)
     private readonly delivery: IIdentityTokenDelivery,
+    private readonly verification?: EmailVerificationService,
   ) {}
 
   /**
@@ -170,6 +172,7 @@ export class TeamService {
       throw new ConflictException('This e-mail already has an Orbit account');
     }
 
+    await this.verification?.sendWelcome(resultado.userId);
     const membro = await this.team.findMember(
       actor.organizationId,
       resultado.userId,
@@ -193,7 +196,7 @@ export class TeamService {
    * trocar o papel dela, desligá-la, ver o que ela faz — e passar o link por
    * WhatsApp não lhe dá poder que ele já não tenha.
    *
-   * O e-mail também é disparado quando há SMTP: os dois caminhos levam ao mesmo
+   * O e-mail também é disparado pelo Amazon SES: os dois caminhos levam ao mesmo
    * endereço, e o owner usa o que funcionar para aquela pessoa.
    */
   async issuePasswordLink(actor: TeamActor, userId: string) {
@@ -229,7 +232,7 @@ export class TeamService {
      * O e-mail sai também, e a falha dele não derruba a resposta.
      *
      * O link é o entregável desta rota — o owner o repassa por onde conseguir.
-     * Tentar o e-mail é conveniência para quem tem caixa postal; se o SMTP não
+     * Tentar o e-mail é conveniência para quem tem caixa postal; se o serviço de e-mail não
      * estiver configurado, o owner ainda tem o link na mão, e `emailSent` diz a
      * ele que precisa usá-lo.
      */

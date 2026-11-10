@@ -1,69 +1,71 @@
-import type { SendMailOptions } from 'nodemailer';
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { InfrastructureException } from '../../../exceptions';
 import { IdentityTokenPurpose } from '../domain/identity.types';
-import { SmtpIdentityTokenDelivery } from './identity-token.delivery';
+import { TransactionalIdentityTokenDelivery } from './identity-token.delivery';
+import type { EmailService } from '../../email/email.service';
 
-class TestDelivery extends SmtpIdentityTokenDelivery {
-  readonly messages: SendMailOptions[] = [];
-  fail = false;
-
-  protected override send(options: SendMailOptions): Promise<void> {
-    this.messages.push(options);
-    return this.fail
-      ? Promise.reject(new Error('provider response with secret detail'))
-      : Promise.resolve();
-  }
-}
-
-describe('SmtpIdentityTokenDelivery', () => {
-  const previousUrl = process.env.IDENTITY_PUBLIC_WEB_URL;
-  const previousFrom = process.env.EMAIL_FROM;
-
+const token = 'A'.repeat(64);
+describe('TransactionalIdentityTokenDelivery', () => {
+  const previous = process.env.IDENTITY_PUBLIC_WEB_URL;
   beforeEach(() => {
     process.env.IDENTITY_PUBLIC_WEB_URL = 'https://app.example.test';
-    process.env.EMAIL_FROM = 'Orbit <no-reply@example.test>';
   });
-
   afterAll(() => {
-    process.env.IDENTITY_PUBLIC_WEB_URL = previousUrl;
-    process.env.EMAIL_FROM = previousFrom;
+    if (previous === undefined) delete process.env.IDENTITY_PUBLIC_WEB_URL;
+    else process.env.IDENTITY_PUBLIC_WEB_URL = previous;
   });
 
   it.each([
-    [IdentityTokenPurpose.INVITATION, '/convite'],
-    [IdentityTokenPurpose.PASSWORD_RESET, '/redefinir-senha'],
-  ] as const)('sends %s in the intended HTTPS flow', async (purpose, path) => {
-    const delivery = new TestDelivery();
-
-    await delivery.deliver(purpose, 'analyst@example.test', 'secret-token');
-
-    expect(delivery.messages).toHaveLength(1);
-    expect(delivery.messages[0]?.from).toBe('Orbit <no-reply@example.test>');
-    expect(delivery.messages[0]?.to).toBe('analyst@example.test');
-    expect(delivery.messages[0]?.text).toContain(
-      `https://app.example.test${path}?token=secret-token`,
-    );
-  });
-
-  it('normalizes provider failures without leaking token or provider detail', async () => {
-    const delivery = new TestDelivery();
-    delivery.fail = true;
-
-    let failure: unknown;
-    try {
-      await delivery.deliver(
-        IdentityTokenPurpose.PASSWORD_RESET,
-        'analyst@example.test',
-        'SENSITIVE_TOKEN_MUST_NOT_LEAK',
+    [IdentityTokenPurpose.INVITATION, '/convite?token=', 'Você foi convidado'],
+    [
+      IdentityTokenPurpose.PASSWORD_RESET,
+      '/redefinir-senha?token=',
+      'Redefinição de senha',
+    ],
+    [
+      IdentityTokenPurpose.EMAIL_VERIFICATION,
+      '/confirmar-email#token=',
+      'Bem-vindo ao Orbit',
+    ],
+  ] as const)(
+    'envia %s pela classe central com texto e HTML em português',
+    async (purpose, path, subject) => {
+      const email = {
+        send: jest.fn().mockResolvedValue({ status: 'SENT', provider: 'ses' }),
+      };
+      await new TransactionalIdentityTokenDelivery(
+        email as unknown as EmailService,
+      ).deliver(purpose, 'user@example.test', token);
+      expect(email.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: 'user@example.test',
+          subject: expect.stringContaining(subject),
+          text: expect.stringContaining(
+            `https://app.example.test${path}${token}`,
+          ),
+          html: expect.stringContaining('lang="pt-BR"'),
+        }),
       );
-    } catch (error) {
-      failure = error;
-    }
-
-    expect(failure).toBeInstanceOf(InfrastructureException);
-    expect((failure as Error).message).toBe('Identity token delivery failed');
-    expect((failure as Error).message).not.toContain(
-      'SENSITIVE_TOKEN_MUST_NOT_LEAK',
+    },
+  );
+  it('normaliza falhas sem incluir detalhes ou tokens na exceção', async () => {
+    const email = {
+      send: jest.fn().mockResolvedValue({
+        status: 'FAILED',
+        provider: 'ses',
+        code: 'SES_MESSAGE_REJECTED',
+      }),
+    };
+    await expect(
+      new TransactionalIdentityTokenDelivery(
+        email as unknown as EmailService,
+      ).deliver(
+        IdentityTokenPurpose.PASSWORD_RESET,
+        'user@example.test',
+        token,
+      ),
+    ).rejects.toThrow(
+      new InfrastructureException('Identity token delivery failed'),
     );
   });
 });

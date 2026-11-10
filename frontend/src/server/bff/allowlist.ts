@@ -83,6 +83,8 @@ const PUBLIC_ENDPOINTS: ReadonlySet<string> = new Set([
   "GET /plans",
   "POST /identity/password/forgot",
   "POST /identity/password/reset",
+  "POST /identity/email/verify",
+  "POST /identity/email/resend",
   "POST /identity/invitations/accept",
 ]);
 

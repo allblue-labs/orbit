@@ -36,8 +36,8 @@ export class PasswordRecoveryService {
      *
      * Sem este `catch` o endpoint era um oráculo de enumeração de contas:
      * e-mail inexistente saía cedo com 202, e-mail existente chegava ao envio e,
-     * com o SMTP indisponível, estourava 500. Quem quisesse descobrir se uma
-     * pessoa tem conta no Orbit só precisava comparar os dois códigos —
+     * com o serviço de e-mail indisponível, estourava 500. Quem quisesse descobrir
+     * se uma pessoa tem conta no Orbit só precisava comparar os dois códigos —
      * verificado ao vivo, 202 contra 500.
      *
      * O token já foi gravado; o que se perde é a entrega. O registro fica sem
