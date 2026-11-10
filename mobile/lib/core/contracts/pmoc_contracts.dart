@@ -427,6 +427,8 @@ class PmocCycleEquipmentContract {
     required this.status,
     required this.eligibility,
     this.execution,
+    this.scheduledTechnicianId,
+    this.hasSchedule = false,
   });
 
   factory PmocCycleEquipmentContract.fromJson(PmocJson json) =>
@@ -442,6 +444,11 @@ class PmocCycleEquipmentContract {
                 json['execution'] as PmocJson,
               )
             : null,
+        scheduledTechnicianId:
+            ((json['schedule'] as PmocJson?)?['responsibleFieldTechnician']
+                    as PmocJson?)?['id']
+                as String?,
+        hasSchedule: json['schedule'] is PmocJson,
       );
 
   final String coverageId;
@@ -452,6 +459,8 @@ class PmocCycleEquipmentContract {
 
   final PmocExecutionEligibilityContract eligibility;
   final PmocEquipmentExecutionContract? execution;
+  final String? scheduledTechnicianId;
+  final bool hasSchedule;
 
   String get assetId => equipment['id'] as String? ?? '';
   String get assetName => equipment['name'] as String? ?? 'Equipamento';

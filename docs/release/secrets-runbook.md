@@ -15,8 +15,9 @@ artefatos de cliente nunca são versionados.
   chave anterior. Nunca troque a chave sem inventário dos ciphertexts.
 - `STRIPE_SECRET_KEY` e `STRIPE_WEBHOOK_SECRET`: rotacione no provider, use
   sobreposição curta e valide assinatura/dedupe antes de revogar a anterior.
-- SMTP, VAPID, DB e credenciais do admin: rotação padrão do secret manager, com
-  smoke específico e revogação da versão anterior.
+- AWS SES (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` e, para credenciais
+  temporárias, `AWS_SESSION_TOKEN`), VAPID, DB e credenciais do admin: rotação
+  padrão do secret manager, com smoke específico e revogação da versão anterior.
 
 ## Segredo de domínio long-lived
 

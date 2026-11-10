@@ -62,6 +62,8 @@ import {
   StartPmocEquipmentExecutionDto,
   UpdatePmocPlanDto,
   UpdatePmocUnitDto,
+  UpdatePmocEquipmentScheduleDto,
+  CancelPmocEquipmentScheduleDto,
 } from './pmoc.dto';
 import { PmocService, type PmocActor } from './pmoc.service';
 
@@ -450,6 +452,44 @@ export class PmocController {
       cycleId,
       assetId,
       this.actor(request),
+    );
+  }
+
+  @Patch('plans/:id/cycles/:cycleId/equipment/:assetId/schedule')
+  @Capabilities('pmoc.manage')
+  @Permissions('pmoc.manage')
+  updateEquipmentSchedule(
+    @Param('id', ParseUUIDv7Pipe) id: string,
+    @Param('cycleId', ParseUUIDv7Pipe) cycleId: string,
+    @Param('assetId', ParseUUIDv7Pipe) assetId: string,
+    @Req() request: IdentityRequest,
+    @Body() input: UpdatePmocEquipmentScheduleDto,
+  ) {
+    return this.pmoc.manageEquipmentSchedule(
+      id,
+      cycleId,
+      assetId,
+      this.actor(request),
+      input,
+    );
+  }
+
+  @Post('plans/:id/cycles/:cycleId/equipment/:assetId/cancel')
+  @Capabilities('pmoc.manage')
+  @Permissions('pmoc.manage')
+  cancelEquipmentSchedule(
+    @Param('id', ParseUUIDv7Pipe) id: string,
+    @Param('cycleId', ParseUUIDv7Pipe) cycleId: string,
+    @Param('assetId', ParseUUIDv7Pipe) assetId: string,
+    @Req() request: IdentityRequest,
+    @Body() input: CancelPmocEquipmentScheduleDto,
+  ) {
+    return this.pmoc.manageEquipmentSchedule(
+      id,
+      cycleId,
+      assetId,
+      this.actor(request),
+      input,
     );
   }
 

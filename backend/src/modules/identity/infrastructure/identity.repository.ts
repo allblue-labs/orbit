@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../database';
 import type { PrismaTransactionClient } from '../../../database/prisma.types';
+import { ValidationException } from '../../../exceptions';
 
 const identityInclude = {
   credential: true,
@@ -284,8 +285,56 @@ export class IdentityRepository {
     });
   }
 
+  createEmailVerification(
+    userId: string,
+    tokenHash: string,
+    expiresAt: Date,
+  ): Promise<string | null> {
+    return this.prisma.$transaction(async (tx) => {
+      await this.setLocal(tx, 'app.user_id', userId);
+      await tx.$executeRaw`SELECT id FROM users WHERE id=${userId}::uuid FOR UPDATE`;
+      const user = await tx.user.findFirst({
+        where: {
+          id: userId,
+          status: 'ACTIVE',
+          deletedAt: null,
+          emailVerifiedAt: null,
+        },
+        select: { normalizedEmail: true, email: true },
+      });
+      if (!user) return null;
+      const previous = await tx.emailVerificationToken.findUnique({
+        where: { userId },
+        select: { createdAt: true },
+      });
+      if (previous && previous.createdAt.getTime() > Date.now() - 60_000)
+        return null;
+      const data = {
+        email: user.normalizedEmail,
+        tokenHash,
+        expiresAt,
+        usedAt: null,
+        createdAt: new Date(),
+      };
+      await tx.emailVerificationToken.upsert({
+        where: { userId },
+        create: { userId, ...data },
+        update: data,
+      });
+      return user.email;
+    });
+  }
+
+  async confirmEmail(tokenHash: string): Promise<boolean> {
+    const [result] = await this.prisma.$queryRaw<
+      { confirmed: boolean }[]
+    >`SELECT app_confirm_email(${tokenHash}) AS confirmed`;
+    return result?.confirmed === true;
+  }
+
   createPasswordReset(userId: string, tokenHash: string, expiresAt: Date) {
     return this.prisma.$transaction(async (transaction) => {
+      await transaction.$executeRaw`SELECT id FROM users WHERE id=${userId}::uuid FOR UPDATE`;
       await transaction.passwordResetToken.deleteMany({ where: { userId } });
       return transaction.passwordResetToken.create({
         data: { userId, tokenHash, expiresAt },
@@ -309,7 +358,9 @@ export class IdentityRepository {
           data: { usedAt: new Date() },
         });
         if (consumed.count !== 1) {
-          throw new Error('Password reset token was already consumed');
+          throw new ValidationException(
+            'Este link de recuperação é inválido, expirou ou já foi utilizado.',
+          );
         }
         await transaction.credential.update({
           where: { userId },

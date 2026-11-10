@@ -64,7 +64,7 @@ Referências: [ativar push no Xcode](https://help.apple.com/xcode/mac/current/en
 ## Android
 
 1. Crie/selecione um projeto no Firebase e registre o aplicativo Android com o
-   pacote `com.allbluelabs.orbit_operator`.
+   pacote `com.allbluelabs.orbit`.
 2. Baixe `google-services.json` e coloque em `mobile/android/app/` antes de compilar.
    O arquivo está ignorado no Git. Builds sem esse arquivo continuam funcionando,
    mas não registram um token FCM.

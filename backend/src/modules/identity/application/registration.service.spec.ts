@@ -37,7 +37,9 @@ describe('registration preserves the commercial selection', () => {
         {} as never,
       );
       await expect(
-        service.register(acceptance as RegisterOrganizationDto, {}),
+        service.register(acceptance as RegisterOrganizationDto, {
+          client: 'WEB',
+        }),
       ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
       expect(repository.register).not.toHaveBeenCalled();
       expect(hashes.hash).not.toHaveBeenCalled();
@@ -64,11 +66,15 @@ describe('registration preserves the commercial selection', () => {
         login: jest.fn().mockResolvedValue({ accessToken: 'unit-only' }),
       };
       const hashes = { hash: jest.fn().mockResolvedValue('unit-hash') };
+      const verification = {
+        sendWelcome: jest.fn().mockResolvedValue(undefined),
+      };
       const service = new RegistrationService(
         repository as unknown as RegistrationRepository,
         authentication as unknown as AuthenticationService,
         hashes as unknown as IHashProvider,
         subscriptions as unknown as SubscriptionProvisioningService,
+        verification as never,
       );
       const input = {
         acceptTerms: true,
@@ -81,7 +87,11 @@ describe('registration preserves the commercial selection', () => {
         documentNumber: '52998224725',
         billingInterval,
       } as RegisterOrganizationDto;
-      await service.register(input, {});
+      await service.register(input, { client: 'WEB' });
+      expect(verification.sendWelcome).toHaveBeenCalledWith('user');
+      expect(verification.sendWelcome.mock.invocationCallOrder[0]).toBeLessThan(
+        subscriptions.provision.mock.invocationCallOrder[0]!,
+      );
       expect(subscriptions.provision).toHaveBeenCalledWith({
         organizationId: 'org',
         planKey: 'PROFESSIONAL',

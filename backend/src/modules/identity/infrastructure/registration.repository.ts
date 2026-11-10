@@ -87,7 +87,7 @@ export class RegistrationRepository {
           lastName: input.lastName.trim(),
           displayName: `${input.firstName} ${input.lastName}`.trim(),
           status: 'ACTIVE',
-          emailVerifiedAt: now,
+          emailVerifiedAt: null,
           credential: { create: { passwordHash } },
         },
       });

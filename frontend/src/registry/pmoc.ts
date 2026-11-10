@@ -159,6 +159,7 @@ export const EQUIPMENT_EXECUTION_STATUS: Readonly<
  * genérico.
  */
 export const EXECUTION_BLOCKED_REASONS: Readonly<Record<string, string>> = {
+  EXECUTION_CANCELLED: "O atendimento deste equipamento foi cancelado.",
   PLAN_NOT_ACTIVE:
     "O plano não está ativo. Reative-o para executar manutenções.",
   CYCLE_NOT_PENDING: "Este ciclo já foi encerrado.",

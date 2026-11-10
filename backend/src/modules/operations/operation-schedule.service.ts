@@ -127,6 +127,70 @@ export class OperationScheduleService {
         },
       });
       const warnings = new Map<string, OperationScheduleWarningReadModel>();
+      const plannedPmoc = await tx.pmocEquipmentSchedule.findMany({
+        where: {
+          organizationId,
+          id: input.excludePmocScheduleId
+            ? { not: input.excludePmocScheduleId }
+            : undefined,
+          cancelledAt: null,
+          scheduledFor: { gte: from, lte: to },
+          cycle: {
+            status: 'PENDING',
+            plan: { status: 'ACTIVE', deletedAt: null },
+          },
+          OR: [
+            { responsibleFieldTechnicianId: { in: userIds } },
+            { auxiliaryTechnicianIds: { hasSome: userIds } },
+          ],
+        },
+        include: {
+          responsibleFieldTechnician: {
+            select: { id: true, displayName: true },
+          },
+          cycle: { select: { plan: { select: { name: true } } } },
+          coverage: {
+            select: {
+              asset: { select: { name: true } },
+              equipmentExecutions: {
+                select: { cycleId: true, operationId: true },
+              },
+            },
+          },
+        },
+      });
+      for (const planned of plannedPmoc) {
+        if (
+          !planned.scheduledFor ||
+          planned.coverage.equipmentExecutions.some(
+            (execution) =>
+              execution.cycleId === planned.cycleId && execution.operationId,
+          )
+        )
+          continue;
+        const assistants = planned.auxiliaryTechnicianIds.filter((id) =>
+          userIds.includes(id),
+        );
+        const people = [
+          ...(planned.responsibleFieldTechnician
+            ? [planned.responsibleFieldTechnician]
+            : []),
+          ...(assistants.length
+            ? await tx.user.findMany({
+                where: { id: { in: assistants } },
+                select: { id: true, displayName: true },
+              })
+            : []),
+        ];
+        for (const user of people)
+          if (userIds.includes(user.id))
+            warnings.set(`pmoc:${planned.id}:${user.id}`, {
+              userName: user.displayName,
+              title: `${planned.cycle.plan.name} · ${planned.coverage.asset.name}`,
+              startsAt: planned.scheduledFor.toISOString(),
+              endsAt: null,
+            });
+      }
       for (const operation of operations) {
         if (
           !operation.scheduledStart ||

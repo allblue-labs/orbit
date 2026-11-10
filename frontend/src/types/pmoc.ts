@@ -52,8 +52,7 @@ export type PmocEquipmentExecution = PmocEquipmentExecutionReadModel;
 export type PmocSignatureLink = PmocSignatureLinkReadModel;
 export type PmocSignatureLinkState = PmocSignatureLinkStateReadModel;
 export type PmocPublicContract = PmocPublicContractReadModel;
-export type PmocContractSignatureResult =
-  PmocContractSignatureResultReadModel;
+export type PmocContractSignatureResult = PmocContractSignatureResultReadModel;
 
 /**
  * O que a página pública envia ao assinar.
@@ -105,6 +104,28 @@ export interface PmocCycleEquipmentRow {
    * revalida contra o estado do momento.
    */
   eligibility: PmocExecutionEligibility;
+  schedule?: PmocEquipmentSchedule | null;
+  plannedFieldTechnician?: { id: string; displayName: string } | null;
+  management?: { version: string; allowedActions: readonly string[] };
+}
+
+export interface PmocEquipmentSchedule {
+  id?: string;
+  version: string;
+  responsibleFieldTechnician: { id: string; displayName: string } | null;
+  auxiliaryTechnicianIds: readonly string[];
+  scheduledFor: string | null;
+  notes: string | null;
+  cancelledAt: string | null;
+  cancellationReason: string | null;
+}
+
+export interface UpdatePmocEquipmentScheduleInput {
+  expectedVersion: string;
+  responsibleFieldTechnicianId: string | null;
+  auxiliaryTechnicianIds: readonly string[];
+  scheduledFor: string | null;
+  notes: string;
 }
 
 export interface PmocExecutionEligibility {
@@ -258,6 +279,8 @@ export interface PmocExecutionPreparation {
   suggestedExecutionTime: { dueOn: string; timezone: string };
   /** A execução já aberta para este equipamento neste ciclo, se houver. */
   existingExecution: PmocEquipmentExecution | null;
+  plannedFieldTechnicianId?: string | null;
+  schedule?: PmocEquipmentSchedule | null;
   /**
    * O que se pode fazer agora — decidido pelo servidor.
    *

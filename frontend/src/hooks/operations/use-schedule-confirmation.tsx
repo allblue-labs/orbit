@@ -10,6 +10,7 @@ export interface ScheduleCheckInput {
   scheduledStart?: string | null;
   scheduledEnd?: string | null;
   excludeOperationId?: string;
+  excludePmocScheduleId?: string;
 }
 export function useScheduleConfirmation() {
   const [warnings, setWarnings] = useState<OperationScheduleWarningReadModel[]>(

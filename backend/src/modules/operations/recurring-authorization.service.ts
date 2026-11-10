@@ -70,7 +70,6 @@ export class RecurringAuthorizationService {
           deletedAt: null,
           status: 'ACTIVE',
           schedulingPaused: false,
-          technicianUserId: query.assignedUserId ?? { not: null },
           ...(search
             ? {
                 OR: [
@@ -80,6 +79,27 @@ export class RecurringAuthorizationService {
               }
             : {}),
         },
+        OR: [
+          { plan: { technicianUserId: query.assignedUserId ?? { not: null } } },
+          {
+            equipmentSchedules: {
+              some: {
+                cancelledAt: null,
+                responsibleFieldTechnicianId: query.assignedUserId ?? {
+                  not: null,
+                },
+              },
+            },
+          },
+          {
+            equipmentExecutions: {
+              some: {
+                status: 'IN_PROGRESS',
+                responsibleFieldTechnicianId: query.assignedUserId,
+              },
+            },
+          },
+        ],
       };
       const take = query.page * 50;
       const visits = await tx.rvtOccurrence.findMany({
@@ -95,6 +115,14 @@ export class RecurringAuthorizationService {
         take,
         orderBy: [{ dueOn: 'asc' }, { id: 'asc' }],
         include: {
+          equipmentSchedules: {
+            where: { cancelledAt: null },
+            select: { responsibleFieldTechnicianId: true },
+          },
+          equipmentExecutions: {
+            where: { status: 'IN_PROGRESS' },
+            select: { responsibleFieldTechnicianId: true },
+          },
           plan: {
             select: {
               id: true,
@@ -110,7 +138,15 @@ export class RecurringAuthorizationService {
         (await tx.pmocExecution.count({ where: pmocWhere }));
       const ids = [
         ...visits.map((row) => row.responsibleFieldTechnicianId),
-        ...cycles.map((row) => row.plan.technicianUserId),
+        ...cycles.flatMap((row) => [
+          row.plan.technicianUserId,
+          ...(row.equipmentSchedules ?? []).map(
+            (item) => item.responsibleFieldTechnicianId,
+          ),
+          ...(row.equipmentExecutions ?? []).map(
+            (item) => item.responsibleFieldTechnicianId,
+          ),
+        ]),
       ].filter((id): id is string => !!id);
       const users = await tx.user.findMany({
         where: { id: { in: [...new Set(ids)] } },
@@ -138,7 +174,14 @@ export class RecurringAuthorizationService {
           scheduledStart: row.dueOn.toISOString().slice(0, 10),
           version: row.updatedAt.toISOString(),
           responsibleFieldTechnician:
-            people.get(row.plan.technicianUserId ?? '') ?? null,
+            people.get(
+              row.equipmentSchedules?.find(
+                (item) => item.responsibleFieldTechnicianId,
+              )?.responsibleFieldTechnicianId ??
+                row.equipmentExecutions?.[0]?.responsibleFieldTechnicianId ??
+                row.plan.technicianUserId ??
+                '',
+            ) ?? null,
         })),
       ];
       rows.sort(
@@ -226,11 +269,23 @@ export class RecurringAuthorizationService {
             include: {
               plan: { select: { technicianUserId: true } },
               equipmentExecutions: { select: { operationId: true } },
+              equipmentSchedules: {
+                where: {
+                  cancelledAt: null,
+                  responsibleFieldTechnicianId: { not: null },
+                },
+                select: { id: true },
+              },
             },
           });
           if (!cycle) throw new EntityNotFoundException('Ciclo PMOC', item.id);
           if (cycle.authorizedAt) continue;
-          if (cycle.status !== 'PENDING' || !cycle.plan.technicianUserId)
+          if (
+            cycle.status !== 'PENDING' ||
+            (!cycle.plan.technicianUserId &&
+              !cycle.equipmentSchedules?.length &&
+              !cycle.equipmentExecutions.length)
+          )
             throw new ConflictException(
               'O ciclo precisa estar atribuído e pendente para autorização.',
             );

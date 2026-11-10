@@ -40,7 +40,7 @@ tasks.configureEach {
 }
 
 android {
-    namespace = "com.allbluelabs.orbit_operator"
+    namespace = "com.allbluelabs.orbit"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -50,7 +50,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.allbluelabs.orbit_operator"
+        applicationId = "com.allbluelabs.orbit"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

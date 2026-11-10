@@ -46,6 +46,7 @@ import type {
   PmocUnit,
   CreatePmocUnitInput,
   UpdatePmocUnitInput,
+  UpdatePmocEquipmentScheduleInput,
 } from "@/types/pmoc";
 
 const PMOC = "pmoc";
@@ -54,6 +55,26 @@ const cycle = (planId: string, cycleId: string) =>
   `${plan(planId)}/cycles/${encodeURIComponent(cycleId)}`;
 
 export const pmocService = {
+  updateEquipmentSchedule: (
+    planId: string,
+    cycleId: string,
+    assetId: string,
+    input: UpdatePmocEquipmentScheduleInput,
+  ) =>
+    apiClient.patch<{ saved: boolean }>(
+      `${cycle(planId, cycleId)}/equipment/${encodeURIComponent(assetId)}/schedule`,
+      input,
+    ),
+  cancelEquipmentSchedule: (
+    planId: string,
+    cycleId: string,
+    assetId: string,
+    input: { expectedVersion: string; reason: string },
+  ) =>
+    apiClient.post<{ saved: boolean }>(
+      `${cycle(planId, cycleId)}/equipment/${encodeURIComponent(assetId)}/cancel`,
+      input,
+    ),
   basePath: "/pmoc",
 
   /* ---------------------------------------------------------------- */

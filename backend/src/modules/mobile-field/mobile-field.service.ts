@@ -669,7 +669,21 @@ export class MobileFieldService {
         const execution = cycle.equipmentExecutions.find(
           (value: any) => value.coverageId === coverage.id,
         );
-        if (!execution && cycle.plan.technician?.id !== actor.id) continue;
+        const schedule = cycle.equipmentSchedules?.find(
+          (value: any) => value.coverageId === coverage.id,
+        );
+        if (schedule?.cancelledAt || execution?.status === 'CANCELLED')
+          continue;
+        const plannedTechnician = schedule
+          ? schedule.responsibleFieldTechnician
+          : cycle.plan.technician;
+        const scheduledFor: Date = schedule?.scheduledFor ?? cycle.dueOn;
+        if (
+          (filters?.from && scheduledFor < filters.from) ||
+          (filters?.to && scheduledFor > filters.to)
+        )
+          continue;
+        if (!execution && plannedTechnician?.id !== actor.id) continue;
         if (
           execution &&
           execution.responsibleFieldTechnician.id !== actor.id &&
@@ -678,7 +692,12 @@ export class MobileFieldService {
           )
         )
           continue;
-        const actions = this.pmocActions(cycle, execution, actor);
+        const actions = this.pmocActions(
+          cycle,
+          execution,
+          actor,
+          plannedTechnician?.id,
+        );
         result.push({
           id: `PMOC:${cycle.id}:${coverage.asset.id}`,
           kind: 'PMOC',
@@ -700,12 +719,12 @@ export class MobileFieldService {
           /* O pedido é da operação. Um ciclo de PMOC sem operação aberta não tem
              o que cancelar — e, com ela aberta, o pedido aparece pelo item dela. */
           pendingCancellation: null,
-          scheduledFor: cycle.dueOn.toISOString(),
+          scheduledFor: scheduledFor.toISOString(),
           scheduledEnd: null,
           timezone: unit.timezone,
           dueState: this.dueState(
             execution?.status ?? cycle.status,
-            cycle.dueOn,
+            scheduledFor,
             unit.timezone,
             true,
           ),
@@ -713,8 +732,8 @@ export class MobileFieldService {
           priority: null,
           responsibleFieldTechnician: execution?.responsibleFieldTechnician
             ? this.party(execution.responsibleFieldTechnician)
-            : cycle.plan.technician
-              ? this.party(cycle.plan.technician)
+            : plannedTechnician
+              ? this.party(plannedTechnician)
               : null,
           auxiliaryTechnicians: (
             execution?.operation?.auxiliaryTechnicians ?? []
@@ -871,13 +890,14 @@ export class MobileFieldService {
     cycle: any,
     execution: any,
     actor: MobileFieldActor,
+    plannedTechnicianId?: string,
   ): MobileFieldAction[] {
     const actions: MobileFieldAction[] = [];
     const assigned =
       actor.isOrganizationOwner === true ||
       (execution
         ? execution.responsibleFieldTechnician.id === actor.id
-        : cycle.plan.technician?.id === actor.id);
+        : (plannedTechnicianId ?? cycle.plan.technician?.id) === actor.id);
     if (assigned || this.has(actor, 'pmoc.read')) actions.push('VIEW');
     if (execution?.status === 'IN_PROGRESS' && assigned)
       actions.push('RESUME', 'ADD_EVIDENCE', 'COMPLETE');

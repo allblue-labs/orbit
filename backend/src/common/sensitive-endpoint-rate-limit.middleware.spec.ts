@@ -21,10 +21,14 @@ describe('SensitiveEndpointRateLimitMiddleware', () => {
     process.env = originalEnvironment;
   });
 
-  it('limits a sensitive route before a third handler execution', () => {
+  it.each([
+    '/api/v1/identity/login',
+    '/api/v1/identity/email/verify',
+    '/api/v1/identity/email/resend',
+  ])('limits sensitive route %s before a third handler execution', (path) => {
     const middleware = new SensitiveEndpointRateLimitMiddleware();
     const next = jest.fn() as NextFunction;
-    const input = request('/api/v1/identity/login');
+    const input = request(path);
 
     middleware.use(input, {} as Response, next);
     middleware.use(input, {} as Response, next);

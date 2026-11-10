@@ -53,6 +53,7 @@ export interface TokenPair {
 }
 
 export const IdentityTokenPurpose = {
+  EMAIL_VERIFICATION: 'EMAIL_VERIFICATION',
   INVITATION: 'INVITATION',
   PASSWORD_RESET: 'PASSWORD_RESET',
 } as const;

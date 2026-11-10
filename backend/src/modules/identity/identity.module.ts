@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { EmailModule } from '../email/email.module';
 import { JwtModule } from '@nestjs/jwt';
 import { EnvironmentProvider } from '../../providers';
 import { AuthenticationService } from './application/authentication.service';
@@ -12,19 +13,19 @@ import { IdentityTokenService } from './application/token.service';
 import { IDENTITY_TOKEN_DELIVERY } from './domain/identity.types';
 import { IdentityRepository } from './infrastructure/identity.repository';
 import { RegistrationRepository } from './infrastructure/registration.repository';
-import {
-  NoopIdentityTokenDelivery,
-  SmtpIdentityTokenDelivery,
-} from './infrastructure/identity-token.delivery';
+import { TransactionalIdentityTokenDelivery } from './infrastructure/identity-token.delivery';
 import { IdentityReadModelMapper } from './identity.mapper';
 import { AuthController } from './presentation/auth.controller';
 import { InvitationController } from './presentation/invitation.controller';
 import { ProfileController } from './presentation/profile.controller';
 import { AvatarService } from './application/avatar.service';
 import { AvatarRepository } from './infrastructure/avatar.repository';
+import { EmailVerificationService } from './application/email-verification.service';
+import { EmailVerificationController } from './presentation/email-verification.controller';
 
 @Module({
   imports: [
+    EmailModule,
     JwtModule.registerAsync({
       inject: [EnvironmentProvider],
       useFactory: (environment: EnvironmentProvider) => ({
@@ -44,7 +45,12 @@ import { AvatarRepository } from './infrastructure/avatar.repository';
       }),
     }),
   ],
-  controllers: [AuthController, ProfileController, InvitationController],
+  controllers: [
+    AuthController,
+    ProfileController,
+    InvitationController,
+    EmailVerificationController,
+  ],
   providers: [
     IdentityRepository,
     RegistrationRepository,
@@ -58,23 +64,20 @@ import { AvatarRepository } from './infrastructure/avatar.repository';
     AvatarRepository,
     MfaService,
     RegistrationService,
+    EmailVerificationService,
     IdentityReadModelMapper,
-    NoopIdentityTokenDelivery,
-    SmtpIdentityTokenDelivery,
+    TransactionalIdentityTokenDelivery,
     {
       provide: IDENTITY_TOKEN_DELIVERY,
-      inject: [NoopIdentityTokenDelivery, SmtpIdentityTokenDelivery],
-      useFactory: (
-        noop: NoopIdentityTokenDelivery,
-        smtp: SmtpIdentityTokenDelivery,
-      ) => (process.env.NODE_ENV === 'production' ? smtp : noop),
+      useExisting: TransactionalIdentityTokenDelivery,
     },
   ],
   exports: [
     IdentityTokenService,
+    EmailVerificationService,
     IdentityRepository,
     RegistrationRepository,
-    /** A equipe entrega o mesmo link por e-mail quando há SMTP. */
+    /** A equipe entrega o mesmo link pelo transporte de e-mail configurado. */
     IDENTITY_TOKEN_DELIVERY,
   ],
 })

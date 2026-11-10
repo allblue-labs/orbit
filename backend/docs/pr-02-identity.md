@@ -32,9 +32,10 @@ Invitation creation requires `identity.invitations.create`.
 
 ## Token delivery integration
 
-The default `NoopIdentityTokenDelivery` never logs or exposes invitation/reset
-tokens. Replace the `IDENTITY_TOKEN_DELIVERY` provider with the transactional
-email/notification adapter when that integration is available.
+`TransactionalIdentityTokenDelivery` uses the shared Amazon SES `EmailService`
+for welcome/verification, invitation and password reset messages. Tokens and
+recipients never enter logs. Only `NODE_ENV=test` disables delivery automatically.
+See `amazon-ses.md` for environment and deployment instructions.
 
 ## Database
 

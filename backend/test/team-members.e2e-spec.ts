@@ -9,7 +9,7 @@ import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
  * - o link de definição vale uma vez, e o dono da organização não recebe um;
  * - `POST /identity/password/forgot` responde igual exista a conta ou não —
  *   antes ele era um oráculo de enumeração: 202 para inexistente, 500 para
- *   existente quando o SMTP estava fora;
+ *   existente quando o serviço de e-mail estava fora;
  * - desligar tira o acesso agora, inclusive das sessões já abertas.
  */
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
@@ -526,7 +526,7 @@ describe('Team members, temporary password and recovery (e2e)', () => {
     /**
      * A regressão que este teste tranca.
      *
-     * Sem SMTP configurado, o envio estourava e o endpoint devolvia 500 —
+     * Sem o transporte de e-mail configurado, o envio estourava e o endpoint devolvia 500 —
      * **só** para e-mail existente, porque o inexistente saía antes do envio.
      * Comparar os dois códigos dizia se uma pessoa tem conta no Orbit.
      */

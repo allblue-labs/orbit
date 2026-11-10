@@ -5,7 +5,7 @@ import { RateLimitException } from '../exceptions';
 type Counter = { count: number; resetAt: number };
 
 const SENSITIVE_PATH =
-  /^\/(?:api\/v1\/)?(?:identity\/(?:login|register|refresh|password\/(?:forgot|reset))|portal\/auth\/(?:login|refresh|activate|password\/reset-(?:request|confirm))|billing\/(?:checkout|portal-session))$/;
+  /^\/(?:api\/v1\/)?(?:identity\/(?:login|register|refresh|email\/(?:verify|resend)|password\/(?:forgot|reset))|portal\/auth\/(?:login|refresh|activate|password\/reset-(?:request|confirm))|billing\/(?:checkout|portal-session))$/;
 const MAX_KEYS = 10_000;
 
 /** Per-process abuse brake for public and money-moving entry points. */

@@ -751,7 +751,11 @@ describe('RVT demand visibility and execution', () => {
 });
 
 describe('PMOC assignment authorizes the field work item', () => {
-  function scenario(existingAssignee?: string) {
+  function scenario(
+    existingAssignee?: string,
+    plannedAssignee?: string,
+    cancelled = false,
+  ) {
     const source = emptySource();
     source.businessUnits.push({
       id: actor.businessUnitIds[0],
@@ -812,6 +816,19 @@ describe('PMOC assignment authorizes the field work item', () => {
             },
           ]
         : [],
+      equipmentSchedules: plannedAssignee
+        ? [
+            {
+              coverageId: 'coverage',
+              responsibleFieldTechnician: {
+                id: plannedAssignee,
+                displayName: 'Planejado por equipamento',
+              },
+              scheduledFor: new Date('2099-02-03T13:00:00Z'),
+              cancelledAt: cancelled ? new Date() : null,
+            },
+          ]
+        : [],
     });
     return new MobileFieldService({
       project: jest.fn().mockResolvedValue(source),
@@ -837,5 +854,31 @@ describe('PMOC assignment authorizes the field work item', () => {
       {},
     );
     expect(queue.data).toEqual([]);
+  });
+  it('atribuição por equipamento libera início no horário escolhido, sem iniciar antes', async () => {
+    const queue = await scenario(undefined, actor.id).workQueue(actor, {});
+    expect(queue.data).toHaveLength(1);
+    expect(queue.data[0]?.allowedActions).toEqual(['VIEW', 'EXECUTE_PMOC']);
+    expect(queue.data[0]?.scheduledFor).toBe('2099-02-03T13:00:00.000Z');
+    expect(queue.data[0]?.navigationContext.executionId).toBeNull();
+  });
+  it('a atribuição individual prevalece sobre a do plano e cancelados saem da fila', async () => {
+    expect(
+      (await scenario(undefined, 'other').workQueue(actor, {})).data,
+    ).toEqual([]);
+    expect(
+      (await scenario(undefined, actor.id, true).workQueue(actor, {})).data,
+    ).toEqual([]);
+  });
+  it('filtra pela data individual antes de paginar a fila', async () => {
+    const service = scenario(undefined, actor.id);
+    expect(
+      (await service.workQueue(actor, { from: '2099-02-03', to: '2099-02-03' }))
+        .data,
+    ).toHaveLength(1);
+    expect(
+      (await service.workQueue(actor, { from: '2099-01-01', to: '2099-01-01' }))
+        .data,
+    ).toHaveLength(0);
   });
 });

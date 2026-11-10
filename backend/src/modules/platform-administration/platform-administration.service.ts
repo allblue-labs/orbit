@@ -16,6 +16,7 @@ import type {
   UpdatePlatformOrganizationDto,
 } from './dto/platform-administration.dto';
 import { PlatformAdministrationRepository } from './platform-administration.repository';
+import { EmailVerificationService } from '../identity/application/email-verification.service';
 
 @Injectable()
 export class PlatformAdministrationService {
@@ -23,6 +24,7 @@ export class PlatformAdministrationService {
     private readonly repository: PlatformAdministrationRepository,
     private readonly registration: RegistrationRepository,
     @Inject(HASH_PROVIDER) private readonly hashes: IHashProvider,
+    private readonly verification?: EmailVerificationService,
   ) {}
 
   overview() {
@@ -83,6 +85,7 @@ export class PlatformAdministrationService {
         },
       );
       if (!result) throw new ValidationException('Invalid or inactive plan');
+      await this.verification?.sendWelcome(result.userId);
       return this.organization(result.organizationId);
     } catch (error) {
       if (error instanceof ValidationException) throw error;

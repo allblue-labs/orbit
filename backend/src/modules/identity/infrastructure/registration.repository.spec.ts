@@ -64,6 +64,14 @@ it.each([
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
+          email: input.email,
+          emailVerifiedAt: null,
+        }) as unknown,
+      }),
+    );
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
           termsVersion: LEGAL_DOCUMENT_VERSION,
           privacyVersion: LEGAL_DOCUMENT_VERSION,
           ipAddress: '192.0.2.1',

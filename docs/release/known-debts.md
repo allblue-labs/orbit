@@ -18,9 +18,9 @@
   `AppModule`; módulos de produto não registram guards globais.
 - **Backend lint/typecheck:** baseline de 29 erros TypeScript e 64 ESLint foi
   corrigido; o gate exige zero.
-- **Identity delivery:** convites e recuperação publicados usam SMTP em
-  produção; a configuração é obrigatória e fail-closed. O adapter Noop fica
-  restrito a desenvolvimento/teste e tokens nunca são registrados.
+- **Identity delivery:** boas-vindas, convites e recuperação usam Amazon SES
+  exclusivamente; a configuração AWS é obrigatória e fail-closed em produção.
+  O modo sem envio fica restrito a `NODE_ENV=test`; tokens nunca são registrados.
 - **Security sessions:** o overview passou a buscar as 100 sessões mais
   recentes com índice dedicado, em vez de materializar histórico ilimitado.
 - **Operation workspace history:** a leitura de workspace foi limitada no

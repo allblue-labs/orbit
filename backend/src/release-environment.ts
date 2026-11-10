@@ -1,4 +1,6 @@
 import { InfrastructureException } from './exceptions';
+import { isEmail } from 'class-validator';
+import { emailConfiguration } from './modules/email/email.config';
 
 const PLACEHOLDER = /change[-_]?me|placeholder|example|dummy|test[-_]?only/i;
 
@@ -24,22 +26,24 @@ export function validateReleaseEnvironment(
   secret('JWT_ACCESS_SECRET', 32);
   secret('TRIAL_FINGERPRINT_SECRET', 32);
 
-  for (const key of ['SMTP_HOST', 'EMAIL_FROM', 'IDENTITY_PUBLIC_WEB_URL']) {
+  const email = emailConfiguration(environment);
+  for (const key of [
+    'IDENTITY_PUBLIC_WEB_URL',
+    'AWS_ACCESS_KEY_ID',
+    'AWS_SECRET_ACCESS_KEY',
+    'AWS_REGION',
+    'AWS_SES_FROM_EMAIL',
+  ]) {
     if (!(environment[key]?.trim() ?? '')) {
       throw new InfrastructureException(`${key} must be configured`);
     }
   }
-  const smtpPort = Number(environment.SMTP_PORT ?? 587);
-  if (!Number.isInteger(smtpPort) || smtpPort < 1 || smtpPort > 65_535) {
-    throw new InfrastructureException('SMTP_PORT must be between 1 and 65535');
-  }
-  const smtpUser = environment.SMTP_USER?.trim() ?? '';
-  const smtpPassword = environment.SMTP_PASSWORD?.trim() ?? '';
-  if (Boolean(smtpUser) !== Boolean(smtpPassword)) {
+  if (!isEmail(email.from ?? ''))
     throw new InfrastructureException(
-      'SMTP_USER and SMTP_PASSWORD must be configured together',
+      'AWS_SES_FROM_EMAIL must be a valid sender email address',
     );
-  }
+  if (!/^[a-z]{2}(?:-[a-z]+)+-\d$/.test(email.region ?? ''))
+    throw new InfrastructureException('AWS_REGION must be a valid AWS region');
 
   const encryption = Buffer.from(secret('ENCRYPTION_KEY', 32), 'base64');
   if (encryption.length !== 32) {

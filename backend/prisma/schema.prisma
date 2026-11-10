@@ -83,6 +83,7 @@ model User {
   pmocEquipmentExecutionsStarted     PmocEquipmentExecution[]       @relation("PmocEquipmentExecutionStartedBy")
   pmocEquipmentExecutionsCompleted   PmocEquipmentExecution[]       @relation("PmocEquipmentExecutionCompletedBy")
   pmocEquipmentExecutionsResponsible PmocEquipmentExecution[]       @relation("PmocEquipmentExecutionResponsible")
+  pmocEquipmentSchedules            PmocEquipmentSchedule[]
   pmocEquipmentEvidenceUploaded      PmocEquipmentEvidence[]        @relation("PmocEquipmentEvidenceUploadedBy")
   schedulingHistory                  SchedulingEventHistory[]
   notificationPreferences            NotificationPreference[]
@@ -92,6 +93,7 @@ model User {
   auditLogs                          AuditLog[]
   invitationsSent                    IdentityInvitation[]           @relation("InvitationInviter")
   passwordResetTokens                PasswordResetToken[]
+  emailVerification                  EmailVerificationToken?
   mfaFactors                         MfaFactor[]
   createdArtifactTemplates           ArtifactTemplate[]             @relation("ArtifactTemplateCreatedBy")
   createdArtifactVersions            ArtifactTemplateVersion[]      @relation("ArtifactTemplateVersionCreatedBy")
@@ -162,6 +164,20 @@ model MfaFactor {
 
   @@index([userId, type, deletedAt])
   @@map("mfa_factors")
+}
+
+model EmailVerificationToken {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  userId    String    @unique @map("user_id") @db.Uuid
+  email     String    @db.VarChar(320)
+  tokenHash String    @unique @map("token_hash") @db.VarChar(64)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@map("email_verification_tokens")
 }
 
 model PasswordResetToken {
@@ -281,6 +297,7 @@ model Organization {
   operations                    Operation[]
   operationAuxiliaryTechnicians OperationAuxiliaryTechnician[]
   pmocEquipmentExecutions       PmocEquipmentExecution[]
+  pmocEquipmentSchedules        PmocEquipmentSchedule[]
   pmocEquipmentEvidence         PmocEquipmentEvidence[]
   reportTemplates               ReportTemplate[]
   artifactTemplates             ArtifactTemplate[]
@@ -423,6 +440,7 @@ model BusinessUnit {
   artifactManifests       ArtifactManifest[]
   backgroundJobs          BackgroundJob[]
   pmocEquipmentExecutions PmocEquipmentExecution[]
+  pmocEquipmentSchedules  PmocEquipmentSchedule[]
 
   teams Team[]
 
@@ -4210,6 +4228,7 @@ model PmocEquipmentCoverage {
   plan                PmocPlan                 @relation(fields: [planId], references: [id], onDelete: Cascade)
   asset               Asset                    @relation(fields: [assetId], references: [id], onDelete: Restrict)
   equipmentExecutions PmocEquipmentExecution[]
+  schedules           PmocEquipmentSchedule[]
 
   @@index([organizationId, planId])
   @@index([organizationId, assetId])
@@ -4395,6 +4414,7 @@ model PmocExecution {
   schedulingEvent     SchedulingEvent?         @relation(fields: [schedulingEventId], references: [id], onDelete: SetNull)
   completedBy         User?                    @relation("PmocExecutionCompletedBy", fields: [completedById], references: [id], onDelete: SetNull)
   equipmentExecutions PmocEquipmentExecution[]
+  equipmentSchedules  PmocEquipmentSchedule[]
 
   @@unique([planId, dueOn])
   @@unique([planId, sequenceNumber])
@@ -4402,6 +4422,32 @@ model PmocExecution {
   @@index([organizationId, status, dueOn])
   @@index([organizationId, authorizedAt, status], map: "pmoc_executions_authorization_idx")
   @@map("pmoc_executions")
+}
+
+/// Planejamento por equipamento; atribuir não significa iniciar a manutenção.
+model PmocEquipmentSchedule {
+  id                           String    @id @default(uuid(7)) @db.Uuid
+  organizationId               String    @map("organization_id") @db.Uuid
+  businessUnitId               String    @map("business_unit_id") @db.Uuid
+  cycleId                      String    @map("cycle_id") @db.Uuid
+  coverageId                   String    @map("coverage_id") @db.Uuid
+  responsibleFieldTechnicianId String?   @map("responsible_field_technician_id") @db.Uuid
+  auxiliaryTechnicianIds       String[]  @default([]) @map("auxiliary_technician_ids") @db.Uuid
+  scheduledFor                 DateTime? @map("scheduled_for") @db.Timestamptz(3)
+  notes                        String?   @db.VarChar(1000)
+  cancelledAt                  DateTime? @map("cancelled_at") @db.Timestamptz(3)
+  cancellationReason           String?   @map("cancellation_reason") @db.VarChar(1000)
+  updatedAt                    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization               Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  businessUnit               BusinessUnit          @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
+  cycle                      PmocExecution         @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  coverage                   PmocEquipmentCoverage @relation(fields: [coverageId], references: [id], onDelete: Cascade)
+  responsibleFieldTechnician User?                 @relation(fields: [responsibleFieldTechnicianId], references: [id], onDelete: Restrict)
+
+  @@unique([cycleId, coverageId])
+  @@index([organizationId, responsibleFieldTechnicianId, cancelledAt], map: "pmoc_equipment_schedules_assignment_idx")
+  @@map("pmoc_equipment_schedules")
 }
 
 /// Execução física de um equipamento em um ciclo PMOC. O índice composto é a
