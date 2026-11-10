@@ -14,6 +14,7 @@ import {
   type MobilePushDeliveryProvider,
 } from './mobile-push.provider';
 import { MobilePushRepository } from './mobile-push.repository';
+import { transactionalPushMessage } from './push-message';
 
 @Injectable()
 export class MobilePushProcessor implements JobProcessor, OnModuleInit {
@@ -39,11 +40,20 @@ export class MobilePushProcessor implements JobProcessor, OnModuleInit {
     const delivery = await this.repository.delivery(deliveryId);
     if (!delivery)
       throw new PermanentJobError('Mobile push delivery is unavailable');
-    if (delivery.status === 'ACCEPTED_BY_PROVIDER') return;
+    if (
+      [
+        'ACCEPTED_BY_PROVIDER',
+        'INVALID_TOKEN',
+        'PERMANENT_FAILURE',
+        'SKIPPED',
+      ].includes(delivery.status)
+    )
+      return;
 
     const installation = delivery.installation;
     const notification = delivery.notification;
     if (
+      !installation ||
       !installation.enabled ||
       installation.revokedAt ||
       installation.organizationId !== notification.organizationId ||
@@ -58,16 +68,30 @@ export class MobilePushProcessor implements JobProcessor, OnModuleInit {
     }
 
     const raw = this.record(notification.payload);
-    const deepLink = raw.deepLink;
-    if (typeof deepLink !== 'string' || !deepLink.startsWith('/field/'))
+    let deepLink = raw.deepLink;
+    let data: Record<string, string> | undefined;
+    if (notification.type === 'TRANSACTIONAL') {
+      try {
+        data = transactionalPushMessage(
+          notification.title,
+          notification.body,
+          raw.data,
+        ).data;
+        deepLink = data.deepLink ?? '';
+      } catch {
+        throw new PermanentJobError('Transactional push message is invalid');
+      }
+    } else if (typeof deepLink !== 'string' || !deepLink.startsWith('/field/'))
       throw new PermanentJobError('Mobile notification deep link is invalid');
     const payload: MobilePushPayloadReadModel = {
       version: 1,
       notificationId: notification.id,
+      organizationId: notification.organizationId,
       type: notification.type as MobilePushPayloadReadModel['type'],
-      deepLink,
+      deepLink: typeof deepLink === 'string' ? deepLink : '',
       title: notification.title.slice(0, 120),
       body: notification.body.slice(0, 240),
+      ...(data ? { data } : {}),
     };
     const result = await this.provider.send(
       {
@@ -102,14 +126,13 @@ export class MobilePushProcessor implements JobProcessor, OnModuleInit {
       return;
     }
     if (result.kind === 'INVALID_TOKEN') {
-      await this.repository.update(delivery.id, {
-        status: result.kind,
-        provider: this.provider.name,
-        attempts: { increment: 1 },
-        failedAt: new Date(),
-        lastErrorCode: result.code,
-      });
-      await this.repository.disableInstallation(installation.id);
+      await this.repository.invalidateToken(
+        delivery.id,
+        installation.id,
+        installation.pushTokenHash,
+        result.code,
+        this.provider.name,
+      );
       return;
     }
     await this.repository.update(delivery.id, {
