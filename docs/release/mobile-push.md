@@ -1,24 +1,27 @@
 # Publicação de notificações mobile
 
-O Orbit usa APNs no iPhone e FCM no Android. A API persiste o aviso do usuário e
-encaminha a entrega por um gateway HTTP. As chaves VAPID são de web push e não
-habilitam as notificações nativas do aplicativo.
+A API persiste o aviso do usuário e envia diretamente pelo SDK Firebase Admin,
+sem gateway externo, com `PUSH_PROVIDER=firebase`. As chaves VAPID são de web
+push e não habilitam as notificações nativas do aplicativo. O cliente Android
+já fornece tokens FCM; o iPhone atual usa APNs direto e precisa da migração de
+cliente descrita em `backend/docs/firebase-push.md` para usar o Firebase.
 
 ## API em produção
 
 Configure no ambiente de deploy (não no app):
 
 ```dotenv
-PUSH_PROVIDER=gateway
-PUSH_GATEWAY_URL=https://seu-gateway.example.com/push
-PUSH_GATEWAY_CREDENTIAL=credencial-do-seu-gateway
+PUSH_PROVIDER=firebase
+FIREBASE_PROJECT_ID=seu-project-id
+FIREBASE_CLIENT_EMAIL=push@seu-project-id.iam.gserviceaccount.com
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nCONTEUDO_DA_CHAVE\n-----END PRIVATE KEY-----\n"
 JOBS_WORKER_ENABLED=true
 JOBS_POLL_INTERVAL_MS=2000
 ```
 
-A URL acima é ilustrativa. É necessário fornecer um serviço real compatível com
-o contrato abaixo. O repositório não inclui um gateway APNs/FCM nem credenciais
-para esses provedores. O Compose agora repassa essas variáveis para a API.
+Copie os três campos da service account para as variáveis correspondentes.
+Não versione o JSON privado. Consulte `backend/docs/firebase-push.md` para a
+configuração da API FCM e das permissões. O Compose repassa as variáveis à API.
 `JOBS_WORKER_ENABLED` controla o worker de push; `BILLING_EVENTS_WORKER_ENABLED`
 controla outro worker e não o substitui. Recrie a API após alterar o ambiente.
 
@@ -28,7 +31,14 @@ consulta a API autenticada a cada 12 segundos, somente enquanto o aplicativo
 está visível. Ao receber um push nativo, também atualiza os dados, sem repetir
 o banner. As preferências de avisos do usuário são respeitadas.
 
-## iPhone
+## iPhone com Firebase
+
+O backend Firebase exige um token FCM. A implementação iOS atual fornece APNs
+puro: será necessário integrar Firebase Messaging no cliente e configurar a
+autenticação APNs no Firebase. O backend não converte tokens APNs em FCM e não
+os invalida por incompatibilidade. Veja `backend/docs/firebase-push.md`.
+
+## iPhone com APNs direto (gateway legado)
 
 1. No Apple Developer, habilite **Push Notifications** no identificador
    `com.allbluelabs.orbitOperator` e atualize o provisioning profile.
@@ -68,7 +78,7 @@ Referências: [ativar push no Xcode](https://help.apple.com/xcode/mac/current/en
 2. Baixe `google-services.json` e coloque em `mobile/android/app/` antes de compilar.
    O arquivo está ignorado no Git. Builds sem esse arquivo continuam funcionando,
    mas não registram um token FCM.
-3. Habilite o envio FCM e configure a credencial de servidor no gateway, usando
+3. Habilite o envio FCM e configure os campos `FIREBASE_*` no backend, usando
    o mesmo projeto do aplicativo. Não coloque credenciais de servidor no APK.
 4. Gere e instale a nova build; Android 13+ solicita permissão para notificações.
    O canal nativo se chama **Atendimentos e documentos** (`orbit_work`).
@@ -77,7 +87,11 @@ Referências: [configuração Android](https://firebase.google.com/docs/android/
 [FCM e permissões](https://firebase.google.com/docs/cloud-messaging/android/get-started),
 [recebimento de mensagens](https://firebase.google.com/docs/cloud-messaging/android/receive-messages).
 
-## Contrato do gateway
+## Contrato do gateway legado
+
+Somente com `PUSH_PROVIDER=gateway`, configure `PUSH_GATEWAY_URL` e
+`PUSH_GATEWAY_CREDENTIAL`. Esse transporte é opcional e não participa do envio
+Firebase direto.
 
 O backend envia `POST PUSH_GATEWAY_URL` com `Authorization: Bearer <credencial>`:
 
@@ -116,11 +130,11 @@ Aceitação pelo provedor não comprova que o aparelho exibiu a notificação.
 - Com o app aberto, verifique o aviso e a atualização da Home/fila. Com o app em
   segundo plano, verifique o banner nativo e toque para abrir o atendimento.
 - No backend, procure `mobile_push_delivery`: `ACCEPTED_BY_PROVIDER` indica que o
-  gateway aceitou; `PROVIDER_DISABLED`, falha temporária e token inválido apontam
+  provider aceitou; `PROVIDER_DISABLED`, falha temporária e token inválido apontam
   para etapas diferentes. O registro não inclui token nem conteúdo do atendimento.
 - Teste logout e login com outro usuário no mesmo aparelho. O vínculo anterior
   deve ser revogado, e o monitor anterior descarta respostas ainda em trânsito.
 
 A compilação e os testes locais não validam credenciais, provisionamento nem a
-entrega pelo gateway de produção. Essa verificação exige a build assinada e o
+entrega pelo provider de produção. Essa verificação exige a build assinada e o
 serviço de envio configurado.

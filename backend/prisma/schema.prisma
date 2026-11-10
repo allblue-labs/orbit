@@ -2613,6 +2613,10 @@ model Notification {
 }
 
 model MobileDeviceInstallation {
+  // FCM token registry: userId + deviceInstanceId (deviceId) + organizationId (tenantId).
+  // Tokens are server-private; RLS, active membership and enabled/revokedAt govern delivery.
+  // app_register_mobile_installation atomically rotates/rebinds on account changes;
+  // never copy tokens into public user read models or use tenant-wide FCM topics.
   id               String    @id @default(uuid(7)) @db.Uuid
   organizationId   String    @map("organization_id") @db.Uuid
   userId           String    @map("user_id") @db.Uuid

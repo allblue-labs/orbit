@@ -23,13 +23,14 @@ A instalação não congela Business Unit. O usuário pode operar em múltiplas 
 
 - `WORK_ASSIGNED`, para responsável ou auxiliar explicitamente atribuído;
 - `ARTIFACT_AVAILABLE`, somente após manifest emitido e render `READY`;
-- `SYNC_ATTENTION_REQUIRED`, infraestrutura preparada para conflito materializado pelo MB-04.
+- `SYNC_ATTENTION_REQUIRED`, infraestrutura preparada para conflito materializado pelo MB-04;
+- `TRANSACTIONAL`, conteúdo validado de `PushNotificationService.sendToUser`, com dados customizados de navegação.
 
 Não há fan-out por tenant topic. Cada usuário pode ter N instalações ativas, gerando uma delivery por `(notificationId, installationId)`. Membership organizacional, membership da BU e binding usuário/instalação são revalidados. Remoção de assignment ou permissão pode tornar o recurso inacessível; abrir o push apenas navega e a API decide novamente com RLS/RBAC.
 
 ## Privacidade e deep links
 
-O payload neutro contém somente versão, notification ID, tipo, deep link, título e corpo curtos. A copy PT-BR não inclui cliente, endereço, telefone, e-mail, valores, evidências, assinaturas ou conteúdo técnico. Tokens nunca aparecem em Read Models, métricas ou logs.
+O payload contém versão, notification ID, organização, tipo, deep link, título e corpo curtos; mensagens transacionais também aceitam dados customizados de texto validados. A copy PT-BR não inclui cliente, endereço, telefone, e-mail, valores, evidências, assinaturas ou conteúdo técnico. Tokens nunca aparecem em Read Models, métricas ou logs.
 
 Deep links são gerados no servidor sob `/field/...`, não aceitos do dispositivo e nunca executam mutações. Apps antigos devem usar a home/central de notificações como fallback para tipos desconhecidos. Um recurso removido retornar `404/403` ao abrir é comportamento normal e seguro.
 
@@ -45,7 +46,7 @@ Resultados:
 - `PERMANENT_FAILURE`: terminal;
 - `SKIPPED`: binding ou eligibility deixou de existir.
 
-O modo `PUSH_PROVIDER=disabled` mantém o domínio operacional em desenvolvimento. Produção usa `PUSH_PROVIDER=gateway` com `PUSH_GATEWAY_URL` e `PUSH_GATEWAY_CREDENTIAL` no ambiente/secret store. O gateway traduz o contrato neutro para FCM/APNs. Habilitar o modo sem credenciais falha claramente no boot. Credenciais nunca são persistidas no banco.
+O modo `PUSH_PROVIDER=disabled` mantém a caixa de avisos sem entrega nativa. `PUSH_PROVIDER=firebase` usa o SDK oficial diretamente com `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL` e `FIREBASE_PRIVATE_KEY`. O transporte legado `gateway` continua opcional. Habilitar Firebase sem credenciais válidas falha no boot. Credenciais nunca são persistidas no banco. Consulte `firebase-push.md`, inclusive sobre os tokens APNs atuais do iOS e a configuração de cliente necessária para FCM.
 
 ## RLS e observabilidade
 
@@ -60,4 +61,4 @@ Logs estruturados usam tipo, provider, plataforma, resultado, attempt e job ID. 
 - sem action buttons, rich media ou comandos em background;
 - sem quiet hours na V1 Mobile;
 - retenção de installations/deliveries antigas ainda depende da política geral futura;
-- disponibilidade externa depende do gateway e dos providers FCM/APNs.
+- disponibilidade externa depende do FCM/APNs; o modo Firebase não depende de gateway próprio.

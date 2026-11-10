@@ -107,8 +107,11 @@ services:
       AWS_REGION: ${AWS_REGION:-}
       AWS_SES_FROM_EMAIL: ${AWS_SES_FROM_EMAIL:-}
       AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
-      # Native mobile push uses a server gateway (APNs on iOS / FCM on Android).
+      # Firebase Admin sends natively; credentials stay only in the API/worker.
       PUSH_PROVIDER: ${PUSH_PROVIDER:-disabled}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
+      FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL:-}
+      FIREBASE_PRIVATE_KEY: ${FIREBASE_PRIVATE_KEY:-}
       PUSH_GATEWAY_URL: ${PUSH_GATEWAY_URL:-}
       PUSH_GATEWAY_CREDENTIAL: ${PUSH_GATEWAY_CREDENTIAL:-}
       JOBS_WORKER_ENABLED: ${JOBS_WORKER_ENABLED:-true}

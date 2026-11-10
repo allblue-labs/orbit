@@ -21,13 +21,18 @@ export interface MobileDeviceInstallationReadModel {
 }
 
 export type MobileNotificationType =
-  'WORK_ASSIGNED' | 'ARTIFACT_AVAILABLE' | 'SYNC_ATTENTION_REQUIRED';
+  | 'WORK_ASSIGNED'
+  | 'ARTIFACT_AVAILABLE'
+  | 'SYNC_ATTENTION_REQUIRED'
+  | 'TRANSACTIONAL';
 
 export interface MobilePushPayloadReadModel {
   version: 1;
   notificationId: string;
+  organizationId: string;
   type: MobileNotificationType;
   deepLink: string;
   title: string;
   body: string;
+  data?: Record<string, string>;
 }

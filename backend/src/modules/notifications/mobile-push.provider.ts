@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { FirebaseMobilePushProvider } from './firebase-push.provider';
 import type {
   MobilePlatform,
   MobilePushPayloadReadModel,
@@ -93,7 +94,9 @@ export class HttpGatewayMobilePushProvider implements MobilePushDeliveryProvider
 export function mobilePushProviderFactory(): MobilePushDeliveryProvider {
   const mode = (process.env.PUSH_PROVIDER ?? 'disabled').toLowerCase();
   if (mode === 'disabled') return new DisabledMobilePushProvider();
-  if (mode !== 'gateway') throw new Error(`Unsupported PUSH_PROVIDER: ${mode}`);
+  if (mode === 'firebase') return FirebaseMobilePushProvider.fromEnvironment();
+  if (mode !== 'gateway')
+    throw new Error('PUSH_PROVIDER must be firebase, gateway or disabled');
   const url = process.env.PUSH_GATEWAY_URL;
   const credential = process.env.PUSH_GATEWAY_CREDENTIAL;
   if (!url || !credential)

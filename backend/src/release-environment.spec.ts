@@ -15,6 +15,23 @@ const valid = (): NodeJS.ProcessEnv => ({
 });
 
 describe('release environment', () => {
+  it.each(['sa-east-1', 'us-east-1', 'us-east-2', 'eu-west-1'])(
+    'aceita o código regional %s também quando há espaços ao redor',
+    (region) => {
+      expect(() =>
+        validateReleaseEnvironment({ ...valid(), AWS_REGION: ` ${region} ` }),
+      ).not.toThrow();
+    },
+  );
+  it.each([
+    'South America (São Paulo)',
+    'https://email.sa-east-1.amazonaws.com',
+    'SA_EAST_1',
+  ])('explica o formato esperado para AWS_REGION inválida: %s', (region) => {
+    expect(() =>
+      validateReleaseEnvironment({ ...valid(), AWS_REGION: region }),
+    ).toThrow(/código da região do SES, como sa-east-1 ou us-east-1/);
+  });
   it('SES utiliza somente as credenciais explícitas de ambiente', () => {
     expect(() =>
       validateReleaseEnvironment({ ...valid(), AWS_PROFILE: 'ignored' }),

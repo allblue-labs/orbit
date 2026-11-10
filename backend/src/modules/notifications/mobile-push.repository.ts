@@ -4,6 +4,9 @@ import { RlsTransaction } from '../../database';
 import { generateUuidV7 } from '../../utils';
 import { BackgroundJobQueue } from '../jobs/background-job.queue';
 import { JOB_QUEUES, scopeFor } from '../jobs/background-job.types';
+import { isUUID } from 'class-validator';
+import { assignmentAuthorizationRequired } from '../operations/recurring-authorization';
+import { fieldVisibilityFilter } from '../operations/operation-authorization';
 import type { MobileNotificationIntent } from './mobile-notification.policy';
 import type { ResolvedMobileNotification } from './mobile-notification.policy';
 
@@ -64,6 +67,8 @@ export class MobilePushRepository {
             version: 1,
             deepLink: resolved.deepLink,
             resourceId: intent.resourceId,
+            ...(intent.workItemId ? { workItemId: intent.workItemId } : {}),
+            ...(resolved.data ? { data: resolved.data } : {}),
           },
           deliveries: {
             create: {
@@ -149,12 +154,23 @@ export class MobilePushRepository {
   }
 
   delivery(id: string) {
-    return this.rls.run((tx) =>
-      tx.mobilePushDelivery.findFirst({
+    return this.rls.run(async (tx) => {
+      const delivery = await tx.mobilePushDelivery.findFirst({
         where: { id },
-        include: { notification: true, installation: true },
-      }),
-    );
+        include: { notification: true },
+      });
+      if (!delivery) return null;
+      // Rebinding the phone can make its old installation invisible under RLS.
+      // Read it explicitly as nullable, never assume a required FK implies visibility.
+      const installation = await tx.mobileDeviceInstallation.findFirst({
+        where: {
+          id: delivery.installationId,
+          organizationId: delivery.organizationId,
+          userId: delivery.notification.recipientUserId,
+        },
+      });
+      return { ...delivery, installation };
+    });
   }
 
   eligible(notification: {
@@ -187,11 +203,108 @@ export class MobilePushRepository {
         });
         if (!unit) return false;
       }
+      const preference = await tx.notificationPreference.findUnique({
+        where: {
+          organizationId_userId_type: {
+            organizationId: notification.organizationId,
+            userId: notification.recipientUserId,
+            type: notification.type,
+          },
+        },
+      });
+      if (
+        preference &&
+        (!preference.enabled || !preference.channels.includes('PUSH'))
+      )
+        return false;
       if (notification.type !== 'WORK_ASSIGNED') return true;
       const payload =
         typeof notification.payload === 'object' && notification.payload
           ? (notification.payload as Record<string, unknown>)
           : {};
+      const authorization = fieldVisibilityFilter(
+        await assignmentAuthorizationRequired(tx, notification.organizationId),
+      );
+      const workItemId =
+        typeof payload.workItemId === 'string'
+          ? payload.workItemId
+          : typeof payload.deepLink === 'string'
+            ? payload.deepLink.replace('/field/work-items/', '')
+            : '';
+      if (workItemId.startsWith('PMOC:')) {
+        const [, cycleId, assetId, extra] = workItemId.split(':');
+        if (
+          !cycleId ||
+          !assetId ||
+          extra !== undefined ||
+          !isUUID(cycleId) ||
+          !isUUID(assetId)
+        )
+          return false;
+        return Boolean(
+          await tx.pmocExecution.findFirst({
+            where: {
+              id: cycleId,
+              organizationId: notification.organizationId,
+              ...authorization,
+              status: { notIn: ['COMPLETED', 'CANCELLED'] },
+              plan: {
+                status: 'ACTIVE',
+                deletedAt: null,
+                schedulingPaused: false,
+              },
+              OR: [
+                {
+                  equipmentSchedules: {
+                    some: {
+                      organizationId: notification.organizationId,
+                      cancelledAt: null,
+                      coverage: { assetId, deletedAt: null },
+                      OR: [
+                        {
+                          responsibleFieldTechnicianId:
+                            notification.recipientUserId,
+                        },
+                        {
+                          auxiliaryTechnicianIds: {
+                            has: notification.recipientUserId,
+                          },
+                        },
+                      ],
+                    },
+                  },
+                },
+                {
+                  equipmentExecutions: {
+                    some: {
+                      organizationId: notification.organizationId,
+                      assetId,
+                      status: { notIn: ['COMPLETED', 'CANCELLED'] },
+                      OR: [
+                        {
+                          responsibleFieldTechnicianId:
+                            notification.recipientUserId,
+                        },
+                        {
+                          operation: {
+                            auxiliaryTechnicians: {
+                              some: {
+                                userId: notification.recipientUserId,
+                                removedAt: null,
+                              },
+                            },
+                          },
+                        },
+                      ],
+                    },
+                  },
+                },
+              ],
+            },
+            select: { id: true },
+          }),
+        );
+      }
       if (typeof payload.resourceId !== 'string') return false;
       return Boolean(
         await tx.operation.findFirst({
@@ -199,6 +312,7 @@ export class MobilePushRepository {
             id: payload.resourceId,
             organizationId: notification.organizationId,
             deletedAt: null,
+            ...authorization,
             OR: [
               { responsibleFieldTechnicianId: notification.recipientUserId },
               {
@@ -223,12 +337,35 @@ export class MobilePushRepository {
     );
   }
 
-  disableInstallation(id: string) {
-    return this.rls.run((tx) =>
-      tx.mobileDeviceInstallation.update({
-        where: { id },
+  /** Atomic delivery result + compare-and-set cleanup. A refreshed/rebound
+   * installation must never be revoked by a response for an older token. */
+  invalidateToken(
+    deliveryId: string,
+    installationId: string,
+    tokenHash: string,
+    code: string,
+    provider: string,
+  ) {
+    return this.rls.run(async (tx) => {
+      await tx.mobileDeviceInstallation.updateMany({
+        where: {
+          id: installationId,
+          pushTokenHash: tokenHash,
+          enabled: true,
+          revokedAt: null,
+        },
         data: { enabled: false, revokedAt: new Date() },
-      }),
-    );
+      });
+      await tx.mobilePushDelivery.update({
+        where: { id: deliveryId },
+        data: {
+          status: 'INVALID_TOKEN',
+          provider,
+          attempts: { increment: 1 },
+          failedAt: new Date(),
+          lastErrorCode: code,
+        },
+      });
+    });
   }
 }

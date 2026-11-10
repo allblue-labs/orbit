@@ -43,7 +43,9 @@ export function validateReleaseEnvironment(
       'AWS_SES_FROM_EMAIL must be a valid sender email address',
     );
   if (!/^[a-z]{2}(?:-[a-z]+)+-\d$/.test(email.region ?? ''))
-    throw new InfrastructureException('AWS_REGION must be a valid AWS region');
+    throw new InfrastructureException(
+      'AWS_REGION deve conter somente o código da região do SES, como sa-east-1 ou us-east-1. Use a mesma região em que o domínio foi verificado na AWS.',
+    );
 
   const encryption = Buffer.from(secret('ENCRYPTION_KEY', 32), 'base64');
   if (encryption.length !== 32) {

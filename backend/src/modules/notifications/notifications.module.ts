@@ -23,6 +23,7 @@ import {
   mobilePushProviderFactory,
 } from './mobile-push.provider';
 import { MobilePushRepository } from './mobile-push.repository';
+import { PushNotificationService } from './push-notification.service';
 
 @Module({
   imports: [IdentityModule, EmailModule],
@@ -45,12 +46,14 @@ import { MobilePushRepository } from './mobile-push.repository';
     MobilePushRepository,
     MobilePushProcessor,
     MobilePushMetrics,
+    PushNotificationService,
     { provide: MOBILE_PUSH_PROVIDER, useFactory: mobilePushProviderFactory },
   ],
   exports: [
     NotificationService,
     NotificationGateway,
     MobileNotificationService,
+    PushNotificationService,
   ],
 })
 export class NotificationsModule {}
