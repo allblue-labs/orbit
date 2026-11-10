@@ -29,6 +29,7 @@ import { CACHE } from "@/hooks/api/cache-policy";
 import { artifactExecutionsService } from "@/services/artifact-executions.service";
 import { assetsService } from "@/services/assets.service";
 import { operationsService } from "@/services/operations.service";
+import { useScheduleWindow } from "@/hooks/scheduling/use-schedule-window";
 import { schedulingService } from "@/services/scheduling.service";
 import type {
   Asset,
@@ -97,14 +98,11 @@ export function useAssetOperations(assetId: string) {
  * ocorrências vêm expandidas pelo motor de recorrência do backend.
  */
 export function useAssetSchedule(assetId: string) {
-  const from = new Date();
-  const to = new Date(from);
-  to.setDate(to.getDate() + SCHEDULE_HORIZON_DAYS);
+  const window = useScheduleWindow(SCHEDULE_HORIZON_DAYS);
 
   const query = {
     assetId,
-    from: from.toISOString(),
-    to: to.toISOString(),
+    ...window,
   };
 
   return useApiQuery(
@@ -176,7 +174,11 @@ export function useUpdateAsset(id: string) {
   const options = useAssetWriteOptions(id);
   return useApiMutation(
     (input: UpdateAssetInput) => assetsService.update(id, input),
-    { ...options, scope: { id: `assets:${id}` }, notify: "Equipamento atualizado" },
+    {
+      ...options,
+      scope: { id: `assets:${id}` },
+      notify: "Equipamento atualizado",
+    },
   );
 }
 

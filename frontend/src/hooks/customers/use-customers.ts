@@ -28,6 +28,7 @@ import { assetsService } from "@/services/assets.service";
 import { customersService } from "@/services/customers.service";
 import { operationsService } from "@/services/operations.service";
 import { operationIntelligenceService } from "@/services/operations.service";
+import { useScheduleWindow } from "@/hooks/scheduling/use-schedule-window";
 import { schedulingService } from "@/services/scheduling.service";
 import type { ArtifactExecutionQuery } from "@/types/artifact-executions";
 import type { AssetQuery } from "@/types/assets";
@@ -128,14 +129,11 @@ export function useCustomer(id: string, options?: { enabled?: boolean }) {
  * recorrência é calculado aqui.
  */
 export function useCustomerSchedule(customerId: string) {
-  const from = new Date();
-  const to = new Date(from);
-  to.setDate(to.getDate() + SCHEDULE_HORIZON_DAYS);
+  const window = useScheduleWindow(SCHEDULE_HORIZON_DAYS);
 
   const query = {
     customerId,
-    from: from.toISOString(),
-    to: to.toISOString(),
+    ...window,
   };
 
   return useApiQuery(
@@ -246,7 +244,11 @@ export function useUpdateCustomer(id: string) {
   const options = useCustomerWriteOptions(id);
   return useApiMutation(
     (input: UpdateCustomerInput) => customersService.update(id, input),
-    { ...options, scope: { id: `customers:${id}` }, notify: "Cliente atualizado" },
+    {
+      ...options,
+      scope: { id: `customers:${id}` },
+      notify: "Cliente atualizado",
+    },
   );
 }
 

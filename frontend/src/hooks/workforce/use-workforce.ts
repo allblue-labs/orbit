@@ -28,6 +28,7 @@ import { useApiQuery } from "@/hooks/api/use-api-query";
 import { CACHE, MINUTE, every } from "@/hooks/api/cache-policy";
 import { artifactExecutionsService } from "@/services/artifact-executions.service";
 import { operationsService } from "@/services/operations.service";
+import { useScheduleWindow } from "@/hooks/scheduling/use-schedule-window";
 import { schedulingService } from "@/services/scheduling.service";
 import { commissionsService } from "@/services/commissions.service";
 import { workforceService } from "@/services/workforce.service";
@@ -308,14 +309,11 @@ export function useMemberExecutions(userId: string, limit = 5) {
  * calculado aqui.
  */
 export function useMemberSchedule(userId: string) {
-  const from = new Date();
-  const to = new Date(from);
-  to.setDate(to.getDate() + SCHEDULE_HORIZON_DAYS);
+  const window = useScheduleWindow(SCHEDULE_HORIZON_DAYS);
 
   const query = {
     userId,
-    from: from.toISOString(),
-    to: to.toISOString(),
+    ...window,
   };
 
   return useApiQuery(
