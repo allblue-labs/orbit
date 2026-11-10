@@ -146,11 +146,11 @@ export function useOperationChecklists(operationId: string) {
  * Não confundir com `useOperationChecklists`: `ChecklistExecution` é outro
  * conceito, com contrato próprio, e continua na sua seção.
  */
-export function useOperationArtifactExecutions(operationId: string) {
+export function useOperationArtifactExecutions(operationId: string, page = 1) {
   const query = {
     operationId,
     limit: OPERATION_RELATED_PAGE_SIZE,
-    page: 1,
+    page,
   } as const;
   return useApiQuery(
     artifactExecutionsService.keys.list(query),

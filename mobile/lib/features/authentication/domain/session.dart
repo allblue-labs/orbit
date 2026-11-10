@@ -90,6 +90,9 @@ class OrbitSession {
       hasPermission('operations.walk_in.create') ||
       hasPermission('operations.create');
 
+  bool get canCreateFieldQuote =>
+      hasPermission('quotes.manage') || canCreateWalkIn;
+
   bool hasRole(String role) =>
       (isOwner && role != platformAdminRole) || roles.contains(role);
 

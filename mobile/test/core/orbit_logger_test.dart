@@ -9,6 +9,21 @@ import 'package:orbit_operator/core/observability/orbit_logger.dart';
 import 'package:orbit_operator/core/storage/token_storage.dart';
 
 void main() {
+  for (final route in [
+    'public/quotes/proposals',
+    'public/pmoc/contracts',
+    'assets/qr',
+  ]) {
+    test('oculta o segredo no caminho de $route', () {
+      final safe = OrbitLogger.redact({
+        'path':
+            'https://orbit.example.test/api/v1/$route/segredo-exclusivo/response?signature=privada',
+      });
+      expect(safe['path'], '/api/v1/$route/***/response');
+      expect(safe.toString(), isNot(contains('segredo-exclusivo')));
+      expect(safe.toString(), isNot(contains('privada')));
+    });
+  }
   test('retira credenciais, assinatura, query e fragmento das URLs', () {
     const url =
         'https://user:password@storage.example.test/object?signature=private&key=customer#secret';

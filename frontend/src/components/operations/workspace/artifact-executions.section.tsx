@@ -20,13 +20,89 @@
  */
 import { RelatedRecordsPanel } from "@/entities/related-records";
 import { useOperationArtifactExecutions } from "@/hooks/operations/use-operations";
+import { useState } from "react";
+import { PanelFrame, PanelState, toPanelQuery } from "@/components/panels";
+import { Button } from "@/components/ui/button";
+import { EntityLink } from "@/entities/entity-components";
+import { OperationReportDownload } from "./report-download";
 
 export function OperationArtifactExecutionsSection({
   operationId,
+  completed = false,
 }: {
   operationId: string;
+  completed?: boolean;
 }) {
-  const query = useOperationArtifactExecutions(operationId);
+  const [page, setPage] = useState(1);
+  const query = useOperationArtifactExecutions(operationId, page);
+
+  if (completed)
+    return (
+      <PanelFrame
+        panelId="operation-reports"
+        title="Relatórios do atendimento"
+        description="Documentos gerados nesta operação, incluindo OS, RVT e outros relatórios."
+      >
+        <PanelState
+          query={toPanelQuery(query)}
+          isEmpty={(result) => result.data.length === 0}
+          emptyMessage="Nenhum relatório foi gerado para esta operação."
+        >
+          {(result) => (
+            <div className="space-y-4">
+              <ul className="space-y-3">
+                {result.data.map((execution) => (
+                  <li
+                    key={execution.id}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-4"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <EntityLink
+                        entity="artifact-execution"
+                        id={execution.id}
+                        className="text-sm font-medium"
+                      >
+                        {execution.title}
+                      </EntityLink>
+                      <p className="text-xs text-muted-foreground">
+                        {execution.code}
+                      </p>
+                    </div>
+                    <OperationReportDownload execution={execution} />
+                  </li>
+                ))}
+              </ul>
+              {result.meta.totalPages > 1 ? (
+                <nav
+                  aria-label="Páginas dos relatórios"
+                  className="flex items-center justify-between gap-3"
+                >
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={page <= 1 || query.isFetching}
+                    onClick={() => setPage((value) => value - 1)}
+                  >
+                    Anterior
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    Página {page} de {result.meta.totalPages}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!result.meta.hasNextPage || query.isFetching}
+                    onClick={() => setPage((value) => value + 1)}
+                  >
+                    Próxima
+                  </Button>
+                </nav>
+              ) : null}
+            </div>
+          )}
+        </PanelState>
+      </PanelFrame>
+    );
 
   return (
     <RelatedRecordsPanel

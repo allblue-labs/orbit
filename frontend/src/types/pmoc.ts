@@ -177,7 +177,7 @@ export interface CreatePmocPlanInput {
   frequencyUnit: string;
   dueSoonDays?: number;
   technicianUserId?: string;
-  technicalResponsibleUserId?: string;
+  technicalResponsibleUserId: string;
   serviceLocation?: Record<string, unknown>;
   scope?: Record<string, unknown>;
   serviceTypes?: string[];

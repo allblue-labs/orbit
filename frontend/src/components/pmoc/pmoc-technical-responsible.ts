@@ -66,9 +66,9 @@ export interface AvisoDoRT {
 /**
  * O aviso da escolha.
  *
- * `bloqueia` não impede criar o plano — o servidor aceita, e contrato se redige
- * antes de assinar. Ele marca o que vai travar depois, para a tela poder diferenciar
- * "falta algo" de "está pronto" sem inventar uma recusa que o domínio não faz.
+ * A escolha do profissional é obrigatória ao salvar. A assinatura pode ser
+ * cadastrada depois, mas continua obrigatória para iniciar a execução.
+ * `bloqueia` indica o impedimento para atender, incluindo assinatura pendente.
  */
 export function avisoDoResponsavelTecnico(
   candidatos: readonly CandidatoRT[],
@@ -85,13 +85,18 @@ export function avisoDoResponsavelTecnico(
   if (!escolhido) {
     return {
       texto:
-        "Sem Responsável Técnico o plano é criado, mas nenhuma execução pode começar.",
+        "Selecione o Responsável Técnico para salvar o PMOC. Sem essa definição, nenhuma execução pode começar.",
       bloqueia: true,
     };
   }
 
   const pessoa = candidatos.find((item) => item.id === escolhido);
-  if (!pessoa) return null;
+  if (!pessoa)
+    return {
+      texto:
+        "O responsável selecionado não está habilitado nesta unidade. Selecione outro profissional ou revise o perfil na Equipe.",
+      bloqueia: true,
+    };
 
   if (!pessoa.signatureAvailable) {
     return {

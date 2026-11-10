@@ -601,13 +601,11 @@ export class PmocService {
         );
       }
     }
-    if (input.technicalResponsibleUserId) {
-      await this.assertTechnicalResponsible(
-        input.technicalResponsibleUserId,
-        actor,
-        input.businessUnitId,
-      );
-    }
+    await this.assertPlanTechnicalResponsible(
+      input.technicalResponsibleUserId,
+      actor,
+      input.businessUnitId,
+    );
 
     this.assertValidity(input.startsOn, input.endsOn ?? null);
 
@@ -719,7 +717,7 @@ export class PmocService {
           frequencyUnit: input.frequencyUnit,
           dueSoonDays: input.dueSoonDays ?? 15,
           technicianUserId: input.technicianUserId ?? null,
-          technicalResponsibleUserId: input.technicalResponsibleUserId ?? null,
+          technicalResponsibleUserId: input.technicalResponsibleUserId,
           serviceLocation: input.serviceLocation as never,
           scope: input.scope as never,
           serviceTypes: input.serviceTypes ?? [],
@@ -994,13 +992,13 @@ export class PmocService {
         );
       }
     }
-    if (input.technicalResponsibleUserId) {
-      await this.assertTechnicalResponsible(
-        input.technicalResponsibleUserId,
-        actor,
-        plan.businessUnit.id,
-      );
-    }
+    await this.assertPlanTechnicalResponsible(
+      input.technicalResponsibleUserId === undefined
+        ? plan.technicalResponsibleUserId
+        : input.technicalResponsibleUserId,
+      actor,
+      plan.businessUnit.id,
+    );
 
     const updated = await this.repository.update(
       id,
@@ -1206,6 +1204,11 @@ export class PmocService {
    */
   async activate(id: string, actor: PmocActor) {
     const plan = await this.plan(id, actor);
+    await this.assertPlanTechnicalResponsible(
+      plan.technicalResponsibleUserId,
+      actor,
+      plan.businessUnit.id,
+    );
     if (plan._count.coverages === 0) {
       throw new ConflictException(
         'A PMOC plan needs at least one covered equipment before activation',
@@ -2737,6 +2740,18 @@ export class PmocService {
     }
   }
 
+  private async assertPlanTechnicalResponsible(
+    userId: string | null | undefined,
+    actor: PmocActor,
+    businessUnitId: string,
+  ): Promise<void> {
+    if (!userId)
+      throw new ValidationException(
+        'Defina um Responsável Técnico para este PMOC antes de salvar ou ativar o plano.',
+      );
+    await this.assertTechnicalResponsible(userId, actor, businessUnitId);
+  }
+
   private async assertTechnicalResponsible(
     userId: string,
     actor: PmocActor,
@@ -2754,7 +2769,9 @@ export class PmocService {
       (requireSignature && !professional.signatureAvailable)
     ) {
       throw new ValidationException(
-        `Technical responsible is not eligible for PMOC: ${professional ? 'SIGNATURE_MISSING' : 'PROFESSIONAL_ROLE_OR_SCOPE_MISSING'}`,
+        professional
+          ? 'O Responsável Técnico precisa cadastrar uma assinatura ativa antes de iniciar a execução do PMOC.'
+          : 'Selecione um Responsável Técnico ativo e habilitado na unidade deste PMOC. Confira o perfil profissional em Equipe.',
       );
     }
   }

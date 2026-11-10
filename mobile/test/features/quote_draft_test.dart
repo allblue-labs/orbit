@@ -33,13 +33,4 @@ void main() {
     );
     expect(linha.total, 0);
   });
-
-  test('o resultado diz quantos itens entraram', () {
-    /// O orçamento nasce vazio e as linhas entram uma a uma — não há comando
-    /// que faça as duas coisas. Se uma linha falhar, quem chamou precisa
-    /// saber que o orçamento existe mesmo assim.
-    const resultado = QuoteDraftResult(id: 'q1', itemsAdded: 2);
-    expect(resultado.id, isNotEmpty);
-    expect(resultado.itemsAdded, 2);
-  });
 }

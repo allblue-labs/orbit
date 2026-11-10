@@ -7,6 +7,7 @@ import {
   IsBoolean,
   IsIn,
   IsInt,
+  IsDefined,
   IsOptional,
   IsObject,
   IsString,
@@ -237,10 +238,12 @@ export class CreatePmocPlanDto {
   @IsUUIDv7()
   technicianUserId?: string;
 
-  @ApiPropertyOptional({ description: 'PR-27 eligible technical responsible' })
-  @IsOptional()
+  @ApiProperty({
+    description: 'Responsável Técnico habilitado na unidade do PMOC',
+  })
+  @IsDefined({ message: 'Selecione o Responsável Técnico do PMOC.' })
   @IsUUIDv7()
-  technicalResponsibleUserId?: string;
+  technicalResponsibleUserId!: string;
 
   @ApiPropertyOptional({ type: Object })
   @IsOptional()

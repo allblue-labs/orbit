@@ -28,6 +28,8 @@ import {
 import { QuoteAcceptanceService } from './quote-acceptance.service';
 import { QuoteAcceptedDocumentService } from './quote-accepted-document.service';
 import { OperationsModule } from '../operations/operations.module';
+import { MobileQuoteController } from './mobile-quote.controller';
+import { MobileQuoteService } from './mobile-quote.service';
 
 @Module({
   imports: [
@@ -42,11 +44,13 @@ import { OperationsModule } from '../operations/operations.module';
     ArtifactExecutionModule,
   ],
   controllers: [
+    MobileQuoteController,
     QuoteAcceptanceController,
     QuotePublicAcceptanceController,
     QuoteController,
   ],
   providers: [
+    MobileQuoteService,
     QuoteRepository,
     QuoteService,
     QuoteMapper,
