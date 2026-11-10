@@ -10,6 +10,7 @@ const actor: PmocActor = {
   organizationId: 'org',
   businessUnitIds: ['unit'],
   permissions: ['pmoc.read'],
+  isOrganizationOwner: false,
 };
 function setup(
   existing: unknown = null,

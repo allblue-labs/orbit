@@ -715,10 +715,31 @@ export class MobileFieldRepository {
                 /// datas precisa ser traduzida, não copiada.
                 ...(filters?.from || filters?.to
                   ? {
-                      dueOn: {
-                        ...(filters.from ? { gte: filters.from } : {}),
-                        ...(filters.to ? { lte: filters.to } : {}),
-                      },
+                      AND: [
+                        {
+                          OR: [
+                            {
+                              dueOn: {
+                                ...(filters.from ? { gte: filters.from } : {}),
+                                ...(filters.to ? { lte: filters.to } : {}),
+                              },
+                            },
+                            {
+                              equipmentSchedules: {
+                                some: {
+                                  cancelledAt: null,
+                                  scheduledFor: {
+                                    ...(filters.from
+                                      ? { gte: filters.from }
+                                      : {}),
+                                    ...(filters.to ? { lte: filters.to } : {}),
+                                  },
+                                },
+                              },
+                            },
+                          ],
+                        },
+                      ],
                     }
                   : {}),
                 plan: {
@@ -749,6 +770,14 @@ export class MobileFieldRepository {
                   {
                     equipmentExecutions: {
                       some: { responsibleFieldTechnicianId: actorId },
+                    },
+                  },
+                  {
+                    equipmentSchedules: {
+                      some: {
+                        responsibleFieldTechnicianId: actorId,
+                        cancelledAt: null,
+                      },
                     },
                   },
                 ],
@@ -827,6 +856,16 @@ export class MobileFieldRepository {
                           },
                         },
                       },
+                    },
+                  },
+                },
+                equipmentSchedules: {
+                  select: {
+                    coverageId: true,
+                    cancelledAt: true,
+                    scheduledFor: true,
+                    responsibleFieldTechnician: {
+                      select: { id: true, displayName: true },
                     },
                   },
                 },

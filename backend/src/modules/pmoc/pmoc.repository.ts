@@ -1331,6 +1331,14 @@ export class PmocRepository {
           id: true,
           startsOn: true,
           endsOn: true,
+          schedules: {
+            where: { cycleId },
+            include: {
+              responsibleFieldTechnician: {
+                select: { id: true, displayName: true },
+              },
+            },
+          },
           asset: {
             select: {
               id: true,
@@ -1391,6 +1399,7 @@ export class PmocRepository {
         cycle,
         coverage,
         existing,
+        schedule: coverage.schedules[0] ?? null,
         technicalResponsibleSignature: signature,
         technicalResponsibleCredential: credential,
         assignmentAuthorizationRequired: await assignmentAuthorizationRequired(
@@ -1422,6 +1431,14 @@ export class PmocRepository {
         orderBy: { createdAt: 'asc' },
         select: {
           id: true,
+          schedules: {
+            where: { cycleId },
+            include: {
+              responsibleFieldTechnician: {
+                select: { id: true, displayName: true },
+              },
+            },
+          },
           asset: {
             select: {
               id: true,
@@ -1441,6 +1458,190 @@ export class PmocRepository {
     );
   }
 
+  manageEquipmentSchedule(input: {
+    organizationId: string;
+    businessUnitId: string;
+    planId: string;
+    cycleId: string;
+    coverageId: string;
+    actorId: string;
+    expectedVersion: string;
+    responsibleFieldTechnicianId: string | null;
+    auxiliaryTechnicianIds: string[];
+    scheduledFor: Date | null;
+    notes: string | null;
+    cancellationReason?: string;
+  }) {
+    return this.rls.run(async (tx) => {
+      await tx.$executeRaw`SELECT id FROM pmoc_executions WHERE id=${input.cycleId}::uuid AND organization_id=${input.organizationId}::uuid FOR UPDATE`;
+      await tx.$executeRaw`SELECT id FROM pmoc_equipment_executions WHERE cycle_id=${input.cycleId}::uuid AND coverage_id=${input.coverageId}::uuid FOR UPDATE`;
+      const cycle = await tx.pmocExecution.findFirst({
+        where: {
+          id: input.cycleId,
+          planId: input.planId,
+          organizationId: input.organizationId,
+          plan: {
+            status: 'ACTIVE',
+            deletedAt: null,
+            businessUnitId: input.businessUnitId,
+          },
+        },
+      });
+      const coverage = await tx.pmocEquipmentCoverage.findFirst({
+        where: {
+          id: input.coverageId,
+          planId: input.planId,
+          organizationId: input.organizationId,
+          deletedAt: null,
+        },
+      });
+      if (!cycle || !coverage)
+        throw new EntityNotFoundException('Execução PMOC');
+      const existing = await tx.pmocEquipmentExecution.findUnique({
+        where: {
+          cycleId_coverageId: {
+            cycleId: input.cycleId,
+            coverageId: input.coverageId,
+          },
+        },
+      });
+      const previous = await tx.pmocEquipmentSchedule.findUnique({
+        where: {
+          cycleId_coverageId: {
+            cycleId: input.cycleId,
+            coverageId: input.coverageId,
+          },
+        },
+      });
+      if (
+        cycle.status !== 'PENDING' ||
+        previous?.cancelledAt ||
+        (existing && existing.status !== 'IN_PROGRESS')
+      )
+        throw new ConflictException(
+          'Esta execução já foi concluída ou cancelada.',
+        );
+      const version =
+        existing?.updatedAt.toISOString() ??
+        previous?.updatedAt.toISOString() ??
+        'unplanned';
+      if (version !== input.expectedVersion)
+        throw new ConflictException(
+          'Esta execução foi alterada. Atualize a página e tente novamente.',
+        );
+      if (existing && !input.responsibleFieldTechnicianId)
+        throw new ValidationException(
+          'Um atendimento em andamento precisa de um técnico em campo.',
+        );
+      const data = {
+        responsibleFieldTechnicianId: input.responsibleFieldTechnicianId,
+        auxiliaryTechnicianIds: input.auxiliaryTechnicianIds,
+        scheduledFor: input.scheduledFor,
+        notes: input.notes,
+        cancelledAt: input.cancellationReason ? new Date() : null,
+        cancellationReason: input.cancellationReason ?? null,
+      };
+      const schedule = await tx.pmocEquipmentSchedule.upsert({
+        where: {
+          cycleId_coverageId: {
+            cycleId: input.cycleId,
+            coverageId: input.coverageId,
+          },
+        },
+        create: {
+          ...data,
+          organizationId: input.organizationId,
+          businessUnitId: input.businessUnitId,
+          cycleId: input.cycleId,
+          coverageId: input.coverageId,
+        },
+        update: data,
+      });
+      if (existing) {
+        await tx.pmocEquipmentExecution.update({
+          where: { id: existing.id },
+          data: input.cancellationReason
+            ? { status: 'CANCELLED' }
+            : {
+                responsibleFieldTechnicianId:
+                  input.responsibleFieldTechnicianId!,
+                notes: input.notes,
+              },
+        });
+        if (existing.operationId) {
+          await tx.operation.update({
+            where: { id: existing.operationId },
+            data: input.cancellationReason
+              ? { status: 'CANCELLED' }
+              : {
+                  responsibleFieldTechnicianId:
+                    input.responsibleFieldTechnicianId,
+                  scheduledStart: input.scheduledFor,
+                },
+          });
+          if (!input.cancellationReason) {
+            await tx.operationUser.deleteMany({
+              where: { operationId: existing.operationId },
+            });
+            await tx.operationUser.create({
+              data: {
+                operationId: existing.operationId,
+                userId: input.responsibleFieldTechnicianId!,
+                assignedById: input.actorId,
+              },
+            });
+            await tx.operationAuxiliaryTechnician.updateMany({
+              where: { operationId: existing.operationId, removedAt: null },
+              data: { removedAt: new Date(), removedById: input.actorId },
+            });
+            if (input.auxiliaryTechnicianIds.length)
+              await tx.operationAuxiliaryTechnician.createMany({
+                data: input.auxiliaryTechnicianIds.map((userId) => ({
+                  id: generateUuidV7(),
+                  organizationId: input.organizationId,
+                  operationId: existing.operationId!,
+                  userId,
+                  assignedById: input.actorId,
+                })),
+              });
+          }
+          await tx.operationHistory.create({
+            data: {
+              operationId: existing.operationId,
+              userId: input.actorId,
+              action: input.cancellationReason
+                ? 'PMOC_EQUIPMENT_EXECUTION_CANCELLED'
+                : 'PMOC_EQUIPMENT_ASSIGNMENT_UPDATED',
+              details: {
+                reason: input.cancellationReason ?? null,
+                responsibleFieldTechnicianId:
+                  input.responsibleFieldTechnicianId,
+              },
+            },
+          });
+        }
+      }
+      // Also advances the feed version when the physical execution has not started.
+      await tx.pmocExecution.update({
+        where: { id: input.cycleId },
+        data: { updatedAt: new Date() },
+      });
+      await this.audit(
+        tx,
+        input.planId,
+        input.organizationId,
+        input.actorId,
+        input.cancellationReason
+          ? 'PMOC_EQUIPMENT_EXECUTION_CANCELLED'
+          : 'PMOC_EQUIPMENT_SCHEDULE_UPDATED',
+        {},
+        { cycleId: input.cycleId, coverageId: input.coverageId, ...data },
+      );
+      if (input.cancellationReason) await this.resolveEquipmentCycle(tx, input);
+      return schedule;
+    });
+  }
+
   startEquipmentExecution(input: {
     organizationId: string;
     planId: string;
@@ -1457,6 +1658,7 @@ export class PmocRepository {
     code: string;
     title: string;
     authorizationBypass?: boolean;
+    restrictToTechnicianId?: string;
   }) {
     return this.rls.run(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`pmoc:equipment:${input.cycleId}:${input.coverageId}`}))`;
@@ -1489,7 +1691,44 @@ export class PmocRepository {
         },
         select: equipmentExecutionView,
       });
-      if (existing) return { execution: existing, created: false };
+      if (existing) {
+        if (
+          input.restrictToTechnicianId &&
+          existing.responsibleFieldTechnician.id !==
+            input.restrictToTechnicianId
+        )
+          throw new ForbiddenException(
+            'Este atendimento não está mais atribuído a você.',
+          );
+        return { execution: existing, created: false };
+      }
+      if (cycle.status !== 'PENDING')
+        throw new ConflictException('Esta execução já foi encerrada.');
+      const schedule = await tx.pmocEquipmentSchedule.findUnique({
+        where: {
+          cycleId_coverageId: {
+            cycleId: input.cycleId,
+            coverageId: input.coverageId,
+          },
+        },
+      });
+      if (schedule?.cancelledAt)
+        throw new ConflictException(
+          'O atendimento deste equipamento foi cancelado.',
+        );
+      if (input.restrictToTechnicianId) {
+        const plan = await tx.pmocPlan.findFirstOrThrow({
+          where: { id: input.planId, organizationId: input.organizationId },
+        });
+        if (
+          (schedule
+            ? schedule.responsibleFieldTechnicianId
+            : plan.technicianUserId) !== input.restrictToTechnicianId
+        )
+          throw new ForbiddenException(
+            'Este atendimento não está mais atribuído a você.',
+          );
+      }
 
       const operation = await tx.operation.create({
         data: {
@@ -1504,6 +1743,7 @@ export class PmocRepository {
           kind: 'PMOC',
           title: input.title,
           status: 'IN_PROGRESS',
+          scheduledStart: schedule?.scheduledFor,
           priority: 'NORMAL',
           responsibleFieldTechnicianId: input.responsibleFieldTechnicianId,
           authorizedAt:
@@ -1599,6 +1839,11 @@ export class PmocRepository {
           },
         },
       });
+      if (schedule?.notes)
+        await tx.pmocEquipmentExecution.update({
+          where: { id: inserido[0]!.id },
+          data: { notes: schedule.notes },
+        });
       const execution = await tx.pmocEquipmentExecution.findUniqueOrThrow({
         where: { id: inserido[0]!.id },
         select: equipmentExecutionView,
@@ -2273,6 +2518,96 @@ export class PmocRepository {
     });
   }
 
+  /** A cancelled machine resolves only its cycle; future coverage remains intact. */
+  private async resolveEquipmentCycle(
+    tx: PrismaTransactionClient,
+    input: {
+      organizationId: string;
+      planId: string;
+      cycleId: string;
+      actorId: string;
+      performedAt?: Date;
+    },
+  ) {
+    const coverageWhere = {
+      planId: input.planId,
+      organizationId: input.organizationId,
+      deletedAt: null,
+    };
+    const required = await tx.pmocEquipmentCoverage.count({
+      where: coverageWhere,
+    });
+    const resolved = await tx.pmocEquipmentCoverage.count({
+      where: {
+        ...coverageWhere,
+        OR: [
+          {
+            equipmentExecutions: {
+              some: {
+                cycleId: input.cycleId,
+                status: { in: ['COMPLETED', 'CANCELLED'] },
+              },
+            },
+          },
+          {
+            schedules: {
+              some: { cycleId: input.cycleId, cancelledAt: { not: null } },
+            },
+          },
+        ],
+      },
+    });
+    const allResolved = required > 0 && resolved === required;
+    let nextDueOn: Date | null = null;
+    if (!allResolved) return { allResolved, nextDueOn };
+    const last = await tx.pmocEquipmentExecution.findFirst({
+      where: {
+        organizationId: input.organizationId,
+        cycleId: input.cycleId,
+        status: 'COMPLETED',
+      },
+      orderBy: { performedAt: 'desc' },
+      select: { performedAt: true },
+    });
+    const performedAt = last?.performedAt ?? input.performedAt ?? null;
+    const cycle = await tx.pmocExecution.findFirstOrThrow({
+      where: {
+        id: input.cycleId,
+        planId: input.planId,
+        organizationId: input.organizationId,
+      },
+    });
+    const closed = await tx.pmocExecution.updateMany({
+      where: { id: cycle.id, status: 'PENDING' },
+      data: {
+        status: performedAt ? 'COMPLETED' : 'CANCELLED',
+        performedAt,
+        completedById: input.actorId,
+      },
+    });
+    if (closed.count) {
+      const rolled = await tx.$queryRaw<{ next_due_on: Date }[]>`
+        UPDATE pmoc_plans SET
+          last_executed_at=COALESCE(${performedAt}::timestamptz, last_executed_at),
+          next_due_on=${nextPmocDueOnSql(performedAt ?? cycle.dueOn, input.cycleId)},
+          due_soon_notified_for=NULL, overdue_notified_for=NULL, updated_at=now()
+        WHERE id=${input.planId}::uuid AND organization_id=${input.organizationId}::uuid
+        RETURNING next_due_on
+      `;
+      nextDueOn = rolled[0]?.next_due_on ?? null;
+      if (nextDueOn)
+        await tx.$executeRaw`
+        INSERT INTO pmoc_executions(id,organization_id,plan_id,due_on,status,sequence_number,updated_at)
+        SELECT ${generateUuidV7()}::uuid,${input.organizationId}::uuid,${input.planId}::uuid,${nextDueOn}::date,'PENDING',
+          COALESCE((SELECT max(sequence_number)+1 FROM pmoc_executions WHERE plan_id=${input.planId}::uuid),1),now()
+        FROM pmoc_plans p WHERE p.id=${input.planId}::uuid AND p.status='ACTIVE'
+          AND (p.ends_on IS NULL OR p.ends_on>=${nextDueOn}::date)
+        ON CONFLICT DO NOTHING
+      `;
+    }
+    return { allResolved, nextDueOn };
+  }
+
   completeEquipmentExecution(input: {
     organizationId: string;
     planId: string;
@@ -2285,6 +2620,7 @@ export class PmocRepository {
   }) {
     return this.rls.run(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`pmoc:cycle-completion:${input.cycleId}`}))`;
+      await tx.$executeRaw`SELECT id FROM pmoc_executions WHERE id=${input.cycleId}::uuid AND organization_id=${input.organizationId}::uuid FOR UPDATE`;
       if (
         input.restrictToTechnicianId &&
         (await assignmentAuthorizationRequired(tx, input.organizationId))
@@ -2348,55 +2684,10 @@ export class PmocRepository {
             completedByUserId: input.actorId,
           },
         });
-      const required = await tx.pmocEquipmentCoverage.count({
-        where: {
-          planId: input.planId,
-          organizationId: input.organizationId,
-          deletedAt: null,
-        },
-      });
-      const resolved = await tx.pmocEquipmentExecution.count({
-        where: {
-          cycleId: input.cycleId,
-          organizationId: input.organizationId,
-          status: { in: ['COMPLETED', 'CANCELLED'] },
-        },
-      });
-      const allResolved = required > 0 && resolved >= required;
-      let nextDueOn: Date | null = null;
-      if (allResolved) {
-        const cycle = await tx.pmocExecution.updateMany({
-          where: {
-            id: input.cycleId,
-            planId: input.planId,
-            organizationId: input.organizationId,
-            status: 'PENDING',
-          },
-          data: {
-            status: 'COMPLETED',
-            performedAt: input.performedAt,
-            completedById: input.actorId,
-          },
-        });
-        if (cycle.count) {
-          const rolled = await tx.$queryRaw<{ next_due_on: Date }[]>`
-            UPDATE pmoc_plans SET last_executed_at=${input.performedAt},
-              next_due_on=${nextPmocDueOnSql(input.performedAt, input.cycleId)},
-              due_soon_notified_for=NULL, overdue_notified_for=NULL, updated_at=now()
-            WHERE id=${input.planId}::uuid AND organization_id=${input.organizationId}::uuid
-            RETURNING next_due_on
-          `;
-          nextDueOn = rolled[0]?.next_due_on ?? null;
-          if (nextDueOn)
-            await tx.$executeRaw`
-            INSERT INTO pmoc_executions(id,organization_id,plan_id,due_on,status,sequence_number,updated_at)
-            SELECT ${generateUuidV7()}::uuid,${input.organizationId}::uuid,${input.planId}::uuid,${nextDueOn}::date,'PENDING',
-              COALESCE((SELECT max(sequence_number)+1 FROM pmoc_executions WHERE plan_id=${input.planId}::uuid),1),now()
-            FROM pmoc_plans p WHERE p.id=${input.planId}::uuid AND (p.ends_on IS NULL OR p.ends_on>=${nextDueOn}::date)
-            ON CONFLICT DO NOTHING
-          `;
-        }
-      }
+      const { allResolved, nextDueOn } = await this.resolveEquipmentCycle(
+        tx,
+        input,
+      );
       await this.audit(
         tx,
         input.planId,

@@ -167,11 +167,32 @@ responde `PLAN_NOT_ACTIVE` para cada equipamento do ciclo. A tela traduz o
 código e nunca o deduz de `status === "SUSPENDED"` — o teste de navegador
 verifica as duas metades: a frase em português aparece, e o código não.
 
-## O que o Web não faz
+## Gerenciamento por equipamento
 
-**Não inicia manutenção.** O comando de início existe, mas exige o técnico
-diante do equipamento; oferecer o botão na mesa sugeriria que a execução pode
-começar sem ninguém em campo. O Web mostra o estado, o bloqueio e o resultado.
+Na aba Execuções, cada equipamento pendente oferece Atender, Atribuir técnico,
+Editar execução e Cancelar execução. A preparação continua validando o plano,
+o equipamento e a assinatura do responsável técnico antes de permitir o início,
+inclusive em períodos futuros. O wizard existente conclui a manutenção e emite
+o relatório daquele equipamento.
 
-Também não gera documento, não edita evidência e não altera o histórico: são
-atos de campo, e o aplicativo é o lugar deles.
+O planejamento é persistido em `pmoc_equipment_schedules`, separado da execução
+física. Atribuir uma equipe ou alterar a previsão mantém o atendimento pendente;
+o técnico inicia pelo mobile ou o gestor usa Atender na web. A edição permite
+definir técnico, auxiliares, data e hora e orientações. Horários sobrepostos ou
+próximos exigem confirmação e permitem prosseguir.
+
+As rotas `PATCH .../equipment/:assetId/schedule` e
+`POST .../equipment/:assetId/cancel` exigem `pmoc.manage`. Os comandos verificam
+organização, unidade, plano, período e versão, sob bloqueio transacional.
+Execuções concluídas ou canceladas preservam seu histórico. O cancelamento pede
+motivo e afeta somente o equipamento naquele período; os demais equipamentos e
+as próximas manutenções permanecem.
+
+Quando a autorização de demandas está ativa, a atribuição individual entra na
+fila de Operações → Pendências mesmo quando o contrato não tem técnico padrão.
+O acesso pelo mobile permanece condicionado à autorização do período. A
+atribuição individual prevalece sobre o técnico padrão do contrato.
+
+O deploy requer a migração `20261110120000_pmoc_equipment_scheduling`, com RLS
+por organização e unidade, além das versões correspondentes da API e frontend.
+O mobile também reconhece a atribuição planejada na lista legada de PMOC.

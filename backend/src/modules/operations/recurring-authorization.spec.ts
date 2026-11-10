@@ -74,6 +74,25 @@ function fixture(enabled = true) {
 }
 
 describe('autorização das visitas RVT e dos ciclos PMOC', () => {
+  it('autoriza ciclo atribuído por equipamento mesmo sem técnico no contrato', async () => {
+    const { tx, service } = fixture();
+    tx.pmocExecution.findFirst.mockResolvedValue({
+      ...cycle,
+      plan: { ...cycle.plan, technicianUserId: null },
+      equipmentExecutions: [],
+      equipmentSchedules: [{ id: 'scheduled-equipment' }],
+    });
+    await expect(
+      service.authorize(actor, [
+        { kind: 'PMOC', id: 'cycle', version: version.toISOString() },
+      ]),
+    ).resolves.toEqual({ authorized: 1 });
+    expect(tx.pmocExecution.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ authorizedAt: expect.any(Date) }),
+      }),
+    );
+  });
   it('oferece as duas demandas na fila, sem criar operações nem iniciar visitas', async () => {
     const { tx, service } = fixture();
     const result = await service.list(

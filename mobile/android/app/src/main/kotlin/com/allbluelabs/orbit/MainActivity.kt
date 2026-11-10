@@ -1,4 +1,4 @@
-package com.allbluelabs.orbit_operator
+package com.allbluelabs.orbit
 
 import android.Manifest
 import android.content.Intent

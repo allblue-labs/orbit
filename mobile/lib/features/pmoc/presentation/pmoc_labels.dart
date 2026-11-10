@@ -19,6 +19,7 @@ import '../../../core/design/orbit_primitives.dart';
 String pmocBlockedReasonLabel(String reason) => switch (reason) {
   'PLAN_NOT_ACTIVE' => 'O plano não está ativo.',
   'CYCLE_NOT_PENDING' => 'Este ciclo já foi encerrado.',
+  'EXECUTION_CANCELLED' => 'O atendimento deste equipamento foi cancelado.',
   'EQUIPMENT_INACTIVE' => 'O equipamento está inativo no cadastro.',
   'TECHNICAL_RESPONSIBLE_MISSING' =>
     'O plano não tem Responsável Técnico definido.',
@@ -26,8 +27,10 @@ String pmocBlockedReasonLabel(String reason) => switch (reason) {
     'O Responsável Técnico do plano não está elegível para assinar.',
   'SIGNATURE_MISSING' =>
     'O Responsável Técnico ainda não cadastrou a assinatura.',
-  'CREDENTIAL_MISSING' => 'O Responsável Técnico está sem registro profissional.',
-  'CREDENTIAL_EXPIRED' => 'O registro profissional do Responsável Técnico venceu.',
+  'CREDENTIAL_MISSING' =>
+    'O Responsável Técnico está sem registro profissional.',
+  'CREDENTIAL_EXPIRED' =>
+    'O registro profissional do Responsável Técnico venceu.',
   _ => reason,
 };
 

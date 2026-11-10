@@ -5,18 +5,29 @@ const CYCLE = "cycle-current";
 const ASSET = "asset-current";
 const STAMP = "2026-10-27T12:00:00Z";
 
-async function setup(page: Page, failArtifact = false) {
+async function setup(page: Page, failArtifact = false, canManage = true) {
   const writes: string[] = [];
   const preparations: string[] = [];
   let started = false;
   let completed = false;
   let issued = false;
+  let cancelled = false;
+  let schedule: {
+    version: string;
+    responsibleFieldTechnician: { id: string; displayName: string } | null;
+    auxiliaryTechnicianIds: string[];
+    scheduledFor: string | null;
+    notes: string | null;
+    cancelledAt: string | null;
+    cancellationReason: string | null;
+  } | null = null;
+  const changes: { path: string; body: Record<string, unknown> }[] = [];
   let fail = failArtifact;
   const cycle = () => ({
     id: CYCLE,
     sequenceNumber: 1,
     dueOn: "2026-10-27",
-    status: completed ? "COMPLETED" : "PENDING",
+    status: cancelled ? "CANCELLED" : completed ? "COMPLETED" : "PENDING",
     performedAt: completed ? STAMP : null,
   });
   const equipment = {
@@ -102,7 +113,7 @@ async function setup(page: Page, failArtifact = false) {
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     const method = route.request().method();
-    if (method === "POST") writes.push(path);
+    if (method === "POST" || method === "PATCH") writes.push(path);
     let data: unknown = {
       data: [],
       meta: { total: 0, page: 1, limit: 10, totalPages: 0 },
@@ -121,8 +132,8 @@ async function setup(page: Page, failArtifact = false) {
           businessUnitId: "unit",
           businessUnitIds: ["unit"],
         },
-        isOwner: true,
-        permissions: ["*"],
+        isOwner: canManage,
+        permissions: canManage ? ["*"] : ["pmoc.read"],
         roles: [],
         organization: { id: "org", displayName: "Empresa" },
         businessUnits: [
@@ -141,18 +152,53 @@ async function setup(page: Page, failArtifact = false) {
         requiresPasswordChange: false,
       };
     else if (path === `/api/orbit/pmoc/plans/${PLAN}`) data = plan();
-    else if (path === `/api/orbit/pmoc/plans/${PLAN}/executions`)
-      data = completed
-        ? [
-            {
-              id: "cycle-next-month",
-              sequenceNumber: 2,
-              dueOn: "2026-11-27",
-              status: "PENDING",
-            },
-            cycle(),
-          ]
-        : [cycle()];
+    else if (path === "/api/orbit/operations/schedule-check") data = [];
+    else if (path.endsWith("/schedule") && method === "PATCH") {
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      changes.push({ path, body });
+      const id = body.responsibleFieldTechnicianId as string;
+      schedule = {
+        version: STAMP,
+        responsibleFieldTechnician: id
+          ? { id, displayName: id === "technician" ? "Marina" : "Carlos" }
+          : null,
+        auxiliaryTechnicianIds: body.auxiliaryTechnicianIds as string[],
+        scheduledFor: body.scheduledFor as string | null,
+        notes: body.notes as string,
+        cancelledAt: null,
+        cancellationReason: null,
+      };
+      data = { saved: true };
+    } else if (
+      path.endsWith(`/equipment/${ASSET}/cancel`) &&
+      method === "POST"
+    ) {
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      changes.push({ path, body });
+      cancelled = true;
+      schedule = {
+        version: STAMP,
+        responsibleFieldTechnician: null,
+        auxiliaryTechnicianIds: [],
+        scheduledFor: null,
+        notes: null,
+        cancelledAt: STAMP,
+        cancellationReason: body.reason as string,
+      };
+      data = { saved: true };
+    } else if (path === `/api/orbit/pmoc/plans/${PLAN}/executions`)
+      data =
+        completed || cancelled
+          ? [
+              {
+                id: "cycle-next-month",
+                sequenceNumber: 2,
+                dueOn: "2026-11-27",
+                status: "PENDING",
+              },
+              cycle(),
+            ]
+          : [cycle()];
     else if (
       path.endsWith("/equipment-executions/physical-execution/complete")
     ) {
@@ -188,8 +234,11 @@ async function setup(page: Page, failArtifact = false) {
         cycle: cycle(),
         customer: { name: "Cliente do contrato" },
         equipment,
-        fieldTechnicians: [{ id: "technician", name: "Marina" }],
-        auxiliaryTechnicians: [],
+        fieldTechnicians: [
+          { id: "technician", name: "Marina" },
+          { id: "other-technician", name: "Carlos" },
+        ],
+        auxiliaryTechnicians: [{ id: "assistant", name: "Joana" }],
         evidencePolicy: {
           minimumPhotos: 0,
           maximumPhotos: 6,
@@ -199,6 +248,7 @@ async function setup(page: Page, failArtifact = false) {
         procedureGroups: [{ group: "Evaporadora", items: ["Limpar filtro"] }],
         eligibility: { ready: true, blockedReasons: [] },
         existingExecution: execution(),
+        schedule,
         allowedActions: completed
           ? ["VIEW"]
           : started
@@ -212,12 +262,22 @@ async function setup(page: Page, failArtifact = false) {
           equipment,
           status: path.includes("cycle-next-month")
             ? "NOT_STARTED"
-            : completed
-              ? "COMPLETED"
-              : started
-                ? "IN_PROGRESS"
-                : "NOT_STARTED",
+            : cancelled
+              ? "CANCELLED"
+              : completed
+                ? "COMPLETED"
+                : started
+                  ? "IN_PROGRESS"
+                  : "NOT_STARTED",
           execution: path.includes("cycle-next-month") ? null : execution(),
+          schedule: path.includes("cycle-next-month") ? null : schedule,
+          management: {
+            version: schedule?.version ?? "unplanned",
+            allowedActions:
+              canManage && !completed && !cancelled
+                ? ["EDIT", "ASSIGN", "CANCEL"]
+                : [],
+          },
           eligibility: {
             ready: path.includes("cycle-next-month") || !completed,
             blockedReasons: [],
@@ -296,8 +356,182 @@ async function setup(page: Page, failArtifact = false) {
       };
     await route.fulfill({ json: { success: true, data } });
   });
-  return { writes, preparations };
+  return { writes, preparations, changes };
 }
+
+test("atribui equipe e horário ao equipamento pendente sem iniciar a manutenção", async ({
+  page,
+}) => {
+  const { changes, writes } = await setup(page);
+  await page.goto(`/pmoc/${PLAN}`);
+  await page.getByRole("tab", { name: "Execuções", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Atribuir técnico", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Técnico em campo (obrigatório)").click();
+  await page.getByRole("option", { name: "Carlos", exact: true }).click();
+  await dialog.getByRole("checkbox", { name: "Joana" }).check();
+  await dialog
+    .getByLabel("Data e hora previstas (opcional)")
+    .fill("2026-11-15T09:30");
+  await dialog
+    .getByLabel("Orientações para o atendimento (opcional)")
+    .fill("Conferir filtro da sala.");
+  await dialog
+    .getByRole("button", { name: "Salvar execução", exact: true })
+    .click();
+  await expect(dialog).toHaveCount(0);
+  expect(changes[0]?.body).toEqual({
+    expectedVersion: "unplanned",
+    responsibleFieldTechnicianId: "other-technician",
+    auxiliaryTechnicianIds: ["assistant"],
+    scheduledFor: "2026-11-15T12:30:00.000Z",
+    notes: "Conferir filtro da sala.",
+  });
+  expect(
+    writes.some((path) => path.endsWith(`/equipment/${ASSET}/executions`)),
+  ).toBe(false);
+  await expect(page.getByText("Técnico previsto: Carlos")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Atender", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Editar execução", exact: true })
+    .click();
+  await expect(page.getByLabel("Data e hora previstas (opcional)")).toHaveValue(
+    "2026-11-15T09:30",
+  );
+  await expect(
+    page.getByLabel("Orientações para o atendimento (opcional)"),
+  ).toHaveValue("Conferir filtro da sala.");
+});
+
+test("cancelamento exige motivo, preserva o período selecionado e mantém a próxima previsão", async ({
+  page,
+}) => {
+  const { changes } = await setup(page);
+  await page.goto(`/pmoc/${PLAN}`);
+  await page.getByRole("tab", { name: "Execuções", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Cancelar execução", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "Confirmar cancelamento" }).click();
+  await expect(dialog.getByRole("alert")).toContainText("Informe o motivo");
+  expect(changes).toHaveLength(0);
+  await dialog
+    .getByLabel("Motivo do cancelamento (obrigatório)")
+    .fill("Cliente indisponível neste período");
+  await dialog.getByRole("button", { name: "Confirmar cancelamento" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(
+    page.getByText(
+      "Motivo do cancelamento: Cliente indisponível neste período",
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /Execução 1/ }),
+  ).toHaveAttribute("aria-current", "true");
+  await expect(page.getByRole("button", { name: /Execução 2/ })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Atender", exact: true }),
+  ).toHaveCount(0);
+});
+
+test("horário próximo pede confirmação antes de salvar a atribuição", async ({
+  page,
+}) => {
+  const { changes } = await setup(page);
+  await page.route("**/api/orbit/operations/schedule-check", (route) =>
+    route.fulfill({
+      json: {
+        success: true,
+        data: [
+          {
+            userName: "Carlos",
+            title: "Outro atendimento",
+            startsAt: "2026-11-15T12:05:00Z",
+            endsAt: null,
+          },
+        ],
+      },
+    }),
+  );
+  await page.goto(`/pmoc/${PLAN}`);
+  await page.getByRole("tab", { name: "Execuções", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Atribuir técnico", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Técnico em campo (obrigatório)").click();
+  await page.getByRole("option", { name: "Carlos", exact: true }).click();
+  await dialog
+    .getByLabel("Data e hora previstas (opcional)")
+    .fill("2026-11-15T09:00");
+  await dialog.getByRole("button", { name: "Salvar execução" }).click();
+  const confirmation = page.getByRole("alertdialog");
+  await expect(confirmation).toContainText("Outro atendimento");
+  expect(changes).toHaveLength(0);
+  await confirmation
+    .getByRole("button", { name: "Confirmar e continuar", exact: true })
+    .click();
+  await expect(dialog).toHaveCount(0);
+  expect(changes).toHaveLength(1);
+});
+
+test("recusa do servidor mantém o formulário e a atribuição digitada", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.route("**/api/orbit/pmoc/**/schedule", (route) =>
+    route.fulfill({
+      status: 409,
+      json: {
+        success: false,
+        error: {
+          code: "CONFLICT",
+          message:
+            "Esta execução foi alterada. Atualize a página e tente novamente.",
+        },
+      },
+    }),
+  );
+  await page.goto(`/pmoc/${PLAN}`);
+  await page.getByRole("tab", { name: "Execuções", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Editar execução", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog");
+  await dialog
+    .getByLabel("Orientações para o atendimento (opcional)")
+    .fill("Não perder este texto");
+  await dialog.getByRole("button", { name: "Salvar execução" }).click();
+  await expect(dialog.getByText(/Esta execução foi alterada/)).toBeVisible();
+  await expect(
+    dialog.getByLabel("Orientações para o atendimento (opcional)"),
+  ).toHaveValue("Não perder este texto");
+});
+
+test("quem só consulta não recebe comandos para gerenciar ou iniciar execução", async ({
+  page,
+}) => {
+  await setup(page, false, false);
+  await page.goto(`/pmoc/${PLAN}`);
+  await page.getByRole("tab", { name: "Execuções", exact: true }).click();
+  await expect(
+    page.getByText("Split sala principal", { exact: true }),
+  ).toBeVisible();
+  for (const name of [
+    "Atribuir técnico",
+    "Editar execução",
+    "Cancelar execução",
+    "Atender",
+  ])
+    await expect(page.getByRole("button", { name, exact: true })).toHaveCount(
+      0,
+    );
+});
 
 async function attend(page: Page) {
   await page.goto(`/pmoc/${PLAN}`);
@@ -401,7 +635,7 @@ test("o cabeçalho integra a assinatura e baixa o contrato por sua rota própria
   expect((await download).suggestedFilename()).toBe("pmoc.pdf");
   await page
     .getByRole("button", {
-      name: "Enviar contrato para assinatura",
+      name: "Gerar link de assinatura (opcional)",
       exact: true,
     })
     .click();

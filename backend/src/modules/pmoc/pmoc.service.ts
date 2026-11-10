@@ -79,6 +79,8 @@ import type {
   StartPmocEquipmentExecutionDto,
   UpdatePmocPlanDto,
   UpdatePmocUnitDto,
+  UpdatePmocEquipmentScheduleDto,
+  CancelPmocEquipmentScheduleDto,
 } from './pmoc.dto';
 import { PmocMapper } from './pmoc.mapper';
 import type {
@@ -1657,7 +1659,9 @@ export class PmocService {
       throw new EntityNotFoundException('Execução PMOC', cycleId);
     const assigned = data.existing
       ? data.existing.responsibleFieldTechnician.id === actor.actorId
-      : data.plan.technicianUserId === actor.actorId;
+      : (data.schedule
+          ? data.schedule.responsibleFieldTechnicianId
+          : data.plan.technicianUserId) === actor.actorId;
     if (
       !actor.isOrganizationOwner &&
       !assigned &&
@@ -1752,7 +1756,13 @@ export class PmocService {
         dueOn: toDateOnly(data.cycle.dueOn),
         timezone: 'America/Recife',
       },
-      eligibility,
+      schedule: this.equipmentScheduleView(data.schedule),
+      plannedFieldTechnicianId: data.schedule
+        ? data.schedule.responsibleFieldTechnicianId
+        : data.plan.technicianUserId,
+      eligibility: data.schedule?.cancelledAt
+        ? { ready: false, blockedReasons: ['EXECUTION_CANCELLED'] }
+        : eligibility,
       existingExecution: data.existing
         ? this.mapper.equipmentExecution(data.existing)
         : null,
@@ -1763,12 +1773,14 @@ export class PmocService {
             ? ['COMPLETE', 'ADD_EVIDENCE']
             : ['VIEW']
           : ['VIEW']
-        : blockedReasons.length
+        : blockedReasons.length || data.schedule?.cancelledAt
           ? []
           : actor.isOrganizationOwner ||
               actor.permissions.includes('*') ||
               actor.permissions.includes('pmoc.manage') ||
-              data.plan.technicianUserId === actor.actorId
+              (data.schedule
+                ? data.schedule.responsibleFieldTechnicianId
+                : data.plan.technicianUserId) === actor.actorId
             ? ['START']
             : [],
     };
@@ -1817,7 +1829,28 @@ export class PmocService {
       execution: row.equipmentExecutions[0]
         ? this.mapper.equipmentExecution(row.equipmentExecutions[0])
         : null,
-      status: row.equipmentExecutions[0]?.status ?? 'NOT_STARTED',
+      status: row.schedules?.[0]?.cancelledAt
+        ? 'CANCELLED'
+        : (row.equipmentExecutions[0]?.status ?? 'NOT_STARTED'),
+      schedule: this.equipmentScheduleView(row.schedules?.[0]),
+      plannedFieldTechnician: row.schedules?.[0]
+        ? row.schedules[0].responsibleFieldTechnician
+        : plan.technician,
+      management: {
+        version:
+          row.equipmentExecutions[0]?.updatedAt.toISOString() ??
+          row.schedules?.[0]?.updatedAt.toISOString() ??
+          'unplanned',
+        allowedActions:
+          managesRecurringAssignments(actor, 'PMOC') &&
+          plan.status === 'ACTIVE' &&
+          cycle.status === 'PENDING' &&
+          !row.schedules?.[0]?.cancelledAt &&
+          (!row.equipmentExecutions[0] ||
+            row.equipmentExecutions[0].status === 'IN_PROGRESS')
+            ? ['EDIT', 'ASSIGN', 'CANCEL']
+            : [],
+      },
       eligibility: executionEligibility({
         planStatus: plan.status,
         cycleStatus: cycle.status,
@@ -1826,6 +1859,169 @@ export class PmocService {
         technicalResponsible,
       }),
     }));
+  }
+
+  private equipmentScheduleView(
+    schedule:
+      | {
+          id: string;
+          updatedAt: Date;
+          responsibleFieldTechnician: {
+            id: string;
+            displayName: string;
+          } | null;
+          auxiliaryTechnicianIds: string[];
+          scheduledFor: Date | null;
+          notes: string | null;
+          cancelledAt: Date | null;
+          cancellationReason: string | null;
+        }
+      | null
+      | undefined,
+  ) {
+    return schedule
+      ? {
+          id: schedule.id,
+          version: schedule.updatedAt.toISOString(),
+          responsibleFieldTechnician: schedule.responsibleFieldTechnician,
+          auxiliaryTechnicianIds: schedule.auxiliaryTechnicianIds,
+          scheduledFor: schedule.scheduledFor?.toISOString() ?? null,
+          notes: schedule.notes,
+          cancelledAt: schedule.cancelledAt?.toISOString() ?? null,
+          cancellationReason: schedule.cancellationReason,
+        }
+      : null;
+  }
+
+  async manageEquipmentSchedule(
+    planId: string,
+    cycleId: string,
+    assetId: string,
+    actor: PmocActor,
+    input: UpdatePmocEquipmentScheduleDto | CancelPmocEquipmentScheduleDto,
+  ) {
+    this.assertPermission(
+      actor,
+      'pmoc.manage',
+      'Você não pode gerenciar execuções de PMOC.',
+    );
+    const data = await this.repository.executionPreparation(
+      actor.organizationId,
+      planId,
+      cycleId,
+      assetId,
+    );
+    if (!data) throw new EntityNotFoundException('Execução PMOC');
+    this.assertUnitInScope(actor, data.plan.businessUnitId);
+    const cancelling = 'reason' in input;
+    const update: UpdatePmocEquipmentScheduleDto = cancelling
+      ? { expectedVersion: input.expectedVersion }
+      : input;
+    const previousTechnician =
+      data.existing?.responsibleFieldTechnician.id ??
+      (data.schedule
+        ? data.schedule.responsibleFieldTechnicianId
+        : data.plan.technicianUserId);
+    const technician =
+      update.responsibleFieldTechnicianId === undefined
+        ? previousTechnician
+        : update.responsibleFieldTechnicianId;
+    const auxiliaries = [
+      ...new Set(
+        update.auxiliaryTechnicianIds ??
+          data.existing?.operation?.auxiliaryTechnicians.map(
+            (item) => item.user.id,
+          ) ??
+          data.schedule?.auxiliaryTechnicianIds ??
+          [],
+      ),
+    ].filter((id) => id !== technician);
+    if (!cancelling) {
+      const [field, assistants] = await Promise.all([
+        this.workforce.listPmocFieldTechnicians(
+          actor.organizationId,
+          data.plan.businessUnitId,
+        ),
+        this.workforce.listFieldAssistantCandidates(
+          actor.organizationId,
+          data.plan.businessUnitId,
+        ),
+      ]);
+      if (technician && !field.some((person) => person.id === technician))
+        throw new ValidationException(
+          'Escolha um técnico em campo ativo e habilitado nesta unidade.',
+        );
+      if (
+        auxiliaries.some((id) => !assistants.some((person) => person.id === id))
+      )
+        throw new ValidationException(
+          'Escolha auxiliares técnicos ativos nesta unidade.',
+        );
+    }
+    const schedule = await this.repository.manageEquipmentSchedule({
+      organizationId: actor.organizationId,
+      businessUnitId: data.plan.businessUnitId,
+      planId,
+      cycleId,
+      coverageId: data.coverage.id,
+      actorId: actor.actorId,
+      expectedVersion: input.expectedVersion,
+      responsibleFieldTechnicianId: technician ?? null,
+      auxiliaryTechnicianIds: auxiliaries,
+      scheduledFor:
+        update.scheduledFor === undefined
+          ? (data.schedule?.scheduledFor ?? null)
+          : update.scheduledFor,
+      notes:
+        update.notes === undefined
+          ? (data.existing?.notes ?? data.schedule?.notes ?? null)
+          : update.notes.trim() || null,
+      cancellationReason: cancelling ? input.reason : undefined,
+    });
+    // Authorization is not granted by assigning a technician. The existing cycle gate remains authoritative.
+    if (
+      !cancelling &&
+      technician &&
+      technician !== previousTechnician &&
+      (!data.assignmentAuthorizationRequired || data.cycle.authorizedAt)
+    ) {
+      await this.notifyEquipmentAssignment(
+        actor,
+        data.plan.businessUnitId,
+        technician,
+        cycleId,
+        assetId,
+        schedule.id,
+      );
+    }
+    return { saved: true };
+  }
+
+  private async notifyEquipmentAssignment(
+    actor: PmocActor,
+    businessUnitId: string,
+    recipientUserId: string,
+    cycleId: string,
+    assetId: string,
+    factId: string,
+  ) {
+    if (!this.mobileNotifications || recipientUserId === actor.actorId) return;
+    try {
+      await this.mobileNotifications.materialize({
+        organizationId: actor.organizationId,
+        businessUnitId,
+        recipientUserId,
+        type: 'WORK_ASSIGNED',
+        factId,
+        resourceId: factId,
+        workItemId: `PMOC:${cycleId}:${assetId}`,
+        correlationId: generateUuidV7(),
+      });
+    } catch {
+      this.logger.warn(
+        JSON.stringify({ event: 'pmoc_assignment_notification_failed' }),
+      );
+    }
   }
 
   /**
@@ -1882,7 +2078,9 @@ export class PmocService {
       throw new EntityNotFoundException('Execução PMOC', cycleId);
     const assignedTo =
       preparation.existing?.responsibleFieldTechnician.id ??
-      preparation.plan.technicianUserId;
+      (preparation.schedule
+        ? preparation.schedule.responsibleFieldTechnicianId
+        : preparation.plan.technicianUserId);
     if (!actor.isOrganizationOwner && assignedTo !== actor.actorId) {
       throw new ForbiddenException(
         'Este PMOC não está atribuído a você. Só o técnico atribuído — ou o dono da organização — pode atendê-lo.',
@@ -1898,6 +2096,7 @@ export class PmocService {
     return this.startEquipmentExecution(planId, cycleId, assetId, actor, {
       /* Abre para si mesmo. É o que distingue esta porta da outra. */
       responsibleFieldTechnicianId: actor.actorId,
+      auxiliaryTechnicianIds: preparation.schedule?.auxiliaryTechnicianIds,
     });
   }
 
@@ -1917,6 +2116,10 @@ export class PmocService {
     if (!preparation)
       throw new EntityNotFoundException('PmocEquipmentCoverage', assetId);
     this.assertUnitInScope(actor, preparation.plan.businessUnitId);
+    if (preparation.schedule?.cancelledAt)
+      throw new ConflictException(
+        'O atendimento deste equipamento foi cancelado.',
+      );
     if (
       preparation.plan.status !== 'ACTIVE' ||
       preparation.cycle.status !== 'PENDING'
@@ -1987,8 +2190,16 @@ export class PmocService {
       ),
       title: `${preparation.plan.name} — ${preparation.coverage.asset.name}`,
       authorizationBypass: managesRecurringAssignments(actor, 'PMOC'),
+      restrictToTechnicianId: managesRecurringAssignments(actor, 'PMOC')
+        ? undefined
+        : actor.actorId,
     });
-    if (result.created && this.mobileNotifications) {
+    if (
+      result.created &&
+      this.mobileNotifications &&
+      (!preparation.assignmentAuthorizationRequired ||
+        preparation.cycle.authorizedAt)
+    ) {
       for (const recipientUserId of [
         input.responsibleFieldTechnicianId,
         ...auxiliaries,

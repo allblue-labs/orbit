@@ -19,4 +19,5 @@ export class CheckOperationScheduleDto {
   @IsOptional() @Type(() => Date) @IsDate() scheduledEnd?: Date;
   @IsOptional() @IsUUIDv7() excludeOperationId?: string;
   @IsOptional() @IsUUIDv7() excludeEventId?: string;
+  @IsOptional() @IsUUIDv7() excludePmocScheduleId?: string;
 }

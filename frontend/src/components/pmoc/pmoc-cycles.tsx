@@ -40,6 +40,7 @@ import {
 } from "@/hooks/pmoc/use-pmoc";
 import { AttendanceReport } from "./attendance/attendance-report";
 import { PmocAttendanceDialog } from "./attendance/attendance.dialog";
+import { PmocEquipmentActions } from "./pmoc-equipment-actions";
 import { useSession } from "@/providers/session-provider";
 
 import { useDateFormatters } from "@/hooks/use-date-formatters";
@@ -193,6 +194,9 @@ function EquipmentExecutions({
               <EquipmentRow
                 key={row.coverageId}
                 row={row}
+                planId={planId}
+                cycleId={cycleId}
+                onManage={onAttend}
                 onAttend={() => {
                   // Completing the last equipment opens the next cycle on the
                   // server. Keep this cycle selected throughout the attendance.
@@ -232,25 +236,22 @@ function EquipmentExecutions({
 function EquipmentRow({
   row,
   onAttend,
+  planId,
+  cycleId,
+  onManage,
 }: {
   row: PmocCycleEquipmentRow;
   onAttend: () => void;
+  planId: string;
+  cycleId: string;
+  onManage: () => void;
 }) {
   const { formatDateTime } = useDateFormatters();
   const eligibility = row.eligibility;
   const session = useSession();
 
-  /*
-   * O portão espelha o que o servidor exige para abrir a execução.
-   *
-   * A rota pede `pmoc.manage` **e** `operations.create` — ela cria a ordem de
-   * serviço 1:1 do atendimento. Exigir menos ofereceria um botão cujo destino é
-   * uma recusa; exigir mais esconderia o botão de quem o servidor aceitaria, que
-   * é o erro mais difícil de descobrir, porque nada aparece.
-   */
-  const canAttend =
-    session.hasPermission("pmoc.manage") &&
-    session.hasPermission("operations.create");
+  // A rota de início verifica pmoc.manage; as capacidades do plano são conferidas na API.
+  const canAttend = session.hasPermission("pmoc.manage");
 
   return (
     <li className="space-y-3 rounded-xl border border-border p-4">
@@ -269,6 +270,37 @@ function EquipmentRow({
           <ExecutionStatusBadge status={row.status} />
         )}
       </div>
+
+      {row.schedule ? (
+        <div className="grid gap-2 rounded-lg bg-muted/30 p-3 text-xs sm:grid-cols-2">
+          {!row.execution ? (
+            <p>
+              <span className="text-muted-foreground">Técnico previsto: </span>
+              {row.schedule.responsibleFieldTechnician?.displayName ??
+                "A definir"}
+            </p>
+          ) : null}
+          {row.schedule.scheduledFor ? (
+            <p>
+              <span className="text-muted-foreground">Agendado para: </span>
+              {formatDateTime(row.schedule.scheduledFor)}
+            </p>
+          ) : null}
+          {row.schedule.notes ? (
+            <p className="whitespace-pre-wrap break-words sm:col-span-2">
+              {row.schedule.notes}
+            </p>
+          ) : null}
+          {row.schedule.cancellationReason ? (
+            <p className="sm:col-span-2">
+              <span className="text-muted-foreground">
+                Motivo do cancelamento:{" "}
+              </span>
+              {row.schedule.cancellationReason}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       {row.execution ? (
         <>
@@ -349,6 +381,7 @@ function EquipmentRow({
              * decide em qual passo ele abre.
              */}
             {canAttend &&
+            row.status !== "CANCELLED" &&
             (row.status === "IN_PROGRESS" ||
               !row.execution.artifactExecution) ? (
               <Button
@@ -372,20 +405,15 @@ function EquipmentRow({
         </>
       ) : (
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-          {eligibility.ready ? (
+          {row.status === "CANCELLED" ? (
+            <span className="text-muted-foreground">
+              Atendimento cancelado neste período.
+            </span>
+          ) : eligibility.ready ? (
             <>
               <span className="text-muted-foreground">
                 Pronto para execução.
               </span>
-              {/* A porta que faltava: a tela dizia "pronto para execução em
-                  campo" e não oferecia como executar. O dono precisava do
-                  aplicativo — ou de ninguém, quando o técnico faltou. */}
-              {canAttend ? (
-                <Button size="sm" onClick={onAttend}>
-                  <Play className="size-3.5" />
-                  Atender
-                </Button>
-              ) : null}
             </>
           ) : (
             <ul className="space-y-0.5">
@@ -396,8 +424,29 @@ function EquipmentRow({
               ))}
             </ul>
           )}
+          {canAttend && row.status !== "CANCELLED" ? (
+            <Button
+              size="sm"
+              onClick={onAttend}
+              disabled={!eligibility.ready}
+              title={
+                !eligibility.ready
+                  ? "Confira os ajustes necessários indicados neste equipamento."
+                  : undefined
+              }
+            >
+              <Play className="size-3.5" />
+              Atender
+            </Button>
+          ) : null}
         </div>
       )}
+      <PmocEquipmentActions
+        planId={planId}
+        cycleId={cycleId}
+        row={row}
+        onInteract={onManage}
+      />
     </li>
   );
 }

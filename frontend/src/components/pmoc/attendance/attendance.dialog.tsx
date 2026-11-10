@@ -182,12 +182,16 @@ function Attendance({
   const [draft, setDraft] = useState<AttendanceDraft>(() => ({
     ...emptyDraft(
       execution?.responsibleFieldTechnician.id ??
+        preparation.schedule?.responsibleFieldTechnician?.id ??
+        preparation.plannedFieldTechnicianId ??
         preparation.fieldTechnicians[0]?.id ??
         null,
     ),
     auxiliaryTechnicianIds:
-      execution?.auxiliaryTechnicians.map((person) => person.id) ?? [],
-    notes: execution?.notes ?? "",
+      execution?.auxiliaryTechnicians.map((person) => person.id) ??
+      preparation.schedule?.auxiliaryTechnicianIds ??
+      [],
+    notes: execution?.notes ?? preparation.schedule?.notes ?? "",
   }));
   /*
    * O passo de entrada vem do servidor; daqui em diante o avanço é local dentro
