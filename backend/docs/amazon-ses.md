@@ -31,6 +31,48 @@ Somente com `NODE_ENV=test` o envio é desativado automaticamente para que a su�
 não envie mensagens reais. Desenvolvimento também utiliza SES; configure uma
 identidade de testes para exercitar entregas reais.
 
+### Erro de inicialização em `AWS_REGION`
+
+O campo recebe somente o **código** da região, por exemplo `sa-east-1` para
+São Paulo ou `us-east-1` para Norte da Virgínia. Use o código da região em que
+a identidade do SES foi verificada; o texto descritivo mostrado no console e
+o endereço do endpoint não são valores válidos para essa variável.
+Consulte a [lista oficial de regiões do SES](https://docs.aws.amazon.com/general/latest/gr/ses.html).
+
+Após ajustar o `.env` ou a variável na plataforma de implantação, recrie a API
+para carregar o ambiente novo (um simples `restart` mantém o ambiente anterior):
+
+```sh
+docker compose up -d --no-deps --force-recreate api
+```
+
+Para conferir **somente a região**, mesmo quando o container estiver reiniciando:
+
+```sh
+docker compose run --rm --no-deps --entrypoint node api -e 'console.log(JSON.stringify({ AWS_REGION: process.env.AWS_REGION }))'
+```
+
+Esse comando não imprime access key, secret ou demais variáveis. O log de erro
+de configuração também nunca inclui os valores recebidos.
+
+Se um código válido, como `us-east-2`, continuar sendo recusado, confira também
+o valor do **container existente**, que pode diferir do ambiente usado ao criar
+um novo container. Este comando imprime somente `AWS_REGION`, com aspas e
+escapes para identificar caracteres inesperados:
+
+```sh
+docker inspect $(docker compose ps -aq api) --format '{{range .Config.Env}}{{if eq (index (split . "=") 0) "AWS_REGION"}}{{printf "%q" .}}{{end}}{{end}}'
+```
+
+Confira a validação realmente compilada na imagem disponível ao Compose:
+
+```sh
+docker compose run --rm --no-deps --entrypoint node api -e 'const s=require("node:fs").readFileSync("dist/src/release-environment.js","utf8"); console.log(s.split("\n").find(l=>l.includes(".test(")&&l.includes("region")))'
+```
+
+`us-east-2` é aceito pela validação atual. Esses diagnósticos ajudam a distinguir
+um valor diferente no container de uma imagem com código diferente do checkout.
+
 ## Configuração na AWS
 
 1. Abra o console SES na **mesma região** de `AWS_REGION`. Em **Verified identities**,
