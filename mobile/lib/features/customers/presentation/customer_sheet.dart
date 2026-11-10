@@ -143,8 +143,7 @@ class _Folha extends ConsumerWidget {
                 label: const Text('Ver documentos'),
               ),
 
-              /// Orçamento é ação de gestão: só aparece com `quotes.manage`.
-              if (session?.hasPermission('quotes.manage') ?? false) ...[
+              if (session?.canCreateFieldQuote ?? false) ...[
                 const SizedBox(height: OrbitSpacing.lg),
                 Text(
                   'Comercial',
