@@ -43,6 +43,8 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useUpdatePmocPlan } from "@/hooks/pmoc/use-pmoc";
+import { useTechnicalResponsibles } from "@/hooks/workforce/use-workforce";
+import { PmocTechnicalResponsibleField } from "./pmoc-technical-responsible.field";
 import { PmocFrequencyUnit } from "@/types/contracts";
 import type { PmocPlan } from "@/types/pmoc";
 
@@ -68,7 +70,7 @@ export function PmocPlanEditDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-h-[90dvh] max-w-2xl overflow-y-auto">
         {/**
          * O formulário só existe enquanto o diálogo está aberto.
          *
@@ -87,6 +89,12 @@ export function PmocPlanEditDialog({
 
 function EditForm({ plan, onDone }: { plan: PmocPlan; onDone: () => void }) {
   const update = useUpdatePmocPlan(plan.id);
+  const responsibles = useTechnicalResponsibles({
+    businessUnitId: plan.businessUnit.id,
+  });
+  const [responsibleId, setResponsibleId] = useState(
+    plan.technicalResponsible?.id ?? "",
+  );
 
   const [name, setName] = useState(plan.name);
   const [startsOn, setStartsOn] = useState(dateOnly(plan.validity.startsOn));
@@ -99,7 +107,12 @@ function EditForm({ plan, onDone }: { plan: PmocPlan; onDone: () => void }) {
   const [notes, setNotes] = useState(plan.notes ?? "");
 
   const ready =
-    name.trim().length > 0 && Number(amount) > 0 && Boolean(startsOn);
+    name.trim().length > 0 &&
+    Number(amount) > 0 &&
+    Boolean(startsOn) &&
+    !responsibles.isPending &&
+    !responsibles.error &&
+    (responsibles.data ?? []).some((person) => person.id === responsibleId);
 
   return (
     <>
@@ -112,6 +125,16 @@ function EditForm({ plan, onDone }: { plan: PmocPlan; onDone: () => void }) {
       </DialogHeader>
 
       <div className="space-y-4">
+        <PmocTechnicalResponsibleField
+          id="pmoc-edit-rt"
+          value={responsibleId}
+          onChange={setResponsibleId}
+          candidates={responsibles.data ?? []}
+          isPending={responsibles.isPending}
+          error={responsibles.error}
+          onRetry={() => void responsibles.refetch()}
+          currentName={plan.technicalResponsible?.displayName}
+        />
         <div className="space-y-2">
           <Label htmlFor="pmoc-edit-name">Nome</Label>
           <Input
@@ -204,6 +227,7 @@ function EditForm({ plan, onDone }: { plan: PmocPlan; onDone: () => void }) {
             update.mutate(
               {
                 name: name.trim(),
+                technicalResponsibleUserId: responsibleId,
                 startsOn,
                 ...(endsOn ? { endsOn } : {}),
                 frequencyAmount: Number(amount),

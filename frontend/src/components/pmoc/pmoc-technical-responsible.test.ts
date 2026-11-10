@@ -98,15 +98,16 @@ describe("o aviso do Responsável Técnico", () => {
     expect(aviso?.texto).toContain("Perfil profissional");
   });
 
-  /** Plano sem RT é criável, e trava na execução: o aviso diz as duas coisas. */
+  /** A escolha é obrigatória ao salvar e necessária para abrir a execução. */
   it("sem escolha avisa que nenhuma execução começa", () => {
     const aviso = avisoDoResponsavelTecnico([dono], "");
     expect(aviso?.bloqueia).toBe(true);
     expect(aviso?.texto).toContain("nenhuma execução");
   });
 
-  /** Id que não está na lista não produz frase sobre alguém inexistente. */
-  it("escolha fora da lista não inventa aviso", () => {
-    expect(avisoDoResponsavelTecnico([dono], "fantasma")).toBeNull();
+  it("escolha que perdeu a elegibilidade orienta a selecionar outro profissional", () => {
+    const aviso = avisoDoResponsavelTecnico([dono], "fantasma");
+    expect(aviso?.bloqueia).toBe(true);
+    expect(aviso?.texto).toContain("não está habilitado");
   });
 });

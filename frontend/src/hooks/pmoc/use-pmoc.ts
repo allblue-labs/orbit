@@ -155,7 +155,16 @@ export function useCreatePmocPlan() {
 export function useUpdatePmocPlan(id: string) {
   return useApiMutation(
     (input: UpdatePmocPlanInput) => pmocService.update(id, input),
-    { scope: { id: `pmoc:${id}` }, invalidate: planKeys(id) },
+    {
+      scope: { id: `pmoc:${id}` },
+      invalidate: [
+        ...planKeys(id),
+        queryKeys.query("pmoc", "equipment-executions", { planId: id }),
+        queryKeys.query("pmoc", "execution-preparation", { planId: id }),
+        pmocService.keys.timeline(id),
+      ],
+      notify: "PMOC atualizado.",
+    },
   );
 }
 

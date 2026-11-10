@@ -64,10 +64,7 @@ import { PROFESSIONAL_ROLES } from "@/registry";
 import { useSession } from "@/providers/session-provider";
 import { useActiveScope } from "@/providers/use-active-scope";
 import type { Asset, AssetQuery } from "@/types/assets";
-import {
-  avisoDoResponsavelTecnico,
-  responsavelTecnicoPadrao,
-} from "./pmoc-technical-responsible";
+import { responsavelTecnicoPadrao } from "./pmoc-technical-responsible";
 import {
   CADENCIAS,
   cadenciaDoIntervalo,
@@ -84,6 +81,7 @@ import {
   primeirasVisitas,
 } from "./pmoc-review";
 import { Package } from "lucide-react";
+import { PmocTechnicalResponsibleField } from "./pmoc-technical-responsible.field";
 
 import {
   ListState,
@@ -318,7 +316,10 @@ export function PmocPlanWizard({
   const rtId =
     rtEscolhido ??
     responsavelTecnicoPadrao(candidatosRT, session.user?.id ?? null);
-  const avisoRT = avisoDoResponsavelTecnico(candidatosRT, rtId);
+  const rtValido =
+    !responsaveisTecnicos.isPending &&
+    !responsaveisTecnicos.error &&
+    candidatosRT.some((person) => person.id === rtId);
 
   const entradaDoPreview = useMemo(
     () => ({
@@ -362,14 +363,14 @@ export function PmocPlanWizard({
     Boolean(startsOn) &&
       Number(vigenciaAmount) > 0 &&
       Number(frequenciaAmount) > 0,
-    true,
+    rtValido,
     /*
       Unidade é opcional de propósito: há plano que o owner ainda não modelou
       por unidade, e travar aqui impediria de cadastrar o plano. O aviso na
       própria etapa diz o que a omissão custa no relatório.
     */
     true,
-    Boolean(projecao),
+    Boolean(projecao) && rtValido,
   ][etapa];
 
   const avancar = () => {
@@ -406,7 +407,7 @@ export function PmocPlanWizard({
   };
 
   const criar = () => {
-    if (!businessUnitId || !projecao) return;
+    if (!businessUnitId || !projecao || !rtValido) return;
     create.mutate(
       {
         businessUnitId,
@@ -424,7 +425,7 @@ export function PmocPlanWizard({
         frequencyAmount: Number(frequenciaAmount),
         frequencyUnit: frequenciaUnit,
         ...(tecnicoId ? { technicianUserId: tecnicoId } : {}),
-        ...(rtId ? { technicalResponsibleUserId: rtId } : {}),
+        technicalResponsibleUserId: rtId,
         assetIds: selecionados.map((asset) => asset.id),
         ...(unidades.length > 0 ? { unitIds: [...unidades] } : {}),
       },
@@ -515,7 +516,9 @@ export function PmocPlanWizard({
           {etapa === 0 && (
             <>
               <div className="space-y-2">
-                <Label htmlFor="pmoc-customer" required>Cliente</Label>
+                <Label htmlFor="pmoc-customer" required>
+                  Cliente
+                </Label>
                 <Select value={customerId} onValueChange={trocarCliente}>
                   <SelectTrigger id="pmoc-customer">
                     <SelectValue placeholder="Selecione o cliente" />
@@ -563,7 +566,9 @@ export function PmocPlanWizard({
                 "Outros" continua permitindo qualquer nome.
               */}
               <div className="space-y-2">
-                <Label htmlFor="pmoc-name-option" required>Nome</Label>
+                <Label htmlFor="pmoc-name-option" required>
+                  Nome
+                </Label>
                 <Select
                   value={nomeEscolhido}
                   onValueChange={(valor) => {
@@ -698,7 +703,9 @@ export function PmocPlanWizard({
           {etapa === 2 && (
             <>
               <div className="space-y-2">
-                <Label htmlFor="pmoc-starts" required>Data inicial</Label>
+                <Label htmlFor="pmoc-starts" required>
+                  Data inicial
+                </Label>
                 <Input
                   id="pmoc-starts"
                   type="date"
@@ -708,7 +715,9 @@ export function PmocPlanWizard({
               </div>
 
               <fieldset className="space-y-2 rounded-md border p-3">
-                <legend className="px-1 text-sm font-medium">Vigência (obrigatória)</legend>
+                <legend className="px-1 text-sm font-medium">
+                  Vigência (obrigatória)
+                </legend>
                 <p className="text-xs text-muted-foreground">
                   Por quanto tempo o contrato vale.
                 </p>
@@ -861,62 +870,15 @@ export function PmocPlanWizard({
           )}
 
           {etapa === 3 && (
-            <div className="space-y-2">
-              <Label htmlFor="pmoc-rt">
-                {PROFESSIONAL_ROLES.TECHNICAL_RESPONSIBLE.label}
-              </Label>
-              {/*
-                Outro papel, outro seletor.
-
-                O de cima é quem vai ao local. Este é quem responde tecnicamente
-                pelo contrato, costuma ter a credencial de conselho esperada pelo
-                PMOC e é, na maioria das organizações, o próprio dono — que por isso
-                vem pré-selecionado.
-
-                A coluna existia no plano desde sempre e o wizard não a oferecia:
-                dizia "definido no detalhe do plano", e quem criava um PMOC saía com
-                um plano que não iniciava execução nenhuma, sem saber por quê.
-              */}
-              <Select
-                value={rtId || SEM_TECNICO}
-                onValueChange={(valor) =>
-                  setRtEscolhido(valor === SEM_TECNICO ? "" : valor)
-                }
-              >
-                <SelectTrigger id="pmoc-rt">
-                  <SelectValue placeholder="Definir depois" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={SEM_TECNICO}>Definir depois</SelectItem>
-                  {candidatosRT.map((pessoa) => (
-                    <SelectItem key={pessoa.id} value={pessoa.id}>
-                      {/* O estado da assinatura ao lado do nome: é ela que sai no
-                          documento, e sem ela a execução não abre. Descobrir isso
-                          aqui é melhor que no dia do atendimento. */}
-                      {pessoa.signatureAvailable
-                        ? pessoa.name
-                        : `${pessoa.name} — sem assinatura`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <p className="text-xs text-muted-foreground">
-                {PROFESSIONAL_ROLES.TECHNICAL_RESPONSIBLE.description}
-              </p>
-
-              {avisoRT ? (
-                <p
-                  className={
-                    avisoRT.bloqueia
-                      ? "text-xs text-warning"
-                      : "text-xs text-muted-foreground"
-                  }
-                >
-                  {avisoRT.texto}
-                </p>
-              ) : null}
-            </div>
+            <PmocTechnicalResponsibleField
+              id="pmoc-rt"
+              value={rtId}
+              onChange={setRtEscolhido}
+              candidates={candidatosRT}
+              isPending={responsaveisTecnicos.isPending}
+              error={responsaveisTecnicos.error}
+              onRetry={() => void responsaveisTecnicos.refetch()}
+            />
           )}
 
           {etapa === 4 && (
@@ -983,6 +945,7 @@ export function PmocPlanWizard({
             <Button
               disabled={
                 (!projecao && !criadoSemAtivar) ||
+                (!criadoSemAtivar && !rtValido) ||
                 create.isPending ||
                 activation.isPending
               }

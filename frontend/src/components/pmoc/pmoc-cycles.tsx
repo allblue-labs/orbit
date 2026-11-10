@@ -25,7 +25,7 @@
  * requisição nenhuma.
  */
 import { useState } from "react";
-import { CalendarClock, Package, Play } from "lucide-react";
+import { CalendarClock, Package, Play, UserRoundCheck } from "lucide-react";
 
 import {
   CycleStatusBadge,
@@ -46,10 +46,13 @@ import { useSession } from "@/providers/session-provider";
 import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { cn } from "@/lib/utils";
 import { executionBlockedLabel, knownBlockedReason } from "@/registry";
-import type { PmocCycle, PmocCycleEquipmentRow } from "@/types/pmoc";
+import type { PmocCycle, PmocCycleEquipmentRow, PmocPlan } from "@/types/pmoc";
+import { PmocPlanEditDialog } from "./pmoc-plan-edit.dialog";
 import { ListState } from "@/workspace";
 
-export function PmocCyclesPanel({ planId }: { planId: string }) {
+export function PmocCyclesPanel({ plan }: { plan: PmocPlan }) {
+  const planId = plan.id;
+  const [editing, setEditing] = useState(false);
   const cycles = usePmocCycles(planId);
   const [selected, setSelected] = useState<string | null>(null);
 
@@ -86,11 +89,17 @@ export function PmocCyclesPanel({ planId }: { planId: string }) {
                 planId={planId}
                 cycleId={current}
                 onAttend={() => setSelected(current)}
+                onDefineResponsible={() => setEditing(true)}
               />
             ) : null}
           </div>
         )}
       </ListState>
+      <PmocPlanEditDialog
+        plan={plan}
+        open={editing}
+        onOpenChange={setEditing}
+      />
     </div>
   );
 }
@@ -154,10 +163,12 @@ function EquipmentExecutions({
   planId,
   cycleId,
   onAttend,
+  onDefineResponsible,
 }: {
   planId: string;
   cycleId: string;
   onAttend: () => void;
+  onDefineResponsible: () => void;
 }) {
   const rows = usePmocEquipmentExecutions(planId, cycleId);
   const items = rows.data ?? [];
@@ -197,6 +208,7 @@ function EquipmentExecutions({
                 planId={planId}
                 cycleId={cycleId}
                 onManage={onAttend}
+                onDefineResponsible={onDefineResponsible}
                 onAttend={() => {
                   // Completing the last equipment opens the next cycle on the
                   // server. Keep this cycle selected throughout the attendance.
@@ -239,12 +251,14 @@ function EquipmentRow({
   planId,
   cycleId,
   onManage,
+  onDefineResponsible,
 }: {
   row: PmocCycleEquipmentRow;
   onAttend: () => void;
   planId: string;
   cycleId: string;
   onManage: () => void;
+  onDefineResponsible: () => void;
 }) {
   const { formatDateTime } = useDateFormatters();
   const eligibility = row.eligibility;
@@ -441,6 +455,20 @@ function EquipmentRow({
           ) : null}
         </div>
       )}
+      {canAttend &&
+      row.eligibility.blockedReasons.includes(
+        "TECHNICAL_RESPONSIBLE_MISSING",
+      ) ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={onDefineResponsible}
+        >
+          <UserRoundCheck className="size-3.5" />
+          Definir Responsável Técnico
+        </Button>
+      ) : null}
       <PmocEquipmentActions
         planId={planId}
         cycleId={cycleId}
