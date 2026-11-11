@@ -1,38 +1,6 @@
 "use client";
 
-/**
- * Radar comparativo — mês corrente contra o mês anterior.
- *
- * ## De onde vêm os números
- *
- * De **duas leituras de `GET /analytics/kpis`**, uma por janela. Nenhum valor
- * é calculado, normalizado ou interpolado aqui: o backend conta e classifica
- * cada indicador para o período que recebeu, e o gráfico desenha o que voltou.
- *
- * Não se usa o `changePercent` do próprio contrato para reconstruir o mês
- * anterior — isso seria o frontend inferindo um número que ninguém publicou.
- * Perguntar duas vezes custa uma requisição e devolve a verdade.
- *
- * ## Quais eixos entram
- *
- * Só indicadores **percentuais e comparáveis** (`comparable` no Metric
- * Registry). Duas razões:
- *
- * 1. um radar exige eixos na mesma escala — misturar "12 operações" com "87%"
- *    desenharia uma forma sem significado;
- * 2. nem todo indicador do Analytics responde ao período. Disponibilidade dos
- *    equipamentos e contratos ativos são contados sem recorte de data, então
- *    apareceriam idênticos nos dois meses e sugeririam estabilidade medida.
- *
- * As contagens comparáveis aparecem embaixo, como números — não como eixo.
- *
- * ## O que o backend não publica
- *
- * Ordens de serviço, visitas técnicas e PMOCs **por tipo de operação** não são
- * indicadores do Analytics: o `KpiEngine` não segmenta por `OperationKind`.
- * Produtividade por técnico também não — é a mesma ausência que já deixa o
- * widget "Desempenho da Equipe" sem fonte. Ausências declaradas no rodapé.
- */
+/** Same radar component, showing measured rates only; unknown samples never become zeros. */
 import { useMemo } from "react";
 import {
   Legend,
@@ -51,53 +19,14 @@ import {
   PanelError,
   PanelLoading,
 } from "@/components/panels";
-import { getMetric, resolveMetric } from "@/metrics";
+import { resolveMetric } from "@/metrics";
 import type { AnalyticsKpi } from "@/types/dashboard";
 import type { WidgetProps } from "./widget-registry";
 
 const CURRENT_COLOR = "var(--color-chart-1)";
 const PREVIOUS_COLOR = "var(--color-chart-4)";
 
-/** Keep perimeter labels short; the tooltip retains the full metric name. */
-const AXIS_LABELS: Readonly<Record<string, string>> = {
-  "operations.completion_rate": "Conclusão",
-  "operations.sla_compliance": "Prazo",
-  "technicians.assignment_coverage": "Equipe",
-};
-
-/** Indicadores pedidos no painel que o Analytics não publica. */
-const NOT_PUBLISHED = [
-  "ordens de serviço por tipo",
-  "visitas técnicas",
-  "produtividade por técnico",
-];
-
-interface RadarRow {
-  readonly axis: string;
-  readonly label: string;
-  readonly current: number;
-  readonly previous: number;
-}
-
-/** Indicador percentual e comparável, na ordem do Metric Registry. */
-function comparableAxes(
-  current: readonly AnalyticsKpi[],
-  previous: readonly AnalyticsKpi[],
-): readonly RadarRow[] {
-  const before = new Map(previous.map((kpi) => [kpi.id, kpi.value]));
-
-  return current
-    .filter((kpi) => getMetric(kpi.id)?.comparable && kpi.unit === "%")
-    .map((kpi) => {
-      const label = resolveMetric(kpi).label;
-      return {
-        axis: AXIS_LABELS[kpi.id] ?? label,
-        label,
-        current: kpi.value,
-        previous: before.get(kpi.id) ?? 0,
-      };
-    });
-}
+import { comparativeAxes, type RadarRow } from "./comparative-radar.model";
 
 /** Contagens comparáveis — mostradas como número, nunca como eixo do radar. */
 function comparableCounts(
@@ -112,14 +41,16 @@ function comparableCounts(
   const before = new Map(previous.map((kpi) => [kpi.id, kpi.value]));
 
   return current
-    .filter((kpi) => getMetric(kpi.id)?.comparable && kpi.unit !== "%")
+    .filter((kpi) =>
+      ["operations.total", "operations.completed"].includes(kpi.id),
+    )
     .map((kpi) => {
       const metric = resolveMetric(kpi);
       return {
         id: kpi.id,
         label: metric.label,
         current: metric.format(kpi.value),
-        previous: metric.format(before.get(kpi.id) ?? 0),
+        previous: before.has(kpi.id) ? metric.format(before.get(kpi.id)!) : "—",
       };
     });
 }
@@ -130,7 +61,7 @@ export function ComparativeRadarWidget({ widget, comparison }: WidgetProps) {
   const rows = useMemo(
     () =>
       current.data && previous.data
-        ? comparableAxes(current.data.indicators, previous.data.indicators)
+        ? comparativeAxes(current.data.indicators, previous.data.indicators)
         : [],
     [current.data, previous.data],
   );
@@ -172,26 +103,34 @@ export function ComparativeRadarWidget({ widget, comparison }: WidgetProps) {
                   }}
                   axisLine={false}
                 />
-                <Radar
-                  name={windows.lastMonth.label}
-                  dataKey="previous"
-                  stroke={PREVIOUS_COLOR}
-                  fill={PREVIOUS_COLOR}
-                  fillOpacity={0.15}
-                />
-                <Radar
-                  name={windows.thisMonth.label}
-                  dataKey="current"
-                  stroke={CURRENT_COLOR}
-                  fill={CURRENT_COLOR}
-                  fillOpacity={0.3}
-                />
+                {rows.length >= 3 &&
+                rows.every((row) => row.previous !== null) ? (
+                  <Radar
+                    name={windows.lastMonth.label}
+                    dataKey="previous"
+                    stroke={PREVIOUS_COLOR}
+                    fill={PREVIOUS_COLOR}
+                    fillOpacity={0.15}
+                  />
+                ) : null}
+                {rows.length >= 3 &&
+                rows.every((row) => row.current !== null) ? (
+                  <Radar
+                    name={windows.thisMonth.label}
+                    dataKey="current"
+                    stroke={CURRENT_COLOR}
+                    fill={CURRENT_COLOR}
+                    fillOpacity={0.3}
+                  />
+                ) : null}
                 <Legend wrapperStyle={{ fontSize: "0.7rem" }} />
                 <Tooltip
                   labelFormatter={(label) =>
                     rows.find((row) => row.axis === label)?.label ?? label
                   }
-                  formatter={(value: number | string) => `${value}%`}
+                  formatter={(value: number | string) =>
+                    value == null ? "Sem dados" : `${value}%`
+                  }
                   contentStyle={{
                     background: "var(--color-popover)",
                     border: "1px solid var(--color-border)",
@@ -220,8 +159,10 @@ export function ComparativeRadarWidget({ widget, comparison }: WidgetProps) {
           ) : null}
 
           <p className="pt-1.5 text-[11px] text-muted-foreground">
-            Sem eixo para {NOT_PUBLISHED.join(", ")} — o Analytics não os
-            publica.
+            Percentuais de 0 a 100; quanto maior, melhor. Sem base de cálculo
+            não equivale a zero. Agenda e equipe consideram as demandas criadas
+            em cada período, conforme cadastro atual. Apenas séries com dados em
+            todos os eixos exibidos são desenhadas.
           </p>
         </div>
       </ComparisonState>
@@ -261,9 +202,12 @@ function ComparisonState({
     );
   }
 
-  if (rows.length === 0) {
+  if (
+    rows.filter((row) => row.current !== null).length < 3 &&
+    rows.filter((row) => row.previous !== null).length < 3
+  ) {
     return (
-      <PanelEmpty message="Nenhum indicador percentual comparável no período." />
+      <PanelEmpty message="Ainda não há três indicadores com base de cálculo para desenhar o radar. Os totais estão nos indicadores executivos." />
     );
   }
 

@@ -68,9 +68,9 @@ export class AnalyticsService implements AnalyticsReadPort {
       ...rawHealth,
       score: healthScore,
       status:
-        healthScore >= 75
+        healthScore >= 90
           ? ('HEALTHY' as const)
-          : healthScore >= 55
+          : healthScore >= 70
             ? ('ATTENTION' as const)
             : ('CRITICAL' as const),
       availability: access.availability,
@@ -129,19 +129,21 @@ export class AnalyticsService implements AnalyticsReadPort {
     permissions: readonly string[],
   ): Promise<AnalyticsDashboardReadModel> {
     const model = await this.overview(organizationId, query, permissions);
-    const metric = (id: string) =>
-      model.kpis.indicators.find((item) => item.id === id)?.value ?? null;
-    const operationsTotal = metric('operations.total');
-    const completionRate = metric('operations.completion_rate');
+    const metric = (id: string) => {
+      const item = model.kpis.indicators.find((item) => item.id === id);
+      return item?.unit === '%' && item.sampleSize === 0
+        ? null
+        : (item?.value ?? null);
+    };
+
     return {
       generatedAt: model.generatedAt,
       availability: model.availability,
       headline: {
-        healthScore: model.health.score,
-        openOperations:
-          operationsTotal === null || completionRate === null
-            ? null
-            : Math.max(0, operationsTotal * (1 - completionRate / 100)),
+        healthScore: model.health.dimensions.some((item) => item.hasData)
+          ? model.health.score
+          : null,
+        openOperations: metric('operations.open'),
         slaCompliance: metric('operations.sla_compliance'),
         equipmentAvailability: metric('equipment.availability'),
       },
@@ -161,21 +163,24 @@ export class AnalyticsService implements AnalyticsReadPort {
     return {
       generatedAt: model.generatedAt,
       availability: model.availability,
-      healthScore: model.health.score,
+      healthScore: model.health.dimensions.some((item) => item.hasData)
+        ? model.health.score
+        : null,
       priorities: model.kpis.indicators
-        .filter((item) => item.status !== 'HEALTHY')
+        .filter(
+          (item) => item.status !== 'HEALTHY' && (item.sampleSize ?? 0) > 0,
+        )
         .map((item) => ({
           domain: item.domain,
           indicator: item.id,
           status: item.status,
           value: item.value,
         })),
-      risks: [
-        ...model.environmentalImpact.impacts,
-        ...model.health.dimensions
-          .filter((item) => item.status !== 'HEALTHY')
-          .map((item) => `${item.label}: ${item.drivers.join(', ')}`),
-      ],
+      // Environmental impacts are currently MOCK_DERIVED. They remain in the
+      // explicitly simulated environmental panel, never in operational risks.
+      risks: model.health.dimensions
+        .filter((item) => item.status !== 'HEALTHY' && item.hasData)
+        .map((item) => `${item.label}: ${item.drivers.join(', ')}`),
       trends: model.trends.series.map((item) => ({
         id: item.id,
         direction: item.direction,
@@ -191,7 +196,9 @@ export class AnalyticsService implements AnalyticsReadPort {
   }
 
   private range(query: AnalyticsQueryDto): AnalyticsRange {
-    const to = query.to ? new Date(query.to) : new Date();
+    const now = new Date();
+    const requestedTo = query.to ? new Date(query.to) : now;
+    const to = new Date(Math.min(requestedTo.getTime(), now.getTime()));
     const from = query.from
       ? new Date(query.from)
       : new Date(to.getTime() - 30 * 86_400_000);
@@ -210,8 +217,8 @@ export class AnalyticsService implements AnalyticsReadPort {
     return {
       from,
       to,
-      previousFrom: new Date(from.getTime() - duration),
-      previousTo: new Date(to.getTime() - duration),
+      previousFrom: new Date(from.getTime() - duration - 1),
+      previousTo: new Date(from.getTime() - 1),
       granularity,
       businessUnitId: query.businessUnitId,
     };

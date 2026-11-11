@@ -20,7 +20,7 @@ arquitetura desta PR:
 | --- | --- |
 | `GET /dashboard` | **A resolução** dos widgets. `DashboardRepository.context()` consulta o banco e o `WidgetResolver` filtra por segmento × módulos do plano × plano × permissões, definindo ordem, tamanho e categoria. |
 | `GET /dashboard` → `widget.data` | **Nada.** `DashboardRepository.read()` devolve fixtures escritas no código (`attention-1`, `totals: { critical: 2, … }`). Nenhuma consulta ao banco. |
-| `GET /analytics/*` | **Tudo.** `AnalyticsRepository.snapshot()` agrega operações, relatórios PMOC, ativos e clientes sob RLS; os engines calculam KPIs, tendências, health e projeções. |
+| `GET /analytics/*` | **Tudo.** `AnalyticsRepository.snapshot()` consulta operações, ciclos PMOC, visitas RVT e ativos sob RLS; os engines calculam KPIs, tendências, health e projeções. |
 | `GET /scheduling/agenda` | **Tudo.** Eventos e ocorrências reais do banco. |
 
 Por isso:
@@ -86,8 +86,8 @@ node -e '…'   # ver seção 6
 
 | Widget | Fonte | Observação |
 | --- | --- | --- |
-| `attention-center` | `/analytics/intelligence` | `priorities` são os indicadores que o backend classificou fora do saudável; `risks` reúne impactos e dimensões degradadas |
-| `executive-kpis` | `/analytics/dashboard` → `metrics` | os 8 indicadores do `KpiEngine`, com status, meta e procedência |
+| `attention-center` | `/analytics/intelligence` | `priorities` são os indicadores que o backend classificou fora do saudável; `risks` reúne dimensões avaliadas e degradadas; clima simulado não gera alertas operacionais |
+| `executive-kpis` | `/analytics/dashboard` → `metrics` | 8 indicadores executivos do `KpiEngine`, com contexto, base de cálculo e procedência; métricas auxiliares não viram cards |
 | `health-score` | `/analytics/health` | score, status e dimensões com peso e drivers |
 | `operational-trend` | `/analytics/dashboard` → `series` + `forecasts` | séries bucketizadas pelo backend; projeções com método e confiança |
 | `orbit-intelligence` | `/analytics/intelligence` | prioridades, riscos, tendências e projeções |
@@ -97,7 +97,62 @@ node -e '…'   # ver seção 6
 | `hvac-equipment-health` | domínio `EQUIPMENT` | |
 | `hvac-sla` | `operations.sla_compliance` + `operations.completion_rate` | |
 | `hvac-technicians` | domínio `TECHNICIANS` | |
-| `hvac-contracts` | domínio `CONTRACTS` | indicador `PROXY` — marca visível |
+| `hvac-contracts` | domínio `CONTRACTS` | sem indicador: clientes ativos não representam contratos |
+
+### Critérios dos indicadores (revisão de novembro/2026)
+
+Os componentes, a grade e o tamanho do radar são preservados. As contagens
+respeitam organização, unidade ativa, exclusão lógica e permissões de domínio.
+`rvt.read` libera somente RVT; não implica acesso a PMOC ou operações.
+
+| Indicador executivo | O que responde |
+| --- | --- |
+| Atendimentos em aberto | Toda a fila não concluída e não cancelada, inclusive demandas criadas antes do período |
+| Atendimentos atrasados | Parte da fila cujo término previsto já venceu |
+| Sem técnico definido | Parte da fila sem responsável operacional; auxiliar não substitui responsável |
+| Sem agendamento | Parte da fila sem início previsto |
+| Concluídos no período | Encerrados no recorte, pela data de conclusão, mesmo que criados antes |
+| Concluídos no prazo | Conclusões até o término previsto / conclusões do período que tinham término previsto |
+| Ciclos PMOC pendentes | Ciclos com vencimento ultrapassado e ainda não concluídos, inclusive anteriores |
+| Visitas RVT pendentes | Visitas com data ultrapassada e ainda não concluídas, inclusive anteriores |
+
+PMOC vence ao fim da data civil na unidade do contrato. A regularidade do RVT
+considera a conclusão até o fim do dia agendado no fuso da configuração: o
+horário de início da visita **não** é tratado como prazo para encerrá-la.
+Compromissos futuros e cancelados não prejudicam a avaliação.
+
+O **Índice de Saúde** combina cinco dimensões observáveis: fila no prazo,
+fila com agenda, fila com técnico, PMOC em dia e RVT em dia. As três primeiras
+usam somente a fila em aberto. PMOC/RVT usam compromissos vencidos no período
+mais pendências anteriores ainda não resolvidas. Cada dimensão mostra seu
+numerador e denominador. Dimensões sem base ficam sem nota e com peso zero;
+as restantes têm pesos iguais, normalizados. Faixas descritivas: 90–100
+saudável, 70–89 atenção e abaixo de 70 crítico. Esses cortes não representam
+SLA contratual. Nenhuma dimensão usa quantidade de clientes, status cadastral
+de equipamento ou clima simulado. Sem dimensões avaliáveis, a interface mostra
+“—” e os resumos da API publicam `healthScore: null`.
+
+O **Radar comparativo** usa apenas taxas de 0 a 100, sempre com maior sendo
+melhor: Prazo, Agenda, Equipe, PMOC e RVT. Agenda e Equipe avaliam as demandas
+criadas em cada janela conforme o cadastro **atual**; não reconstituem como
+estavam as atribuições no passado. Prazo usa as conclusões em cada janela.
+PMOC/RVT usam a regularidade descrita acima. Exibe o mesmo trecho transcorrido
+do mês anterior, no fuso efetivo do usuário, sem antecipar o restante de hoje.
+Quando o mês anterior é mais curto, limita o término ao seu último dia.
+
+O gráfico prioriza pelo menos três eixos com base nos dois períodos. Sem isso,
+pode mostrar somente um período com três eixos avaliáveis. Uma série só é
+desenhada se possuir dados em todos os eixos exibidos; ausência nunca vira um
+vértice zero. Sem três indicadores avaliáveis, exibe orientação. Contagens ficam
+fora dos eixos. Diferenças entre taxas são expressas em pontos percentuais;
+contagens só mostram variação relativa quando o período anterior é positivo.
+Fila atual e pendências não exibem comparação histórica inventada.
+
+O seletor de 7/30/90 dias inclui hoje e começa à meia-noite no fuso efetivo do
+usuário. O backend limita o fim ao instante atual. A fila continua incluindo
+pendências mais antigas que o período; somente os resultados e compromissos
+avaliados usam o recorte. “Sem base de cálculo” difere de uma taxa observada de
+0%. Não há meta numérica fictícia nos cards.
 
 ### Declarados sem fonte real (14)
 
@@ -121,7 +176,7 @@ preserva essa semântica:
 | --- | --- | --- |
 | `OBSERVED` | sem marca | contagem direta dos fatos; é o caso normal |
 | `DERIVED` | sem marca | cálculo do backend sobre fatos observados; é informação legítima |
-| `PROXY` | **marca discreta** + tooltip | muda a interpretação: hoje `contracts.active_proxy` conta clientes ativos como substituto de contratos |
+| `PROXY` | **marca discreta** + tooltip | muda a interpretação: aproximações precisam declarar a limitação; `contracts.active_proxy` foi retirado por contar clientes como contratos |
 | `MOCK` | **marca explícita** | não pode parecer observação real |
 
 A origem técnica (`source`, ex.: `operation_users`) aparece no tooltip de
@@ -164,7 +219,7 @@ Coerência com organização e unidade ativas, sem invalidação manual:
    aceitam) → trocar de unidade muda a query key e refaz a leitura;
 2. trocar de organização descarta as queries do escopo anterior
    (`RequestContextProvider`, PR-02);
-3. `from` e `date` são quantizados no início do dia — sem isso, cada render
+3. `from` é quantizado no dia local; no radar, a referência é quantizada no minuto. Sem isso, cada render
    geraria uma key nova e um refetch infinito.
 
 ---
@@ -263,3 +318,13 @@ npm run typecheck        # sem erros
 npm run lint             # sem erros
 npm run build            # 16 rotas
 ```
+
+### Validação da revisão de novembro/2026
+
+- 26 testes de engines, autorização e resolução do dashboard.
+- 32 testes de apresentação, radar, datas e preservação da grade.
+- 5 cenários no PostgreSQL temporário com migrations e papel sem `BYPASSRLS`: isolamento de organização/unidade, fila antiga, conclusão atual, domínio negado e vencimentos locais.
+- 2 cenários no Chromium com respostas controladas: oito indicadores e radar completos; organização vazia sem nota ou taxa fictícia.
+
+Os cenários do navegador validam a apresentação; os cenários de PostgreSQL
+validam as consultas reais. Nenhum usa credenciais ou dados de produção.

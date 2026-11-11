@@ -48,8 +48,8 @@ export function HealthScoreWidget({ widget, analytics }: WidgetProps) {
             </div>
             {!hasData ? (
               <p className="text-sm text-muted-foreground">
-                Seu índice aparecerá conforme você registrar atividades na
-                plataforma.
+                Não há atendimentos em aberto ou compromissos vencidos com base
+                suficiente para avaliar o índice neste período.
               </p>
             ) : null}
             <div className="space-y-3">

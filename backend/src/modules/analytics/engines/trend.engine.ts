@@ -13,12 +13,15 @@ import type {
 @Injectable()
 export class TrendEngine {
   execute(snapshot: AnalyticsSnapshot): TrendReadModel {
+    const operations = snapshot.operations.filter(
+      (item) => !['CANCELLED', 'CANCELED'].includes(item.status),
+    );
     const created = this.bucket(
-      snapshot.operations.map((item) => item.createdAt),
+      operations.map((item) => item.createdAt),
       snapshot,
     );
     const completed = this.bucket(
-      snapshot.operations.flatMap((item) =>
+      operations.flatMap((item) =>
         item.completedAt ? [item.completedAt] : [],
       ),
       snapshot,
@@ -87,6 +90,7 @@ export class TrendEngine {
       result.set(this.key(cursor, snapshot.range.granularity), 0);
     }
     dates.forEach((date) => {
+      if (date < snapshot.range.from || date > snapshot.range.to) return;
       const key = this.key(date, snapshot.range.granularity);
       if (result.has(key)) result.set(key, (result.get(key) ?? 0) + 1);
     });

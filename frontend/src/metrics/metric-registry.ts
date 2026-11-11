@@ -72,10 +72,7 @@ export type MetricIcon = ComponentType<LucideProps>;
  * tipo de decisão que este registry existe para hospedar.
  */
 export type MetricCategory =
-  | AnalyticsDomain
-  | "FINANCIAL"
-  | "COMMERCIAL"
-  | "INVENTORY";
+  AnalyticsDomain | "FINANCIAL" | "COMMERCIAL" | "INVENTORY";
 
 export type MetricUnit = "count" | "percent" | "hours" | "index" | "currency";
 
@@ -213,6 +210,7 @@ interface MetricInput extends Omit<
 const CATEGORY_COLORS: Readonly<Record<MetricCategory, string>> = {
   OPERATIONS: "text-chart-1",
   PMOC: "text-chart-2",
+  RVT: "text-sky-400",
   EQUIPMENT: "text-chart-3",
   TECHNICIANS: "text-chart-4",
   CONTRACTS: "text-chart-5",
@@ -436,7 +434,8 @@ const DEFINITIONS: readonly MetricDefinition[] = [
   define({
     id: "asset.artifact_executions.total",
     label: "Artefatos executados",
-    description: "PMOCs, relatórios e checklists preenchidos neste equipamento.",
+    description:
+      "PMOCs, relatórios e checklists preenchidos neste equipamento.",
     category: "OPERATIONS",
     unit: "count",
     icon: ClipboardCheck,
@@ -562,9 +561,95 @@ const DEFINITIONS: readonly MetricDefinition[] = [
     priority: 8.4,
     capability: "artifact_executions.read",
   }),
+  ...[
+    {
+      id: "operations.open",
+      label: "Atendimentos em aberto",
+      description: "Fila atual, incluindo demandas antigas.",
+      icon: Activity,
+      category: "OPERATIONS",
+      priority: 1,
+      trendColor: () => "neutral",
+    },
+    {
+      id: "operations.overdue",
+      label: "Atendimentos atrasados",
+      description: "Em aberto com término previsto vencido.",
+      icon: Timer,
+      category: "OPERATIONS",
+      priority: 2,
+      trendColor: lowerIsBetter,
+    },
+    {
+      id: "operations.unassigned",
+      label: "Sem técnico definido",
+      description: "Em aberto sem responsável operacional.",
+      icon: Users,
+      category: "TECHNICIANS",
+      priority: 3,
+      trendColor: lowerIsBetter,
+    },
+    {
+      id: "operations.unscheduled",
+      label: "Sem agendamento",
+      description: "Em aberto sem início previsto.",
+      icon: CalendarClock,
+      category: "OPERATIONS",
+      priority: 4,
+      trendColor: lowerIsBetter,
+    },
+    {
+      id: "pmoc.overdue",
+      label: "Ciclos PMOC pendentes",
+      description: "Ciclos vencidos e não concluídos.",
+      icon: ClipboardCheck,
+      category: "PMOC",
+      priority: 7,
+      trendColor: lowerIsBetter,
+    },
+    {
+      id: "rvt.overdue",
+      label: "Visitas RVT pendentes",
+      description: "Visitas vencidas e não concluídas.",
+      icon: FileCheck2,
+      category: "RVT",
+      priority: 8,
+      trendColor: lowerIsBetter,
+    },
+  ].map((input) =>
+    define({
+      ...input,
+      category: input.category as MetricCategory,
+      unit: "count",
+      trendColor: input.trendColor as MetricDefinition["trendColor"],
+    }),
+  ),
+  define({
+    id: "operations.scheduling_coverage",
+    priority: 42,
+    label: "Demandas com agenda",
+    description: "Demandas criadas em cada período com início previsto.",
+    category: "OPERATIONS",
+    unit: "percent",
+    icon: CalendarClock,
+    trendColor: higherIsBetter,
+    comparable: true,
+  }),
+  define({
+    id: "rvt.compliance",
+    priority: 43,
+    label: "RVT em dia",
+    description:
+      "Visitas com vencimento no período e pendências anteriores, concluídas no prazo.",
+    category: "RVT",
+    unit: "percent",
+    icon: FileCheck2,
+    trendColor: higherIsBetter,
+    comparable: true,
+  }),
   define({
     id: "operations.total",
-    label: "Operações criadas",
+    label: "Demandas criadas",
     description: "Operações abertas no período, excluindo canceladas.",
     category: "OPERATIONS",
     unit: "count",
@@ -584,18 +669,18 @@ const DEFINITIONS: readonly MetricDefinition[] = [
     trendColor: higherIsBetter,
     priority: 20,
     capability: "operations.read",
-    comparable: true,
+    comparable: false,
   }),
   define({
     id: "operations.sla_compliance",
-    label: "SLA atendido",
+    label: "Concluídos no prazo",
     description:
       "Operações concluídas dentro do prazo previsto, entre as que tinham prazo.",
     category: "OPERATIONS",
     unit: "percent",
     icon: Timer,
     trendColor: higherIsBetter,
-    priority: 30,
+    priority: 6,
     capability: "operations.read",
     comparable: true,
   }),
@@ -611,35 +696,50 @@ const DEFINITIONS: readonly MetricDefinition[] = [
   }),
   define({
     id: "operations.completed",
-    label: "Operações concluídas",
+    label: "Concluídos no período",
     description: "Quantidade de operações concluídas no período.",
     category: "OPERATIONS",
     unit: "count",
     icon: CheckCircle2,
     trendColor: higherIsBetter,
-    priority: 32,
+    priority: 5,
+    comparable: true,
   }),
   define({
     id: "pmoc.compliance",
-    label: "PMOCs finalizados",
-    description: "Relatórios PMOC finalizados sobre os gerados no período.",
+    label: "PMOC em dia",
+    description:
+      "Ciclos vencidos no período e pendências anteriores, concluídos no prazo.",
     category: "PMOC",
     unit: "percent",
     icon: ClipboardCheck,
     trendColor: higherIsBetter,
     priority: 40,
-    capability: "reports.read",
+    capability: "pmoc.read",
     comparable: true,
   }),
   define({
     id: "pmoc.generated",
-    label: "PMOCs gerados",
-    description: "Quantidade de documentos PMOC gerados no período.",
+    label: "Ciclos PMOC previstos",
+    description:
+      "Ciclos com vencimento previsto no período; não é uma contagem de relatórios.",
     category: "PMOC",
     unit: "count",
     icon: ClipboardCheck,
     trendColor: higherIsBetter,
     priority: 41,
+  }),
+  define({
+    id: "equipment.registered",
+    label: "Equipamentos cadastrados",
+    description:
+      "Quantidade cadastrada; não mede disponibilidade física ou funcionamento.",
+    category: "EQUIPMENT",
+    unit: "count",
+    icon: Wrench,
+    trendColor: neutralTrend,
+    priority: 50,
+    capability: "assets.read",
   }),
   define({
     id: "equipment.availability",
@@ -654,8 +754,9 @@ const DEFINITIONS: readonly MetricDefinition[] = [
   }),
   define({
     id: "technicians.assignment_coverage",
-    label: "Cobertura de atribuição técnica",
-    description: "Operações com ao menos um técnico atribuído.",
+    label: "Demandas com técnico",
+    description:
+      "Demandas criadas no período com responsável operacional, conforme cadastro atual.",
     category: "TECHNICIANS",
     unit: "percent",
     icon: Users,
@@ -666,15 +767,16 @@ const DEFINITIONS: readonly MetricDefinition[] = [
   }),
   define({
     id: "technicians.active",
-    label: "Técnicos alocados",
-    description: "Técnicos distintos com pelo menos uma atribuição no período.",
+    label: "Técnicos responsáveis",
+    description:
+      "Responsáveis operacionais distintos nas demandas criadas no período.",
     category: "TECHNICIANS",
     unit: "count",
     icon: Users,
     trendColor: higherIsBetter,
     priority: 70,
     capability: "operations.read",
-    comparable: true,
+    comparable: false,
   }),
   define({
     id: "contracts.active_proxy",
@@ -810,8 +912,7 @@ const DEFINITIONS: readonly MetricDefinition[] = [
   define({
     id: "financial.netPending",
     label: "Saldo previsto",
-    description:
-      "Receitas menos despesas previstas. É expectativa, não caixa.",
+    description: "Receitas menos despesas previstas. É expectativa, não caixa.",
     category: "FINANCIAL",
     unit: "currency",
     icon: CalendarClock,
@@ -830,8 +931,7 @@ const DEFINITIONS: readonly MetricDefinition[] = [
   define({
     id: "financial.overdue.pending",
     label: "Vencido",
-    description:
-      "Lançamentos previstos cujo vencimento já passou.",
+    description: "Lançamentos previstos cujo vencimento já passou.",
     category: "FINANCIAL",
     unit: "currency",
     icon: Timer,
@@ -1031,6 +1131,7 @@ const registry = createRegistry<MetricDefinition>({
 const CATEGORY_ICONS: Readonly<Record<MetricCategory, MetricIcon>> = {
   OPERATIONS: Activity,
   PMOC: ClipboardCheck,
+  RVT: FileCheck2,
   EQUIPMENT: Wrench,
   TECHNICIANS: Users,
   CONTRACTS: Handshake,
@@ -1104,7 +1205,12 @@ export function resolveMetric(contract: MetricContract): MetricDefinition {
   const cached = derivedFromContract.get(contract.id);
   if (cached) return cached;
 
-  warnUnknown("metrics", "métrica", contract.id, "src/metrics/metric-registry.ts");
+  warnUnknown(
+    "metrics",
+    "métrica",
+    contract.id,
+    "src/metrics/metric-registry.ts",
+  );
 
   const category = contract.domain ?? "OPERATIONS";
   const derived = define({

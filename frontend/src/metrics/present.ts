@@ -42,6 +42,7 @@ export interface PresentedMetric {
   direction: AnalyticsDirection;
   trendTone: TrendTone;
   status: AnalyticsStatus;
+  statusLabel?: string;
   provenance: {
     quality: DataQuality;
     mark: ProvenanceMark;
@@ -69,18 +70,44 @@ export function presentMetric(kpi: AnalyticsKpi): PresentedMetric {
     id: kpi.id,
     definition,
     label: definition.label,
-    description: definition.description,
+    description:
+      (kpi.basis && kpi.basis.denominator > 0
+        ? `${kpi.basis.numerator} de ${kpi.basis.denominator}. `
+        : "") + (kpi.description ?? definition.description),
     icon: definition.icon,
     iconColor: definition.color,
-    value: formatMetricValue(definition, kpi.value),
+    value:
+      kpi.unit === "%" && kpi.sampleSize === 0
+        ? "—"
+        : formatMetricValue(definition, kpi.value),
     target:
       kpi.target === undefined
         ? undefined
         : formatMetricValue(definition, kpi.target),
-    change: formatChangePercent(kpi.changePercent),
+    change:
+      kpi.comparisonAvailable === false
+        ? undefined
+        : kpi.changeUnit === "POINTS"
+          ? kpi.changePercent
+            ? `${kpi.changePercent > 0 ? "+" : ""}${decimal.format(kpi.changePercent)} p.p.`
+            : undefined
+          : formatChangePercent(kpi.changePercent),
     direction: kpi.direction,
     trendTone: definition.trendColor(kpi.direction),
     status: kpi.status,
+    statusLabel:
+      kpi.unit === "%" && kpi.sampleSize === 0
+        ? "Sem base de cálculo"
+        : kpi.unit !== "%" &&
+            ![
+              "operations.overdue",
+              "operations.unassigned",
+              "operations.unscheduled",
+              "pmoc.overdue",
+              "rvt.overdue",
+            ].includes(kpi.id)
+          ? "Informativo"
+          : undefined,
     provenance: {
       quality: kpi.dataQuality,
       mark: provenanceMarkFor(definition, kpi.dataQuality),

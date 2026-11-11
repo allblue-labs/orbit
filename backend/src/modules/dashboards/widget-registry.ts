@@ -72,7 +72,7 @@ const globalWidgets: DashboardWidgetDefinition[] = [
   {
     id: 'executive-kpis',
     title: 'Indicadores Executivos',
-    description: 'Indicadores executivos consolidados da organização.',
+    description: 'Fila atual, pendências e entregas no período selecionado.',
     category: 'EXECUTIVE',
     /**
      * Ao lado do radar, e não numa faixa própria.
@@ -130,7 +130,8 @@ const globalWidgets: DashboardWidgetDefinition[] = [
   {
     id: 'health-score',
     title: 'Índice de Saúde',
-    description: 'Visão sintética da saúde operacional.',
+    description:
+      'Prazos, agenda, equipe e regularidade das manutenções; somente dimensões com dados.',
     category: 'EXECUTIVE',
     order: 30,
     size: 'MEDIUM',
