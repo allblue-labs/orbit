@@ -14,6 +14,9 @@
 import { useMemo } from "react";
 
 import { buildMonthComparison } from "@/lib/analytics/month-comparison";
+import { recentPeriodStart } from "@/lib/analytics/recent-period";
+import { zonedDateKey } from "@/lib/scheduling";
+import { useTimeZone } from "@/hooks/use-timezone";
 import { useActiveScope } from "@/providers/use-active-scope";
 import {
   analyticsService,
@@ -53,22 +56,21 @@ export const REFRESH_POLICY = {
 /**
  * Janela analítica derivada da faixa escolhida.
  *
- * `from` é quantizado no início do dia (UTC) para manter a query key estável
+ * `from` é quantizado no início do dia no fuso do usuário para manter a query key estável
  * entre renders — sem isso, cada render geraria uma key nova e um refetch. `to`
  * é omitido: o backend usa "agora" por padrão.
  */
 export function useAnalyticsQuery(range: DashboardRangeKey): AnalyticsQuery {
   const { businessUnitId } = useActiveScope();
+  const { timeZone } = useTimeZone();
+  const day = zonedDateKey(new Date(), timeZone);
 
   return useMemo(() => {
-    const from = new Date();
-    from.setUTCHours(0, 0, 0, 0);
-    from.setUTCDate(from.getUTCDate() - DASHBOARD_RANGE_DAYS[range]);
     return {
-      from: from.toISOString(),
+      from: recentPeriodStart(day, DASHBOARD_RANGE_DAYS[range], timeZone),
       businessUnitId: businessUnitId ?? undefined,
     };
-  }, [businessUnitId, range]);
+  }, [businessUnitId, range, day, timeZone]);
 }
 
 /** Layout resolvido pelo backend: quais widgets este tenant enxerga. */
@@ -110,16 +112,16 @@ export function useAnalyticsHealth(query: AnalyticsQuery) {
  * quem conta e classifica cada indicador em cada período; aqui só se escolhe
  * o recorte e se guarda o rótulo de cada janela.
  *
- * A referência é quantizada no dia — sem isso, cada render produziria uma
+ * A referência é quantizada no minuto — sem isso, cada render produziria uma
  * query key nova e um refetch.
  */
 export function useMonthComparison(timeZone: string) {
   const { businessUnitId } = useActiveScope();
-  const today = new Date().toISOString().slice(0, 10);
+  const minute = new Date().toISOString().slice(0, 16);
 
   const windows = useMemo(
-    () => buildMonthComparison(new Date(`${today}T12:00:00Z`), timeZone),
-    [today, timeZone],
+    () => buildMonthComparison(new Date(`${minute}:00Z`), timeZone, true),
+    [minute, timeZone],
   );
 
   const currentQuery = useMemo<AnalyticsQuery>(

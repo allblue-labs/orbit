@@ -3,6 +3,7 @@ import type { WeatherEnvironmentalIntelligenceReadModel } from '../dashboards/da
 export type AnalyticsDomain =
   | 'OPERATIONS'
   | 'PMOC'
+  | 'RVT'
   | 'EQUIPMENT'
   | 'TECHNICIANS'
   | 'CONTRACTS'
@@ -38,6 +39,13 @@ export type AnalyticsKpi = {
   dataQuality: 'OBSERVED' | 'DERIVED' | 'PROXY' | 'MOCK';
   /** Number of source records; zero means there is nothing to evaluate. */
   sampleSize?: number;
+  /** False for metrics that should remain available to other consumers only. */
+  executive?: boolean;
+  description?: string;
+  comparisonAvailable?: boolean;
+  changeUnit?: 'PERCENT' | 'POINTS';
+  /** Publish the measured numerator and denominator, never an invented target. */
+  basis?: { numerator: number; denominator: number };
 };
 
 export type KpiReadModel = {
@@ -127,7 +135,7 @@ export type AnalyticsDashboardReadModel = {
   generatedAt: string;
   availability: readonly AnalyticsDomainAvailability[];
   headline: {
-    healthScore: number;
+    healthScore: number | null;
     openOperations: number | null;
     slaCompliance: number | null;
     equipmentAvailability: number | null;
@@ -142,7 +150,7 @@ export type AnalyticsDashboardReadModel = {
 export type OrbitIntelligenceAnalyticsContext = {
   generatedAt: string;
   availability: readonly AnalyticsDomainAvailability[];
-  healthScore: number;
+  healthScore: number | null;
   priorities: Array<{
     domain: AnalyticsDomain;
     indicator: string;

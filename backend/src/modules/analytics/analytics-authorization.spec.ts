@@ -33,4 +33,12 @@ describe('Analytics compound authorization', () => {
       ),
     ).toBe(true);
   });
+
+  it('requires explicit RVT access without granting PMOC or operations', () => {
+    const access = analyticsAccess(['analytics.read', 'rvt.read']);
+    expect(access.domains.has('RVT')).toBe(true);
+    expect(access.domains.has('PMOC')).toBe(false);
+    expect(access.domains.has('OPERATIONS')).toBe(false);
+    expect(analyticsAccess(['analytics.read']).domains.has('RVT')).toBe(false);
+  });
 });
