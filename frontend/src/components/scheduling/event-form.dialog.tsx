@@ -5,7 +5,7 @@
  *
  * ## Datas
  *
- * O campo `datetime-local` devolve hora de parede sem fuso ("2026-02-03T09:00").
+ * O seletor de data e hora devolve hora de parede sem fuso ("2026-02-03T09:00").
  * Interpretá-la com `new Date(...)` a leria no fuso do **navegador** — o que
  * agendaria 9h de Recife como 9h de Lisboa para quem abrisse a tela de lá. A
  * conversão passa por `instantFromZoned`, no fuso da visão, e sai em ISO com
@@ -46,11 +46,25 @@
  *    neste repositório.
  */
 import { useState } from "react";
-import { AlertTriangle } from "lucide-react";
+import {
+  AlertTriangle,
+  CalendarDays,
+  Check,
+  ChevronsUpDown,
+} from "lucide-react";
 
 import { MutationError } from "@/components/artifact-studio/mutation-error";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import {
   Dialog,
   DialogContent,
@@ -69,6 +83,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   useCreateSchedulingEvent,
   useUpdateSchedulingEvent,
@@ -104,6 +123,13 @@ const WEEKDAYS = [
   { value: 5, label: "S" },
   { value: 6, label: "S" },
 ];
+
+const RECURRENCE_FREQUENCY_LABELS = {
+  DAILY: "Diariamente",
+  WEEKLY: "Semanalmente",
+  MONTHLY: "Mensalmente",
+  CUSTOM: "Personalizada",
+} as const;
 
 export function EventFormDialog({
   open,
@@ -155,6 +181,163 @@ interface FormState {
   interval: string;
   byWeekday: readonly number[];
   count: string;
+}
+
+/**
+ * Sugestões reabertas e texto livre no mesmo controle.
+ *
+ * O `datalist` nativo fechava após uma seleção e alguns navegadores não
+ * voltavam a mostrar as demais opções. Este combobox conserva o contrato de
+ * tipo livre, mas torna cada sugestão sempre acessível pelo gatilho.
+ */
+function EventTypePicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (nextOpen) setSearch("");
+      }}
+    >
+      <PopoverTrigger asChild>
+        <Button
+          id="event-type"
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          aria-required="true"
+          className="w-full justify-between font-mono text-sm font-normal"
+        >
+          <span className="truncate">{value || "Selecione ou digite"}</span>
+          <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-[--radix-popover-trigger-width] p-0"
+        align="start"
+      >
+        <Command>
+          <CommandInput
+            placeholder="Buscar ou digitar um tipo…"
+            value={search}
+            maxLength={SCHEDULING_LIMITS.typeMaxLength}
+            onValueChange={(nextValue) => {
+              setSearch(nextValue);
+              onChange(nextValue.toUpperCase());
+            }}
+          />
+          <CommandList>
+            <CommandEmpty>O tipo digitado será usado ao salvar.</CommandEmpty>
+            <CommandGroup>
+              {SUGGESTED_EVENT_TYPES.map((type) => (
+                <CommandItem
+                  key={type}
+                  value={type}
+                  onSelect={() => {
+                    onChange(type);
+                    setOpen(false);
+                  }}
+                >
+                  <Check
+                    className={
+                      value === type ? "size-4 opacity-100" : "size-4 opacity-0"
+                    }
+                  />
+                  {type}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/**
+ * Seleção de data e hora sem confirmação adicional.
+ *
+ * O pop-up nativo de `datetime-local` não permite controlar a confirmação.
+ * Aqui a data é aplicada no clique e a escolha da hora também confirma e fecha
+ * o seletor, deixando o próprio controle de data/hora concluir a ação.
+ */
+function EventDateTimePicker({
+  id,
+  value,
+  onChange,
+}: {
+  id: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const parts = localDateTimeParts(draft);
+
+  const commit = (nextValue: string) => {
+    setDraft(nextValue);
+    onChange(nextValue);
+  };
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (nextOpen) setDraft(value);
+      }}
+    >
+      <PopoverTrigger asChild>
+        <Button
+          id={id}
+          type="button"
+          variant="outline"
+          aria-expanded={open}
+          aria-haspopup="dialog"
+          aria-required="true"
+          className="w-full justify-between font-normal"
+        >
+          <span>{formatLocalDateTime(value)}</span>
+          <CalendarDays className="size-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="start">
+        <Calendar
+          mode="single"
+          selected={parts?.date}
+          defaultMonth={parts?.date}
+          onSelect={(date) => {
+            if (!date) return;
+            commit(localDateTimeValue(date, parts?.time ?? "00:00"));
+          }}
+        />
+        <div className="border-t p-3">
+          <Label htmlFor={`${id}-time`}>Hora</Label>
+          <Input
+            id={`${id}-time`}
+            type="time"
+            value={parts?.time ?? ""}
+            onChange={(event) => {
+              if (!parts?.date || !event.target.value) return;
+              commit(localDateTimeValue(parts.date, event.target.value));
+              setOpen(false);
+            }}
+            className="mt-2"
+          />
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 function EventForm({
@@ -330,53 +513,31 @@ function EventForm({
           <Label htmlFor="event-type" required>
             Tipo
           </Label>
-          <Input
-            id="event-type"
-            required
-            aria-required="true"
-            list="event-type-options"
+          <EventTypePicker
             value={form.type}
-            maxLength={SCHEDULING_LIMITS.typeMaxLength}
-            onChange={(event) =>
-              edit({ type: event.target.value.toUpperCase() })
-            }
-            className="font-mono text-sm"
+            onChange={(type) => edit({ type })}
           />
-          <datalist id="event-type-options">
-            {SUGGESTED_EVENT_TYPES.map((type) => (
-              <option key={type} value={type} />
-            ))}
-          </datalist>
           <p className="text-xs text-muted-foreground">
-            Texto livre: apenas o formato é conferido.
+            Escolha uma sugestão ou digite outro tipo. Apenas o formato é
+            conferido.
           </p>
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="event-start" required>
-            Início
-          </Label>
-          <Input
+          <Label htmlFor="event-start" required>Início</Label>
+          <EventDateTimePicker
             id="event-start"
-            required
-            aria-required="true"
-            type="datetime-local"
             value={form.startLocal}
-            onChange={(event) => edit({ startLocal: event.target.value })}
+            onChange={(startLocal) => edit({ startLocal })}
           />
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="event-end" required>
-            Fim
-          </Label>
-          <Input
+          <Label htmlFor="event-end" required>Fim</Label>
+          <EventDateTimePicker
             id="event-end"
-            required
-            aria-required="true"
-            type="datetime-local"
             value={form.endLocal}
-            onChange={(event) => edit({ endLocal: event.target.value })}
+            onChange={(endLocal) => edit({ endLocal })}
           />
         </div>
 
@@ -553,7 +714,7 @@ function RecurrenceFields({
                   (frequency) => frequency !== "CUSTOM",
                 ).map((frequency) => (
                   <SelectItem key={frequency} value={frequency}>
-                    {frequency}
+                    {RECURRENCE_FREQUENCY_LABELS[frequency]}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -684,6 +845,27 @@ function toLocalInput(iso: string, timeZone: string): string {
   const parts = zonedParts(new Date(iso), timeZone);
   const pad = (value: number) => String(value).padStart(2, "0");
   return `${parts.year}-${pad(parts.month)}-${pad(parts.day)}T${pad(parts.hour)}:${pad(parts.minute)}`;
+}
+
+/** Partes de uma hora de parede, para o calendário não depender do fuso do navegador. */
+function localDateTimeParts(value: string): { date: Date; time: string } | null {
+  const [dateValue, time = "00:00"] = value.split("T");
+  const [year, month, day] = dateValue.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return { date: new Date(year, month - 1, day), time };
+}
+
+function localDateTimeValue(date: Date, time: string): string {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${time}`;
+}
+
+function formatLocalDateTime(value: string): string {
+  const parts = localDateTimeParts(value);
+  if (!parts) return "Selecione data e hora";
+  const { date, time } = parts;
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} ${time}`;
 }
 
 /** Valor de `datetime-local` → instante ISO, lido no fuso da visão. */
