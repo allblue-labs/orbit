@@ -19,7 +19,6 @@ import {
 } from "lucide-react";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
-import { z } from "zod";
 
 import { OrbitLogo } from "@/components/brand/orbit-logo";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -52,7 +51,6 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   detectBrazilianDocumentType,
   formatBrazilianDocument,
-  isValidBrazilianDocument,
   normalizeBrazilianDocument,
 } from "@/lib/brazilian-document";
 import type { PostalAddress } from "@/lib/postal-code";
@@ -60,43 +58,14 @@ import { cn } from "@/lib/utils";
 
 import { ApiError } from "@/lib/api-error";
 import { errorCopy } from "@/lib/error-copy";
-import { passwordPolicyIssues } from "@/lib/password-policy";
 import { PasswordRequirements } from "./password-requirements";
+import {
+  signupSchema,
+  TERMS_ACCEPTANCE_MESSAGE,
+  type SignupFormValues as FormValues,
+} from "./signup-schema";
 
-const TERMS_ACCEPTANCE_MESSAGE =
-  "Para continuar, aceite os Termos de Uso e confirme a leitura da Política de Privacidade.";
 const TERMS_TOAST_ID = "signup-terms-required";
-
-const schema = z
-  .object({
-    firstName: z.string().min(2, "Informe seu nome"),
-    lastName: z.string().min(2, "Informe seu sobrenome"),
-    email: z.string().email("Informe um e-mail válido"),
-    password: z.string().superRefine((password, context) => {
-      for (const issue of passwordPolicyIssues(password)) {
-        context.addIssue({ code: "custom", message: issue });
-      }
-    }),
-    confirmPassword: z.string(),
-    organizationName: z.string().min(2, "Informe o nome da organização"),
-    legalName: z.string().min(2, "Informe a razão social"),
-    documentNumber: z
-      .string()
-      .refine(isValidBrazilianDocument, "Informe um CPF ou CNPJ válido"),
-    primarySegment: z.string().min(2, "Informe o segmento"),
-    city: z.string().min(2, "Informe a cidade"),
-    street: z.string().min(2, "Informe o endereço"),
-    stateCode: z.string().length(2, "Use a sigla do estado"),
-    planKey: z.string().min(1, "Escolha um plano para continuar"),
-    billingInterval: z.enum(BILLING_INTERVALS),
-    terms: z.boolean().refine(Boolean, TERMS_ACCEPTANCE_MESSAGE),
-  })
-  .refine((data) => data.password === data.confirmPassword, {
-    path: ["confirmPassword"],
-    message: "As senhas não coincidem",
-  });
-
-type FormValues = z.infer<typeof schema>;
 const registrationConflicts: Readonly<
   Record<string, { field: keyof FormValues; step: number }>
 > = {
@@ -343,7 +312,7 @@ export function SignupContent({
     control,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(signupSchema),
     defaultValues: {
       primarySegment: "Serviços",
       stateCode: "",
@@ -356,7 +325,6 @@ export function SignupContent({
   const billingInterval = useWatch({ control, name: "billingInterval" });
   const plan = catalog.plans.find((entry) => entry.code === selectedPlan);
   const documentNumber = useWatch({ control, name: "documentNumber" });
-  const termsAccepted = useWatch({ control, name: "terms" });
   const password = useWatch({ control, name: "password" }) ?? "";
 
   async function next() {

@@ -76,6 +76,8 @@ aceitar goldens. Corrigir os erros de lint listados, inclusive linguagem de prod
 Tratar também os 19 alertas moderate/low restantes na cadeia de desenvolvimento
 do backend (Glob/Minimatch/Deepmerge e ferramentas dependentes), registrados na
 [PR-01](pr-01-backend-dependencies.md), e definir o gate da CI para esse grafo.
+Incluir os moderate da cadeia TypeScript ESLint/Minimatch do frontend e a
+variante Linux, conforme [PR-02](pr-02-frontend-dependencies.md).
 
 **Aceite:** comandos padrão dos três projetos reproduzíveis em ambiente limpo,
 suítes unitárias e E2E verdes, checks sem `--fix`, e pipeline versionada que execute
@@ -285,5 +287,6 @@ o parecer bloqueado para o recurso correspondente.
 | PR | Estado | Commit local | Evidência / pendência |
 | --- | --- | --- | --- |
 | 00 | Revisão concluída | `9404804` | Relatório e evidência sanitizada; sem push |
-| 01 | Implementada | Commit desta entrega, identificado por `PR-01` na mensagem | [Resultados](pr-01-backend-dependencies.md): audit de produção zerado; Node 22/Linux validado; falhas preexistentes mantidas para PR-03; sem push |
-| 02–19 | Planejadas | — | Executar sequencialmente; critérios acima |
+| 01 | Implementada | `5b922b8` | [Resultados](pr-01-backend-dependencies.md): audit de produção zerado; Node 22/Linux validado; falhas preexistentes mantidas para PR-03; sem push |
+| 02 | Implementada | Commit desta entrega, identificado por `PR-02` na mensagem | [Resultados](pr-02-frontend-dependencies.md): audit de produção zerado; Zod 4; 668 testes e cinco smokes standalone; pendências de linguagem/tooling na PR-03; sem push |
+| 03–19 | Planejadas | — | Executar sequencialmente; critérios acima |

@@ -7,3 +7,5 @@ out
 *.log
 README.md
 INTEGRATION.md
+test-results
+playwright-report
