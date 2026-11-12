@@ -1,0 +1,250 @@
+{
+  "pr": "PR-01",
+  "reviewDate": "2026-11-12",
+  "baseCommit": "940480430ef11b4f2c75b513cf21bbd8e2bc2eca",
+  "lockfile": "backend/package-lock.json",
+  "lockfileSha256": "68866ff5d98ef130e8e498836f1a51b95b3dd79d586f62d60c8dac7a1d43f669",
+  "updatedPackages": [
+    {
+      "name": "@nestjs/platform-express",
+      "before": "11.2.3",
+      "after": "11.2.9"
+    },
+    {
+      "name": "@nestjs/swagger",
+      "before": "11.4.7",
+      "after": "11.4.8"
+    },
+    {
+      "name": "body-parser",
+      "before": "2.3.0",
+      "after": "2.4.0"
+    },
+    {
+      "name": "engine.io",
+      "before": "6.6.9",
+      "after": "6.6.11"
+    },
+    {
+      "name": "multer",
+      "before": "2.3.0",
+      "after": "2.5.0"
+    },
+    {
+      "name": "sharp",
+      "before": "0.35.4",
+      "after": "0.35.5"
+    },
+    {
+      "name": "socket.io",
+      "before": "4.8.3",
+      "after": "4.8.4"
+    },
+    {
+      "name": "firebase-admin",
+      "before": "14.5.0",
+      "after": "14.5.1"
+    },
+    {
+      "name": "@google-cloud/firestore",
+      "before": "9.4.0",
+      "after": "9.4.1"
+    },
+    {
+      "name": "@google-cloud/firestore-api",
+      "before": "0.2.0",
+      "after": "0.7.1"
+    },
+    {
+      "name": "qs",
+      "before": "6.16.0",
+      "after": "6.17.1"
+    },
+    {
+      "name": "fast-uri",
+      "before": "3.1.7",
+      "after": "3.1.9"
+    },
+    {
+      "name": "handlebars",
+      "before": "4.7.9",
+      "after": "4.7.10"
+    }
+  ],
+  "productionAudit": {
+    "command": "npm audit --omit=dev --json",
+    "before": {
+      "info": 0,
+      "low": 0,
+      "moderate": 11,
+      "high": 4,
+      "critical": 0,
+      "total": 15
+    },
+    "after": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    },
+    "exitCodeAfter": 0
+  },
+  "developmentAudit": {
+    "command": "npm audit --json",
+    "result": {
+      "info": 0,
+      "low": 2,
+      "moderate": 17,
+      "high": 0,
+      "critical": 0,
+      "total": 19
+    },
+    "remainingPackages": [
+      {
+        "name": "@jest/core",
+        "severity": "moderate"
+      },
+      {
+        "name": "@jest/reporters",
+        "severity": "moderate"
+      },
+      {
+        "name": "@nestjs/cli",
+        "severity": "moderate"
+      },
+      {
+        "name": "@typescript-eslint/eslint-plugin",
+        "severity": "moderate"
+      },
+      {
+        "name": "@typescript-eslint/parser",
+        "severity": "moderate"
+      },
+      {
+        "name": "@typescript-eslint/type-utils",
+        "severity": "moderate"
+      },
+      {
+        "name": "@typescript-eslint/typescript-estree",
+        "severity": "moderate"
+      },
+      {
+        "name": "@typescript-eslint/utils",
+        "severity": "moderate"
+      },
+      {
+        "name": "deepmerge",
+        "severity": "low"
+      },
+      {
+        "name": "fork-ts-checker-webpack-plugin",
+        "severity": "low"
+      },
+      {
+        "name": "glob",
+        "severity": "moderate"
+      },
+      {
+        "name": "jest",
+        "severity": "moderate"
+      },
+      {
+        "name": "jest-circus",
+        "severity": "moderate"
+      },
+      {
+        "name": "jest-cli",
+        "severity": "moderate"
+      },
+      {
+        "name": "jest-config",
+        "severity": "moderate"
+      },
+      {
+        "name": "jest-runner",
+        "severity": "moderate"
+      },
+      {
+        "name": "jest-runtime",
+        "severity": "moderate"
+      },
+      {
+        "name": "minimatch",
+        "severity": "moderate"
+      },
+      {
+        "name": "typescript-eslint",
+        "severity": "moderate"
+      }
+    ],
+    "followUp": "PR-03; build/lint/test paths, not the production advisory graph"
+  },
+  "localValidation": {
+    "node": "25.1.0",
+    "npm": "11.18.0",
+    "cleanInstall": {
+      "command": "npm ci --no-audit",
+      "passed": true
+    },
+    "prismaGenerate": {
+      "command": "npx prisma generate",
+      "version": "7.10.0",
+      "passed": true
+    },
+    "build": {
+      "command": "npm run build",
+      "passed": true
+    },
+    "changedFilesLint": {
+      "command": "npx eslint src/main.ts src/configure-http-parsers.ts src/common/transport-dependencies.http.spec.ts",
+      "passed": true
+    },
+    "unitTests": {
+      "command": "npm test -- --runInBand --watchman=false",
+      "suitesPassed": 243,
+      "suitesFailed": 4,
+      "testsPassed": 1962,
+      "testsFailed": 15,
+      "totalTests": 1977,
+      "newSecurityTestsPassed": 7,
+      "unchangedFailureSuites": [
+        "modules/billing/stripe/stripe-billing.provider.spec.ts",
+        "modules/identity/domain/password-policy.spec.ts",
+        "modules/operations/operations-routing.spec.ts",
+        "modules/subscription-plans/subscriptions/plan-change.spec.ts"
+      ],
+      "exitCode": 1
+    }
+  },
+  "containerValidation": {
+    "status": "PASSED",
+    "buildCommand": "docker build --target runner --tag orbit-pr01-api:review --file backend/Dockerfile backend",
+    "imageId": "sha256:96a15af9326b060ce0386713d4fc3e8a1622362b9b1f8680e3cb92e5c39f5dbd",
+    "productionPruneAuditVulnerabilities": 0,
+    "smokeCommand": "docker run --rm --interactive --network none orbit-pr01-api:review node < backend/test/support/production-dependencies-smoke.cjs",
+    "smoke": {
+      "node": "v22.23.5",
+      "platform": "linux",
+      "arch": "x64",
+      "uid": 1001,
+      "sharp": "0.35.5",
+      "vips": "8.18.7",
+      "rsvg": "2.63.2",
+      "nativeImageRoundTrip": true,
+      "argon2RoundTrip": true,
+      "firebaseAndSesModulesLoaded": true,
+      "exactRawBody": true,
+      "malformedGzipRejected": true,
+      "healthyAfterMalformedRequest": true
+    },
+    "databaseApiStartupQualified": false,
+    "cloudDeliveryQualified": false
+  },
+  "limits": [
+    "Database E2E suite not rerun; baseline repair belongs to PR-03",
+    "No real Firebase, SES, Stripe or production deployment calls",
+    "This PR does not close the release approval or the push integration gap"
+  ]
+}

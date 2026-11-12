@@ -4,6 +4,7 @@ import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { configureApiVersioning } from './configure-api';
+import { configureHttpParsers } from './configure-http-parsers';
 import { validateReleaseEnvironment } from './release-environment';
 
 async function bootstrap() {
@@ -45,8 +46,7 @@ async function bootstrap() {
     rawBody: true,
     bodyParser: false,
   });
-  app.useBodyParser('json', { limit: '1mb' });
-  app.useBodyParser('urlencoded', { extended: true, limit: '1mb' });
+  configureHttpParsers(app);
 
   configureApiVersioning(app);
   app.enableShutdownHooks();

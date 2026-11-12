@@ -73,6 +73,9 @@ fixtures de PMOC/RVT/campo/cobrança. Reescrever casos RBAC para vínculos reais
 banco em vez de forjar restrições nas claims de um owner. Separar o instrumento
 de capturas visuais da suíte de regressão; revisar mudanças visuais antes de
 aceitar goldens. Corrigir os erros de lint listados, inclusive linguagem de produto.
+Tratar também os 19 alertas moderate/low restantes na cadeia de desenvolvimento
+do backend (Glob/Minimatch/Deepmerge e ferramentas dependentes), registrados na
+[PR-01](pr-01-backend-dependencies.md), e definir o gate da CI para esse grafo.
 
 **Aceite:** comandos padrão dos três projetos reproduzíveis em ambiente limpo,
 suítes unitárias e E2E verdes, checks sem `--fix`, e pipeline versionada que execute
@@ -281,5 +284,6 @@ o parecer bloqueado para o recurso correspondente.
 
 | PR | Estado | Commit local | Evidência / pendência |
 | --- | --- | --- | --- |
-| 00 | Revisão concluída | Commit que contém este documento; consultar `git log -- docs/release/production-pr-plan-2026-11-12.md` | Relatório e evidência sanitizada; sem push |
-| 01–19 | Planejadas | — | Executar sequencialmente; critérios acima |
+| 00 | Revisão concluída | `9404804` | Relatório e evidência sanitizada; sem push |
+| 01 | Implementada | Commit desta entrega, identificado por `PR-01` na mensagem | [Resultados](pr-01-backend-dependencies.md): audit de produção zerado; Node 22/Linux validado; falhas preexistentes mantidas para PR-03; sem push |
+| 02–19 | Planejadas | — | Executar sequencialmente; critérios acima |
