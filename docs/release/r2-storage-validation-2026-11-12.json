@@ -1,0 +1,54 @@
+{
+  "checkedAt": "2026-11-12T18:34:12.395024+00:00",
+  "scope": "R2 media integration; repository changes only, no server migration/deployment executed",
+  "publicBucket": "orbit-assets",
+  "privateBucket": "orbit-assets-private",
+  "publicUrl": "https://cdn-orbit.allblue-labs.com",
+  "checks": {
+    "r2": {
+      "publicAndPrivatePutGetSha256": true,
+      "signedGetHttpStatus": 200,
+      "cdnGetHttpStatus": 200,
+      "privateObjectViaPublicCdnHttpStatus": 404,
+      "anonymousS3GetDenied": true,
+      "corsOriginBothBuckets": "https://orbit.allblue-labs.com",
+      "temporaryTestObjectsDeleted": true
+    },
+    "heic": {
+      "realLibheifFixtureDecodedInWorker": true,
+      "outputFormat": "webp",
+      "outputWidth": 1280,
+      "outputHeight": 854,
+      "outputBytes": 270894,
+      "exifRemoved": true
+    },
+    "backend": {
+      "productionBuild": "passed",
+      "mediaUnitAndHttpSuites": 23,
+      "mediaUnitAndHttpTests": 223,
+      "signedAcceptanceE2eTestsWithRealRls": 17,
+      "isolatedPostgresqlAllMigrations": "passed",
+      "changedFilesEslint": "passed",
+      "productionDependencyVulnerabilities": 0,
+      "additionalLegacyPathSuites": 3,
+      "additionalLegacyPathTests": 37
+    },
+    "web": {
+      "productionBuild": "passed",
+      "testSuites": 68,
+      "tests": 671,
+      "changedFilesEslint": "passed"
+    },
+    "mobile": {
+      "flutterAnalyze": "passed",
+      "targetedMediaTests": 68
+    },
+    "deployment": {
+      "composeAndMigrationOverrideValidation": "passed",
+      "sourceVolumesDeleted": false,
+      "productionDatabaseTouched": false,
+      "productionFilesMigrated": false,
+      "gitPushPerformed": false
+    }
+  }
+}

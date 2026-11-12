@@ -68,6 +68,67 @@ export class StorageFileRepository {
     );
   }
 
+  markDeletedByRef(bucket: string, objectKey: string) {
+    return this.rls.run((tx) =>
+      tx.storageFile.updateMany({
+        where: { bucket, objectKey, deletedAt: null },
+        data: { deletedAt: new Date() },
+      }),
+    );
+  }
+
+  findByRef(organizationId: string, bucket: string, objectKey: string) {
+    return this.rls.run((tx) =>
+      tx.storageFile.findFirst({
+        where: {
+          organizationId,
+          deletedAt: null,
+          OR: [
+            { bucket, objectKey },
+            {
+              AND: [
+                { metadata: { path: ['sourceObjectKey'], equals: objectKey } },
+                { metadata: { path: ['sourceBucket'], equals: bucket } },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+  }
+
+  async completeUpload(
+    id: string,
+    organizationId: string,
+    expectedKey: string,
+    data: {
+      bucket: string;
+      objectKey: string;
+      mimeType: string;
+      fileName: string;
+      sizeBytes: bigint;
+      sha256: string;
+      metadata: Prisma.InputJsonValue;
+    },
+  ) {
+    return this.rls.run(async (tx) => {
+      const changed = await tx.storageFile.updateMany({
+        where: {
+          id,
+          organizationId,
+          objectKey: expectedKey,
+          status: 'PENDING',
+          deletedAt: null,
+        },
+        data: { ...data, status: 'AVAILABLE' },
+      });
+      if (changed.count !== 1) return null;
+      return tx.storageFile.findFirst({
+        where: { id, organizationId, deletedAt: null },
+      });
+    });
+  }
+
   /** Confirma um upload assinado: grava tamanho, hash e disponibilidade. */
   markAvailable(
     id: string,
@@ -77,7 +138,7 @@ export class StorageFileRepository {
   ) {
     return this.rls.run((tx) =>
       tx.storageFile.update({
-        where: { id },
+        where: { id, organizationId },
         data: { sizeBytes, sha256, status: 'AVAILABLE' },
         // O `where` do update não aceita a organização; a RLS a impõe.
       }),

@@ -1,0 +1,30 @@
+# Use only during the offline migration, together with docker-compose.yml.
+# Legacy volumes are mounted read-only and are never deleted by this job.
+services:
+  storage-migration:
+    profiles: [storage-migration]
+    image: ${ORBIT_MIGRATOR_IMAGE:-docker.io/allbluelabs/orbit-api:${ORBIT_VERSION:?ORBIT_VERSION is required}-migrator}
+    entrypoint: [node, dist/src/scripts/migrate-media-to-r2.js]
+    user: "1001:1001"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      STORAGE_PROVIDER: R2
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY}
+      R2_BUCKET_NAME: ${R2_BUCKET_NAME:-orbit-assets}
+      R2_PRIVATE_BUCKET_NAME: ${R2_PRIVATE_BUCKET_NAME:-orbit-assets-private}
+      R2_ENDPOINT: ${R2_ENDPOINT}
+      R2_LEGACY_PRIVATE_BUCKETS: ${R2_LEGACY_PRIVATE_BUCKETS:-orbit-artifacts,documents}
+      R2_PUBLIC_URL: ${R2_PUBLIC_URL:-https://cdn-orbit.allblue-labs.com}
+      STORAGE_MIGRATION_OFFLINE: ${STORAGE_MIGRATION_OFFLINE:-false}
+      LEGACY_STORAGE_ROOT: /legacy
+    volumes:
+      - operation_attachments:/legacy/operations:ro
+      - generated_documents:/legacy/documents:ro
+      - artifact_objects:/legacy/objects:ro
+    networks: [orbit_private, orbit_public]

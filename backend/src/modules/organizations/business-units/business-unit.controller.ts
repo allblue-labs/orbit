@@ -1,5 +1,9 @@
+import { FileInterceptor } from '@nestjs/platform-express';
+import { imageUploadOptions } from '../../storage/image-upload.options';
 import {
   Body,
+  UploadedFile,
+  UseInterceptors,
   Controller,
   Delete,
   Get,
@@ -85,17 +89,21 @@ export class BusinessUnitController {
    * clientes e forem reimpressos.
    */
   @Put(':id/logo')
+  @UseInterceptors(FileInterceptor('file', imageUploadOptions))
   @Permissions('business_units.update')
   @Capabilities('business_units.manage')
   async setLogo(
     @Param('id', ParseUUIDv7Pipe) id: string,
     @Req() request: IdentityRequest,
     @Body() input: UpdateBusinessUnitLogoDto,
+    @UploadedFile() file?: Express.Multer.File,
   ) {
     return this.businessUnits.setLogo(
       id,
       this.organizationId(request),
-      input.image,
+      file
+        ? `data:${file.mimetype};base64,${file.buffer.toString('base64')}`
+        : (input.image ?? ''),
     );
   }
 

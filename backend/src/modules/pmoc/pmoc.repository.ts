@@ -413,6 +413,14 @@ export class PmocRepository {
   }
 
   /** Registra a assinatura do contratante — arquivo e marca, na mesma transação. */
+  async signatureUploadScope(tokenHash: string): Promise<string | null> {
+    const rows = await this.prisma.$queryRaw<
+      { organization_id: string | null }[]
+    >`
+      SELECT app_pmoc_signature_upload_scope(${tokenHash}) AS organization_id`;
+    return rows[0]?.organization_id ?? null;
+  }
+
   async signByToken(input: {
     tokenHash: string;
     signerName: string;
@@ -425,10 +433,11 @@ export class PmocRepository {
     mimeType: string;
     sizeBytes: number;
     sha256: string;
+    provider: string;
   }): Promise<{ state: string; signed: boolean }> {
     const rows = await this.prisma.$queryRaw<
       { state: string; signed: boolean }[]
-    >`SELECT * FROM app_pmoc_signature_link_sign(
+    >`SELECT * FROM app_pmoc_signature_link_sign_storage(
         ${input.tokenHash},
         ${input.signerName},
         ${input.signerDocument ?? null},
@@ -439,7 +448,8 @@ export class PmocRepository {
         ${input.objectKey},
         ${input.mimeType},
         ${input.sizeBytes}::bigint,
-        ${input.sha256}
+        ${input.sha256},
+        ${input.provider}
       )`;
     return rows[0] ?? { state: 'INEXISTENTE', signed: false };
   }

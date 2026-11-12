@@ -1,3 +1,4 @@
+import { brandImageStub } from '../../../test/support/brand-image.stub';
 /**
  * Regras do Commercial Engine, sem banco.
  *
@@ -92,6 +93,7 @@ describe('QuoteService', () => {
     documents,
     storage as unknown as StorageProvider,
     { create: jest.fn() } as never,
+    brandImageStub(),
   );
 
   beforeEach(() => {
@@ -443,6 +445,7 @@ describe('QuoteService', () => {
       documents,
       storage as never,
       { create } as never,
+      brandImageStub(),
     );
     repository.convert.mockImplementationOnce(
       async (_input: unknown, command: () => Promise<unknown>) => {

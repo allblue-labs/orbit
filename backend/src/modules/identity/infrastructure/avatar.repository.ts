@@ -22,7 +22,12 @@ export class AvatarRepository {
   reservedFile(organizationId: string, id: string) {
     return this.rls.run((tx) =>
       tx.storageFile.findFirst({
-        where: { id, organizationId, deletedAt: null },
+        where: {
+          id,
+          organizationId,
+          deletedAt: null,
+          metadata: { path: ['purpose'], equals: 'USER_AVATAR' },
+        },
         select: { id: true, createdById: true },
       }),
     );

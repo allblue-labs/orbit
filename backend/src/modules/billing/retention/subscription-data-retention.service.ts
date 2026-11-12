@@ -251,6 +251,19 @@ export class SubscriptionDataRetentionService {
       await tx.$executeRaw`INSERT INTO storage_deletion_jobs (id,organization_id,provider,bucket,object_key)
         SELECT gen_random_uuid(),organization_id,provider,bucket,object_key FROM storage_files WHERE organization_id = ${organizationId}::uuid
         ON CONFLICT (provider,bucket,object_key) DO NOTHING`;
+      await tx.$executeRaw`INSERT INTO storage_deletion_jobs (id,organization_id,provider,bucket,object_key)
+        SELECT gen_random_uuid(),o.organization_id,${this.storage.name},${this.storage.defaultBucket},a.storage_key
+        FROM operation_attachments a JOIN operations o ON o.id=a.operation_id WHERE o.organization_id=${organizationId}::uuid
+        ON CONFLICT (provider,bucket,object_key) DO NOTHING`;
+      await tx.$executeRaw`INSERT INTO storage_deletion_jobs (id,organization_id,provider,bucket,object_key)
+        SELECT gen_random_uuid(),organization_id,${this.storage.name},storage_bucket,storage_key
+        FROM generated_documents WHERE organization_id=${organizationId}::uuid
+        ON CONFLICT (provider,bucket,object_key) DO NOTHING`;
+
+      await tx.$executeRaw`INSERT INTO storage_deletion_jobs (id,organization_id,provider,bucket,object_key)
+        SELECT gen_random_uuid(),organization_id,${this.storage.name},document_bucket,document_object_key
+        FROM pmoc_plan_signature_links WHERE organization_id=${organizationId}::uuid AND document_object_key IS NOT NULL
+        ON CONFLICT (provider,bucket,object_key) DO NOTHING`;
       const edges = await tx.$queryRaw<
         { child: string; parent: string }[]
       >`SELECT child.relname AS child, parent.relname AS parent

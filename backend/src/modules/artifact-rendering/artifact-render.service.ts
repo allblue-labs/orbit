@@ -1,3 +1,4 @@
+import { BrandImageService } from '../storage/brand-image.service';
 /**
  * Solicitação de renderização.
  *
@@ -34,7 +35,6 @@ import {
   sampleQuote,
   sampleRenderInput,
 } from './sample-document.factory';
-import { readEmbeddedImage } from '../../common/embedded-image';
 import { issuerLogo } from '../../common/issuer-brand';
 import { defaultRendererFor } from './renderers/default-renderer';
 import type {
@@ -65,6 +65,7 @@ export class ArtifactRenderService {
     private readonly inputs: RenderInputFactory,
     private readonly documentContext: DocumentContextBuilder,
     private readonly quotes: QuoteDocumentService,
+    private readonly brands: BrandImageService,
   ) {}
 
   /**
@@ -98,7 +99,7 @@ export class ArtifactRenderService {
     const unidade = await this.repository.findSampleEmitter(
       actor.organizationId,
     );
-    const logo = readEmbeddedImage(issuerLogo(unidade));
+    const logo = await this.brands.read(issuerLogo(unidade));
     const { emitter } = this.documentContext.build({
       businessUnit: unidade ?? undefined,
       logo: logo ?? undefined,

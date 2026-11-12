@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AuthorizationService } from '../../common';
-import { readEmbeddedImage } from '../../common/embedded-image';
+import { BrandImageService } from '../storage/brand-image.service';
 import type { AuthenticatedIdentity } from '../identity/domain/identity.types';
 import {
   ConflictException,
@@ -36,6 +36,7 @@ export class OrganizationService {
   constructor(
     private readonly repository: OrganizationRepository,
     private readonly authorization: AuthorizationService,
+    private readonly brands: BrandImageService,
   ) {}
 
   async create(ownerUserId: string, input: CreateOrganizationDto) {
@@ -496,25 +497,30 @@ export class OrganizationService {
    * dentro do gerador de documento.
    */
   async setLogo(organizationId: string, image: string) {
-    await this.getLogo(organizationId);
-
-    const imagem = readEmbeddedImage(image);
-    if (!imagem) {
-      throw new ValidationException(
-        'A imagem precisa ser um PNG ou JPEG de até 512 KB, enviado como data URI.',
-      );
+    const previous = await this.getLogo(organizationId);
+    const logoUrl = await this.brands.store(
+      organizationId,
+      organizationId,
+      image,
+    );
+    try {
+      const saved = await this.repository.setLogo(organizationId, logoUrl);
+      await this.brands.remove(previous.logoUrl, organizationId);
+      return saved;
+    } catch (error) {
+      // Preserve the old logo if the database write fails.
+      const current = await this.repository.findLogo(organizationId);
+      if (current?.logoUrl !== logoUrl)
+        await this.brands.remove(logoUrl, organizationId);
+      throw error;
     }
-
-    return this.repository.setLogo(organizationId, imagem.dataUrl);
   }
 
-  /**
-   * Volta a emitir sem timbre — a não ser onde a unidade tenha marca própria,
-   * que não é esta.
-   */
   async removeLogo(organizationId: string) {
-    await this.getLogo(organizationId);
-    return this.repository.setLogo(organizationId, null);
+    const previous = await this.getLogo(organizationId);
+    const saved = await this.repository.setLogo(organizationId, null);
+    await this.brands.remove(previous.logoUrl, organizationId);
+    return saved;
   }
 
   async update(organizationId: string, input: UpdateOrganizationDto) {

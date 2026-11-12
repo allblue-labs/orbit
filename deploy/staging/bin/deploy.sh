@@ -12,7 +12,7 @@ x=json.loads(subprocess.check_output(['docker','compose','--env-file','.env','-f
 env=x['services']['api']['environment']
 web=x['services']['frontend']['environment']
 origin='https://orbit.allblue-labs.com'
-for key, value in [('FRONTEND_ORIGIN',origin),('IDENTITY_PUBLIC_WEB_URL',origin),('STORAGE_LOCAL_PUBLIC_URL',origin+'/api/v1')]:
+for key, value in [('FRONTEND_ORIGIN',origin),('IDENTITY_PUBLIC_WEB_URL',origin),('STORAGE_PUBLIC_API_URL',origin+'/api/v1')]:
     if env.get(key) != value: sys.exit('Corrija a URL pública de staging: '+key)
 if web.get('FRONTEND_ORIGIN') != origin: sys.exit('Use uma única origem HTTPS no frontend.')
 if str(web.get('AUTH_COOKIE_SECURE')).lower() != 'true' or str(web.get('ALLOW_INSECURE_LOCAL_COOKIES')).lower() != 'false':
@@ -22,7 +22,7 @@ if env.get('DATABASE_URL') != env.get('APP_DATABASE_URL') or env.get('PLATFORM_A
 for service in ['api','migrate','frontend']:
     if not re.search(r'@sha256:[a-f0-9]{64}$',x['services'][service]['image']):
         sys.exit('Use uma imagem por digest no lock: '+service)
-required=['AWS_ACCESS_KEY_ID','AWS_SECRET_ACCESS_KEY','AWS_REGION','AWS_SES_FROM_EMAIL']
+required=['R2_ACCOUNT_ID','R2_ACCESS_KEY_ID','R2_SECRET_ACCESS_KEY','R2_ENDPOINT','R2_PUBLIC_URL','R2_BUCKET_NAME','R2_PRIVATE_BUCKET_NAME','AWS_ACCESS_KEY_ID','AWS_SECRET_ACCESS_KEY','AWS_REGION','AWS_SES_FROM_EMAIL']
 missing=[key for key in required if not str(env.get(key,'')).strip()]
 if missing: sys.exit('Preencha as variáveis: '+', '.join(missing))
 if str(env.get('STRIPE_ENABLED','')).lower() == 'true' and not str(env.get('STRIPE_SECRET_KEY','')).startswith(('sk_test_', 'rk_test_')):

@@ -1,3 +1,4 @@
+import { brandImageStub } from '../../../test/support/brand-image.stub';
 /**
  * O rascunho não emite.
  *
@@ -46,6 +47,7 @@ function montar(source: unknown) {
     inputs as never,
     documentContext as never,
     quotes,
+    brandImageStub(),
   );
 
   return {

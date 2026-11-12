@@ -183,7 +183,7 @@ export class ReportService {
       signatures: report.signatures,
       contentHash: report.contentHash,
     });
-    const stored = await this.storage.store(pdf);
+    const stored = await this.storage.store(pdf, organizationId);
     try {
       const document = await this.repository.createDocument(
         id,

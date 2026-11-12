@@ -17,7 +17,7 @@
  * a mensagem de recusa dele é exibida como veio.
  */
 import { useRef, useState } from "react";
-import { Trash2, Upload, UserRound } from "lucide-react";
+import { Trash2, Upload, UserRound, Loader2 } from "lucide-react";
 
 import { AvatarCropDialog } from "@/components/profile/avatar-crop.dialog";
 import { MutationError } from "@/components/artifact-studio/mutation-error";
@@ -60,7 +60,7 @@ export function AvatarSection({
     if (!file) return;
 
     if (!ACCEPTED_IMAGE_TYPES.includes(file.type as never)) {
-      setRecusa("Escolha uma imagem PNG, JPEG ou WEBP.");
+      setRecusa("Escolha uma imagem PNG, JPEG, WebP ou HEIC.");
       return;
     }
 
@@ -73,6 +73,14 @@ export function AvatarSection({
      * faz por ela.
      */
     setRecusa(null);
+    if (file.type === "image/heic") {
+      if (file.size > 10_000_000) {
+        setRecusa("A imagem deve ter até 10 MB.");
+        return;
+      }
+      upload.mutate(file);
+      return;
+    }
     setRecortando(file);
   };
 
@@ -135,8 +143,16 @@ export function AvatarSection({
                   disabled={upload.isPending || remove.isPending}
                   onClick={() => input.current?.click()}
                 >
-                  <Upload className="size-4" aria-hidden />
-                  {avatar.available ? "Trocar foto" : "Enviar foto"}
+                  {upload.isPending ? (
+                    <Loader2 className="size-4 animate-spin" aria-hidden />
+                  ) : (
+                    <Upload className="size-4" aria-hidden />
+                  )}
+                  {upload.isPending
+                    ? "Enviando..."
+                    : avatar.available
+                      ? "Trocar foto"
+                      : "Enviar foto"}
                 </Button>
 
                 {avatar.available ? (
@@ -154,8 +170,8 @@ export function AvatarSection({
               </div>
 
               <p className="text-xs text-muted-foreground">
-                PNG, JPEG ou WEBP. Você enquadra antes de enviar. Sem foto,
-                aparecem suas iniciais.
+                PNG, JPEG, WebP ou HEIC. Você enquadra antes de enviar. Sem
+                foto, aparecem suas iniciais.
               </p>
 
               {recusa ? (

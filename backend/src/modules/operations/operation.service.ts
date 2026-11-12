@@ -637,14 +637,14 @@ export class OperationService {
     if (!file || file.size === 0) {
       throw new ValidationException('Attachment file is required');
     }
-    const stored = await this.storage.store(file);
+    const stored = await this.storage.store(file, organizationId);
     try {
       return await this.repository.createAttachment(
         {
           operationId: id,
           uploadedById: actorId,
-          fileName: this.fileName(file.originalname),
-          mimeType: file.mimetype || 'application/octet-stream',
+          fileName: this.fileName(stored.fileName),
+          mimeType: stored.mimeType || 'application/octet-stream',
           size: stored.size,
           storageKey: stored.storageKey,
           checksum: stored.checksum,

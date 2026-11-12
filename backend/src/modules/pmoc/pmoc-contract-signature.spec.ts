@@ -1,3 +1,5 @@
+import sharp from 'sharp';
+import { brandImageStub } from '../../../test/support/brand-image.stub';
 import { PmocService } from './pmoc.service';
 import type { PmocActor } from './pmoc.service';
 import { ConflictException, EntityNotFoundException } from '../../exceptions';
@@ -72,6 +74,7 @@ describe('assinatura pública do contrato de PMOC', () => {
         .mockResolvedValue(
           options.contrato === undefined ? linhaDoContrato() : options.contrato,
         ),
+      signatureUploadScope: jest.fn().mockResolvedValue('org-1'),
       signByToken: jest
         .fn()
         .mockResolvedValue(
@@ -82,6 +85,7 @@ describe('assinatura pública do contrato de PMOC', () => {
       defaultBucket: 'orbit',
       put: jest.fn().mockResolvedValue({ sizeBytes: 10 }),
       get: jest.fn(),
+      remove: jest.fn().mockResolvedValue(undefined),
     };
     const service = new PmocService(
       repository as never,
@@ -91,6 +95,8 @@ describe('assinatura pública do contrato de PMOC', () => {
       undefined as never,
       undefined as never,
       storage as never,
+      undefined,
+      brandImageStub(),
     );
     jest.spyOn(service, 'document').mockResolvedValue({
       bytes: Buffer.from('%PDF-1.7 frozen contract'),
@@ -247,17 +253,22 @@ describe('assinatura pública do contrato de PMOC', () => {
         [{ sha256: string; sizeBytes: number }],
       ];
       expect(gravado.sha256).toMatch(/^[0-9a-f]{64}$/);
-      expect(gravado.sizeBytes).toBe(PNG.byteLength);
+      expect(gravado.sizeBytes).toBe(
+        (await sharp(PNG).webp({ quality: 80 }).toBuffer()).byteLength,
+      );
     });
 
     /** A chave do objeto não revela qual contrato é: o bucket é da organização toda. */
-    it('a chave do objeto deriva do token, não do plano', async () => {
+    it('a chave do objeto usa o tenant sem expor token ou plano', async () => {
       const { service, storage } = montar();
 
       await assinar(service);
 
       const [[enviado]] = storage.put.mock.calls as [[{ objectKey: string }]];
-      expect(enviado.objectKey).toContain(HashHelper.sha256('token'));
+      expect(enviado.objectKey).toMatch(
+        /^pmoc-contract-signatures\/org-1\/[0-9]+-[a-f0-9-]+\.webp$/,
+      );
+      expect(enviado.objectKey).not.toContain(HashHelper.sha256('token'));
       expect(enviado.objectKey).not.toContain('plan-1');
     });
 

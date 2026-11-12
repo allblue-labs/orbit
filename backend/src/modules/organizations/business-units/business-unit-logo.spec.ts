@@ -1,3 +1,4 @@
+import { brandImageStub } from '../../../../test/support/brand-image.stub';
 /**
  * A marca da unidade, no caminho de escrita.
  *
@@ -31,6 +32,7 @@ function montar(unidade: unknown = { id: 'unit-1' }) {
   const service = new BusinessUnitService(
     repository as unknown as BusinessUnitRepository,
     {} as unknown as EntitlementService,
+    brandImageStub(),
   );
   return { service, repository };
 }

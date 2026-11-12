@@ -1,3 +1,4 @@
+import { brandImageStub } from '../../../test/support/brand-image.stub';
 /**
  * A marca da empresa, no caminho de escrita.
  *
@@ -29,6 +30,7 @@ function montar(organizacao: unknown = { id: 'org-1', logoUrl: null }) {
   const service = new OrganizationService(
     repository as unknown as OrganizationRepository,
     {} as unknown as AuthorizationService,
+    brandImageStub(),
   );
   return { service, repository };
 }

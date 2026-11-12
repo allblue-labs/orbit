@@ -1,3 +1,4 @@
+import { brandImageStub } from '../../../test/support/brand-image.stub';
 import { ValidationException } from '../../exceptions';
 import { BusinessUnitType } from '../../contracts';
 import type { OrganizationRepository } from './organization.repository';
@@ -11,6 +12,7 @@ describe('OrganizationService', () => {
   const service = new OrganizationService(
     repository as unknown as OrganizationRepository,
     {} as unknown as AuthorizationService,
+    brandImageStub(),
   );
 
   beforeEach(() => jest.clearAllMocks());

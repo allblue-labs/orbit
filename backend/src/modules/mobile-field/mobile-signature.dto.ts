@@ -52,9 +52,11 @@ export class MobileSignatureUploadReservationDto {
   @MaxLength(255)
   fileName!: string;
 
-  @ApiProperty({ enum: ['image/png', 'image/jpeg', 'image/webp'] })
-  @IsIn(['image/png', 'image/jpeg', 'image/webp'])
-  mimeType!: 'image/png' | 'image/jpeg' | 'image/webp';
+  @ApiProperty({
+    enum: ['image/png', 'image/jpeg', 'image/webp', 'image/heic'],
+  })
+  @IsIn(['image/png', 'image/jpeg', 'image/webp', 'image/heic'])
+  mimeType!: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/heic';
 
   @ApiProperty({ maximum: 2_000_000 })
   @IsInt()

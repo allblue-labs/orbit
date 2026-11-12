@@ -218,7 +218,7 @@ export class QuoteAcceptanceService {
             id: link.signatureFileId,
             organizationId: link.organizationId,
             status: 'AVAILABLE',
-            mimeType: 'image/png',
+            mimeType: { in: ['image/png', 'image/webp'] },
           },
         });
         const signature = await this.files.read(

@@ -75,12 +75,6 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/* \
   && groupadd --system --gid 1001 orbit \
   && useradd --system --uid 1001 --gid orbit orbit \
-  && mkdir -p /app/storage/operations \
-  && mkdir -p /app/storage/documents \
-  # Objetos do Storage Provider (PR-19). O diretório precisa existir na imagem
-  # com a dona certa: um volume montado sobre caminho inexistente nasce do root,
-  # e o processo, que roda como `orbit`, não consegue gravar.
-  && mkdir -p /app/storage/objects \
   && chown -R orbit:orbit /app
 
 COPY --from=production-dependencies --chown=orbit:orbit /app/node_modules ./node_modules

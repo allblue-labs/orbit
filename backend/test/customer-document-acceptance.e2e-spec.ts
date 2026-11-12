@@ -1,3 +1,4 @@
+import { brandImageStub } from './support/brand-image.stub';
 import { PrismaClient } from '@prisma/client';
 import { PDFDocument } from 'pdf-lib';
 import { QuoteAcceptedDocumentService } from '../src/modules/quotes/quote-accepted-document.service';
@@ -72,6 +73,10 @@ describe('aceite público de propostas com RLS real', () => {
     put: jest.fn(({ objectKey, body }: PutObjectInput) => {
       objects.set(objectKey, body);
       return Promise.resolve({ sizeBytes: body.length });
+    }),
+    remove: jest.fn(({ objectKey }: StorageObjectRef) => {
+      objects.delete(objectKey);
+      return Promise.resolve();
     }),
     get: jest.fn(({ objectKey }: StorageObjectRef) => {
       const bytes = objects.get(objectKey);
@@ -181,7 +186,8 @@ describe('aceite público de propostas com RLS real', () => {
       repository,
       new QuoteDocumentService(),
       storage as unknown as StorageProvider,
-      undefined as never, // Este cenário não converte orçamentos em operações.
+      undefined as never,
+      brandImageStub(), // Este cenário não converte orçamentos em operações.
     );
     const files = new FileObjectService(
       storage as unknown as StorageProvider,
@@ -212,6 +218,8 @@ describe('aceite público de propostas com RLS real', () => {
       undefined as never,
       new PmocPlanDocumentService(),
       storage as unknown as StorageProvider,
+      undefined,
+      brandImageStub(),
     );
     signatureBase64 = (
       await sharp({

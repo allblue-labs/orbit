@@ -47,9 +47,21 @@ export class CreateFieldEvidenceUploadDto {
   filename!: string;
 
   @ApiProperty({
-    enum: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'],
+    enum: [
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+      'image/heic',
+      'application/pdf',
+    ],
   })
-  @IsIn(['image/jpeg', 'image/png', 'image/webp', 'application/pdf'])
+  @IsIn([
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'image/heic',
+    'application/pdf',
+  ])
   declaredMimeType!: string;
 
   @ApiProperty({ maximum: 100_000_000 })

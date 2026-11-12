@@ -1,3 +1,4 @@
+import { brandImageStub } from '../../../test/support/brand-image.stub';
 /**
  * Quem pode concluir a manutenção de um equipamento.
  *
@@ -56,6 +57,8 @@ function servico(resposta: unknown) {
     undefined as never,
     /* Storage: estes testes não imprimem documento, e o dublê diz isso. */
     undefined as never,
+    undefined,
+    brandImageStub(),
   );
   return { service, repository };
 }
@@ -113,6 +116,8 @@ describe('autoridade para abrir o próprio atendimento', () => {
       undefined as never,
       /* Storage: estes testes não imprimem documento, e o dublê diz isso. */
       undefined as never,
+      undefined,
+      brandImageStub(),
     );
     return { service, repository, mapper };
   }
@@ -285,6 +290,8 @@ describe('autoridade para emitir o relatório da execução', () => {
       undefined as never,
       /* Storage: estes testes não imprimem documento, e o dublê diz isso. */
       undefined as never,
+      undefined,
+      brandImageStub(),
     );
     return { service, repository };
   }

@@ -1,3 +1,4 @@
+import { brandImageStub } from '../../../test/support/brand-image.stub';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { PmocService, type PmocActor } from './pmoc.service';
@@ -56,6 +57,8 @@ function fixture(responsibleId: string | null = null) {
     {} as never,
     {} as never,
     {} as never,
+    undefined,
+    brandImageStub(),
   );
   return { service, repository, professionals };
 }

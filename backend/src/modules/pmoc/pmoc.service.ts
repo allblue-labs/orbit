@@ -1,3 +1,6 @@
+import { ImageOptimizationService } from '../storage/image-optimization.service';
+import { BrandImageService } from '../storage/brand-image.service';
+import { pdfImage } from '../storage/pdf-image';
 /**
  * Regras do domínio PMOC.
  *
@@ -248,7 +251,9 @@ export class PmocService {
        contrato — a mesma dependência que o orçamento usa, pelo mesmo motivo. */
     @Inject(STORAGE_PROVIDER) private readonly storage: StorageProvider,
     @Optional()
-    private readonly mobileNotifications?: MobileNotificationService,
+    private readonly mobileNotifications: MobileNotificationService | undefined,
+    private readonly brands: BrandImageService,
+    private readonly images: ImageOptimizationService = new ImageOptimizationService(),
   ) {}
 
   /* ---------------------------------------------------------------- */
@@ -288,7 +293,7 @@ export class PmocService {
 
     const token = randomBytes(48).toString('base64url');
     const document = await this.document(id, actor);
-    const documentObjectKey = `pmoc-contract-documents/${generateUuidV7()}.pdf`;
+    const documentObjectKey = `pmoc-contract-documents/${actor.organizationId}/${Date.now()}-${generateUuidV7()}.pdf`;
     await this.storage.put({
       bucket: this.storage.defaultBucket,
       objectKey: documentObjectKey,
@@ -427,17 +432,21 @@ export class PmocService {
       return { state: estadoAtual, reason: MOTIVO_DO_ESTADO[estadoAtual] };
     }
 
-    const sha256 = createHash('sha256').update(input.signature).digest('hex');
+    const organizationId =
+      await this.repository.signatureUploadScope(tokenHash);
+    if (!organizationId) throw new EntityNotFoundException('PmocContract');
+    const body = await this.images.optimize(input.signature, input.mimeType);
+    const sha256 = createHash('sha256').update(body).digest('hex');
     /* A chave carrega o hash do token, e não o id do plano: ela não pode revelar
        qual contrato é, porque o bucket é compartilhado pela organização. */
-    const objectKey = `pmoc-contract-signatures/${tokenHash}/${generateUuidV7()}.png`;
+    const objectKey = `pmoc-contract-signatures/${organizationId}/${Date.now()}-${generateUuidV7()}.webp`;
     const bucket = this.storage.defaultBucket;
 
     await this.storage.put({
       bucket,
       objectKey,
-      body: input.signature,
-      mimeType: input.mimeType,
+      body,
+      mimeType: 'image/webp',
       metadata: { source: 'PMOC_CONTRACT_SIGNATURE' },
     });
 
@@ -450,8 +459,9 @@ export class PmocService {
       userAgent: input.userAgent,
       bucket,
       objectKey,
-      mimeType: input.mimeType,
-      sizeBytes: input.signature.byteLength,
+      mimeType: 'image/webp',
+      sizeBytes: body.byteLength,
+      provider: this.storage.name,
       sha256,
     });
 
@@ -464,6 +474,7 @@ export class PmocService {
      * `?? null` produzia `{ reason: null }`, que é **o sinal de sucesso**: a página
      * diria "contrato assinado" sem nada ter sido gravado.
      */
+    if (!resultado.signed) await this.storage.remove({ bucket, objectKey });
     if (resultado.state === 'INEXISTENTE') {
       throw new EntityNotFoundException('PmocContract');
     }
@@ -511,11 +522,13 @@ export class PmocService {
 
     try {
       return {
-        bytes: await this.storage.get({
-          bucket: coletada.signatureFile.bucket,
-          objectKey: coletada.signatureFile.objectKey,
-        }),
-        mimeType: coletada.signatureFile.mimeType,
+        ...(await pdfImage(
+          await this.storage.get({
+            bucket: coletada.signatureFile.bucket,
+            objectKey: coletada.signatureFile.objectKey,
+          }),
+          coletada.signatureFile.mimeType,
+        )),
         signerName: coletada.signerName,
         signedAtLabel: assinadoEm ? `Assinado em ${assinadoEm}` : undefined,
       };
@@ -557,11 +570,13 @@ export class PmocService {
     if (!assinatura) return {};
     try {
       return {
-        bytes: await this.storage.get({
-          bucket: assinatura.storageObject.bucket,
-          objectKey: assinatura.storageObject.objectKey,
-        }),
-        mimeType: assinatura.storageObject.mimeType,
+        ...(await pdfImage(
+          await this.storage.get({
+            bucket: assinatura.storageObject.bucket,
+            objectKey: assinatura.storageObject.objectKey,
+          }),
+          assinatura.storageObject.mimeType,
+        )),
       };
     } catch {
       return {};
@@ -1088,7 +1103,11 @@ export class PmocService {
     const bytes = await this.planDocument.render({
       timezone: fuso,
       emitter: {
-        ...logoDoEmissor(plan.businessUnit),
+        ...logoDoEmissor({
+          organization: null,
+          logoUrl: (await this.brands.read(issuerLogo(plan.businessUnit)))
+            ?.dataUrl,
+        }),
         tradeName: plan.businessUnit?.tradeName ?? undefined,
         legalName: plan.businessUnit?.legalName ?? undefined,
         document: documentoFormatado(

@@ -1,3 +1,5 @@
+import { pdfImage } from '../storage/pdf-image';
+import { BrandImageService } from '../storage/brand-image.service';
 /**
  * Monta o `RenderInput` a partir do que o banco devolveu.
  *
@@ -25,7 +27,6 @@ import { DocumentContextBuilder } from './document-context.builder';
 import type { DocumentContext } from './renderers/pdf/kit/document-context';
 import type { RenderInput } from './renderers/artifact-renderer';
 import { PMOC_EXECUTION_LEGAL_REFERENCE } from './renderers/pdf/documents/legal';
-import { readEmbeddedImage } from '../../common/embedded-image';
 import { issuerLogo } from '../../common/issuer-brand';
 
 /** A linha que o repositório devolve, com os anexos já resolvidos. */
@@ -83,6 +84,7 @@ export class RenderInputFactory {
     private readonly assembler: ArtifactRenderAssembler,
     private readonly documentContext: DocumentContextBuilder,
     @Inject(STORAGE_PROVIDER) private readonly storage: StorageProvider,
+    private readonly brands: BrandImageService,
   ) {}
 
   async build(
@@ -97,7 +99,7 @@ export class RenderInputFactory {
        ou da empresa quando a unidade não tem marca própria. `readEmbeddedImage`
        recusa URL — que o servidor teria de buscar — e SVG, que é documento e
        não imagem. */
-    const logo = readEmbeddedImage(issuerLogo(source.businessUnit));
+    const logo = await this.brands.read(issuerLogo(source.businessUnit));
 
     /*
      * Os fatos do PMOC vêm do **snapshot**.
@@ -188,21 +190,27 @@ export class RenderInputFactory {
     ];
 
     return Promise.all(
-      itens.map(async (item) => ({
-        id: item.id,
-        kind: item.kind,
-        caption: item.caption,
-        fileName: item.fileName,
-        mimeType: item.mimeType,
-        sha256: item.sha256,
-        bytes:
+      itens.map(async (item) => {
+        const image =
           item.storageFile.status === 'AVAILABLE'
-            ? await this.storage.get({
-                bucket: item.storageFile.bucket,
-                objectKey: item.storageFile.objectKey,
-              })
-            : undefined,
-      })),
+            ? await pdfImage(
+                await this.storage.get({
+                  bucket: item.storageFile.bucket,
+                  objectKey: item.storageFile.objectKey,
+                }),
+                item.mimeType,
+              )
+            : undefined;
+        return {
+          id: item.id,
+          kind: item.kind,
+          caption: item.caption,
+          fileName: item.fileName,
+          sha256: item.sha256,
+          mimeType: image?.mimeType ?? item.mimeType,
+          bytes: image?.bytes,
+        };
+      }),
     );
   }
 
@@ -214,11 +222,13 @@ export class RenderInputFactory {
             [
               asset.id,
               {
-                bytes: await this.storage.get({
-                  bucket: asset.bucket,
-                  objectKey: asset.objectKey,
-                }),
-                mimeType: asset.mimeType,
+                ...(await pdfImage(
+                  await this.storage.get({
+                    bucket: asset.bucket,
+                    objectKey: asset.objectKey,
+                  }),
+                  asset.mimeType,
+                )),
               },
             ] as const,
         ),
@@ -245,11 +255,13 @@ export class RenderInputFactory {
             [
               asset.id,
               {
-                bytes: await this.storage.get({
-                  bucket: asset.bucket,
-                  objectKey: asset.objectKey,
-                }),
-                mimeType: asset.mimeType,
+                ...(await pdfImage(
+                  await this.storage.get({
+                    bucket: asset.bucket,
+                    objectKey: asset.objectKey,
+                  }),
+                  asset.mimeType,
+                )),
                 fileName: asset.fileName,
               },
             ] as const,

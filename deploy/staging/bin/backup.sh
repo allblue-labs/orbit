@@ -18,13 +18,8 @@ if [[ -n "$api_running" ]]; then
 fi
 "${compose[@]}" exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom' > "$target/database.dump"
 "${compose[@]}" exec -T postgres sh -c 'pg_restore --list' < "$target/database.dump" > "$target/database.contents"
-# O container parado conserva seus mounts. Não grave segredos em manifestos.
-api_id=$("${compose[@]}" ps -a -q api)
-[[ -n "$api_id" ]] || { echo 'Container da API não encontrado.' >&2; exit 1; }
-for volume_path in operations documents objects; do
-    mkdir -m 700 "$target/$volume_path"
-    docker cp "$api_id:/app/storage/$volume_path/." "$target/$volume_path/"
-done
+# R2 objects are not on this server. Back up buckets separately; the database
+# snapshot preserves their keys and SHA-256 values. Legacy volumes remain untouched.
 cp docker-compose.yml "$target/"
 [[ ! -f docker-compose.lock.yml ]] || cp docker-compose.lock.yml "$target/"
 # As chaves de criptografia/segredos devem ser preservadas separadamente no cofre.

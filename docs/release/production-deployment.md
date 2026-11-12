@@ -25,13 +25,11 @@ nunca imprima a configuração interpolada: ela contém segredos.
    smoke local isolado. O mesmo `FRONTEND_ORIGIN` é injetado no frontend: ele é
    a autoridade da validação same-origin do BFF e não pode ser inferido do host
    interno do container ou do reverse proxy.
-7. Com `STORAGE_PROVIDER=LOCAL`, configure `STORAGE_LOCAL_PUBLIC_URL` com a URL
-   HTTPS pública da API, incluindo `/api/v1` (por exemplo,
-   `https://orbit.example.com/api/v1`). O padrão `localhost` do Compose é para
-   desenvolvimento: em um link aberto por outra máquina, ele aponta para essa
-   máquina. No Nginx, encaminhe `/api/v1/` para a API e deixe `/api/auth/`,
-   `/api/orbit/` e `/api/cep/` no Next.js. O frontend encaminha imagens do
-   storage local pelo BFF; links externos e clientes mobile usam a URL pública.
+7. Configure R2 com os dois buckets e o domínio CDN, conforme
+   [`cloudflare-r2.md`](../../backend/docs/cloudflare-r2.md). Em instalações
+   existentes, migre os volumes antes de iniciar a API nova. Produção recusa
+   `STORAGE_PROVIDER=LOCAL`; a API não monta diretórios de mídia. Preserve no
+   Nginx `/api/v1/` para a API e `/api/orbit/`/`/api/auth/` para o Next.js.
 
 ## Build reproduzível e provenance
 

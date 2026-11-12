@@ -1,3 +1,4 @@
+import sharp from 'sharp';
 import { Injectable } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
 import { PDFDocument as PdfArchive } from 'pdf-lib';
@@ -27,7 +28,14 @@ export class QuoteAcceptedDocumentService {
     original: Buffer,
     acceptance: CustomerAcceptance,
   ): Promise<Buffer> {
-    const receipt = await this.receipt(acceptance);
+    const receipt = await this.receipt({
+      ...acceptance,
+      signature: await sharp(acceptance.signature, {
+        limitInputPixels: 4_000_000,
+      })
+        .png()
+        .toBuffer(),
+    });
     const document = await PdfArchive.load(original);
     const appendix = await PdfArchive.load(receipt);
     const pages = await document.copyPages(appendix, appendix.getPageIndices());

@@ -1,23 +1,5 @@
-/**
- * A foto de perfil.
- *
- * ## O que ela é, e o que não é
- *
- * É um arquivo como qualquer outro do produto: reservado, enviado por URL
- * assinada, **conferido pelos primeiros bytes**, com hash e ciclo de vida. O
- * que a coluna `users.avatar_storage_file_id` guarda é a referência — nunca o
- * binário, e nunca uma URL permanente.
- *
- * Ela **não** é assinatura. Assinatura profissional é `UserSignature`,
- * versionada e usada em documento; foto é decoração de identidade e a versão
- * anterior não interessa a ninguém. Fundir as duas daria à foto um histórico
- * que ninguém consulta e à assinatura um ciclo de vida que ela não pode ter.
- *
- * ## A leitura é temporária, sempre
- *
- * O endereço devolvido expira. Publicar uma URL permanente transformaria a
- * foto num objeto acessível a quem descobrisse o endereço, para sempre — e
- * "para sempre" inclui depois de a pessoa sair da empresa.
+/** Profile photos use immutable public CDN keys; activation remains tenant/user scoped.
+ * Replacing a photo removes its old object without touching versioned signatures.
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { createHash } from 'node:crypto';
@@ -39,11 +21,11 @@ import { AvatarRepository } from '../infrastructure/avatar.repository';
  * megabytes já é generoso — o limite existe para que ninguém use o campo como
  * depósito, não para acomodar a foto original da câmera.
  */
-export const AVATAR_MAX_BYTES = 2_000_000;
+export const AVATAR_MAX_BYTES = 10_000_000;
 
 export interface AvatarView {
   available: boolean;
-  /** Temporária. Nula quando não há foto. */
+  /** URL absoluta do CDN. Nula quando não há foto. */
   url: string | null;
   expiresAt: string | null;
   updatedAt: string | null;
@@ -119,7 +101,7 @@ export class AvatarService {
       );
     if (file.sizeBytes > BigInt(AVATAR_MAX_BYTES))
       throw new ValidationException(
-        'A foto deve ter no máximo 2 MB',
+        'A foto deve ter no máximo 10 MB',
         undefined,
         'FILE_TOO_LARGE',
       );

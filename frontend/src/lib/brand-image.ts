@@ -36,7 +36,12 @@ export type BrandImageResult =
   | { readonly ok: true; readonly dataUrl: string; readonly bytes: number }
   | { readonly ok: false; readonly error: BrandImageError };
 
-const ACEITOS = new Set(["image/png", "image/jpeg", "image/webp"]);
+const ACEITOS = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/heic",
+]);
 
 /**
  * Lê o arquivo, reduz para o tamanho de uso e devolve o data URI.
@@ -45,9 +50,7 @@ const ACEITOS = new Set(["image/png", "image/jpeg", "image/webp"]);
  * marcas usa, e evita que um JPEG com fundo branco ganhe um retângulo visível
  * sobre o cabeçalho claro.
  */
-export async function prepareBrandImage(
-  file: File,
-): Promise<BrandImageResult> {
+export async function prepareBrandImage(file: File): Promise<BrandImageResult> {
   if (!ACEITOS.has(file.type)) {
     return {
       ok: false,
@@ -56,6 +59,28 @@ export async function prepareBrandImage(
         message: "Envie a marca em PNG, JPEG ou WebP.",
       },
     };
+  }
+
+  if (file.type === "image/heic") {
+    if (file.size > 10_000_000)
+      return {
+        ok: false,
+        error: { kind: "size", message: "A imagem deve ter até 10 MB." },
+      };
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(new Error("Falha na leitura"));
+        reader.readAsDataURL(file);
+      });
+      return { ok: true, dataUrl, bytes: file.size };
+    } catch {
+      return {
+        ok: false,
+        error: { kind: "decode", message: "Não foi possível ler esta imagem." },
+      };
+    }
   }
 
   let bitmap: ImageBitmap;
@@ -100,7 +125,9 @@ export async function prepareBrandImage(
   bitmap.close();
 
   const dataUrl = canvas.toDataURL("image/png");
-  const bytes = Math.ceil(((dataUrl.length - dataUrl.indexOf(",") - 1) * 3) / 4);
+  const bytes = Math.ceil(
+    ((dataUrl.length - dataUrl.indexOf(",") - 1) * 3) / 4,
+  );
 
   if (bytes > TAMANHO_MAXIMO) {
     return {

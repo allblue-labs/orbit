@@ -1,61 +1,67 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
-import { basename, extname, resolve } from 'node:path';
-import { InfrastructureException } from '../../exceptions';
+import { extname } from 'node:path';
 import { generateUuidV7 } from '../../utils';
-
+import {
+  STORAGE_PROVIDER,
+  type StorageProvider,
+} from '../storage/storage.types';
+import { ImageOptimizationService } from '../storage/image-optimization.service';
 export interface StoredOperationFile {
   storageKey: string;
   checksum: string;
   size: number;
+  mimeType: string;
+  fileName: string;
 }
-
 @Injectable()
 export class OperationStorageService {
-  private readonly root = resolve(
-    process.env.OPERATION_UPLOAD_DIR ?? 'storage/operations',
-  );
-
-  async store(file: Express.Multer.File): Promise<StoredOperationFile> {
-    const extension = extname(file.originalname).toLowerCase().slice(0, 12);
-    const storageKey = `${generateUuidV7()}${extension}`;
-    try {
-      await mkdir(this.root, { recursive: true });
-      await writeFile(this.path(storageKey), file.buffer, { flag: 'wx' });
-      return {
-        storageKey,
-        checksum: createHash('sha256').update(file.buffer).digest('hex'),
-        size: file.size,
-      };
-    } catch {
-      throw new InfrastructureException('Unable to persist attachment');
-    }
+  constructor(
+    @Inject(STORAGE_PROVIDER) private readonly provider: StorageProvider,
+    private readonly images: ImageOptimizationService,
+  ) {}
+  async store(
+    file: Express.Multer.File,
+    organizationId: string,
+  ): Promise<StoredOperationFile> {
+    const image = file.mimetype.startsWith('image/');
+    const body = image
+      ? await this.images.optimize(file.buffer, file.mimetype)
+      : file.buffer;
+    const mimeType = image ? 'image/webp' : file.mimetype;
+    const extension = image
+      ? '.webp'
+      : extname(file.originalname)
+          .toLowerCase()
+          .replace(/[^.a-z0-9]/g, '')
+          .slice(0, 12);
+    const storageKey = `attachments/${organizationId}/${Date.now()}-${generateUuidV7()}${extension}`;
+    await this.provider.put({
+      bucket: this.provider.defaultBucket,
+      objectKey: storageKey,
+      body,
+      mimeType,
+    });
+    return {
+      storageKey,
+      checksum: createHash('sha256').update(body).digest('hex'),
+      size: body.length,
+      mimeType,
+      fileName: image
+        ? file.originalname.replace(/\.[^.]+$/, '') + '.webp'
+        : file.originalname,
+    };
   }
-
-  async read(storageKey: string): Promise<Buffer> {
-    try {
-      return await readFile(this.path(storageKey));
-    } catch {
-      throw new InfrastructureException('Unable to read attachment');
-    }
+  read(storageKey: string) {
+    return this.provider.get({
+      bucket: this.provider.defaultBucket,
+      objectKey: storageKey,
+    });
   }
-
-  async remove(storageKey: string): Promise<void> {
-    try {
-      await unlink(this.path(storageKey));
-    } catch (error) {
-      const code =
-        typeof error === 'object' && error && 'code' in error
-          ? error.code
-          : undefined;
-      if (code !== 'ENOENT') {
-        throw new InfrastructureException('Unable to remove attachment');
-      }
-    }
-  }
-
-  private path(storageKey: string): string {
-    return resolve(this.root, basename(storageKey));
+  remove(storageKey: string) {
+    return this.provider.remove({
+      bucket: this.provider.defaultBucket,
+      objectKey: storageKey,
+    });
   }
 }

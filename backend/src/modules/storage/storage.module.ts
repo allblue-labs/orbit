@@ -1,3 +1,5 @@
+import { StorageUploadGuard } from './storage-upload.guard';
+import { StorageCleanupService } from './storage-cleanup.service';
 /**
  * Composição do armazenamento.
  *
@@ -16,6 +18,8 @@ import {
 import { STORAGE_PROVIDER, type StorageProvider } from './storage.types';
 import { LocalFilesystemStorageProvider } from './providers/local-filesystem.storage';
 import { S3CompatibleStorageProvider } from './providers/s3-compatible.storage';
+import { BrandImageService } from './brand-image.service';
+import { ImageOptimizationService } from './image-optimization.service';
 import { FileObjectService } from './file-object.service';
 import { StorageFileRepository } from './file-object.repository';
 import { StorageFileMapper } from './file-object.mapper';
@@ -31,7 +35,11 @@ export function createStorageProvider(config: StorageConfig): StorageProvider {
     );
   }
 
-  if (config.provider === 'S3' || config.provider === 'MINIO') {
+  if (
+    config.provider === 'R2' ||
+    config.provider === 'S3' ||
+    config.provider === 'MINIO'
+  ) {
     if (!config.s3) {
       throw new InfrastructureException('S3 storage configuration is missing');
     }
@@ -62,11 +70,19 @@ export function createStorageProvider(config: StorageConfig): StorageProvider {
     StorageFileRepository,
     StorageFileMapper,
     FileObjectService,
+    ImageOptimizationService,
+    BrandImageService,
+    StorageCleanupService,
+    StorageUploadGuard,
   ],
   exports: [
     STORAGE_PROVIDER,
     STORAGE_CONFIG,
     FileObjectService,
+    ImageOptimizationService,
+    BrandImageService,
+    StorageCleanupService,
+    StorageUploadGuard,
     StorageFileRepository,
     StorageFileMapper,
   ],

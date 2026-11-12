@@ -1,3 +1,4 @@
+import { brandImageForm } from "@/lib/upload-media";
 /**
  * Serviços do Organization Workspace.
  *
@@ -112,7 +113,10 @@ export const organizationService = {
     apiClient.get<OrganizationLogo>("/organizations/current/logo", options),
 
   setLogo: (image: string): Promise<OrganizationLogo> =>
-    apiClient.put<OrganizationLogo>("/organizations/current/logo", { image }),
+    apiClient.put<OrganizationLogo>(
+      "/organizations/current/logo",
+      brandImageForm(image),
+    ),
 
   removeLogo: (): Promise<OrganizationLogo> =>
     apiClient.delete<OrganizationLogo>("/organizations/current/logo"),
@@ -139,7 +143,7 @@ export const organizationService = {
    * carregar a imagem junto.
    */
   setBusinessUnitLogo: (id: string, image: string): Promise<BusinessUnitLogo> =>
-    apiClient.put<BusinessUnitLogo>(`${unit(id)}/logo`, { image }),
+    apiClient.put<BusinessUnitLogo>(`${unit(id)}/logo`, brandImageForm(image)),
 
   removeBusinessUnitLogo: (id: string): Promise<BusinessUnitLogo> =>
     apiClient.delete<BusinessUnitLogo>(`${unit(id)}/logo`),

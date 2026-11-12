@@ -1,5 +1,9 @@
+import { FileInterceptor } from '@nestjs/platform-express';
+import { imageUploadOptions } from '../storage/image-upload.options';
 import {
   Body,
+  UploadedFile,
+  UseInterceptors,
   Controller,
   Delete,
   Get,
@@ -249,15 +253,19 @@ export class OrganizationController {
 
   /** `PUT` e não `PATCH`: o recurso é a imagem inteira, substituída de uma vez. */
   @Put('current/logo')
+  @UseInterceptors(FileInterceptor('file', imageUploadOptions))
   @RequiresActivePlan()
   @Permissions('organization.update')
   async setLogo(
     @Req() request: IdentityRequest,
     @Body() input: UpdateOrganizationLogoDto,
+    @UploadedFile() file?: Express.Multer.File,
   ) {
     return this.organizations.setLogo(
       this.organizationId(request),
-      input.image,
+      file
+        ? `data:${file.mimetype};base64,${file.buffer.toString('base64')}`
+        : (input.image ?? ''),
     );
   }
 

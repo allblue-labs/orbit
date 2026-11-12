@@ -7,7 +7,7 @@ import {
   ValidationException,
 } from '../../../exceptions';
 import { SlugHelper } from '../../../helpers';
-import { readEmbeddedImage } from '../../../common/embedded-image';
+import { BrandImageService } from '../../storage/brand-image.service';
 import type {
   CreateBusinessUnitDto,
   UpdateBusinessUnitDto,
@@ -23,6 +23,7 @@ export class BusinessUnitService {
   constructor(
     private readonly repository: BusinessUnitRepository,
     private readonly entitlements: EntitlementService,
+    private readonly brands: BrandImageService,
   ) {}
 
   list(organizationId: string) {
@@ -119,6 +120,7 @@ export class BusinessUnitService {
         'The primary business unit cannot be deleted',
       );
     }
+    await this.brands.remove(unit.logoUrl, organizationId);
     await this.repository.softDelete(id);
   }
 
@@ -132,22 +134,24 @@ export class BusinessUnitService {
    * inválido chegue a ser gravado.
    */
   async setLogo(id: string, organizationId: string, image: string) {
-    await this.require(id, organizationId);
-
-    const imagem = readEmbeddedImage(image);
-    if (!imagem) {
-      throw new ValidationException(
-        'A imagem precisa ser um PNG ou JPEG de até 512 KB, enviado como data URI.',
-      );
+    const previous = await this.require(id, organizationId);
+    const logoUrl = await this.brands.store(organizationId, id, image);
+    try {
+      const saved = await this.repository.setLogo(id, logoUrl);
+      await this.brands.remove(previous.logoUrl, organizationId);
+      return saved;
+    } catch (error) {
+      const current = await this.repository.find(id, organizationId);
+      if (current?.logoUrl !== logoUrl)
+        await this.brands.remove(logoUrl, organizationId);
+      throw error;
     }
-
-    return this.repository.setLogo(id, imagem.dataUrl);
   }
-
-  /** Volta a emitir sem timbre. */
   async removeLogo(id: string, organizationId: string) {
-    await this.require(id, organizationId);
-    return this.repository.setLogo(id, null);
+    const previous = await this.require(id, organizationId);
+    const saved = await this.repository.setLogo(id, null);
+    await this.brands.remove(previous.logoUrl, organizationId);
+    return saved;
   }
 
   private async require(id: string, organizationId: string) {

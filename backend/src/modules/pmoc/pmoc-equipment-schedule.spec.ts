@@ -1,3 +1,4 @@
+import { brandImageStub } from '../../../test/support/brand-image.stub';
 /* Jest asymmetric matchers are intentionally used in expected objects. */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { PmocRepository } from './pmoc.repository';
@@ -238,6 +239,7 @@ function serviceFixture(required = false, authorized = false) {
     {} as never,
     {} as never,
     notifications as never,
+    brandImageStub(),
   );
   return { service, repository, notifications, data };
 }

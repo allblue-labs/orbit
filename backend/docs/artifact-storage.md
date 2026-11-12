@@ -1,3 +1,8 @@
+> **Atualização R2 (2026-11-12):** o padrão de produção passou a ser R2,
+> com SDK AWS v3, upload em memória e buckets público/privado separados.
+> Exclusões são suportadas. As descrições de LOCAL/SigV4 manual abaixo são
+> históricas; configuração e rollout atuais estão em [cloudflare-r2.md](cloudflare-r2.md).
+
 # Storage Provider & URLs assinadas
 
 A infraestrutura de arquivos da plataforma.
@@ -72,10 +77,10 @@ O teste unitário prova que o algoritmo produz o `canonical request` da
 especificação. Isso não é o mesmo que provar que um servidor **aceita** a URL —
 e foi o round-trip contra MinIO que revelou dois defeitos reais:
 
-| Defeito                                                    | Sintoma | Correção                       |
-| ---------------------------------------------------------- | ------- | ------------------------------ |
+| Defeito                                                     | Sintoma | Correção                                          |
+| ----------------------------------------------------------- | ------- | ------------------------------------------------- |
 | cabeçalhos `x-amz-meta-*` enviados sem entrar na assinatura | **400** | não enviar; o metadado já vive em `storage_files` |
-| assinar como `GET` e requisitar `HEAD`                     | **403** | assinar para o método que será usado |
+| assinar como `GET` e requisitar `HEAD`                      | **403** | assinar para o método que será usado              |
 
 O round-trip cobre: gravar, ler byte a byte, consultar metadados, objeto
 inexistente, URL de download, URL de preview, URL de upload, assinatura
@@ -116,7 +121,17 @@ metadata e `createdAt` — como pedido. O Read Model publica **tudo menos bucket
 e objectKey**:
 
 ```ts
-{ id, fileName, mimeType, sizeBytes, sha256, status, provider, metadata, createdAt }
+{
+  (id,
+    fileName,
+    mimeType,
+    sizeBytes,
+    sha256,
+    status,
+    provider,
+    metadata,
+    createdAt);
+}
 ```
 
 Publicar o endereço interno daria ao cliente algo que muda ao trocar de
@@ -138,7 +153,7 @@ o que a URL de download devolve ao navegador.
 
 `PENDING` → nada foi transferido ainda, sem hash. `AVAILABLE` → o servidor leu
 o objeto e calculou o SHA-256 do que está lá. `MISSING` → a reserva expirou sem
-upload. O banco recusa `AVAILABLE` sem hash por *check constraint*.
+upload. O banco recusa `AVAILABLE` sem hash por _check constraint_.
 
 ## 6. Fluxo de upload
 
@@ -153,19 +168,19 @@ cliente sobre o próprio conteúdo — e é o hash que prova o documento.
 
 ## 7. Configuração
 
-| Variável                          | Padrão                        | Uso                       |
-| --------------------------------- | ----------------------------- | ------------------------- |
-| `STORAGE_PROVIDER`                | `LOCAL`                       | qual provider             |
-| `STORAGE_BUCKET`                  | `orbit-artifacts`             | bucket padrão             |
-| `STORAGE_SIGNED_URL_TTL_SECONDS`  | `300` (teto de 3600)          | validade das URLs         |
-| `STORAGE_LOCAL_DIR`               | `storage/objects`             | raiz do provider local    |
-| `STORAGE_LOCAL_PUBLIC_URL`        | `http://localhost:6001/api/v1`| base das URLs locais      |
-| `STORAGE_LOCAL_SIGNING_SECRET`    | `JWT_ACCESS_SECRET`           | segredo da assinatura local |
-| `STORAGE_S3_ENDPOINT`             | —                             | obrigatório em S3/MinIO   |
-| `STORAGE_S3_REGION`               | `us-east-1`                   |                           |
-| `STORAGE_S3_ACCESS_KEY_ID`        | —                             | obrigatório em S3/MinIO   |
-| `STORAGE_S3_SECRET_ACCESS_KEY`    | —                             | obrigatório em S3/MinIO   |
-| `STORAGE_S3_FORCE_PATH_STYLE`     | `true`                        | `false` para AWS S3       |
+| Variável                         | Padrão                         | Uso                         |
+| -------------------------------- | ------------------------------ | --------------------------- |
+| `STORAGE_PROVIDER`               | `LOCAL`                        | qual provider               |
+| `STORAGE_BUCKET`                 | `orbit-artifacts`              | bucket padrão               |
+| `STORAGE_SIGNED_URL_TTL_SECONDS` | `300` (teto de 3600)           | validade das URLs           |
+| `STORAGE_LOCAL_DIR`              | `storage/objects`              | raiz do provider local      |
+| `STORAGE_LOCAL_PUBLIC_URL`       | `http://localhost:6001/api/v1` | base das URLs locais        |
+| `STORAGE_LOCAL_SIGNING_SECRET`   | `JWT_ACCESS_SECRET`            | segredo da assinatura local |
+| `STORAGE_S3_ENDPOINT`            | —                              | obrigatório em S3/MinIO     |
+| `STORAGE_S3_REGION`              | `us-east-1`                    |                             |
+| `STORAGE_S3_ACCESS_KEY_ID`       | —                              | obrigatório em S3/MinIO     |
+| `STORAGE_S3_SECRET_ACCESS_KEY`   | —                              | obrigatório em S3/MinIO     |
+| `STORAGE_S3_FORCE_PATH_STYLE`    | `true`                         | `false` para AWS S3         |
 
 Configuração incompleta falha na **subida da aplicação**, não na primeira
 requisição de arquivo.

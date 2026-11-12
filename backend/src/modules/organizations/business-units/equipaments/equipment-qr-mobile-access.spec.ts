@@ -1,3 +1,4 @@
+import { brandImageStub } from '../../../../../test/support/brand-image.stub';
 import type { ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { AuthorizationService } from '../../../../common/authorization.service';
@@ -115,6 +116,7 @@ describe('Leitura de equipamentos por QR no aplicativo de campo', () => {
       repository as never,
       {} as never,
       {} as never,
+      brandImageStub(),
     );
     const controller = new AssetController({} as never, service);
     return { request, context, repository, controller };

@@ -1,22 +1,9 @@
-/**
- * Serviço de arquivos — a porta que o domínio usa.
- *
- * Concentra três responsabilidades que nenhum módulo de domínio deve ter:
- *
- * 1. **decidir a chave do objeto** — organização, ano, mês e identificador,
- *    nunca um nome vindo do cliente;
- * 2. **calcular o hash** (Stage 6) — SHA-256 do conteúdo exatamente como
- *    armazenado, o mesmo valor que uma futura assinatura digital cobrirá;
- * 3. **emitir URLs assinadas** — sempre com prazo, sempre por objeto.
- *
- * Nada aqui conhece manifest, anexo ou execução. É o que permite ao mesmo
- * serviço atender os dois usos da PR-19 sem duplicação.
- */
-import { Inject, Injectable } from '@nestjs/common';
+import { StorageCleanupService } from './storage-cleanup.service';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import { extname } from 'node:path';
-import { InfrastructureException } from '../../exceptions';
+import { EntityNotFoundException, ValidationException } from '../../exceptions';
 import { generateUuidV7 } from '../../utils';
 import { STORAGE_CONFIG, type StorageConfig } from './storage.config';
 import {
@@ -29,22 +16,24 @@ import {
   StorageFileRepository,
   type CreateStorageFileData,
 } from './file-object.repository';
+import {
+  ImageOptimizationService,
+  IMAGE_CACHE_CONTROL,
+  MAX_IMAGE_BYTES,
+} from './image-optimization.service';
+import { uploadGrant } from './upload-grant';
 
-/** Namespaces de chave — separam o que tem ciclo de vida diferente. */
 export const STORAGE_NAMESPACES = {
   manifest: 'manifests',
   attachment: 'attachments',
-  /** Relatórios gerenciais: mesmo storage, ciclo de vida próprio. */
   report: 'reports',
   signature: 'signatures',
   evidence: 'field-evidence',
-  /** Foto de perfil. Namespace próprio: outro dono, outro ciclo de vida. */
   avatar: 'avatars',
+  logo: 'logos',
 } as const;
-
 export type StorageNamespace =
   (typeof STORAGE_NAMESPACES)[keyof typeof STORAGE_NAMESPACES];
-
 export interface StoreObjectInput {
   organizationId: string;
   businessUnitId?: string | null;
@@ -55,163 +44,193 @@ export interface StoreObjectInput {
   metadata?: Record<string, unknown>;
   createdById: string | null;
 }
-
 export interface ReserveObjectInput extends Omit<
   StoreObjectInput,
   'body' | 'metadata'
 > {
-  /** Tamanho declarado; conferido na confirmação. */
   sizeBytes: number;
   metadata?: Record<string, unknown>;
 }
 
+/** Domain-facing storage service. Canonical bytes, MIME, size and hash are saved together. */
 @Injectable()
 export class FileObjectService {
+  private readonly logger = new Logger(FileObjectService.name);
   constructor(
     @Inject(STORAGE_PROVIDER) private readonly provider: StorageProvider,
     @Inject(STORAGE_CONFIG) private readonly config: StorageConfig,
     private readonly repository: StorageFileRepository,
+    private readonly images: ImageOptimizationService = new ImageOptimizationService(),
+    @Optional() private readonly garbage?: StorageCleanupService,
   ) {}
-
-  /** SHA-256 do conteúdo — o hash oficial da plataforma (Stage 6). */
   static hash(body: Buffer): string {
     return createHash('sha256').update(body).digest('hex');
   }
-
-  /**
-   * Grava o conteúdo e registra o arquivo.
-   *
-   * O objeto vai para o storage **antes** do registro: um registro apontando
-   * para um objeto inexistente é pior do que um objeto órfão, que a limpeza do
-   * bucket resolve.
-   */
   async store(input: StoreObjectInput) {
-    const objectKey = this.buildObjectKey(input);
-    const sha256 = FileObjectService.hash(input.body);
-
-    await this.provider.put({
-      bucket: this.config.bucket,
-      objectKey,
-      body: input.body,
-      mimeType: input.mimeType,
-      metadata: {
-        organization: input.organizationId,
-        sha256,
-      },
-    });
-
-    return this.repository.create(
-      this.toData(input, objectKey, BigInt(input.body.length), sha256),
-    );
+    return this.storeUsing(input, (data) => this.repository.create(data));
   }
-
-  /** Versão transacional — usada quando o registro precisa acompanhar outro. */
   async storeWith(tx: Prisma.TransactionClient, input: StoreObjectInput) {
-    const objectKey = this.buildObjectKey(input);
-    const sha256 = FileObjectService.hash(input.body);
-
-    await this.provider.put({
-      bucket: this.config.bucket,
-      objectKey,
-      body: input.body,
-      mimeType: input.mimeType,
-      metadata: { organization: input.organizationId, sha256 },
-    });
-
-    return this.repository.createWith(
-      tx,
-      this.toData(input, objectKey, BigInt(input.body.length), sha256),
+    return this.storeUsing(input, (data) =>
+      this.repository.createWith(tx, data),
     );
   }
-
-  /**
-   * Reserva um objeto para upload direto.
-   *
-   * O arquivo nasce `PENDING`, sem hash: nada foi transferido ainda. Só a
-   * confirmação, que lê o objeto e calcula o SHA-256 do que **realmente** foi
-   * gravado, o torna `AVAILABLE`. Confiar no hash que o cliente informaria
-   * seria confiar no cliente sobre o próprio conteúdo.
-   */
-  async reserve(input: ReserveObjectInput) {
-    const objectKey = this.buildObjectKey(input);
-    const file = await this.repository.create({
-      ...this.toData(input, objectKey, BigInt(input.sizeBytes), null),
-      status: 'PENDING',
-    });
-
-    const signed = await this.provider.sign({
-      bucket: this.config.bucket,
+  private async storeUsing(
+    input: StoreObjectInput,
+    create: (
+      data: CreateStorageFileData,
+    ) => ReturnType<StorageFileRepository['create']>,
+  ) {
+    const normalized = await this.normalize(input);
+    const objectKey = this.buildObjectKey(normalized);
+    const data = this.toData(
+      normalized,
       objectKey,
+      BigInt(normalized.body.length),
+      FileObjectService.hash(normalized.body),
+    );
+    await this.put(data, normalized.body);
+    try {
+      return await create(data);
+    } catch (error) {
+      await this.cleanup(data.bucket, objectKey);
+      throw error;
+    }
+  }
+  async reserve(input: ReserveObjectInput) {
+    const image = input.mimeType.startsWith('image/');
+    if (
+      !Number.isSafeInteger(input.sizeBytes) ||
+      input.sizeBytes <= 0 ||
+      input.sizeBytes > (image ? MAX_IMAGE_BYTES : 20_000_000)
+    )
+      throw new ValidationException(
+        image
+          ? 'A imagem deve ter até 10 MB.'
+          : 'O arquivo deve ter até 20 MB.',
+        undefined,
+        'FILE_TOO_LARGE',
+      );
+    const objectKey = this.buildObjectKey(input);
+    // Pending originals are never exposed through the public bucket.
+    const data = this.toData(input, objectKey, BigInt(input.sizeBytes), null);
+    data.bucket = this.config.bucket;
+    data.metadata = { ...input.metadata, namespace: input.namespace };
+    const file = await this.repository.create(data);
+    const signed = uploadGrant(this.config, {
+      ...file,
       operation: 'upload',
       expiresInSeconds: this.config.signedUrlTtlSeconds,
-      mimeType: input.mimeType,
     });
-
     return { file, signed };
   }
-
-  /**
-   * Confirma um upload reservado.
-   *
-   * Lê o objeto do provider, calcula o hash do conteúdo armazenado e grava.
-   * Se o objeto não estiver lá, o arquivo é marcado `MISSING` — estado honesto,
-   * melhor do que um `AVAILABLE` que quebra no primeiro download.
-   */
-  async confirm(id: string, organizationId: string) {
-    const file = await this.repository.find(id, organizationId);
-    if (!file) {
-      throw new InfrastructureException('Storage file is not registered');
-    }
-    const stat = await this.provider.head({
-      bucket: file.bucket,
-      objectKey: file.objectKey,
-    });
-    if (!stat) {
-      await this.repository.markMissing(id);
-      throw new InfrastructureException(
-        'The reserved object was not uploaded to the storage provider',
+  /** Called only after verifying the upload grant. CAS prevents replay/overwrites after activation. */
+  async uploadReserved(
+    organizationId: string,
+    bucket: string,
+    objectKey: string,
+    body: Buffer,
+    mimeType: string,
+  ) {
+    const file = await this.repository.findByRef(
+      organizationId,
+      bucket,
+      objectKey,
+    );
+    if (!file) throw new EntityNotFoundException('Upload');
+    const source = (file.metadata ?? {}) as Record<string, unknown>;
+    if (file.status === 'AVAILABLE') {
+      if (
+        source.sourceSha256 === FileObjectService.hash(body) &&
+        source.sourceSizeBytes === body.length &&
+        source.sourceMimeType === mimeType
+      )
+        return file;
+      throw new ValidationException(
+        'Este upload já foi concluído com outro conteúdo.',
       );
     }
-
-    const body = await this.provider.get({
-      bucket: file.bucket,
-      objectKey: file.objectKey,
-    });
-
-    return this.repository.markAvailable(
-      id,
-      organizationId,
-      BigInt(body.length),
-      FileObjectService.hash(body),
+    if (file.status !== 'PENDING') throw new EntityNotFoundException('Upload');
+    if (BigInt(body.length) !== file.sizeBytes || mimeType !== file.mimeType)
+      throw new ValidationException(
+        'O tamanho ou formato do arquivo difere do upload reservado.',
+        undefined,
+        'FILE_INVALID',
+      );
+    const metadata = (file.metadata ?? {}) as Record<string, unknown>;
+    const namespace = metadata.namespace as StorageNamespace;
+    if (!Object.values(STORAGE_NAMESPACES).includes(namespace))
+      throw new ValidationException('Upload inválido.');
+    const input = await this.normalize({ ...file, namespace, body, metadata });
+    const canonicalKey = this.buildObjectKey(input);
+    const data = this.toData(
+      input,
+      canonicalKey,
+      BigInt(input.body.length),
+      FileObjectService.hash(input.body),
     );
-  }
-
-  /**
-   * Arquivo registrado, sem confirmar upload.
-   *
-   * Usado quando o objeto já foi confirmado antes e só se precisa da
-   * referência interna para assinar.
-   */
-  async confirmRegistered(id: string, organizationId: string) {
-    const file = await this.repository.find(id, organizationId);
-    if (!file) {
-      throw new InfrastructureException('Storage file is not registered');
+    data.metadata = {
+      ...metadata,
+      sourceSha256: FileObjectService.hash(body),
+      sourceSizeBytes: body.length,
+      sourceMimeType: mimeType,
+      sourceObjectKey: objectKey,
+      sourceBucket: bucket,
+    };
+    await this.put(data, input.body);
+    try {
+      const saved = await this.repository.completeUpload(
+        file.id,
+        organizationId,
+        objectKey,
+        {
+          bucket: data.bucket,
+          objectKey: data.objectKey,
+          fileName: data.fileName,
+          mimeType: data.mimeType,
+          sizeBytes: data.sizeBytes,
+          sha256: data.sha256!,
+          metadata: data.metadata as Prisma.InputJsonValue,
+        },
+      );
+      if (!saved)
+        throw new ValidationException('Este upload já foi utilizado.');
+      return saved;
+    } catch (error) {
+      await this.cleanup(data.bucket, canonicalKey);
+      throw error;
     }
+  }
+  async confirm(id: string, organizationId: string) {
+    const file = await this.confirmRegistered(id, organizationId);
+    if (file.status !== 'AVAILABLE' || !file.sha256)
+      throw new ValidationException(
+        'O envio do arquivo ainda não foi concluído. Tente novamente.',
+      );
     return file;
   }
-
-  /** Conteúdo do objeto — usado pela rota local de download assinado. */
+  async confirmRegistered(id: string, organizationId: string) {
+    const file = await this.repository.find(id, organizationId);
+    if (!file) throw new EntityNotFoundException('StorageFile');
+    return file;
+  }
   read(bucket: string, objectKey: string): Promise<Buffer> {
     return this.provider.get({ bucket, objectKey });
   }
-
-  /** Remove um objeto pelo provider; metadata só deve ser expirada após sucesso. */
-  remove(bucket: string, objectKey: string): Promise<void> {
-    return this.provider.remove({ bucket, objectKey });
+  async remove(bucket: string, objectKey: string): Promise<void> {
+    try {
+      await this.provider.remove({ bucket, objectKey });
+      await this.repository.markDeletedByRef(bucket, objectKey);
+    } catch (error) {
+      const segments = objectKey.split('/');
+      const organizationId = segments.find((part) =>
+        /^[0-9a-f-]{36}$/.test(part),
+      );
+      if (organizationId && this.garbage)
+        await this.garbage.enqueue(organizationId, bucket, objectKey);
+      throw error;
+    }
   }
-
-  /** URL temporária de acesso a um arquivo já registrado (Stage 3). */
-  sign(
+  async sign(
     file: {
       bucket: string;
       objectKey: string;
@@ -221,46 +240,45 @@ export class FileObjectService {
     operation: SignedUrlOperation,
     expiresInSeconds?: number,
   ): Promise<SignedUrl> {
-    return this.provider.sign({
-      bucket: file.bucket,
-      objectKey: file.objectKey,
+    const request = {
+      ...file,
       operation,
       expiresInSeconds: expiresInSeconds ?? this.config.signedUrlTtlSeconds,
-      fileName: file.fileName,
-      mimeType: file.mimeType,
-    });
+    };
+    if (operation === 'upload') return uploadGrant(this.config, request);
+    if (this.config.publicUrl && file.bucket === this.config.publicBucket)
+      return {
+        url: `${this.config.publicUrl}/${file.objectKey.split('/').map(encodeURIComponent).join('/')}`,
+        method: 'GET',
+        expiresAt: new Date('9999-12-31T00:00:00Z'),
+        requiredHeaders: {},
+      };
+    return this.provider.sign(request);
   }
-
-  /**
-   * Chave do objeto.
-   *
-   * `{organização}/{namespace}/{ano}/{mês}/{uuid}{extensão}`. O nome original
-   * **não** entra: um nome vindo do cliente carrega acentuação, espaço,
-   * caminho relativo e colisão. Ele é guardado no registro, que é onde serve —
-   * e é o que a URL assinada devolve ao navegador.
-   */
+  private async normalize(input: StoreObjectInput): Promise<StoreObjectInput> {
+    if (!input.mimeType.startsWith('image/')) return input;
+    const body = await this.images.optimize(
+      input.body,
+      input.mimeType,
+      input.namespace === 'avatars' || input.namespace === 'logos',
+    );
+    return {
+      ...input,
+      body,
+      mimeType: 'image/webp',
+      fileName: `${input.fileName.replace(/\.[^.]+$/, '').slice(0, 245)}.webp`,
+    };
+  }
   private buildObjectKey(input: {
     organizationId: string;
     namespace: StorageNamespace;
     fileName: string;
   }): string {
-    const now = new Date();
-    const year = now.getUTCFullYear();
-    const month = String(now.getUTCMonth() + 1).padStart(2, '0');
     const extension = extname(input.fileName).toLowerCase().slice(0, 12);
-    const safeExtension = /^\.[a-z0-9]+$/.test(extension) ? extension : '';
-    return `${input.organizationId}/${input.namespace}/${year}/${month}/${generateUuidV7()}${safeExtension}`;
+    return `${input.namespace}/${input.organizationId}/${Date.now()}-${generateUuidV7()}${/^\.[a-z0-9]+$/.test(extension) ? extension : ''}`;
   }
-
   private toData(
-    input: {
-      organizationId: string;
-      businessUnitId?: string | null;
-      fileName: string;
-      mimeType: string;
-      metadata?: Record<string, unknown>;
-      createdById: string | null;
-    },
+    input: Omit<StoreObjectInput, 'body'>,
     objectKey: string,
     sizeBytes: bigint,
     sha256: string | null,
@@ -269,7 +287,9 @@ export class FileObjectService {
       organizationId: input.organizationId,
       businessUnitId: input.businessUnitId ?? null,
       provider: this.provider.name,
-      bucket: this.config.bucket,
+      bucket: this.isPublic(input.namespace)
+        ? this.config.publicBucket!
+        : this.config.bucket,
       objectKey,
       fileName: input.fileName,
       mimeType: input.mimeType,
@@ -279,5 +299,37 @@ export class FileObjectService {
       metadata: input.metadata,
       createdById: input.createdById,
     };
+  }
+  private isPublic(namespace: StorageNamespace) {
+    return (
+      !!this.config.publicBucket &&
+      (namespace === 'avatars' || namespace === 'logos')
+    );
+  }
+  private put(data: CreateStorageFileData, body: Buffer) {
+    return this.provider.put({
+      bucket: data.bucket,
+      objectKey: data.objectKey,
+      body,
+      mimeType: data.mimeType,
+      cacheControl:
+        data.bucket === this.config.publicBucket
+          ? IMAGE_CACHE_CONTROL
+          : 'private, no-store',
+      metadata: { organization: data.organizationId, sha256: data.sha256! },
+    });
+  }
+  private async cleanup(bucket: string, objectKey: string) {
+    try {
+      await this.remove(bucket, objectKey);
+    } catch {
+      this.logger.error(
+        JSON.stringify({
+          stage: 'storage-orphan-cleanup-failed',
+          bucket,
+          objectKey,
+        }),
+      );
+    }
   }
 }

@@ -230,8 +230,9 @@ O SSH será desconectado. Depois do boot, confira `uname -r`, saúde dos
 containers, firewall e funcionamento público. O kernel 6.8.0-149 estava
 instalado durante a preparação; o host ainda executava 6.8.0-71 antes do reboot.
 
-O backup diário às 03:15 UTC pausa a API brevemente, faz `pg_dump` e copia os
-três storages, verifica a listagem do dump e registra SHA-256. Reinicia a API
+O backup diário às 03:15 UTC pausa a API brevemente, faz `pg_dump`, verifica a
+listagem do dump e registra SHA-256. Após a migração R2, as mídias são copiadas
+por um backup independente dos buckets; não ficam mais no disco do servidor. Reinicia a API
 mesmo em falha. Retenção local 14 dias. Arquivos ficam em `/var/backups/orbit`
 0700; `.env` e chaves AES/JWT precisam de cópia **separada em cofre**.
 Esse backup no mesmo disco **não é recuperação de desastre**: falta destino
@@ -259,17 +260,17 @@ UPS; não altere a interface remotamente sem acesso de recuperação.
 
 No Huawei **EG8041X6-10**, em **IPv4 Port Mapping**, a regra usada neste host é:
 
-| Campo | Valor |
-| --- | --- |
-| Mapping Name | `cloudflare_https` |
-| Enable Port Mapping | Ativado |
-| WAN Name | `1_INTERNET_R_VID_1000` |
-| Internal Host | `192.168.18.200` |
-| Protocol | `TCP` |
-| External Source IP Address | Vazio |
-| External source port number | Ambos vazios |
-| External port number | `443` até `443` |
-| Internal port number | `443` até `443` |
+| Campo                       | Valor                   |
+| --------------------------- | ----------------------- |
+| Mapping Name                | `cloudflare_https`      |
+| Enable Port Mapping         | Ativado                 |
+| WAN Name                    | `1_INTERNET_R_VID_1000` |
+| Internal Host               | `192.168.18.200`        |
+| Protocol                    | `TCP`                   |
+| External Source IP Address  | Vazio                   |
+| External source port number | Ambos vazios            |
+| External port number        | `443` até `443`         |
+| Internal port number        | `443` até `443`         |
 
 Clique Apply/Save. A porta de origem é variável: restringi-la a 443 impede
 as conexões normais. Durante o diagnóstico, 443 estava no campo de porta de
@@ -285,3 +286,13 @@ pacotes 443 na interface do Ubuntu. Não adicione UDP nem outra porta pública.
 - [Cloudflare Origin CA](https://developers.cloudflare.com/ssl/origin-configuration/origin-ca/)
 - [Cloudflare Full (strict)](https://developers.cloudflare.com/ssl/origin-configuration/ssl-modes/full-strict/)
 - [IPs Cloudflare](https://www.cloudflare.com/ips/)
+
+## Armazenamento R2
+
+A release de mídia exige as variáveis `R2_*` da raiz e
+`STORAGE_PUBLIC_API_URL=https://orbit.allblue-labs.com/api/v1`.
+O domínio de avatares/logos é `cdn-orbit.allblue-labs.com`; evidências, PDFs e
+assinaturas ficam em `orbit-assets-private`, sem acesso público. Antes de
+substituir uma release LOCAL, siga a [migração offline](../../backend/docs/cloudflare-r2.md)
+e transfira também `docker-compose.storage-migration.yml` para `/opt/stacks/orbit`.
+Não reutilize um lock/digest da release anterior para esta migração.

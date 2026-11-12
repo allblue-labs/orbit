@@ -297,15 +297,33 @@ class OrbitApiClient {
     checkSession();
     final generation = authenticator.generation;
     try {
+      final multipart = headers['x-orbit-upload-mode'] == 'multipart';
+      final requestHeaders = Map<String, dynamic>.from(headers);
+      Object body = Stream<List<int>>.value(bytes);
+      if (multipart) {
+        final mimeType = headers['content-type'] ?? 'application/octet-stream';
+        requestHeaders.remove('content-type');
+        requestHeaders.remove('x-orbit-upload-mode');
+        final extension = mimeType.split('/').last;
+        body = FormData.fromMap({
+          'file': MultipartFile.fromBytes(
+            bytes,
+            filename: 'arquivo.$extension',
+            contentType: DioMediaType.parse(mimeType),
+          ),
+        });
+      } else {
+        requestHeaders[Headers.contentLengthHeader] = bytes.length;
+      }
       await _dio.putUri<dynamic>(
         resolveBackendUrl(url, _apiBase),
-        data: Stream<List<int>>.value(bytes),
+        data: body,
         cancelToken: cancelToken,
         onSendProgress: (sent, total) {
           if (total > 0) onProgress?.call(sent / total);
         },
         options: Options(
-          headers: {...headers, Headers.contentLengthHeader: bytes.length},
+          headers: requestHeaders,
 
           /// Sem interceptor de sessão: a URL assinada é a credencial.
           extra: _requestExtra(true),

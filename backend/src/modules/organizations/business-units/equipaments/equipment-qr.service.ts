@@ -1,3 +1,4 @@
+import { BrandImageService } from '../../../storage/brand-image.service';
 import { Injectable, Logger } from '@nestjs/common';
 import {
   EntityNotFoundException,
@@ -34,6 +35,7 @@ export class EquipmentQrService {
     private readonly repository: EquipmentQrRepository,
     private readonly renderer: EquipmentQrRenderer,
     private readonly pmoc: PmocService,
+    private readonly brands: BrandImageService,
   ) {}
 
   async summary(
@@ -377,7 +379,7 @@ export class EquipmentQrService {
         name: equipment.name,
         preset: query.preset,
         brandingName,
-        logoUrl,
+        logoUrl: (await this.brands.read(logoUrl))?.dataUrl ?? null,
       },
       query.format,
     );

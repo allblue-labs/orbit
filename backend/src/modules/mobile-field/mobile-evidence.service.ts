@@ -36,6 +36,7 @@ const ALLOWED_MIMES = [
   'image/jpeg',
   'image/png',
   'image/webp',
+  'image/heic',
   'application/pdf',
 ] as const;
 
@@ -198,6 +199,19 @@ export class MobileEvidenceService {
       const body = await this.files.read(confirmed.bucket, confirmed.objectKey);
       const actualMime = this.sniff(body);
       const actualSha = FileObjectService.hash(body);
+      const source = (confirmed.metadata ?? {}) as Record<string, unknown>;
+      const sourceSize =
+        typeof source.sourceSizeBytes === 'number'
+          ? source.sourceSizeBytes
+          : body.length;
+      const sourceMime =
+        typeof source.sourceMimeType === 'string'
+          ? source.sourceMimeType
+          : actualMime;
+      const sourceSha =
+        typeof source.sourceSha256 === 'string'
+          ? source.sourceSha256
+          : actualSha;
       const expected =
         input.expectedSha256?.toLowerCase() ?? upload.expectedSha256;
       if (!actualMime || !ALLOWED_MIMES.includes(actualMime))
@@ -207,7 +221,10 @@ export class MobileEvidenceService {
           'INVALID_MIME',
           'O arquivo enviado não possui um formato permitido',
         );
-      if (actualMime !== upload.storageFile.mimeType)
+      if (
+        sourceMime !== upload.storageFile.mimeType &&
+        actualMime !== upload.storageFile.mimeType
+      )
         return await this.reject(
           actor,
           uploadId,
@@ -219,14 +236,17 @@ export class MobileEvidenceService {
         await this.repository.markFailed(actor, uploadId, 'FILE_TOO_LARGE');
         this.tooLarge(maxSize);
       }
-      if (BigInt(body.length) !== upload.storageFile.sizeBytes)
+      if (
+        BigInt(sourceSize) !== upload.storageFile.sizeBytes &&
+        BigInt(body.length) !== upload.storageFile.sizeBytes
+      )
         return await this.reject(
           actor,
           uploadId,
           'SIZE_MISMATCH',
           'O tamanho real não corresponde ao tamanho declarado',
         );
-      if (expected && actualSha !== expected)
+      if (expected && sourceSha !== expected)
         return await this.reject(
           actor,
           uploadId,
