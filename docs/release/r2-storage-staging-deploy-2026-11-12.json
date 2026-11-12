@@ -1,0 +1,81 @@
+{
+  "date": "2026-11-12",
+  "environment": "staging",
+  "origin": "https://orbit.allblue-labs.com",
+  "release": {
+    "commit": "dd4550325012b2f4e34110e65a45034023222472",
+    "created": "2026-11-12T18:47:06Z",
+    "tag": "staging-dd4550325012",
+    "images": {
+      "api": {
+        "tag": "docker.io/allbluelabs/orbit-api:staging-dd4550325012-api",
+        "digest": "docker.io/allbluelabs/orbit-api@sha256:f01d955e93dccd9070cb4a440bfa4c4f7955f82a6edfc4154fa44029e5735bed"
+      },
+      "migrate": {
+        "tag": "docker.io/allbluelabs/orbit-api:staging-dd4550325012-migrator",
+        "digest": "docker.io/allbluelabs/orbit-api@sha256:6817c7e50cf4bfc9f4149a1ec39e80359b35e7007a00602366836b69986d040a"
+      },
+      "bootstrap-admin": {
+        "tag": "docker.io/allbluelabs/orbit-api:staging-dd4550325012-migrator",
+        "digest": "docker.io/allbluelabs/orbit-api@sha256:6817c7e50cf4bfc9f4149a1ec39e80359b35e7007a00602366836b69986d040a"
+      },
+      "frontend": {
+        "tag": "docker.io/allbluelabs/orbit-api:staging-dd4550325012-frontend",
+        "digest": "docker.io/allbluelabs/orbit-api@sha256:5efcd343ad777ee07c3f6092c823551dbf689fe317d02f03bb27cab8478c2b72"
+      }
+    }
+  },
+  "database": {
+    "migrationsApplied": 111,
+    "mediaMigration": "20261112160000_cloudflare_r2_storage",
+    "runtimeRole": "orbit_app",
+    "superuser": false,
+    "bypassRls": false
+  },
+  "mediaMigration": {
+    "inspect": {
+      "inspected": 0,
+      "migrated": 0
+    },
+    "apply": {
+      "inspected": 0,
+      "migrated": 0,
+      "sourcesDeleted": 0
+    },
+    "legacyVolumeFileCount": 0,
+    "note": "Fresh staging; there were no existing media files to copy. Legacy volumes preserved.",
+    "imageDigest": "docker.io/allbluelabs/orbit-api@sha256:6817c7e50cf4bfc9f4149a1ec39e80359b35e7007a00602366836b69986d040a",
+    "composeOrder": [
+      "docker-compose.yml",
+      "docker-compose.storage-migration.yml",
+      "docker-compose.lock.yml"
+    ]
+  },
+  "r2": {
+    "publicBucket": "orbit-assets",
+    "privateBucket": "orbit-assets-private",
+    "cdn": "https://cdn-orbit.allblue-labs.com",
+    "serverPutGetDelete": "passed for both buckets; temporary objects removed"
+  },
+  "runtime": {
+    "apiHealthy": true,
+    "frontendHealthy": true,
+    "apiReadOnlyRootfs": true,
+    "apiMediaMounts": []
+  },
+  "publicSmoke": {
+    "landing": 200,
+    "login": 200,
+    "unauthenticatedApi": 401,
+    "dotEnvBlocked": 404
+  },
+  "backup": {
+    "preMigration": "executed by operator before rollout",
+    "scriptUpdatedForR2": true,
+    "legacyVolumesPreserved": true,
+    "postDeploymentBackup": "executed by operator through nexus-bootstrap/install-host.sh; both APIs healthy after backup",
+    "timer": "active and enabled",
+    "offsiteBucketBackup": "not configured by this deployment; see backend/docs/cloudflare-r2.md"
+  },
+  "gitPush": false
+}

@@ -106,13 +106,13 @@ docker compose -f docker-compose.yml -f docker-compose.lock.yml stop api
 # Atualiza schema/grants, incluindo o provider R2 e a fila de limpeza.
 docker compose -f docker-compose.yml -f docker-compose.lock.yml run --rm migrate
 # Inspeção: lê originais e confere hashes; não envia nem altera dados.
-docker compose -f docker-compose.yml -f docker-compose.lock.yml \
-  -f docker-compose.storage-migration.yml --profile storage-migration \
+docker compose -f docker-compose.yml -f docker-compose.storage-migration.yml \
+  -f docker-compose.lock.yml --profile storage-migration \
   run --rm storage-migration
 # Aplicação offline: copia, relê do R2, confere SHA-256 e só então troca referências.
 STORAGE_MIGRATION_OFFLINE=true docker compose \
-  -f docker-compose.yml -f docker-compose.lock.yml \
-  -f docker-compose.storage-migration.yml --profile storage-migration \
+  -f docker-compose.yml -f docker-compose.storage-migration.yml \
+  -f docker-compose.lock.yml --profile storage-migration \
   run --rm storage-migration --apply
 ```
 
@@ -127,6 +127,9 @@ sudo install -m 0750 ~/orbit-bootstrap/bin/backup.sh /usr/local/sbin/orbit-backu
 A versão antiga tenta copiar diretórios locais que não existem na imagem nova.
 O timer existente continua válido. Teste um backup do banco e o backup separado
 dos buckets depois do rollout.
+
+O lock deve ser o último arquivo do Compose, para que a ferramenta use o mesmo
+digest do migrator da release, sem herdar uma tag antiga de `ORBIT_VERSION`.
 
 A ferramenta usa a credencial administrativa **somente no container efêmero de
 migração**. Monta os volumes originais em `/legacy/{objects,operations,documents}`
