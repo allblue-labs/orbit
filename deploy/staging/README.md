@@ -142,6 +142,10 @@ Build/push no Mac ou CI, com árvore limpa e login Docker Hub:
 ORBIT_RELEASE_OUTPUT=/private/tmp/orbit-staging-release bash deploy/staging/bin/build-push.sh
 ```
 
+O script usa builder Buildx dedicado `orbit-staging` (`docker-container`) para
+suportar atestações de origem mesmo com image store clássico no Docker Desktop.
+Não altera o builder selecionado para outros projetos.
+
 Copie o `docker-compose.yml`, o lock gerado e `release.json` para o diretório
 do servidor. O servidor **não recebe** `docker-compose.build.yml`, `.git`,
 código do backend/frontend, nem segredos do Mac. Ajuste `ORBIT_VERSION` para a

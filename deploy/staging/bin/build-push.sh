@@ -9,6 +9,12 @@ created=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 repository=docker.io/allbluelabs/orbit-api
 output=${ORBIT_RELEASE_OUTPUT:?Informe ORBIT_RELEASE_OUTPUT fora do repositório}
 mkdir -p "$output"
+# O driver docker clássico não suporta atestações em todos os Docker Desktop.
+# Um builder dedicado evita mudar o builder selecionado de outros projetos.
+builder=${ORBIT_BUILDX_BUILDER:-orbit-staging}
+if ! docker buildx inspect "$builder" >/dev/null 2>&1; then
+    docker buildx create --name "$builder" --driver docker-container >/dev/null
+fi
 for component in api migrator frontend; do
     case "$component" in
         api) context=backend; target=runner ;;
@@ -17,7 +23,7 @@ for component in api migrator frontend; do
     esac
     image="$repository:$tag-$component"
     # Digest é obtido do próprio resultado do push, não de uma tag mutável.
-    docker buildx build --platform linux/amd64 --pull --provenance=mode=min \
+    docker buildx build --builder "$builder" --platform linux/amd64 --pull --provenance=mode=min \
         --target "$target" --build-arg "ORBIT_COMMIT_SHA=$sha" \
         --build-arg "ORBIT_BUILD_TIME=$created" --tag "$image" \
         --metadata-file "$output/$component.json" --push "$context"
