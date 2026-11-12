@@ -2,14 +2,15 @@ name: orbit
 
 services:
   postgres:
-    image: postgres:17-alpine
+    mem_limit: 2g
+    cpus: 2
+    pids_limit: 512
+    image: ${POSTGRES_IMAGE:-postgres:17.11-alpine3.24@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0}
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
-    ports:
-      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -20,28 +21,31 @@ services:
       start_period: 10s
     networks:
       - orbit_private
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
     security_opt:
       - no-new-privileges:true
 
   api:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      target: runner
-      args:
-        ORBIT_COMMIT_SHA: ${ORBIT_COMMIT_SHA:?ORBIT_COMMIT_SHA is required}
-        ORBIT_BUILD_TIME: ${ORBIT_BUILD_TIME:?ORBIT_BUILD_TIME is required}
-    image: orbit-api:${ORBIT_VERSION:?ORBIT_VERSION is required}
+    cap_drop: [ALL]
+    pids_limit: 512
+    mem_limit: 3g
+    cpus: 4
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=536870912,uid=1001,gid=1001,mode=1777
+    image: ${ORBIT_API_IMAGE:-docker.io/allbluelabs/orbit-api:${ORBIT_VERSION:?ORBIT_VERSION is required}}
     restart: unless-stopped
     init: true
     environment:
       NODE_ENV: production
       PORT: 5001
       HOST: ${API_HOST:-0.0.0.0}
-      # Credencial administrativa: continua disponível porque scripts de
-      # manutenção (seed do administrador global, templates) a usam. O runtime
-      # conecta pela APP_DATABASE_URL.
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      # O processo HTTP não recebe credenciais administrativas do banco.
+      DATABASE_URL: postgresql://${APP_DATABASE_USER:-orbit_app}:${APP_DATABASE_PASSWORD:?APP_DATABASE_PASSWORD is required}@postgres:5432/${POSTGRES_DB}?schema=public
       # Papel restrito (PR-26.6): sem SUPERUSER e sem BYPASSRLS. É com ele que
       # as políticas de RLS passam a ser efetivamente avaliadas.
       APP_DATABASE_URL: postgresql://${APP_DATABASE_USER:-orbit_app}:${APP_DATABASE_PASSWORD:?APP_DATABASE_PASSWORD is required}@postgres:5432/${POSTGRES_DB}?schema=public
@@ -75,7 +79,7 @@ services:
       # dizia 6001. O endereço assinado que a API devolvia apontava para a porta
       # interna do container e não era alcançável do host — o upload do smoke de
       # RVT falhava com ECONNREFUSED.
-      STORAGE_LOCAL_PUBLIC_URL: ${STORAGE_LOCAL_PUBLIC_URL:-http://localhost:${API_PORT:-5001}/api/v1}
+      STORAGE_LOCAL_PUBLIC_URL: ${STORAGE_LOCAL_PUBLIC_URL:-http://localhost:${API_PORT:-6001}/api/v1}
       STORAGE_SIGNED_URL_TTL_SECONDS: ${STORAGE_SIGNED_URL_TTL_SECONDS:-300}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
       IDENTITY_PUBLIC_WEB_URL: ${IDENTITY_PUBLIC_WEB_URL:-}
@@ -119,12 +123,8 @@ services:
       VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@orbit.local}
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
-      PLATFORM_ADMIN_EMAIL: ${PLATFORM_ADMIN_EMAIL:?PLATFORM_ADMIN_EMAIL is required}
-      PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD:?PLATFORM_ADMIN_PASSWORD is required}
-      PLATFORM_ADMIN_FIRST_NAME: ${PLATFORM_ADMIN_FIRST_NAME:?PLATFORM_ADMIN_FIRST_NAME is required}
-      PLATFORM_ADMIN_LAST_NAME: ${PLATFORM_ADMIN_LAST_NAME:?PLATFORM_ADMIN_LAST_NAME is required}
     ports:
-      - "0.0.0.0:${API_PORT:-5001}:5001"
+      - "127.0.0.1:${API_PORT:-6001}:5001"
     volumes:
       - operation_attachments:/app/storage/operations
       - generated_documents:/app/storage/documents
@@ -147,18 +147,18 @@ services:
     networks:
       - orbit_private
       - orbit_public
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
     security_opt:
       - no-new-privileges:true
 
   migrate:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      target: migrator
-      args:
-        ORBIT_COMMIT_SHA: ${ORBIT_COMMIT_SHA:?ORBIT_COMMIT_SHA is required}
-        ORBIT_BUILD_TIME: ${ORBIT_BUILD_TIME:?ORBIT_BUILD_TIME is required}
-    image: orbit-api-migrator:${ORBIT_VERSION:?ORBIT_VERSION is required}
+    mem_limit: 2g
+    pids_limit: 512
+    image: ${ORBIT_MIGRATOR_IMAGE:-docker.io/allbluelabs/orbit-api-migrator:${ORBIT_VERSION:?ORBIT_VERSION is required}}
     restart: "no"
     environment:
       NODE_ENV: production
@@ -172,18 +172,49 @@ services:
         condition: service_healthy
     networks:
       - orbit_private
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
+
+  # Ação administrativa explícita. Nunca é executada por `compose up` normal.
+  bootstrap-admin:
+    profiles: [admin]
+    image: ${ORBIT_MIGRATOR_IMAGE:-docker.io/allbluelabs/orbit-api-migrator:${ORBIT_VERSION:?ORBIT_VERSION is required}}
+    restart: "no"
+    command: ["node", "dist/src/scripts/seed-platform-admin.js"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      PLATFORM_ADMIN_EMAIL: ${PLATFORM_ADMIN_EMAIL:-}
+      PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD:-}
+      PLATFORM_ADMIN_FIRST_NAME: ${PLATFORM_ADMIN_FIRST_NAME:-Platform}
+      PLATFORM_ADMIN_LAST_NAME: ${PLATFORM_ADMIN_LAST_NAME:-Administrator}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [orbit_private]
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
     security_opt:
       - no-new-privileges:true
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      target: runner
-      args:
-        ORBIT_COMMIT_SHA: ${ORBIT_COMMIT_SHA:?ORBIT_COMMIT_SHA is required}
-        ORBIT_BUILD_TIME: ${ORBIT_BUILD_TIME:?ORBIT_BUILD_TIME is required}
-    image: orbit-frontend:${ORBIT_VERSION:?ORBIT_VERSION is required}
+    cap_drop: [ALL]
+    pids_limit: 512
+    mem_limit: 1536m
+    cpus: 2
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=134217728,uid=1001,gid=1001,mode=1777
+      - /app/.next/cache:rw,noexec,nosuid,size=268435456,uid=1001,gid=1001,mode=0755
+    image: ${ORBIT_FRONTEND_IMAGE:-docker.io/allbluelabs/orbit-frontend:${ORBIT_VERSION:?ORBIT_VERSION is required}}
     restart: unless-stopped
     init: true
     environment:
@@ -202,7 +233,7 @@ services:
       # manter false, sempre com AUTH_COOKIE_SECURE=true.
       ALLOW_INSECURE_LOCAL_COOKIES: ${ALLOW_INSECURE_LOCAL_COOKIES:-false}
     ports:
-      - "${FRONTEND_PORT:-3000}:3000"
+      - "127.0.0.1:${FRONTEND_PORT:-7070}:3000"
     depends_on:
       api:
         condition: service_healthy
@@ -220,6 +251,11 @@ services:
       start_period: 20s
     networks:
       - orbit_public
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
     security_opt:
       - no-new-privileges:true
 

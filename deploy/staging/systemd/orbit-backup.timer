@@ -1,0 +1,10 @@
+[Unit]
+Description=Backup diário do Orbit staging às 03:15 UTC
+
+[Timer]
+OnCalendar=*-*-* 03:15:00 UTC
+RandomizedDelaySec=5m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

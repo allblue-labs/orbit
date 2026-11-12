@@ -1,0 +1,12 @@
+[Unit]
+Description=Backup consistente de PostgreSQL e arquivos do Orbit staging
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/orbit-backup
+UMask=0077
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

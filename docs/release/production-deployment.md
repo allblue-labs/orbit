@@ -2,8 +2,8 @@
 
 Este runbook é a sequência autoritativa de build, migration, deploy e smoke da
 release V1. Execute os gates sequencialmente. Nunca use uma imagem já existente
-como evidência de uma release nova e nunca execute `docker compose config`: a
-saída interpolada pode materializar segredos no terminal ou no CI.
+como evidência de uma release nova. Para validar Compose, use `config --quiet`;
+nunca imprima a configuração interpolada: ela contém segredos.
 
 ## Preflight
 
@@ -39,15 +39,24 @@ Defina `ORBIT_VERSION`, o SHA completo em `ORBIT_COMMIT_SHA` e um timestamp UTC
 RFC 3339 em `ORBIT_BUILD_TIME`. Então execute:
 
 ```bash
-docker compose build --pull api migrate frontend
-docker image inspect orbit-api:$ORBIT_VERSION
-docker image inspect orbit-api-migrator:$ORBIT_VERSION
-docker image inspect orbit-frontend:$ORBIT_VERSION
+# Somente na estação de desenvolvimento/CI:
+docker compose -f docker-compose.yml -f docker-compose.build.yml build --pull api migrate frontend
+docker compose -f docker-compose.yml -f docker-compose.build.yml push api migrate frontend
+
+# No servidor, use as imagens publicadas, sem Git/build:
+docker compose pull
 ```
 
 Registre digest, `org.opencontainers.image.revision` e
 `org.opencontainers.image.created`. A ausência de qualquer build arg falha
 antes do build; as imagens não usam `latest` implícito.
+
+O Compose principal usa `docker.io/allbluelabs/orbit-api`,
+`orbit-api-migrator` e `orbit-frontend`. `ORBIT_API_IMAGE`,
+`ORBIT_MIGRATOR_IMAGE` e `ORBIT_FRONTEND_IMAGE` permitem fornecer referências
+completas com digest. O staging usa um único repositório privado com três tags,
+por limite do plano Docker Hub, e um arquivo de lock por digest; consulte
+[`../../deploy/staging/README.md`](../../deploy/staging/README.md).
 
 ## Migrate e deploy
 
@@ -63,6 +72,13 @@ por fim, executa o seed idempotente dos quatro planos comerciais. Esse catálogo
 usa `APP_DATABASE_URL`, valida `NOSUPERUSER` e `NOBYPASSRLS` na inicialização.
 Seeds de owner/admin e o bootstrap de assinaturas existentes continuam sendo
 ações operacionais explícitas, nunca parte do boot normal.
+O `DATABASE_URL` do runtime também usa o papel restrito. A senha administrativa
+do PostgreSQL e `PLATFORM_ADMIN_PASSWORD` não entram no ambiente da API.
+Para provisionar o administrador global após as migrations, preencha os campos
+`PLATFORM_ADMIN_*` e execute `docker compose --profile admin run --rm bootstrap-admin`
+(inclua o arquivo de lock do ambiente, se houver). Remova a senha do `.env`
+após guardar o acesso no cofre. PostgreSQL não publica porta; API/frontend
+publicam somente em `127.0.0.1`, nas portas 6001/7070 por padrão.
 
 ## Health e smoke
 

@@ -1,0 +1,26 @@
+# Somente na estação de build/CI; o servidor usa apenas docker-compose.yml.
+services:
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: runner
+      args:
+        ORBIT_COMMIT_SHA: ${ORBIT_COMMIT_SHA:?ORBIT_COMMIT_SHA is required}
+        ORBIT_BUILD_TIME: ${ORBIT_BUILD_TIME:?ORBIT_BUILD_TIME is required}
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: migrator
+      args:
+        ORBIT_COMMIT_SHA: ${ORBIT_COMMIT_SHA:?ORBIT_COMMIT_SHA is required}
+        ORBIT_BUILD_TIME: ${ORBIT_BUILD_TIME:?ORBIT_BUILD_TIME is required}
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: runner
+      args:
+        ORBIT_COMMIT_SHA: ${ORBIT_COMMIT_SHA:?ORBIT_COMMIT_SHA is required}
+        ORBIT_BUILD_TIME: ${ORBIT_BUILD_TIME:?ORBIT_BUILD_TIME is required}

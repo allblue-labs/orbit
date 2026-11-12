@@ -1,0 +1,14 @@
+[Unit]
+Description=Bloqueia entrada direta em containers Docker do staging
+After=network-online.target docker.service ufw.service
+Requires=docker.service
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/orbit-docker-firewall
+ExecReload=/usr/local/sbin/orbit-docker-firewall
+
+[Install]
+WantedBy=docker.service
