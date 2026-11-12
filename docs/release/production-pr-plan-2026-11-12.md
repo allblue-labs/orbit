@@ -213,6 +213,14 @@ nem migração destrutiva automaticamente sobre dados de cliente.
 
 ### PR-14 — Menor privilégio no deploy
 
+**Cobertura antecipada no staging (12/11/2026):** o trabalho de infraestrutura
+retirou credenciais administrativas do runtime, separou bootstrap, restringiu
+portas, aplicou limites, filesystem protegido e imagens privadas por digest.
+Verificações reais estão em
+[`../../deploy/staging/deployment-2026-11-12.json`](../../deploy/staging/deployment-2026-11-12.json).
+Reavaliar o delta e a qualificação mobile antes de executar esta PR; não
+reintroduzir credenciais privilegiadas no processo HTTP para manutenção.
+
 Retirar URL administrativa do banco e senha de bootstrap do processo HTTP/worker;
 reservá-las a migrator/bootstrap de uso controlado. Manter startup verificando
 papel restrito. Rever publicação de portas, limites de recursos, configuração

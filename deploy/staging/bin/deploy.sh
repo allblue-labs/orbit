@@ -7,9 +7,21 @@ compose=(docker compose --env-file .env -f docker-compose.yml -f docker-compose.
 "${compose[@]}" config --quiet
 # Valida sem imprimir valores e impede Stripe real neste staging.
 python3 - <<'PY'
-import json, subprocess, sys
+import json, re, subprocess, sys
 x=json.loads(subprocess.check_output(['docker','compose','--env-file','.env','-f','docker-compose.yml','-f','docker-compose.lock.yml','config','--format','json']))
 env=x['services']['api']['environment']
+web=x['services']['frontend']['environment']
+origin='https://orbit.allblue-labs.com'
+for key, value in [('FRONTEND_ORIGIN',origin),('IDENTITY_PUBLIC_WEB_URL',origin),('STORAGE_LOCAL_PUBLIC_URL',origin+'/api/v1')]:
+    if env.get(key) != value: sys.exit('Corrija a URL pública de staging: '+key)
+if web.get('FRONTEND_ORIGIN') != origin: sys.exit('Use uma única origem HTTPS no frontend.')
+if str(web.get('AUTH_COOKIE_SECURE')).lower() != 'true' or str(web.get('ALLOW_INSECURE_LOCAL_COOKIES')).lower() != 'false':
+    sys.exit('Staging exige cookies Secure e proíbe a exceção de HTTP local.')
+if env.get('DATABASE_URL') != env.get('APP_DATABASE_URL') or env.get('PLATFORM_ADMIN_PASSWORD'):
+    sys.exit('O runtime não pode receber credenciais administrativas.')
+for service in ['api','migrate','frontend']:
+    if not re.search(r'@sha256:[a-f0-9]{64}$',x['services'][service]['image']):
+        sys.exit('Use uma imagem por digest no lock: '+service)
 required=['AWS_ACCESS_KEY_ID','AWS_SECRET_ACCESS_KEY','AWS_REGION','AWS_SES_FROM_EMAIL']
 missing=[key for key in required if not str(env.get(key,'')).strip()]
 if missing: sys.exit('Preencha as variáveis: '+', '.join(missing))
@@ -20,8 +32,14 @@ if x['services']['postgres'].get('ports'): sys.exit('PostgreSQL não deve public
 for name in ['api','frontend']:
     if any(p.get('host_ip') != '127.0.0.1' for p in x['services'][name].get('ports',[])):
         sys.exit('Porta interna exposta: '+name)
+    expected='6001' if name=='api' else '7070'
+    if [str(p.get('published')) for p in x['services'][name].get('ports',[])] != [expected]:
+        sys.exit('A porta não corresponde ao upstream Nginx: '+name)
 print('Preflight concluído; segredos não foram exibidos.')
 PY
+if [[ ${1:-} == --check ]]; then
+    exit 0
+fi
 "${compose[@]}" pull
 "${compose[@]}" up -d --wait postgres
 # Migração é um serviço efêmero; up aguarda seu exit 0 antes de iniciar a API.

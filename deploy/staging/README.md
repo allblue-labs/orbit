@@ -5,6 +5,15 @@ URL pública: `https://orbit.allblue-labs.com`; IP fixo: `177.74.108.132`.
 Instalação nova, banco vazio, independente de produção. Os PRs de liberação
 continuam pendentes: subir staging não aprova a aplicação para produção.
 
+Implantação validada em 12/11/2026: release de aplicação
+`staging-6616a00961e0`, kernel 6.8.0-149, 110 migrations aplicadas e 131 tabelas
+com RLS forçado. Landing, login e imagem responderam 200 pela Cloudflare;
+HTTP redirecionou com 301; as recusas de origem/autenticação e os bloqueios de
+rotas internas foram verificados. Os digests e demais verificações estão em
+[`deployment-2026-11-12.json`](deployment-2026-11-12.json), sem segredos.
+Infraestrutura e aplicação têm revisões separadas: as correções operacionais
+posteriores não alteraram o código da aplicação presente nessas imagens.
+
 ## Rede e limites de confiança
 
 ```text
@@ -51,12 +60,23 @@ O script preserva configurações anteriores em `/root/orbit-bootstrap-<UTC>`:
 - Logs Docker rotacionados no Compose; Nginx não registra query strings.
 - Instala o script/timer de backup; habilite o timer após o primeiro deploy.
 
-Há reversão automática do firewall após **10 minutos**. Depois de testar uma
-**segunda conexão SSH a partir do Mac**, cancele-a no Ubuntu:
+Há reversão automática do firewall após **10 minutos**. Antes de executar o
+bootstrap (ou `repair-firewall.sh`), mantenha um terminal neste Mac com:
 
 ```bash
-sudo systemctl stop "$(cat ~/orbit-firewall-rollback-unit)"
+python3 deploy/staging/bin/confirm-firewall.py ninja@192.168.18.200
 ```
+
+O observador abre uma **nova conexão SSH** depois de as regras serem aplicadas.
+Somente essa confirmação permite ao observador root cancelar o rollback.
+Confira `~/orbit-bootstrap/firewall-verified.txt` no Ubuntu. Não é necessário
+cancelar o timer manualmente. A proteção Docker fica habilitada tanto por
+`multi-user.target` quanto por `docker.service`.
+
+Se a janela expirar, as regras anteriores são restauradas. `inactive` no timer,
+isoladamente, não prova cancelamento; confira o journal e o arquivo de
+verificação. Reaplique com `sudo bash ~/orbit-bootstrap/bin/repair-firewall.sh`
+mantendo o observador no Mac. Confirmações antigas não são reaproveitadas.
 
 Se houver reboot pendente, agende-o depois do primeiro teste e valide novamente
 SSH, firewall, Nginx e retorno automático dos containers. Não exponha as portas
@@ -155,6 +175,12 @@ tag registrada no manifest (os serviços efetivamente usam digests do lock).
 bash ~/orbit-bootstrap/bin/deploy.sh
 ```
 
+Use `bash ~/orbit-bootstrap/bin/deploy.sh --check` para validar sem baixar
+imagens nem alterar os containers. O preflight recusa origens localhost,
+cookies inseguros, portas diferentes do Nginx, imagens sem digest e Stripe
+habilitado com uma chave que não seja de teste. Não copie o `.env` de outro
+ambiente: acrescente somente as credenciais das integrações necessárias.
+
 Migrations/grants/catálogos rodam no migrador efêmero, antes da API. A API usa
 apenas papel `NOSUPERUSER NOBYPASSRLS`; a credencial administrativa não entra no
 runtime. Se precisar de administrador global, preencha `PLATFORM_ADMIN_*` e:
@@ -193,6 +219,17 @@ sudo systemctl enable --now orbit-backup.timer
 sudo systemctl list-timers orbit-backup.timer
 ```
 
+Ou execute a finalização completa, que testa Nginx/firewall, faz o primeiro
+backup, agenda os próximos e reinicia para ativar kernel/microcódigo instalados:
+
+```bash
+sudo bash ~/orbit-bootstrap/bin/finalize-host.sh --reboot
+```
+
+O SSH será desconectado. Depois do boot, confira `uname -r`, saúde dos
+containers, firewall e funcionamento público. O kernel 6.8.0-149 estava
+instalado durante a preparação; o host ainda executava 6.8.0-71 antes do reboot.
+
 O backup diário às 03:15 UTC pausa a API brevemente, faz `pg_dump` e copia os
 três storages, verifica a listagem do dump e registra SHA-256. Reinicia a API
 mesmo em falha. Retenção local 14 dias. Arquivos ficam em `/var/backups/orbit`
@@ -219,6 +256,25 @@ deve usar VPN; nunca exponha SSH/Dockge para isso.
 Teste pelo 4G/5G a URL pública e confirme que o IP direto não serve a aplicação.
 O servidor usa Wi-Fi atualmente: para operação estável, prefira Ethernet e
 UPS; não altere a interface remotamente sem acesso de recuperação.
+
+No Huawei **EG8041X6-10**, em **IPv4 Port Mapping**, a regra usada neste host é:
+
+| Campo | Valor |
+| --- | --- |
+| Mapping Name | `cloudflare_https` |
+| Enable Port Mapping | Ativado |
+| WAN Name | `1_INTERNET_R_VID_1000` |
+| Internal Host | `192.168.18.200` |
+| Protocol | `TCP` |
+| External Source IP Address | Vazio |
+| External source port number | Ambos vazios |
+| External port number | `443` até `443` |
+| Internal port number | `443` até `443` |
+
+Clique Apply/Save. A porta de origem é variável: restringi-la a 443 impede
+as conexões normais. Durante o diagnóstico, 443 estava no campo de porta de
+origem e o campo de destino externo estava vazio, resultando em 522 e zero
+pacotes 443 na interface do Ubuntu. Não adicione UDP nem outra porta pública.
 
 ## Referências oficiais
 

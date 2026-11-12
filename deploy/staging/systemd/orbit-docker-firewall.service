@@ -11,4 +11,4 @@ ExecStart=/usr/local/sbin/orbit-docker-firewall
 ExecReload=/usr/local/sbin/orbit-docker-firewall
 
 [Install]
-WantedBy=docker.service
+WantedBy=multi-user.target docker.service

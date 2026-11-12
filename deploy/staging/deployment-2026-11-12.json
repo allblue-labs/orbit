@@ -1,0 +1,131 @@
+{
+  "date": "2026-11-12",
+  "environment": "staging",
+  "hostname": "robozao",
+  "lanAddress": "192.168.18.200",
+  "publicAddress": "177.74.108.132",
+  "publicOrigin": "https://orbit.allblue-labs.com",
+  "applicationRelease": {
+    "commit": "6616a00961e0c91e0b8f5fcf669efaf8a308dc71",
+    "created": "2026-11-12T16:09:28Z",
+    "tag": "staging-6616a00961e0",
+    "images": {
+      "api": {
+        "tag": "docker.io/allbluelabs/orbit-api:staging-6616a00961e0-api",
+        "digest": "docker.io/allbluelabs/orbit-api@sha256:eea088919a1bc9500f35e6a95a098de6ee156e50aa145f934b12e39a72e2853f"
+      },
+      "migrate": {
+        "tag": "docker.io/allbluelabs/orbit-api:staging-6616a00961e0-migrator",
+        "digest": "docker.io/allbluelabs/orbit-api@sha256:f12687504d94048f6e60a0c65468f4aa91560f958cb9a9eb79343e5c775cdcae"
+      },
+      "bootstrap-admin": {
+        "tag": "docker.io/allbluelabs/orbit-api:staging-6616a00961e0-migrator",
+        "digest": "docker.io/allbluelabs/orbit-api@sha256:f12687504d94048f6e60a0c65468f4aa91560f958cb9a9eb79343e5c775cdcae"
+      },
+      "frontend": {
+        "tag": "docker.io/allbluelabs/orbit-api:staging-6616a00961e0-frontend",
+        "digest": "docker.io/allbluelabs/orbit-api@sha256:215fe02fdc7795e37155efec0d723d9e4ba487dbb3ca4728b8ceb89c55cc954c"
+      }
+    }
+  },
+  "registryPrivate": true,
+  "services": {
+    "ubuntu": "24.04.5 LTS",
+    "kernel": "6.8.0-149-generic",
+    "nginx": "1.30.6",
+    "docker": "29.9.3",
+    "compose": "5.7.1",
+    "postgres": "17.11",
+    "node": "22.23.5",
+    "next": "16.4.6"
+  },
+  "verification": {
+    "containersHealthyAfterReboot": true,
+    "migrationsApplied": 110,
+    "tablesWithForcedRls": 131,
+    "initialUsers": 0,
+    "initialOrganizations": 0,
+    "runtimeUid": 1001,
+    "runtimeRole": "orbit_app",
+    "runtimeSuperuser": false,
+    "runtimeBypassRls": false,
+    "runtimeCreateRole": false,
+    "migrationMetadataDenied": true,
+    "bootstrapPasswordAbsentFromApi": true,
+    "rootFilesystemProtected": true,
+    "allThreeStorageVolumesWritable": true,
+    "originTlsLoginHttp": 200,
+    "originOptimizedImageHttp": 200,
+    "syntheticInvalidLoginHttp": 401,
+    "dockerFirewallEnabled": true,
+    "dockerFirewallActive": true,
+    "firewallNewSshConfirmationSucceeded": true,
+    "ufwRules": 25,
+    "sshAllowedFrom": "192.168.18.0/24",
+    "applicationPortsBoundToLoopback": [
+      6001,
+      7070
+    ],
+    "dockgeBoundToLoopback": 5001,
+    "postgresPortPublished": false,
+    "backupServiceResult": "success",
+    "backupServiceExitCode": 0,
+    "backupTimerEnabled": true,
+    "backupRetentionDays": 14,
+    "macSshAliasVerified": true,
+    "macLocalHostnameVerified": "orbit-staging.home.arpa",
+    "publicLandingHttp": 200,
+    "publicLoginHttp": 200,
+    "publicOptimizedImageHttp": 200,
+    "publicHttpRedirect": 301,
+    "publicHttpRedirectDestination": "https://orbit.allblue-labs.com/",
+    "edgeTlsVerified": true,
+    "hstsPresent": true,
+    "privatePageCacheControl": "private, no-cache, no-store",
+    "firewallBootLinks": [
+      "multi-user.target",
+      "docker.service"
+    ],
+    "publicProtectedApiWithoutOriginHttp": 403,
+    "publicProtectedApiSameOriginWithoutSessionHttp": 401,
+    "publicSyntheticInvalidLoginHttp": 401,
+    "publicHealthEndpointHttp": 404,
+    "publicDotEnvHttp": 404,
+    "publicApiDocsHttp": 404,
+    "publicLegacySocketEndpointHttp": 404,
+    "lanInternalPortsUnreachable": [
+      5001,
+      6001,
+      7070,
+      5432
+    ],
+    "firewallOriginalRollbackHadTriggered": true,
+    "firewallRecoveryConfirmed": true
+  },
+  "integrations": {
+    "stripe": "disabled pending test credentials",
+    "firebase": "configured, delivery not qualified",
+    "ses": "configured, sandbox/real delivery not qualified"
+  },
+  "pending": [
+    "Encrypted off-host backup destination and restore drill",
+    "Existing production-readiness PR backlog remains applicable"
+  ],
+  "secretsIncluded": false,
+  "networkDiagnosis": {
+    "router": "Huawei EG8041X6-10",
+    "wan": "1_INTERNET_R_VID_1000",
+    "sslModeConfirmedByUser": "Full (strict)",
+    "dnsAConfirmedByUser": "177.74.108.132",
+    "wanIpv4ConfirmedByUser": "177.74.108.132/32",
+    "tcpCaptureBeforeRouterCorrection": {
+      "interface": "wlp2s0",
+      "durationSeconds": 60,
+      "packets": 0
+    },
+    "routerFieldError": "External source port range was 443-443, while External port number was empty",
+    "correctionRequested": "Clear External source port number; set External port number to 443-443 and Internal port number to 443-443",
+    "resolved": true,
+    "resolution": "User cleared External source port number and configured External port number 443-443; public HTTPS then returned 200."
+  }
+}

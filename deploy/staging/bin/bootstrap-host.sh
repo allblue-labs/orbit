@@ -92,46 +92,12 @@ APT::Periodic::Unattended-Upgrade "1";
 Unattended-Upgrade::Automatic-Reboot "false";
 APT
 
-# Rollback automático protege o acesso SSH durante a primeira alteração.
-cat > "$backup/rollback-firewall.sh" <<ROLLBACK
-#!/usr/bin/env bash
-set -e
-cp -a '$backup/ufw/.' /etc/ufw/
-ufw reload
-iptables -w -D DOCKER-USER -j ORBIT-INGRESS 2>/dev/null || true
-systemctl disable orbit-docker-firewall.service
-ROLLBACK
-chmod 700 "$backup/rollback-firewall.sh"
-systemd-run --unit="orbit-firewall-rollback-$stamp" --on-active=10m "$backup/rollback-firewall.sh"
-echo "orbit-firewall-rollback-$stamp.timer" > /home/ninja/orbit-firewall-rollback-unit
-chown ninja:ninja /home/ninja/orbit-firewall-rollback-unit
-
-ufw default deny incoming
-ufw default allow outgoing
-ufw limit from 192.168.18.0/24 to any port 22 proto tcp comment 'SSH somente LAN'
-ufw allow from 192.168.18.0/24 to any port 80 proto tcp comment 'HTTP LAN redirect'
-ufw allow from 192.168.18.0/24 to any port 443 proto tcp comment 'HTTPS LAN'
-# Remove somente permissões globais dessas portas, preservando regras específicas.
-for port in 22 80 443 403 5001 6001 7070 5432; do
-    ufw --force delete allow "$port/tcp" >/dev/null 2>&1 || true
-    ufw --force delete allow "$port" >/dev/null 2>&1 || true
-done
-ufw --force delete allow OpenSSH >/dev/null 2>&1 || true
-ufw --force delete allow 'Nginx Full' >/dev/null 2>&1 || true
-while IFS= read -r cidr || [[ -n "$cidr" ]]; do
-    [[ -n "$cidr" ]] && ufw allow from "$cidr" to any port 443 proto tcp comment 'Cloudflare HTTPS'
-done < <(cat "$cidr_dir/v4"; echo; cat "$cidr_dir/v6"; echo)
-rm -rf "$cidr_dir"
-ufw logging low
-ufw --force enable
-
-install -m 750 "$source_dir/bin/docker-firewall.sh" /usr/local/sbin/orbit-docker-firewall
-install -m 644 "$source_dir/systemd/orbit-docker-firewall.service" /etc/systemd/system/
 install -m 750 "$source_dir/bin/backup.sh" /usr/local/sbin/orbit-backup
 install -m 644 "$source_dir/systemd/orbit-backup.service" /etc/systemd/system/
 install -m 644 "$source_dir/systemd/orbit-backup.timer" /etc/systemd/system/
-systemctl daemon-reload
-systemctl enable --now orbit-docker-firewall.service
+rm -rf "$cidr_dir"
+# Mesmo fluxo validado na recuperação: confirmação por NOVA conexão SSH.
+bash "$source_dir/bin/repair-firewall.sh"
 
 # Dockge tem acesso root via socket Docker: apenas loopback + túnel SSH.
 python3 - <<'PY'
@@ -151,8 +117,8 @@ systemctl enable --now fail2ban nginx unattended-upgrades
 systemctl restart fail2ban
 systemctl reload nginx
 
-echo 'Configuração aplicada. Abra outra conexão SSH e confirme antes dos 10 minutos:'
-echo 'sudo systemctl stop "$(cat ~/orbit-firewall-rollback-unit)"'
+echo 'Configuração aplicada. O observador no Mac confirma a nova conexão SSH.'
+echo 'Confira ~/orbit-bootstrap/firewall-verified.txt para confirmar o cancelamento do rollback.'
 echo "Backup da configuração: $backup"
 echo 'Certificado: /etc/nginx/ssl/orbit-origin.pem (644)'
 echo 'Chave: /etc/nginx/ssl/orbit-origin.key (600)'

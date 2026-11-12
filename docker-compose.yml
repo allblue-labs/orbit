@@ -37,7 +37,7 @@ services:
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=536870912,uid=1001,gid=1001,mode=1777
-    image: ${ORBIT_API_IMAGE:-docker.io/allbluelabs/orbit-api:${ORBIT_VERSION:?ORBIT_VERSION is required}}
+    image: ${ORBIT_API_IMAGE:-docker.io/allbluelabs/orbit-api:${ORBIT_VERSION:?ORBIT_VERSION is required}-api}
     restart: unless-stopped
     init: true
     environment:
@@ -158,7 +158,7 @@ services:
   migrate:
     mem_limit: 2g
     pids_limit: 512
-    image: ${ORBIT_MIGRATOR_IMAGE:-docker.io/allbluelabs/orbit-api-migrator:${ORBIT_VERSION:?ORBIT_VERSION is required}}
+    image: ${ORBIT_MIGRATOR_IMAGE:-docker.io/allbluelabs/orbit-api:${ORBIT_VERSION:?ORBIT_VERSION is required}-migrator}
     restart: "no"
     environment:
       NODE_ENV: production
@@ -183,7 +183,7 @@ services:
   # Ação administrativa explícita. Nunca é executada por `compose up` normal.
   bootstrap-admin:
     profiles: [admin]
-    image: ${ORBIT_MIGRATOR_IMAGE:-docker.io/allbluelabs/orbit-api-migrator:${ORBIT_VERSION:?ORBIT_VERSION is required}}
+    image: ${ORBIT_MIGRATOR_IMAGE:-docker.io/allbluelabs/orbit-api:${ORBIT_VERSION:?ORBIT_VERSION is required}-migrator}
     restart: "no"
     command: ["node", "dist/src/scripts/seed-platform-admin.js"]
     environment:
@@ -214,7 +214,7 @@ services:
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=134217728,uid=1001,gid=1001,mode=1777
       - /app/.next/cache:rw,noexec,nosuid,size=268435456,uid=1001,gid=1001,mode=0755
-    image: ${ORBIT_FRONTEND_IMAGE:-docker.io/allbluelabs/orbit-frontend:${ORBIT_VERSION:?ORBIT_VERSION is required}}
+    image: ${ORBIT_FRONTEND_IMAGE:-docker.io/allbluelabs/orbit-api:${ORBIT_VERSION:?ORBIT_VERSION is required}-frontend}
     restart: unless-stopped
     init: true
     environment:

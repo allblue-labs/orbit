@@ -51,11 +51,11 @@ Registre digest, `org.opencontainers.image.revision` e
 `org.opencontainers.image.created`. A ausência de qualquer build arg falha
 antes do build; as imagens não usam `latest` implícito.
 
-O Compose principal usa `docker.io/allbluelabs/orbit-api`,
-`orbit-api-migrator` e `orbit-frontend`. `ORBIT_API_IMAGE`,
+O Compose principal usa o repositório privado `docker.io/allbluelabs/orbit-api`,
+com sufixos `-api`, `-migrator` e `-frontend` nas tags. `ORBIT_API_IMAGE`,
 `ORBIT_MIGRATOR_IMAGE` e `ORBIT_FRONTEND_IMAGE` permitem fornecer referências
-completas com digest. O staging usa um único repositório privado com três tags,
-por limite do plano Docker Hub, e um arquivo de lock por digest; consulte
+completas com digest. Crie/confirme o repositório como privado antes do push.
+O staging usa um arquivo de lock por digest; consulte
 [`../../deploy/staging/README.md`](../../deploy/staging/README.md).
 
 ## Migrate e deploy
