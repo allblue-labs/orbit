@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/providers.dart';
 import '../../../core/contracts/mobile_field_contracts.dart';
 import '../../artifact/application/artifact_providers.dart';
+import '../../customers/application/customer_write_providers.dart';
 import '../../artifact/application/document_downloader.dart';
 import '../data/documents_repository.dart';
 import 'document_sharing.dart';
@@ -217,3 +218,28 @@ final documentsControllerProvider =
         query: ref.watch(documentQueryProvider),
       ),
     );
+
+/// Resolve the document authority without treating a quote ID as a field artifact.
+Stream<DownloadState> downloadListedDocument(
+  WidgetRef ref,
+  MobileRecentDocumentContract document, {
+  required String fileName,
+  bool preview = false,
+}) {
+  final downloader = DocumentDownloader(
+    repository: ref.read(artifactRepositoryProvider),
+    files: ref.read(documentFileStoreProvider),
+  );
+  if (document.documentType == 'QUOTE') {
+    return downloader.fetchBytes(
+      load: () =>
+          ref.read(mobileQuoteRepositoryProvider).download(document.artifactId),
+      fileName: fileName,
+    );
+  }
+  return downloader.fetch(
+    artifactId: document.artifactId,
+    fileName: fileName,
+    preview: preview,
+  );
+}

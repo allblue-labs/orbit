@@ -73,6 +73,9 @@ class OrbitSession {
   bool get isPlatformAdmin => roles.contains(platformAdminRole);
   bool get isOwner => access?.isOwner ?? claims.isOrganizationOwner;
 
+  bool get canViewQuoteDocuments =>
+      isOwner || permissions.contains('mobile.quotes.documents.read');
+
   bool get hasActiveSubscription =>
       entitlements?.isActive ??
       activeSubscriptionStatuses.contains(

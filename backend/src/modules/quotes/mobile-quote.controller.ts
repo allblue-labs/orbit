@@ -10,6 +10,7 @@ import {
   StreamableFile,
 } from '@nestjs/common';
 import type { Response } from 'express';
+import { CreateAssetDto } from '../organizations/business-units/equipaments/asset.dto';
 import { Surfaces } from '../../decorators';
 import { ForbiddenException } from '../../exceptions';
 import { ParseUUIDv7Pipe } from '../../pipes';
@@ -39,6 +40,15 @@ export class MobileQuoteController {
       customerId,
       query.businessUnitId,
     );
+  }
+
+  @Post('customers/:customerId/equipment')
+  createEquipment(
+    @Req() request: IdentityRequest,
+    @Param('customerId', ParseUUIDv7Pipe) customerId: string,
+    @Body() input: CreateAssetDto,
+  ) {
+    return this.service.createEquipment(this.actor(request), customerId, input);
   }
 
   @Get('catalog')

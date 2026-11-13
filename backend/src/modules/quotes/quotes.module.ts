@@ -8,6 +8,7 @@
  * O processador do evento mora aqui pelo mesmo motivo: quem reage conhece quem
  * publica.
  */
+import { OrganizationsModule } from '../organizations/organizations.module';
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../../database/prisma.module';
 import { FinancialModule } from '../financial/financial.module';
@@ -33,6 +34,7 @@ import { MobileQuoteService } from './mobile-quote.service';
 
 @Module({
   imports: [
+    OrganizationsModule,
     OperationsModule,
     PrismaModule,
     SubscriptionPlansModule,

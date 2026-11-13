@@ -79,7 +79,12 @@ export class MobileWorkQueueQueryDto {
 }
 
 /** Os tipos de documento que a tela de Documentos filtra. */
-export const MOBILE_DOCUMENT_TYPES = ['SERVICE_ORDER', 'PMOC', 'RVT'] as const;
+export const MOBILE_DOCUMENT_TYPES = [
+  'SERVICE_ORDER',
+  'PMOC',
+  'RVT',
+  'QUOTE',
+] as const;
 
 export class MobileDocumentsQueryDto {
   @ApiPropertyOptional({ enum: MOBILE_DOCUMENT_TYPES })

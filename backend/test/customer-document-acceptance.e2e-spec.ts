@@ -853,6 +853,7 @@ describe('aceite público de propostas com RLS real', () => {
         quotes,
         new QuoteMapper(),
         acceptance,
+        {} as never,
       );
     });
 

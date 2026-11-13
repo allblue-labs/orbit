@@ -32,6 +32,15 @@ class MobileQuoteRepository {
     return data.cast<Map<String, dynamic>>();
   }
 
+  Future<Map<String, dynamic>> createEquipment(
+    String customerId,
+    Map<String, dynamic> equipment, {
+    required String businessUnitId,
+  }) => _client.post(
+    '/mobile/field/quotes/customers/$customerId/equipment',
+    body: {...equipment, 'businessUnitId': businessUnitId},
+  );
+
   Future<Map<String, dynamic>> create(Map<String, dynamic> body) =>
       _client.post('/mobile/field/quotes', body: body);
   Future<String> acceptanceLink(String id) async {
@@ -58,14 +67,18 @@ class MobileQuoteRepository {
     );
   }
 
+  Future<({List<int> bytes, String? contentType, String? fileName})> download(
+    String id,
+  ) => _client.getBytes(
+    url: Uri.parse(
+      '${apiBaseUrl.replaceFirst(RegExp(r"/$"), "")}/mobile/field/quotes/$id/document',
+    ),
+    isPublic: false,
+    maxBytes: 30 * 1024 * 1024,
+  );
+
   Future<String> document(String id, DocumentFileStore files) async {
-    final data = await _client.getBytes(
-      url: Uri.parse(
-        '${apiBaseUrl.replaceFirst(RegExp(r"/$"), "")}/mobile/field/quotes/$id/document',
-      ),
-      isPublic: false,
-      maxBytes: 30 * 1024 * 1024,
-    );
+    final data = await download(id);
     if (checkDocumentBytes(data.bytes) != null) {
       throw const OrbitException(
         kind: OrbitErrorKind.parse,

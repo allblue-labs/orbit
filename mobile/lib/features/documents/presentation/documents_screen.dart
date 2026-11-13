@@ -28,6 +28,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/providers.dart';
 import '../../../core/contracts/mobile_field_contracts.dart';
 import '../../../core/design/orbit_primitives.dart';
 import '../../../core/design/orbit_screen_header.dart';
@@ -232,7 +233,12 @@ class _Cabecalho extends ConsumerWidget {
                 onTap: () => _escolherPeriodo(context, ref, query),
               ),
               children: [
-                for (final opcao in DocumentFilter.values)
+                for (final opcao in DocumentFilter.values.where(
+                  (filter) =>
+                      filter != DocumentFilter.orcamentos ||
+                      (ref.watch(sessionProvider)?.canViewQuoteDocuments ??
+                          false),
+                ))
                   Padding(
                     padding: const EdgeInsets.only(right: OrbitSpacing.sm),
                     child: _Chip(

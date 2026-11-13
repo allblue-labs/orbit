@@ -1,3 +1,4 @@
+import { canReadMobileQuoteDocuments } from './field-document-access';
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-return */
 import { Injectable, Logger } from '@nestjs/common';
 import { EntityNotFoundException, ForbiddenException } from '../../exceptions';
@@ -165,14 +166,20 @@ export class MobileFieldService {
   /**
    * A tela de Documentos, paginada.
    *
-   * Mesma projeção da tela inicial, sem o teto de cinco. Nenhuma regra nova: o
-   * isolamento por organização e unidade é o mesmo, e o filtro por tipo é
-   * recorte de leitura.
+   * Mantém o isolamento por organização e unidade dos documentos de campo.
+   * Orçamentos são uma fonte separada, incluída apenas para o proprietário
+   * ou para quem recebeu a permissão explícita de leitura no aplicativo.
    */
   async documents(
     actor: MobileFieldActor,
     query: MobileDocumentsQueryDto,
   ): Promise<MobileDocumentsPageReadModel> {
+    if (canReadMobileQuoteDocuments(actor))
+      return this.documentsWithQuotes(actor, query);
+    if (query.type === 'QUOTE')
+      throw new ForbiddenException(
+        'A visualização de orçamentos no aplicativo não foi liberada.',
+      );
     const started = performance.now();
     const limit = query.limit ?? 20;
     const cursor = query.cursor ? this.decodeCursor(query.cursor) : null;
@@ -209,6 +216,112 @@ export class MobileFieldService {
         hasNextPage,
         nextCursor:
           hasNextPage && last ? this.encodeCursor(last.artifactId) : null,
+      },
+    };
+  }
+
+  /** Merge two independent keyset streams, advancing only the rows actually consumed. */
+  private async documentsWithQuotes(
+    actor: MobileFieldActor,
+    query: MobileDocumentsQueryDto,
+  ): Promise<MobileDocumentsPageReadModel> {
+    const limit = query.limit ?? 20;
+    let positions: { fieldId?: string; quoteId?: string } = {};
+    const validId = (id: unknown): id is string =>
+      typeof id === 'string' &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        id,
+      );
+    if (query.cursor) {
+      try {
+        const parsed = JSON.parse(
+          Buffer.from(query.cursor, 'base64url').toString('utf8'),
+        ) as {
+          v?: unknown;
+          fieldId?: unknown;
+          quoteId?: unknown;
+          id?: unknown;
+        };
+        if (parsed.v === 1 && validId(parsed.id)) positions.fieldId = parsed.id;
+        else {
+          if (
+            parsed.v !== 2 ||
+            [parsed.fieldId, parsed.quoteId].some(
+              (id) => id !== undefined && !validId(id),
+            )
+          )
+            throw new Error();
+          positions = {
+            fieldId: parsed.fieldId as string | undefined,
+            quoteId: parsed.quoteId as string | undefined,
+          };
+        }
+      } catch {
+        throw new ForbiddenException('Cursor de documentos inválido.');
+      }
+    }
+    const options = {
+      take: limit + 1,
+      search: query.search,
+      customerId: query.customerId,
+      ...(query.from ? { from: new Date(`${query.from}T00:00:00.000Z`) } : {}),
+      ...(query.to ? { to: new Date(`${query.to}T23:59:59.999Z`) } : {}),
+    };
+    const [fields, quotes] = await Promise.all([
+      query.type === 'QUOTE'
+        ? Promise.resolve([])
+        : this.repository.documentsPage(
+            actor.organizationId,
+            actor.businessUnitIds,
+            { ...options, type: query.type, cursorId: positions.fieldId },
+            actor,
+          ),
+      query.type && query.type !== 'QUOTE'
+        ? Promise.resolve([])
+        : this.repository.quoteDocumentsPage(
+            actor.organizationId,
+            actor.businessUnitIds,
+            { ...options, cursorId: positions.quoteId },
+          ),
+    ]);
+    const rows = [
+      ...fields.map((field) => ({
+        kind: 'field' as const,
+        document: this.toDocument(field),
+      })),
+      ...quotes.map((quote) => ({
+        kind: 'quote' as const,
+        document: {
+          artifactId: quote.id,
+          documentType: 'QUOTE',
+          label: `Orçamento ${quote.code}`,
+          customerName: quote.customer.tradeName ?? quote.customer.legalName,
+          createdAt: quote.createdAt.toISOString(),
+          state: 'AVAILABLE' as const,
+        },
+      })),
+    ].sort(
+      (a, b) =>
+        b.document.createdAt.localeCompare(a.document.createdAt) ||
+        b.document.artifactId.localeCompare(a.document.artifactId) ||
+        b.kind.localeCompare(a.kind),
+    );
+    const selected = rows.slice(0, limit);
+    for (const row of selected) {
+      if (row.kind === 'quote') positions.quoteId = row.document.artifactId;
+      else positions.fieldId = row.document.artifactId;
+    }
+    const hasNextPage = rows.length > limit;
+    return {
+      data: selected.map((row) => row.document),
+      meta: {
+        limit,
+        hasNextPage,
+        nextCursor: hasNextPage
+          ? Buffer.from(JSON.stringify({ v: 2, ...positions })).toString(
+              'base64url',
+            )
+          : null,
       },
     };
   }

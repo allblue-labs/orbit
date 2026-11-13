@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { MOBILE_QUOTE_DOCUMENTS_PERMISSION } from './mobile-document-permissions';
 
 interface PermissionActor {
   readonly permissions: readonly string[];
@@ -52,7 +53,11 @@ export class AuthorizationService {
     allowedSurfaces: readonly string[],
   ): boolean {
     if (actor.isOrganizationOwner) return true;
-    if (permissions.includes('*')) return false;
+    if (
+      permissions.includes('*') ||
+      permissions.includes(MOBILE_QUOTE_DOCUMENTS_PERMISSION)
+    )
+      return false;
     return (
       permissions.every((permission) =>
         actor.permissions.includes(permission),

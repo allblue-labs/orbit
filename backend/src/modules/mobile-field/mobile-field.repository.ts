@@ -303,7 +303,7 @@ export class MobileFieldRepository {
         where: {
           organizationId,
           businessUnitId: { in: [...businessUnitIds] },
-          AND: [fieldDocumentAccess(actor)],
+          AND: [fieldDocumentAccess(actor), { documentType: { not: 'QUOTE' } }],
           ...(options.type ? { documentType: options.type } : {}),
 
           /// A janela é sobre a **emissão** do documento, que é a data que
@@ -373,6 +373,75 @@ export class MobileFieldRepository {
             },
           },
         },
+      }),
+    );
+  }
+
+  quoteDocumentsPage(
+    organizationId: string,
+    businessUnitIds: readonly string[],
+    options: {
+      take: number;
+      cursorId?: string;
+      search?: string;
+      customerId?: string;
+      from?: Date;
+      to?: Date;
+    },
+  ) {
+    if (!businessUnitIds.length) return Promise.resolve([]);
+    const search = options.search?.trim();
+    return this.rls.run((tx) =>
+      tx.quote.findMany({
+        where: {
+          organizationId,
+          businessUnitId: { in: [...businessUnitIds] },
+          deletedAt: null,
+          ...(options.customerId ? { customerId: options.customerId } : {}),
+          ...(options.from || options.to
+            ? {
+                createdAt: {
+                  ...(options.from ? { gte: options.from } : {}),
+                  ...(options.to ? { lte: options.to } : {}),
+                },
+              }
+            : {}),
+          ...(search
+            ? {
+                OR: [
+                  { code: { contains: search, mode: 'insensitive' as const } },
+                  { title: { contains: search, mode: 'insensitive' as const } },
+                  {
+                    customer: {
+                      legalName: {
+                        contains: search,
+                        mode: 'insensitive' as const,
+                      },
+                    },
+                  },
+                  {
+                    customer: {
+                      tradeName: {
+                        contains: search,
+                        mode: 'insensitive' as const,
+                      },
+                    },
+                  },
+                ],
+              }
+            : {}),
+        },
+        select: {
+          id: true,
+          code: true,
+          createdAt: true,
+          customer: { select: { legalName: true, tradeName: true } },
+        },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: options.take,
+        ...(options.cursorId
+          ? { cursor: { id: options.cursorId }, skip: 1 }
+          : {}),
       }),
     );
   }

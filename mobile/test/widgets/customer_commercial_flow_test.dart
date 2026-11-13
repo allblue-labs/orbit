@@ -24,6 +24,8 @@ class Backend {
   final requests = <RequestOptions>[];
   Future<ResponseBody> Function(RequestOptions)? lookup;
   bool loseFirstCreate = false;
+  bool emptyEquipment = false;
+  bool failEquipment = false;
   Future<ResponseBody> handle(RequestOptions request) async {
     requests.add(request);
     if (request.path.startsWith('/lookups/')) {
@@ -41,6 +43,7 @@ class Backend {
     if (request.path.endsWith('/options')) {
       return jsonResponse(
         envelope({
+          'businessUnitId': 'unit-1',
           'addresses': [
             {
               'id': 'address-1',
@@ -51,7 +54,7 @@ class Backend {
             },
           ],
           'equipment': [
-            {'id': 'asset-1', 'name': 'Split do cliente'},
+            if (!emptyEquipment) {'id': 'asset-1', 'name': 'Split do cliente'},
           ],
           'responsibles': [
             {
@@ -60,6 +63,25 @@ class Backend {
               'hasSignature': true,
             },
           ],
+        }),
+      );
+    }
+    if (request.path.endsWith('/equipment')) {
+      if (failEquipment) {
+        return jsonResponse({
+          'success': false,
+          'error': {
+            'code': 'VALIDATION_ERROR',
+            'message': 'Não foi possível cadastrar agora.',
+          },
+        }, status: 400);
+      }
+      return jsonResponse(
+        envelope({
+          'id': 'new-equipment',
+          'name': (request.data as Map)['name'],
+          'customerId': 'customer-1',
+          'businessUnitId': 'unit-1',
         }),
       );
     }
@@ -286,6 +308,79 @@ void main() {
       containsPair('street', 'Rua manual'),
     );
   });
+
+  testWidgets(
+    'cliente sem equipamento permite cadastrar e selecionar sem sair do orçamento',
+    (tester) async {
+      final backend = Backend()..emptyEquipment = true;
+      await host(tester, backend, quote: true);
+      await tap(tester, find.text('Adicionar equipamento'));
+      await tester.enterText(
+        find.byKey(const ValueKey('walk-in.Nome do equipamento')),
+        'Split novo do cliente',
+      );
+      await tap(
+        tester,
+        find.widgetWithText(FilledButton, 'Cadastrar equipamento'),
+      );
+      final created = backend.requests.singleWhere(
+        (r) => r.path.endsWith('/equipment'),
+      );
+      expect(
+        created.path,
+        '/mobile/field/quotes/customers/customer-1/equipment',
+      );
+      expect(created.data, containsPair('businessUnitId', 'unit-1'));
+      expect(find.text('Split novo do cliente'), findsOneWidget);
+      final checkbox = tester.widget<CheckboxListTile>(
+        find.ancestor(
+          of: find.text('Split novo do cliente'),
+          matching: find.byType(CheckboxListTile),
+        ),
+      );
+      expect(checkbox.value, isTrue);
+      expect(
+        find.text('Nenhum equipamento cadastrado para este cliente.'),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'falha ao cadastrar mantém o formulário e os dados para nova tentativa',
+    (tester) async {
+      final backend = Backend()
+        ..emptyEquipment = true
+        ..failEquipment = true;
+      await host(tester, backend, quote: true);
+      await tap(tester, find.text('Adicionar equipamento'));
+      await tester.enterText(
+        find.byKey(const ValueKey('walk-in.Nome do equipamento')),
+        'Equipamento preservado',
+      );
+      await tap(
+        tester,
+        find.widgetWithText(FilledButton, 'Cadastrar equipamento'),
+      );
+      expect(find.text('Equipamento preservado'), findsOneWidget);
+      expect(
+        find.widgetWithText(FilledButton, 'Cadastrar equipamento'),
+        findsOneWidget,
+      );
+      backend.failEquipment = false;
+      await tap(
+        tester,
+        find.widgetWithText(FilledButton, 'Cadastrar equipamento'),
+      );
+      expect(find.text('Equipamento preservado'), findsOneWidget);
+      expect(
+        backend.requests.where((r) => r.path.endsWith('/equipment')),
+        hasLength(2),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'operador abre wizard com cliente preenchido; retry conserva envio e aprovação pede assinatura',

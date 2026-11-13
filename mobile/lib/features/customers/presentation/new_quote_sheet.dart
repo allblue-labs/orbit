@@ -18,6 +18,7 @@ import '../../../core/theme/orbit_theme.dart';
 import '../../../core/time/civil_time.dart';
 import '../../artifact/application/artifact_providers.dart';
 import '../application/customer_write_providers.dart';
+import '../../walk_in/presentation/widgets/walk_in_equipment_sheet.dart';
 import '../data/customer_write_repository.dart';
 
 Future<bool> showNewQuoteSheet(
@@ -47,6 +48,7 @@ class _QuoteWizardState extends ConsumerState<_QuoteWizard> {
   final _signature = OrbitSignatureController();
   final _lines = <QuoteLine>[];
   final _assetIds = <String>{};
+  final _createdEquipment = <Map<String, dynamic>>[];
   final _wizard = GlobalKey<OrbitWizardState>();
   final _requestId =
       'quote-${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32)}';
@@ -105,13 +107,52 @@ class _QuoteWizardState extends ConsumerState<_QuoteWizard> {
   }
 
   double get _total => _subtotal - (_discountValue ?? 0);
-  List<Map<String, dynamic>> _rows(Map<String, dynamic> data, String key) =>
-      (data[key] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
+  List<Map<String, dynamic>> _rows(Map<String, dynamic> data, String key) {
+    final rows = (data[key] as List<dynamic>? ?? [])
+        .cast<Map<String, dynamic>>();
+    if (key != 'equipment') return rows;
+    final byId = {for (final row in rows) row['id'] as String: row};
+    for (final row in _createdEquipment) {
+      byId[row['id'] as String] = row;
+    }
+    return byId.values.toList(growable: false);
+  }
 
   void _showError(Object error) {
     if (mounted) {
       setState(() => _error = OrbitException.publicCopyForAny(error));
     }
+  }
+
+  Future<void> _addEquipment(Map<String, dynamic> options) async {
+    await showWalkInEquipmentSheet(
+      context,
+      onSave: (draft) async {
+        final unit =
+            options['businessUnitId'] as String? ??
+            ref.read(sessionProvider)?.businessUnitId;
+        if (unit == null) {
+          throw const OrbitException(
+            kind: OrbitErrorKind.http,
+            publicMessage:
+                'Selecione uma unidade para cadastrar o equipamento.',
+          );
+        }
+        final repository = ref.read(mobileQuoteRepositoryProvider);
+        final equipment = await repository.createEquipment(
+          widget.cliente.id,
+          draft.toJson(),
+          businessUnitId: unit,
+        );
+        repository.checkSession();
+        if (!mounted) return;
+        setState(() {
+          _createdEquipment.add(equipment);
+          _assetIds.add(equipment['id'] as String);
+          _reviewed = false;
+        });
+      },
+    );
   }
 
   Future<void> _create() async {
@@ -575,6 +616,11 @@ class _QuoteWizardState extends ConsumerState<_QuoteWizard> {
               ),
               const SizedBox(height: OrbitSpacing.md),
               _section('Equipamentos (opcional)', Icons.ac_unit_outlined, [
+                OutlinedButton.icon(
+                  onPressed: () => _addEquipment(options),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Adicionar equipamento'),
+                ),
                 if (_rows(options, 'equipment').isEmpty)
                   const Text(
                     'Nenhum equipamento cadastrado para este cliente.',

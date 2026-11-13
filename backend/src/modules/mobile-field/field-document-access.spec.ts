@@ -68,7 +68,7 @@ describe('isolamento de documentos de campo', () => {
       where: {
         organizationId: 'org-A',
         businessUnitId: { in: ['unit-A'] },
-        AND: [fieldDocumentAccess(actor)],
+        AND: [fieldDocumentAccess(actor), { documentType: { not: 'QUOTE' } }],
         artifactExecution: { customerId: 'customer-A' },
       },
     });

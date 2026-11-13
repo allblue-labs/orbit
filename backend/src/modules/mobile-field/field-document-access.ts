@@ -1,3 +1,4 @@
+import { MOBILE_QUOTE_DOCUMENTS_PERMISSION } from '../../common/mobile-document-permissions';
 import type { Prisma } from '@prisma/client';
 import type { MobileFieldActor } from './mobile-field.service';
 
@@ -69,4 +70,12 @@ export function fieldDocumentAccess(
       },
     ],
   };
+}
+
+/** Separate opt-in from quote creation and operational management. */
+export function canReadMobileQuoteDocuments(actor: MobileFieldActor): boolean {
+  return (
+    actor.isOrganizationOwner === true ||
+    actor.permissions.includes(MOBILE_QUOTE_DOCUMENTS_PERMISSION)
+  );
 }

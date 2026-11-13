@@ -4,6 +4,8 @@ export const ROLE_SURFACES = ['WEB', 'MOBILE', 'API'] as const;
 export type RoleSurface = (typeof ROLE_SURFACES)[number];
 export const DEFAULT_ROLE_SURFACES: readonly RoleSurface[] = ['WEB', 'MOBILE'];
 export const FIELD_ONLY_SURFACES: readonly RoleSurface[] = ['MOBILE'];
+import { MOBILE_QUOTE_DOCUMENTS_PERMISSION } from '../../common/mobile-document-permissions';
+export { MOBILE_QUOTE_DOCUMENTS_PERMISSION };
 export const WALK_IN_CREATE_PERMISSION = 'operations.walk_in.create';
 
 export interface PermissionDefinition {
@@ -26,6 +28,16 @@ const permission = (code: string, label: string): PermissionDefinition => ({
  * choose from this catalogue, but cannot introduce arbitrary strings or `*`.
  */
 export const PERMISSION_GROUPS: readonly PermissionGroup[] = [
+  {
+    key: 'mobile_documents',
+    label: 'Documentos no aplicativo',
+    permissions: [
+      permission(
+        MOBILE_QUOTE_DOCUMENTS_PERMISSION,
+        'Visualizar orçamentos em Documentos no app',
+      ),
+    ],
+  },
   {
     key: 'customers',
     label: 'Clientes e contatos',

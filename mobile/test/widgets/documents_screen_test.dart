@@ -15,6 +15,7 @@ import 'package:orbit_operator/core/theme/orbit_theme.dart';
 import 'package:orbit_operator/features/documents/presentation/documents_screen.dart';
 
 import '../support/fakes.dart';
+import 'package:orbit_operator/features/authentication/domain/session.dart';
 import '../support/scripted_adapter.dart';
 
 Map<String, dynamic> document({
@@ -35,6 +36,7 @@ Map<String, dynamic> document({
 /// Registra o que a tela pediu — o filtro precisa virar consulta ao servidor,
 /// e não recorte local de uma lista já baixada.
 class Backend {
+  bool includeQuotes = false;
   final pedidos = <Map<String, dynamic>>[];
 
   Future<ResponseBody> call(RequestOptions options) async {
@@ -44,6 +46,8 @@ class Backend {
       'success': true,
       'data': {
         'data': [
+          if (includeQuotes && (tipo == null || tipo == 'QUOTE'))
+            document(id: 'q1', type: 'QUOTE', label: 'Orçamento ORC-1'),
           if (tipo == null || tipo == 'SERVICE_ORDER') document(),
           if (tipo == null || tipo == 'RVT')
             document(id: 'a2', type: 'RVT', label: 'RVT', state: 'PREPARING'),
@@ -56,7 +60,12 @@ class Backend {
   }
 }
 
-Widget host(Backend backend, {double textScale = 1.0, double width = 390}) {
+Widget host(
+  Backend backend, {
+  double textScale = 1.0,
+  double width = 390,
+  OrbitSession? session,
+}) {
   final dio = Dio()..httpClientAdapter = ScriptedAdapter(backend.call);
   final plain = Dio()..httpClientAdapter = ScriptedAdapter(backend.call);
   final client = OrbitApiClient.create(
@@ -68,7 +77,10 @@ Widget host(Backend backend, {double textScale = 1.0, double width = 390}) {
   );
 
   return ProviderScope(
-    overrides: [apiClientProvider.overrideWithValue(client)],
+    overrides: [
+      apiClientProvider.overrideWithValue(client),
+      sessionProvider.overrideWithValue(session),
+    ],
     child: MediaQuery(
       data: MediaQueryData(
         textScaler: TextScaler.linear(textScale),
@@ -91,6 +103,49 @@ void main() {
     FlutterError.onError = (details) => layoutError ??= details.exception;
   });
   tearDown(() => FlutterError.onError = FlutterError.presentError);
+
+  testWidgets('owner e operador liberado podem filtrar orçamentos', (
+    tester,
+  ) async {
+    for (final session in [
+      sessionFrom(isOrganizationOwner: true),
+      sessionFrom(
+        permissions: ['mobile.quotes.documents.read'],
+        roles: ['FIELD_TECHNICIAN'],
+      ),
+    ]) {
+      final backend = Backend()..includeQuotes = true;
+      await tester.pumpWidget(host(backend, session: session));
+      await tester.pumpAndSettle();
+      final filter = find.text('Orçamentos');
+      expect(filter, findsOneWidget);
+      await tester.ensureVisible(filter);
+      await tester.tap(filter);
+      await tester.pumpAndSettle();
+      expect(backend.pedidos.last['type'], 'QUOTE');
+      expect(find.text('Orçamento ORC-1'), findsOneWidget);
+      expect(find.text('Ordem de serviço'), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpAndSettle();
+    }
+  });
+
+  testWidgets('operador sem liberação não recebe filtro de orçamentos', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      host(
+        Backend(),
+        session: sessionFrom(
+          roles: ['FIELD_TECHNICIAN'],
+          permissions: ['artifact_executions.read'],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Orçamentos'), findsNothing);
+    expect(find.text('Ordem de serviço'), findsOneWidget);
+  });
 
   testWidgets('lista o que o servidor emitiu, com o rótulo dele', (
     tester,

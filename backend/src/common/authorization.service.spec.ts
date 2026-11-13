@@ -47,4 +47,20 @@ describe('AuthorizationService', () => {
     ).toBe(false);
     expect(service.canDelegate(actor, ['*'], ['WEB'])).toBe(false);
   });
+  it('only the structural owner can grant mobile quote-document access', () => {
+    const permission = 'mobile.quotes.documents.read';
+    const actor = {
+      isOrganizationOwner: false,
+      permissions: [permission],
+      allowedSurfaces: ['MOBILE'],
+    };
+    expect(service.canDelegate(actor, [permission], ['MOBILE'])).toBe(false);
+    expect(
+      service.canDelegate(
+        { ...actor, isOrganizationOwner: true },
+        [permission],
+        ['MOBILE'],
+      ),
+    ).toBe(true);
+  });
 });
