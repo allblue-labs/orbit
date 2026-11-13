@@ -78,19 +78,26 @@ class OrbitApiClient {
       storage: storage,
       logger: logger,
       refreshCall: (refreshToken) async {
-        final response = await plain.post<dynamic>(
-          '/identity/refresh',
-          data: {'refreshToken': refreshToken},
-        );
-        final data = _unwrap(response.data);
-        if (data is! Map<String, dynamic>) {
-          throw const OrbitException(
-            kind: OrbitErrorKind.parse,
-            publicMessage: OrbitPublicCopy.unknown,
-            code: 'PARSE',
+        try {
+          final response = await plain.post<dynamic>(
+            '/identity/refresh',
+            data: {'refreshToken': refreshToken},
           );
+          final data = _unwrap(response.data);
+          if (data is! Map<String, dynamic>) {
+            throw const OrbitException(
+              kind: OrbitErrorKind.parse,
+              publicMessage: OrbitPublicCopy.unknown,
+              code: 'PARSE',
+            );
+          }
+          return TokenPair.fromJson(data);
+        } on DioException catch (error) {
+          // Classify before the authenticator decides whether to expire.
+          throw ErrorMappingInterceptor(
+            destination: environment.diagnosticHost,
+          ).map(error);
         }
-        return TokenPair.fromJson(data);
       },
     );
 

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 import { SignupContent } from "@/components/auth/signup-content";
-import { carregarCatalogoPublico } from "@/components/pricing/pricing-catalog";
+import { carregarCatalogoPublico } from "@/server/public-plan-catalog";
 import { signupPlanSelection } from "@/lib/signup-plan-selection";
 
 export const metadata: Metadata = {

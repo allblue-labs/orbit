@@ -1,3 +1,4 @@
+import { requestClientIp } from '../common/trusted-client-origin';
 import {
   CallHandler,
   type ExecutionContext,
@@ -73,7 +74,7 @@ export class RequestContextInterceptor implements NestInterceptor {
       permissions: request.user?.permissions ?? [],
       allowedSurfaces: request.user?.allowedSurfaces ?? [],
       isOrganizationOwner: request.user?.isOrganizationOwner ?? false,
-      ip: request.ip ?? null,
+      ip: requestClientIp(request),
       userAgent: request.header('user-agent') ?? null,
       locale: request.acceptsLanguages()[0] ?? 'pt-BR',
     });

@@ -14,6 +14,8 @@ settings = {
     'APP_DATABASE_PASSWORD': secrets.token_hex(32),
     'JWT_ACCESS_SECRET': secrets.token_hex(48),
     'TRIAL_FINGERPRINT_SECRET': secrets.token_hex(48),
+    'TRUSTED_PROXY_SECRET': secrets.token_hex(32),
+    'AUTH_RATE_LIMIT_SECRET': secrets.token_hex(32),
     'ENCRYPTION_KEY': base64.b64encode(secrets.token_bytes(32)).decode(),
     'FRONTEND_ORIGIN': 'https://orbit.allblue-labs.com',
     'IDENTITY_PUBLIC_WEB_URL': 'https://orbit.allblue-labs.com',

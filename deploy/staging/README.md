@@ -296,3 +296,10 @@ assinaturas ficam em `orbit-assets-private`, sem acesso público. Antes de
 substituir uma release LOCAL, siga a [migração offline](../../backend/docs/cloudflare-r2.md)
 e transfira também `docker-compose.storage-migration.yml` para `/opt/stacks/orbit`.
 Não reutilize um lock/digest da release anterior para esta migração.
+
+## Atualização de segurança PR-05
+
+Antes de publicar as imagens da PR-05, seguir a [sequência de implantação](../../docs/release/pr-05-rate-limit-proxies.md#implantação-posterior).
+Ela exige migration, dois segredos internos independentes e o include privado
+do Nginx. Não basta atualizar somente a imagem da API. O instalador
+`bin/configure-proxy-origin.py` gera/preserva os valores sem exibi-los.

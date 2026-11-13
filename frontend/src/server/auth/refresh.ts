@@ -1,10 +1,11 @@
 /**
  * Rotação do par de tokens.
  *
- * Isolado de `session.ts` porque o middleware (Edge Runtime) precisa renovar
+ * Isolado de `session.ts` porque o Proxy do Next precisa renovar
  * a sessão sem importar `next/headers`, indisponível naquele contexto.
  */
 import { backendJson, jsonBody } from "@/server/backend-client";
+import { ApiError } from "@/lib/api-error";
 import type { TokenPair } from "@/types/session";
 
 /** Only deduplicate requests still in flight. The database owns grace/revocation
@@ -27,7 +28,11 @@ export function refreshTokens(refreshToken: string): Promise<TokenPair | null> {
     body: jsonBody({ refreshToken }),
     retries: 0,
   })
-    .catch(() => null)
+    .catch((error: unknown) => {
+      if (error instanceof ApiError && [401, 403].includes(error.status))
+        return null;
+      throw error;
+    })
     .finally(() => {
       inFlight.delete(refreshToken);
     });

@@ -2,6 +2,28 @@ import { expect, test } from "@playwright/test";
 import { randomBytes } from "node:crypto";
 
 test.describe("dependências do standalone", () => {
+  test("429 do refresh preserva cookies, status e Retry-After", async ({
+    request,
+    baseURL,
+  }) => {
+    const response = await request.post("/api/auth/refresh", {
+      headers: {
+        origin: baseURL!,
+        "sec-fetch-site": "same-origin",
+        cookie: "orbit_refresh=rate-limited-synthetic",
+      },
+    });
+    expect(response.status()).toBe(429);
+    expect(response.headers()["retry-after"]).toBe("17");
+    expect(
+      response
+        .headersArray()
+        .filter((header) => header.name.toLowerCase() === "set-cookie"),
+    ).toEqual([]);
+    expect(await response.json()).toMatchObject({
+      error: { code: "RATE_LIMITED", details: { retryAfterSeconds: 17 } },
+    });
+  });
   test("renderiza, hidrata e navega entre planos e cadastro com imagem otimizada", async ({
     page,
     request,

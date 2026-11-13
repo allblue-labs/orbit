@@ -2,6 +2,7 @@
 set -Eeuo pipefail
 [[ $EUID -eq 0 ]] || { echo 'Execute com sudo.' >&2; exit 1; }
 source_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+python3 "$source_dir/bin/configure-proxy-origin.py"
 cert=/etc/nginx/ssl/orbit-origin.pem
 key=/etc/nginx/ssl/orbit-origin.key
 openssl x509 -in "$cert" -noout -checkend 604800 >/dev/null

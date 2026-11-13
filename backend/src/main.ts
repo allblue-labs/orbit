@@ -47,6 +47,9 @@ async function bootstrap() {
     bodyParser: false,
   });
   configureHttpParsers(app);
+  // Forwarded chains never determine request.ip. Internal ingress identity is
+  // validated independently by requestClientIp, using its private credential.
+  app.set('trust proxy', false);
 
   configureApiVersioning(app);
   app.enableShutdownHooks();

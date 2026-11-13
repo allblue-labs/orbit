@@ -37,6 +37,9 @@ install -d -m 700 /var/backups/orbit
 install -d -o ninja -g ninja -m 700 /opt/stacks/orbit
 install -m 644 "$source_dir/nginx/00-orbit-common.conf" /etc/nginx/conf.d/00-orbit-common.conf
 install -m 644 "$source_dir/nginx/proxy-common.inc" /etc/nginx/orbit-proxy.inc
+if [[ -f /opt/stacks/orbit/.env ]]; then
+    python3 "$source_dir/bin/configure-proxy-origin.py"
+fi
 if [[ ! -f /etc/nginx/conf.d/10-orbit.conf ]]; then
     install -m 644 "$source_dir/nginx/orbit-http.conf" /etc/nginx/conf.d/10-orbit.conf
 fi

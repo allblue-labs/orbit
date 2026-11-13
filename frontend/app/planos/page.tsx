@@ -4,7 +4,7 @@ import { ArrowRight, ShieldCheck } from "lucide-react";
 
 import { OrbitLogo } from "@/components/brand/orbit-logo";
 import { PricingPlans } from "@/components/pricing/pricing-plans";
-import { carregarCatalogoPublico } from "@/components/pricing/pricing-catalog";
+import { carregarCatalogoPublico } from "@/server/public-plan-catalog";
 import { Button } from "@/components/ui/button";
 import { ROUTES } from "@/lib/routes";
 

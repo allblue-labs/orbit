@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TokenPair } from "@/types/session";
+import { ApiError } from "@/lib/api-error";
 
 const { backendJson } = vi.hoisted(() => ({ backendJson: vi.fn() }));
 vi.mock("@/server/backend-client", () => ({
@@ -17,6 +18,20 @@ const pair: TokenPair = {
 };
 beforeEach(() => backendJson.mockReset());
 describe("renovação coordenada pela API", () => {
+  it.each([429, 503])(
+    "preserva falha temporária %s para o chamador, sem sinalizar sessão expirada",
+    async (status) => {
+      const error = new ApiError({
+        kind: "http",
+        status,
+        message: "Aguarde",
+        details: { retryAfterSeconds: 17 },
+      });
+      backendJson.mockRejectedValueOnce(error).mockResolvedValueOnce(pair);
+      await expect(refreshTokens(`temporary-${status}`)).rejects.toBe(error);
+      expect(await refreshTokens(`temporary-${status}`)).toEqual(pair);
+    },
+  );
   it("compartilha somente a chamada em andamento", async () => {
     let release!: (value: TokenPair) => void;
     backendJson.mockReturnValue(
@@ -36,7 +51,9 @@ describe("renovação coordenada pela API", () => {
   it("reconfere a API após concluir e não mascara uma revogação com cache local", async () => {
     backendJson
       .mockResolvedValueOnce(pair)
-      .mockRejectedValueOnce(new Error("revoked"));
+      .mockRejectedValueOnce(
+        new ApiError({ kind: "http", status: 401, message: "revoked" }),
+      );
     expect(await refreshTokens("revocable")).toEqual(pair);
     expect(await refreshTokens("revocable")).toBeNull();
     expect(backendJson).toHaveBeenCalledTimes(2);

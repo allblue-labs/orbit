@@ -25,6 +25,8 @@ export function validateReleaseEnvironment(
 
   secret('JWT_ACCESS_SECRET', 32);
   secret('TRIAL_FINGERPRINT_SECRET', 32);
+  secret('AUTH_RATE_LIMIT_SECRET', 32);
+  secret('TRUSTED_PROXY_SECRET', 32);
 
   const email = emailConfiguration(environment);
   for (const key of [

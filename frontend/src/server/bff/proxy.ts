@@ -15,6 +15,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import { toApiError } from "@/lib/api-error";
+import { withClientOrigin } from "@/server/trusted-client-origin";
 import { backendFetch } from "@/server/backend-client";
 import {
   endSession,
@@ -55,6 +56,7 @@ const FORWARDED_RESPONSE_HEADERS: readonly string[] = [
   "x-content-type-options",
   "x-document-sha256",
   "x-request-id",
+  "retry-after",
 ];
 
 const METHODS_WITH_BODY: readonly HttpMethod[] = ["POST", "PUT", "PATCH"];
@@ -64,6 +66,26 @@ export interface ProxyRouteContext {
 }
 
 export async function proxyToBackend(
+  request: NextRequest,
+  context: ProxyRouteContext,
+): Promise<Response> {
+  return withClientOrigin(request, async () => {
+    try {
+      return await proxyWithOrigin(request, context);
+    } catch (error) {
+      const apiError = toApiError(error);
+      return bffError({
+        status: apiError.status === 429 ? 429 : 503,
+        code: apiError.code,
+        message: apiError.message,
+        requestId: readContextFromRequest(request).requestId,
+        details: apiError.details,
+      });
+    }
+  });
+}
+
+async function proxyWithOrigin(
   request: NextRequest,
   context: ProxyRouteContext,
 ): Promise<Response> {
@@ -169,9 +191,11 @@ export async function proxyToBackend(
   } catch (error) {
     const apiError = toApiError(error);
     return bffError({
-      status: apiError.kind === "timeout" ? 504 : 502,
+      status:
+        apiError.status === 429 ? 429 : apiError.kind === "timeout" ? 504 : 502,
       code: apiError.code,
       message: apiError.message,
+      details: apiError.details,
       requestId,
     });
   }

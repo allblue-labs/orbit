@@ -1,54 +1,50 @@
 import { Injectable, type NestMiddleware } from '@nestjs/common';
 import type { NextFunction, Request, Response } from 'express';
-import { RateLimitException } from '../exceptions';
-
-type Counter = { count: number; resetAt: number };
+import { AuthRateLimitService } from './auth-rate-limit.service';
+import { requestClientIp } from './trusted-client-origin';
 
 const SENSITIVE_PATH =
-  /^\/(?:api\/v1\/)?(?:identity\/(?:login|register|refresh|email\/(?:verify|resend)|password\/(?:forgot|reset))|portal\/auth\/(?:login|refresh|activate|password\/reset-(?:request|confirm))|billing\/(?:checkout|portal-session))$/;
-const MAX_KEYS = 10_000;
+  /^(?:identity\/(?:login|register|refresh|email\/(?:verify|resend)|password\/(?:forgot|reset)|me\/mfa\/(?:enrollment|enable))|portal\/auth\/(?:login|refresh|activate|password\/reset-(?:request|confirm))|billing\/(?:checkout-session|portal-session))$/;
 
-/** Per-process abuse brake for public and money-moving entry points. */
+/** Shared database budgets. No test-runtime bypass or per-process fallback. */
 @Injectable()
 export class SensitiveEndpointRateLimitMiddleware implements NestMiddleware {
-  private readonly counters = new Map<string, Counter>();
+  constructor(private readonly limits: AuthRateLimitService) {}
 
-  use(request: Request, _response: Response, next: NextFunction): void {
-    if (process.env.NODE_ENV === 'test' || !SENSITIVE_PATH.test(request.path)) {
-      next();
-      return;
-    }
-
-    const windowMs = this.positiveInt('AUTH_RATE_LIMIT_WINDOW_MS', 60_000);
-    const maximum = this.positiveInt('AUTH_RATE_LIMIT_MAX', 20);
-    const now = Date.now();
-    const key = `${request.ip}:${request.method}:${request.path}`;
-    let counter = this.counters.get(key);
-    if (!counter || counter.resetAt <= now) {
-      this.prune(now);
-      counter = { count: 0, resetAt: now + windowMs };
-      this.counters.set(key, counter);
-    }
-    counter.count += 1;
-    if (counter.count > maximum) {
-      throw new RateLimitException(
-        Math.max(1, Math.ceil((counter.resetAt - now) / 1_000)),
-      );
-    }
+  async use(
+    request: Request,
+    _response: Response,
+    next: NextFunction,
+  ): Promise<void> {
+    const path = request.path
+      .toLowerCase()
+      .replace(/^\/(?:api\/v1\/)?/, '')
+      .replace(/\/+$/, '');
+    if (request.method !== 'POST' || !SENSITIVE_PATH.test(path)) return next();
+    const body = request.body as Record<string, unknown> | undefined;
+    const email =
+      typeof body?.email === 'string'
+        ? body.email.trim().toLowerCase().slice(0, 320)
+        : null;
+    const token =
+      typeof body?.refreshToken === 'string'
+        ? body.refreshToken
+        : typeof body?.token === 'string'
+          ? body.token
+          : null;
+    const bearer = request.headers.authorization;
+    const tenant =
+      path.startsWith('portal/') && typeof body?.organizationSlug === 'string'
+        ? body.organizationSlug.trim().toLowerCase().slice(0, 100)
+        : '';
+    const account = email
+      ? `email:${tenant}:${email}`
+      : token
+        ? `token:${token.slice(0, 2048)}`
+        : bearer
+          ? `bearer:${bearer.slice(0, 8192)}`
+          : undefined;
+    await this.limits.check(path, requestClientIp(request), account);
     next();
-  }
-
-  private positiveInt(key: string, fallback: number): number {
-    const value = Number(process.env[key] ?? fallback);
-    return Number.isSafeInteger(value) && value > 0 ? value : fallback;
-  }
-
-  private prune(now: number): void {
-    for (const [key, counter] of this.counters) {
-      if (counter.resetAt <= now || this.counters.size >= MAX_KEYS) {
-        this.counters.delete(key);
-      }
-      if (this.counters.size < MAX_KEYS) break;
-    }
   }
 }

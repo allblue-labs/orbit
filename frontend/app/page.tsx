@@ -1,5 +1,5 @@
 import { LandingContent } from "@/components/landing/landing-content";
-import { carregarCatalogoPublico } from "@/components/pricing/pricing-catalog";
+import { carregarCatalogoPublico } from "@/server/public-plan-catalog";
 
 /**
  * Landing.

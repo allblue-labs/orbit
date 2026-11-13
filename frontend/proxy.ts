@@ -21,6 +21,8 @@
  * enxergam a sessão completa.
  */
 import { NextResponse, type NextRequest } from "next/server";
+import { withClientOrigin } from "@/server/trusted-client-origin";
+import { toApiError } from "@/lib/api-error";
 
 import {
   LoginReason,
@@ -44,6 +46,38 @@ import { PLATFORM_ADMIN_ROLE, type AccessTokenClaims } from "@/types/session";
 import type { TokenPair } from "@/types/session";
 
 export async function proxy(request: NextRequest): Promise<NextResponse> {
+  return withClientOrigin(request, async () => {
+    try {
+      return await proxyWithOrigin(request);
+    } catch (error) {
+      const apiError = toApiError(error);
+      const status = apiError.status === 429 ? 429 : 503;
+      const retry =
+        typeof apiError.details === "object" &&
+        apiError.details !== null &&
+        "retryAfterSeconds" in apiError.details
+          ? Number(apiError.details.retryAfterSeconds)
+          : 5;
+      return new NextResponse(
+        status === 429
+          ? "Muitas tentativas. Aguarde um momento e tente novamente."
+          : "Não foi possível abrir esta página agora. Tente novamente em instantes.",
+        {
+          status,
+          headers: {
+            "Retry-After": String(
+              Number.isFinite(retry) ? Math.max(1, Math.ceil(retry)) : 5,
+            ),
+            "Content-Type": "text/plain; charset=utf-8",
+            "Cache-Control": "no-store",
+          },
+        },
+      );
+    }
+  });
+}
+
+async function proxyWithOrigin(request: NextRequest): Promise<NextResponse> {
   const { pathname } = request.nextUrl;
   const isProtected = isProtectedPath(pathname);
   const isPlatform = isPlatformPath(pathname);

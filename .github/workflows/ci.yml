@@ -32,6 +32,8 @@ jobs:
       - run: npm run lint && npm run typecheck && npm run lint:public-errors && npm run contracts:guard
         working-directory: backend
       - run: node --test scripts/audit-policy.test.mjs
+      - run: python3 scripts/test_proxy_origin.py
+      - run: node scripts/verify-proxy-ingress.mjs
       - run: npm run security:audit
         working-directory: backend
       - run: npm run build

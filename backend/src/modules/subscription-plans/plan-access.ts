@@ -1,3 +1,4 @@
+import { requestClientIp } from '../../common/trusted-client-origin';
 import {
   type CanActivate,
   type ExecutionContext,
@@ -281,7 +282,7 @@ export class ActivePlanGuard extends PlanMetadataGuard implements CanActivate {
         roles: identity.roles ?? [],
         permissions: identity.permissions ?? [],
         isOrganizationOwner: identity.isOrganizationOwner,
-        ip: request.ip ?? null,
+        ip: requestClientIp(request),
         userAgent: null,
         locale: 'pt-BR',
       }),

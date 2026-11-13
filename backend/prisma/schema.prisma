@@ -218,6 +218,16 @@ model IdentityInvitation {
   @@map("identity_invitations")
 }
 
+model AuthRateLimitBucket {
+  scopeHash String   @id @map("scope_hash") @db.Char(64)
+  shard     Int      @db.SmallInt
+  attempts  Int
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+
+  @@index([shard, expiresAt])
+  @@map("auth_rate_limit_buckets")
+}
+
 model Session {
   id                       String    @id @default(uuid(7)) @db.Uuid
   userId                   String    @map("user_id") @db.Uuid

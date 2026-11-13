@@ -145,7 +145,12 @@ class AuthInterceptor extends QueuedInterceptor {
     if (!_current(options)) return handler.next(_changed(options));
     if (tokens == null) return handler.next(err);
 
-    final renewed = await _authenticator.refresh(tokens.refreshToken);
+    TokenPair? renewed;
+    try {
+      renewed = await _authenticator.refresh(tokens.refreshToken);
+    } on OrbitException catch (error) {
+      return handler.next(DioException(requestOptions: options, error: error));
+    }
     if (!_current(options)) return handler.next(_changed(options));
     if (renewed == null) return handler.next(err);
 
@@ -272,6 +277,7 @@ class ErrorMappingInterceptor extends Interceptor {
   /// verificado caso a caso. Exercitá-la através de `onError` exigiria fabricar
   /// um handler do Dio, e o teste passaria a medir o handler.
   OrbitException map(DioException err) {
+    if (err.error case final OrbitException known) return known;
     final requestId =
         err.response?.headers.value(ContextHeaders.requestId) ??
         err.requestOptions.headers[ContextHeaders.requestId] as String?;

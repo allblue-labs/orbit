@@ -97,6 +97,13 @@ export async function withIntegrationEnvironment(work) {
     DATABASE_ENFORCE_RESTRICTED_ROLE: "true",
     JWT_ACCESS_SECRET: randomBytes(48).toString("hex"),
     ENCRYPTION_KEY: randomBytes(32).toString("base64"),
+    TRUSTED_PROXY_SECRET: randomBytes(32).toString("hex"),
+    AUTH_RATE_LIMIT_SECRET: randomBytes(32).toString("hex"),
+    // Broad suites share one synthetic origin. Focused rate-limit tests use
+    // their own small limits; the middleware is never disabled by NODE_ENV.
+    AUTH_RATE_LIMIT_MAX: "100000",
+    AUTH_RATE_LIMIT_ORIGIN_MAX: "100000",
+    AUTH_RATE_LIMIT_WINDOW_MS: "60000",
     TRIAL_FINGERPRINT_SECRET: randomBytes(32).toString("hex"),
     STORAGE_PROVIDER: "LOCAL",
     STORAGE_LOCAL_DIR: join(directory, "objects"),

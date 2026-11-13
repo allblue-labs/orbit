@@ -1,3 +1,4 @@
+import { requestClientIp } from '../../common/trusted-client-origin';
 import { StorageUploadGuard } from './storage-upload.guard';
 /** Signed upload gateway: buffers are bounded, validated and optimized before storage.
  * Only the development LOCAL provider serves GET here; R2 uses CDN/private signed GET.
@@ -161,7 +162,7 @@ export class StorageObjectController {
         businessUnitIds: [],
         roles: [],
         permissions: [],
-        ip: request.ip ?? null,
+        ip: requestClientIp(request),
         userAgent: null,
         locale: 'pt-BR',
       }),

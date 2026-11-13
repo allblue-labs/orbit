@@ -1,3 +1,4 @@
+import { requestClientIp } from '../../common/trusted-client-origin';
 import {
   Body,
   Controller,
@@ -49,7 +50,7 @@ export class SignatureController {
       request.identity!.id,
       input,
       {
-        ipAddress: request.ip,
+        ipAddress: requestClientIp(request),
         userAgent: request.header('user-agent'),
       },
     );

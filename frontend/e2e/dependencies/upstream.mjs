@@ -97,6 +97,22 @@ createServer(async (req, res) => {
     });
   if (path === "/identity/login" && req.method === "POST")
     return reply(200, tokens);
+  if (path === "/identity/refresh" && req.method === "POST") {
+    res.writeHead(429, {
+      "content-type": "application/json",
+      "retry-after": "17",
+    });
+    res.end(
+      JSON.stringify({
+        success: false,
+        error: {
+          code: "RATE_LIMITED",
+          message: "Muitas tentativas. Aguarde e tente novamente.",
+        },
+      }),
+    );
+    return;
+  }
   if (path === "/identity/me")
     return reply(200, {
       id: claims.sub,

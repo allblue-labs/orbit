@@ -7,6 +7,7 @@ import {
   Req,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { requestClientIp } from '../../../common/trusted-client-origin';
 import { ApiPublicErrors } from '../../../common/public-errors';
 import { Public, Surfaces } from '../../../decorators';
 import { AuthenticationService } from '../application/authentication.service';
@@ -45,7 +46,7 @@ export class AuthController {
       client: input.client,
       deviceId: input.deviceId,
       userAgent: request.header('user-agent'),
-      ipAddress: request.ip,
+      ipAddress: requestClientIp(request),
     });
     return this.readModels.session(session);
   }
@@ -62,7 +63,7 @@ export class AuthController {
         client: input.client,
         deviceId: input.deviceId,
         userAgent: request.header('user-agent'),
-        ipAddress: request.ip,
+        ipAddress: requestClientIp(request),
       },
     );
     return this.readModels.session(session);

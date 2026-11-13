@@ -19,6 +19,12 @@ export interface BffErrorInit {
 }
 
 export function bffError(init: BffErrorInit): NextResponse<ApiErrorEnvelope> {
+  const retry =
+    typeof init.details === "object" &&
+    init.details !== null &&
+    "retryAfterSeconds" in init.details
+      ? Number(init.details.retryAfterSeconds)
+      : null;
   const body: ApiErrorEnvelope = {
     success: false,
     error: {
@@ -32,7 +38,15 @@ export function bffError(init: BffErrorInit): NextResponse<ApiErrorEnvelope> {
   };
   return NextResponse.json(body, {
     status: init.status,
-    headers: { [CONTEXT_HEADERS.requestId]: init.requestId },
+    headers: {
+      [CONTEXT_HEADERS.requestId]: init.requestId,
+      ...(init.status === 429 &&
+      retry !== null &&
+      Number.isFinite(retry) &&
+      retry > 0
+        ? { "Retry-After": String(Math.ceil(retry)) }
+        : {}),
+    },
   });
 }
 

@@ -480,6 +480,45 @@ void main() {
     );
   });
 
+  test(
+    '429 ao renovar chega ao chamador sem apagar a sessão ou travar o transporte',
+    () async {
+      final storage = InMemoryTokenStorage(
+        const TokenPair(
+          accessToken: 'expired-access',
+          refreshToken: 'kept-refresh',
+          expiresIn: 900,
+        ),
+      );
+      final setup = build(
+        storage: storage,
+        onRequest: (_) async => _json(
+          errorEnvelope(code: 'UNAUTHORIZED', message: 'Sessão expirada'),
+          status: 401,
+        ),
+        onPlain: (_) async => _json(
+          errorEnvelope(
+            code: 'RATE_LIMITED',
+            message: 'Aguarde e tente novamente.',
+          ),
+          status: 429,
+        ),
+      );
+      await expectLater(
+        setup.client
+            .get<dynamic>('/operations/1')
+            .timeout(const Duration(seconds: 5)),
+        throwsA(
+          isA<OrbitException>()
+              .having((e) => e.status, 'status', 429)
+              .having((e) => e.code, 'code', 'RATE_LIMITED'),
+        ),
+      );
+      expect((await storage.read())?.refreshToken, 'kept-refresh');
+      expect(storage.clears, 0);
+    },
+  );
+
   test('401 dispara renovação e repete a requisição', () async {
     final storage = InMemoryTokenStorage(
       const TokenPair(

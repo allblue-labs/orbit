@@ -1,3 +1,4 @@
+import { requestClientIp } from '../../common/trusted-client-origin';
 import {
   Body,
   Controller,
@@ -46,7 +47,7 @@ import {
 } from './customer-portal.openapi';
 
 const metadata = (request: CustomerPortalRequest) => ({
-  ipAddress: request.ip,
+  ipAddress: requestClientIp(request),
   userAgent: request.header('user-agent'),
 });
 

@@ -6,6 +6,7 @@
  * alcança o NestJS diretamente.
  */
 import { ApiError, parseErrorEnvelope, toApiError } from "@/lib/api-error";
+import { clientOriginHeaders } from "./trusted-client-origin";
 import { DEFAULT_TIMEOUT_MS, assertServer, backendUrl } from "@/lib/env";
 import {
   defaultRetriesFor,
@@ -60,10 +61,21 @@ export async function backendFetch(request: BackendRequest): Promise<Response> {
   const method = request.method ?? "GET";
   const search = request.search ?? serializeQuery(request.query);
   const url = `${backendUrl(normalizePath(request.path))}${search}`;
-  const headers = {
+  const headers = new Headers({
     ...backendContextHeaders(request),
     ...request.headers,
-  };
+  });
+  for (const name of [
+    "forwarded",
+    "x-forwarded-for",
+    "x-real-ip",
+    "cf-connecting-ip",
+    "x-orbit-client-ip",
+    "x-orbit-proxy-secret",
+  ])
+    headers.delete(name);
+  for (const [name, value] of Object.entries(clientOriginHeaders()))
+    headers.set(name, value);
   const maxRetries = request.retries ?? defaultRetriesFor(method);
 
   let attempt = 0;
@@ -142,13 +154,23 @@ export async function unwrapEnvelope<T>(response: Response): Promise<T> {
 
   if (!response.ok) {
     const parsed = parseErrorEnvelope(payload);
+    const retryMs = parseRetryAfter(response.headers.get("retry-after"));
+    const details =
+      response.status === 429 && retryMs !== undefined
+        ? {
+            ...(typeof parsed.details === "object" && parsed.details !== null
+              ? parsed.details
+              : {}),
+            retryAfterSeconds: Math.max(1, Math.ceil(retryMs / 1000)),
+          }
+        : parsed.details;
     throw new ApiError({
       kind: "http",
       status: response.status,
       message: parsed.message,
       code: parsed.code,
       requestId: parsed.requestId ?? requestId,
-      details: parsed.details,
+      details,
     });
   }
   return extractData<T>(payload);

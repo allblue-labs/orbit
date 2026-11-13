@@ -19,12 +19,15 @@ import { FoundationExceptionFilter } from './foundation-exception.filter';
 import { RequestIdMiddleware } from './request-id.middleware';
 import { SensitiveEndpointRateLimitMiddleware } from './sensitive-endpoint-rate-limit.middleware';
 import { AuthorizationService } from './authorization.service';
+import { AuthRateLimitService } from './auth-rate-limit.service';
+import { PrismaModule } from '../database';
 
 @Global()
 @Module({
-  imports: [RequestContextModule, CommonProvidersModule],
+  imports: [RequestContextModule, CommonProvidersModule, PrismaModule],
   providers: [
     AuthorizationService,
+    AuthRateLimitService,
     IsJsonObjectConstraint,
     RequestIdMiddleware,
     SensitiveEndpointRateLimitMiddleware,

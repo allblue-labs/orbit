@@ -99,6 +99,14 @@ class SessionAuthenticator {
       return pair;
     } on Object catch (error) {
       if (generation != _generation) return null;
+      // A budget or transport failure does not invalidate a valid credential.
+      // Let the caller display the temporary error without logging the user out.
+      if (error is OrbitException &&
+          error.status != 401 &&
+          error.status != 403 &&
+          error.kind != OrbitErrorKind.unauthorized) {
+        rethrow;
+      }
       // Falha de renovação encerra a sessão: o refresh token não vale mais.
       _logger.warning('renovação de sessão falhou', data: {'motivo': '$error'});
       final clearing = clearSession();

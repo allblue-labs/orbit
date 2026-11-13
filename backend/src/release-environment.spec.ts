@@ -5,6 +5,8 @@ const valid = (): NodeJS.ProcessEnv => ({
   NODE_ENV: 'production',
   JWT_ACCESS_SECRET: 'j'.repeat(48),
   TRIAL_FINGERPRINT_SECRET: 't'.repeat(48),
+  AUTH_RATE_LIMIT_SECRET: 'r'.repeat(48),
+  TRUSTED_PROXY_SECRET: 'p'.repeat(48),
   ENCRYPTION_KEY: Buffer.alloc(32, 7).toString('base64'),
   FRONTEND_ORIGIN: 'https://app.example.test',
   AWS_REGION: 'us-east-1',
@@ -62,6 +64,8 @@ describe('release environment', () => {
   it.each([
     'JWT_ACCESS_SECRET',
     'TRIAL_FINGERPRINT_SECRET',
+    'AUTH_RATE_LIMIT_SECRET',
+    'TRUSTED_PROXY_SECRET',
     'ENCRYPTION_KEY',
     'FRONTEND_ORIGIN',
     'IDENTITY_PUBLIC_WEB_URL',

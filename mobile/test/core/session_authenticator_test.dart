@@ -12,10 +12,47 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_operator/core/network/session_authenticator.dart';
 import 'package:orbit_operator/core/observability/orbit_logger.dart';
 import 'package:orbit_operator/core/storage/token_storage.dart';
+import 'package:orbit_operator/core/errors/orbit_exception.dart';
 
 import '../support/fakes.dart';
 
 void main() {
+  for (final status in [429, 503]) {
+    test(
+      'erro temporário $status não apaga tokens nem emite expiração',
+      () async {
+        final storage = InMemoryTokenStorage(
+          const TokenPair(
+            accessToken: 'access',
+            refreshToken: 'refresh',
+            expiresIn: 900,
+          ),
+        );
+        final error = OrbitException(
+          kind: OrbitErrorKind.http,
+          status: status,
+          code: 'RATE_LIMITED',
+          publicMessage: 'Aguarde e tente novamente.',
+        );
+        final authenticator = SessionAuthenticator(
+          storage: storage,
+          logger: const OrbitLogger(isProduction: true),
+          refreshCall: (_) async => throw error,
+        );
+        final events = <void>[];
+        final subscription = authenticator.onExpired.listen(events.add);
+        await expectLater(
+          authenticator.refresh('refresh'),
+          throwsA(same(error)),
+        );
+        expect((await storage.read())?.refreshToken, 'refresh');
+        expect(storage.clears, 0);
+        expect(events, isEmpty);
+        await subscription.cancel();
+        await authenticator.dispose();
+      },
+    );
+  }
   late InMemoryTokenStorage storage;
   const logger = OrbitLogger(isProduction: true);
 
