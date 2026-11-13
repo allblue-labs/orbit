@@ -16,20 +16,50 @@ import { expect, test, type APIRequestContext } from "@playwright/test";
 
 import { OWNER, login, record, settled } from "./support";
 
-/**
- * Uma conta com `pmoc.read` e **sem** `pmoc.manage`.
- *
- * É a conta que prova a correção: o componente de ações começava com
- * `if (!canManage) return null`, e quem só consulta o plano perdia o contrato
- * impresso — um documento que o servidor entrega a `pmoc.read`.
- *
- * Sem ela o teste passa com o botão de volta atrás do portão, porque o dono tem
- * as duas permissões. Foi o que aconteceu na primeira tentativa.
- */
-const VIEWER = {
-  email: process.env.ORBIT_VIEWER_EMAIL ?? "viewer.pmoc@orbit.test",
-  password: process.env.ORBIT_VIEWER_PASSWORD ?? "",
-};
+/** Membro real de leitura, criado sem depender de credenciais externas. */
+async function provisionViewer(request: APIRequestContext) {
+  const auth = await request.post(`${API}/identity/login`, {
+    data: OWNER,
+  });
+  expect(auth.ok(), await auth.text()).toBe(true);
+  const headers = {
+    authorization: `Bearer ${(await auth.json()).data.accessToken}`,
+  };
+  const rolesResponse = await request.get(
+    `${API}/organizations/current/roles`,
+    { headers },
+  );
+  expect(rolesResponse.ok(), await rolesResponse.text()).toBe(true);
+  const roles = (await rolesResponse.json()).data as {
+    id: string;
+    key: string;
+  }[];
+  const role = roles.find((item) => item.key === "VIEWER");
+  expect(role, "papel de consulta deve existir").toBeTruthy();
+  const email = `pmoc.viewer.${crypto.randomUUID()}@orbit.local`;
+  const created = await request.post(
+    `${API}/organizations/current/team/members`,
+    {
+      headers,
+      data: { email, firstName: "Leitura", lastName: "PMOC", roleId: role!.id },
+    },
+  );
+  expect(created.ok(), await created.text()).toBe(true);
+  const { temporaryPassword } = (await created.json()).data;
+  const session = await request.post(`${API}/identity/login`, {
+    data: { email, password: temporaryPassword },
+  });
+  expect(session.ok(), await session.text()).toBe(true);
+  const password = "Pmoc#Consulta@2026";
+  const changed = await request.post(`${API}/identity/me/password`, {
+    headers: {
+      authorization: `Bearer ${(await session.json()).data.accessToken}`,
+    },
+    data: { currentPassword: temporaryPassword, newPassword: password },
+  });
+  expect(changed.status(), await changed.text()).toBe(204);
+  return { email, password };
+}
 
 async function loginAs(
   page: import("@playwright/test").Page,
@@ -40,6 +70,9 @@ async function loginAs(
   await page.getByLabel(/senha/i).first().fill(quem.password);
   await page.getByRole("button", { name: "Entrar", exact: true }).click();
   await page.waitForURL(/\/(dashboard|)$/, { timeout: 30_000 });
+  const guide = page.getByRole("dialog", { name: "Seu espaço começa aqui" });
+  await guide.getByRole("button", { name: "Pular e fazer depois" }).click();
+  await expect(guide).toHaveCount(0);
 }
 
 const API = process.env.ORBIT_API_URL ?? "http://localhost:6001/api/v1";
@@ -94,14 +127,11 @@ test("quem só consulta o plano também baixa o contrato", async ({
   page,
   request,
 }) => {
-  test.skip(
-    VIEWER.password.length === 0,
-    "sem ORBIT_VIEWER_PASSWORD não há conta de leitura para exercitar",
-  );
+  const viewer = await provisionViewer(request);
 
   const planId = await seedPlan(request);
 
-  await loginAs(page, VIEWER);
+  await loginAs(page, viewer);
   await page.goto(`/pmoc/${planId}`);
   await settled(page);
 

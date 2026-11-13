@@ -135,7 +135,7 @@ describe('automatic cancellation retention safeguards', () => {
       where: { id: 'job' },
     });
     expect(files.remove.mock.invocationCallOrder[0]).toBeLessThan(
-      tx.storageDeletionJob.deleteMany.mock.invocationCallOrder[0],
+      tx.storageDeletionJob.deleteMany.mock.invocationCallOrder[0]!,
     );
   });
 

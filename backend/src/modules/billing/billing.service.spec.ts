@@ -351,7 +351,7 @@ describe('BillingService checkout intent', () => {
         expect.objectContaining({ organizationId, subscriptionId }),
       );
       expect(release.mock.invocationCallOrder[0]).toBeLessThan(
-        setCancelAtPeriodEnd.mock.invocationCallOrder[0],
+        setCancelAtPeriodEnd.mock.invocationCallOrder[0]!,
       );
     });
 

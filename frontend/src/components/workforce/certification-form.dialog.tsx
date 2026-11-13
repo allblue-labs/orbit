@@ -147,7 +147,7 @@ function Body({
           {editando ? "Editar certificação" : "Nova certificação"}
         </DialogTitle>
         <DialogDescription>
-          A situação do prazo é calculada pelo servidor a partir da validade.
+          A situação é atualizada automaticamente conforme a data de validade.
         </DialogDescription>
       </DialogHeader>
 
@@ -184,7 +184,9 @@ function Body({
         )}
 
         <div className="space-y-1.5">
-          <Label required htmlFor="certification-name">Certificação</Label>
+          <Label required htmlFor="certification-name">
+            Certificação
+          </Label>
           <Input
             id="certification-name"
             value={name}

@@ -138,7 +138,7 @@ export function GeneralSection({
           <JsonField
             id="organization-settings"
             label="settings"
-            description="Campos livres, que o servidor guarda e não interpreta. Cores e demais preferências ficam aqui por convenção da organização — o logotipo, não: ele tem campo próprio, acima."
+            description="Preferências personalizadas da organização, como cores e informações adicionais. Use o campo acima para alterar o logotipo."
             value={settings}
             disabled={!canManage}
             rows={6}

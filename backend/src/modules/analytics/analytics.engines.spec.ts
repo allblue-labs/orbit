@@ -292,12 +292,12 @@ describe('Analytics facts and operational health', () => {
       ],
     });
     const trends = new TrendEngine().execute(data);
-    expect(trends.series[0].points).toHaveLength(7);
+    expect(trends.series[0]!.points).toHaveLength(7);
     expect(
-      trends.series[0].points.reduce((sum, item) => sum + item.value, 0),
+      trends.series[0]!.points.reduce((sum, item) => sum + item.value, 0),
     ).toBe(0);
     expect(
-      trends.series[1].points.reduce((sum, item) => sum + item.value, 0),
+      trends.series[1]!.points.reduce((sum, item) => sum + item.value, 0),
     ).toBe(1);
     expect(new ForecastEngine().execute(trends).forecasts).toHaveLength(3);
   });
@@ -313,7 +313,7 @@ describe('Analytics facts and operational health', () => {
         operation({ status: 'CANCELLED' }),
       ],
     });
-    expect(new TrendEngine().execute(data).series[0].points[0]?.value).toBe(0);
+    expect(new TrendEngine().execute(data).series[0]!.points[0]?.value).toBe(0);
   });
   it('does not publish a zero health score or simulated weather risks when there is no basis', async () => {
     const service = new AnalyticsService(

@@ -156,4 +156,7 @@ createServer(async (req, res) => {
       expiresAt: "2099-01-01T00:00:00.000Z",
     });
   return reply(404, null);
-}).listen(17203, "0.0.0.0");
+}).listen(
+  Number(process.env.DEPENDENCY_API_PORT ?? 17203),
+  process.env.DEPENDENCY_API_HOST ?? "0.0.0.0",
+);

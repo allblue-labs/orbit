@@ -11,6 +11,7 @@
 /// Escopo deliberadamente estreito (PR-FL-01): sessão, uma rota protegida,
 /// decodificação de contrato e as recusas. Os fluxos de campo são das
 /// próximas PRs.
+@Tags(['integration'])
 library;
 
 import 'dart:io';
@@ -61,6 +62,9 @@ Future<bool> _apiIsUp() async {
     socket.destroy();
     return true;
   } on Object {
+    if (const bool.fromEnvironment('ORBIT_REQUIRE_API')) {
+      throw StateError('A API de testes obrigatória não está disponível.');
+    }
     return false;
   }
 }

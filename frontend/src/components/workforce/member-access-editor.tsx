@@ -75,8 +75,8 @@ export function MemberAccessEditor({
             Unidades de atuação
           </p>
           <p className="text-xs text-muted-foreground">
-            Selecione uma ou mais unidades. O servidor impede acesso fora do
-            seu próprio escopo.
+            Selecione as unidades em que esta pessoa poderá atuar. Você só pode
+            conceder acesso às unidades sob sua gestão.
           </p>
         </div>
         <div className="grid gap-2 sm:grid-cols-2">
@@ -152,11 +152,7 @@ export function MemberAccessEditor({
                       checked={allowedSurfaces.includes(surface.code)}
                       onCheckedChange={(value) =>
                         onAllowedSurfacesChange(
-                          toggle(
-                            allowedSurfaces,
-                            surface.code,
-                            value === true,
-                          ),
+                          toggle(allowedSurfaces, surface.code, value === true),
                         )
                       }
                     />

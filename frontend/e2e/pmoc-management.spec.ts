@@ -33,13 +33,18 @@ async function openPlan(
   await settled(page);
 }
 
-test("o seletor de equipamento pagina no servidor e busca", async ({ page }) => {
+test("o seletor de equipamento pagina no servidor e busca", async ({
+  page,
+}) => {
   const recorder = record(page);
   await login(page);
   const plan = await provisionPmocPlan(page, "paginacao");
   await openPlan(page, plan.id, "Cobertura");
 
-  await page.getByRole("button", { name: /Adicionar equipamento/ }).first().click();
+  await page
+    .getByRole("button", { name: /Adicionar equipamento/ })
+    .first()
+    .click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
 
@@ -65,7 +70,7 @@ test("o seletor de equipamento pagina no servidor e busca", async ({ page }) => 
   });
   /** Digitado tecla a tecla: é o que prova que a consulta espera a digitação parar. */
   await dialog
-    .getByLabel("Buscar", { exact: true })
+    .getByLabel(/^Buscar(?:\s*\*?\s*\(obrigatório\))?$/)
     .pressSequentially("Sala 07", { delay: 40 });
   await page.waitForTimeout(1_500);
   await settled(page);
@@ -78,16 +83,23 @@ test("o seletor de equipamento pagina no servidor e busca", async ({ page }) => 
   assertClean(recorder, "seletor de equipamento");
 });
 
-test("adicionar equipamento persiste e sobrevive à recarga", async ({ page }) => {
+test("adicionar equipamento persiste e sobrevive à recarga", async ({
+  page,
+}) => {
   const recorder = record(page);
   await login(page);
   const plan = await provisionPmocPlan(page, "adicionar");
   const escolhido = plan.assets[8];
   await openPlan(page, plan.id, "Cobertura");
 
-  await page.getByRole("button", { name: /Adicionar equipamento/ }).first().click();
+  await page
+    .getByRole("button", { name: /Adicionar equipamento/ })
+    .first()
+    .click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Buscar", { exact: true }).fill(escolhido.name);
+  await dialog
+    .getByLabel(/^Buscar(?:\s*\*?\s*\(obrigatório\))?$/)
+    .fill(escolhido.name);
   await page.waitForTimeout(1_200);
   await settled(page);
 
@@ -96,14 +108,18 @@ test("adicionar equipamento persiste e sobrevive à recarga", async ({ page }) =
   await expect(dialog).toBeHidden({ timeout: 20_000 });
   await settled(page);
 
-  await expect(page.getByRole("cell", { name: escolhido.name }).first()).toBeVisible();
+  await expect(
+    page.getByRole("cell", { name: escolhido.name }).first(),
+  ).toBeVisible();
 
   /** Persistência: recarregar não é cache — é o servidor respondendo de novo. */
   await page.reload();
   await settled(page);
   await page.getByRole("tab", { name: "Cobertura" }).click();
   await settled(page);
-  await expect(page.getByRole("cell", { name: escolhido.name }).first()).toBeVisible();
+  await expect(
+    page.getByRole("cell", { name: escolhido.name }).first(),
+  ).toBeVisible();
 
   assertClean(recorder, "adicionar cobertura");
 });
@@ -117,9 +133,14 @@ test("equipamento já coberto não é oferecido de novo", async ({ page }) => {
   await coverAsset(page, plan.id, coberto.id);
   await openPlan(page, plan.id, "Cobertura");
 
-  await page.getByRole("button", { name: /Adicionar equipamento/ }).first().click();
+  await page
+    .getByRole("button", { name: /Adicionar equipamento/ })
+    .first()
+    .click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Buscar", { exact: true }).fill(coberto.name);
+  await dialog
+    .getByLabel(/^Buscar(?:\s*\*?\s*\(obrigatório\))?$/)
+    .fill(coberto.name);
   await page.waitForTimeout(1_200);
   await settled(page);
 
@@ -127,7 +148,9 @@ test("equipamento já coberto não é oferecido de novo", async ({ page }) => {
    * Some da oferta porque já está coberto. A regra continua sendo do servidor,
    * que responde `CONFLICT` — isto aqui evita oferecer o que seria recusado.
    */
-  await expect(dialog.getByRole("button", { name: coberto.name })).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: coberto.name })).toHaveCount(
+    0,
+  );
 
   await page.keyboard.press("Escape");
   assertClean(recorder, "duplicidade");
@@ -246,7 +269,9 @@ test("suspender o plano bloqueia a execução, com o motivo do servidor", async 
 
   /** O estado é o publicado, e o aviso explica o que ele significa. */
   await expect(page.getByText("Suspenso").first()).toBeVisible();
-  await expect(page.getByText(/novas execuções não são abertas/i)).toBeVisible();
+  await expect(
+    page.getByText(/novas execuções não são abertas/i),
+  ).toBeVisible();
 
   /**
    * A prova do bloqueio não é o badge: é `execution-preparation` respondendo
@@ -255,9 +280,9 @@ test("suspender o plano bloqueia a execução, com o motivo do servidor", async 
    */
   await page.getByRole("tab", { name: "Execuções" }).click();
   await settled(page);
-  await expect(
-    page.getByText(/O plano não está ativo/i).first(),
-  ).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText(/O plano não está ativo/i).first()).toBeVisible({
+    timeout: 20_000,
+  });
 
   const body = await page.evaluate(() => document.body.innerText);
   expect(body).not.toContain("PLAN_NOT_ACTIVE");
@@ -284,7 +309,9 @@ test("reativar devolve o plano ao estado ativo", async ({ page }) => {
   await settled(page);
 
   await expect(page.getByText("Ativo").first()).toBeVisible();
-  await expect(page.getByText(/novas execuções não são abertas/i)).toHaveCount(0);
+  await expect(page.getByText(/novas execuções não são abertas/i)).toHaveCount(
+    0,
+  );
 
   assertClean(recorder, "reativar plano");
 });
@@ -297,7 +324,10 @@ test("conflito real de cobertura não duplica e explica o que houve", async ({
   const plan = await provisionPmocPlan(page, "conflito", 4);
   await openPlan(page, plan.id, "Cobertura");
 
-  await page.getByRole("button", { name: /Adicionar equipamento/ }).first().click();
+  await page
+    .getByRole("button", { name: /Adicionar equipamento/ })
+    .first()
+    .click();
   const dialog = page.getByRole("dialog");
   const list = dialog.getByRole("list", { name: "Equipamentos disponíveis" });
 
@@ -390,9 +420,8 @@ test("conflito real de cobertura não duplica e explica o que houve", async ({
         `/api/orbit/pmoc/plans/${id}/equipment-page?limit=100`,
         { headers: { "sec-fetch-site": "same-origin" } },
       ).then((response) => response.json());
-      const rows = (
-        page1 as { data: { data: { asset: { name: string } }[] } }
-      ).data.data;
+      const rows = (page1 as { data: { data: { asset: { name: string } }[] } })
+        .data.data;
       return rows.filter((row) => row.asset.name === name).length;
     },
     { id: planId, name: label },
@@ -401,4 +430,47 @@ test("conflito real de cobertura não duplica e explica o que houve", async ({
 
   expect(recorder.pageErrors).toEqual([]);
   expect(recorder.reactWarnings).toEqual([]);
+});
+
+test("aguarda a cobertura antes de oferecer equipamentos para inclusão", async ({
+  page,
+}) => {
+  await login(page);
+  const plan = await provisionPmocPlan(page, "cobertura-pendente", 2);
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route(
+    `**/api/orbit/pmoc/plans/${plan.id}/equipment-page?*`,
+    async (route) => {
+      const response = await route.fetch({
+        headers: {
+          ...route.request().headers(),
+          origin: new URL(page.url()).origin,
+          "sec-fetch-site": "same-origin",
+        },
+      });
+      await pending;
+      await route.fulfill({ response });
+    },
+  );
+  try {
+    await page.goto(`/pmoc/${plan.id}`);
+    await page.getByRole("tab", { name: "Cobertura", exact: true }).click();
+    const add = page
+      .getByRole("button", { name: "Adicionar equipamento", exact: true })
+      .first();
+    await expect(add).toBeDisabled();
+    release();
+    await expect(add).toBeEnabled();
+    await add.click();
+    const available = page.getByRole("list", {
+      name: "Equipamentos disponíveis",
+    });
+    await expect(available.getByRole("button").first()).toBeVisible();
+    await expect(available).not.toContainText("Cobertura inicial");
+  } finally {
+    release();
+  }
 });

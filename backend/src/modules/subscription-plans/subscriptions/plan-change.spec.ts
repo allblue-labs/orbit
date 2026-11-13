@@ -68,6 +68,13 @@ function bancada(linha: Record<string, unknown>) {
   };
 }
 
+// Keep the paid/trial periods active regardless of the day this suite runs.
+beforeEach(() => {
+  jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+  jest.setSystemTime(new Date('2026-10-23T12:00:00Z'));
+});
+afterEach(() => jest.useRealTimers());
+
 describe('trocar de plano durante a avaliação', () => {
   it('a subida é programada para o fim da avaliação, não aplicada na hora', async () => {
     const { service, repository } = bancada({});

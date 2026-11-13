@@ -1,3 +1,4 @@
+import type { UUID } from '../../contracts';
 import 'reflect-metadata';
 import type { Server } from 'node:http';
 import {
@@ -38,9 +39,12 @@ describe('notification preferences HTTP routes for a mobile-only operator', () =
           const req = context.switchToHttp().getRequest<IdentityRequest>();
           if (req.header('authorization') !== 'Bearer test-mobile-session')
             throw new UnauthorizedException();
-          req.identity = { id: 'operator-a', organizationId: 'org-a' } as never;
+          req.identity = {
+            id: 'operator-a' as UUID,
+            organizationId: 'org-a',
+          } as never;
           req.user = {
-            id: 'operator-a',
+            id: 'operator-a' as UUID,
             roles: [],
             permissions: [],
             businessUnitIds: [],

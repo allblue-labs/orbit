@@ -59,16 +59,16 @@ describe('cancellation retention', () => {
       pendingPlanCode: 'ESSENTIAL',
     });
     await service.cancelAtPeriodEnd('org', 1, true);
-    const data = repository.updateIfVersion.mock.calls[0][2];
+    const data = repository.updateIfVersion.mock.calls[0]?.[2];
     expect(data).toMatchObject({
       cancelAtPeriodEnd: true,
       dataRetentionEndsAt: new Date('2026-12-01T12:00:00Z'),
       pendingPlanCode: null,
     });
-    expect(data.status).toBeUndefined();
-    expect(data.planCode).toBeUndefined();
-    expect(data.entitlementsSnapshot).toBeUndefined();
-    expect(data.currentPeriodEnd).toBeUndefined();
+    expect(data?.status).toBeUndefined();
+    expect(data?.planCode).toBeUndefined();
+    expect(data?.entitlementsSnapshot).toBeUndefined();
+    expect(data?.currentPeriodEnd).toBeUndefined();
     expect(current.status).toBe('ACTIVE');
   });
 
@@ -79,7 +79,7 @@ describe('cancellation retention', () => {
       trialEndsAt: new Date('2026-10-31T12:00:00Z'),
     });
     await service.cancelAtPeriodEnd('org', 1, true);
-    expect(repository.updateIfVersion.mock.calls[0][2]).toMatchObject({
+    expect(repository.updateIfVersion.mock.calls[0]?.[2]).toMatchObject({
       dataRetentionEndsAt: new Date('2026-11-30T12:00:00Z'),
     });
   });
@@ -87,7 +87,7 @@ describe('cancellation retention', () => {
   it('does not schedule deletion retroactively for a client that did not see the policy', async () => {
     const { service, repository } = fixture();
     await service.cancelAtPeriodEnd('org', 1);
-    expect(repository.updateIfVersion.mock.calls[0][2]).toMatchObject({
+    expect(repository.updateIfVersion.mock.calls[0]?.[2]).toMatchObject({
       cancelAtPeriodEnd: true,
       dataRetentionEndsAt: null,
     });
@@ -100,7 +100,7 @@ describe('cancellation retention', () => {
       dataRetentionEndsAt: new Date('2026-12-01T12:00:00Z'),
     });
     await service.applyProviderCancellation('org', 1, false);
-    expect(repository.updateIfVersion.mock.calls[0][2]).toMatchObject({
+    expect(repository.updateIfVersion.mock.calls[0]?.[2]).toMatchObject({
       cancelAtPeriodEnd: false,
       dataRetentionEndsAt: null,
     });
@@ -122,7 +122,7 @@ describe('cancellation retention', () => {
       activate: true,
       cancelAtPeriodEnd: true,
     });
-    expect(repository.updateIfVersion.mock.calls[0][2]).toMatchObject({
+    expect(repository.updateIfVersion.mock.calls[0]?.[2]).toMatchObject({
       dataRetentionEndsAt: new Date('2026-12-05T12:00:00Z'),
     });
   });

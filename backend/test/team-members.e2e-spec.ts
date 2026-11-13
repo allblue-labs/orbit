@@ -1,3 +1,4 @@
+import { paidSubscriptionFixture } from './support/paid-subscription-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
  * Cadastro de pessoas da equipe, senha temporária e recuperação de senha.
@@ -161,8 +162,11 @@ describe('Team members, temporary password and recovery (e2e)', () => {
     http = () => request(app.getHttpServer());
 
     const owner = await register('owner');
+    await paidSubscriptionFixture(app, prisma, owner.email);
     ownerToken = owner.token;
-    neighbourToken = (await register('neighbour')).token;
+    const neighbour = await register('neighbour');
+    await paidSubscriptionFixture(app, prisma, neighbour.email);
+    neighbourToken = neighbour.token;
     ownerUserId = (
       await prisma.user.findUniqueOrThrow({
         where: { email: owner.email },

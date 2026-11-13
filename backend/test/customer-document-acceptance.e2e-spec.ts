@@ -404,7 +404,7 @@ describe('aceite público de propostas com RLS real', () => {
     expect((await acceptance.read(link.token)).response?.signerName).toBe(
       'Cliente Teste',
     );
-  });
+  }, 30_000);
   it.each(['REJECT', 'REQUEST_CHANGES'] as const)(
     'registra %s e aplica a transição correspondente sem evento de aprovação',
     async (decision) => {

@@ -14,6 +14,7 @@
 import { expect, test } from "@playwright/test";
 
 import { assertClean, login, record, settled } from "./support";
+import { provisionOperationWithArtifact } from "./provision";
 
 test.describe("Navegação de artefatos", () => {
   test("o menu não oferece Execuções de artefato", async ({ page }) => {
@@ -60,26 +61,30 @@ test.describe("Navegação de artefatos", () => {
 
   test("o deep link por execução continua funcionando", async ({ page }) => {
     await login(page);
-    await page.goto("/documentos");
-    await settled(page);
-
-    /**
-     * A partir do Centro de Documentos chega-se a uma execução. Se não houver
-     * documento nenhum no ambiente, o teste se declara ausente em vez de
-     * inventar um id — um id fabricado provaria só que a rota devolve 404.
-     */
-    const link = page.locator('a[href^="/execucoes/"]').first();
-    if ((await link.count()) === 0) {
-      test.skip(true, "sem documentos emitidos neste ambiente");
-      return;
-    }
-
-    await link.click();
-    await settled(page);
-    await expect(page).toHaveURL(/\/execucoes\/[0-9a-f-]+$/);
-
-    /** A tela abre de verdade, e não numa rota morta. */
-    await expect(page.getByRole("main")).toBeVisible();
+    const operation = await provisionOperationWithArtifact(page, "deep-link");
+    await page.goto(`/operacoes/${operation.id}`);
+    const panel = page.locator('[data-panel="operation-artifact-executions"]');
+    await expect(panel).toBeVisible();
+    await panel
+      .getByRole("listitem")
+      .filter({ hasText: operation.executionCode })
+      .getByRole("link")
+      .click();
+    await expect(page).toHaveURL(
+      new RegExp(`/execucoes/${operation.executionId}$`),
+    );
+    await expect(
+      page
+        .locator('[data-panel="artifact-execution-overview"]')
+        .getByText(operation.executionCode, { exact: true }),
+    ).toBeVisible();
+    // Favoritos e recarga também precisam resolver a execução real do cenário.
+    await page.reload();
+    await expect(
+      page
+        .locator('[data-panel="artifact-execution-overview"]')
+        .getByText(operation.executionCode, { exact: true }),
+    ).toBeVisible();
   });
 
   test("o Centro de Documentos continua de pé", async ({ page }) => {

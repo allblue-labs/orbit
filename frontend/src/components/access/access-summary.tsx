@@ -92,8 +92,8 @@ export function AccessSummary({ className }: { className?: string }) {
       ) : null}
 
       <p className="text-xs text-muted-foreground">
-        Este resumo é informativo. Quem autoriza cada operação é o servidor, no
-        momento em que ela acontece.
+        Este resumo mostra os acessos disponíveis para você. As permissões são
+        verificadas a cada ação.
       </p>
     </div>
   );

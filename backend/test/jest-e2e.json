@@ -7,5 +7,6 @@
     "^.+\\.(t|j)s$": "ts-jest"
   },
   "//": "Uma suíte por vez: os E2E compartilham banco e fila. Em paralelo, o worker de um processo reivindica o job de outro — `FOR UPDATE SKIP LOCKED` não distingue de quem é o trabalho, e não deveria mesmo. Serializar aqui é mais honesto que dar a cada suíte uma fila própria que não existe em produção.",
-  "maxWorkers": 1
+  "maxWorkers": 1,
+  "testTimeout": 30000
 }

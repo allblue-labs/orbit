@@ -318,7 +318,7 @@ describe('Artifact Manifest (e2e)', () => {
       .send({
         fileName: 'relatorio-v2.pdf',
         mimeType: 'application/pdf',
-        sizeBytes: 32,
+        sizeBytes: Buffer.byteLength('%PDF-1.7 revisao dois'),
       })
       .expect(201);
     const reserved = (
@@ -329,7 +329,8 @@ describe('Artifact Manifest (e2e)', () => {
     await http()
       .put(`${upload.pathname}${upload.search}`)
       .set('content-type', 'application/pdf')
-      .send(Buffer.from('%PDF-1.7 revisao dois'));
+      .send(Buffer.from('%PDF-1.7 revisao dois'))
+      .expect(200);
 
     await auth(http().post(`/api/v1/artifact-manifests/${second.id}/issue`))
       .send({ fileId: reserved.fileId })

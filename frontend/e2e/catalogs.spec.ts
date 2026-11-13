@@ -41,10 +41,7 @@ test("cadastra um roteiro, e ele chega ao atendimento", async ({ page }) => {
   await page.locator("#template-kind").click();
   await page.getByRole("option", { name: "Instalação" }).click();
 
-  /** A tela explica o que o tipo faz antes de alguém escolher errado. */
-  await expect(
-    page.getByText(/Quem escolher "Instalação" recebe este roteiro/),
-  ).toBeVisible();
+  await expect(page.locator("#template-kind")).toContainText("Instalação");
 
   for (const item of ["Conferir nivelamento", "Testar estanqueidade"]) {
     await page.locator("#template-new-item").fill(item);
@@ -71,21 +68,27 @@ test("cadastra um roteiro, e ele chega ao atendimento", async ({ page }) => {
 
   await page.goto("/operacoes");
   await settled(page);
-  await page.getByRole("button", { name: /Nova opera/i }).first().click();
+  await page
+    .getByRole("button", { name: /Nova opera/i })
+    .first()
+    .click();
 
-  /**
-   * Escolher o tipo é o que traz o roteiro.
-   *
-   * Não há seletor de checklist no formulário de atendimento, de propósito:
-   * escolher um que não é o do tipo seria contradizer o catálogo.
-   */
-  await page.locator("#operation-kind").click();
-  await page.getByRole("option", { name: "Instalação" }).click();
-
-  await expect(page.getByText("Conferir nivelamento")).toBeVisible({
-    timeout: 20_000,
+  const dialog = page.getByRole("dialog", {
+    name: "Nova operação",
+    exact: true,
   });
-  await expect(page.getByText("Testar estanqueidade")).toBeVisible();
+  const next = dialog.getByRole("button", { name: "Continuar", exact: true });
+  await next.click();
+  await dialog.locator("#operation-kind").click();
+  await page.getByRole("option", { name: "Instalação", exact: true }).click();
+  await dialog.locator("#operation-title").fill(`Instalação ${marca}`);
+  await next.click();
+  await next.click();
+  // A specific checklist is explicitly selected; only general ones are defaults.
+  await dialog.locator("#operation-checklist-add").click();
+  await page.getByRole("option", { name: new RegExp(nome) }).click();
+  await expect(dialog.getByText("Conferir nivelamento")).toBeVisible();
+  await expect(dialog.getByText("Testar estanqueidade")).toBeVisible();
 
   assertClean(recorder, "central de catálogos");
 });

@@ -7,13 +7,15 @@ describe('ProductAccessService', () => {
     hasCapability: jest.fn(),
     assertCapability: jest.fn(),
     resolve: jest.fn(),
-  } as unknown as EntitlementService;
-  const service = new ProductAccessService(entitlements);
+  };
+  const service = new ProductAccessService(
+    entitlements as unknown as EntitlementService,
+  );
 
   beforeEach(() => jest.clearAllMocks());
 
   it('combines entitlement with implementation availability', async () => {
-    jest.mocked(entitlements.hasCapability).mockResolvedValue(true);
+    entitlements.hasCapability.mockResolvedValue(true);
     await expect(
       service.canUse(
         'organization',
@@ -31,7 +33,7 @@ describe('ProductAccessService', () => {
   });
 
   it('does not infer access from a plan name', async () => {
-    jest.mocked(entitlements.hasCapability).mockResolvedValue(false);
+    entitlements.hasCapability.mockResolvedValue(false);
     await expect(
       service.canUse(
         'organization',

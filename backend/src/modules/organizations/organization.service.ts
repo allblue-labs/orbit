@@ -487,7 +487,7 @@ export class OrganizationService {
   async getLogo(organizationId: string) {
     const logo = await this.repository.findLogo(organizationId);
     if (!logo) throw new EntityNotFoundException('Organization');
-    return logo;
+    return { ...logo, logoUrl: await this.brands.url(logo.logoUrl) };
   }
 
   /**
@@ -497,7 +497,8 @@ export class OrganizationService {
    * dentro do gerador de documento.
    */
   async setLogo(organizationId: string, image: string) {
-    const previous = await this.getLogo(organizationId);
+    const previous = await this.repository.findLogo(organizationId);
+    if (!previous) throw new EntityNotFoundException('Organization');
     const logoUrl = await this.brands.store(
       organizationId,
       organizationId,
@@ -506,7 +507,7 @@ export class OrganizationService {
     try {
       const saved = await this.repository.setLogo(organizationId, logoUrl);
       await this.brands.remove(previous.logoUrl, organizationId);
-      return saved;
+      return { ...saved, logoUrl: await this.brands.url(saved.logoUrl) };
     } catch (error) {
       // Preserve the old logo if the database write fails.
       const current = await this.repository.findLogo(organizationId);
@@ -517,7 +518,8 @@ export class OrganizationService {
   }
 
   async removeLogo(organizationId: string) {
-    const previous = await this.getLogo(organizationId);
+    const previous = await this.repository.findLogo(organizationId);
+    if (!previous) throw new EntityNotFoundException('Organization');
     const saved = await this.repository.setLogo(organizationId, null);
     await this.brands.remove(previous.logoUrl, organizationId);
     return saved;

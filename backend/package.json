@@ -18,12 +18,12 @@
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/src/main",
-    "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
+    "lint": "eslint \"{src,apps,libs,test}/**/*.ts\"",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "test:e2e": "node ../scripts/verify-integrations.mjs backend",
     "provision:db-roles": "node dist/src/scripts/provision-database-roles.js",
     "provision:db-roles:dev": "ts-node src/scripts/provision-database-roles.ts",
     "seed:owner": "node dist/src/scripts/seed-owner.js",
@@ -35,7 +35,11 @@
     "seed:plan-catalog": "node dist/src/scripts/seed-plan-catalog.js",
     "seed:plan-catalog:dev": "ts-node src/scripts/seed-plan-catalog.ts",
     "bootstrap:subscriptions": "node dist/src/scripts/bootstrap-subscriptions.js",
-    "bootstrap:subscriptions:dev": "ts-node src/scripts/bootstrap-subscriptions.ts"
+    "bootstrap:subscriptions:dev": "ts-node src/scripts/bootstrap-subscriptions.ts",
+    "lint:fix": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
+    "test:e2e:jest": "jest --config ./test/jest-e2e.json",
+    "security:audit": "node ../scripts/audit-policy.mjs backend",
+    "typecheck": "tsc --noEmit --incremental false"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1167.0",
@@ -74,7 +78,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
     "@eslint/js": "^9.18.0",
-    "@nestjs/cli": "^11.0.0",
+    "@nestjs/cli": "^11.0.24",
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.1",
     "@types/express": "^5.0.0",
@@ -93,7 +97,7 @@
     "eslint-config-prettier": "^10.0.1",
     "eslint-plugin-prettier": "^5.2.2",
     "globals": "^16.0.0",
-    "jest": "^30.0.0",
+    "jest": "^30.5.2",
     "jsqr": "^1.4.0",
     "pngjs": "^7.0.0",
     "prettier": "^3.4.2",
@@ -105,7 +109,7 @@
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.7.3",
-    "typescript-eslint": "^8.20.0"
+    "typescript-eslint": "^8.72.2"
   },
   "overrides": {
     "multer": "$multer",

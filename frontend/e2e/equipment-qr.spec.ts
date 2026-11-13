@@ -397,6 +397,8 @@ test("preparar atendimento não cria nada antes da confirmação", async ({
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible({ timeout: 20_000 });
 
+  await dialog.getByRole("button", { name: "Continuar", exact: true }).click();
+
   /** O formulário abre preenchido com o que o servidor preparou. */
   await expect(dialog.getByLabel("Título")).toHaveValue(
     new RegExp(asset.name.slice(0, 12).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
@@ -446,7 +448,13 @@ test("confirmado, o atendimento nasce — e nasce parado", async ({
    * criação era recusada. É a colisão que a FL-07 já tinha encontrado.
    */
   const code = `QR-${crypto.randomUUID().replace(/-/g, "").slice(0, 10).toUpperCase()}`;
+  await dialog.getByRole("button", { name: "Continuar", exact: true }).click();
   await dialog.getByLabel("Código").fill(code);
+  for (let step = 0; step < 3; step++) {
+    await dialog
+      .getByRole("button", { name: "Continuar", exact: true })
+      .click();
+  }
   await dialog.getByRole("button", { name: /criar|salvar/i }).click();
   await expect(dialog).toBeHidden({ timeout: 30_000 });
 

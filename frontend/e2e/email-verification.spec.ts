@@ -107,7 +107,7 @@ test("sem token oferece reenvio com resposta genérica em português", async ({
     page.getByRole("button", { name: "Confirmar meu e-mail", exact: true }),
   ).toHaveCount(0);
   await page
-    .getByLabel("Seu e-mail", { exact: true })
+    .getByLabel(/^Seu e-mail(?:\s*\*?\s*\(obrigatório\))?$/)
     .fill("owner@example.test");
   await page
     .getByRole("button", { name: "Solicitar novo e-mail", exact: true })

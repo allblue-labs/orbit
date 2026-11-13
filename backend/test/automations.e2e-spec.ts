@@ -1,3 +1,4 @@
+import { replaceFixtureOwner, memberFixture } from './support/member-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
  * E2E do Automation Engine.
@@ -150,7 +151,6 @@ describe('Automations (e2e)', () => {
   let restrictedToken: string;
   let organizationId: string;
   let userId: string;
-  let principalEmail: string;
   let unitA: string;
   let unitB: string;
   let customerId: string;
@@ -363,7 +363,6 @@ describe('Automations (e2e)', () => {
     worker = app.get(BackgroundJobWorker);
 
     const principal = await register('principal');
-    principalEmail = principal.email;
     token = principal.token;
     neighbourToken = (await register('vizinha')).token;
 
@@ -477,6 +476,7 @@ describe('Automations (e2e)', () => {
       where: { userId: restrictedUser.id },
       data: { roleId: limited.id },
     });
+    await replaceFixtureOwner(prisma, membership.organizationId, PASSWORD);
     restrictedToken = await login(restricted.email);
   }, 180000);
 
@@ -1221,87 +1221,103 @@ describe('Automations (e2e)', () => {
   });
 
   it('19 · snapshot organizacional permanece fail-closed após perda de unidade', async () => {
-    const organizationRule = await createRule({
-      name: 'Snapshot A e B',
-      trigger: 'operation.created',
-      actions: [
-        {
-          type: 'SEND_NOTIFICATION',
-          config: {
-            title: `Snapshot ${digits(6)}`,
-            body: 'escopo histórico',
-            target: 'ACTOR',
+    const ownerToken = token;
+    const member = await memberFixture(prisma, {
+      organizationId,
+      businessUnitIds: [unitA, unitB],
+      permissions: ['*'],
+      password: PASSWORD,
+    });
+    token = await login(member.email);
+    try {
+      const organizationRule = await createRule({
+        name: 'Snapshot A e B',
+        trigger: 'operation.created',
+        actions: [
+          {
+            type: 'SEND_NOTIFICATION',
+            config: {
+              title: `Snapshot ${digits(6)}`,
+              body: 'escopo histórico',
+              target: 'ACTOR',
+            },
           },
-        },
-      ],
-    });
-    expect(organizationRule.businessUnit).toBeNull();
+        ],
+      });
+      expect(organizationRule.businessUnit).toBeNull();
 
-    const persisted = await prisma.automationRule.findUniqueOrThrow({
-      where: { id: organizationRule.id },
-      select: { scopeBusinessUnitIds: true },
-    });
-    expect([...persisted.scopeBusinessUnitIds].sort()).toEqual(
-      [unitA, unitB].sort(),
-    );
+      const persisted = await prisma.automationRule.findUniqueOrThrow({
+        where: { id: organizationRule.id },
+        select: { scopeBusinessUnitIds: true },
+      });
+      expect([...persisted.scopeBusinessUnitIds].sort()).toEqual(
+        [unitA, unitB].sort(),
+      );
 
-    const copied = await auth(
-      http().post(`/api/v1/automations/${organizationRule.id}/duplicate`),
-    ).expect(201);
-    const copiedId = (copied.body as Envelope<Rule>).data.id;
-    const copiedSnapshot = await prisma.automationRule.findUniqueOrThrow({
-      where: { id: copiedId },
-      select: { scopeBusinessUnitIds: true },
-    });
-    expect([...copiedSnapshot.scopeBusinessUnitIds].sort()).toEqual(
-      [unitA, unitB].sort(),
-    );
+      const copied = await auth(
+        http().post(`/api/v1/automations/${organizationRule.id}/duplicate`),
+      ).expect(201);
+      const copiedId = (copied.body as Envelope<Rule>).data.id;
+      const copiedSnapshot = await prisma.automationRule.findUniqueOrThrow({
+        where: { id: copiedId },
+        select: { scopeBusinessUnitIds: true },
+      });
+      expect([...copiedSnapshot.scopeBusinessUnitIds].sort()).toEqual(
+        [unitA, unitB].sort(),
+      );
 
-    const neighbour = await auth(
-      http().get('/api/v1/organizations/current'),
-      neighbourToken,
-    ).expect(200);
-    const foreignUnit = (
-      neighbour.body as Envelope<{ businessUnits: { id: string }[] }>
-    ).data.businessUnits[0]!.id;
+      const neighbour = await auth(
+        http().get('/api/v1/organizations/current'),
+        neighbourToken,
+      ).expect(200);
+      const foreignUnit = (
+        neighbour.body as Envelope<{ businessUnits: { id: string }[] }>
+      ).data.businessUnits[0]!.id;
 
-    await prisma.businessUnitMembership.updateMany({
-      where: { userId, businessUnitId: unitB },
-      data: { status: 'INACTIVE' },
-    });
-    token = await login(principalEmail);
+      await prisma.businessUnitMembership.updateMany({
+        where: { userId: member.userId, businessUnitId: unitB },
+        data: { status: 'INACTIVE' },
+      });
+      token = await login(member.email);
 
-    await createRule({
-      name: 'Permitida em A',
-      trigger: 'operation.created',
-      businessUnitId: unitA,
-      actions: [{ type: 'CREATE_REMINDER', config: { title: 'Unidade A' } }],
-    });
+      await createRule({
+        name: 'Permitida em A',
+        trigger: 'operation.created',
+        businessUnitId: unitA,
+        actions: [{ type: 'CREATE_REMINDER', config: { title: 'Unidade A' } }],
+      });
 
-    const rejected = {
-      name: 'Fora do escopo',
-      trigger: 'operation.created',
-      actions: [{ type: 'CREATE_REMINDER', config: { title: 'Negada' } }],
-    };
-    await auth(http().post('/api/v1/automations'))
-      .send({ ...rejected, businessUnitId: unitB })
-      .expect(404);
-    await auth(http().post('/api/v1/automations'))
-      .send({ ...rejected, businessUnitId: foreignUnit })
-      .expect(404);
+      const rejected = {
+        name: 'Fora do escopo',
+        trigger: 'operation.created',
+        actions: [{ type: 'CREATE_REMINDER', config: { title: 'Negada' } }],
+      };
+      await auth(http().post('/api/v1/automations'))
+        .send({ ...rejected, businessUnitId: unitB })
+        .expect(404);
+      await auth(http().post('/api/v1/automations'))
+        .send({ ...rejected, businessUnitId: foreignUnit })
+        .expect(404);
 
-    await auth(http().patch(`/api/v1/automations/${organizationRule.id}`))
-      .send({ name: 'Não pode editar snapshot maior' })
-      .expect(404);
-    await auth(
-      http().post(`/api/v1/automations/${organizationRule.id}/duplicate`),
-    ).expect(404);
+      await auth(http().patch(`/api/v1/automations/${organizationRule.id}`))
+        .send({ name: 'Não pode editar snapshot maior' })
+        .expect(404);
+      await auth(
+        http().post(`/api/v1/automations/${organizationRule.id}/duplicate`),
+      ).expect(404);
 
-    await auth(http().post(`/api/v1/automations/${organizationRule.id}/toggle`))
-      .send({ enabled: false })
-      .expect(201);
-    await auth(http().post(`/api/v1/automations/${organizationRule.id}/toggle`))
-      .send({ enabled: true })
-      .expect(404);
+      await auth(
+        http().post(`/api/v1/automations/${organizationRule.id}/toggle`),
+      )
+        .send({ enabled: false })
+        .expect(201);
+      await auth(
+        http().post(`/api/v1/automations/${organizationRule.id}/toggle`),
+      )
+        .send({ enabled: true })
+        .expect(404);
+    } finally {
+      token = ownerToken;
+    }
   }, 120000);
 });

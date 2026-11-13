@@ -1,3 +1,4 @@
+import { imageFixture } from "./image-fixture";
 /**
  * RVT V2 no navegador.
  *
@@ -20,7 +21,7 @@ import { OWNER, assertClean, login, record, settled } from "./support";
 
 test.describe.configure({ mode: "serial" });
 
-const stamp = () => Date.now().toString().slice(-6);
+const stamp = () => crypto.randomUUID().replace(/-/g, "").slice(0, 12);
 let scenarioCustomerName = "";
 let scenarioUnitName = "";
 
@@ -64,18 +65,22 @@ async function createConfiguration(
   await page
     .getByRole("button", { name: scenarioCustomerName, exact: true })
     .click();
-  await dialog.getByLabel("Código *", { exact: true }).fill(code);
   await dialog
-    .getByLabel("Nome do atendimento *", { exact: true })
+    .getByLabel(/^Código \*(?:\s*\*?\s*\(obrigatório\))?$/)
+    .fill(code);
+  await dialog
+    .getByLabel(/^Nome do atendimento \*(?:\s*\*?\s*\(obrigatório\))?$/)
     .fill(options.name);
   await dialog.getByRole("button", { name: "Continuar", exact: true }).click();
   await dialog.getByRole("checkbox").nth(0).check();
   await dialog.getByRole("checkbox").nth(1).check();
   await dialog
-    .getByLabel("Rua / logradouro *", { exact: true })
+    .getByLabel(/^Rua \/ logradouro \*(?:\s*\*?\s*\(obrigatório\))?$/)
     .fill("Rua das visitas");
-  await dialog.getByLabel("Cidade *", { exact: true }).fill("Recife");
-  await dialog.getByLabel("UF *", { exact: true }).fill("PE");
+  await dialog
+    .getByLabel(/^Cidade \*(?:\s*\*?\s*\(obrigatório\))?$/)
+    .fill("Recife");
+  await dialog.getByLabel(/^UF \*(?:\s*\*?\s*\(obrigatório\))?$/).fill("PE");
   await dialog.getByRole("button", { name: "Continuar", exact: true }).click();
   await dialog.getByRole("combobox", { name: "Agenda *", exact: true }).click();
   await page
@@ -95,10 +100,12 @@ async function createConfiguration(
       exact: true,
     })
     .fill("2099-09-07");
-  await dialog.getByLabel("Horário *", { exact: true }).fill("14:35");
+  await dialog
+    .getByLabel(/^Horário \*(?:\s*\*?\s*\(obrigatório\))?$/)
+    .fill("14:35");
   if (options.recurring)
     await dialog
-      .getByLabel("Fim da vigência *", { exact: true })
+      .getByLabel(/^Fim da vigência \*(?:\s*\*?\s*\(obrigatório\))?$/)
       .fill("2099-11-30");
   await dialog.getByRole("button", { name: "Continuar", exact: true }).click();
   await expect(dialog.getByText("Confira o atendimento")).toBeVisible();
@@ -276,10 +283,7 @@ test.beforeAll(async ({ request }) => {
    * aplicativo de campo faz. Fabricar a linha no banco pularia justamente a
    * verificação que dá sentido ao dado.
    */
-  const PNG = Buffer.from(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
-    "base64",
-  );
+  const PNG = await imageFixture();
   const reservation = await request.post(
     `${api}/mobile/field/me/signature/uploads`,
     {
@@ -296,10 +300,11 @@ test.beforeAll(async ({ request }) => {
     fileId: string;
     upload: { url: string; requiredHeaders?: Record<string, string> };
   };
-  await request.put(reserved.upload.url, {
+  const uploaded = await request.put(reserved.upload.url, {
     headers: { ...(reserved.upload.requiredHeaders ?? {}) },
     data: PNG,
   });
+  expect(uploaded.ok(), await uploaded.text()).toBe(true);
   const confirmed = await request.post(`${api}/mobile/field/me/signature`, {
     headers,
     data: { storageObjectId: reserved.fileId },
@@ -353,7 +358,7 @@ test("a lista traz configurações reais, sem enum cru na tela", async ({
   await openRvt(page);
 
   await expect(
-    page.getByRole("heading", { name: "RVT", exact: true }),
+    page.getByRole("tab", { name: "RVT", exact: true }),
   ).toBeVisible();
   /** As visitas avulsas semeadas pelo caminho do app de campo aparecem aqui. */
   await expect(
@@ -517,7 +522,9 @@ test("editar a configuração deixa o servidor reconciliar a agenda futura", asy
   await page.getByRole("button", { name: "Editar" }).click();
   const dialog = page.getByRole("dialog");
 
-  await expect(dialog.getByLabel("Código *", { exact: true })).toBeDisabled();
+  await expect(
+    dialog.getByLabel(/^Código \*(?:\s*\*?\s*\(obrigatório\))?$/),
+  ).toBeDisabled();
   await expect(
     dialog.getByRole("combobox", { name: "Cliente *", exact: true }),
   ).toBeDisabled();
@@ -814,8 +821,12 @@ test("gerencia visitas, equipamentos e agenda sem sair do RVT", async ({
     .getByRole("button", { name: "Editar visita 001", exact: true })
     .click();
   let dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Data *", { exact: true }).fill("2099-10-12");
-  await dialog.getByLabel("Horário *", { exact: true }).fill("14:35");
+  await dialog
+    .getByLabel(/^Data \*(?:\s*\*?\s*\(obrigatório\))?$/)
+    .fill("2099-10-12");
+  await dialog
+    .getByLabel(/^Horário \*(?:\s*\*?\s*\(obrigatório\))?$/)
+    .fill("14:35");
   await dialog.getByRole("checkbox").first().uncheck();
   const saved = page.waitForResponse(
     (response) =>
@@ -862,7 +873,9 @@ test("gerencia visitas, equipamentos e agenda sem sair do RVT", async ({
     .getByRole("button", { name: "Adicionar visita", exact: true })
     .click();
   dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Data *", { exact: true }).fill("2099-10-22");
+  await dialog
+    .getByLabel(/^Data \*(?:\s*\*?\s*\(obrigatório\))?$/)
+    .fill("2099-10-22");
   await dialog
     .getByRole("button", { name: "Salvar visita", exact: true })
     .click();

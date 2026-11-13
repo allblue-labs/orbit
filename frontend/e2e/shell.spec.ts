@@ -34,16 +34,19 @@ test.describe("shell", () => {
      * existe "copilot" em backend, contrato, rota ou capability.
      */
     await expect(aside(page)).not.toContainText(/copilot/i);
-    await expect(aside(page).getByRole("button", { name: "Ativar" })).toHaveCount(0);
+    await expect(
+      aside(page).getByRole("button", { name: "Ativar" }),
+    ).toHaveCount(0);
 
     /** E nenhum bloco vazio ficou no lugar dele. */
-    const vazios = await aside(page).evaluate((el) =>
-      Array.from(el.children).filter(
-        (c) =>
-          !(c.textContent ?? "").trim() &&
-          !c.querySelector("img,svg") &&
-          c.getBoundingClientRect().height > 8,
-      ).length,
+    const vazios = await aside(page).evaluate(
+      (el) =>
+        Array.from(el.children).filter(
+          (c) =>
+            !(c.textContent ?? "").trim() &&
+            !c.querySelector("img,svg") &&
+            c.getBoundingClientRect().height > 8,
+        ).length,
     );
     expect(vazios).toBe(0);
 
@@ -91,11 +94,15 @@ test.describe("shell", () => {
     await expect(
       menu.getByRole("link", { name: "Execuções de artefato" }),
     ).toHaveCount(0);
-    await expect(menu.getByRole("link", { name: "Documentos" })).toBeVisible();
+    await expect(menu.getByRole("link", { name: "Relatórios" })).toBeVisible();
     /** H05: duas entradas de administração, e "Organização" não é uma delas. */
-    await expect(menu.getByRole("link", { name: "Configurações" })).toBeVisible();
+    await expect(
+      menu.getByRole("link", { name: "Configurações" }),
+    ).toBeVisible();
     await expect(menu.getByRole("link", { name: "Minha conta" })).toBeVisible();
-    await expect(menu.getByRole("link", { name: "Organização" })).toHaveCount(0);
+    await expect(menu.getByRole("link", { name: "Organização" })).toHaveCount(
+      0,
+    );
     /** H03: Clientes segue no lugar. */
     await expect(menu.getByRole("link", { name: "Clientes" })).toBeVisible();
 
@@ -144,7 +151,10 @@ test.describe("shell", () => {
     await page.goto("/dashboard");
     await expand(page);
 
-    await expect(nav(page)).toHaveAttribute("aria-label", "Navegação principal");
+    await expect(nav(page)).toHaveAttribute(
+      "aria-label",
+      "Navegação principal",
+    );
     /** O menu longo rola no próprio painel; a página não ganha barra horizontal. */
     const sideways = await page.evaluate(
       () =>
@@ -163,10 +173,12 @@ test.describe("shell", () => {
 
 test.describe("navegação abaixo do desktop", () => {
   for (const width of [768, 375]) {
-    test(`a ${width}px o menu abre, navega e devolve o foco`, async ({ page }) => {
+    test(`a ${width}px o menu abre, navega e devolve o foco`, async ({
+      page,
+    }) => {
       const recorder = record(page);
       await login(page);
-      await page.setViewportSize({ width, height: 900 });
+      await page.setViewportSize({ width, height: 480 });
       await page.goto("/dashboard");
 
       /** A barra fixa não existe aqui; o gatilho é o botão do cabeçalho. */
@@ -180,8 +192,8 @@ test.describe("navegação abaixo do desktop", () => {
 
       /** A mesma lista do menu fixo — não uma segunda navegação escrita à mão. */
       const links = drawer.getByRole("link");
-      /* 17 desde que a Central de Catálogos entrou em Administração. */
-      await expect(links).toHaveCount(17);
+      /* Marca mais os 11 destinos da navegação consolidada. */
+      await expect(links).toHaveCount(12);
       await expect(
         drawer.getByRole("link", { name: "Execuções de artefato" }),
       ).toHaveCount(0);
@@ -196,32 +208,45 @@ test.describe("navegação abaixo do desktop", () => {
       await expect(
         drawer.getByRole("link", { name: "Notificações" }),
       ).toHaveCount(0);
-      await expect(drawer.getByRole("link", { name: "Minha conta" })).toBeVisible();
-      await expect(drawer.getByRole("link", { name: "Organização" })).toHaveCount(0);
+      await expect(
+        drawer.getByRole("link", { name: "Minha conta" }),
+      ).toBeVisible();
+      await expect(
+        drawer.getByRole("link", { name: "Organização" }),
+      ).toHaveCount(0);
       await expect(drawer).not.toContainText(/copilot/i);
 
       /** Cabe na tela e rola por dentro quando os itens não cabem. */
       const box = (await drawer.boundingBox())!;
       expect(box.width).toBeLessThanOrEqual(width);
       expect(
-        await drawer.getByRole("navigation").evaluate((n) => n.scrollHeight > n.clientHeight),
+        await drawer
+          .getByRole("navigation")
+          .evaluate((n) => n.scrollHeight > n.clientHeight),
       ).toBe(true);
 
       /** O foco entra na gaveta. */
       expect(
         await page.evaluate(() =>
-          document.querySelector('[role="dialog"]')?.contains(document.activeElement),
+          document
+            .querySelector('[role="dialog"]')
+            ?.contains(document.activeElement),
         ),
       ).toBe(true);
 
       /** Escape fecha e devolve o foco a quem abriu. */
       await page.keyboard.press("Escape");
       await expect(drawer).toBeHidden();
-      expect(await trigger.evaluate((el) => el === document.activeElement)).toBe(true);
+      expect(
+        await trigger.evaluate((el) => el === document.activeElement),
+      ).toBe(true);
 
       /** Escolher um destino navega e fecha. */
       await trigger.click();
-      await page.getByRole("dialog").getByRole("link", { name: "Clientes" }).click();
+      await page
+        .getByRole("dialog")
+        .getByRole("link", { name: "Clientes" })
+        .click();
       await page.waitForURL(/\/clientes/, { timeout: 20_000 });
       await expect(page.getByRole("dialog")).toBeHidden();
 
@@ -235,7 +260,9 @@ test.describe("navegação abaixo do desktop", () => {
       /** A página não ganha barra horizontal por causa da gaveta. */
       expect(
         await page.evaluate(
-          () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+          () =>
+            document.documentElement.scrollWidth -
+            document.documentElement.clientWidth,
         ),
       ).toBe(0);
 

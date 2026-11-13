@@ -1,0 +1,164 @@
+{
+  "date": "2026-11-13",
+  "baseCommit": "64117be",
+  "backendIntegration": {
+    "success": true,
+    "numTotalTestSuites": 38,
+    "numPassedTestSuites": 38,
+    "numFailedTestSuites": 0,
+    "numTotalTests": 459,
+    "numPassedTests": 459,
+    "numFailedTests": 0,
+    "numPendingTests": 0
+  },
+  "dependencyAudit": {
+    "backend": {
+      "project": "backend",
+      "full": {
+        "info": 0,
+        "low": 5,
+        "moderate": 23,
+        "high": 0,
+        "critical": 0,
+        "total": 28
+      },
+      "production": {
+        "info": 0,
+        "low": 0,
+        "moderate": 0,
+        "high": 0,
+        "critical": 0,
+        "total": 0
+      },
+      "reviewedUntil": "2026-11-26",
+      "errors": []
+    },
+    "frontend": {
+      "project": "frontend",
+      "full": {
+        "info": 0,
+        "low": 0,
+        "moderate": 7,
+        "high": 0,
+        "critical": 0,
+        "total": 7
+      },
+      "production": {
+        "info": 0,
+        "low": 0,
+        "moderate": 0,
+        "high": 0,
+        "critical": 0,
+        "total": 0
+      },
+      "reviewedUntil": "2026-11-26",
+      "errors": []
+    }
+  },
+  "remainingValidation": [],
+  "remoteCI": "awaits owner push",
+  "pushPerformed": false,
+  "deploymentPerformed": false,
+  "frontendUnit": {
+    "passedSuites": 68,
+    "passedTests": 671,
+    "failedTests": 0
+  },
+  "frontendStaticChecks": {
+    "lint": "passed on final sources, including product language",
+    "typecheck": "passed",
+    "productLanguage": "passed"
+  },
+  "backendUnit": {
+    "success": true,
+    "numTotalTestSuites": 250,
+    "numPassedTestSuites": 250,
+    "numFailedTestSuites": 0,
+    "numTotalTests": 1995,
+    "numPassedTests": 1995,
+    "numFailedTests": 0
+  },
+  "backendStaticChecks": {
+    "lint": "passed",
+    "typecheck": "passed",
+    "publicErrorContract": "passed",
+    "contractBoundaries": "passed",
+    "build": "passed"
+  },
+  "lockfiles": {
+    "backend": {
+      "sha256": "90cef745b335bd4056dcc834288e1f6d90f17576ccd0588cbae1b1aefb585ea1",
+      "runtimeVersionChanges": []
+    },
+    "frontend": {
+      "sha256": "ed900ae05688b334d0c653860483afc02a477e65ed21cc932a2aa5d2b55c7b07",
+      "runtimeVersionChanges": []
+    }
+  },
+  "mobileStaticChecks": {
+    "sdk": "Flutter 3.47.2 / Dart 3.13.2",
+    "lockfile": "passed --enforce-lockfile",
+    "analyzer": "passed --fatal-infos"
+  },
+  "mobileVisualHarness": {
+    "passedCases": 308,
+    "pngFilesGenerated": 307,
+    "review": "sampled documents 320px/1.0x and attendance 390px/1.0x + 320px/2.0x",
+    "versionedBaselinesAccepted": false
+  },
+  "mobileUnit": {
+    "command": "flutter test --no-pub --exclude-tags integration --reporter=expanded",
+    "passedTests": 1265,
+    "failedTests": 0,
+    "skippedTests": 1,
+    "skipReason": "Captura PNG manual da ficha de equipamento exige ORBIT_CAPTURE_EQUIPMENT; os cenários funcionais de leitura, histórico e layout são executados."
+  },
+  "mobileIntegration": {
+    "command": "ORBIT_FLUTTER_BIN=/usr/local/share/flutter/bin/flutter node scripts/verify-integrations.mjs mobile",
+    "passedTests": 60,
+    "failedTests": 0,
+    "skippedTests": 0,
+    "database": "disposable PostgreSQL with 111 migrations and restricted orbit_app",
+    "externalDeliveryQualified": false
+  },
+  "auditPolicyTests": {
+    "passedTests": 7,
+    "failedTests": 0,
+    "skippedTests": 0
+  },
+  "androidBuild": {
+    "command": "flutter build apk --debug --no-pub --dart-define=ORBIT_API_URL=https://orbit.allblue-labs.com/api/v1",
+    "success": true,
+    "sdk": "Flutter 3.47.2",
+    "variant": "debug",
+    "artifact": "mobile/build/app/outputs/flutter-apk/app-debug.apk",
+    "distributionQualified": false,
+    "warning": "KGP legado mantido por compatibilidade dos plugins atuais; Flutter futuro exigirá migração para Kotlin integrado."
+  },
+  "pr": "PR-03",
+  "qualification": "All local PR-03 gates passed. Remote CI and remaining release PRs still required; production not approved.",
+  "allLocalGatesPassed": true,
+  "frontendBrowser": {
+    "command": "node scripts/verify-integrations.mjs browser",
+    "passedTests": 307,
+    "failedTests": 0,
+    "skippedTests": 0,
+    "durationMinutes": 24.0,
+    "freshDatabaseMigrations": 111,
+    "restrictedRole": "orbit_app",
+    "runtime": "Next standalone copied outside checkout"
+  },
+  "frontendDependencySmoke": {
+    "passedTests": 5,
+    "failedTests": 0,
+    "skippedTests": 0,
+    "durationSeconds": 14.7,
+    "runtime": "separate Next standalone process with synthetic upstream"
+  },
+  "frontendBuild": {
+    "success": true,
+    "mode": "production standalone",
+    "missingRuntimeDependenciesMaskedByCheckout": false
+  },
+  "disposableContainersCleanupVerified": true
+}

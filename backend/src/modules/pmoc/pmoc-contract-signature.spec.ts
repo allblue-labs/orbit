@@ -101,6 +101,7 @@ describe('assinatura pública do contrato de PMOC', () => {
     jest.spyOn(service, 'document').mockResolvedValue({
       bytes: Buffer.from('%PDF-1.7 frozen contract'),
       fileName: 'contrato.pdf',
+      mimeType: 'application/pdf',
     });
     return { service, repository, storage };
   };

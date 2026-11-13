@@ -49,6 +49,7 @@ describe('PMOC V2 public mapping', () => {
       operation: {
         id: 'operation',
         code: 'OS-1',
+        data: null,
         status: 'IN_PROGRESS',
         auxiliaryTechnicians: [],
       },

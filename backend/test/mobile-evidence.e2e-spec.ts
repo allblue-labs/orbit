@@ -1,3 +1,5 @@
+import { memberFixture } from './support/member-fixture';
+import { imageFixture } from './support/image-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-return */
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
@@ -16,10 +18,7 @@ import { adminPrisma, disconnectAdminPrisma } from './support/admin-prisma';
 
 jest.setTimeout(180_000);
 const PASSWORD = 'Orbit#Evidence@2026';
-const PNG = Buffer.concat([
-  Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
-  Buffer.from('orbit-field-evidence'),
-]);
+const PNG = imageFixture();
 interface Envelope<T> {
   data: T;
 }
@@ -33,7 +32,6 @@ describe('Mobile Evidence & Media Pipeline (e2e)', () => {
   let organizationId: string;
   let unitId: string;
   let actorId: string;
-  let ownerRoleId: string;
 
   const auth = (test: request.Test, value = token) =>
     test.set('Authorization', `Bearer ${value}`);
@@ -67,12 +65,6 @@ describe('Mobile Evidence & Media Pipeline (e2e)', () => {
     organizationId = organization.id;
     actorId = organization.ownerUserId;
     unitId = organization.businessUnits[0].id;
-    ownerRoleId = (
-      await prisma.organizationMembership.findFirstOrThrow({
-        where: { organizationId, userId: actorId },
-        select: { roleId: true },
-      })
-    ).roleId;
     await auth(
       api().patch(`/api/v1/workforce/members/${actorId}/professional-profile`),
     )
@@ -106,10 +98,9 @@ describe('Mobile Evidence & Media Pipeline (e2e)', () => {
     const finalized = await finalize(intent.uploadId, sha(PNG));
     expect(finalized).toMatchObject({
       target: { type: 'OPERATION', id: operationId },
-      filename: 'Evidência técnica çã.png',
-      mimeType: 'image/png',
-      sizeBytes: String(PNG.length),
-      sha256: sha(PNG),
+      filename: 'Evidência técnica çã.webp',
+      mimeType: 'image/webp',
+      sha256: expect.stringMatching(/^[a-f0-9]{64}$/),
       localMediaId: 'local-real-1',
       previewAvailable: true,
     });
@@ -138,6 +129,18 @@ describe('Mobile Evidence & Media Pipeline (e2e)', () => {
     expect((access.body as Envelope<any>).data.url).toContain(
       'operation=preview',
     );
+    const previewUrl = new URL(
+      (access.body as Envelope<{ url: string }>).data.url,
+    );
+    const downloaded = await api()
+      .get(`${previewUrl.pathname}${previewUrl.search}`)
+      .buffer(true)
+      .expect(200);
+    const bytes = Buffer.from(downloaded.body as Buffer);
+    expect(bytes.subarray(8, 12).toString()).toBe('WEBP');
+    expect(sha(bytes)).toBe(finalized.sha256);
+    expect(String(bytes.length)).toBe(finalized.sizeBytes);
+
     await auth(
       api().get(`/api/v1/mobile/field/evidence/${finalized.id}/access`),
       foreignToken,
@@ -147,7 +150,12 @@ describe('Mobile Evidence & Media Pipeline (e2e)', () => {
   it('rejects fake MIME, wrong SHA and oversize declarations without final evidence', async () => {
     const operationId = await createOperation('VALIDATION');
     const fake = await reserve(operationId, { filename: 'fake.jpg', size: 12 });
-    await upload(fake.uploadUrl, Buffer.from('not-an-image'), 'image/jpeg');
+    await upload(
+      fake.uploadUrl,
+      Buffer.from('not-an-image'),
+      'image/jpeg',
+      400,
+    );
     await auth(
       api().post(
         `/api/v1/mobile/field/evidence/uploads/${fake.uploadId}/finalize`,
@@ -251,24 +259,44 @@ describe('Mobile Evidence & Media Pipeline (e2e)', () => {
       .send({})
       .expect(403);
 
+    const member = await memberFixture(prisma, {
+      organizationId,
+      businessUnitIds: [unitId],
+      permissions: ['operations.read', 'operations.update'],
+      password: PASSWORD,
+    });
+    await prisma.professionalProfile.create({
+      data: {
+        organizationId,
+        userId: member.userId,
+        fieldTechnicianEnabled: true,
+      },
+    });
+    const logged = await api()
+      .post('/api/v1/identity/login')
+      .send({ email: member.email, password: PASSWORD, client: 'MOBILE' })
+      .expect(200);
+    const bearer = (logged.body as Envelope<{ accessToken: string }>).data
+      .accessToken;
     const capabilityId = await createOperation('REVOKE-CAPABILITY');
-    const capability = await reserve(capabilityId);
+    await prisma.operation.update({
+      where: { id: capabilityId },
+      data: { responsibleFieldTechnicianId: member.userId },
+    });
+    const capability = await reserve(capabilityId, {}, bearer);
     await upload(capability.uploadUrl, PNG, 'image/png');
     await prisma.role.update({
-      where: { id: ownerRoleId },
+      where: { id: member.roleId },
       data: { permissions: ['operations.read'] },
     });
     await auth(
       api().post(
         `/api/v1/mobile/field/evidence/uploads/${capability.uploadId}/finalize`,
       ),
+      bearer,
     )
       .send({})
       .expect(403);
-    await prisma.role.update({
-      where: { id: ownerRoleId },
-      data: { permissions: ['*'] },
-    });
 
     const stateId = await createOperation('STATE');
     const state = await reserve(stateId);
@@ -392,9 +420,14 @@ describe('Mobile Evidence & Media Pipeline (e2e)', () => {
         : {}),
     };
   }
-  async function reserve(operationId: string, options: any = {}): Promise<any> {
+  async function reserve(
+    operationId: string,
+    options: any = {},
+    bearer = token,
+  ): Promise<any> {
     const response = await auth(
       api().post('/api/v1/mobile/field/evidence/uploads'),
+      bearer,
     )
       .send(intentPayload(operationId, options))
       .expect(201);
@@ -404,13 +437,14 @@ describe('Mobile Evidence & Media Pipeline (e2e)', () => {
     url: string,
     body: Buffer,
     mime: string,
+    expectedStatus = 200,
   ): Promise<void> {
     const parsed = new URL(url);
     await api()
       .put(`${parsed.pathname}${parsed.search}`)
       .set('Content-Type', mime)
       .send(body)
-      .expect(200);
+      .expect(expectedStatus);
   }
   async function finalize(
     uploadId: string,

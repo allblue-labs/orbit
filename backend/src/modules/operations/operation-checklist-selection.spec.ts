@@ -119,7 +119,7 @@ describe('seleção de checklists na criação da operação', () => {
     );
     expect(repository.find).not.toHaveBeenCalled();
     await expect(
-      entitlements.guardUsage.mock.results[0].value,
+      entitlements.guardUsage.mock.results[0]?.value,
     ).rejects.toThrow();
   });
 

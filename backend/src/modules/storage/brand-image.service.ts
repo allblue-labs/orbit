@@ -45,6 +45,21 @@ export class BrandImageService {
       ? `${this.config.publicUrl}/${file.objectKey}`
       : `r2-object:${file.objectKey}`;
   }
+  /** Internal object references are persisted; only browser-readable URLs leave the API. */
+  async url(value: string | null): Promise<string | null> {
+    if (!value?.startsWith('r2-object:')) return value;
+    const objectKey = this.key(value);
+    if (!objectKey) return null;
+    return (
+      await this.storage.sign({
+        bucket: this.config.publicBucket ?? this.config.bucket,
+        objectKey,
+        operation: 'preview',
+        expiresInSeconds: this.config.signedUrlTtlSeconds,
+        mimeType: 'image/webp',
+      })
+    ).url;
+  }
   async read(value?: string | null): Promise<EmbeddedImage | null> {
     const embedded = readEmbeddedImage(value);
     if (embedded || !value) return embedded;

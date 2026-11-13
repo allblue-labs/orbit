@@ -1,3 +1,4 @@
+import { memberFixture } from './support/member-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return */
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
@@ -27,7 +28,6 @@ describe('Mobile Offline Command & Sync Protocol (e2e)', () => {
   let organizationId: string;
   let unitId: string;
   let actorId: string;
-  let ownerRoleId: string;
 
   const auth = (test: request.Test, value = token) =>
     test.set('Authorization', `Bearer ${value}`);
@@ -62,12 +62,6 @@ describe('Mobile Offline Command & Sync Protocol (e2e)', () => {
     organizationId = organization.id;
     actorId = organization.ownerUserId;
     unitId = organization.businessUnits[0]!.id;
-    ownerRoleId = (
-      await prisma.organizationMembership.findFirstOrThrow({
-        where: { organizationId, userId: actorId },
-        select: { roleId: true },
-      })
-    ).roleId;
     await auth(
       api().patch(`/api/v1/workforce/members/${actorId}/professional-profile`),
     )
@@ -259,13 +253,13 @@ describe('Mobile Offline Command & Sync Protocol (e2e)', () => {
     const concurrent = await Promise.all(
       Array.from({ length: 4 }, () => push([valid])),
     );
-    expect(
-      concurrent
-        .flatMap((item) => item.results)
-        .every((item: any) =>
-          ['APPLIED', 'ALREADY_APPLIED'].includes(item.status),
-        ),
-    ).toBe(true);
+    expect(concurrent.flatMap((item) => item.results)).toEqual(
+      Array.from({ length: 4 }, () =>
+        expect.objectContaining({
+          status: expect.stringMatching(/^(APPLIED|ALREADY_APPLIED)$/),
+        }),
+      ),
+    );
     expect((await balance(product.id)).onHand.toString()).toBe('0');
     expect(
       await prisma.inventoryMovement.count({
@@ -352,18 +346,43 @@ describe('Mobile Offline Command & Sync Protocol (e2e)', () => {
 
   it('rejects a command after current capability revocation and applies it only after restoration', async () => {
     const operationId = await createOperation('CAPABILITY');
+    const member = await memberFixture(prisma, {
+      organizationId,
+      businessUnitIds: [unitId],
+      permissions: ['operations.read', 'operations.status.update'],
+      password: PASSWORD,
+    });
+    await prisma.professionalProfile.create({
+      data: {
+        organizationId,
+        userId: member.userId,
+        fieldTechnicianEnabled: true,
+      },
+    });
+    await prisma.operation.update({
+      where: { id: operationId },
+      data: { responsibleFieldTechnicianId: member.userId },
+    });
+    const logged = await api()
+      .post('/api/v1/identity/login')
+      .send({ email: member.email, password: PASSWORD, client: 'MOBILE' })
+      .expect(200);
+    const bearer = (logged.body as Envelope<{ accessToken: string }>).data
+      .accessToken;
+
     const workItemId = `SERVICE_OPERATION:${operationId}`;
     const fieldPackage = await auth(
       api().get(`/api/v1/mobile/field/offline/packages/${workItemId}`),
+      bearer,
     ).expect(200);
     const version = (fieldPackage.body as Envelope<any>).data.versionTokens
       .operation as string;
     const command = envelope('OPERATION_START', operationId, version, {});
     await prisma.role.update({
-      where: { id: ownerRoleId },
+      where: { id: member.roleId },
       data: { permissions: ['operations.read'] },
     });
-    const rejected = await push([command]);
+    const rejected = await push([command], bearer);
     expect(rejected.results[0]).toMatchObject({
       status: 'REJECTED',
       error: { code: 'AUTHORIZATION_CHANGED' },
@@ -385,10 +404,10 @@ describe('Mobile Offline Command & Sync Protocol (e2e)', () => {
     ).toBe(0);
 
     await prisma.role.update({
-      where: { id: ownerRoleId },
+      where: { id: member.roleId },
       data: { permissions: ['*'] },
     });
-    const restored = await push([command]);
+    const restored = await push([command], bearer);
     expect(restored.results[0].status).toBe('APPLIED');
   });
 
@@ -732,9 +751,10 @@ describe('Mobile Offline Command & Sync Protocol (e2e)', () => {
       payload,
     };
   }
-  async function push(commands: any[]): Promise<any> {
+  async function push(commands: any[], bearer = token): Promise<any> {
     const response = await auth(
       api().post('/api/v1/mobile/field/offline/sync/push'),
+      bearer,
     )
       .send({ commands })
       .expect(201);

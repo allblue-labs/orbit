@@ -79,7 +79,7 @@ describe('reissuing frozen field documents after a renderer correction', () => {
       expect.anything(),
       expect.objectContaining({ fileName: 'OS-001.pdf' }),
     );
-    expect(env.source.manifests[0].id).toBe('previous-manifest');
+    expect(env.source.manifests[0]!.id).toBe('previous-manifest');
   });
   it('retry after issuing the same renderer version does not duplicate a revision', async () => {
     const env = setup('2.0.2');

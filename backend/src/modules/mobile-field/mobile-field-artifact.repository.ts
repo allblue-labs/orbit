@@ -1,3 +1,7 @@
+import {
+  currentMemberPermissions,
+  memberPermissionSelection,
+} from './current-member-permissions';
 import { Injectable } from '@nestjs/common';
 import {
   canManageFieldDocuments,
@@ -628,28 +632,16 @@ export class MobileFieldArtifactRepository {
     tx: Prisma.TransactionClient,
     actor: MobileFieldActor,
   ): Promise<string[]> {
-    const organization = await tx.organizationMembership.findFirst({
+    const membership = await tx.organizationMembership.findFirst({
       where: {
         organizationId: actor.organizationId,
         userId: actor.id,
-        status: 'ACTIVE',
-      },
-      select: { role: { select: { permissions: true } } },
-    });
-    const units = await tx.businessUnitMembership.findMany({
-      where: {
-        organizationId: actor.organizationId,
-        userId: actor.id,
-        businessUnitId: { in: [...actor.businessUnitIds] },
         status: 'ACTIVE',
         deletedAt: null,
       },
-      select: { role: { select: { permissions: true } } },
+      select: memberPermissionSelection,
     });
-    return [
-      ...(organization?.role.permissions ?? []),
-      ...units.flatMap((item) => item.role.permissions),
-    ];
+    return currentMemberPermissions(membership, actor.id);
   }
 
   private json(value: unknown): Prisma.InputJsonValue {

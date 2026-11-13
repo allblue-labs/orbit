@@ -1,3 +1,4 @@
+import { replaceFixtureOwner } from './support/member-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 import { type INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
@@ -92,6 +93,11 @@ describe('Analytics compound authorization (e2e)', () => {
       },
     });
     roleId = user.organizationMemberships[0]!.roleId;
+    const membership = await prisma.organizationMembership.findFirstOrThrow({
+      where: { userId: user.id },
+      select: { organizationId: true },
+    });
+    await replaceFixtureOwner(prisma, membership.organizationId, PASSWORD);
   }, 120000);
 
   afterAll(async () => {

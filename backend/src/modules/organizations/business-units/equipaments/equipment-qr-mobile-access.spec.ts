@@ -1,3 +1,4 @@
+import type { UUID } from '../../../../contracts';
 import { brandImageStub } from '../../../../../test/support/brand-image.stub';
 import type { ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
@@ -152,7 +153,7 @@ describe('Leitura de equipamentos por QR no aplicativo de campo', () => {
       outsideUnit.controller.resolveQr('a'.repeat(43), outsideUnit.request),
     ).rejects.toThrow();
     expect(outsideUnit.repository.fieldContext).not.toHaveBeenCalled();
-    own.request.identity!.organizationId = 'foreign-org';
+    own.request.identity!.organizationId = 'foreign-org' as UUID;
     await expect(
       own.controller.resolveQr('a'.repeat(43), own.request),
     ).rejects.toThrow();
@@ -207,7 +208,7 @@ describe('Leitura de equipamentos por QR no aplicativo de campo', () => {
       ),
     ).rejects.toThrow();
     expect(repository.serviceHistory).not.toHaveBeenCalled();
-    request.identity!.organizationId = 'foreign-org';
+    request.identity!.organizationId = 'foreign-org' as UUID;
     await expect(
       controller.serviceHistory(
         'a'.repeat(43),

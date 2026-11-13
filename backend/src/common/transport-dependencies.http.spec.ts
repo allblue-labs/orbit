@@ -71,7 +71,7 @@ describe('security regressions in transport dependencies', () => {
       logger: false,
     });
     configureHttpParsers(app);
-    server = app.getHttpServer<HttpServer>();
+    server = app.getHttpServer();
     sockets = new SocketServer(server);
     await app.listen(0, '127.0.0.1');
     port = (server.address() as AddressInfo).port;

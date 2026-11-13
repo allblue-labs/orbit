@@ -1,0 +1,50 @@
+[
+  {
+    "project": "backend",
+    "advisory": "https://github.com/advisories/GHSA-gcqx-w48m-w2h4",
+    "package": "deepmerge",
+    "maxSeverity": "low",
+    "expiresOn": "2026-11-26",
+    "reason": "Development-only tooling. Upstream compatible releases still depend on affected majors; do not force transitive API migrations. No untrusted patterns/configuration or deployment secrets in CI. Recheck upstream before expiry.",
+    "nodes": {
+      "node_modules/deepmerge": "4.3.1"
+    }
+  },
+  {
+    "project": "backend",
+    "advisory": "https://github.com/advisories/GHSA-3g3m-2fjr-6pw4",
+    "package": "glob",
+    "maxSeverity": "moderate",
+    "expiresOn": "2026-11-26",
+    "reason": "Development-only tooling. Upstream compatible releases still depend on affected majors; do not force transitive API migrations. No untrusted patterns/configuration or deployment secrets in CI. Recheck upstream before expiry.",
+    "nodes": {
+      "node_modules/glob": "13.0.6",
+      "node_modules/test-exclude/node_modules/glob": "10.5.0"
+    }
+  },
+  {
+    "project": "backend",
+    "advisory": "https://github.com/advisories/GHSA-g3hv-75wg-m249",
+    "package": "minimatch",
+    "maxSeverity": "moderate",
+    "expiresOn": "2026-11-26",
+    "reason": "Development-only tooling. Upstream compatible releases still depend on affected majors; do not force transitive API migrations. No untrusted patterns/configuration or deployment secrets in CI. Recheck upstream before expiry.",
+    "nodes": {
+      "node_modules/@typescript-eslint/typescript-estree/node_modules/minimatch": "10.2.6",
+      "node_modules/glob/node_modules/minimatch": "10.2.6",
+      "node_modules/test-exclude/node_modules/glob/node_modules/minimatch": "9.0.9",
+      "node_modules/test-exclude/node_modules/minimatch": "10.2.6"
+    }
+  },
+  {
+    "project": "frontend",
+    "advisory": "https://github.com/advisories/GHSA-g3hv-75wg-m249",
+    "package": "minimatch",
+    "maxSeverity": "moderate",
+    "expiresOn": "2026-11-26",
+    "reason": "Development-only tooling. Upstream compatible releases still depend on affected majors; do not force transitive API migrations. No untrusted patterns/configuration or deployment secrets in CI. Recheck upstream before expiry.",
+    "nodes": {
+      "node_modules/@typescript-eslint/typescript-estree/node_modules/minimatch": "10.2.6"
+    }
+  }
+]

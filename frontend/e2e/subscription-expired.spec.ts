@@ -17,7 +17,8 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { login, settled } from "./support";
 
-const AVISO = "Sua avaliação gratuita terminou";
+// O owner sintético possui assinatura, sem avaliação gratuita.
+const AVISO = "Sua assinatura está inativa";
 
 /**
  * Faz a sessão desta página reportar a assinatura como vencida.
@@ -87,9 +88,12 @@ test("o aviso aparece uma vez e não volta ao navegar", async ({ page }) => {
    */
   for (const destino of ["Clientes", "Agenda"]) {
     await page.getByRole("link", { name: destino }).first().click();
-    await page.waitForURL(new RegExp(destino === "Clientes" ? "clientes" : "agenda"), {
-      timeout: 20_000,
-    });
+    await page.waitForURL(
+      new RegExp(destino === "Clientes" ? "clientes" : "agenda"),
+      {
+        timeout: 20_000,
+      },
+    );
     await settled(page);
     await expect(
       page.getByText(AVISO),

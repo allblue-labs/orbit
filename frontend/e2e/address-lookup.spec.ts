@@ -61,7 +61,7 @@ test("número e complemento continuam de quem preenche", async ({ page }) => {
   await login(page);
   await abrirFormulario(page);
 
-  await page.getByLabel("Número", { exact: true }).fill("1200");
+  await page.getByLabel(/^Número(?:\s*\*?\s*\(obrigatório\))?$/).fill("1200");
   await page.getByLabel("Complemento").fill("Sala 5");
   await page.getByLabel("CEP").fill(CEP);
   await expect(page.getByLabel("Logradouro")).toHaveValue(RUA, {
@@ -69,7 +69,9 @@ test("número e complemento continuam de quem preenche", async ({ page }) => {
   });
 
   /** O CEP conhece a rua, não a porta. */
-  await expect(page.getByLabel("Número", { exact: true })).toHaveValue("1200");
+  await expect(
+    page.getByLabel(/^Número(?:\s*\*?\s*\(obrigatório\))?$/),
+  ).toHaveValue("1200");
   await expect(page.getByLabel("Complemento")).toHaveValue("Sala 5");
 
   assertClean(recorder, "número preservado");
@@ -87,7 +89,9 @@ test("o que veio do CEP continua editável", async ({ page }) => {
 
   /** A consulta é conveniência, não autoridade: dá para corrigir. */
   await page.getByLabel("Logradouro").fill("Cais do Apolo, anexo");
-  await expect(page.getByLabel("Logradouro")).toHaveValue("Cais do Apolo, anexo");
+  await expect(page.getByLabel("Logradouro")).toHaveValue(
+    "Cais do Apolo, anexo",
+  );
 
   assertClean(recorder, "endereço editável");
 });
@@ -99,7 +103,9 @@ test("CEP inexistente avisa e não trava o cadastro", async ({ page }) => {
 
   await page.getByLabel("CEP").fill("99999999");
 
-  const aviso = page.getByRole("status").filter({ hasText: /CEP não encontrado/i });
+  const aviso = page
+    .getByRole("status")
+    .filter({ hasText: /CEP não encontrado/i });
   await expect(aviso).toBeVisible({ timeout: 20_000 });
   /** Fala com quem digitou, não do transporte. */
   await expect(aviso).not.toContainText(/404|erro|falha técnica/i);
@@ -156,9 +162,11 @@ test("o cadastro de organização também preenche pelo CEP", async ({ page }) =
   await page.getByRole("button", { name: /^Essencial/ }).click();
   await continuar.click();
 
-  await page.getByLabel("Nome", { exact: true }).fill("Ana");
+  await page.getByLabel(/^Nome(?:\s*\*?\s*\(obrigatório\))?$/).fill("Ana");
   await page.getByLabel("Sobrenome").fill("Teste");
-  await page.getByLabel("E-mail corporativo").fill(`cep.${sufixo}@exemplo.com.br`);
+  await page
+    .getByLabel("E-mail corporativo")
+    .fill(`cep.${sufixo}@exemplo.com.br`);
   const senhas = page.locator('input[type="password"]');
   await senhas.nth(0).fill("SenhaForte@2026");
   await senhas.nth(1).fill("SenhaForte@2026");
@@ -175,7 +183,9 @@ test("o cadastro de organização também preenche pelo CEP", async ({ page }) =
   await cep.fill(CEP);
 
   /** Pelos identificadores: "Cidade" e "UF" aparecem mais de uma vez na página. */
-  await expect(page.locator("#city")).toHaveValue("Recife", { timeout: 20_000 });
+  await expect(page.locator("#city")).toHaveValue("Recife", {
+    timeout: 20_000,
+  });
   await expect(page.locator("#stateCode")).toHaveValue("PE");
   await expect(page.locator("#street")).toHaveValue(RUA);
 

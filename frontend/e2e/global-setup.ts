@@ -51,7 +51,9 @@ export default async function globalSetup(_config: FullConfig): Promise<void> {
   const headers = { authorization: `Bearer ${token}` };
 
   /** 3 · o banco responde por trás da API. */
-  const organization = await api.get(`${API}/organizations/current`, { headers });
+  const organization = await api.get(`${API}/organizations/current`, {
+    headers,
+  });
   if (!organization.ok()) {
     fail(
       "a API não leu a organização",
@@ -66,28 +68,34 @@ export default async function globalSetup(_config: FullConfig): Promise<void> {
    * atende. É o passo que faltava — a URL vinha da API com a porta interna do
    * container e só falhava lá adiante, no meio do smoke de RVT.
    */
-  const reservation = await api.post(`${API}/mobile/field/me/signature/upload`, {
-    headers,
-    data: { fileName: "prontidao.png", mimeType: "image/png", sizeBytes: 1 },
-  });
-  if (reservation.ok()) {
-    const upload = (await reservation.json()).data?.upload as
-      | { url: string }
-      | undefined;
-    if (upload?.url) {
-      const host = new URL(upload.url).host;
-      const reachable = await api
-        .fetch(upload.url, { method: "HEAD", failOnStatusCode: false })
-        .catch(() => null);
-      if (!reachable) {
-        fail(
-          `o storage devolveu um endereço que este host não alcança (${host})`,
-          "STORAGE_LOCAL_PUBLIC_URL precisa apontar para a porta publicada da API, " +
-            "não para a porta interna do container.",
-        );
-      }
-    }
-  }
+  const reservation = await api.post(
+    `${API}/mobile/field/me/signature/uploads`,
+    {
+      headers,
+      data: { fileName: "prontidao.png", mimeType: "image/png", sizeBytes: 1 },
+    },
+  );
+  if (!reservation.ok())
+    fail(
+      "a API não reservou o upload de prontidão",
+      "Confira o perfil e as permissões da conta sintética.",
+    );
+  const upload = (await reservation.json()).data?.upload as
+    { url?: string } | undefined;
+  if (!upload?.url)
+    fail(
+      "a reserva de storage veio sem URL",
+      "A API precisa devolver a autorização de upload.",
+    );
+  const host = new URL(upload.url).host;
+  const reachable = await api
+    .fetch(upload.url, { method: "HEAD", failOnStatusCode: false })
+    .catch(() => null);
+  if (!reachable)
+    fail(
+      `o endereço de storage não está acessível (${host})`,
+      "STORAGE_PUBLIC_API_URL precisa apontar para a porta publicada da API.",
+    );
 
   await api.dispose();
 }

@@ -177,7 +177,7 @@ describe('Mobile Push & Device Registry (e2e)', () => {
         type: 'WORK_ASSIGNED',
         payload: {
           path: ['deepLink'],
-          equals: `/field/work-items/OPERATION:${operationId}`,
+          equals: `/field/work-items/SERVICE_OPERATION:${operationId}`,
         },
       },
       orderBy: { createdAt: 'desc' },

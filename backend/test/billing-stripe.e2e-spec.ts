@@ -1045,7 +1045,7 @@ describe('Stripe billing integration and webhook reconciliation (e2e)', () => {
 
   describe('as demais rotas continuam recebendo JSON', () => {
     it('uma rota comum segue interpretando o corpo normalmente', async () => {
-      const inquilino = await registrar('json');
+      const inquilino = await registrar('json', PlanCode.ESSENTIAL);
       const resposta = await auth(
         http().post('/api/v1/customers'),
         inquilino.token,

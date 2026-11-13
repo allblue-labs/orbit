@@ -55,3 +55,7 @@ app.*.map.json
 # Artefatos de comparacao dos goldens: gerados quando um golden falha,
 # substituidos a cada execucao. O golden em si ja e ignorado logo acima.
 test/screenshots/failures/
+
+# Manual visual review output (not automatically accepted golden baselines).
+/tool/out/
+/tool/failures/

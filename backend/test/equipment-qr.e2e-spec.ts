@@ -407,9 +407,10 @@ describe('Equipment QR Identity PR-31 (e2e)', () => {
     const otherIdentity = await prisma.equipmentQrIdentity.findFirstOrThrow({
       where: { equipmentId: otherEquipment.id, status: 'ACTIVE' },
     });
-    await auth(http().get(`/api/v1/assets/qr/${otherIdentity.token}`)).expect(
-      404,
-    );
+    await auth(
+      http().get(`/api/v1/assets/qr/${otherIdentity.token}`),
+      minimalToken,
+    ).expect(404);
 
     const ownUnit = await prisma.businessUnit.findUniqueOrThrow({
       where: { id: unitId },

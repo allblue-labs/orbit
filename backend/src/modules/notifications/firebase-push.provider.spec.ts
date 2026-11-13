@@ -71,7 +71,7 @@ describe('FirebaseMobilePushProvider', () => {
   it('prepara alerta APNs quando o iPhone já fornece um token FCM', async () => {
     const { provider, send } = fixture();
     await provider.send({ ...target, platform: 'IOS' }, payload);
-    expect(send.mock.calls[0]?.[0].apns?.payload.aps).toMatchObject({
+    expect(send.mock.calls[0]?.[0]?.apns?.payload?.aps).toMatchObject({
       alert: { title: payload.title, body: payload.body },
       sound: 'default',
     });

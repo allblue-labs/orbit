@@ -25,7 +25,9 @@ for (const origin of ["/", "/planos"]) {
     await expect(
       page.getByRole("heading", { name: "Sua conta", exact: true }),
     ).toBeVisible();
-    await expect(page.getByLabel("Nome", { exact: true })).toBeVisible();
+    await expect(
+      page.getByLabel(/^Nome(?:\s*\*?\s*\(obrigatório\))?$/),
+    ).toBeVisible();
     const summary = page.locator('[aria-label="Plano selecionado"]');
     await expect(summary).toContainText("Profissional · Anual");
     await expect(summary).toContainText(/1\.499,00.*por ano/);
@@ -46,7 +48,9 @@ for (const query of [
       page.getByRole("heading", { name: "Escolha do plano", exact: true }),
     ).toBeVisible();
     await expect(
-      page.getByRole("button", { name: /Profissional Plano para/ }).first(),
+      page
+        .getByRole("button")
+        .filter({ has: page.getByText("Profissional", { exact: true }) }),
     ).toBeVisible();
   });
 }
@@ -55,16 +59,21 @@ test("changing the preselected plan preserves account data", async ({
   page,
 }) => {
   await page.goto("/cadastro?plano=PROFESSIONAL");
-  await page.getByLabel("Nome", { exact: true }).fill("Marina");
+  await page.getByLabel(/^Nome(?:\s*\*?\s*\(obrigatório\))?$/).fill("Marina");
   await page
     .getByRole("button", { name: "Alterar plano", exact: true })
     .click();
   await page.getByRole("tab", { name: "Semestral", exact: true }).click();
   await page
-    .getByRole("button", { name: /Profissional \+ Inteligência Plano para/ })
+    .getByRole("button")
+    .filter({
+      has: page.getByText("Profissional + Inteligência", { exact: true }),
+    })
     .click();
   await page.getByRole("button", { name: "Continuar", exact: true }).click();
-  await expect(page.getByLabel("Nome", { exact: true })).toHaveValue("Marina");
+  await expect(
+    page.getByLabel(/^Nome(?:\s*\*?\s*\(obrigatório\))?$/),
+  ).toHaveValue("Marina");
   await expect(page.locator('[aria-label="Plano selecionado"]')).toContainText(
     "Profissional + Inteligência · Semestral",
   );
@@ -88,28 +97,32 @@ test("the registration request preserves the paid plan and billing interval", as
     });
   });
   await page.goto("/cadastro?plano=PROFESSIONAL&periodicidade=ANNUAL");
-  await page.getByLabel("Nome", { exact: true }).fill("Marina");
-  await page.getByLabel("Sobrenome", { exact: true }).fill("Silva");
+  await page.getByLabel(/^Nome(?:\s*\*?\s*\(obrigatório\))?$/).fill("Marina");
   await page
-    .getByLabel("E-mail corporativo", { exact: true })
+    .getByLabel(/^Sobrenome(?:\s*\*?\s*\(obrigatório\))?$/)
+    .fill("Silva");
+  await page
+    .getByLabel(/^E-mail corporativo(?:\s*\*?\s*\(obrigatório\))?$/)
     .fill("owner@example.test");
-  await page.getByLabel("Senha", { exact: true }).fill("Orbit#Signup2026");
   await page
-    .getByLabel("Confirmar senha", { exact: true })
+    .getByLabel(/^Senha(?:\s*\*?\s*\(obrigatório\))?$/)
+    .fill("Orbit#Signup2026");
+  await page
+    .getByLabel(/^Confirmar senha(?:\s*\*?\s*\(obrigatório\))?$/)
     .fill("Orbit#Signup2026");
   await page.getByRole("button", { name: "Continuar", exact: true }).click();
   await page
-    .getByLabel("Nome da organização", { exact: true })
+    .getByLabel(/^Nome da organização(?:\s*\*?\s*\(obrigatório\))?$/)
     .fill("Empresa do cadastro");
   await page
-    .getByLabel("Razão social", { exact: true })
+    .getByLabel(/^Razão social(?:\s*\*?\s*\(obrigatório\))?$/)
     .fill("Empresa do cadastro Ltda");
   await page.locator("#documentNumber").fill("52998224725");
   await page.getByRole("button", { name: "Continuar", exact: true }).click();
-  await page.getByLabel("Cidade", { exact: true }).fill("Recife");
-  await page.getByLabel("UF", { exact: true }).fill("PE");
+  await page.getByLabel(/^Cidade(?:\s*\*?\s*\(obrigatório\))?$/).fill("Recife");
+  await page.getByLabel(/^UF(?:\s*\*?\s*\(obrigatório\))?$/).fill("PE");
   await page
-    .getByLabel("Endereço da matriz", { exact: true })
+    .getByLabel(/^Endereço da matriz(?:\s*\*?\s*\(obrigatório\))?$/)
     .fill("Rua da Aurora, 100");
   await page.locator("#terms").check();
   expect(writes).toEqual([]);

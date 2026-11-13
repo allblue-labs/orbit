@@ -82,7 +82,7 @@ describe('Mobile Field Operation execution contract (e2e)', () => {
       operation: { id: operationId, status: 'OPEN' },
       responsibleFieldTechnician: { id: actorId },
       allowedActions: expect.arrayContaining(['VIEW', 'START']),
-      evidencePolicy: { uploadEnabled: false, base64Accepted: false },
+      evidencePolicy: { uploadEnabled: true, base64Accepted: false },
     });
     const command = commandFor(prepared.version);
     const started = await auth(
@@ -156,7 +156,7 @@ describe('Mobile Field Operation execution contract (e2e)', () => {
   it('enforces checklist identity and OCC', async () => {
     const operationId = await createOperation('CHECKLIST');
     let prepared = await preparation(operationId);
-    const started = await auth(
+    await auth(
       api().post(
         `/api/v1/mobile/field/operations/${operationId}/commands/start`,
       ),
@@ -211,8 +211,8 @@ describe('Mobile Field Operation execution contract (e2e)', () => {
     )
       .send({ ...commandFor(checklistVersion), answers: { pressure: false } })
       .expect(409);
-    const operationVersion = (started.body as Envelope<{ version: string }>)
-      .data.version;
+    // Saving the checklist advances the aggregate version.
+    const operationVersion = (await preparation(operationId)).version;
     await auth(
       api().post(
         `/api/v1/mobile/field/operations/${operationId}/commands/complete`,

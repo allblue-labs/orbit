@@ -4,6 +4,7 @@
 /// conferidos sobre o objeto de verdade, que a mesma captura não vira duas
 /// evidências, que um `PUT` concluído não basta, e que o acesso de leitura é
 /// temporário.
+@Tags(['integration'])
 library;
 
 import 'dart:convert';
@@ -17,25 +18,11 @@ import 'package:orbit_operator/features/evidence/data/evidence_repository.dart';
 import 'package:orbit_operator/features/evidence/data/media_store.dart';
 
 import 'support/scenario_provisioner.dart';
+import '../support/image_fixture.dart';
 import 'support/smoke_environment.dart';
 
-/// PNG 1×1 real, com um sufixo que o torna único por execução.
-///
-/// Bytes diferentes a cada rodada evitam que o teste dependa de estado
-/// deixado por uma execução anterior.
-Uint8List uniquePng() {
-  final base = base64Decode(
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmM'
-    'IQAAAABJRU5ErkJggg==',
-  );
-
-  /// Bytes após o IEND são ignorados por decodificadores, e o servidor
-  /// identifica o formato pela assinatura inicial — que continua intacta.
-  return Uint8List.fromList([
-    ...base,
-    ...utf8.encode('${DateTime.now().microsecondsSinceEpoch}'),
-  ]);
-}
+int _revision = 0;
+Uint8List uniquePng() => signaturePng(revision: ++_revision);
 
 void main() {
   late bool available;
@@ -150,12 +137,20 @@ void main() {
       final created = await upload(bytes);
 
       expect(created.id, isNotEmpty);
-      expect(created.mimeType, 'image/png');
+      expect(created.mimeType, 'image/webp');
 
       /// O hash é do servidor, calculado sobre o objeto real no storage — e
       /// coincide com o dos bytes que o app enviou.
-      expect(created.sha256, sha256OfBytes(bytes));
-      expect(created.sizeBytes, bytes.length);
+      final access = await evidence.access(created.id, download: true);
+      final canonical = await provisioner.client.getBytes(
+        url: access.url,
+        headers: access.requiredHeaders,
+      );
+      expect(
+        created.sha256,
+        sha256OfBytes(Uint8List.fromList(canonical.bytes)),
+      );
+      expect(created.sizeBytes, canonical.bytes.length);
 
       /// A lista autoritativa passa a incluí-la.
       final list = await evidence.list(target: target);
@@ -266,10 +261,13 @@ void main() {
           localMediaId: id,
         ),
       );
-      await evidence.putBytes(
-        url: intent.uploadUrl!,
-        headers: intent.requiredHeaders,
-        bytes: fake,
+      await expectLater(
+        evidence.putBytes(
+          url: intent.uploadUrl!,
+          headers: intent.requiredHeaders,
+          bytes: fake,
+        ),
+        throwsA(isA<OrbitException>()),
       );
 
       await expectLater(
@@ -486,61 +484,65 @@ void main() {
   });
 
   group('limite do alvo', () {
-    test('atingido o limite, o servidor recusa a próxima', () async {
-      if (skip()) return;
+    test(
+      'atingido o limite, o servidor recusa a próxima',
+      () async {
+        if (skip()) return;
 
-      /// Um alvo só para este teste, saturado aqui mesmo. Depender de um
-      /// atendimento que ficou cheio por acaso tornaria o gate refém do que
-      /// outra execução deixou para trás.
-      final own = await provisioner.operation(suite: 'FL06LIM');
-      final limitTarget = FieldEvidenceTargetRef(
-        type: FieldEvidenceTarget.operation,
-        id: own.operationId,
-      );
+        /// Um alvo só para este teste, saturado aqui mesmo. Depender de um
+        /// atendimento que ficou cheio por acaso tornaria o gate refém do que
+        /// outra execução deixou para trás.
+        final own = await provisioner.operation(suite: 'FL06LIM');
+        final limitTarget = FieldEvidenceTargetRef(
+          type: FieldEvidenceTarget.operation,
+          id: own.operationId,
+        );
 
-      /// 20 por atendimento (`operationMaximumFiles`).
-      const maximum = 20;
-      for (var index = 0; index < maximum; index += 1) {
-        await upload(uniquePng(), into: limitTarget);
-      }
-      expect(await evidence.list(target: limitTarget), hasLength(maximum));
+        /// 20 por atendimento (`operationMaximumFiles`).
+        const maximum = 20;
+        for (var index = 0; index < maximum; index += 1) {
+          await upload(uniquePng(), into: limitTarget);
+        }
+        expect(await evidence.list(target: limitTarget), hasLength(maximum));
 
-      /// A reserva passa: o limite não é contado ali. É no `finalize`, sob
-      /// `pg_advisory_xact_lock` do alvo, que a contagem acontece — e é isso
-      /// que torna segura a disputa de dois aparelhos pela última vaga.
-      final bytes = uniquePng();
-      final id = newLocalMediaId();
-      final intent = await evidence.reserve(
-        EvidenceUploadIntentRequest(
-          target: limitTarget,
-          filename: 'limite-$id.png',
-          declaredMimeType: 'image/png',
-          declaredSize: bytes.length,
-          idempotencyKey: 'evidence:$id',
-          localMediaId: id,
-          expectedSha256: sha256OfBytes(bytes),
-        ),
-      );
-      await evidence.putBytes(
-        url: intent.uploadUrl!,
-        headers: intent.requiredHeaders,
-        bytes: bytes,
-      );
+        /// A reserva passa: o limite não é contado ali. É no `finalize`, sob
+        /// `pg_advisory_xact_lock` do alvo, que a contagem acontece — e é isso
+        /// que torna segura a disputa de dois aparelhos pela última vaga.
+        final bytes = uniquePng();
+        final id = newLocalMediaId();
+        final intent = await evidence.reserve(
+          EvidenceUploadIntentRequest(
+            target: limitTarget,
+            filename: 'limite-$id.png',
+            declaredMimeType: 'image/png',
+            declaredSize: bytes.length,
+            idempotencyKey: 'evidence:$id',
+            localMediaId: id,
+            expectedSha256: sha256OfBytes(bytes),
+          ),
+        );
+        await evidence.putBytes(
+          url: intent.uploadUrl!,
+          headers: intent.requiredHeaders,
+          bytes: bytes,
+        );
 
-      await expectLater(
-        evidence.finalize(
-          intent.uploadId,
-          expectedSha256: sha256OfBytes(bytes),
-        ),
-        throwsA(
-          isA<OrbitException>()
-              .having((e) => e.status, 'status', 409)
-              .having((e) => e.code, 'code', 'EVIDENCE_LIMIT_REACHED'),
-        ),
-      );
+        await expectLater(
+          evidence.finalize(
+            intent.uploadId,
+            expectedSha256: sha256OfBytes(bytes),
+          ),
+          throwsA(
+            isA<OrbitException>()
+                .having((e) => e.status, 'status', 409)
+                .having((e) => e.code, 'code', 'EVIDENCE_LIMIT_REACHED'),
+          ),
+        );
 
-      /// E a contagem confirmada não passa do teto.
-      expect(await evidence.list(target: limitTarget), hasLength(maximum));
-    }, timeout: const Timeout(Duration(minutes: 3)));
+        /// E a contagem confirmada não passa do teto.
+        expect(await evidence.list(target: limitTarget), hasLength(maximum));
+      },
+      timeout: const Timeout(Duration(minutes: 3)),
+    );
   });
 }

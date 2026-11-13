@@ -1,3 +1,4 @@
+import { paidSubscriptionFixture } from './support/paid-subscription-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
  * Planos, direitos e cotas mensais — contra o banco de verdade.
@@ -171,6 +172,7 @@ describe('Plans, entitlements and monthly usage limits (e2e)', () => {
         planKey,
       })
       .expect(201);
+    await paidSubscriptionFixture(app, prisma, email);
     return {
       email,
       token: (response.body as Envelope<{ accessToken: string }>).data
@@ -534,6 +536,10 @@ describe('Plans, entitlements and monthly usage limits (e2e)', () => {
      */
     async function criarPessoa(rotulo: string): Promise<string> {
       const id = generateUuidV7();
+      const { id: fieldRoleId } = await prisma.role.findFirstOrThrow({
+        where: { organizationId, key: 'FIELD_TECHNICIAN' },
+        select: { id: true },
+      });
       const local = randomUUID().slice(0, 8);
       await prisma.user.create({
         data: {
@@ -548,10 +554,20 @@ describe('Plans, entitlements and monthly usage limits (e2e)', () => {
         },
       });
       await prisma.organizationMembership.create({
-        data: { organizationId, userId: id, roleId, status: 'ACTIVE' },
+        data: {
+          organizationId,
+          userId: id,
+          roleId: fieldRoleId,
+          status: 'ACTIVE',
+        },
       });
       await prisma.businessUnitMembership.create({
-        data: { organizationId, businessUnitId, userId: id, roleId },
+        data: {
+          organizationId,
+          businessUnitId,
+          userId: id,
+          roleId: fieldRoleId,
+        },
       });
       return id;
     }

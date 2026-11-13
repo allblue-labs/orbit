@@ -15,6 +15,17 @@ module.exports = async function cleanupE2eTenants() {
     throw new Error('DATABASE_URL is required for E2E cleanup');
   }
 
+  const url = new URL(connectionString);
+  if (
+    process.env.NODE_ENV !== 'test' ||
+    !/^orbit_e2e_[a-f0-9]{16}$/.test(process.env.ORBIT_E2E_DATABASE ?? '') ||
+    url.pathname.slice(1) !== process.env.ORBIT_E2E_DATABASE ||
+    !['127.0.0.1', 'localhost'].includes(url.hostname)
+  ) {
+    throw new Error(
+      'E2E requires the disposable database runner: npm run test:e2e',
+    );
+  }
   const client = new Client({ connectionString });
   await client.connect();
   try {
@@ -22,7 +33,7 @@ module.exports = async function cleanupE2eTenants() {
     const users = await client.query(`
       SELECT id
         FROM users
-       WHERE email ~ '^(manifest\\.e2e\\.|render\\.e2e\\.|portal\\.e2e\\.|inv\\.|quotes\\.|conc\\.|financial\\.|rep\\.|rls\\.|auto\\.|pmoc\\.|professional\\.|evidence\\.|rvt\\.|qr\\.|assignment\\.|mobile\\.sign\\.|push\\.|offline\\.|mobile\\.field\\.|field\\.execution\\.|artifact\\.|analytics\\.|entitlements\\.|subscriptions\\.|billing\\.)'
+       WHERE email ~ '^(fixture\\.|manifest\\.e2e\\.|render\\.e2e\\.|portal\\.e2e\\.|inv\\.|quotes\\.|conc\\.|financial\\.|rep\\.|rls\\.|auto\\.|pmoc\\.|professional\\.|evidence\\.|rvt\\.|qr\\.|assignment\\.|mobile\\.sign\\.|push\\.|offline\\.|mobile\\.field\\.|field\\.execution\\.|artifact\\.|analytics\\.|entitlements\\.|subscriptions\\.|billing\\.)'
          AND email LIKE '%@orbit.local'
     `);
     const ids = users.rows.map(({ id }) => id);

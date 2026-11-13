@@ -1,3 +1,7 @@
+import {
+  currentMemberPermissions,
+  memberPermissionSelection,
+} from './current-member-permissions';
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { RlsTransaction } from '../../database';
@@ -470,26 +474,19 @@ export class MobileEvidenceRepository {
     tx: Prisma.TransactionClient,
     organizationId: string,
     actorId: string,
-    businessUnitIds: readonly string[],
+    _businessUnitIds: readonly string[],
   ): Promise<string[]> {
-    const organization = await tx.organizationMembership.findFirst({
-      where: { organizationId, userId: actorId, status: 'ACTIVE' },
-      select: { role: { select: { permissions: true } } },
-    });
-    const units = await tx.businessUnitMembership.findMany({
+    void _businessUnitIds;
+    const membership = await tx.organizationMembership.findFirst({
       where: {
         organizationId,
         userId: actorId,
-        businessUnitId: { in: [...businessUnitIds] },
         status: 'ACTIVE',
         deletedAt: null,
       },
-      select: { role: { select: { permissions: true } } },
+      select: memberPermissionSelection,
     });
-    return [
-      ...(organization?.role.permissions ?? []),
-      ...units.flatMap((item) => item.role.permissions),
-    ];
+    return currentMemberPermissions(membership, actorId);
   }
 
   private async target(

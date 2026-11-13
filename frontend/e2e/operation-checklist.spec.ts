@@ -2,11 +2,15 @@
 import { expect, test } from "@playwright/test";
 
 import { assertClean, login, record, settled } from "./support";
+import { bff } from "./provision";
 
 async function selectTemplate(page: import("@playwright/test").Page) {
-  const response = await page.request.get(
+  const response = await bff(
+    page,
+    "get",
     "/api/orbit/checklist-templates?isActive=true&latestOnly=true&limit=100",
   );
+  expect(response.ok(), await response.text()).toBe(true);
   const templates = (await response.json()).data.data as {
     name: string;
     items: { label: string }[];
@@ -70,7 +74,9 @@ test("o checklist escolhido entra na execução, com o item extra junto", async 
 
   const corpo = await (await criada).json();
   const operationId = (corpo.data ?? corpo).id as string;
-  const executions = await page.request.get(
+  const executions = await bff(
+    page,
+    "get",
     `/api/orbit/checklist-executions?operationId=${operationId}`,
   );
   const itens = (await executions.json()).data.data[0].templateSnapshot

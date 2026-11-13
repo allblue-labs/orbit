@@ -6,6 +6,7 @@
 ///
 /// Sem API no ar, cada teste é pulado com motivo — nunca substituído por dado
 /// fabricado.
+@Tags(['integration'])
 library;
 
 import 'dart:io';
@@ -54,6 +55,9 @@ Future<bool> _apiIsUp() async {
     socket.destroy();
     return true;
   } on Object {
+    if (const bool.fromEnvironment('ORBIT_REQUIRE_API')) {
+      throw StateError('A API de testes obrigatória não está disponível.');
+    }
     return false;
   }
 }
@@ -160,6 +164,9 @@ void main() {
         ),
       );
       if (!first.hasNextPage) {
+        if (const bool.fromEnvironment('ORBIT_REQUIRE_API')) {
+          fail('fila com menos de dois itens neste tenant');
+        }
         markTestSkipped('fila com menos de dois itens neste tenant');
         return;
       }
@@ -191,6 +198,9 @@ void main() {
       ),
     );
     if (queue.data.isEmpty) {
+      if (const bool.fromEnvironment('ORBIT_REQUIRE_API')) {
+        fail('sem itens de campo neste tenant');
+      }
       markTestSkipped('sem itens de campo neste tenant');
       return;
     }

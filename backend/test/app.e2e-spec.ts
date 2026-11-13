@@ -12,6 +12,33 @@ import { ForbiddenException } from './../src/exceptions';
 
 jest.setTimeout(180_000);
 
+// Deliberate identity stubs for guard-order and fault-injection tests only.
+const identityFixture = (
+  id: string,
+  organizationId: string,
+  unitId: string,
+  permissions: string[],
+) => ({
+  id,
+  status: 'ACTIVE',
+  deletedAt: null,
+  isOrganizationOwner: false,
+  effectiveBusinessUnitIds: [unitId],
+  platformRoleAssignments: [],
+  businessUnitMemberships: [],
+  organizationMemberships: [
+    {
+      organizationId,
+      usesCustomAccess: false,
+      role: {
+        key: 'FIXTURE',
+        permissions,
+        allowedSurfaces: ['WEB', 'MOBILE', 'API'],
+      },
+    },
+  ],
+});
+
 describe('AppController (e2e)', () => {
   let app: INestApplication<App>;
 
@@ -119,6 +146,15 @@ describe('AppController (e2e)', () => {
       .useValue({ verifyAccessToken })
       .overrideProvider(IdentityRepository)
       .useValue({
+        findById: jest
+          .fn()
+          .mockImplementation(() =>
+            Promise.resolve(
+              identityFixture(lastUserId, 'organization-id', 'unit-id', [
+                'artifact_executions.create',
+              ]),
+            ),
+          ),
         findSessionById: jest.fn().mockImplementation(() =>
           Promise.resolve({
             id: 'session-id',
@@ -295,6 +331,16 @@ describe('AppController (e2e)', () => {
       })
       .overrideProvider(IdentityRepository)
       .useValue({
+        findById: jest
+          .fn()
+          .mockResolvedValue(
+            identityFixture(
+              '01900000-0000-7000-8000-000000000001',
+              '01900000-0000-7000-8000-000000000003',
+              '01900000-0000-7000-8000-000000000004',
+              ['artifact_executions.read'],
+            ),
+          ),
         findSessionById: jest.fn().mockResolvedValue({
           id: '01900000-0000-7000-8000-000000000002',
           userId: '01900000-0000-7000-8000-000000000001',

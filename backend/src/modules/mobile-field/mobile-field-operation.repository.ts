@@ -608,8 +608,32 @@ export class MobileFieldOperationRepository {
     quantity: number;
     notes: string | null;
   }) {
-    return this.rls.run((tx) =>
-      tx.operationMaterial.create({
+    return this.rls.run(async (tx) => {
+      // The unique partial index is the last barrier; serialize before INSERT
+      // so concurrent retransmissions return the canonical row instead of P2002.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`field-material:${input.organizationId}:${input.commandId}`}))`;
+      const existing = await tx.operationMaterial.findFirst({
+        where: {
+          organizationId: input.organizationId,
+          commandId: input.commandId,
+        },
+      });
+      if (existing) {
+        if (
+          existing.operationId !== input.operationId ||
+          existing.createdById !== input.actorId ||
+          existing.catalogItemId !== input.catalogItemId ||
+          Number(existing.quantity.toString()) !== input.quantity ||
+          existing.description !== input.description ||
+          existing.unit !== input.unit ||
+          existing.notes !== input.notes
+        )
+          throw new ConflictException(
+            'Idempotency key reused with a different material payload',
+          );
+        return existing;
+      }
+      return tx.operationMaterial.create({
         data: {
           id: generateUuidV7(),
           organizationId: input.organizationId,
@@ -635,8 +659,8 @@ export class MobileFieldOperationRepository {
           quantity: true,
           notes: true,
         },
-      }),
-    );
+      });
+    });
   }
 
   materialByCommand(organizationId: string, commandId: string) {

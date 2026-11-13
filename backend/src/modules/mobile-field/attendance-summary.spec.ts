@@ -52,4 +52,29 @@ describe('resumo que o cliente confirma', () => {
     expect(summary).toContain('Evaporadora — Inspeção: Realizado');
     expect(summary).toContain('Correia ajustada');
   });
+  it('não transforma objetos técnicos em texto para o cliente', () => {
+    const summary = attendanceSummary({
+      title: 'Atendimento',
+      checklistExecutions: [
+        {
+          templateSnapshot: {
+            name: { internal: true },
+            items: [
+              { key: 'reading', label: { internal: 'sensor' } },
+              { key: 'list', label: 'Medições' },
+            ],
+          },
+          answers: {
+            reading: { secret: 'raw' },
+            list: [12, 'OK', { internal: true }],
+          },
+        },
+      ],
+    });
+    expect(summary).toContain('Checklist: Atendimento');
+    expect(summary).toContain('Item: Não informado');
+    expect(summary).toContain('Medições: 12, OK, Não informado');
+    expect(summary).not.toContain('[object Object]');
+    expect(summary).not.toContain('internal');
+  });
 });

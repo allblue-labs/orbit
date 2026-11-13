@@ -84,7 +84,11 @@ export function PmocCoveragePanel({
           hint="A busca considera toda a cobertura, não apenas esta página."
         />
         {canManage ? (
-          <Button size="sm" onClick={() => setAdding(true)}>
+          <Button
+            size="sm"
+            disabled={page.isPending || page.isError}
+            onClick={() => setAdding(true)}
+          >
             <Plus className="size-3.5" />
             Adicionar equipamento
           </Button>
@@ -102,7 +106,11 @@ export function PmocCoveragePanel({
           description:
             "A cobertura define quais equipamentos este plano mantém. Sem cobertura, as execuções nascem vazias.",
           action: canManage ? (
-            <Button size="sm" onClick={() => setAdding(true)}>
+            <Button
+              size="sm"
+              disabled={page.isPending || page.isError}
+              onClick={() => setAdding(true)}
+            >
               <Plus className="size-3.5" />
               Adicionar equipamento
             </Button>

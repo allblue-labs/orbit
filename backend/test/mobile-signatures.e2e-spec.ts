@@ -1,8 +1,9 @@
+import { imageFixture } from './support/image-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument */
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -15,10 +16,7 @@ import { adminPrisma, disconnectAdminPrisma } from './support/admin-prisma';
 
 jest.setTimeout(180_000);
 const PASSWORD = 'Orbit#MobileSign@2026';
-const PNG = Buffer.concat([
-  Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
-  Buffer.from('orbit-mobile-signature'),
-]);
+const PNG = imageFixture();
 interface Envelope<T> {
   data: T;
 }
@@ -107,7 +105,7 @@ describe('Mobile signatures and customer acknowledgement (e2e)', () => {
       version: 1,
       replacedVersion: null,
     });
-    const secondBody = Buffer.concat([PNG, Buffer.from('v2')]);
+    const secondBody = imageFixture('v2');
     const second = await uploadSignature(secondBody);
     expect(second).toMatchObject({
       signatureAvailable: true,
@@ -130,8 +128,8 @@ describe('Mobile signatures and customer acknowledgement (e2e)', () => {
     ).expect(200);
     const ownData = (ownStatus.body as Envelope<any>).data;
     expect(ownData.preview).toMatchObject({
-      mimeType: 'image/png',
-      sizeBytes: secondBody.length.toString(),
+      mimeType: 'image/webp',
+      sizeBytes: expect.stringMatching(/^[1-9][0-9]*$/),
     });
     expect(ownData.preview.sha256).toMatch(/^[a-f0-9]{64}$/);
     expect(new Date(ownData.preview.expiresAt).getTime()).toBeGreaterThan(
@@ -150,7 +148,12 @@ describe('Mobile signatures and customer acknowledgement (e2e)', () => {
     ))
       previewRequest.set(name, value);
     const preview = await previewRequest.expect(200);
-    expect(Buffer.from(preview.body as Buffer)).toEqual(secondBody);
+    const canonicalBytes = Buffer.from(preview.body as Buffer);
+    expect(canonicalBytes.subarray(8, 12).toString()).toBe('WEBP');
+    expect(String(canonicalBytes.length)).toBe(ownData.preview.sizeBytes);
+    expect(createHash('sha256').update(canonicalBytes).digest('hex')).toBe(
+      ownData.preview.sha256,
+    );
     const tampered = new URL(ownData.preview.url, 'http://orbit.local');
     tampered.searchParams.set('expires', '0');
     await auth(api().get(`${tampered.pathname}${tampered.search}`)).expect(403);
@@ -175,7 +178,7 @@ describe('Mobile signatures and customer acknowledgement (e2e)', () => {
       .put(`${target.pathname}${target.search}`)
       .set('content-type', 'image/png')
       .send(Buffer.from('not-png!'))
-      .expect(200);
+      .expect(400);
     await auth(api().post('/api/v1/mobile/field/me/signature'))
       .send({ storageObjectId: reservation.fileId })
       .expect(400);
@@ -208,10 +211,7 @@ describe('Mobile signatures and customer acknowledgement (e2e)', () => {
     for (let round = 0; round < 5; round += 1) {
       const reservations = [];
       for (let attempt = 0; attempt < 4; attempt += 1) {
-        const body = Buffer.concat([
-          PNG,
-          Buffer.from(`round-${round}-${attempt}`),
-        ]);
+        const body = imageFixture(`round-${round}-${attempt}`);
         const reservation = await reserve(
           `concurrent-${round}-${attempt}.png`,
           'image/png',
@@ -260,7 +260,7 @@ describe('Mobile signatures and customer acknowledgement (e2e)', () => {
       where: { id: customer.id },
     });
     const preparation = await acknowledgementPreparation(operationId);
-    const signatureBody = Buffer.concat([PNG, Buffer.from('customer')]);
+    const signatureBody = imageFixture('customer');
     const reservation = await reserve(
       'customer.png',
       'image/png',
@@ -401,7 +401,7 @@ describe('Mobile signatures and customer acknowledgement (e2e)', () => {
     const activeBefore = await prisma.userSignature.findFirstOrThrow({
       where: { organizationId, userId: actorId, active: true, revokedAt: null },
     });
-    const body = Buffer.concat([PNG, Buffer.from('fault-signature')]);
+    const body = imageFixture('fault-signature');
     const reservation = await reserve(
       'fault-signature.png',
       'image/png',

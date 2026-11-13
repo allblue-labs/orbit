@@ -12,17 +12,17 @@ async function completeSignup(page: Page) {
     await page.getByLabel(label, { exact: true }).fill(value);
   await page.getByRole("button", { name: "Continuar", exact: true }).click();
   await page
-    .getByLabel("Nome da organização", { exact: true })
+    .getByLabel(/^Nome da organização(?:\s*\*?\s*\(obrigatório\))?$/)
     .fill("Minha empresa");
   await page
-    .getByLabel("Razão social", { exact: true })
+    .getByLabel(/^Razão social(?:\s*\*?\s*\(obrigatório\))?$/)
     .fill("Minha empresa Ltda");
   await page.locator("#documentNumber").fill("52998224725");
   await page.getByRole("button", { name: "Continuar", exact: true }).click();
-  await page.getByLabel("UF", { exact: true }).fill("PE");
-  await page.getByLabel("Cidade", { exact: true }).fill("Recife");
+  await page.getByLabel(/^UF(?:\s*\*?\s*\(obrigatório\))?$/).fill("PE");
+  await page.getByLabel(/^Cidade(?:\s*\*?\s*\(obrigatório\))?$/).fill("Recife");
   await page
-    .getByLabel("Endereço da matriz", { exact: true })
+    .getByLabel(/^Endereço da matriz(?:\s*\*?\s*\(obrigatório\))?$/)
     .fill("Rua da Aurora, 100");
   await page.locator("#terms").check();
   await page.getByRole("button", { name: /Criar/ }).click();
@@ -102,16 +102,18 @@ for (const conflict of [
         .click();
     if (conflict.code === "REGISTRATION_EMAIL_ALREADY_EXISTS") {
       await expect(
-        page.getByLabel("Razão social", { exact: true }),
+        page.getByLabel(/^Razão social(?:\s*\*?\s*\(obrigatório\))?$/),
       ).toHaveValue("Minha empresa Ltda");
       await page
         .getByRole("button", { name: "Continuar", exact: true })
         .click();
     }
-    await expect(page.getByLabel("Cidade", { exact: true })).toHaveValue(
-      "Recife",
-    );
-    await expect(page.getByLabel("UF", { exact: true })).toHaveValue("PE");
+    await expect(
+      page.getByLabel(/^Cidade(?:\s*\*?\s*\(obrigatório\))?$/),
+    ).toHaveValue("Recife");
+    await expect(
+      page.getByLabel(/^UF(?:\s*\*?\s*\(obrigatório\))?$/),
+    ).toHaveValue("PE");
     await expect(page.locator("#terms")).toBeChecked();
     await expect(
       page.locator('[aria-label="Plano selecionado"]'),

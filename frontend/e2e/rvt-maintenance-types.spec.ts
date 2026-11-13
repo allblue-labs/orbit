@@ -79,11 +79,35 @@ test("cadastra um tipo de manutenção, e ele chega ao contrato", async ({
 
   await page.goto("/rvt");
   await settled(page);
-  await page.getByRole("button", { name: /Nova visita|Nova configura/i })
+  await page
+    .getByRole("button", { name: /Nova visita|Nova configura/i })
     .first()
     .click();
 
-  await page.locator("#rvt-type").click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel(/Código/).fill(`RVT-TIPO-${marca}`);
+  await dialog.getByLabel(/Nome do atendimento/).fill(`Visita com ${tipo}`);
+  await dialog
+    .getByRole("combobox", { name: "Cliente *", exact: true })
+    .click();
+  await page
+    .getByLabel("Buscar cliente")
+    .fill("Cliente sintético dos cenários web");
+  await page
+    .getByRole("button", {
+      name: "Cliente sintético dos cenários web",
+      exact: true,
+    })
+    .click();
+  await dialog.getByRole("button", { name: "Continuar", exact: true }).click();
+  await dialog.getByRole("checkbox").first().check();
+  await dialog.getByLabel(/Rua \/ logradouro/).fill("Rua do teste");
+  await dialog.getByLabel(/Cidade/).fill("Recife");
+  await dialog.getByLabel(/^UF/).fill("PE");
+  await dialog.getByRole("button", { name: "Continuar", exact: true }).click();
+  await dialog
+    .getByRole("combobox", { name: "Tipo de atendimento *", exact: true })
+    .click();
 
   /**
    * A cadência viaja junto no seletor.

@@ -1,8 +1,7 @@
 /// Capturas das telas reais, para olhar.
 ///
-/// Não é teste de regressão: é o instrumento para julgar a interface. Roda com
-/// `flutter test test/screenshots/capture_test.dart --update-goldens` e as
-/// imagens saem em `test/screenshots/out/`.
+/// Os cenários e suas verificações funcionais rodam na suíte padrão.
+/// A gravação visual é ativada separadamente por `tool/capture_ui.dart`.
 library;
 
 import 'dart:typed_data';
@@ -11,6 +10,10 @@ import 'dart:ui' as ui;
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:orbit_operator/core/network/connectivity_monitor.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -276,6 +279,14 @@ Future<void> _settleMemoryImages(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+class _CaptureConnectivity implements ConnectivityMonitor {
+  const _CaptureConnectivity();
+  @override
+  Stream<bool> get onStatusChange => const Stream<bool>.empty();
+  @override
+  Future<bool> isOnline() async => true;
+}
+
 Widget host(
   Map<String, dynamic> payload,
   Widget tela, {
@@ -477,37 +488,68 @@ Widget host(
     retryDio: plain,
   );
 
+  final router = GoRouter(
+    routes: [
+      GoRoute(
+        path: '/',
+        builder: (context, state) => Scaffold(
+          body: tela,
+
+          /// As abas vêm do produto, não de uma cópia.
+          ///
+          /// Enquanto a lista vivia duplicada aqui, a captura mostrava uma
+          /// navegação que já não existia — uma aba trocada no shell não
+          /// aparecia na imagem, e a imagem é justamente o que se olha.
+          bottomNavigationBar: OrbitBottomNav(
+            /// A posição sai da rota, não de um número escrito à mão.
+            ///
+            /// Escrito à mão, o perfil ficou marcado na casa 3 no dia em que
+            /// Documentos entrou como quarta aba — a captura passaria a
+            /// iluminar a aba errada sem nenhum teste reclamar.
+            selected: switch (tela) {
+              ProfileScreen() => _aba(OrbitRoutes.profile),
+              DocumentsScreen() => _aba(OrbitRoutes.documents),
+              CustomersScreen() => _aba(OrbitRoutes.customers),
+              WorkQueueScreen() => _aba(OrbitRoutes.workQueue),
+              _ => _aba(OrbitRoutes.home),
+            },
+            onSelect: (_) {},
+            items: [
+              for (final d in orbitShellDestinations)
+                (
+                  label: d.navLabel,
+                  fullLabel: d.label,
+                  icon: d.icon,
+                  selectedIcon: d.selectedIcon,
+                ),
+            ],
+          ),
+        ),
+      ),
+    ],
+  );
+  addTearDown(router.dispose);
+
   return ProviderScope(
     overrides: [
+      connectivityProvider.overrideWithValue(const _CaptureConnectivity()),
+      sharedPreferencesProvider.overrideWithValue(_preferences),
       apiClientProvider.overrideWithValue(client),
       readCacheProvider.overrideWithValue(InMemoryReadCache()),
 
-      /// A sessão é sobreposta sempre que a tela depende dela.
-      ///
-      /// A condição antiga listava duas telas pelo nome, e qualquer tela nova
-      /// que lesse permissão nascia sem sessão — o botão sumia da captura e a
-      /// imagem mentia sobre o que o produto mostra.
-      if (profile ||
-          session != null ||
-          tela is FieldDashboardScreen ||
-          tela is CustomersScreen)
-        sessionProvider.overrideWithValue(
-          (session ??
-                  sessionFrom(
-                    permissions: const ['operations.read'],
-                    roles: const ['TECHNICIAN'],
-                  ))
-              .copyWith(
-                organization: const Organization(
-                  id: 'org-1',
-                  displayName: 'Clima Engenharia',
-                  subscriptionStatus: 'ACTIVE',
-                  businessUnits: [
-                    BusinessUnit(id: 'unit-1', legalName: 'Unidade Recife'),
-                  ],
-                ),
-              ),
+      // Every protected screen receives an authenticated session fixture.
+      sessionProvider.overrideWithValue(
+        (session ?? sessionFrom()).copyWith(
+          organization: const Organization(
+            id: 'org-1',
+            displayName: 'Clima Engenharia',
+            subscriptionStatus: 'ACTIVE',
+            businessUnits: [
+              BusinessUnit(id: 'unit-1', legalName: 'Unidade Recife'),
+            ],
+          ),
         ),
+      ),
       commandJournalProvider.overrideWithValue(
         CommandJournal(file: MemoryJournalFile()),
       ),
@@ -521,7 +563,10 @@ Widget host(
         MediaQueue(file: MemoryJournalFile(), files: MemoryMediaFileStore()),
       ),
     ],
-    child: MaterialApp(
+    child: MaterialApp.router(
+      locale: const Locale('pt', 'BR'),
+      supportedLocales: const [Locale('pt', 'BR')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       debugShowCheckedModeBanner: false,
       theme: OrbitTheme.light(),
       builder: (context, child) => MediaQuery(
@@ -530,39 +575,7 @@ Widget host(
         ).copyWith(textScaler: TextScaler.linear(captureScale)),
         child: child!,
       ),
-      home: Scaffold(
-        body: tela,
-
-        /// As abas vêm do produto, não de uma cópia.
-        ///
-        /// Enquanto a lista vivia duplicada aqui, a captura mostrava uma
-        /// navegação que já não existia — uma aba trocada no shell não
-        /// aparecia na imagem, e a imagem é justamente o que se olha.
-        bottomNavigationBar: OrbitBottomNav(
-          /// A posição sai da rota, não de um número escrito à mão.
-          ///
-          /// Escrito à mão, o perfil ficou marcado na casa 3 no dia em que
-          /// Documentos entrou como quarta aba — a captura passaria a
-          /// iluminar a aba errada sem nenhum teste reclamar.
-          selected: switch (tela) {
-            ProfileScreen() => _aba(OrbitRoutes.profile),
-            DocumentsScreen() => _aba(OrbitRoutes.documents),
-            CustomersScreen() => _aba(OrbitRoutes.customers),
-            WorkQueueScreen() => _aba(OrbitRoutes.workQueue),
-            _ => _aba(OrbitRoutes.home),
-          },
-          onSelect: (_) {},
-          items: [
-            for (final d in orbitShellDestinations)
-              (
-                label: d.navLabel,
-                fullLabel: d.label,
-                icon: d.icon,
-                selectedIcon: d.selectedIcon,
-              ),
-          ],
-        ),
-      ),
+      routerConfig: router,
     ),
   );
 }
@@ -570,8 +583,25 @@ Widget host(
 int _aba(String rota) =>
     orbitShellDestinations.indexWhere((destino) => destino.route == rota);
 
-void main() {
+late SharedPreferences _preferences;
+bool _captureScreenshots = false;
+
+// Pixel snapshots are a review instrument, not an automatically accepted gate.
+Future<void> _capture(
+  WidgetTester tester,
+  Finder finder,
+  Matcher matcher,
+) async {
+  if (_captureScreenshots) await expectLater(finder, matcher);
+  await tester.pumpWidget(const SizedBox.shrink());
+  await tester.pumpAndSettle();
+}
+
+void main({bool captureScreenshots = false}) {
+  _captureScreenshots = captureScreenshots;
   setUpAll(() async {
+    SharedPreferences.setMockInitialValues({});
+    _preferences = await SharedPreferences.getInstance();
     await initializeDateFormatting('pt_BR');
     _signaturePng = await _signatureFixture();
   });
@@ -622,7 +652,8 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await expectLater(
+    await _capture(
+      tester,
       find.byType(MaterialApp),
       matchesGoldenFile('out/final/owner_home.png'),
     );
@@ -644,7 +675,8 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await expectLater(
+    await _capture(
+      tester,
       find.byType(MaterialApp),
       matchesGoldenFile('out/final/technician_home.png'),
     );
@@ -658,7 +690,8 @@ void main() {
     await tester.pumpWidget(host({}, const MySignatureScreen()));
     await tester.pumpAndSettle();
     await _settleMemoryImages(tester);
-    await expectLater(
+    await _capture(
+      tester,
       find.byType(MaterialApp),
       matchesGoldenFile('out/final/signature_pad.png'),
     );
@@ -678,7 +711,8 @@ void registerCaptures() {
       }, DocumentsScreen(now: _captureNow)),
     );
     await tester.pumpAndSettle();
-    await expectLater(
+    await _capture(
+      tester,
       find.byType(MaterialApp),
       matchesGoldenFile(
         'out/${captureWidth.toInt()}_$captureScale/05_documentos.png',
@@ -703,7 +737,8 @@ void registerCaptures() {
     await tester.tap(find.byType(DocumentRow).first);
     await tester.pumpAndSettle();
 
-    await expectLater(
+    await _capture(
+      tester,
       find.byType(MaterialApp),
       matchesGoldenFile(
         'out/${captureWidth.toInt()}_$captureScale/05d_documento.png',
@@ -727,7 +762,8 @@ void registerCaptures() {
     expect(find.text('Assinatura'), findsOneWidget);
     expect(find.text('Configurações'), findsOneWidget);
 
-    await expectLater(
+    await _capture(
+      tester,
       find.byType(MaterialApp),
       matchesGoldenFile(
         'out/${captureWidth.toInt()}_$captureScale/06_perfil.png',
@@ -741,7 +777,8 @@ void registerCaptures() {
     await tester.pumpWidget(host(const {}, const LoginScreen()));
     await tester.pumpAndSettle();
 
-    await expectLater(
+    await _capture(
+      tester,
       find.byType(MaterialApp),
       matchesGoldenFile(
         'out/${captureWidth.toInt()}_$captureScale/00_entrar.png',
@@ -760,7 +797,8 @@ void registerCaptures() {
     await tester.pumpWidget(host(const {}, const ChangePasswordScreen()));
     await tester.pumpAndSettle();
 
-    await expectLater(
+    await _capture(
+      tester,
       find.byType(MaterialApp),
       matchesGoldenFile(
         'out/${captureWidth.toInt()}_$captureScale/00b_definir_senha.png',
@@ -799,7 +837,8 @@ void registerCaptures() {
     );
     await tester.pumpAndSettle();
 
-    await expectLater(
+    await _capture(
+      tester,
       find.byType(MaterialApp),
       matchesGoldenFile(
         'out/${captureWidth.toInt()}_$captureScale/03c_detalhe.png',
@@ -819,7 +858,8 @@ void registerCaptures() {
     expect(find.text('2 NÃO LIDOS'), findsOneWidget);
     expect(find.text('ANTERIORES'), findsOneWidget);
 
-    await expectLater(
+    await _capture(
+      tester,
       find.byType(MaterialApp),
       matchesGoldenFile(
         'out/${captureWidth.toInt()}_$captureScale/08_avisos.png',
@@ -835,7 +875,8 @@ void registerCaptures() {
     );
     await tester.pumpAndSettle();
 
-    await expectLater(
+    await _capture(
+      tester,
       find.byType(MaterialApp),
       matchesGoldenFile(
         'out/${captureWidth.toInt()}_$captureScale/09_sincronizacao.png',
@@ -859,7 +900,8 @@ void registerCaptures() {
     expect(interruptores[1].value, isTrue, reason: 'ausente = ligado');
     expect(interruptores[2].value, isFalse);
 
-    await expectLater(
+    await _capture(
+      tester,
       find.byType(MaterialApp),
       matchesGoldenFile(
         'out/${captureWidth.toInt()}_$captureScale/06b_configuracoes.png',
@@ -876,7 +918,8 @@ void registerCaptures() {
     await tester.tap(find.text('Meus dados'));
     await tester.pumpAndSettle();
 
-    await expectLater(
+    await _capture(
+      tester,
       find.byType(MaterialApp),
       matchesGoldenFile(
         'out/${captureWidth.toInt()}_$captureScale/06c_meus_dados.png',
@@ -909,7 +952,8 @@ void registerCaptures() {
       }, const OperationExecutionScreen(operationId: 'op-1')),
     );
     await tester.pumpAndSettle();
-    await expectLater(
+    await _capture(
+      tester,
       find.byType(MaterialApp),
       matchesGoldenFile(
         'out/${captureWidth.toInt()}_$captureScale/07_wizard.png',
@@ -926,7 +970,8 @@ void registerCaptures() {
     );
     await tester.pumpAndSettle();
 
-    await expectLater(
+    await _capture(
+      tester,
       find.byType(MaterialApp),
       matchesGoldenFile(
         'out/${captureWidth.toInt()}_$captureScale/01_field_dashboard.png',
@@ -1016,6 +1061,9 @@ void registerCaptures() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          connectivityProvider.overrideWithValue(const _CaptureConnectivity()),
+      sharedPreferencesProvider.overrideWithValue(_preferences),
+          sessionProvider.overrideWithValue(sessionFrom()),
           operationsRepositoryProvider.overrideWithValue(
             OperationsRepository(client: client, cache: InMemoryReadCache()),
           ),
@@ -1035,7 +1083,8 @@ void registerCaptures() {
     );
     await tester.pumpAndSettle();
 
-    await expectLater(
+    await _capture(
+      tester,
       find.byType(MaterialApp),
       matchesGoldenFile(
         'out/${captureWidth.toInt()}_$captureScale/02_servicos.png',
@@ -1050,7 +1099,8 @@ void registerCaptures() {
     await tester.pumpWidget(host(const {}, const CustomersScreen()));
     await tester.pumpAndSettle();
 
-    await expectLater(
+    await _capture(
+      tester,
       find.byType(MaterialApp),
       matchesGoldenFile(
         'out/${captureWidth.toInt()}_$captureScale/05_clientes.png',
@@ -1088,7 +1138,8 @@ void registerCaptures() {
     await tester.tap(find.text('Abrir orçamento'));
     await tester.pumpAndSettle();
 
-    await expectLater(
+    await _capture(
+      tester,
       find.byType(MaterialApp),
       matchesGoldenFile(
         'out/${captureWidth.toInt()}_$captureScale/05c_orcamento.png',
@@ -1106,7 +1157,8 @@ void registerCaptures() {
     await tester.tap(find.text('Shopping Recife'));
     await tester.pumpAndSettle();
 
-    await expectLater(
+    await _capture(
+      tester,
       find.byType(MaterialApp),
       matchesGoldenFile(
         'out/${captureWidth.toInt()}_$captureScale/05b_cliente.png',
@@ -1136,7 +1188,8 @@ void registerCaptures() {
     await tester.tap(find.byIcon(Icons.tune_rounded));
     await tester.pumpAndSettle();
 
-    await expectLater(
+    await _capture(
+      tester,
       find.byType(MaterialApp),
       matchesGoldenFile(
         'out/${captureWidth.toInt()}_$captureScale/03b_filtros.png',
@@ -1202,7 +1255,8 @@ void registerCaptures() {
     await tester.pumpWidget(host(fila, const WorkQueueScreen()));
     await tester.pumpAndSettle();
 
-    await expectLater(
+    await _capture(
+      tester,
       find.byType(MaterialApp),
       matchesGoldenFile(
         'out/${captureWidth.toInt()}_$captureScale/03_fila.png',
@@ -1269,7 +1323,8 @@ void registerCaptures() {
     await tester.pumpWidget(host(agenda, const AgendaScreen()));
     await tester.pumpAndSettle();
 
-    await expectLater(
+    await _capture(
+      tester,
       find.byType(MaterialApp),
       matchesGoldenFile(
         'out/${captureWidth.toInt()}_$captureScale/04_agenda.png',

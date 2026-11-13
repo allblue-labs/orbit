@@ -10,6 +10,8 @@ import { ChecklistService } from './checklist.service';
 import { OperationCancellationService } from './operation-cancellation.service';
 import { OperationReadModelMapper } from './operation.mapper';
 import { OperationService } from './operation.service';
+import { OperationScheduleService } from './operation-schedule.service';
+import { RecurringAuthorizationService } from './recurring-authorization.service';
 import { OperationsModule } from './operations.module';
 
 const ORGANIZATION_ID = '01900000-0000-7000-8000-000000000001';
@@ -41,6 +43,8 @@ describe('Operations HTTP routing', () => {
       controllers,
       providers: [
         AuthorizationService,
+        { provide: OperationScheduleService, useValue: {} },
+        { provide: RecurringAuthorizationService, useValue: {} },
         { provide: OperationService, useValue: operations },
         { provide: OperationReadModelMapper, useValue: readModels },
         { provide: ChecklistService, useValue: {} },

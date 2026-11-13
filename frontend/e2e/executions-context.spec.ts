@@ -191,7 +191,7 @@ test("a rota global leva ao Centro de Documentos", async ({ page }) => {
    * Redireciona em vez de 404: o caminho continua alcançável por favorito e
    * histórico, e o que a pessoa procurava existe com outro nome.
    */
-  await expect(page).toHaveURL(/\/documentos$/);
+  await expect(page).toHaveURL(/\/relatorios\?secao=emitidos$/);
 
   assertClean(recorder, "rota global redirecionada");
 });
@@ -213,7 +213,7 @@ test("a navegação nomeia os domínios, e não a arquitetura", async ({
    * aparecem: os três são o mesmo assunto visto de três ângulos, e quem trabalha
    * neles alterna entre os três no mesmo dia.
    */
-  await expect(nav.getByRole("link", { name: "Documentos" })).toBeVisible();
+  await expect(nav.getByRole("link", { name: "Relatórios" })).toBeVisible();
 
   await page.goto("/operacoes");
   await settled(page);

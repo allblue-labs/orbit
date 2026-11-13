@@ -544,7 +544,7 @@ async function attend(page: Page) {
   await dialog.getByRole("checkbox").check();
   await dialog.getByRole("button", { name: "Continuar", exact: true }).click();
   await dialog
-    .getByLabel("Observações", { exact: true })
+    .getByLabel(/^Observações(?:\s*\*?\s*\(obrigatório\))?$/)
     .fill("Filtro limpo e funcionamento conferido.");
   await dialog
     .getByRole("button", { name: "Revisar atendimento", exact: true })

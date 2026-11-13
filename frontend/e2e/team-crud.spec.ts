@@ -73,6 +73,8 @@ test("cadastra o técnico, mostra a senha uma vez e força a troca", async ({
    * endereço, e não só que ela sabe desenhar o domínio em algum canto.
    */
   const campoEmail = page.locator("#member-email");
+  // O foco posiciona o cursor antes do domínio; depois substituímos a sugestão.
+  await campoEmail.focus();
   await campoEmail.fill(nomeDeEntrada);
 
   const emailTecnico = (await campoEmail.inputValue()).trim();
@@ -104,7 +106,7 @@ test("cadastra o técnico, mostra a senha uma vez e força a troca", async ({
   await page.getByRole("option", { name: "Técnico Operacional" }).click();
 
   /// O papel se explica antes de ser concedido, não depois.
-  await expect(page.getByText(/Executa o atendimento em campo/)).toBeVisible();
+  await expect(page.getByText(/Executa o serviço no cliente/)).toBeVisible();
   await continuar.click();
 
   /// Acessos: o padrão do papel e a unidade principal já vêm escolhidos.

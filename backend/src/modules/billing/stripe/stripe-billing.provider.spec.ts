@@ -7,6 +7,13 @@ import { BillingMode } from '../billing.types';
 import { BillingConfigurationInvalidException } from '../billing.errors';
 import { StripeBillingProvider } from './stripe-billing.provider';
 
+// Keep the paid/trial periods active regardless of the day this suite runs.
+beforeEach(() => {
+  jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+  jest.setSystemTime(new Date('2026-10-23T12:00:00Z'));
+});
+afterEach(() => jest.useRealTimers());
+
 describe('StripeBillingProvider subscription commands', () => {
   const current = (overrides: Record<string, unknown> = {}) => ({
     id: 'sub_test_1',

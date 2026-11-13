@@ -4,6 +4,7 @@ import type { BrandImageService } from '../../src/modules/storage/brand-image.se
 /** Domain tests keep storage I/O isolated; BrandImageService has dedicated integration coverage. */
 export function brandImageStub(): BrandImageService {
   return {
+    url: (value: string | null) => Promise.resolve(value),
     read: (value?: string | null) => Promise.resolve(readEmbeddedImage(value)),
     store: (_organizationId: string, _ownerId: string, value: string) => {
       if (!readEmbeddedImage(value))

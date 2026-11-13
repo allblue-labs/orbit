@@ -139,7 +139,7 @@ export class BusinessUnitService {
     try {
       const saved = await this.repository.setLogo(id, logoUrl);
       await this.brands.remove(previous.logoUrl, organizationId);
-      return saved;
+      return { ...saved, logoUrl: await this.brands.url(saved.logoUrl) };
     } catch (error) {
       const current = await this.repository.find(id, organizationId);
       if (current?.logoUrl !== logoUrl)

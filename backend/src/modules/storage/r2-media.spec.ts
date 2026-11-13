@@ -1,4 +1,6 @@
 import sharp from 'sharp';
+import { BrandImageService } from './brand-image.service';
+import type { StorageCleanupService } from './storage-cleanup.service';
 import { ImageOptimizationService } from './image-optimization.service';
 import { FileObjectService } from './file-object.service';
 import type { StorageFileRepository } from './file-object.repository';
@@ -286,5 +288,42 @@ describe('R2 image pipeline', () => {
     ).rejects.toThrow('Database unavailable');
     expect(provider.remove).toHaveBeenCalledTimes(1);
     expect(objects.size).toBe(0);
+  });
+});
+
+describe('brand references returned to clients', () => {
+  it('resolves local internal references without changing CDN URLs or embedded legacy images', async () => {
+    const { files, provider } = setup();
+    const local = {
+      ...config,
+      provider: 'LOCAL' as const,
+      publicUrl: undefined,
+    };
+    const brands = new BrandImageService(
+      provider as unknown as StorageProvider,
+      local,
+      files,
+      {} as StorageCleanupService,
+    );
+    const key = `logos/${organizationId}/1794532744234-01a1d27c-9c2a-7f85-934b-e100eb17ce93.webp`;
+    await expect(brands.url(`r2-object:${key}`)).resolves.toBe(
+      'https://private.r2.cloudflarestorage.com/signed',
+    );
+    expect(provider.sign).toHaveBeenCalledWith(
+      expect.objectContaining({
+        objectKey: key,
+        operation: 'preview',
+        expiresInSeconds: 300,
+      }),
+    );
+    await expect(brands.url(`${config.publicUrl}/${key}`)).resolves.toBe(
+      `${config.publicUrl}/${key}`,
+    );
+    await expect(brands.url('data:image/png;base64,legacy')).resolves.toBe(
+      'data:image/png;base64,legacy',
+    );
+    await expect(brands.url('r2-object:../private')).resolves.toBeNull();
+    await expect(brands.url(null)).resolves.toBeNull();
+    expect(provider.sign).toHaveBeenCalledTimes(1);
   });
 });

@@ -71,11 +71,15 @@ test.describe("Minha conta — foto", () => {
     /** Nunca um endereço público permanente nem a chave do objeto. */
     expect(src).not.toMatch(/\.amazonaws\.com|objectKey|bucket=orbit-public/);
 
-    await expect(page.getByRole("button", { name: "Trocar foto" })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Trocar foto" }),
+    ).toBeVisible();
 
     await page.getByRole("button", { name: "Remover" }).click();
     await expect(preview.locator("img")).toHaveCount(0, { timeout: 20_000 });
-    await expect(page.getByRole("button", { name: "Enviar foto" })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Enviar foto" }),
+    ).toBeVisible();
   });
 
   test("formato fora do contrato é recusado sem gastar rede", async ({
@@ -92,7 +96,7 @@ test.describe("Minha conta — foto", () => {
     });
 
     await expect(
-      page.getByRole("alert").filter({ hasText: /PNG, JPEG ou WEBP/ }),
+      page.getByRole("alert").filter({ hasText: /PNG, JPEG, WebP ou HEIC/i }),
     ).toBeVisible();
   });
 
@@ -183,7 +187,9 @@ test.describe("Minha conta — assinatura", () => {
     await expect(
       page.getByRole("tab", { name: "Desenhar assinatura" }),
     ).toBeVisible();
-    await expect(page.getByRole("tab", { name: "Enviar imagem" })).toBeVisible();
+    await expect(
+      page.getByRole("tab", { name: "Enviar imagem" }),
+    ).toBeVisible();
 
     /**
      * O que o produto **não** promete. A assinatura é a representação gráfica

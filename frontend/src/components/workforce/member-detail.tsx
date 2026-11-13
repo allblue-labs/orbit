@@ -138,9 +138,6 @@ function Body({ member }: { member: TeamMember }) {
           <div className="rounded-xl border border-border p-4">
             <p className="flex items-center gap-2">
               <Badge variant="outline">{member.role.name}</Badge>
-              <span className="font-mono text-xs text-muted-foreground">
-                {member.role.key}
-              </span>
             </p>
 
             {catalog.isPending ? (

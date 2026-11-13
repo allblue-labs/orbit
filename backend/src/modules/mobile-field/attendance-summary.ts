@@ -29,28 +29,30 @@ const record = (value: unknown): Record<string, unknown> =>
   value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
-const answer = (value: unknown): string =>
-  value === true
-    ? 'Realizado'
-    : value === false
-      ? 'Não realizado'
-      : value == null
-        ? 'Não informado'
-        : Array.isArray(value)
-          ? value.join(', ')
-          : String(value);
+function text(value: unknown, fallback: string): string {
+  return typeof value === 'string' || typeof value === 'number'
+    ? String(value)
+    : fallback;
+}
+function answer(value: unknown): string {
+  if (value === true) return 'Realizado';
+  if (value === false) return 'Não realizado';
+  if (Array.isArray(value))
+    return value.map((item: unknown) => text(item, 'Não informado')).join(', ');
+  return text(value, 'Não informado');
+}
 
 /** O mesmo texto é exibido, conferido pelo hash e congelado no aceite. */
 export function attendanceSummary(source: AttendanceSummarySource): string {
   const lines = [source.description?.trim() || source.title];
   for (const checklist of source.checklistExecutions ?? []) {
     const snapshot = record(checklist.templateSnapshot);
-    lines.push(`\nChecklist: ${String(snapshot.name ?? 'Atendimento')}`);
+    lines.push(`\nChecklist: ${text(snapshot.name, 'Atendimento')}`);
     const answers = record(checklist.answers);
     for (const item of Array.isArray(snapshot.items) ? snapshot.items : []) {
       const row = record(item);
       lines.push(
-        `• ${String(row.label ?? row.key)}: ${answer(answers[String(row.key)])}`,
+        `• ${text(row.label ?? row.key, 'Item')}: ${answer(answers[text(row.key, '')])}`,
       );
     }
   }

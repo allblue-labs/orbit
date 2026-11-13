@@ -1,3 +1,4 @@
+import { replaceFixtureOwner, memberFixture } from './support/member-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
  * E2E do Management Reports Engine.
@@ -385,6 +386,11 @@ describe('Management reports (e2e)', () => {
       where: { userId: restrictedUser.id },
       data: { roleId: limited.id },
     });
+    await replaceFixtureOwner(
+      prisma,
+      restrictedMembership.organizationId,
+      PASSWORD,
+    );
     restrictedToken = await login(restricted.email);
   }, 240000);
 
@@ -470,7 +476,7 @@ describe('Management reports (e2e)', () => {
     expect(ready.sourceHash).toHaveLength(64);
     expect(ready.generatedAt).not.toBeNull();
     expect(ready.hasFile).toBe(true);
-    expect(ready.renderer).toContain('pdf.default');
+    expect(ready.renderer).toContain('pdf.premium');
     expect(ready.snapshot?.schemaVersion).toBe(2);
 
     /** Compõe os seis domínios que o ator pode ver. */
@@ -874,58 +880,32 @@ describe('Management reports (e2e)', () => {
   }, 180000);
 
   it('18 · perder o acesso depois fecha a leitura do relatório antigo', async () => {
-    const report = await produce({ type: 'FINANCIAL_PERFORMANCE' });
+    const member = await memberFixture(prisma, {
+      organizationId,
+      businessUnitIds: [unitA, unitB],
+      permissions: [
+        'reports.management.read',
+        'reports.management.manage',
+        'financial.read',
+      ],
+      password: PASSWORD,
+    });
+    const bearer = await login(member.email);
+    const report = await produce({ type: 'FINANCIAL_PERFORMANCE' }, bearer);
     expect(report.status).toBe('READY');
-
-    /** O papel muda: quem gerou ontem não lê hoje. */
-    await prisma.$executeRaw`
-      UPDATE roles
-         SET permissions = array_remove(array_remove(permissions, '*'), 'financial.read')
-       WHERE organization_id = ${organizationId}::uuid
-    `;
-    const refreshed = await login(
-      (
-        await prisma.user.findFirstOrThrow({
-          where: {
-            organizationMemberships: { some: { organizationId } },
-          },
-          select: { email: true },
-          orderBy: { createdAt: 'asc' },
-        })
-      ).email,
-    );
-
-    await auth(
-      http().get(`/api/v1/management-reports/${report.id}`),
-      refreshed,
-    ).expect(403);
-    await auth(
-      http().get(`/api/v1/management-reports/${report.id}/snapshot`),
-      refreshed,
-    ).expect(403);
-    await auth(
-      http().get(`/api/v1/management-reports/${report.id}/download`),
-      refreshed,
-    ).expect(403);
-
-    /** Devolve o acesso: as demais asserções da suíte dependem dele. */
-    await prisma.$executeRaw`
-      UPDATE roles
-         SET permissions = permissions || ARRAY['*', 'financial.read']::varchar[]
-       WHERE organization_id = ${organizationId}::uuid
-    `;
-    token = await login(
-      (
-        await prisma.user.findFirstOrThrow({
-          where: {
-            organizationMemberships: { some: { organizationId } },
-          },
-          select: { email: true },
-          orderBy: { createdAt: 'asc' },
-        })
-      ).email,
-    );
-  }, 240000);
+    await prisma.role.update({
+      where: { id: member.roleId },
+      data: {
+        permissions: ['reports.management.read', 'reports.management.manage'],
+      },
+    });
+    // Even the already issued JWT must lose access when the database grant changes.
+    for (const suffix of ['', '/snapshot', '/download'])
+      await auth(
+        http().get(`/api/v1/management-reports/${report.id}${suffix}`),
+        bearer,
+      ).expect(403);
+  });
 
   /* ================================================================ */
   /* 19 · 20 — proveniência                                            */

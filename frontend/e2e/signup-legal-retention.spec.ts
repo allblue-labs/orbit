@@ -16,10 +16,10 @@ async function addressStep(page: Page) {
     await page.getByLabel(label, { exact: true }).fill(value);
   await page.getByRole("button", { name: "Continuar", exact: true }).click();
   await page
-    .getByLabel("Nome da organização", { exact: true })
+    .getByLabel(/^Nome da organização(?:\s*\*?\s*\(obrigatório\))?$/)
     .fill("Minha empresa");
   await page
-    .getByLabel("Razão social", { exact: true })
+    .getByLabel(/^Razão social(?:\s*\*?\s*\(obrigatório\))?$/)
     .fill("Minha empresa Ltda");
   await page.locator("#documentNumber").fill("52998224725");
   await page.getByRole("button", { name: "Continuar", exact: true }).click();
@@ -45,19 +45,25 @@ test("UF starts empty and is filled from the selected CEP", async ({
     }),
   );
   await addressStep(page);
-  await expect(page.getByLabel("UF", { exact: true })).toHaveValue("");
-  await page.getByLabel("CEP", { exact: true }).fill("40020000");
-  await expect(page.getByLabel("UF", { exact: true })).toHaveValue("BA");
-  await expect(page.getByLabel("Cidade", { exact: true })).toHaveValue(
-    "Salvador",
-  );
+  await expect(
+    page.getByLabel(/^UF(?:\s*\*?\s*\(obrigatório\))?$/),
+  ).toHaveValue("");
+  await page.getByLabel(/^CEP(?:\s*\*?\s*\(obrigatório\))?$/).fill("40020000");
+  await expect(
+    page.getByLabel(/^UF(?:\s*\*?\s*\(obrigatório\))?$/),
+  ).toHaveValue("BA");
+  await expect(
+    page.getByLabel(/^Cidade(?:\s*\*?\s*\(obrigatório\))?$/),
+  ).toHaveValue("Salvador");
 });
 
 test("reading both full documents preserves the signup form and does not accept on behalf of the user", async ({
   page,
 }) => {
   await addressStep(page);
-  await page.getByLabel("Cidade", { exact: true }).fill("Salvador");
+  await page
+    .getByLabel(/^Cidade(?:\s*\*?\s*\(obrigatório\))?$/)
+    .fill("Salvador");
   for (const [label, title] of [
     ["Termos de Uso", "Termos de Uso do Orbit"],
     ["Política de Privacidade", "Política de Privacidade do Orbit"],
@@ -82,9 +88,9 @@ test("reading both full documents preserves the signup form and does not accept 
     await dialog.getByRole("button", { name: "Fechar", exact: true }).click();
     await expect(dialog).not.toBeVisible();
   }
-  await expect(page.getByLabel("Cidade", { exact: true })).toHaveValue(
-    "Salvador",
-  );
+  await expect(
+    page.getByLabel(/^Cidade(?:\s*\*?\s*\(obrigatório\))?$/),
+  ).toHaveValue("Salvador");
   await expect(page.locator("#terms")).not.toBeChecked();
 });
 
@@ -153,9 +159,13 @@ test.describe("aceite obrigatório em português", () => {
       if (action === "Enter")
         await page.setViewportSize({ width: 390, height: 844 });
       await addressStep(page);
-      await page.getByLabel("Cidade", { exact: true }).fill("Salvador");
-      await page.getByLabel("UF", { exact: true }).fill("BA");
-      const street = page.getByLabel("Endereço da matriz", { exact: true });
+      await page
+        .getByLabel(/^Cidade(?:\s*\*?\s*\(obrigatório\))?$/)
+        .fill("Salvador");
+      await page.getByLabel(/^UF(?:\s*\*?\s*\(obrigatório\))?$/).fill("BA");
+      const street = page.getByLabel(
+        /^Endereço da matriz(?:\s*\*?\s*\(obrigatório\))?$/,
+      );
       await street.fill("Rua da Misericórdia, 100");
       if (action === "Enter") await street.press("Enter");
       else

@@ -15,7 +15,9 @@
     "test:browser": "playwright test",
     "test:dependencies": "playwright test --config playwright.dependencies.config.ts",
     "contracts:sync": "node scripts/sync-contracts.mjs",
-    "lint:language": "node scripts/check-product-language.mjs"
+    "lint:language": "node scripts/check-product-language.mjs",
+    "security:audit": "node ../scripts/audit-policy.mjs frontend",
+    "test:e2e": "node ../scripts/verify-integrations.mjs browser"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
