@@ -196,11 +196,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         TextFormField(
                           key: const Key('login.mfa'),
                           controller: _mfaCode,
-                          keyboardType: TextInputType.number,
+                          keyboardType: TextInputType.visiblePassword,
+                          autocorrect: false,
+                          enableSuggestions: false,
+                          maxLength: 16,
                           textInputAction: TextInputAction.done,
                           decoration: const InputDecoration(
                             labelText: 'Código de verificação',
                             prefixIcon: Icon(Icons.shield_outlined),
+                            counterText: '',
+                            helperText:
+                                'Use o autenticador ou um código de recuperação.',
+                            helperMaxLines: 2,
                           ),
                         ),
                       ],

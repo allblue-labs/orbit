@@ -2,7 +2,19 @@ import { Injectable } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../database';
 import type { PrismaTransactionClient } from '../../../database/prisma.types';
-import { ValidationException } from '../../../exceptions';
+import {
+  UnauthorizedException,
+  ValidationException,
+} from '../../../exceptions';
+
+export interface RefreshSession {
+  id: string;
+  userId: string;
+  client: string;
+  refreshTokenHash: string;
+  rotationResponse: string | null;
+  inGrace: boolean;
+}
 
 const identityInclude = {
   credential: true,
@@ -122,17 +134,21 @@ export class IdentityRepository {
     });
   }
 
-  updateFailedLogin(
+  async updateFailedLogin(
     credentialId: string,
-    failedAttempts: number,
-    lockedUntil: Date | null,
+    expectedPasswordHash: string,
   ): Promise<void> {
-    return this.prisma.credential
-      .update({
-        where: { id: credentialId },
-        data: { failedAttempts, lockedUntil },
-      })
-      .then(() => undefined);
+    // Increment the current row, never the snapshot read before password/MFA
+    // verification. A late attempt against an old password cannot re-lock it.
+    await this.prisma.$executeRaw`
+      UPDATE credentials SET
+        failed_attempts = CASE WHEN locked_until <= clock_timestamp() THEN 1 ELSE failed_attempts + 1 END,
+        locked_until = CASE
+          WHEN (CASE WHEN locked_until <= clock_timestamp() THEN 1 ELSE failed_attempts + 1 END) >= 5
+          THEN clock_timestamp() + interval '15 minutes' ELSE NULL END,
+        updated_at = clock_timestamp()
+      WHERE id = ${credentialId}::uuid AND password_hash = ${expectedPasswordHash}
+        AND (locked_until IS NULL OR locked_until <= clock_timestamp())`;
   }
 
   findCredential(userId: string) {
@@ -176,19 +192,47 @@ export class IdentityRepository {
       .then(() => undefined);
   }
 
-  markAuthenticated(userId: string, credentialId: string): Promise<void> {
-    return this.prisma
-      .$transaction([
-        this.prisma.user.update({
-          where: { id: userId },
-          data: { lastAuthenticatedAt: new Date() },
-        }),
-        this.prisma.credential.update({
+  async completeLogin(
+    data: Prisma.SessionUncheckedCreateInput,
+    credentialId: string,
+    expectedPasswordHash: string,
+  ): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const changed = await tx.$executeRaw`
+        UPDATE credentials SET failed_attempts = 0, locked_until = NULL, updated_at = clock_timestamp()
+        WHERE id = ${credentialId}::uuid AND user_id = ${data.userId}::uuid
+          AND password_hash = ${expectedPasswordHash}
+          AND (locked_until IS NULL OR locked_until <= clock_timestamp())`;
+      if (changed !== 1) {
+        const current = await tx.credential.findUnique({
           where: { id: credentialId },
-          data: { failedAttempts: 0, lockedUntil: null },
-        }),
-      ])
-      .then(() => undefined);
+        });
+        if (
+          current?.passwordHash === expectedPasswordHash &&
+          current.lockedUntil
+        )
+          throw new UnauthorizedException(
+            'Account temporarily locked',
+            'ACCOUNT_LOCKED',
+          );
+        throw new UnauthorizedException(
+          'Invalid credentials',
+          'INVALID_CREDENTIALS',
+        );
+      }
+      const user = await tx.user.updateMany({
+        where: { id: data.userId, status: 'ACTIVE', deletedAt: null },
+        data: { lastAuthenticatedAt: new Date() },
+      });
+      if (user.count !== 1)
+        throw new UnauthorizedException(
+          'Invalid credentials',
+          'INVALID_CREDENTIALS',
+        );
+      // Password resets lock this same credential before revoking sessions:
+      // either this login loses its comparison or the reset revokes its session.
+      await tx.session.create({ data });
+    });
   }
 
   createSession(data: Prisma.SessionUncheckedCreateInput) {
@@ -200,20 +244,49 @@ export class IdentityRepository {
   }
 
   findSessionById(id: string) {
-    return this.prisma.session.findUnique({ where: { id } });
+    return this.prisma.session.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        userId: true,
+        client: true,
+        expiresAt: true,
+        revokedAt: true,
+      },
+    });
   }
 
-  rotateSession(
+  async findRefreshSession(hash: string): Promise<RefreshSession | null> {
+    const rows = await this.prisma.$queryRaw<RefreshSession[]>`
+      SELECT id, user_id AS "userId", client, refresh_token_hash AS "refreshTokenHash",
+        rotation_response AS "rotationResponse",
+        COALESCE(rotation_grace_until > clock_timestamp(), false) AS "inGrace"
+      FROM sessions
+      WHERE (refresh_token_hash = ${hash} OR previous_refresh_token_hash = ${hash})
+        AND revoked_at IS NULL AND expires_at > clock_timestamp()`;
+    return rows[0] ?? null;
+  }
+
+  async rotateSession(
     id: string,
+    expectedHash: string,
     refreshTokenHash: string,
     expiresAt: Date,
-  ): Promise<void> {
-    return this.prisma.session
-      .update({
-        where: { id },
-        data: { refreshTokenHash, expiresAt },
-      })
-      .then(() => undefined);
+    encryptedResponse: string,
+  ): Promise<boolean> {
+    // PostgreSQL rechecks this predicate after waiting for a competing update.
+    // Current and previous tokens return the same response throughout grace;
+    // a fast successor cannot invalidate a response still in flight.
+    const changed = await this.prisma.$executeRaw`
+      UPDATE sessions SET refresh_token_hash = ${refreshTokenHash},
+        previous_refresh_token_hash = ${expectedHash},
+        rotation_response = ${encryptedResponse},
+        rotation_grace_until = clock_timestamp() + interval '15 seconds',
+        expires_at = ${expiresAt}
+      WHERE id = ${id}::uuid AND refresh_token_hash = ${expectedHash}
+        AND revoked_at IS NULL AND expires_at > clock_timestamp()
+        AND (rotation_grace_until IS NULL OR rotation_grace_until <= clock_timestamp())`;
+    return changed === 1;
   }
 
   revokeSession(id: string): Promise<void> {
@@ -666,22 +739,24 @@ export class IdentityRepository {
       .then(() => undefined);
   }
 
-  touchMfaFactor(id: string): Promise<void> {
-    return this.prisma.mfaFactor
-      .update({ where: { id }, data: { lastUsedAt: new Date() } })
-      .then(() => undefined);
+  async touchMfaFactor(id: string): Promise<boolean> {
+    const result = await this.prisma.mfaFactor.updateMany({
+      where: { id, verifiedAt: { not: null }, deletedAt: null },
+      data: { lastUsedAt: new Date() },
+    });
+    return result.count === 1;
   }
 
-  consumeMfaRecoveryCode(
+  async consumeMfaRecoveryCode(
     id: string,
-    recoveryCodes: readonly string[],
-  ): Promise<void> {
-    return this.prisma.mfaFactor
-      .update({
-        where: { id },
-        data: { recoveryCodes: [...recoveryCodes], lastUsedAt: new Date() },
-      })
-      .then(() => undefined);
+    matchedHash: string,
+  ): Promise<boolean> {
+    const changed = await this.prisma.$executeRaw`
+      UPDATE mfa_factors SET recovery_codes = array_remove(recovery_codes, ${matchedHash}),
+        last_used_at = clock_timestamp()
+      WHERE id = ${id}::uuid AND verified_at IS NOT NULL AND deleted_at IS NULL
+        AND ${matchedHash} = ANY(recovery_codes)`;
+    return changed === 1;
   }
 
   disableMfa(userId: string): Promise<void> {

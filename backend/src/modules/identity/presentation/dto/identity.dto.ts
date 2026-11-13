@@ -50,7 +50,7 @@ export class LoginDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  @Length(6, 10)
+  @Length(6, 16)
   mfaCode?: string;
 
   @ApiPropertyOptional({ default: 'WEB' })

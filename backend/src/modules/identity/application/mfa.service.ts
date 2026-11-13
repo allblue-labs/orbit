@@ -89,7 +89,8 @@ export class MfaService {
       throw new UnauthorizedException('MFA code is required', 'MFA_REQUIRED');
     }
     if (verifyTotp(this.crypto.decrypt(factor.secret), code)) {
-      await this.repository.touchMfaFactor(factor.id);
+      if (!(await this.repository.touchMfaFactor(factor.id)))
+        throw new UnauthorizedException('Invalid MFA code', 'MFA_INVALID');
       return;
     }
     const recoveryMatches = await Promise.all(
@@ -99,10 +100,12 @@ export class MfaService {
     if (matchedIndex < 0) {
       throw new UnauthorizedException('Invalid MFA code', 'MFA_INVALID');
     }
-    await this.repository.consumeMfaRecoveryCode(
+    const consumed = await this.repository.consumeMfaRecoveryCode(
       factor.id,
-      factor.recoveryCodes.filter((_, index) => index !== matchedIndex),
+      factor.recoveryCodes[matchedIndex]!,
     );
+    if (!consumed)
+      throw new UnauthorizedException('Invalid MFA code', 'MFA_INVALID');
   }
 
   disable(userId: string): Promise<void> {

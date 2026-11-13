@@ -219,18 +219,22 @@ model IdentityInvitation {
 }
 
 model Session {
-  id               String    @id @default(uuid(7)) @db.Uuid
-  userId           String    @map("user_id") @db.Uuid
-  organizationId   String?   @map("organization_id") @db.Uuid
-  businessUnitId   String?   @map("business_unit_id") @db.Uuid
-  refreshTokenHash String    @unique @map("refresh_token_hash") @db.VarChar(255)
-  client           String    @db.VarChar(30)
-  deviceId         String?   @map("device_id") @db.VarChar(160)
-  userAgent        String?   @map("user_agent") @db.Text
-  ipAddress        String?   @map("ip_address") @db.Inet
-  expiresAt        DateTime  @map("expires_at") @db.Timestamptz(3)
-  revokedAt        DateTime? @map("revoked_at") @db.Timestamptz(3)
-  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  id                       String    @id @default(uuid(7)) @db.Uuid
+  userId                   String    @map("user_id") @db.Uuid
+  organizationId           String?   @map("organization_id") @db.Uuid
+  businessUnitId           String?   @map("business_unit_id") @db.Uuid
+  refreshTokenHash         String    @unique @map("refresh_token_hash") @db.VarChar(255)
+  previousRefreshTokenHash String?   @unique @map("previous_refresh_token_hash") @db.VarChar(255)
+  /// AES-GCM encrypted canonical response, readable only during the bounded grace.
+  rotationResponse         String?   @map("rotation_response") @db.Text
+  rotationGraceUntil       DateTime? @map("rotation_grace_until") @db.Timestamptz(3)
+  client                   String    @db.VarChar(30)
+  deviceId                 String?   @map("device_id") @db.VarChar(160)
+  userAgent                String?   @map("user_agent") @db.Text
+  ipAddress                String?   @map("ip_address") @db.Inet
+  expiresAt                DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt                DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
 
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)

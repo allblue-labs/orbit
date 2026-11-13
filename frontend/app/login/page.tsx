@@ -195,15 +195,18 @@ function LoginView() {
                     <Input
                       id="mfaCode"
                       name="mfaCode"
-                      inputMode="numeric"
+                      inputMode="text"
                       autoComplete="one-time-code"
                       minLength={6}
-                      maxLength={10}
+                      maxLength={16}
                       required
                       placeholder="000000"
                       className="pl-9 font-mono tracking-[0.25em]"
                     />
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    Use o autenticador ou um dos seus códigos de recuperação.
+                  </p>
                 </motion.div>
               )}
 

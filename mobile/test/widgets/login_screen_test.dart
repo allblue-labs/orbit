@@ -194,6 +194,28 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('login.mfa')), findsOneWidget);
+    final factor = tester.widget<TextField>(
+      find.descendant(
+        of: find.byKey(const Key('login.mfa')),
+        matching: find.byType(TextField),
+      ),
+    );
+    expect(factor.maxLength, 16);
+    expect(factor.keyboardType, TextInputType.visiblePassword);
+    await tester.enterText(
+      find.byKey(const Key('login.mfa')),
+      'a1b2c3d4e5f60789',
+    );
+    await tester.ensureVisible(find.byKey(const Key('login.submit')));
+    await tester.tap(find.byKey(const Key('login.submit')));
+    await tester.pumpAndSettle();
+    verify(
+      () => repository.login(
+        email: 'tecnico@acme.com',
+        password: 'senha-longa',
+        mfaCode: 'a1b2c3d4e5f60789',
+      ),
+    ).called(1);
   });
 
   testWidgets('autentica com credenciais válidas', (tester) async {

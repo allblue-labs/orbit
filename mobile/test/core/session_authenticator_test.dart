@@ -70,7 +70,7 @@ void main() {
     );
   }
 
-  test('reset remove a janela de rotação da conta anterior', () async {
+  test('reset impede reaproveitar a renovação da conta anterior', () async {
     var calls = 0;
     final authenticator = SessionAuthenticator(
       storage: storage,
@@ -143,35 +143,38 @@ void main() {
 
       expect(
         backendCalls,
-        1,
-        reason: 'a janela de rotação evita o segundo uso',
+        2,
+        reason: 'o servidor decide a janela e reconfere a sessão',
       );
       expect(late?.accessToken, 'access-novo');
     },
   );
 
-  test('token antigo fora da janela de rotação renova de novo', () async {
-    var backendCalls = 0;
-    final authenticator = SessionAuthenticator(
-      storage: storage,
-      logger: logger,
-      rotationGrace: Duration.zero, // janela já vencida
-      refreshCall: (_) async {
-        backendCalls++;
-        return TokenPair(
-          accessToken: 'access-$backendCalls',
-          refreshToken: 'refresh-$backendCalls',
-          expiresIn: 900,
-        );
-      },
-    );
+  test(
+    'revogação após refresh não é ocultada por um resultado em cache',
+    () async {
+      var backendCalls = 0;
+      final authenticator = SessionAuthenticator(
+        storage: storage,
+        logger: logger,
+        refreshCall: (_) async {
+          backendCalls++;
+          if (backendCalls > 1) throw Exception('sessão revogada');
+          return TokenPair(
+            accessToken: 'access-$backendCalls',
+            refreshToken: 'refresh-$backendCalls',
+            expiresIn: 900,
+          );
+        },
+      );
 
-    await authenticator.refresh('refresh-1');
-    await Future<void>.delayed(const Duration(milliseconds: 1));
-    await authenticator.refresh('refresh-1');
+      await authenticator.refresh('refresh-1');
+      expect(await authenticator.refresh('refresh-1'), isNull);
 
-    expect(backendCalls, 2);
-  });
+      expect(backendCalls, 2);
+      expect(await storage.read(), isNull);
+    },
+  );
 
   test('falha na renovação encerra a sessão e avisa a aplicação', () async {
     final authenticator = SessionAuthenticator(

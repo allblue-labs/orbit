@@ -297,5 +297,6 @@ o parecer bloqueado para o recurso correspondente.
 | 00 | Revisão concluída | `9404804` | Relatório e evidência sanitizada; sem push |
 | 01 | Implementada | `5b922b8` | [Resultados](pr-01-backend-dependencies.md): audit de produção zerado; Node 22/Linux validado; falhas preexistentes mantidas para PR-03; sem push |
 | 02 | Implementada | `f582e88` | [Resultados](pr-02-frontend-dependencies.md): audit de produção zerado; Zod 4; 668 testes e cinco smokes standalone; pendências de linguagem/tooling na PR-03; sem push |
-| 03 | Implementada; gates locais aprovados | Commit desta entrega, identificado por `PR-03` na mensagem | [Resultados](pr-03-baseline-ci.md): backend 1.995 + 459; web 671 + 307 + 5; mobile 1.265 + 60; builds e auditoria aprovados; CI remota aguarda push do owner; exceções de tooling até 26/11/2026; sem push |
-| 04–19 | Planejadas | — | Executar sequencialmente; critérios acima |
+| 03 | Implementada; gates locais aprovados | `2c922e0` | [Resultados](pr-03-baseline-ci.md): backend 1.995 + 459; web 671 + 307 + 5; mobile 1.265 + 60; builds e auditoria aprovados; CI remota aguarda push do owner; exceções de tooling até 26/11/2026; sem push |
+| 04 | Implementada; gates locais aprovados | Identificado por `fix(identity): PR-04` na mensagem | [Resultados](pr-04-identity-concurrency.md): MFA atômico, refresh canônico entre réplicas, login concorrente e recovery de 16 caracteres; backend 2.009 + 39, web 673 + 2 + 5, mobile 125; migration obrigatória, sem deploy/push |
+| 05–19 | Planejadas | — | Executar sequencialmente; critérios acima |
