@@ -601,7 +601,8 @@ model Role {
 
 /// Global roles are assigned independently from tenant memberships. A
 /// PLATFORM_ADMIN can therefore authenticate without belonging to a customer
-/// organization and receives RLS bypass only through its signed identity.
+/// organization. Runtime platform authority is reloaded from active persisted
+/// global assignments on each request, never inferred from JWT role names.
 model PlatformRoleAssignment {
   id        String    @id @default(uuid(7)) @db.Uuid
   userId    String    @map("user_id") @db.Uuid

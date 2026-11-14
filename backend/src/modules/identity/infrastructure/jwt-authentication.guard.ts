@@ -20,12 +20,14 @@ import { IdentityRepository } from './identity.repository';
 import { IdentityTokenService } from '../application/token.service';
 import { toAuthenticatedIdentity } from '../application/authentication.service';
 import { allowsSurface } from '../domain/surface-access';
+import type { VerifiedPlatformAuthority } from '../../../common/verified-platform-authority';
 
 export interface IdentityRequest extends Request {
   actorType?: 'INTERNAL_USER';
   identity?: AuthenticatedIdentity;
   user?: {
     id: UUID;
+    platformAuthority?: VerifiedPlatformAuthority;
     roles: readonly string[];
     permissions: readonly string[];
     businessUnitIds: readonly UUID[];
@@ -75,16 +77,6 @@ export class JwtAuthenticationGuard implements CanActivate {
       ) {
         throw new UnauthorizedException();
       }
-      if (
-        claims.roles.includes('PLATFORM_ADMIN') &&
-        !(await this.repository.hasActivePlatformRole(
-          claims.sub,
-          'PLATFORM_ADMIN',
-        ))
-      ) {
-        await this.repository.revokeSession(session.id);
-        throw new UnauthorizedException('Platform access was revoked');
-      }
       const user = await this.repository.findById(claims.sub);
       if (!user || user.deletedAt || user.status !== 'ACTIVE') {
         await this.repository.revokeSession(session.id);
@@ -101,6 +93,7 @@ export class JwtAuthenticationGuard implements CanActivate {
       request.actorType = 'INTERNAL_USER';
       request.user = {
         id: identity.id,
+        platformAuthority: identity.platformAuthority,
         roles: identity.roles,
         permissions: identity.permissions,
         businessUnitIds: identity.businessUnitIds,

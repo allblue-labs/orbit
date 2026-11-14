@@ -2,6 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AuthorizationService } from '../../common';
 import { BrandImageService } from '../storage/brand-image.service';
+import {
+  normalizeRoleKey,
+  isReservedRoleKey,
+} from '../../common/role-namespace';
 import type { AuthenticatedIdentity } from '../identity/domain/identity.types';
 import {
   ConflictException,
@@ -453,13 +457,13 @@ export class OrganizationService {
    * identificador técnico que ele não deveria inventar.
    */
   private roleKey(name: string): string {
-    return name
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toUpperCase()
-      .replace(/[^A-Z0-9]+/g, '_')
-      .replace(/^_+|_+$/g, '')
-      .slice(0, 80);
+    const key = normalizeRoleKey(name);
+    if (!key || isReservedRoleKey(key)) {
+      throw new ValidationException(
+        'Este nome de perfil é reservado à administração da plataforma.',
+      );
+    }
+    return key;
   }
 
   private rethrowRoleConflict(error: unknown): never {

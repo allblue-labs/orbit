@@ -1,4 +1,5 @@
 import { IdentityEmailOutbox } from './identity-email.outbox';
+import { VerifiedPlatformAuthority } from '../../../common/verified-platform-authority';
 import { Injectable } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../database';
@@ -21,7 +22,10 @@ const identityInclude = {
   credential: true,
   mfaFactors: { where: { verifiedAt: { not: null }, deletedAt: null } },
   platformRoleAssignments: {
-    where: { revokedAt: null },
+    where: {
+      revokedAt: null,
+      role: { organizationId: null, deletedAt: null },
+    },
     include: { role: true },
   },
   organizationMemberships: {
@@ -39,6 +43,7 @@ export type IdentityUser = Prisma.UserGetPayload<{
 }> & {
   readonly isOrganizationOwner: boolean;
   readonly effectiveBusinessUnitIds: readonly string[];
+  readonly platformAuthority?: VerifiedPlatformAuthority;
 };
 
 @Injectable()
@@ -59,25 +64,6 @@ export class IdentityRepository {
 
   findById(id: string): Promise<IdentityUser | null> {
     return this.findIdentity(id);
-  }
-
-  hasActivePlatformRole(userId: string, roleKey: string): Promise<boolean> {
-    return this.prisma.$transaction(async (transaction) => {
-      await this.setLocal(transaction, 'app.user_id', userId);
-      const assignment = await transaction.platformRoleAssignment.findFirst({
-        where: {
-          userId,
-          revokedAt: null,
-          role: {
-            key: roleKey,
-            organizationId: null,
-            deletedAt: null,
-          },
-        },
-        select: { id: true },
-      });
-      return Boolean(assignment);
-    });
   }
 
   private findIdentity(id: string): Promise<IdentityUser | null> {
@@ -133,7 +119,16 @@ export class IdentityRepository {
         include: identityInclude,
       });
       return user
-        ? { ...user, isOrganizationOwner, effectiveBusinessUnitIds: unitIds }
+        ? {
+            ...user,
+            isOrganizationOwner,
+            effectiveBusinessUnitIds: unitIds,
+            platformAuthority:
+              VerifiedPlatformAuthority.fromPersistedAssignments(
+                user.id,
+                user.platformRoleAssignments,
+              ),
+          }
         : null;
     });
   }

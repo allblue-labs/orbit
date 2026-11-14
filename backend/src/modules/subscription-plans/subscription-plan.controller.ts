@@ -50,12 +50,14 @@ export class SubscriptionPlanController {
 
   @Post('plans')
   @Roles('PLATFORM_ADMIN')
+  @Permissions('platform.admin')
   createPlan(@Body() input: CreatePlanDto) {
     return this.plans.createPlan(input);
   }
 
   @Patch('plans/:id')
   @Roles('PLATFORM_ADMIN')
+  @Permissions('platform.admin')
   updatePlan(
     @Param('id', ParseUUIDv7Pipe) id: string,
     @Body() input: UpdatePlanDto,

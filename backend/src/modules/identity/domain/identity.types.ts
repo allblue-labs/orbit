@@ -1,5 +1,6 @@
 import type { EmailSendResult } from '../../email/email.types';
 import type { UUID } from '../../../contracts';
+import type { VerifiedPlatformAuthority } from '../../../common/verified-platform-authority';
 
 export interface AccessTokenClaims {
   sub: UUID;
@@ -15,6 +16,9 @@ export interface AccessTokenClaims {
 }
 
 export interface AuthenticatedIdentity {
+  /** Request-local verified global grants; not serialized into access tokens. */
+  platformAuthority?: VerifiedPlatformAuthority;
+  organizationRoles?: readonly string[];
   id: UUID;
   sessionId: UUID;
   organizationId: UUID | null;

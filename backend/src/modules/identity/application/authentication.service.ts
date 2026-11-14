@@ -27,6 +27,11 @@ import {
 } from '../domain/surface-access';
 import { IdentityTokenService } from './token.service';
 import { MfaService } from './mfa.service';
+import { VerifiedPlatformAuthority } from '../../../common/verified-platform-authority';
+import {
+  isPlatformPermission,
+  isReservedRoleKey,
+} from '../../../common/role-namespace';
 
 /** Pure, shared resolution used at issuance and at every authenticated call. */
 export function toAuthenticatedIdentity(
@@ -34,25 +39,31 @@ export function toAuthenticatedIdentity(
   sessionId: UUID,
 ): AuthenticatedIdentity {
   const organization = user.organizationMemberships[0] ?? null;
-  const roles = new Set<string>();
-  const permissions = new Set<string>();
-  const allowedSurfaces = new Set<string>();
-  user.platformRoleAssignments.forEach((assignment) => {
-    roles.add(assignment.role.key);
-    assignment.role.permissions.forEach((item) => permissions.add(item));
-    assignment.role.allowedSurfaces.forEach((item) =>
-      allowedSurfaces.add(item),
-    );
-  });
+  const platformAuthority = VerifiedPlatformAuthority.forUser(
+    user.platformAuthority,
+    user.id,
+  );
+  const roles = new Set<string>(platformAuthority?.roles ?? []);
+  const permissions = new Set<string>(platformAuthority?.permissions ?? []);
+  const allowedSurfaces = new Set<string>(
+    platformAuthority?.allowedSurfaces ?? [],
+  );
+  const organizationRoles: string[] = [];
   if (organization) {
-    roles.add(organization.role.key);
+    // Conflicting legacy tenant roles retain tenant access, never global power.
+    if (!isReservedRoleKey(organization.role.key)) {
+      roles.add(organization.role.key);
+      organizationRoles.push(organization.role.key);
+    }
     const accessPermissions = organization.usesCustomAccess
       ? organization.customPermissions
       : organization.role.permissions;
     const accessSurfaces = organization.usesCustomAccess
       ? organization.customAllowedSurfaces
       : organization.role.allowedSurfaces;
-    accessPermissions.forEach((item) => permissions.add(item));
+    accessPermissions
+      .filter((item) => !isPlatformPermission(item))
+      .forEach((item) => permissions.add(item));
     accessSurfaces.forEach((item) => allowedSurfaces.add(item));
   }
   if (user.isOrganizationOwner) {
@@ -62,6 +73,8 @@ export function toAuthenticatedIdentity(
   }
   const unitIds = user.effectiveBusinessUnitIds;
   return {
+    platformAuthority,
+    organizationRoles,
     id: user.id as UUID,
     sessionId,
     organizationId: (organization?.organizationId as UUID) ?? null,

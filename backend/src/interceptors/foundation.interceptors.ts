@@ -20,10 +20,11 @@ import type {
 } from '../contracts';
 import { RequestContext, RequestContextStorage } from '../context';
 import { generateUuidV7 } from '../utils';
+import type { VerifiedPlatformAuthority } from '../common/verified-platform-authority';
 
 interface FoundationRequest extends Request {
   id?: string;
-  user?: IAuthenticatedUser;
+  user?: IAuthenticatedUser & { platformAuthority?: VerifiedPlatformAuthority };
   requestContext?: IRequestContext;
   actorType?: IRequestContext['actorType'];
   portalIdentityId?: UUID;
@@ -71,6 +72,7 @@ export class RequestContextInterceptor implements NestInterceptor {
         request.businessUnitIds ??
         (request.businessUnitId ? [request.businessUnitId] : []),
       roles: request.user?.roles ?? [],
+      platformAuthority: request.user?.platformAuthority,
       permissions: request.user?.permissions ?? [],
       allowedSurfaces: request.user?.allowedSurfaces ?? [],
       isOrganizationOwner: request.user?.isOrganizationOwner ?? false,
