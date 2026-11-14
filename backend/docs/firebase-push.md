@@ -156,7 +156,7 @@ autorize notificações. A chave privada do backend nunca vai nesse arquivo.
 
 **iPhone:** o SDK Firebase Messaging foi integrado via Swift Package Manager.
 A ponte associa APNs ao FCM e registra somente FCM no backend. Configurar o app
-`com.allbluelabs.orbitOperator`, chave APNs no Firebase e provisioning com push.
+`com.allbluelabs.orbit`, chave APNs no Firebase e provisioning com push.
 Builds de distribuição validam o arquivo cliente, projeto e entitlement; Personal
 Team permanece disponível por opt-out local explícito, sem qualificação de push.
 O [guia de release mobile](../../mobile/docs/firebase-push-release.md) detalha os

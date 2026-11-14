@@ -14,13 +14,16 @@ cadastrar os dois apps em **Firebase Console → Configurações do projeto → 
 | Plataforma | Identificador |
 | --- | --- |
 | Android / Google Play | `com.allbluelabs.orbit` |
-| iOS / Apple | `com.allbluelabs.orbitOperator` |
+| iOS / Apple | `com.allbluelabs.orbit` |
 
-Os identificadores diferentes entre plataformas são intencionais. Baixar os
-arquivos **dos aplicativos**, preservando o nome:
+Os dois aplicativos usam o mesmo identificador, cada um em sua plataforma.
+Baixar os arquivos **dos aplicativos**, preservando o nome:
 
 - Android: `mobile/android/app/google-services.json`.
-- iOS: `mobile/ios/Runner/Google-Service-Info.plist`.
+- iOS: `mobile/ios/Runner/GoogleService-Info.plist`.
+
+No Android, o nome tem **services** no plural; no iOS, não existe hífen entre
+Google e Service. O validador, a cópia para o bundle e o SDK usam esses nomes.
 
 Esses caminhos estão ignorados pelo Git. Para alternar ambientes, guardar cópias
 em `mobile/config/firebase/staging/` e `mobile/config/firebase/production/`, também
@@ -38,8 +41,20 @@ de conta de serviço. O projeto esperado é explícito para detectar arquivos tr
 É necessário um Apple Developer Program compatível com Push Notifications.
 Personal Team continua servindo para desenvolvimento local sem push.
 
+**Enquanto a conta Apple estiver em análise:** publique/teste o Android normalmente.
+O envio FCM Android usa as credenciais do backend e não depende de uma chave APNs.
+No iOS, mantenha `ORBIT_PUSH_ENABLED = NO` e os entitlements de push vazios.
+O plist pode permanecer no caminho acima, mas não será incorporado/ativado nesse
+modo. A recusa ou ausência de push não impede o uso do app. Para instalação local
+Release, use o opt-out explícito da seção Builds. Archives para TestFlight/App Store
+continuam bloqueados até habilitar push com um perfil compatível.
+
+Após a aprovação da conta, seguir os passos abaixo. Além dos painéis, habilitar
+o arquivo local do passo 4 e recompilar o iOS; não é necessário alterar o Android
+ou acrescentar uma chave `.p8` às envs do backend.
+
 1. No Apple Developer, habilitar Push Notifications no App ID
-   `com.allbluelabs.orbitOperator` e atualizar o provisioning profile correspondente.
+   `com.allbluelabs.orbit` e atualizar o provisioning profile correspondente.
 2. Criar/selecionar uma chave de autenticação APNs para esse app e ambiente, conforme
    a política da conta. Guardar o `.p8`, Key ID e Team ID fora do repositório.
 3. Em **Firebase Console → Configurações do projeto → Cloud Messaging → configuração

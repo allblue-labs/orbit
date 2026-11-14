@@ -49,6 +49,8 @@ app.*.map.json
 /config/staging.json
 /config/production.json
 /config/firebase/
+/ios/Runner/GoogleService-Info.plist
+# Ignore the old misspelling too; only GoogleService-Info.plist is used by iOS.
 /ios/Runner/Google-Service-Info.plist
 
 # APNs is enabled per signing environment, never by the API URL or build mode.

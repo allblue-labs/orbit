@@ -87,6 +87,22 @@ describe('FirebaseMobilePushProvider', () => {
       sound: 'default',
     });
   });
+  it('falha de credencial APNs não impede o envio subsequente ao Android', async () => {
+    const { provider, send } = fixture();
+    send.mockRejectedValueOnce({ code: 'messaging/third-party-auth-error' });
+    await expect(
+      provider.send({ ...target, platform: 'IOS' }, payload),
+    ).resolves.toEqual({
+      kind: 'PERMANENT_FAILURE',
+      code: 'messaging/third-party-auth-error',
+    });
+    await expect(provider.send(target, payload)).resolves.toMatchObject({
+      kind: 'ACCEPTED_BY_PROVIDER',
+    });
+    expect(send.mock.calls[1][0]).toMatchObject({
+      android: { priority: 'high', notification: { channelId: 'orbit_work' } },
+    });
+  });
   it('não confunde um token APNs puro com um token FCM inválido', async () => {
     const { provider, send } = fixture();
     await expect(

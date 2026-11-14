@@ -7,6 +7,7 @@ import plistlib
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 sys.dont_write_bytecode = True
 spec = importlib.util.spec_from_file_location('push_config', Path(__file__).with_name('check_push_config.py'))
 module = importlib.util.module_from_spec(spec)
@@ -19,7 +20,7 @@ class PushConfigTest(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.android = self.root / 'android/app/google-services.json'
-        self.ios = self.root / 'ios/Runner/Google-Service-Info.plist'
+        self.ios = self.root / 'ios/Runner/GoogleService-Info.plist'
         self.android.parent.mkdir(parents=True)
         self.ios.parent.mkdir(parents=True)
         self.android.write_text(json.dumps({
@@ -27,7 +28,7 @@ class PushConfigTest(unittest.TestCase):
             'client': [{'client_info': {'mobilesdk_app_id': '1:123456:android:abc', 'android_client_info': {'package_name': 'com.allbluelabs.orbit'}}, 'api_key': [{'current_key': 'synthetic-public-api-key'}]}],
         }))
         self.ios.write_bytes(plistlib.dumps({
-            'PROJECT_ID': 'orbit-staging-test', 'BUNDLE_ID': 'com.allbluelabs.orbitOperator',
+            'PROJECT_ID': 'orbit-staging-test', 'BUNDLE_ID': 'com.allbluelabs.orbit',
             'GCM_SENDER_ID': '123456', 'GOOGLE_APP_ID': '1:123456:ios:abc', 'API_KEY': 'synthetic-public-api-key',
         }))
         (self.ios.parent / 'Runner.entitlements').write_bytes(plistlib.dumps({'aps-environment': 'development'}))
@@ -37,6 +38,36 @@ class PushConfigTest(unittest.TestCase):
     def test_both_valid_clients(self):
         for platform in ('android', 'ios'):
             self.assertTrue(module.check(platform, self.root, self.env))
+
+    def test_android_does_not_require_apple_configuration(self):
+        self.ios.unlink()
+        (self.ios.parent / 'Runner.entitlements').unlink()
+        self.assertTrue(module.check('android', self.root, {
+            **self.env, 'ORBIT_PUSH_ENABLED': 'NO', 'CODE_SIGN_ENTITLEMENTS': '',
+        }))
+
+    def test_ios_copies_official_filename_to_bundle(self):
+        target = self.root / 'build/Runner.app'
+        environment = {**self.env, 'TARGET_BUILD_DIR': str(target.parent),
+                       'UNLOCALIZED_RESOURCES_FOLDER_PATH': target.name}
+        with patch.dict(module.os.environ, environment, clear=True), patch.object(sys, 'argv', [
+            'check_push_config.py', '--platform', 'ios', '--mobile-root', str(self.root), '--copy-ios-resource',
+        ]):
+            module.main()
+        self.assertEqual((target / 'GoogleService-Info.plist').read_bytes(), self.ios.read_bytes())
+
+    def test_local_opt_out_removes_previously_embedded_config(self):
+        target = self.root / 'build/Runner.app'
+        target.mkdir(parents=True)
+        resource = target / 'GoogleService-Info.plist'
+        resource.write_bytes(self.ios.read_bytes())
+        environment = {**self.env, 'ORBIT_PUSH_ENABLED': 'NO', 'ORBIT_ALLOW_NO_PUSH': 'YES',
+                       'TARGET_BUILD_DIR': str(target.parent), 'UNLOCALIZED_RESOURCES_FOLDER_PATH': target.name}
+        with patch.dict(module.os.environ, environment, clear=True), patch.object(sys, 'argv', [
+            'check_push_config.py', '--platform', 'ios', '--mobile-root', str(self.root), '--copy-ios-resource',
+        ]):
+            module.main()
+        self.assertFalse(resource.exists())
 
     def test_missing_release_configuration(self):
         for platform, config in (('android', self.android), ('ios', self.ios)):
@@ -48,7 +79,7 @@ class PushConfigTest(unittest.TestCase):
         for platform in ('android', 'ios'):
             config = self.android if platform == 'android' else self.ios
             with self.assertRaisesRegex(ValueError, 'incompatível'):
-                module.validate(platform, config, 'orbit-production-test', 'com.allbluelabs.orbit' if platform == 'android' else 'com.allbluelabs.orbitOperator')
+                module.validate(platform, config, 'orbit-production-test', 'com.allbluelabs.orbit')
 
     def test_wrong_app_id(self):
         for platform, config in (('android', self.android), ('ios', self.ios)):

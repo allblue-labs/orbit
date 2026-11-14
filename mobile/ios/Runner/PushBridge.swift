@@ -21,7 +21,7 @@ final class PushBridge: NSObject {
 
   func configureFirebase() {
     guard Bundle.main.object(forInfoDictionaryKey: "OrbitPushEnabled") as? String == "YES",
-          let path = Bundle.main.path(forResource: "Google-Service-Info", ofType: "plist"),
+          let path = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
           let options = FirebaseOptions(contentsOfFile: path) else { return }
     if FirebaseApp.app() == nil { FirebaseApp.configure(options: options) }
     Messaging.messaging().delegate = self

@@ -29,7 +29,7 @@ def validate(platform, config, project, app_id):
     if not re.fullmatch(r'[a-z][a-z0-9-]{4,28}[a-z0-9]', project):
         raise ValueError('Defina ORBIT_FIREBASE_PROJECT_ID com o projeto do ambiente selecionado.')
     if not config.is_file():
-        raise ValueError('Configuração pública Firebase ausente. Consulte docs/firebase-push-release.md.')
+        raise ValueError(f'Configuração pública Firebase ausente: {config.name}. Consulte docs/firebase-push-release.md.')
     try:
         if platform == 'android':
             data = json.loads(config.read_text())
@@ -68,7 +68,7 @@ def check(platform, mobile_root, environment):
         raise ValueError('Archive de distribuição não permite ORBIT_ALLOW_NO_PUSH.')
     required = archive or (release and not opt_out)
     enabled = platform == 'android' or environment.get('ORBIT_PUSH_ENABLED') == 'YES'
-    config = mobile_root / ('android/app/google-services.json' if platform == 'android' else 'ios/Runner/Google-Service-Info.plist')
+    config = mobile_root / ('android/app/google-services.json' if platform == 'android' else 'ios/Runner/GoogleService-Info.plist')
     if not required and (not enabled or (platform == 'android' and not config.is_file())):
         return False
     if not enabled:
@@ -76,7 +76,7 @@ def check(platform, mobile_root, environment):
     if options.get('ORBIT_FLAVOR') not in ('staging', 'production'):
         raise ValueError('Defina ORBIT_FLAVOR=staging ou production; não misture projetos Firebase entre ambientes.')
     project = options.get('ORBIT_FIREBASE_PROJECT_ID', '')
-    app_id = environment.get('PRODUCT_BUNDLE_IDENTIFIER', 'com.allbluelabs.orbitOperator') if platform == 'ios' else 'com.allbluelabs.orbit'
+    app_id = environment.get('PRODUCT_BUNDLE_IDENTIFIER', 'com.allbluelabs.orbit') if platform == 'ios' else 'com.allbluelabs.orbit'
     validate(platform, config, project, app_id)
     if platform == 'ios':
         entitlement = environment.get('CODE_SIGN_ENTITLEMENTS', '')
@@ -101,8 +101,8 @@ def main():
     try:
         validated = check(args.platform, args.mobile_root, os.environ)
         if args.copy_ios_resource:
-            target = Path(os.environ['TARGET_BUILD_DIR']) / os.environ['UNLOCALIZED_RESOURCES_FOLDER_PATH'] / 'Google-Service-Info.plist'
-            source = args.mobile_root / 'ios/Runner/Google-Service-Info.plist'
+            target = Path(os.environ['TARGET_BUILD_DIR']) / os.environ['UNLOCALIZED_RESOURCES_FOLDER_PATH'] / 'GoogleService-Info.plist'
+            source = args.mobile_root / 'ios/Runner/GoogleService-Info.plist'
             if validated:
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(source, target)

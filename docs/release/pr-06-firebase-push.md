@@ -4,6 +4,26 @@ Achado tratado: **F09**, base `bc2026c`. Código implementado e validado localme
 **Aceite externo pendente; push ainda não qualificado para produção.** Nenhum
 push, deploy, envio Firebase real ou publicação nas lojas foi executado nesta PR.
 
+**Complemento de configuração em 14/11/2026:** os apps Android e iOS agora usam
+`com.allbluelabs.orbit`. O caminho Apple correto é
+`mobile/ios/Runner/GoogleService-Info.plist`, ignorado pelo Git e usado tanto pelo
+validador/cópia do Xcode quanto pelo SDK. Os arquivos cliente foram fornecidos
+localmente e validados, e o AAB Release foi compilado com os recursos Firebase
+correspondentes. O cenário atual libera o Android enquanto aguarda aprovação da
+conta Apple/configuração APNs; o teste físico Android será feito posteriormente
+pelo responsável. Isso não constitui evidência de entrega real. As instruções
+atuais estão no [guia operacional](mobile-push.md).
+
+Neste complemento passaram 15 testes de configuração nativa, 45 testes unitários
+do backend, 10 testes HTTP com PostgreSQL/RLS e 25 testes Flutter de registro,
+rotação/revogação, recebimento e navegação. A assinatura do AAB foi verificada e
+os recursos Firebase gerados pelo Gradle correspondem ao arquivo cliente. O
+`Package.resolved` do projeto Xcode foi sincronizado com o do workspace, mantendo
+Firebase 13.1.1 e as mesmas revisões das dependências já resolvidas no workspace.
+O Runner também compilou para simulador iOS, sem assinatura: o bundle final usa
+`com.allbluelabs.orbit`, mantém push desligado e não incorpora o plist nesse modo.
+Isso valida a preparação do cliente, sem comprovar provisioning ou entrega APNs.
+
 ## Alterações
 
 - O iOS deixou de registrar APNs puro como destino do Firebase Admin. O SDK oficial
@@ -42,8 +62,10 @@ push, deploy, envio Firebase real ou publicação nas lojas foi executado nesta 
 
 O [guia de release](../../mobile/docs/firebase-push-release.md) contém os passos dos
 consoles Firebase/Apple, os dois caminhos locais dos arquivos públicos, comandos de
-build, configuração de worker e a matriz de teste físico. Os arquivos Firebase e
-`Push.local.xcconfig` estão ausentes neste checkout; os exemplos não contêm credenciais.
+build, configuração de worker e a matriz de teste físico. No registro original da
+PR, os arquivos Firebase e `Push.local.xcconfig` estavam ausentes neste checkout;
+no complemento acima os arquivos cliente já estão disponíveis localmente, sem
+versionamento. Os exemplos não contêm credenciais.
 A nova entrada pública foi sincronizada para os contratos web.
 
 Não há migration nem nova chave privada exigida. Manter `FIREBASE_*` somente na API,

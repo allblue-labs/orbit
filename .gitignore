@@ -108,3 +108,7 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 # Deployment-owned Firebase configuration
 /mobile/android/app/google-services.json
+# Common download/name variants must never be committed accidentally.
+/mobile/android/app/google-service.json
+/mobile/ios/Runner/GoogleService-Info.plist
+/mobile/ios/Runner/Google-Service-Info.plist
