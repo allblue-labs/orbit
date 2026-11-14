@@ -99,7 +99,7 @@ describe('FirebaseMobilePushProvider', () => {
     await expect(provider.send(target, payload)).resolves.toMatchObject({
       kind: 'ACCEPTED_BY_PROVIDER',
     });
-    expect(send.mock.calls[1][0]).toMatchObject({
+    expect(send.mock.calls[1]?.[0]).toMatchObject({
       android: { priority: 'high', notification: { channelId: 'orbit_work' } },
     });
   });

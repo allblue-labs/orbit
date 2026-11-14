@@ -1,3 +1,4 @@
+import { generateUuidV7 } from '../../../utils';
 import { LEGAL_DOCUMENT_VERSION } from '../../../contracts/modules/legal/legal.read-models';
 import { RegistrationService } from './registration.service';
 import { BillingInterval } from '../../subscription-plans/catalog/plan-catalog.types';
@@ -52,12 +53,18 @@ describe('registration preserves the commercial selection', () => {
   ])(
     'provisions the selected paid plan with interval %s',
     async (billingInterval) => {
+      const created = {
+        organizationId: generateUuidV7(),
+        userId: generateUuidV7(),
+        businessUnitId: generateUuidV7(),
+      };
       const repository = {
-        register: jest.fn().mockResolvedValue({
-          organizationId: 'org',
-          userId: 'user',
-          businessUnitId: 'unit',
-        }),
+        register: jest
+          .fn<
+            ReturnType<RegistrationRepository['register']>,
+            Parameters<RegistrationRepository['register']>
+          >()
+          .mockResolvedValue(created),
       };
       const subscriptions = {
         provision: jest.fn().mockResolvedValue(undefined),
@@ -67,7 +74,7 @@ describe('registration preserves the commercial selection', () => {
       };
       const hashes = { hash: jest.fn().mockResolvedValue('unit-hash') };
       const verification = {
-        sendWelcome: jest.fn().mockResolvedValue(undefined),
+        queueWelcomeIn: jest.fn().mockResolvedValue(undefined),
       };
       const service = new RegistrationService(
         repository as unknown as RegistrationRepository,
@@ -88,12 +95,19 @@ describe('registration preserves the commercial selection', () => {
         billingInterval,
       } as RegisterOrganizationDto;
       await service.register(input, { client: 'WEB' });
-      expect(verification.sendWelcome).toHaveBeenCalledWith('user');
-      expect(verification.sendWelcome.mock.invocationCallOrder[0]).toBeLessThan(
-        subscriptions.provision.mock.invocationCallOrder[0]!,
+      const callback = repository.register.mock.calls[0]?.[5] as (
+        tx: unknown,
+        userId: string,
+      ) => Promise<void>;
+      expect(callback).toEqual(expect.any(Function));
+      await callback('transaction', created.userId);
+      expect(verification.queueWelcomeIn).toHaveBeenCalledWith(
+        'transaction',
+        created.userId,
+        input.email,
       );
       expect(subscriptions.provision).toHaveBeenCalledWith({
-        organizationId: 'org',
+        organizationId: created.organizationId,
         planKey: 'PROFESSIONAL',
         legalDocument: '52998224725',
         billingInterval,

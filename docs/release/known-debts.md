@@ -21,6 +21,8 @@
 - **Identity delivery:** boas-vindas, convites e recuperação usam Amazon SES
   exclusivamente; a configuração AWS é obrigatória e fail-closed em produção.
   O modo sem envio fica restrito a `NODE_ENV=test`; tokens nunca são registrados.
+  A PR-07 acrescenta outbox cifrada/transacional, retries e preflight regional.
+  Aprovação AWS, teste real de entrega e feedback SNS/supressão seguem pendentes.
 - **Security sessions:** o overview passou a buscar as 100 sessões mais
   recentes com índice dedicado, em vez de materializar histórico ilimitado.
 - **Operation workspace history:** a leitura de workspace foi limitada no

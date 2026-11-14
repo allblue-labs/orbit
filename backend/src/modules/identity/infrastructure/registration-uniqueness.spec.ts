@@ -67,6 +67,7 @@ describe('public signup document reservation', () => {
       'empresa',
       { publicSignup: true },
       { client: 'WEB' },
+      undefined,
     );
     expect(subscriptions.provision).not.toHaveBeenCalled();
     expect(authentication.login).not.toHaveBeenCalled();

@@ -39,7 +39,9 @@
     "lint:fix": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test:e2e:jest": "jest --config ./test/jest-e2e.json",
     "security:audit": "node ../scripts/audit-policy.mjs backend",
-    "typecheck": "tsc --noEmit --incremental false"
+    "typecheck": "tsc --noEmit --incremental false",
+    "email:check": "node dist/src/scripts/check-ses-config.js",
+    "email:check:dev": "ts-node src/scripts/check-ses-config.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1167.0",

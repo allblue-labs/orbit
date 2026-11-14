@@ -128,6 +128,8 @@ model User {
 
   createdQuoteAcceptanceLinks QuoteAcceptanceLink[] @relation("QuoteAcceptanceCreatedBy")
 
+  identityEmails IdentityEmailDelivery[]
+
   @@index([status, deletedAt])
   @@map("users")
 }
@@ -216,6 +218,36 @@ model IdentityInvitation {
   @@unique([organizationId, normalizedEmail, status])
   @@index([organizationId, expiresAt])
   @@map("identity_invitations")
+}
+
+/// Encrypted identity email outbox. No tokens or recipients in job payloads/logs.
+model IdentityEmailDelivery {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  purpose           String    @db.VarChar(30)
+  userId            String?   @map("user_id") @db.Uuid
+  organizationId    String?   @map("organization_id") @db.Uuid
+  tokenHash         String    @map("token_hash") @db.Char(64)
+  encryptedPayload  String?   @map("encrypted_payload") @db.Text
+  expiresAt         DateTime  @map("expires_at") @db.Timestamptz(3)
+  status            String    @default("PENDING") @db.VarChar(30)
+  attempts          Int       @default(0)
+  availableAt       DateTime  @default(now()) @map("available_at") @db.Timestamptz(3)
+  lockedAt          DateTime? @map("locked_at") @db.Timestamptz(3)
+  leaseId           String?   @map("lease_id") @db.Uuid
+  providerMessageId String?   @map("provider_message_id") @db.VarChar(255)
+  lastErrorCode     String?   @map("last_error_code") @db.VarChar(80)
+  finishedAt        DateTime? @map("finished_at") @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user         User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([purpose, tokenHash])
+  @@index([status, availableAt])
+  @@index([status, lockedAt])
+  @@index([providerMessageId])
+  @@map("identity_email_deliveries")
 }
 
 model AuthRateLimitBucket {
@@ -389,6 +421,8 @@ model Organization {
   operationMaterials            OperationMaterial[]
 
   quoteAcceptanceLinks QuoteAcceptanceLink[]
+
+  identityEmails IdentityEmailDelivery[]
 
   @@index([ownerUserId, status])
   @@index([planId, subscriptionStatus])

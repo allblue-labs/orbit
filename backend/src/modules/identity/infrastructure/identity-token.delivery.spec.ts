@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-import { InfrastructureException } from '../../../exceptions';
 import { IdentityTokenPurpose } from '../domain/identity.types';
 import { TransactionalIdentityTokenDelivery } from './identity-token.delivery';
 import type { EmailService } from '../../email/email.service';
@@ -64,8 +63,9 @@ describe('TransactionalIdentityTokenDelivery', () => {
         'user@example.test',
         token,
       ),
-    ).rejects.toThrow(
-      new InfrastructureException('Identity token delivery failed'),
-    );
+    ).resolves.toMatchObject({
+      status: 'FAILED',
+      code: 'SES_MESSAGE_REJECTED',
+    });
   });
 });

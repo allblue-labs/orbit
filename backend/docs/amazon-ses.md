@@ -122,9 +122,11 @@ Referências oficiais:
 
 ## Fluxos e garantias
 
-- Cadastro público, provisionamento pela administração e cadastro direto de equipe: depois do commit do usuário,
-  gera token aleatório de 48 bytes, persiste somente SHA-256 com prazo de 24h e
-  envia boas-vindas. Falha de envio é registrada e não desfaz o cadastro.
+- Cadastro público, provisionamento pela administração e cadastro direto de equipe:
+  usuário, hash de verificação (token aleatório de 48 bytes, prazo de 24h) e intenção
+  de e-mail cifrada são gravados na mesma transação. O HTTP não chama SES.
+  Uma falha no SES não desfaz a conta; falha de persistência na fila desfaz toda a
+  transação, evitando uma conta criada sem a comunicação correspondente.
 - `emailVerifiedAt` fica vazio até a confirmação. A mudança não acrescenta um
   bloqueio de login, mobile, checkout ou teste de plano. Contas antigas não são
   desverificadas; convite aceito continua sendo prova de posse do e-mail.
@@ -137,18 +139,94 @@ Referências oficiais:
 - `POST /identity/email/resend` recebe `{ "email": "..." }` e responde 202 com
   mensagem genérica. Há intervalo mínimo de 60 segundos por usuário e limite
   por IP; reemitir invalida o link anterior. Nunca retorna tokens.
-- Recuperação existente: `POST /identity/password/forgot` grava hash e expiração
-  de 30 minutos antes do envio. Resposta genérica permanece igual mesmo em falha
-  do provedor, evitando enumeração de contas. O reset consome uma vez e revoga
+- Recuperação existente: `POST /identity/password/forgot` grava hash, expiração
+  de 30 minutos e intenção de envio na mesma transação. A resposta genérica em
+  português permanece igual para conta inexistente e falha ao enfileirar,
+  evitando enumeração de contas. O reset consome uma vez e revoga
   as sessões existentes. O link HTTPS aponta ao formulário já implementado.
 - SES: conexão limitada a 2s, timeout de requisição de 5s e até 3 tentativas do
   SDK para falhas elegíveis. Resultado `SENT` significa aceitação pelo provedor,
-  não entrega na caixa de entrada. Não há promessa de reenvio durável automático
-  além dessas tentativas: recuperação/reenvio emitem um novo token quando necessário.
+  não entrega na caixa de entrada. Para identidade, a outbox durável acrescenta
+  até seis tentativas com backoff, reaproveitando o mesmo token enquanto válido.
+  Antes de cada envio, reconfere conta/e-mail, uso, expiração e token atual;
+  reemissão, revogação e exclusão impedem tentativas tardias. Falhas permanentes
+  não são repetidas automaticamente. O registro de aceitação usa
+  `ACCEPTED_BY_PROVIDER`, não um comprovante de recebimento.
 - Erros específicos (rejeição, identidade não verificada, suspensão e limites)
   recebem códigos estáveis nos logs; mensagens brutas do SDK, destinatários,
   corpos, tokens e credenciais nunca são registrados. As notificações mantêm o
   registro `FAILED` em falhas de envio.
+
+## Outbox de identidade e preflight (PR-07)
+
+A migration `20261114180000_identity_email_outbox` cria a fila privada. O worker
+usa `JOBS_WORKER_ENABLED` e `JOBS_POLL_INTERVAL_MS` existentes. Manter ao menos uma
+réplica com worker ativo e a mesma `ENCRYPTION_KEY` nas réplicas: ela protege os
+segredos pendentes em AES-256-GCM. Não rotacioná-la isoladamente com trabalho
+pendente. O payload recuperável é removido quando a entrega termina (aceita,
+ignorada ou falha permanente); os metadados do resultado permanecem sem o link.
+A RLS da fila não permite leitura em requisições normais.
+
+Convites e reenvios também gravam token e mensagem juntos. A fila usa unicidade
+por propósito/hash, `SKIP LOCKED`, lease de cinco minutos e conclusão condicionada
+à lease para impedir que uma réplica antiga altere a entrega reivindicada por outra.
+O backoff é de 5s, 10s, 20s, 40s e 80s, limitado a seis tentativas do worker.
+Uma falha antes de confirmar o resultado pode repetir o mesmo e-mail: a API SES
+SendEmail não oferece chave de idempotência. O link continua de uso único;
+não se promete exactly-once nem se cria outra conta/token a cada retry.
+
+Para conferir a configuração local:
+
+```sh
+cd backend
+npm run email:check:dev
+```
+
+Para consultar a AWS sem enviar e-mails:
+
+```sh
+npm run email:check:dev -- --remote
+# No contêiner da API compilada:
+node dist/src/scripts/check-ses-config.js --remote
+```
+
+A consulta usa `GetAccount` e `GetEmailIdentity` na região configurada, verifica
+identidade (inclusive domínio pai), envio habilitado e quotas. Produz `READY`,
+`SANDBOX` ou `BLOCKED`. Código de saída 0: configuração local válida ou consulta
+remota pronta; 2: consulta remota em sandbox/bloqueada; 1: erro/configuração/IAM.
+**A validação local não comprova acesso de produção.** Não existe flag para
+simular aprovação da AWS. A consulta remota depende das permissões de leitura:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "ses:GetAccount",
+      "Resource": "*",
+      "Condition": { "StringEquals": { "aws:RequestedRegion": "us-east-2" } }
+    },
+    {
+      "Effect": "Allow",
+      "Action": "ses:GetEmailIdentity",
+      "Resource": "arn:aws:ses:us-east-2:SEU_ACCOUNT_ID:identity/*"
+    }
+  ]
+}
+```
+
+Ajustar região e ID da conta. Essas permissões não substituem `ses:SendEmail`;
+a identidade e a condição `ses:FromAddress` do remetente continuam restritas
+conforme a política de envio acima. Podem ser concedidas apenas à identidade IAM
+que executará o preflight, se a conta de envio permanecer limitada a `SendEmail`.
+
+A saída da sandbox é regional e continua sendo uma ação da AWS. Na sandbox,
+testar somente destinatários verificados ou o mailbox simulator, com acordo do
+responsável. Após aprovação, executar novamente o preflight e realizar teste real.
+Falhas permanentes antigas não são reabertas: solicitar um link novo. O worker
+continua independente de uma consulta remota por e-mail; indisponibilidade do
+preflight não bloqueia requisições de cadastro/recuperação.
 
 ## Futuro webhook SNS: bounces e complaints
 

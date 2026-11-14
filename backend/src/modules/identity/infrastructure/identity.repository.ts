@@ -1,3 +1,4 @@
+import { IdentityEmailOutbox } from './identity-email.outbox';
 import { Injectable } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../database';
@@ -42,7 +43,10 @@ export type IdentityUser = Prisma.UserGetPayload<{
 
 @Injectable()
 export class IdentityRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly emailOutbox: IdentityEmailOutbox,
+  ) {}
 
   async findByEmail(email: string): Promise<IdentityUser | null> {
     const normalizedEmail = email.trim().toLowerCase();
@@ -362,6 +366,7 @@ export class IdentityRepository {
     userId: string,
     tokenHash: string,
     expiresAt: Date,
+    emailToken?: string,
   ): Promise<string | null> {
     return this.prisma.$transaction(async (tx) => {
       await this.setLocal(tx, 'app.user_id', userId);
@@ -394,6 +399,14 @@ export class IdentityRepository {
         create: { userId, ...data },
         update: data,
       });
+      if (emailToken)
+        await this.emailOutbox.enqueueIn(tx, {
+          purpose: 'EMAIL_VERIFICATION',
+          userId,
+          recipient: user.email,
+          token: emailToken,
+          expiresAt,
+        });
       return user.email;
     });
   }
@@ -405,13 +418,33 @@ export class IdentityRepository {
     return result?.confirmed === true;
   }
 
-  createPasswordReset(userId: string, tokenHash: string, expiresAt: Date) {
+  createPasswordReset(
+    userId: string,
+    tokenHash: string,
+    expiresAt: Date,
+    emailToken?: string,
+  ) {
     return this.prisma.$transaction(async (transaction) => {
       await transaction.$executeRaw`SELECT id FROM users WHERE id=${userId}::uuid FOR UPDATE`;
+      await this.setLocal(transaction, 'app.user_id', userId);
       await transaction.passwordResetToken.deleteMany({ where: { userId } });
-      return transaction.passwordResetToken.create({
+      const reset = await transaction.passwordResetToken.create({
         data: { userId, tokenHash, expiresAt },
       });
+      if (emailToken) {
+        const user = await transaction.user.findUniqueOrThrow({
+          where: { id: userId },
+          select: { email: true },
+        });
+        await this.emailOutbox.enqueueIn(transaction, {
+          purpose: 'PASSWORD_RESET',
+          userId,
+          recipient: user.email,
+          token: emailToken,
+          expiresAt,
+        });
+      }
+      return reset;
     });
   }
 
@@ -453,7 +486,10 @@ export class IdentityRepository {
       .then(() => undefined);
   }
 
-  createInvitation(data: Prisma.IdentityInvitationUncheckedCreateInput) {
+  createInvitation(
+    data: Prisma.IdentityInvitationUncheckedCreateInput,
+    emailToken?: string,
+  ) {
     return this.prisma.$transaction(async (transaction) => {
       await this.setLocal(
         transaction,
@@ -497,7 +533,16 @@ export class IdentityRepository {
         },
         data: { status: 'EXPIRED' },
       });
-      return transaction.identityInvitation.create({ data });
+      const invitation = await transaction.identityInvitation.create({ data });
+      if (emailToken)
+        await this.emailOutbox.enqueueIn(transaction, {
+          purpose: 'INVITATION',
+          organizationId: invitation.organizationId,
+          recipient: invitation.email,
+          token: emailToken,
+          expiresAt: invitation.expiresAt,
+        });
+      return invitation;
     });
   }
 
@@ -568,13 +613,33 @@ export class IdentityRepository {
     id: string,
     organizationId: string,
     data: { tokenHash: string; expiresAt: Date },
+    emailToken?: string,
   ) {
     return this.prisma.$transaction(async (transaction) => {
       await this.setLocal(transaction, 'app.organization_id', organizationId);
-      return transaction.identityInvitation.update({
-        where: { id },
-        data: { ...data, status: 'PENDING' },
+      const changed = await transaction.identityInvitation.updateMany({
+        where: {
+          id,
+          organizationId,
+          status: 'PENDING',
+          expiresAt: { gt: new Date() },
+        },
+        data,
       });
+      if (changed.count !== 1)
+        throw new ValidationException('Invitation is no longer pending');
+      const invitation = await transaction.identityInvitation.findUniqueOrThrow(
+        { where: { id } },
+      );
+      if (emailToken)
+        await this.emailOutbox.enqueueIn(transaction, {
+          purpose: 'INVITATION',
+          organizationId,
+          recipient: invitation.email,
+          token: emailToken,
+          expiresAt: data.expiresAt,
+        });
+      return invitation;
     });
   }
 

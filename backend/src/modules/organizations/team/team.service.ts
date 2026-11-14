@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import type { IHashProvider } from '../../../contracts';
 import { HASH_PROVIDER } from '../../../providers';
 import {
@@ -8,11 +8,7 @@ import {
   ValidationException,
 } from '../../../exceptions';
 import { identityTokenLink } from '../../identity/domain/identity-links';
-import {
-  IDENTITY_TOKEN_DELIVERY,
-  IdentityTokenPurpose,
-  type IIdentityTokenDelivery,
-} from '../../identity/domain/identity.types';
+import { IdentityTokenPurpose } from '../../identity/domain/identity.types';
 import { IdentityRepository } from '../../identity/infrastructure/identity.repository';
 import { IdentityTokenService } from '../../identity/application/token.service';
 import {
@@ -41,8 +37,6 @@ export interface TeamActor {
 
 @Injectable()
 export class TeamService {
-  private readonly logger = new Logger(TeamService.name);
-
   constructor(
     private readonly team: TeamRepository,
     private readonly organizations: OrganizationRepository,
@@ -51,8 +45,6 @@ export class TeamService {
     private readonly entitlements: EntitlementService,
     private readonly authorization: AuthorizationService,
     @Inject(HASH_PROVIDER) private readonly hashes: IHashProvider,
-    @Inject(IDENTITY_TOKEN_DELIVERY)
-    private readonly delivery: IIdentityTokenDelivery,
     private readonly verification?: EmailVerificationService,
   ) {}
 
@@ -160,6 +152,10 @@ export class TeamService {
           actor.organizationId,
           AllocationResource.PLATFORM_USERS,
         ),
+      this.verification
+        ? (tx, userId) =>
+            this.verification!.queueWelcomeIn(tx, userId, input.email)
+        : undefined,
     );
 
     if ('conflict' in resultado) {
@@ -172,7 +168,6 @@ export class TeamService {
       throw new ConflictException('This e-mail already has an Orbit account');
     }
 
-    await this.verification?.sendWelcome(resultado.userId);
     const membro = await this.team.findMember(
       actor.organizationId,
       resultado.userId,
@@ -226,32 +221,14 @@ export class TeamService {
       userId,
       this.tokens.hashOpaqueToken(token),
       expiresAt,
+      token,
     );
-
-    /**
-     * O e-mail sai também, e a falha dele não derruba a resposta.
-     *
-     * O link é o entregável desta rota — o owner o repassa por onde conseguir.
-     * Tentar o e-mail é conveniência para quem tem caixa postal; se o serviço de e-mail não
-     * estiver configurado, o owner ainda tem o link na mão, e `emailSent` diz a
-     * ele que precisa usá-lo.
-     */
-    let emailSent = false;
-    try {
-      await this.delivery.deliver(
-        IdentityTokenPurpose.PASSWORD_RESET,
-        membro.user.email,
-        token,
-      );
-      emailSent = true;
-    } catch {
-      this.logger.warn('Team password link e-mail delivery failed');
-    }
 
     return {
       link: identityTokenLink(IdentityTokenPurpose.PASSWORD_RESET, token),
       expiresAt,
-      emailSent,
+      emailSent: false,
+      emailQueued: true,
       member: membro,
     };
   }

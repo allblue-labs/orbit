@@ -1,10 +1,7 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ValidationException } from '../../../exceptions';
-import {
-  IDENTITY_TOKEN_DELIVERY,
-  IdentityTokenPurpose,
-  type IIdentityTokenDelivery,
-} from '../domain/identity.types';
+import { IdentityEmailOutbox } from '../infrastructure/identity-email.outbox';
+import type { PrismaTransactionClient } from '../../../database/prisma.types';
 import { IdentityRepository } from '../infrastructure/identity.repository';
 import { IdentityTokenService } from './token.service';
 
@@ -14,25 +11,24 @@ export class EmailVerificationService {
   constructor(
     private readonly repository: IdentityRepository,
     private readonly tokens: IdentityTokenService,
-    @Inject(IDENTITY_TOKEN_DELIVERY)
-    private readonly delivery: IIdentityTokenDelivery,
+    private readonly outbox: IdentityEmailOutbox,
   ) {}
 
-  /** Called after the account commits, independently of billing provisioning. */
+  /** The registration/member transaction also persists the token and delivery. */
+  queueWelcomeIn(tx: PrismaTransactionClient, userId: string, email: string) {
+    return this.outbox.welcomeIn(tx, userId, email);
+  }
+
+  /** Resend: token replacement and durable delivery commit together. */
   async sendWelcome(userId: string): Promise<void> {
     try {
       const token = this.tokens.generateOpaqueToken();
-      const recipient = await this.repository.createEmailVerification(
+      await this.repository.createEmailVerification(
         userId,
         this.tokens.hashOpaqueToken(token),
         new Date(Date.now() + 24 * 60 * 60_000),
+        token,
       );
-      if (recipient)
-        await this.delivery.deliver(
-          IdentityTokenPurpose.EMAIL_VERIFICATION,
-          recipient,
-          token,
-        );
     } catch {
       // Account creation stays successful; the user can request a fresh email.
       this.logger.error(

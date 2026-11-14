@@ -94,7 +94,8 @@ export class AuthController {
   async forgotPassword(@Body() input: ForgotPasswordDto) {
     await this.recovery.request(input.email);
     return {
-      message: 'If the account exists, recovery instructions were sent',
+      message:
+        'Se a conta existir, as instruções de recuperação serão enviadas por e-mail.',
     };
   }
 

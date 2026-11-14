@@ -1,3 +1,4 @@
+import type { EmailSendResult } from '../../email/email.types';
 import type { UUID } from '../../../contracts';
 
 export interface AccessTokenClaims {
@@ -65,7 +66,7 @@ export interface IIdentityTokenDelivery {
     purpose: IdentityTokenPurpose,
     recipient: string,
     token: string,
-  ): Promise<void>;
+  ): Promise<EmailSendResult>;
 }
 
 export const IDENTITY_TOKEN_DELIVERY = Symbol('IDENTITY_TOKEN_DELIVERY');

@@ -129,6 +129,10 @@ privado pelo chat nem considerar mocks como comprovação de entrega real.
 
 ### PR-07 — SES durável e prontidão da conta
 
+**Implementação local:** [PR-07 e evidências](pr-07-ses-durable-delivery.md).
+A consulta AWS em 14/11/2026 confirmou sandbox em us-east-2; aprovação e teste de
+envio real continuam pendentes. Não houve deploy nem envio de e-mail.
+
 Criar outbox transacional para boas-vindas, recuperação e convites, com idempotência,
 retry/backoff e erro permanente. Impedir que uma falha de envio transforme um
 cadastro já persistido em uma tentativa ambígua para o cliente. Preservar sigilo de

@@ -1,0 +1,70 @@
+{
+  "pr": "PR-07",
+  "baseCommit": "9ff971b",
+  "date": "2026-11-14",
+  "findings": [
+    "F10",
+    "F11 (readiness only)"
+  ],
+  "qualification": "Implemented and locally tested. SES general delivery is not qualified until AWS production access and a real recipient test. PR-08 owns SNS feedback and suppression.",
+  "migration": "20261114180000_identity_email_outbox",
+  "checks": {
+    "backendFull": {
+      "suites": 257,
+      "passed": 2050,
+      "initialSandboxRun": "HTTP socket EPERM; repeated outside sandbox with original tests and timeouts."
+    },
+    "identityIntegration": {
+      "suites": 3,
+      "passed": 32,
+      "database": "Disposable PostgreSQL with restricted orbit_app role, RLS and two Nest instances",
+      "emailBoundary": "Simulated provider only"
+    },
+    "finalTypedFixtureRegression": {
+      "suites": 4,
+      "passed": 34
+    },
+    "finalWorkerPreflightAndSender": {
+      "suites": 3,
+      "passed": 33
+    },
+    "frontendUnit": {
+      "files": 70,
+      "passed": 678
+    },
+    "frontendTypecheck": "passed",
+    "frontendLint": "passed",
+    "backendTypecheck": "passed",
+    "backendLint": "passed",
+    "backendBuild": "passed",
+    "prismaSchema": "valid",
+    "contracts": "passed",
+    "publicErrorContract": "passed"
+  },
+  "sesReadOnlyPreflight": {
+    "credentialSource": "Local environment; does not attest to other deployment environments",
+    "realEmailsSent": 0,
+    "exitCode": 2,
+    "report": {
+      "region": "us-east-2",
+      "productionAccess": false,
+      "sendingEnabled": true,
+      "identityVerified": true,
+      "quotaAvailable": true,
+      "quota": {
+        "max24HourSend": 200,
+        "maxSendRate": 1,
+        "sentLast24Hours": 0
+      },
+      "status": "SANDBOX"
+    }
+  },
+  "deliveryGuarantee": "At-least-once transport after lease recovery; SES acceptance is not mailbox delivery. Valid links remain single-use. Ambiguous SES success before crash can duplicate an email, never the account or token.",
+  "deploymentExecuted": false,
+  "pushExecuted": false,
+  "externalPending": [
+    "AWS production access in selected region",
+    "Controlled real email receipt test",
+    "SES/SNS feedback and suppression in PR-08"
+  ]
+}

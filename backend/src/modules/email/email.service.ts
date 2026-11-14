@@ -16,21 +16,8 @@ import {
   type EmailConfiguration,
 } from './email.config';
 
-export interface EmailMessage {
-  to: string;
-  subject: string;
-  text: string;
-  html?: string;
-}
-export type EmailSendResult =
-  | { status: 'SENT'; provider: 'ses'; providerMessageId?: string }
-  | { status: 'SKIPPED'; provider: 'noop' }
-  | {
-      status: 'FAILED';
-      provider: 'ses';
-      code: string;
-      retryable: boolean;
-    };
+import type { EmailMessage, EmailSendResult } from './email.types';
+export type { EmailMessage, EmailSendResult } from './email.types';
 
 /** Shared transactional sender. No recipients, bodies, links or credentials enter logs. */
 @Injectable()

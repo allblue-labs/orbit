@@ -1,3 +1,4 @@
+import { SESv2Client } from '@aws-sdk/client-sesv2';
 export type EmailProvider = 'ses' | 'noop';
 export interface EmailConfiguration {
   provider: EmailProvider;
@@ -25,3 +26,32 @@ export function emailConfiguration(
 
 export const EMAIL_CONFIGURATION = Symbol('EMAIL_CONFIGURATION');
 export const SES_EMAIL_CLIENT = Symbol('SES_EMAIL_CLIENT');
+
+/** Shared transport options for delivery and the read-only preflight. */
+export function createSesEmailClient(
+  config: EmailConfiguration,
+): SESv2Client | null {
+  if (
+    config.provider !== 'ses' ||
+    !config.region ||
+    !config.accessKeyId ||
+    !config.secretAccessKey ||
+    !config.from
+  )
+    return null;
+  return new SESv2Client({
+    region: config.region,
+    credentials: {
+      accessKeyId: config.accessKeyId,
+      secretAccessKey: config.secretAccessKey,
+      sessionToken: config.sessionToken,
+    },
+    maxAttempts: 3,
+    retryMode: 'standard',
+    requestHandler: {
+      connectionTimeout: 2_000,
+      requestTimeout: 5_000,
+      throwOnRequestTimeout: true,
+    },
+  });
+}

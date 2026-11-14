@@ -43,6 +43,10 @@ export class TeamRepository {
       fieldTechnicianEnabled: boolean;
     },
     assertQuota: (transaction: PrismaTransactionClient) => Promise<void>,
+    queueWelcome?: (
+      tx: PrismaTransactionClient,
+      userId: string,
+    ) => Promise<void>,
   ) {
     return this.prisma.$transaction(async (transaction) => {
       await this.setLocal(
@@ -143,6 +147,7 @@ export class TeamRepository {
         },
       });
 
+      await queueWelcome?.(transaction, user.id);
       return { userId: user.id };
     });
   }

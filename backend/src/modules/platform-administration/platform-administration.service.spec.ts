@@ -1,3 +1,5 @@
+import { generateUuidV7 } from '../../utils';
+import type { RegistrationRepository } from '../identity/infrastructure/registration.repository';
 import { BusinessUnitType } from '../../contracts';
 import { EntityNotFoundException, ValidationException } from '../../exceptions';
 import { PlatformAdministrationService } from './platform-administration.service';
@@ -12,8 +14,15 @@ describe('PlatformAdministrationService', () => {
     listUsers: jest.fn(),
     plansAndModules: jest.fn(),
   };
-  const registration = { register: jest.fn() };
-  const verification = { sendWelcome: jest.fn().mockResolvedValue(undefined) };
+  const registration = {
+    register: jest.fn<
+      ReturnType<RegistrationRepository['register']>,
+      Parameters<RegistrationRepository['register']>
+    >(),
+  };
+  const verification = {
+    queueWelcomeIn: jest.fn().mockResolvedValue(undefined),
+  };
   const hashes = {
     hash: jest.fn().mockResolvedValue('hash'),
     verify: jest.fn().mockResolvedValue(true),
@@ -28,10 +37,12 @@ describe('PlatformAdministrationService', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('provisions the first tenant owner through the shared onboarding boundary', async () => {
-    registration.register.mockResolvedValue({
-      organizationId: 'org-1',
-      userId: 'owner-1',
-    });
+    const created = {
+      organizationId: generateUuidV7(),
+      userId: generateUuidV7(),
+      businessUnitId: generateUuidV7(),
+    };
+    registration.register.mockResolvedValue(created);
     repository.findOrganization.mockResolvedValue({ id: 'org-1' });
     await expect(
       service.createTenant('admin-1', {
@@ -57,7 +68,14 @@ describe('PlatformAdministrationService', () => {
         subscriptionStatus: 'TRIALING',
       }),
     ).resolves.toEqual({ id: 'org-1' });
-    expect(verification.sendWelcome).toHaveBeenCalledWith('owner-1');
+    const callback = registration.register.mock.calls[0]?.[5];
+    expect(callback).toEqual(expect.any(Function));
+    await callback!({} as never, created.userId);
+    expect(verification.queueWelcomeIn).toHaveBeenCalledWith(
+      {},
+      created.userId,
+      'owner@example.com',
+    );
     expect(registration.register).toHaveBeenCalledWith(
       expect.objectContaining({
         email: 'owner@example.com',
@@ -66,6 +84,8 @@ describe('PlatformAdministrationService', () => {
       'hash',
       'tenant-example',
       expect.objectContaining({ actorUserId: 'admin-1', platformAdmin: true }),
+      undefined,
+      expect.any(Function),
     );
   });
 

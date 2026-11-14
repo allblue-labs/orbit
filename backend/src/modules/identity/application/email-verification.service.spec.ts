@@ -4,7 +4,7 @@ import { EmailVerificationService } from './email-verification.service';
 function fixture() {
   const repository = {
     createEmailVerification: jest
-      .fn<Promise<string | null>, [string, string, Date]>()
+      .fn<Promise<string | null>, [string, string, Date, string]>()
       .mockResolvedValue('user@example.test'),
     confirmEmail: jest.fn().mockResolvedValue(true),
     findByEmail: jest.fn().mockResolvedValue({
@@ -17,39 +17,32 @@ function fixture() {
     generateOpaqueToken: () => 'PRIVATE_RAW_TOKEN',
     hashOpaqueToken: jest.fn().mockReturnValue('HASH_ONLY'),
   };
-  const delivery = { deliver: jest.fn().mockResolvedValue(undefined) };
+  const outbox = { welcomeIn: jest.fn() };
   const service = new EmailVerificationService(
     repository as never,
     tokens as never,
-    delivery,
+    outbox as never,
   );
-  return { repository, tokens, delivery, service };
+  return { repository, tokens, outbox, service };
 }
 describe('confirmação de e-mail', () => {
-  it('persiste somente hash e expiração de 24h antes de enviar as boas-vindas', async () => {
-    const { repository, delivery, service } = fixture();
+  it('solicita persistência atômica do hash, prazo e entrega cifrada, sem envio no HTTP', async () => {
+    const { repository, service } = fixture();
     const before = Date.now();
     await service.sendWelcome('user');
     expect(repository.createEmailVerification).toHaveBeenCalledWith(
       'user',
       'HASH_ONLY',
       expect.any(Date),
+      'PRIVATE_RAW_TOKEN',
     );
     const expiry = repository.createEmailVerification.mock
       .calls[0]?.[2] as Date;
     expect(expiry.getTime()).toBeGreaterThanOrEqual(before + 24 * 3600_000);
-    expect(delivery.deliver).toHaveBeenCalledWith(
-      'EMAIL_VERIFICATION',
-      'user@example.test',
-      'PRIVATE_RAW_TOKEN',
-    );
-    expect(
-      repository.createEmailVerification.mock.invocationCallOrder[0],
-    ).toBeLessThan(delivery.deliver.mock.invocationCallOrder[0]!);
   });
-  it('falha no provedor não desfaz o cadastro nem expõe o token', async () => {
-    const { delivery, service } = fixture();
-    delivery.deliver.mockRejectedValue(
+  it('falha ao enfileirar não expõe token nem destinatário no reenvio', async () => {
+    const { repository, service } = fixture();
+    repository.createEmailVerification.mockRejectedValue(
       new Error('PRIVATE_RAW_TOKEN user@example.test'),
     );
     const logs = jest
@@ -72,16 +65,10 @@ describe('confirmação de e-mail', () => {
     { id: 'user', status: 'ACTIVE', emailVerifiedAt: new Date() },
     { id: 'user', status: 'INACTIVE' },
   ])('reenvio é opaco quando não há conta elegível', async (user) => {
-    const { repository, delivery, service } = fixture();
+    const { repository, service } = fixture();
     repository.findByEmail.mockResolvedValue(user);
     await expect(service.request('user@example.test')).resolves.toBeUndefined();
-    expect(delivery.deliver).not.toHaveBeenCalled();
-  });
-  it('o intervalo de reenvio não gera outro envio', async () => {
-    const { repository, delivery, service } = fixture();
-    repository.createEmailVerification.mockResolvedValue(null);
-    await service.request('user@example.test');
-    expect(delivery.deliver).not.toHaveBeenCalled();
+    expect(repository.createEmailVerification).not.toHaveBeenCalled();
   });
   it('confirma sem receber ID de usuário ou organização do solicitante', async () => {
     const { repository, service } = fixture();

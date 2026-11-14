@@ -48,9 +48,12 @@ export class RegistrationService {
         slug,
         { publicSignup: true },
         metadata,
+        this.verification
+          ? (tx, userId) =>
+              this.verification!.queueWelcomeIn(tx, userId, normalized.email)
+          : undefined,
       );
       if (!created) throw new ValidationException('Invalid plan');
-      await this.verification?.sendWelcome(created.userId);
       /**
        * A assinatura nasce junto com a organização.
        *

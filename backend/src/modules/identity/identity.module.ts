@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { IdentityEmailOutbox } from './infrastructure/identity-email.outbox';
+import { IdentityEmailWorker } from './infrastructure/identity-email.worker';
 import { EmailModule } from '../email/email.module';
 import { JwtModule } from '@nestjs/jwt';
 import { EnvironmentProvider } from '../../providers';
@@ -53,6 +55,8 @@ import { EmailVerificationController } from './presentation/email-verification.c
   ],
   providers: [
     IdentityRepository,
+    IdentityEmailOutbox,
+    IdentityEmailWorker,
     RegistrationRepository,
     IdentityTokenService,
     AuthenticationService,

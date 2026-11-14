@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { InfrastructureException } from '../../../exceptions';
-import { EmailService } from '../../email/email.service';
+import { EmailService, type EmailSendResult } from '../../email/email.service';
 import { actionEmail } from '../../email/email-template';
 import {
   IdentityTokenPurpose,
@@ -17,7 +16,7 @@ export class TransactionalIdentityTokenDelivery implements IIdentityTokenDeliver
     purpose: IdentityTokenPurpose,
     recipient: string,
     token: string,
-  ): Promise<void> {
+  ): Promise<EmailSendResult> {
     const copy = {
       EMAIL_VERIFICATION: {
         title: 'Bem-vindo ao Orbit! Confirme seu e-mail',
@@ -25,7 +24,7 @@ export class TransactionalIdentityTokenDelivery implements IIdentityTokenDeliver
           'Sua conta foi criada. Confirme seu endereço de e-mail para manter seus dados de acesso atualizados e receber as comunicações do Orbit.',
         action: 'Confirmar meu e-mail',
         expiry:
-          'Este link é exclusivo, pode ser usado uma única vez e expira em 24 horas.',
+          'Este link é exclusivo, pode ser usado uma única vez e vale por até 24 horas após a solicitação.',
       },
       PASSWORD_RESET: {
         title: 'Redefinição de senha do Orbit',
@@ -40,14 +39,12 @@ export class TransactionalIdentityTokenDelivery implements IIdentityTokenDeliver
         introduction:
           'Você recebeu um convite para participar de uma equipe no Orbit. Aceite o convite e defina sua senha.',
         action: 'Aceitar convite',
-        expiry: 'Este convite expira em 7 dias.',
+        expiry: 'Este convite vale por até 7 dias após a solicitação.',
       },
     }[purpose];
-    const result = await this.email.send({
+    return this.email.send({
       to: recipient,
       ...actionEmail({ ...copy, link: identityTokenLink(purpose, token) }),
     });
-    if (result.status === 'FAILED')
-      throw new InfrastructureException('Identity token delivery failed');
   }
 }

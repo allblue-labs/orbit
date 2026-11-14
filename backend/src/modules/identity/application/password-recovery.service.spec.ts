@@ -6,10 +6,11 @@ function fixture() {
     findByEmail: jest.fn().mockResolvedValue({
       id: 'user',
       email: 'user@example.test',
+      status: 'ACTIVE',
       credential: {},
     }),
     createPasswordReset: jest
-      .fn<Promise<object>, [string, string, Date]>()
+      .fn<Promise<object>, [string, string, Date, string]>()
       .mockResolvedValue({}),
     findPasswordReset: jest.fn(),
     consumePasswordReset: jest.fn(),
@@ -19,48 +20,38 @@ function fixture() {
     hashOpaqueToken: jest.fn().mockReturnValue('HASH_ONLY'),
   };
   const hashes = { hash: jest.fn().mockResolvedValue('NEW_PASSWORD_HASH') };
-  const delivery = { deliver: jest.fn().mockResolvedValue(undefined) };
   return {
     repository,
     tokens,
     hashes,
-    delivery,
     service: new PasswordRecoveryService(
       repository as never,
       tokens as never,
       hashes as never,
-      delivery,
     ),
   };
 }
 describe('recuperação de senha por e-mail', () => {
-  it('grava hash e prazo de 30 minutos antes do envio', async () => {
-    const { repository, delivery, service } = fixture();
+  it('solicita token e entrega na mesma transação sem chamar SES no HTTP', async () => {
+    const { repository, service } = fixture();
     const now = Date.now();
     await service.request('user@example.test');
     expect(repository.createPasswordReset).toHaveBeenCalledWith(
       'user',
       'HASH_ONLY',
       expect.any(Date),
+      'RAW_RESET_TOKEN',
     );
     const expires = repository.createPasswordReset.mock.calls[0]?.[2] as Date;
     expect(expires.getTime()).toBeGreaterThanOrEqual(now + 30 * 60_000);
-    expect(delivery.deliver).toHaveBeenCalledWith(
-      'PASSWORD_RESET',
-      'user@example.test',
-      'RAW_RESET_TOKEN',
-    );
-    expect(
-      repository.createPasswordReset.mock.invocationCallOrder[0],
-    ).toBeLessThan(delivery.deliver.mock.invocationCallOrder[0]!);
   });
   it('responde igualmente para conta inexistente e envio recusado', async () => {
-    const { repository, delivery, service } = fixture();
+    const { repository, service } = fixture();
     const logger = jest
       .spyOn(Logger.prototype, 'error')
       .mockImplementation(() => undefined);
     try {
-      delivery.deliver.mockRejectedValue(
+      repository.createPasswordReset.mockRejectedValue(
         new Error('RAW_RESET_TOKEN user@example.test'),
       );
       await expect(
@@ -70,7 +61,7 @@ describe('recuperação de senha por e-mail', () => {
       await expect(
         service.request('missing@example.test'),
       ).resolves.toBeUndefined();
-      expect(delivery.deliver).toHaveBeenCalledTimes(1);
+      expect(repository.createPasswordReset).toHaveBeenCalledTimes(1);
       expect(JSON.stringify(logger.mock.calls)).not.toContain(
         'RAW_RESET_TOKEN',
       );

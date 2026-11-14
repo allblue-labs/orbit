@@ -83,9 +83,13 @@ export class PlatformAdministrationService {
           externalCustomerId: input.externalCustomerId,
           externalSubscriptionId: input.externalSubscriptionId,
         },
+        undefined,
+        this.verification
+          ? (tx, userId) =>
+              this.verification!.queueWelcomeIn(tx, userId, registration.email)
+          : undefined,
       );
       if (!result) throw new ValidationException('Invalid or inactive plan');
-      await this.verification?.sendWelcome(result.userId);
       return this.organization(result.organizationId);
     } catch (error) {
       if (error instanceof ValidationException) throw error;

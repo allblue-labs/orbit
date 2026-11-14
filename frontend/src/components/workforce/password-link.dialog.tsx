@@ -6,9 +6,9 @@
  * ## Por que compartilhar por mensageiro é o caminho principal, e não o desvio
  *
  * Metade de uma equipe de campo não usa e-mail no trabalho. O link chega por
- * WhatsApp porque é onde a pessoa vai ver — e o servidor tenta o e-mail no
- * mesmo pedido, para quem tem caixa postal. `emailSent` diz qual dos dois
- * aconteceu, em vez de deixar o owner adivinhar.
+ * WhatsApp porque é onde a pessoa vai ver. O servidor grava o e-mail na fila
+ * durável no mesmo pedido; `emailQueued` descreve essa etapa, sem afirmar
+ * que a mensagem chegou à caixa postal.
  *
  * ## Quem pode ver este link
  *
@@ -143,15 +143,17 @@ export function PasswordLinkDialog({
             </div>
 
             <p className="flex items-start gap-2 text-xs text-muted-foreground">
-              {resultado.emailSent ? (
+              {resultado.emailQueued || resultado.emailSent ? (
                 <Mail className="mt-0.5 size-3.5 shrink-0" aria-hidden />
               ) : (
                 <MailX className="mt-0.5 size-3.5 shrink-0" aria-hidden />
               )}
               <span>
-                {resultado.emailSent
-                  ? `Também enviamos para ${resultado.member.email}.`
-                  : "O envio por e-mail não saiu — repasse o link por aqui."}
+                {resultado.emailQueued
+                  ? `E-mail na fila de envio para ${resultado.member.email}. Você também pode compartilhar o link.`
+                  : resultado.emailSent
+                    ? `Envio aceito para ${resultado.member.email}.`
+                    : "O envio por e-mail não saiu — repasse o link por aqui."}
               </span>
             </p>
           </div>

@@ -5,8 +5,9 @@ import { Injectable } from '@nestjs/common';
  *
  * ## O token nunca sai daqui
  *
- * `IdentityInvitation` guarda `tokenHash`, e o token em claro só existe no
- * instante da criação, para ser entregue por e-mail. **Nenhum dos dois é
+ * `IdentityInvitation` guarda `tokenHash`. O segredo fica cifrado na outbox
+ * até o envio assíncrono terminar; depois, a cópia recuperável é removida.
+ * **Nem token nem hash são
  * publicado**: expor o hash permitiria ataque offline, e expor o token daria a
  * qualquer gestor a capacidade de aceitar o convite no lugar da pessoa.
  *

@@ -37,6 +37,10 @@ export class RegistrationRepository {
     slug: string,
     options: TenantProvisioningOptions = {},
     metadata?: SessionMetadata,
+    queueWelcome?: (
+      tx: Prisma.TransactionClient,
+      userId: string,
+    ) => Promise<void>,
   ) {
     const userId = generateUuidV7();
     const organizationId = generateUuidV7();
@@ -82,7 +86,7 @@ export class RegistrationRepository {
         data: {
           id: userId,
           email: input.email,
-          normalizedEmail: input.email,
+          normalizedEmail: input.email.trim().toLowerCase(),
           firstName: input.firstName.trim(),
           lastName: input.lastName.trim(),
           displayName: `${input.firstName} ${input.lastName}`.trim(),
@@ -223,6 +227,7 @@ export class RegistrationRepository {
           },
         });
       }
+      await queueWelcome?.(transaction, userId);
       return { userId, organizationId, businessUnitId };
     });
   }
