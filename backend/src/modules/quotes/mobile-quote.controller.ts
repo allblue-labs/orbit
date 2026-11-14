@@ -77,6 +77,7 @@ export class MobileQuoteController {
   }
 
   @Get(':id/document')
+  @Capabilities('quotes.read')
   async document(
     @Req() request: IdentityRequest,
     @Param('id', ParseUUIDv7Pipe) id: string,

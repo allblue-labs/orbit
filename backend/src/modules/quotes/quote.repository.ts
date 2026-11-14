@@ -23,7 +23,7 @@
  */
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { ConflictException } from '../../exceptions';
+import { ConflictException, EntityNotFoundException } from '../../exceptions';
 import { PaginationHelper, RlsTransaction } from '../../database';
 import type { PrismaTransactionClient } from '../../database/prisma.types';
 import { generateUuidV7 } from '../../utils';
@@ -54,6 +54,7 @@ const quoteView = {
   number: true,
   code: true,
   status: true,
+  mobileVisible: true,
   title: true,
   notes: true,
   introText: true,
@@ -155,6 +156,35 @@ export class QuoteRepository {
     private readonly jobs: BackgroundJobQueue,
     private readonly events: DomainEventEmitter,
   ) {}
+
+  setMobileVisibility(
+    id: string,
+    organizationId: string,
+    ownerId: string,
+    visible: boolean,
+  ) {
+    return this.rls.run(async (tx) => {
+      // Access policy is independent of the commercial version/signature links.
+      // Deliberately do not change updated_at or the signed proposal content.
+      const rows = await tx.$queryRaw<{ businessUnitId: string }[]>`
+        UPDATE quotes SET mobile_visible = ${visible}
+        WHERE id = ${id}::uuid AND organization_id = ${organizationId}::uuid AND deleted_at IS NULL
+          AND EXISTS (SELECT 1 FROM organizations WHERE id = ${organizationId}::uuid AND owner_user_id = ${ownerId}::uuid)
+        RETURNING business_unit_id AS "businessUnitId"`;
+      if (!rows[0]) throw new EntityNotFoundException('Orçamento', id);
+      await tx.auditLog.create({
+        data: {
+          organizationId,
+          businessUnitId: rows[0].businessUnitId,
+          userId: ownerId,
+          action: 'quote.mobile_visibility.updated',
+          entityType: 'QUOTE',
+          entityId: id,
+          after: { mobileVisible: visible },
+        },
+      });
+    });
+  }
 
   latestCustomerSignature(quoteId: string, organizationId: string) {
     return this.rls.run(async (tx) => {

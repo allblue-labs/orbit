@@ -5,6 +5,7 @@ import type { App } from 'supertest/types';
 import { randomUUID, randomInt } from 'node:crypto';
 import { AppModule } from '../src/app.module';
 import { configureApiVersioning } from '../src/configure-api';
+import { adminPrisma, disconnectAdminPrisma } from './support/admin-prisma';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 import { MOBILE_QUOTE_DOCUMENTS_PERMISSION as permission } from '../src/common/mobile-document-permissions';
 
@@ -41,6 +42,7 @@ describe('orçamentos e equipamentos no aplicativo (HTTP e RLS)', () => {
     email: string;
     permissions: string[];
   };
+  const admin = adminPrisma();
   const http = () => request(app.getHttpServer());
   const auth = (test: request.Test, token = principal.token) =>
     test.set('Authorization', `Bearer ${token}`);
@@ -150,6 +152,7 @@ describe('orçamentos e equipamentos no aplicativo (HTTP e RLS)', () => {
   }, 120_000);
   afterAll(async () => {
     if (app) await app.close();
+    await disconnectAdminPrisma();
   });
 
   it('owner vê e baixa o orçamento da web; outro tenant não alcança o PDF', async () => {
@@ -171,7 +174,7 @@ describe('orçamentos e equipamentos no aplicativo (HTTP e RLS)', () => {
       http().get(`/api/v1/mobile/field/quotes/${neighbor.quote}/document`),
     ).expect(404);
   });
-  it('permissão vem desativada; alterações do owner revogam sessões e controlam a nova entrada', async () => {
+  it('owner controla cada orçamento, em qualquer status, sem mudar a versão comercial', async () => {
     const list = () =>
       auth(
         http().get('/api/v1/mobile/field/documents?type=QUOTE'),
@@ -182,49 +185,130 @@ describe('orçamentos e equipamentos no aplicativo (HTTP e RLS)', () => {
         http().get(`/api/v1/mobile/field/quotes/${principal.quote}/document`),
         operator.token,
       );
-    await list().expect(403);
+    expect(data<{ data: unknown[] }>(await list().expect(200)).data).toEqual(
+      [],
+    );
     await download().expect(404);
-    const ordinary = await auth(
-      http().get('/api/v1/mobile/field/documents'),
-      operator.token,
-    ).expect(200);
-    expect(
-      data<{ data: { documentType: string }[] }>(ordinary).data.every(
-        (d) => d.documentType !== 'QUOTE',
-      ),
-    ).toBe(true);
-    const update = (enabled: boolean) =>
+    const before = await admin.quote.findUniqueOrThrow({
+      where: { id: principal.quote },
+    });
+    const access = (visible: boolean, token = principal.token) =>
       auth(
-        http().patch(`/api/v1/organizations/current/members/${operator.id}`),
-      ).send({
-        useRoleDefaults: false,
-        permissions: [
-          ...operator.permissions,
-          ...(enabled ? [permission] : []),
-        ],
-        allowedSurfaces: ['MOBILE'],
-      });
-    await update(true).expect(200);
-    await list().expect(401);
-    const signIn = async () => {
-      const response = await http()
-        .post('/api/v1/identity/login')
-        .send({ email: operator.email, password, client: 'MOBILE' })
-        .expect(200);
-      operator.token = data<{ accessToken: string }>(response).accessToken;
-    };
-    await signIn();
-    await list().expect(200);
-    await download().expect(200);
+        http().patch(`/api/v1/quotes/${principal.quote}/mobile-access`),
+        token,
+      ).send({ mobileVisible: visible });
+    await access(true, operator.token).expect(403);
+    await auth(http().patch(`/api/v1/quotes/${principal.quote}/mobile-access`))
+      .send({ mobileVisible: 'true' })
+      .expect(400);
+    await access(true).expect(200);
+    const visible = data<{
+      data: { artifactId: string; status: string; statusLabel: string }[];
+    }>(await list().expect(200)).data;
+    expect(visible).toEqual([
+      expect.objectContaining({
+        artifactId: principal.quote,
+        status: 'DRAFT',
+        statusLabel: 'Rascunho',
+      }),
+    ]);
+    await download()
+      .expect(200)
+      .expect('Content-Type', /application\/pdf/);
+    const after = await admin.quote.findUniqueOrThrow({
+      where: { id: principal.quote },
+    });
+    expect(after.updatedAt).toEqual(before.updatedAt);
+    expect(after.status).toBe('DRAFT');
+    await auth(http().patch(`/api/v1/quotes/${neighbor.quote}/mobile-access`))
+      .send({ mobileVisible: true })
+      .expect(404);
     await auth(
       http().get(`/api/v1/mobile/field/quotes/${neighbor.quote}/document`),
       operator.token,
     ).expect(404);
-    await update(false).expect(200);
-    await list().expect(401);
-    await signIn();
-    await list().expect(403);
+    await access(false).expect(200);
+    expect(data<{ data: unknown[] }>(await list().expect(200)).data).toEqual(
+      [],
+    );
     await download().expect(404);
+    // The owner still sees it without any opt-in and without changing sessions.
+    expect(
+      data<{ data: { artifactId: string }[] }>(
+        await auth(
+          http().get('/api/v1/mobile/field/documents?type=QUOTE'),
+        ).expect(200),
+      ).data.map((row) => row.artifactId),
+    ).toContain(principal.quote);
+  });
+  it('uma permissão antiga do operador não contorna a autorização por orçamento', async () => {
+    await auth(
+      http().patch(`/api/v1/organizations/current/members/${operator.id}`),
+    )
+      .send({
+        useRoleDefaults: false,
+        permissions: [...operator.permissions, permission, 'quotes.manage'],
+        allowedSurfaces: ['MOBILE'],
+      })
+      .expect(200);
+    const session = await http()
+      .post('/api/v1/identity/login')
+      .send({ email: operator.email, password, client: 'MOBILE' })
+      .expect(200);
+    operator.token = data<{ accessToken: string }>(session).accessToken;
+    await auth(
+      http().patch(`/api/v1/quotes/${principal.quote}/mobile-access`),
+      operator.token,
+    )
+      .send({ mobileVisible: true })
+      .expect(403);
+    const result = await auth(
+      http().get('/api/v1/mobile/field/documents?type=QUOTE'),
+      operator.token,
+    ).expect(200);
+    expect(data<{ data: unknown[] }>(result).data).toEqual([]);
+    await auth(
+      http().get(`/api/v1/mobile/field/quotes/${principal.quote}/document`),
+      operator.token,
+    ).expect(404);
+  });
+  it('todos os estados comerciais são listados para o owner, inclusive rascunhos sem PDF emitido', async () => {
+    const source = await admin.quote.findUniqueOrThrow({
+      where: { id: principal.quote },
+    });
+    for (const [index, status] of [
+      'SENT',
+      'APPROVED',
+      'REJECTED',
+      'EXPIRED',
+      'CANCELLED',
+    ].entries()) {
+      await admin.quote.create({
+        data: {
+          organizationId: source.organizationId,
+          businessUnitId: source.businessUnitId,
+          customerId: source.customerId,
+          number: 100 + index,
+          code: `STATUS-${status}`,
+          title: `Proposta ${status}`,
+          status,
+          createdById: source.createdById,
+          sentAt: new Date(),
+          decidedAt: new Date(),
+          cancelledAt: status === 'CANCELLED' ? new Date() : null,
+        },
+      });
+    }
+    const response = await auth(
+      http().get('/api/v1/mobile/field/documents?type=QUOTE'),
+    ).expect(200);
+    const docs = data<{ data: { status: string; statusLabel: string }[] }>(
+      response,
+    ).data;
+    expect(docs.map((doc) => doc.status).sort()).toEqual(
+      ['DRAFT', 'SENT', 'APPROVED', 'REJECTED', 'EXPIRED', 'CANCELLED'].sort(),
+    );
+    expect(docs.every((doc) => !!doc.statusLabel)).toBe(true);
   });
   it('operador cadastra equipamento no cliente correto e não troca de tenant ou unidade', async () => {
     const create = (customer: string, body: Record<string, unknown>) =>

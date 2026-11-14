@@ -182,6 +182,14 @@ export function useUpdateQuote(id: string) {
   );
 }
 
+export function useQuoteMobileAccess(id: string) {
+  const write = useQuoteWrite();
+  return useApiMutation(
+    (visible: boolean) => quotesService.mobileAccess(id, visible),
+    write,
+  );
+}
+
 export function useRemoveQuote() {
   const queryClient = useQueryClient();
   return useApiMutation((id: string) => quotesService.remove(id), {

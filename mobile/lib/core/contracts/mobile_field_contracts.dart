@@ -707,6 +707,8 @@ class MobileRecentDocumentContract {
     required this.createdAt,
     required this.state,
     this.customerName,
+    this.status,
+    this.statusLabel,
   });
 
   factory MobileRecentDocumentContract.fromJson(Map<String, dynamic> json) =>
@@ -715,6 +717,8 @@ class MobileRecentDocumentContract {
         documentType: json['documentType'] as String? ?? '',
         label: json['label'] as String? ?? 'Documento',
         customerName: json['customerName'] as String?,
+        status: json['status'] as String?,
+        statusLabel: json['statusLabel'] as String?,
         createdAt:
             DateTime.tryParse(json['createdAt'] as String? ?? '') ??
             DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
@@ -729,6 +733,8 @@ class MobileRecentDocumentContract {
   final String? customerName;
   final DateTime createdAt;
   final MobileDocumentState state;
+  final String? status;
+  final String? statusLabel;
 
   bool get isAvailable => state == MobileDocumentState.available;
   bool get hasFailed => state == MobileDocumentState.failed;

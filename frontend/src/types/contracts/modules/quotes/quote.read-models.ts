@@ -100,6 +100,7 @@ export interface QuoteReadModel {
   number: number;
   code: string;
   status: QuoteStatus;
+  mobileVisible: boolean;
   title: string;
   notes: string | null;
   /** Parágrafo de abertura. `null` imprime o padrão do documento. */

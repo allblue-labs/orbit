@@ -3719,6 +3719,8 @@ model Quote {
   code              String    @db.VarChar(40)
   /// `DRAFT` · `SENT` · `APPROVED` · `REJECTED` · `EXPIRED` · `CANCELLED`.
   status            String    @default("DRAFT") @db.VarChar(20)
+  /// Owner opt-in for non-owner readers in the mobile document library.
+  mobileVisible     Boolean   @default(false) @map("mobile_visible")
   title             String    @db.VarChar(220)
   notes             String?   @db.Text
   /// O parágrafo de abertura da proposta ("Atendendo à honrosa solicitação…").

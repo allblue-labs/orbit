@@ -30,6 +30,7 @@ function setup() {
     code: `ORC-${day}`,
     createdAt: at(day),
     customer,
+    status: 'DRAFT',
   }));
   const page = <T extends { id: string }>(
     rows: T[],
@@ -62,42 +63,47 @@ function setup() {
 }
 
 describe('orçamentos na lista de documentos mobile', () => {
-  it('nenhum papel padrão recebe a permissão; gestão operacional não a substitui', async () => {
+  it('consulta orçamentos para todos; permissão geral não libera orçamento privado', async () => {
+    const { service, repository } = setup();
+    await service.documents(actor, { type: 'QUOTE' });
+    expect(repository.quoteDocumentsPage).toHaveBeenCalledWith(
+      'tenant',
+      ['unit'],
+      expect.anything(),
+      actor,
+    );
+    const privileged = { ...actor, permissions: [permission] };
+    await service.documents(privileged, { type: 'QUOTE' });
+    expect(repository.quoteDocumentsPage).toHaveBeenLastCalledWith(
+      'tenant',
+      ['unit'],
+      expect.anything(),
+      privileged,
+    );
     expect(
       ASSIGNABLE_TEAM_ROLES.every(
         (role) => !role.permissions.includes(permission),
       ),
     ).toBe(true);
-    const { service, repository } = setup();
-    await service.documents(
-      { ...actor, permissions: ['operations.manage', 'quotes.manage'] },
-      {},
-    );
-    expect(repository.quoteDocumentsPage).not.toHaveBeenCalled();
-    await expect(service.documents(actor, { type: 'QUOTE' })).rejects.toThrow();
   });
-  it('owner e operador liberado recebem somente orçamentos quando filtrados', async () => {
-    for (const reader of [
+  it('owner recebe orçamento sem emissão/aprovação e com status comercial', async () => {
+    const { service } = setup();
+    const result = await service.documents(
       { ...actor, isOrganizationOwner: true },
-      { ...actor, permissions: [permission] },
-    ]) {
-      const { service, repository } = setup();
-      const result = await service.documents(reader, {
-        type: 'QUOTE',
-        search: 'Cliente',
-        customerId: 'customer',
-      });
-      expect(result.data.map((row) => row.label)).toEqual([
-        'Orçamento ORC-4',
-        'Orçamento ORC-2',
-      ]);
-      expect(repository.documentsPage).not.toHaveBeenCalled();
-      expect(repository.quoteDocumentsPage).toHaveBeenCalledWith(
-        'tenant',
-        ['unit'],
-        expect.objectContaining({ search: 'Cliente', customerId: 'customer' }),
-      );
-    }
+      { type: 'QUOTE' },
+    );
+    expect(result.data.map((row) => row.label)).toEqual([
+      'Orçamento ORC-4',
+      'Orçamento ORC-2',
+    ]);
+    expect(
+      result.data.every(
+        (row) =>
+          row.status === 'DRAFT' &&
+          row.statusLabel === 'Rascunho' &&
+          row.state === 'AVAILABLE',
+      ),
+    ).toBe(true);
   });
   it('pagina fontes intercaladas sem perder nem repetir registros', async () => {
     const { service } = setup();

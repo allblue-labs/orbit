@@ -1,6 +1,5 @@
 "use client";
 
-import { useSession } from "@/providers/session-provider";
 import { ShieldCheck } from "lucide-react";
 
 import {
@@ -61,8 +60,6 @@ export function MemberAccessEditor({
   allowedSurfaces,
   onAllowedSurfacesChange,
 }: MemberAccessEditorProps) {
-  const { isOwner } = useSession();
-  const quotePermission = "mobile.quotes.documents.read";
   const effectivePermissions = useRoleDefaults
     ? (role?.permissions ?? [])
     : permissions;
@@ -72,30 +69,10 @@ export function MemberAccessEditor({
 
   return (
     <div className="space-y-5">
-      <section className="rounded-lg border p-4 space-y-2">
-        <div className="flex items-center justify-between gap-4">
-          <Label htmlFor="member-mobile-quotes">
-            Visualizar orçamentos em Documentos no app
-          </Label>
-          <Switch
-            id="member-mobile-quotes"
-            disabled={!isOwner}
-            checked={effectivePermissions.includes(quotePermission)}
-            onCheckedChange={(checked) => {
-              onUseRoleDefaultsChange(false);
-              onAllowedSurfacesChange([...effectiveSurfaces]);
-              onPermissionsChange(
-                toggle(effectivePermissions, quotePermission, checked),
-              );
-            }}
-          />
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Desativado por padrão. Ao liberar, esta pessoa poderá visualizar e
-          compartilhar os orçamentos das unidades em que atua. Somente o
-          proprietário pode conceder esse acesso.
-        </p>
-      </section>
+      <p className="rounded-lg border p-4 text-xs text-muted-foreground">
+        A visualização de orçamentos no aplicativo é liberada pelo proprietário
+        nas configurações de cada orçamento.
+      </p>
       <section className="space-y-3" aria-labelledby="member-units-title">
         <div>
           <p id="member-units-title" className="text-sm font-medium">

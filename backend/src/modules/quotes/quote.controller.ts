@@ -50,6 +50,7 @@ import {
   RejectQuoteDto,
   UpdateQuoteDto,
   UpdateQuoteItemDto,
+  QuoteMobileAccessDto,
 } from './quote.dto';
 import { QuoteMapper } from './quote.mapper';
 import { QuoteEmissionService } from './quote-emission.service';
@@ -64,6 +65,27 @@ export class QuoteController {
     private readonly mapper: QuoteMapper,
     private readonly emission: QuoteEmissionService,
   ) {}
+
+  @Patch(':id/mobile-access')
+  @Capabilities('quotes.manage')
+  @Permissions('quotes.manage')
+  async mobileAccess(
+    @Param('id', ParseUUIDv7Pipe) id: string,
+    @Req() request: IdentityRequest,
+    @Body() input: QuoteMobileAccessDto,
+  ) {
+    if (!request.identity?.isOrganizationOwner)
+      throw new ForbiddenException(
+        'Somente o proprietário pode liberar orçamentos no aplicativo.',
+      );
+    await this.quotes.setMobileVisibility(
+      id,
+      this.org(request),
+      this.actor(request),
+      input.mobileVisible,
+    );
+    return this.mapper.detail(await this.quotes.get(id, this.org(request)));
+  }
 
   /* ---------------------------------------------------------------- */
   /* Leitura                                                           */

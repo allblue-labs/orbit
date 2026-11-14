@@ -54,6 +54,7 @@ export class QuoteMapper {
       number: source.number,
       code: source.code,
       status: source.status,
+      mobileVisible: source.mobileVisible,
       title: source.title,
       notes: source.notes,
       introText: source.introText,

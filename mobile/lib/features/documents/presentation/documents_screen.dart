@@ -26,9 +26,10 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import '../../../core/routing/orbit_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../app/providers.dart';
 import '../../../core/contracts/mobile_field_contracts.dart';
 import '../../../core/design/orbit_primitives.dart';
 import '../../../core/design/orbit_screen_header.dart';
@@ -53,7 +54,10 @@ class DocumentsScreen extends ConsumerStatefulWidget {
   ConsumerState<DocumentsScreen> createState() => _DocumentsScreenState();
 }
 
-class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
+class _DocumentsScreenState extends ConsumerState<DocumentsScreen>
+    with WidgetsBindingObserver {
+  GoRouter? _router;
+  bool _atDocuments = true;
   final _scroll = ScrollController();
   final _busca = TextEditingController();
   Timer? _debounce;
@@ -61,6 +65,7 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _scroll.addListener(_onScroll);
   }
 
@@ -70,7 +75,48 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
     _busca.dispose();
     _scroll.removeListener(_onScroll);
     _scroll.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+    _router?.routerDelegate.removeListener(_navigationChanged);
     super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final router = GoRouter.maybeOf(context);
+    if (_router == router) return;
+    _router?.routerDelegate.removeListener(_navigationChanged);
+    _router = router;
+    _atDocuments =
+        router == null ||
+        router
+                .routerDelegate
+                .currentConfiguration
+                .lastOrNull
+                ?.matchedLocation ==
+            OrbitRoutes.documents;
+    router?.routerDelegate.addListener(_navigationChanged);
+  }
+
+  void _navigationChanged() {
+    final visible =
+        _router
+            ?.routerDelegate
+            .currentConfiguration
+            .lastOrNull
+            ?.matchedLocation ==
+        OrbitRoutes.documents;
+    if (visible && !_atDocuments && mounted) {
+      ref.invalidate(documentsControllerProvider);
+    }
+    _atDocuments = visible;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _atDocuments) {
+      ref.invalidate(documentsControllerProvider);
+    }
   }
 
   /// Espera a pessoa parar de digitar: sem isso, um nome de cliente dispara
@@ -233,12 +279,7 @@ class _Cabecalho extends ConsumerWidget {
                 onTap: () => _escolherPeriodo(context, ref, query),
               ),
               children: [
-                for (final opcao in DocumentFilter.values.where(
-                  (filter) =>
-                      filter != DocumentFilter.orcamentos ||
-                      (ref.watch(sessionProvider)?.canViewQuoteDocuments ??
-                          false),
-                ))
+                for (final opcao in DocumentFilter.values)
                   Padding(
                     padding: const EdgeInsets.only(right: OrbitSpacing.sm),
                     child: _Chip(
@@ -451,8 +492,7 @@ class _Lista extends StatelessWidget {
             icon: Icons.description_outlined,
             title: 'Nenhum documento neste recorte',
             description:
-                'Ordens de serviço, PMOC e RVT aparecem aqui assim que são '
-                'emitidos.',
+                'Consulte OS, PMOC, RVT e orçamentos disponíveis para sua conta.',
           ),
         ],
       );
@@ -650,21 +690,33 @@ class _Rodape extends ConsumerWidget {
 /// Três casos, e a diferença entre os dois últimos importa para quem espera:
 /// "preparando" resolve sozinho, "falhou" não resolve. Chamar os dois de
 /// preparando deixaria a pessoa esperando um documento que nunca chega.
-Widget documentStateBadge(MobileRecentDocumentContract document) =>
-    switch (document.state) {
-      MobileDocumentState.available => const OrbitStatusBadge(
-        label: 'Disponível',
-        tone: OrbitTone.success,
-      ),
-      MobileDocumentState.preparing => const OrbitStatusBadge(
-        label: 'Preparando',
-        tone: OrbitTone.warning,
-      ),
-      MobileDocumentState.failed => const OrbitStatusBadge(
-        label: 'Falhou',
-        tone: OrbitTone.danger,
-      ),
-    };
+Widget documentStateBadge(MobileRecentDocumentContract document) {
+  if (document.documentType == 'QUOTE') {
+    return OrbitStatusBadge(
+      label: document.statusLabel ?? 'Orçamento',
+      tone: switch (document.status) {
+        'APPROVED' => OrbitTone.success,
+        'REJECTED' || 'CANCELLED' => OrbitTone.danger,
+        'SENT' || 'EXPIRED' => OrbitTone.warning,
+        _ => OrbitTone.neutral,
+      },
+    );
+  }
+  return switch (document.state) {
+    MobileDocumentState.available => const OrbitStatusBadge(
+      label: 'Disponível',
+      tone: OrbitTone.success,
+    ),
+    MobileDocumentState.preparing => const OrbitStatusBadge(
+      label: 'Preparando',
+      tone: OrbitTone.warning,
+    ),
+    MobileDocumentState.failed => const OrbitStatusBadge(
+      label: 'Falhou',
+      tone: OrbitTone.danger,
+    ),
+  };
+}
 
 /// A marca do tipo, na caixa da esquerda.
 ///
@@ -818,7 +870,8 @@ class _DocumentRowState extends ConsumerState<DocumentRow> {
                     /// O selo só aparece quando **não** é o caso comum. Um
                     /// "Disponível" verde em toda linha vira ruído e some
                     /// justamente quando um "Preparando" precisaria saltar.
-                    if (!documento.isAvailable) ...[
+                    if (!documento.isAvailable ||
+                        documento.documentType == 'QUOTE') ...[
                       const SizedBox(height: 6),
                       documentStateBadge(documento),
                     ],

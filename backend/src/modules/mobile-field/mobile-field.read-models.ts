@@ -176,6 +176,9 @@ export interface MobileRecentDocumentReadModel {
   label: string;
   customerName: string | null;
   createdAt: string;
+  /** Commercial state, independently of whether its PDF can be downloaded. */
+  status?: string;
+  statusLabel?: string;
   /**
    * O que a tela pode oferecer.
    *

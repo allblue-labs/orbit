@@ -47,7 +47,11 @@ class Backend {
       'data': {
         'data': [
           if (includeQuotes && (tipo == null || tipo == 'QUOTE'))
-            document(id: 'q1', type: 'QUOTE', label: 'Orçamento ORC-1'),
+            {
+              ...document(id: 'q1', type: 'QUOTE', label: 'Orçamento ORC-1'),
+              'status': 'DRAFT',
+              'statusLabel': 'Rascunho',
+            },
           if (tipo == null || tipo == 'SERVICE_ORDER') document(),
           if (tipo == null || tipo == 'RVT')
             document(id: 'a2', type: 'RVT', label: 'RVT', state: 'PREPARING'),
@@ -124,28 +128,55 @@ void main() {
       await tester.pumpAndSettle();
       expect(backend.pedidos.last['type'], 'QUOTE');
       expect(find.text('Orçamento ORC-1'), findsOneWidget);
+      expect(find.text('Rascunho'), findsOneWidget);
+      await tester.tap(find.text('Orçamento ORC-1'));
+      await tester.pumpAndSettle();
+      expect(find.text('Compartilhar documento'), findsOneWidget);
+      expect(find.text('Baixar neste aparelho'), findsOneWidget);
       expect(find.text('Ordem de serviço'), findsNothing);
       await tester.pumpWidget(const SizedBox());
       await tester.pumpAndSettle();
     }
   });
 
-  testWidgets('operador sem liberação não recebe filtro de orçamentos', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      host(
-        Backend(),
-        session: sessionFrom(
-          roles: ['FIELD_TECHNICIAN'],
-          permissions: ['artifact_executions.read'],
+  testWidgets(
+    'operador pode consultar o filtro; a API só retorna orçamentos liberados',
+    (tester) async {
+      await tester.pumpWidget(
+        host(
+          Backend(),
+          session: sessionFrom(
+            roles: ['FIELD_TECHNICIAN'],
+            permissions: ['artifact_executions.read'],
+          ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('Orçamentos'), findsNothing);
-    expect(find.text('Ordem de serviço'), findsOneWidget);
-  });
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Orçamentos'), findsOneWidget);
+      expect(find.text('Ordem de serviço'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'retomar o app atualiza orçamentos criados enquanto Docs estava aberta',
+    (tester) async {
+      final backend = Backend();
+      await tester.pumpWidget(host(backend));
+      await tester.pumpAndSettle();
+      expect(find.text('Orçamento ORC-1'), findsNothing);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump();
+      backend.includeQuotes = true;
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(find.text('Orçamento ORC-1'), findsOneWidget);
+      expect(find.text('Rascunho'), findsOneWidget);
+    },
+  );
 
   testWidgets('lista o que o servidor emitiu, com o rótulo dele', (
     tester,

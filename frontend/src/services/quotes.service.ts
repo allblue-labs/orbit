@@ -74,6 +74,9 @@ export const quotesService = {
   update: (id: string, input: UpdateQuoteInput): Promise<Quote> =>
     apiClient.patch<Quote>(quote(id), input),
 
+  mobileAccess: (id: string, mobileVisible: boolean): Promise<Quote> =>
+    apiClient.patch<Quote>(`${quote(id)}/mobile-access`, { mobileVisible }),
+
   /** Só rascunho. Proposta enviada é cancelada, não apagada. */
   remove: (id: string): Promise<void> => apiClient.delete<void>(quote(id)),
 

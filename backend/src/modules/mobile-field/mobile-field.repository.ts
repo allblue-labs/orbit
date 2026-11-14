@@ -388,6 +388,7 @@ export class MobileFieldRepository {
       from?: Date;
       to?: Date;
     },
+    actor: MobileFieldActor,
   ) {
     if (!businessUnitIds.length) return Promise.resolve([]);
     const search = options.search?.trim();
@@ -397,6 +398,7 @@ export class MobileFieldRepository {
           organizationId,
           businessUnitId: { in: [...businessUnitIds] },
           deletedAt: null,
+          ...(!actor.isOrganizationOwner ? { mobileVisible: true } : {}),
           ...(options.customerId ? { customerId: options.customerId } : {}),
           ...(options.from || options.to
             ? {
@@ -434,6 +436,7 @@ export class MobileFieldRepository {
         select: {
           id: true,
           code: true,
+          status: true,
           createdAt: true,
           customer: { select: { legalName: true, tradeName: true } },
         },

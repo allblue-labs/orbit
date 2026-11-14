@@ -202,6 +202,20 @@ export class QuoteService {
     return this.repository.list(organizationId, query);
   }
 
+  setMobileVisibility(
+    id: string,
+    organizationId: string,
+    ownerId: string,
+    visible: boolean,
+  ) {
+    return this.repository.setMobileVisibility(
+      id,
+      organizationId,
+      ownerId,
+      visible,
+    );
+  }
+
   async get(id: string, organizationId: string): Promise<QuoteDetailRecord> {
     const quote = await this.repository.find(id, organizationId);
     if (!quote) throw new EntityNotFoundException('Quote', id);

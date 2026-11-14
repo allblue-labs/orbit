@@ -1,4 +1,3 @@
-import { canReadMobileQuoteDocuments } from './field-document-access';
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-return */
 import { Injectable, Logger } from '@nestjs/common';
 import { EntityNotFoundException, ForbiddenException } from '../../exceptions';
@@ -35,6 +34,14 @@ import type {
 
 /** Quantos itens cada recorte curto da tela inicial traz. */
 const RECENTES = 5;
+const QUOTE_DOCUMENT_STATUS_LABELS: Record<string, string> = {
+  DRAFT: 'Rascunho',
+  SENT: 'Enviado',
+  APPROVED: 'Aprovado',
+  REJECTED: 'Recusado',
+  EXPIRED: 'Expirado',
+  CANCELLED: 'Cancelado',
+};
 
 /** Os rótulos públicos dos documentos de campo. A tela não traduz enum. */
 const DOCUMENT_LABELS: Readonly<Record<string, string>> = {
@@ -167,57 +174,17 @@ export class MobileFieldService {
    * A tela de Documentos, paginada.
    *
    * Mantém o isolamento por organização e unidade dos documentos de campo.
-   * Orçamentos são uma fonte separada, incluída apenas para o proprietário
-   * ou para quem recebeu a permissão explícita de leitura no aplicativo.
+   * Orçamentos são uma fonte separada: o proprietário vê todos; os demais
+   * usuários veem somente as propostas liberadas individualmente pelo owner.
    */
   async documents(
     actor: MobileFieldActor,
     query: MobileDocumentsQueryDto,
   ): Promise<MobileDocumentsPageReadModel> {
-    if (canReadMobileQuoteDocuments(actor))
-      return this.documentsWithQuotes(actor, query);
-    if (query.type === 'QUOTE')
-      throw new ForbiddenException(
-        'A visualização de orçamentos no aplicativo não foi liberada.',
-      );
     const started = performance.now();
-    const limit = query.limit ?? 20;
-    const cursor = query.cursor ? this.decodeCursor(query.cursor) : null;
-
-    /**
-     * Pede um a mais do que cabe na página. É como se sabe que existe próxima
-     * sem contar a tabela inteira — e sem prometer uma página seguinte vazia.
-     */
-    const linhas = await this.repository.documentsPage(
-      actor.organizationId,
-      actor.businessUnitIds,
-      {
-        ...(query.type ? { type: query.type } : {}),
-        ...(query.search ? { search: query.search } : {}),
-        ...(query.customerId ? { customerId: query.customerId } : {}),
-        ...(query.from
-          ? { from: new Date(`${query.from}T00:00:00.000Z`) }
-          : {}),
-        ...(query.to ? { to: new Date(`${query.to}T23:59:59.999Z`) } : {}),
-        take: limit + 1,
-        ...(cursor ? { cursorId: cursor.id } : {}),
-      },
-      actor,
-    );
-
-    const hasNextPage = linhas.length > limit;
-    const data = linhas.slice(0, limit).map((linha) => this.toDocument(linha));
-    const last = data.at(-1);
-    this.metric('documents', started, data.length);
-    return {
-      data,
-      meta: {
-        limit,
-        hasNextPage,
-        nextCursor:
-          hasNextPage && last ? this.encodeCursor(last.artifactId) : null,
-      },
-    };
+    const page = await this.documentsWithQuotes(actor, query);
+    this.metric('documents', started, page.data.length);
+    return page;
   }
 
   /** Merge two independent keyset streams, advancing only the rows actually consumed. */
@@ -282,6 +249,7 @@ export class MobileFieldService {
             actor.organizationId,
             actor.businessUnitIds,
             { ...options, cursorId: positions.quoteId },
+            actor,
           ),
     ]);
     const rows = [
@@ -298,6 +266,9 @@ export class MobileFieldService {
           customerName: quote.customer.tradeName ?? quote.customer.legalName,
           createdAt: quote.createdAt.toISOString(),
           state: 'AVAILABLE' as const,
+          status: quote.status,
+          statusLabel:
+            QUOTE_DOCUMENT_STATUS_LABELS[quote.status] ?? 'Orçamento',
         },
       })),
     ].sort(

@@ -1,6 +1,5 @@
 import { AssetService } from '../organizations/business-units/equipaments/asset.service';
 import type { CreateAssetDto } from '../organizations/business-units/equipaments/asset.dto';
-import { MOBILE_QUOTE_DOCUMENTS_PERMISSION } from '../../common/mobile-document-permissions';
 import { Injectable } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
@@ -291,10 +290,6 @@ export class MobileQuoteService {
   async assertDocumentRead(actor: AuthenticatedIdentity, id: string) {
     if (!actor.organizationId)
       throw new ForbiddenException('Selecione uma organização.');
-    const canReadAll =
-      actor.isOrganizationOwner ||
-      actor.permissions.includes(MOBILE_QUOTE_DOCUMENTS_PERMISSION);
-    if (!canReadAll) return this.assertOwn(actor, id);
     const quote = await this.rls.run((tx) =>
       tx.quote.findFirst({
         where: {
@@ -302,6 +297,7 @@ export class MobileQuoteService {
           organizationId: actor.organizationId!,
           businessUnitId: { in: [...actor.businessUnitIds] },
           deletedAt: null,
+          ...(!actor.isOrganizationOwner ? { mobileVisible: true } : {}),
         },
         select: { id: true },
       }),
