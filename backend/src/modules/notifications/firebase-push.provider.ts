@@ -55,6 +55,7 @@ export class FirebaseMobilePushProvider
         version: String(payload.version),
         notificationId: payload.notificationId,
         organizationId: payload.organizationId,
+        recipientUserId: payload.recipientUserId,
         tenantId: payload.organizationId,
         type: payload.data?.type ?? payload.type,
         eventType: payload.type,
@@ -65,10 +66,21 @@ export class FirebaseMobilePushProvider
       const providerMessageId = await this.messaging.send({
         token: target.token,
         data,
-        // Data-only on Android: the existing native receiver displays the alert
-        // and preserves its deep link in background as well as foreground.
+        // Android displays notification+data itself in the background. The
+        // native service handles foreground delivery without a second alert.
         ...(target.platform === 'ANDROID'
-          ? { android: { priority: 'high' as const, ttl: 24 * 60 * 60_000 } }
+          ? {
+              notification: { title: payload.title, body: payload.body },
+              android: {
+                priority: 'high' as const,
+                ttl: 24 * 60 * 60_000,
+                notification: {
+                  channelId: 'orbit_work',
+                  icon: 'ic_stat_orbit',
+                  tag: payload.notificationId,
+                },
+              },
+            }
           : {
               apns: {
                 headers: { 'apns-push-type': 'alert', 'apns-priority': '10' },

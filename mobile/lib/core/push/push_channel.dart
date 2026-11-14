@@ -1,24 +1,10 @@
-/// A ponte com o sistema de notificação do aparelho.
-///
-/// ## Por que não há Firebase aqui
-///
-/// O backend aceita **APNS** como provedor (`MOBILE_PUSH_PROVIDERS`), então
-/// no iOS o token vem direto do sistema: `registerForRemoteNotifications` e
-/// pronto. Firebase resolveria o Android, e é onde ele continua necessário —
-/// mas colocá-lo no caminho do iOS adicionaria um intermediário, um arquivo
-/// de configuração e um SDK para obter um token que a Apple já entrega.
-///
-/// ## O que acontece sem a parte nativa
-///
-/// Tudo devolve vazio, e nada quebra. Um aplicativo que trava porque não há
-/// push configurado é pior do que um sem push: o resto do trabalho continua
-/// funcionando, e a ausência aparece na tela de Configurações, não num
-/// diálogo de erro.
+/// Native Firebase Messaging bridge. Both Android and iOS expose FCM tokens.
+/// APNs registration is associated privately by the iOS SDK, never sent as FCM.
+/// Local builds without push return empty; distribution is checked at build time.
 library;
 
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../contracts/mobile_push_device_contracts.dart';
@@ -54,16 +40,13 @@ class PushChannel implements PushTokenSource, PushMessageSource {
     MethodChannel? canal,
     EventChannel? tokens,
     EventChannel? links,
-    TargetPlatform? plataforma,
   }) : _canal = canal ?? const MethodChannel('orbit/push'),
        _tokens = tokens ?? const EventChannel('orbit/push/token'),
-       _links = links ?? const EventChannel('orbit/push/link'),
-       _plataforma = plataforma ?? defaultTargetPlatform;
+       _links = links ?? const EventChannel('orbit/push/link');
 
   final MethodChannel _canal;
   final EventChannel _tokens;
   final EventChannel _links;
-  final TargetPlatform _plataforma;
 
   // One broadcast subscription per native channel survives overlapping session
   // teardown/startup. Cancelling the old account cannot detach the new listener.
@@ -83,9 +66,7 @@ class PushChannel implements PushTokenSource, PushMessageSource {
   Stream<String> get onNotificationReceived => _receiptEvents;
 
   @override
-  MobilePushProvider get provider => _plataforma == TargetPlatform.iOS
-      ? MobilePushProvider.apns
-      : MobilePushProvider.fcm;
+  MobilePushProvider get provider => MobilePushProvider.fcm;
 
   @override
   Future<bool> requestPermission() async {

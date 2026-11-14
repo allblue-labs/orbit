@@ -9,6 +9,7 @@ import { mobilePushProviderFactory } from './mobile-push.provider';
 const payload = {
   version: 1,
   notificationId: 'notification-id',
+  recipientUserId: 'recipient-id',
   organizationId: 'tenant-id',
   type: 'WORK_ASSIGNED',
   deepLink: '/field/work-items/SERVICE_OPERATION:id',
@@ -57,6 +58,7 @@ describe('FirebaseMobilePushProvider', () => {
         click_action: 'FLUTTER_NOTIFICATION_CLICK',
         version: '1',
         notificationId: payload.notificationId,
+        recipientUserId: payload.recipientUserId,
         organizationId: payload.organizationId,
         tenantId: payload.organizationId,
         type: 'WORK_ASSIGNED',
@@ -65,7 +67,16 @@ describe('FirebaseMobilePushProvider', () => {
         title: payload.title,
         body: payload.body,
       },
-      android: { priority: 'high', ttl: 86_400_000 },
+      notification: { title: payload.title, body: payload.body },
+      android: {
+        priority: 'high',
+        ttl: 86_400_000,
+        notification: {
+          channelId: 'orbit_work',
+          icon: 'ic_stat_orbit',
+          tag: payload.notificationId,
+        },
+      },
     });
   });
   it('prepara alerta APNs quando o iPhone já fornece um token FCM', async () => {

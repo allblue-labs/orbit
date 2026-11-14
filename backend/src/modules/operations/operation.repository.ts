@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
+import { FieldAssignmentOutbox } from '../notifications/field-assignment-outbox';
 import type { Prisma } from '@prisma/client';
 import { RlsTransaction } from '../../database';
 import { DomainEventEmitter } from '../automations/domain-event.emitter';
@@ -104,6 +105,7 @@ export class OperationRepository {
   constructor(
     private readonly rls: RlsTransaction,
     private readonly events: DomainEventEmitter,
+    @Optional() private readonly assignmentPush?: FieldAssignmentOutbox,
   ) {}
 
   list(organizationId: string, query: OperationQueryDto) {
@@ -484,6 +486,8 @@ export class OperationRepository {
         data: { authorizedAt, authorizedById: autorizar ? actorId : null },
         include: operationInclude,
       });
+      if (registrarTrilha && autorizar && !anterior.authorizedAt)
+        await this.assignmentPush?.operation(tx, operation.id);
       const details = {
         authorizedAt: authorizedAt?.toISOString() ?? null,
         previousAuthorizedAt: anterior.authorizedAt?.toISOString() ?? null,
@@ -611,6 +615,7 @@ export class OperationRepository {
       /* O evento é o que faz o atendimento aparecer para quem vai executar; um por
          atendimento, como na autorização individual. */
       for (const alvo of alvos) {
+        await this.assignmentPush?.operation(tx, alvo.id);
         await this.events.emit(tx, {
           type: 'operation.assignment.authorized',
           organizationId,

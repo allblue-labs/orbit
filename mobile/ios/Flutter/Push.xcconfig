@@ -1,7 +1,10 @@
 // Release mode also supports direct installation with an Apple Personal Team.
 // APNs requires an explicit opt-in and a provisioning profile that supports it.
-// APNs credentials belong to the configured server push gateway, never the app.
+// APNs private key belongs to Firebase Console, never the app or repository.
 ORBIT_PUSH_ENTITLEMENTS =
+ORBIT_PUSH_ENABLED = NO
+ORBIT_ALLOW_NO_PUSH = NO
+ORBIT_APNS_ENVIRONMENT = development
 
 // Copy Push.local.xcconfig.example to Push.local.xcconfig on machines/CI builds
 // signed with a compatible Apple Developer Program team.

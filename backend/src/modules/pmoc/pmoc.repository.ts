@@ -1,3 +1,5 @@
+import { Optional } from '@nestjs/common';
+import { FieldAssignmentOutbox } from '../notifications/field-assignment-outbox';
 /**
  * Persistência do domínio PMOC.
  *
@@ -276,6 +278,7 @@ export class PmocRepository {
      * declarar. A credencial é o token, e a validação dele é dentro da função.
      */
     private readonly prisma: PrismaService,
+    @Optional() private readonly assignmentPush?: FieldAssignmentOutbox,
   ) {}
 
   /* ---------------------------------------------------------------- */
@@ -980,6 +983,7 @@ export class PmocRepository {
         },
       });
 
+      await this.assignmentPush?.pmoc(tx, executionId);
       return { plan, executionId };
     });
   }
@@ -1108,7 +1112,10 @@ export class PmocRepository {
         ON CONFLICT DO NOTHING
         RETURNING id
       `;
-      if (rows[0]) return rows[0].id;
+      if (rows[0]) {
+        await this.assignmentPush?.pmoc(tx, rows[0].id);
+        return rows[0].id;
+      }
 
       const existing = await tx.pmocExecution.findFirst({
         where: { planId, dueOn, status: { not: 'CANCELLED' } },

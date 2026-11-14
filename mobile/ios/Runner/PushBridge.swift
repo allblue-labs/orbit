@@ -2,22 +2,11 @@ import Flutter
 import UIKit
 import UserNotifications
 
-/// A ponte entre o APNs e o Dart.
-///
-/// ## Por que não há Firebase aqui
-///
-/// O backend do Orbit aceita `APNS` como provedor. O token que ele precisa é
-/// o que a Apple entrega em `didRegisterForRemoteNotificationsWithDeviceToken`
-/// — Firebase serviria para traduzi-lo num token do Google, que o servidor
-/// teria de traduzir de volta.
-///
-/// ## Três canais
-///
-/// ```text
-/// orbit/push         requestPermission, token   (chamada e resposta)
-/// orbit/push/token   o token, quando o sistema o troca
-/// orbit/push/link    o caminho do aviso que a pessoa tocou
-/// ```
+import FirebaseCore
+import FirebaseMessaging
+
+/// Firebase is the single delivery provider on Android and iOS. APNs tokens
+/// stay inside the Apple SDK; only the associated FCM token crosses to Dart.
 final class PushBridge: NSObject {
   static let shared = PushBridge()
 
@@ -28,6 +17,28 @@ final class PushBridge: NSObject {
   /// O token mais recente. Guardado porque ele pode chegar **antes** de o
   /// Dart perguntar — o sistema responde ao registro quando quer.
   private var currentToken: String?
+  private var configured = false
+
+  func configureFirebase() {
+    guard Bundle.main.object(forInfoDictionaryKey: "OrbitPushEnabled") as? String == "YES",
+          let path = Bundle.main.path(forResource: "Google-Service-Info", ofType: "plist"),
+          let options = FirebaseOptions(contentsOfFile: path) else { return }
+    if FirebaseApp.app() == nil { FirebaseApp.configure(options: options) }
+    Messaging.messaging().delegate = self
+    configured = true
+    UNUserNotificationCenter.current().delegate = self
+  }
+
+  private func fcmToken(_ result: @escaping FlutterResult) {
+    guard configured, Messaging.messaging().apnsToken != nil else { result(nil); return }
+    Messaging.messaging().token { [weak self] token, error in
+      DispatchQueue.main.async {
+        guard error == nil, let token = token else { result(nil); return }
+        self?.currentToken = token
+        result(token)
+      }
+    }
+  }
 
   /// O toque que abriu o aplicativo, guardado até o Dart estar ouvindo.
   ///
@@ -45,7 +56,7 @@ final class PushBridge: NSObject {
       case "requestPermission":
         self?.requestPermission(result)
       case "token":
-        result(self?.currentToken)
+        self?.fcmToken(result)
       default:
         result(FlutterMethodNotImplemented)
       }
@@ -66,6 +77,7 @@ final class PushBridge: NSObject {
   }
 
   private func requestPermission(_ result: @escaping FlutterResult) {
+    guard configured else { result(false); return }
     UNUserNotificationCenter.current().requestAuthorization(
       options: [.alert, .badge, .sound]
     ) { granted, _ in
@@ -84,9 +96,14 @@ final class PushBridge: NSObject {
 
   /// Chamado pelo `AppDelegate` quando a Apple entrega o token.
   func didRegister(deviceToken: Data) {
-    let hex = deviceToken.map { String(format: "%02x", $0) }.joined()
-    currentToken = hex
-    tokenSink?(hex)
+    guard configured else { return }
+    Messaging.messaging().apnsToken = deviceToken
+    Messaging.messaging().isAutoInitEnabled = true
+    // Request again after APNs association; do not publish its raw hex token.
+    Messaging.messaging().token { [weak self] token, error in
+      guard error == nil, let token = token else { return }
+      DispatchQueue.main.async { self?.publish(token: token) }
+    }
   }
 
   fileprivate func attach(tokenSink: @escaping FlutterEventSink) {
@@ -121,7 +138,13 @@ final class PushBridge: NSObject {
     guard let link = userInfo["deepLink"] as? String, !link.isEmpty else {
       return
     }
-    emit(link: link)
+    let keys = ["deepLink", "notificationId", "organizationId", "recipientUserId"]
+    let payload = keys.reduce(into: [String: String]()) { result, key in
+      if let value = userInfo[key] as? String { result[key] = value }
+    }
+    guard let data = try? JSONSerialization.data(withJSONObject: payload),
+          let event = String(data: data, encoding: .utf8) else { return }
+    emit(link: event)
   }
 }
 
@@ -183,4 +206,18 @@ private final class LinkStreamHandler: NSObject, FlutterStreamHandler {
 private final class MessageStreamHandler: NSObject, FlutterStreamHandler {
   func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? { PushBridge.shared.messageSink = events; return nil }
   func onCancel(withArguments arguments: Any?) -> FlutterError? { PushBridge.shared.messageSink = nil; return nil }
+}
+
+
+extension PushBridge: MessagingDelegate {
+  private func publish(token: String) {
+    guard configured, Messaging.messaging().apnsToken != nil else { return }
+    currentToken = token
+    tokenSink?(token)
+  }
+
+  func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
+    guard let token = fcmToken else { return }
+    DispatchQueue.main.async { [weak self] in self?.publish(token: token) }
+  }
 }

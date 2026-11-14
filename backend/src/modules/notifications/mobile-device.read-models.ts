@@ -30,6 +30,7 @@ export interface MobilePushPayloadReadModel {
   version: 1;
   notificationId: string;
   organizationId: string;
+  recipientUserId: string;
   type: MobileNotificationType;
   deepLink: string;
   title: string;

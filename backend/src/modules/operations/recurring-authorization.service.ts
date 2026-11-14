@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
+import { FieldAssignmentOutbox } from '../notifications/field-assignment-outbox';
 import { RlsTransaction } from '../../database';
 import {
   ConflictException,
@@ -29,7 +30,10 @@ export interface RecurringAuthorizationItem {
 
 @Injectable()
 export class RecurringAuthorizationService {
-  constructor(private readonly rls: RlsTransaction) {}
+  constructor(
+    private readonly rls: RlsTransaction,
+    @Optional() private readonly assignmentPush?: FieldAssignmentOutbox,
+  ) {}
 
   list(actor: Actor, query: RecurringAuthorizationQueryDto) {
     return this.rls.run(async (tx) => {
@@ -316,6 +320,8 @@ export class RecurringAuthorizationService {
               data: stamp,
             });
         }
+        if (item.kind === 'RVT') await this.assignmentPush?.rvt(tx, item.id);
+        else await this.assignmentPush?.pmoc(tx, item.id);
         authorized++;
         await tx.auditLog.create({
           data: {

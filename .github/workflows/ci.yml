@@ -93,6 +93,7 @@ jobs:
         working-directory: mobile
       - run: flutter analyze --fatal-infos
         working-directory: mobile
+      - run: python3 mobile/tool/test_push_config.py
       # The visual scenarios retain their behavioral assertions; recording PNGs
       # is a separate manual tool and cannot silently accept a changed baseline.
       - run: flutter test --exclude-tags integration

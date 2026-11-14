@@ -1,4 +1,5 @@
 {
   "ORBIT_API_URL": "https://api.production.invalid/api/v1",
-  "ORBIT_FLAVOR": "production"
+  "ORBIT_FLAVOR": "production",
+  "ORBIT_FIREBASE_PROJECT_ID": "replace-with-firebase-production-project"
 }

@@ -89,14 +89,15 @@ entre aceitação pelo FCM e gravação do resultado pode produzir duplicidade.
 `dataPayload` aceita somente strings, no máximo 30 campos, e limite conservador
 de 3.000 bytes para título/corpo/dados. O SDK recebe `data` com os campos enviados,
 `click_action` padrão e campos de controle gerados no servidor: `version`,
-`notificationId`, `organizationId`, `tenantId`, `eventType`, `title`, `body` e
+`notificationId`, `organizationId`, `recipientUserId`, `tenantId`, `eventType`, `title`, `body` e
 `deepLink`. O cliente não pode substituir campos de identidade. `type` customizado
 é preservado; sem ele recebe o tipo do evento. URLs devem usar HTTPS, sem
 credenciais; caminhos internos ficam sob `/field/`.
 
-No Android atual, a mensagem é **data-only** com prioridade alta: o receiver
-existente exibe a notificação e conserva o deep link tanto com o app aberto
-quanto em segundo plano. O receiver atual navega pelos caminhos `/field/...`.
+No Android a mensagem contém **notification + data**: em background, o SDK mostra
+o aviso; em foreground, o receiver nativo o apresenta uma vez. Ambos preservam
+o destino e os metadados do destinatário no toque. O app compara usuário e tenant
+com a sessão atual antes de navegar; relê os detalhes com autenticação.
 O campo `url` externo é entregue no payload, mas sua abertura exige suporte
 explícito no app, com validação dos domínios permitidos para a marca.
 
@@ -153,14 +154,13 @@ Android: registre `com.allbluelabs.orbit` no mesmo projeto, coloque a configura�
 de cliente em `mobile/android/app/google-services.json`, gere uma nova build e
 autorize notificações. A chave privada do backend nunca vai nesse arquivo.
 
-**iPhone:** a implementação atual de `PushBridge.swift` registra um token APNs
-puro. Esse token não pode ser enviado pelo Firebase Admin. O provider devolve
-`FCM_TOKEN_REQUIRED` e preserva a instalação. Para usar Firebase no iOS, configure
-Firebase Messaging no cliente, obtenha o token FCM, registre `pushProvider=FCM`
-na API e configure a autenticação APNs do app no Firebase. Continuam necessários
-Apple Developer Program, entitlement e provisioning com push. O backend já
-prepara o alerta APNs para iPhones que forneçam um token FCM. O gateway legado
-permanece disponível para instalações que ainda usem APNs direto.
+**iPhone:** o SDK Firebase Messaging foi integrado via Swift Package Manager.
+A ponte associa APNs ao FCM e registra somente FCM no backend. Configurar o app
+`com.allbluelabs.orbitOperator`, chave APNs no Firebase e provisioning com push.
+Builds de distribuição validam o arquivo cliente, projeto e entitlement; Personal
+Team permanece disponível por opt-out local explícito, sem qualificação de push.
+O [guia de release mobile](../../mobile/docs/firebase-push-release.md) detalha os
+arquivos, comandos e a matriz de aceite físico Android/iPhone.
 
 Os testes locais usam credenciais RSA sintéticas e envio simulado. Nenhuma
 mensagem real é enviada. Após publicar, atribua uma operação de outra conta da
@@ -178,7 +178,7 @@ Referências oficiais:
 - [Configuração iOS](https://firebase.google.com/docs/cloud-messaging/ios/get-started)
 - [Permissões de envio](https://firebase.google.com/docs/projects/iam/roles-predefined-product)
 
-## Verificações locais
+## Registro histórico da implementação inicial
 
 Passaram 60 testes direcionados de configuração, payload, escopo, registro,
 materialização e entrega, além de build, lint e validação do schema Prisma.
@@ -186,9 +186,18 @@ O teste em PostgreSQL temporário com `orbit_app` e RLS real exercita múltiplos
 dispositivos, isolamento entre tenants/usuários, fila persistida, rotação de token,
 rollback da limpeza e troca de conta no mesmo aparelho.
 
-A auditoria npm de produção ainda aponta 15 dependências afetadas: quatro altas
+Na implementação inicial, a auditoria npm de produção apontava 15 dependências afetadas: quatro altas
 e onze moderadas. Nove já existiam; seis pertencem à cadeia opcional de Firestore
 incluída pelo SDK oficial. O transporte implementado importa `firebase-admin/app`
 e `firebase-admin/messaging`, sem utilizar Firestore. Atualizar as versões
 compatíveis dessas dependências não resolveu os achados; sua correção exige
 acompanhamento dos pacotes upstream ou uma atualização específica de dependências.
+As dependências foram posteriormente tratadas nas PR-01/PR-03; consultar os
+registros de release atuais para o estado da auditoria, sem reutilizar esses números históricos.
+
+## Atualização PR-06
+
+O registro e o envio foram alinhados em FCM nas duas plataformas. A autorização
+de OS/RVT/PMOC e a atribuição de visitas usam a fila existente, com revalidação
+antes de materializar/enviar. Os resultados históricos acima não substituem a
+[evidência atual da PR-06](../../docs/release/pr-06-firebase-push.md).

@@ -9,6 +9,7 @@ describe('HttpGatewayMobilePushProvider', () => {
   const payload = {
     version: 1,
     notificationId: '01900000-0000-7000-8000-000000000001',
+    recipientUserId: '01900000-0000-7000-8000-000000000002',
     organizationId: '01900000-0000-7000-8000-000000000002',
     type: 'WORK_ASSIGNED',
     deepLink: '/field/work-items/OPERATION:id',

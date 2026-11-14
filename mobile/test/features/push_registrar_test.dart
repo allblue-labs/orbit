@@ -31,7 +31,7 @@ class FonteFalsa implements PushTokenSource {
   int permissoesPedidas = 0;
 
   @override
-  MobilePushProvider get provider => MobilePushProvider.apns;
+  MobilePushProvider get provider => MobilePushProvider.fcm;
 
   @override
   Future<bool> requestPermission() async {
@@ -126,7 +126,7 @@ void main() {
 
     /// O provedor vem da fonte, não de um palpite sobre a plataforma: é o
     /// que separa um token do APNs de um do Firebase no servidor.
-    expect(corpo['pushProvider'], 'APNS');
+    expect(corpo['pushProvider'], 'FCM');
   });
 
   test('inícios simultâneos registram apenas uma instalação', () async {
@@ -260,4 +260,23 @@ void main() {
 
     await expectLater(registrar.start(), completes);
   });
+  test(
+    'tenta obter o token novamente depois de APNs/rede ainda não estarem prontos',
+    () async {
+      final source = FonteFalsa(inicial: null);
+      final setup = montar(
+        source,
+        retryDelay: const Duration(milliseconds: 10),
+      );
+      addTearDown(source.fechar);
+      addTearDown(setup.registrar.dispose);
+      await setup.registrar.start();
+      source.inicial = tokenA;
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      expect(
+        setup.backend.chamadas.where((c) => c.method == 'POST'),
+        hasLength(1),
+      );
+    },
+  );
 }

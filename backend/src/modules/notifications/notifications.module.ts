@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { FieldAssignmentOutbox } from './field-assignment-outbox';
 import { EmailModule } from '../email/email.module';
 import { IdentityModule } from '../identity/identity.module';
 import {
@@ -33,6 +34,7 @@ import { PushNotificationService } from './push-notification.service';
     MobileDeviceController,
   ],
   providers: [
+    FieldAssignmentOutbox,
     NotificationRepository,
     NotificationService,
     NotificationGateway,
@@ -50,6 +52,7 @@ import { PushNotificationService } from './push-notification.service';
     { provide: MOBILE_PUSH_PROVIDER, useFactory: mobilePushProviderFactory },
   ],
   exports: [
+    FieldAssignmentOutbox,
     NotificationService,
     NotificationGateway,
     MobileNotificationService,

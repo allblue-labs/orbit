@@ -13,6 +13,11 @@ export interface PublicErrorDefinition {
 const entries = [
   ['VALIDATION_ERROR', HttpStatus.BAD_REQUEST, 'Revise os campos informados.'],
   [
+    'MOBILE_PUSH_UPGRADE_REQUIRED',
+    HttpStatus.BAD_REQUEST,
+    'Atualize o Orbit para ativar os avisos neste aparelho.',
+  ],
+  [
     'UNAUTHORIZED',
     HttpStatus.UNAUTHORIZED,
     'Sua sessão não é válida ou expirou.',

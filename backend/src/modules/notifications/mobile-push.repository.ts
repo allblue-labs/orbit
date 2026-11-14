@@ -17,10 +17,22 @@ export class MobilePushRepository {
     private readonly jobs: BackgroundJobQueue,
   ) {}
 
-  materialize(
+  async materialize(
     intent: MobileNotificationIntent,
     resolved: ResolvedMobileNotification,
   ) {
+    if (
+      intent.type === 'WORK_ASSIGNED' &&
+      !(await this.eligible({
+        ...intent,
+        payload: {
+          resourceId: intent.resourceId,
+          workItemId: intent.workItemId,
+          deepLink: resolved.deepLink,
+        },
+      }))
+    )
+      return null;
     return this.rls.runAmbient(async (tx) => {
       const recipient = await tx.organizationMembership.findFirst({
         where: {
@@ -231,6 +243,25 @@ export class MobilePushRepository {
           : typeof payload.deepLink === 'string'
             ? payload.deepLink.replace('/field/work-items/', '')
             : '';
+      if (workItemId.startsWith('RVT:')) {
+        const [, occurrenceId, extra] = workItemId.split(':');
+        if (!occurrenceId || extra !== undefined || !isUUID(occurrenceId))
+          return false;
+        return Boolean(
+          await tx.rvtOccurrence.findFirst({
+            where: {
+              id: occurrenceId,
+              organizationId: notification.organizationId,
+              deletedAt: null,
+              status: { in: ['SCHEDULED', 'IN_PROGRESS'] },
+              responsibleFieldTechnicianId: notification.recipientUserId,
+              ...authorization,
+              configuration: { deletedAt: null, status: 'ACTIVE' },
+            },
+            select: { id: true },
+          }),
+        );
+      }
       if (workItemId.startsWith('PMOC:')) {
         const [, cycleId, assetId, extra] = workItemId.split(':');
         if (
@@ -254,6 +285,14 @@ export class MobilePushRepository {
                 schedulingPaused: false,
               },
               OR: [
+                {
+                  plan: {
+                    technicianUserId: notification.recipientUserId,
+                    coverages: { some: { assetId, deletedAt: null } },
+                  },
+                  equipmentSchedules: { none: { coverage: { assetId } } },
+                  equipmentExecutions: { none: { assetId } },
+                },
                 {
                   equipmentSchedules: {
                     some: {
@@ -312,6 +351,7 @@ export class MobilePushRepository {
             id: payload.resourceId,
             organizationId: notification.organizationId,
             deletedAt: null,
+            status: { notIn: ['CANCELLED', 'COMPLETED'] },
             ...authorization,
             OR: [
               { responsibleFieldTechnicianId: notification.recipientUserId },

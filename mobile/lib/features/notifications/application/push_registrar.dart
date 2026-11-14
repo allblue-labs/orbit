@@ -101,6 +101,10 @@ class PushRegistrar {
     if (!_active || generation != _generation) return;
     if (token == null) {
       _logger.info('push_token_unavailable');
+      _retry?.cancel();
+      _retry = Timer(retryDelay, () {
+        if (_active && generation == _generation) unawaited(start());
+      });
       return;
     }
     await _registrar(token);

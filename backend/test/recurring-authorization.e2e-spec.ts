@@ -7,6 +7,8 @@ import { MobileFieldRepository } from '../src/modules/mobile-field/mobile-field.
 import { RecurringAuthorizationService } from '../src/modules/operations/recurring-authorization.service';
 import { RecurringAuthorizationQueryDto } from '../src/modules/operations/dto/recurring-authorization.dto';
 import { ConflictException, EntityNotFoundException } from '../src/exceptions';
+import { FieldAssignmentOutbox } from '../src/modules/notifications/field-assignment-outbox';
+import { BackgroundJobQueue } from '../src/modules/jobs/background-job.queue';
 
 describe('autorização de demandas recorrentes com RLS real', () => {
   const admin = adminPrisma();
@@ -170,7 +172,10 @@ describe('autorização de demandas recorrentes com RLS real', () => {
         }),
       } as never,
     );
-    service = new RecurringAuthorizationService(rls);
+    service = new RecurringAuthorizationService(
+      rls,
+      new FieldAssignmentOutbox(new BackgroundJobQueue(runtime as never, rls)),
+    );
     field = new MobileFieldRepository(rls);
   });
 
@@ -231,6 +236,14 @@ describe('autorização de demandas recorrentes com RLS real', () => {
         },
       }),
     ).toBe(0);
+    expect(
+      await admin.backgroundJob.count({
+        where: {
+          organizationId: actor.organizationId,
+          queue: 'mobile.notification.materialize',
+        },
+      }),
+    ).toBe(0);
   });
 
   it('recusa ids de outra organização mesmo quando pertencem ao mesmo técnico', async () => {
@@ -269,6 +282,22 @@ describe('autorização de demandas recorrentes com RLS real', () => {
     expect(after.pmocCycles.map((item: { id: string }) => item.id)).toEqual([
       cycleId,
     ]);
+    const intents = await admin.backgroundJob.findMany({
+      where: {
+        organizationId: actor.organizationId,
+        queue: 'mobile.notification.materialize',
+      },
+    });
+    expect(intents).toHaveLength(2);
+    expect(intents.map((item) => item.payload)).toContainEqual(
+      expect.objectContaining({ workItemId: `RVT:${visitId}` }),
+    );
+    expect(
+      intents.some((item) =>
+        item.jobKey.startsWith(`WORK_ASSIGNED:PMOC:${cycleId}:`),
+      ),
+    ).toBe(true);
+    expect(intents.every((item) => item.actorUserId === userId)).toBe(true);
   });
 
   it('com a exigência desligada, as demandas atribuídas permanecem acessíveis sem carimbo', async () => {

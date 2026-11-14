@@ -61,6 +61,7 @@ class _OrbitOperatorAppState extends ConsumerState<OrbitOperatorApp>
   SessionRuntime? _runtime;
   Object? _runtimeIdentity;
   bool _refreshingProfile = false;
+  PushTap? _pendingPushTap;
 
   @override
   void initState() {
@@ -113,14 +114,28 @@ class _OrbitOperatorAppState extends ConsumerState<OrbitOperatorApp>
     }
   }
 
-  void _abrirAviso(String caminho) {
-    final destino = routeForDeepLink(caminho);
+  void _abrirAviso(String event) {
+    final tap = PushTap.parse(event);
+    if (tap == null) return;
+    if (ref.read(authControllerProvider) is AuthRestoring) {
+      _pendingPushTap = tap;
+      return;
+    }
+    _navigatePush(tap);
+  }
 
-    /// Caminho desconhecido leva à caixa de avisos, nunca a um palpite: uma
-    /// tela errada passa por defeito, quando só chegou um tipo novo de aviso.
+  void _navigatePush(PushTap tap) {
+    final auth = ref.read(authControllerProvider);
+    if (auth is! AuthAuthenticated ||
+        !tap.matches(
+          userId: auth.session.user.id,
+          tenantId: auth.session.organizationId,
+        )) {
+      return;
+    }
     _runtime?.container
         .read(routerProvider)
-        .go(destino ?? OrbitRoutes.notifications);
+        .go(routeForDeepLink(tap.deepLink) ?? OrbitRoutes.notifications);
   }
 
   @override
@@ -151,6 +166,13 @@ class _OrbitOperatorAppState extends ConsumerState<OrbitOperatorApp>
         unawaited(_runtime!.container.read(pushRegistrarProvider).start());
       }
       WidgetsBinding.instance.addPostFrameCallback((_) => previous?.dispose());
+    }
+    if (auth is! AuthRestoring && _pendingPushTap != null) {
+      final tap = _pendingPushTap!;
+      _pendingPushTap = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _navigatePush(tap);
+      });
     }
 
     return KeyedSubtree(

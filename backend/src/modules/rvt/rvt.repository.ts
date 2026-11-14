@@ -1,7 +1,8 @@
 import { checklistDefaults } from '../operations/checklist-defaults';
 import { assignmentAuthorizationRequired } from '../operations/recurring-authorization';
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument, orbit/no-concurrent-transaction-queries */
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
+import { FieldAssignmentOutbox } from '../notifications/field-assignment-outbox';
 import { Prisma } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import { RlsTransaction } from '../../database';
@@ -24,7 +25,10 @@ const maintenanceTypeView = {
 
 @Injectable()
 export class RvtRepository {
-  constructor(private readonly rls: RlsTransaction) {}
+  constructor(
+    private readonly rls: RlsTransaction,
+    @Optional() private readonly assignmentPush?: FieldAssignmentOutbox,
+  ) {}
 
   /* ---------------------------------------------------------------- */
   /* Tipos de manutenção                                               */
@@ -227,6 +231,7 @@ export class RvtRepository {
           where: { id: occurrence.id },
           data: { schedulingEventId },
         });
+        await this.assignmentPush?.rvt(tx, occurrence.id);
       }
       await this.audit(
         tx,
@@ -459,6 +464,14 @@ export class RvtRepository {
           },
         });
       }
+      if (this.assignmentPush) {
+        const assignedVisits = await tx.rvtOccurrence.findMany({
+          where: { configurationId: id, deletedAt: null, status: 'SCHEDULED' },
+          select: { id: true },
+        });
+        for (const visit of assignedVisits)
+          await this.assignmentPush.rvt(tx, visit.id);
+      }
       const maximum = await tx.rvtOccurrence.aggregate({
         where: { configurationId: id },
         _max: { sequenceNumber: true },
@@ -502,6 +515,7 @@ export class RvtRepository {
           where: { id: occurrence.id },
           data: { schedulingEventId },
         });
+        await this.assignmentPush?.rvt(tx, occurrence.id);
         created++;
       }
       if (created || cancelled || rescheduled)
@@ -864,6 +878,7 @@ export class RvtRepository {
         visit.id,
         { configurationId },
       );
+      await this.assignmentPush?.rvt(tx, visit.id);
       return visit.id;
     });
   }

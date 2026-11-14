@@ -1,3 +1,8 @@
 // Requires Push Notifications enabled for the App ID and provisioning profile.
 // Keep this value disabled when signing with an Apple Personal Team.
 ORBIT_PUSH_ENTITLEMENTS = Runner/Runner.entitlements
+ORBIT_PUSH_ENABLED = YES
+// For direct development-signed installs only: ORBIT_APNS_ENVIRONMENT = development
+// App Store/TestFlight archives require production and matching provisioning.
+// Personal Team development only: set ENABLED=NO, ENTITLEMENTS=empty and
+// ALLOW_NO_PUSH=YES for a direct release install. Archives always reject this.

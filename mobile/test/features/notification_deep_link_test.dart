@@ -1,11 +1,38 @@
 /// A tradução do destino publicado pelo servidor.
 library;
 
+import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_operator/core/routing/orbit_router.dart';
 import 'package:orbit_operator/features/notifications/domain/deep_link.dart';
 
 void main() {
+  test('toque só pode abrir destino do destinatário e tenant autenticados', () {
+    final tap = PushTap.parse(
+      jsonEncode({
+        'notificationId': 'notice',
+        'deepLink': '/field/sync',
+        'organizationId': 'tenant-a',
+        'recipientUserId': 'user-a',
+      }),
+    )!;
+    expect(tap.matches(userId: 'user-a', tenantId: 'tenant-a'), isTrue);
+    expect(tap.matches(userId: 'user-b', tenantId: 'tenant-a'), isFalse);
+    expect(tap.matches(userId: 'user-a', tenantId: 'tenant-b'), isFalse);
+    expect(tap.matches(userId: 'user-a', tenantId: null), isFalse);
+    expect(PushTap.parse('/field/sync'), isNull);
+    expect(PushTap.parse('{"deepLink":"/field/sync"}'), isNull);
+  });
+  test('destinos não podem injetar query, fragmento ou navegação relativa', () {
+    for (final path in [
+      '/field/work-items/../admin',
+      '/field/work-items/id?x=1',
+      '/field/work-items/id#other',
+      '/field/artifacts/',
+    ]) {
+      expect(routeForDeepLink(path), isNull);
+    }
+  });
   test('atendimento atribuído abre o item de trabalho', () {
     expect(
       routeForDeepLink('/field/work-items/OPERATION:abc-123'),

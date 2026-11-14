@@ -16,6 +16,9 @@ import {
 } from '../src/modules/notifications/mobile-push.provider';
 import type { MobilePushPayloadReadModel } from '../src/modules/notifications/mobile-device.read-models';
 import { adminPrisma, disconnectAdminPrisma } from './support/admin-prisma';
+import { RequestContext, RequestContextStorage } from '../src/context';
+import type { UUID } from '../src/contracts';
+import { MobileNotificationService } from '../src/modules/notifications/mobile-notification.service';
 
 jest.setTimeout(180_000);
 const PASSWORD = 'Orbit#Push@2026';
@@ -97,6 +100,135 @@ describe('Mobile Push & Device Registry (e2e)', () => {
     await app.close();
     await disconnectAdminPrisma();
   });
+  beforeEach(() => {
+    provider.calls.length = 0;
+    provider.next = {
+      kind: 'ACCEPTED_BY_PROVIDER',
+      providerMessageId: 'provider-message',
+    };
+  });
+
+  it('Firebase recusa APNs puro no registro com uma orientação para atualizar o app', async () => {
+    const previous = process.env.PUSH_PROVIDER;
+    try {
+      process.env.PUSH_PROVIDER = 'firebase';
+      const response = await auth(api().post('/api/v1/mobile/devices'))
+        .send({
+          ...device(`legacy-${randomUUID()}`, tokenValue('apns')),
+          pushProvider: 'APNS',
+        })
+        .expect(400);
+      expect(JSON.stringify(response.body)).toContain('Atualize o Orbit');
+    } finally {
+      if (previous === undefined) delete process.env.PUSH_PROVIDER;
+      else process.env.PUSH_PROVIDER = previous;
+    }
+  });
+
+  it('não avisa antes da autorização; autorizar cria uma intenção durável e idempotente', async () => {
+    await registerDevice(
+      `authorized-${randomUUID()}`,
+      tokenValue('authorized'),
+    );
+    await prisma.organization.update({
+      where: { id: organizationId },
+      data: {
+        settings: { operations: { requireAssignmentAuthorization: true } },
+      },
+    });
+    try {
+      const operationId = await createAssigned();
+      expect(await findNotice(operationId)).toBeNull();
+      await auth(
+        api().post(`/api/v1/operations/${operationId}/authorization`),
+      ).expect(201);
+      const pendingIntent = await prisma.backgroundJob.findFirst({
+        where: {
+          organizationId,
+          queue: 'mobile.notification.materialize',
+          jobKey: { contains: operationId },
+        },
+      });
+      expect(pendingIntent).not.toBeNull();
+      const notice = await waitForNotice(operationId);
+      await drain(notice.id);
+      expect(
+        provider.calls.some(
+          (call) => call.payload.notificationId === notice.id,
+        ),
+      ).toBe(true);
+      await auth(
+        api().post(`/api/v1/operations/${operationId}/authorization`),
+      ).expect(201);
+      await worker.tick();
+      expect(
+        await prisma.notification.count({
+          where: {
+            organizationId,
+            type: 'WORK_ASSIGNED',
+            payload: { path: ['resourceId'], equals: operationId },
+          },
+        }),
+      ).toBe(1);
+    } finally {
+      await prisma.organization.update({
+        where: { id: organizationId },
+        data: { settings: {} },
+      });
+    }
+  });
+
+  it.each(['cancelled', 'reassigned', 'preference', 'rebound'])(
+    'descarta a entrega que ficou inelegível antes de enviar: %s',
+    async (reason) => {
+      const instance = `late-${reason}-${randomUUID()}`;
+      const pushToken = tokenValue(reason);
+      const installation = await registerDevice(instance, pushToken);
+      const operationId = await createAssigned();
+      const notice = await waitForNotice(operationId);
+      if (reason === 'cancelled')
+        await prisma.operation.update({
+          where: { id: operationId },
+          data: { status: 'CANCELLED' },
+        });
+      if (reason === 'reassigned')
+        await prisma.operation.update({
+          where: { id: operationId },
+          data: { responsibleFieldTechnicianId: null },
+        });
+      if (reason === 'preference')
+        await auth(api().patch('/api/v1/notifications/preferences'))
+          .send({ type: 'WORK_ASSIGNED', enabled: false, channels: ['IN_APP'] })
+          .expect(200);
+      if (reason === 'rebound')
+        await auth(api().post('/api/v1/mobile/devices'), foreignToken)
+          .send(device(instance, tokenValue('new-account')))
+          .expect(201);
+      try {
+        await drain(notice.id);
+        const result = await prisma.mobilePushDelivery.findFirstOrThrow({
+          where: { notificationId: notice.id, installationId: installation.id },
+        });
+        expect(result.status).toBe('SKIPPED');
+        expect(
+          provider.calls.some(
+            (call) =>
+              call.payload.notificationId === notice.id &&
+              call.token === pushToken,
+          ),
+        ).toBe(false);
+      } finally {
+        if (reason === 'preference')
+          await auth(api().patch('/api/v1/notifications/preferences'))
+            .send({
+              type: 'WORK_ASSIGNED',
+              enabled: true,
+              channels: ['IN_APP', 'PUSH'],
+            })
+            .expect(200);
+      }
+    },
+  );
 
   it('converges repeat registration and concurrent token rotation', async () => {
     const deviceInstanceId = `device-${randomUUID()}`;
@@ -122,6 +254,67 @@ describe('Mobile Push & Device Registry (e2e)', () => {
     });
     expect(active.enabled).toBe(true);
     expect(active.userId).toBe(actorId);
+  });
+
+  it('documento disponível mantém um aviso e uma entrega por aparelho ao repetir o mesmo fato', async () => {
+    await registerDevice(`document-${randomUUID()}`, tokenValue('document'));
+    const documentId = randomUUID();
+    const intent = {
+      organizationId,
+      businessUnitId: unitId,
+      recipientUserId: actorId,
+      type: 'ARTIFACT_AVAILABLE' as const,
+      factId: documentId,
+      resourceId: documentId,
+      correlationId: randomUUID(),
+    };
+    const context = new RequestContext({
+      requestId: randomUUID(),
+      actorType: 'INTERNAL_USER',
+      userId: actorId as UUID,
+      organizationId: organizationId as UUID,
+      businessUnitId: unitId as UUID,
+      businessUnitIds: [unitId as UUID],
+      roles: ['ORGANIZATION_OWNER'],
+      permissions: [],
+      isOrganizationOwner: true,
+      ip: null,
+      userAgent: null,
+      locale: 'pt-BR',
+    });
+    const materialize = () =>
+      app
+        .get(RequestContextStorage)
+        .run(context, () =>
+          app.get(MobileNotificationService).materialize(intent),
+        );
+    await materialize();
+    await materialize();
+    const notices = await prisma.notification.findMany({
+      where: {
+        organizationId,
+        dedupeKey: `ARTIFACT_AVAILABLE:${documentId}:${actorId}`,
+      },
+    });
+    expect(notices).toHaveLength(1);
+    const deliveries = await prisma.mobilePushDelivery.findMany({
+      where: { notificationId: notices[0]!.id },
+    });
+    expect(
+      new Set(deliveries.map((delivery) => delivery.installationId)).size,
+    ).toBe(deliveries.length);
+    await drain(notices[0]!.id);
+    expect(provider.calls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            type: 'ARTIFACT_AVAILABLE',
+            deepLink: `/field/artifacts/${documentId}`,
+            recipientUserId: actorId,
+          }),
+        }),
+      ]),
+    );
   });
 
   it('rebinds the same installation on user switch and logout removes eligibility', async () => {
@@ -192,6 +385,7 @@ describe('Mobile Push & Device Registry (e2e)', () => {
     for (const call of provider.calls.slice(-2)) {
       const raw = JSON.stringify(call.payload);
       expect(raw).toContain(notification.id);
+      expect(call.payload.recipientUserId).toBe(actorId);
       expect(raw).not.toMatch(/endereço|telefone|email|evidence|financeiro/i);
     }
 
@@ -242,6 +436,43 @@ describe('Mobile Push & Device Registry (e2e)', () => {
     throw new Error(`delivery drain timed out for ${notificationId}`);
   }
 
+  async function createAssigned(): Promise<string> {
+    const response = await auth(api().post('/api/v1/operations'))
+      .send({
+        businessUnitId: unitId,
+        code: `PUSH-${randomUUID().slice(0, 8)}`,
+        kind: 'MAINTENANCE',
+        title: 'Atendimento sintético',
+      })
+      .expect(201);
+    const id = (response.body as Envelope<{ id: string }>).data.id;
+    await auth(api().post(`/api/v1/operations/${id}/assignments`))
+      .send({ userId: actorId })
+      .expect(201);
+    return id;
+  }
+
+  function findNotice(operationId: string) {
+    return prisma.notification.findFirst({
+      where: {
+        organizationId,
+        recipientUserId: actorId,
+        type: 'WORK_ASSIGNED',
+        payload: { path: ['resourceId'], equals: operationId },
+      },
+    });
+  }
+
+  async function waitForNotice(operationId: string) {
+    const deadline = Date.now() + 20_000;
+    while (Date.now() < deadline) {
+      const notice = await findNotice(operationId);
+      if (notice) return notice;
+      await worker.tick();
+    }
+    throw new Error('Synthetic notification did not materialize');
+  }
+
   async function registerDevice(deviceInstanceId: string, pushToken: string) {
     const response = await auth(api().post('/api/v1/mobile/devices'))
       .send(device(deviceInstanceId, pushToken))
@@ -253,7 +484,7 @@ describe('Mobile Push & Device Registry (e2e)', () => {
     return {
       deviceInstanceId,
       platform: 'IOS',
-      pushProvider: 'APNS',
+      pushProvider: 'FCM',
       pushToken,
       appVersion: '1.0.0',
       osVersion: '18.6',

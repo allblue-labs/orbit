@@ -7,6 +7,7 @@
 /** Contrato público e versionado de erros da API v1. */
 export const PUBLIC_ERROR_CODES = [
   'VALIDATION_ERROR',
+  'MOBILE_PUSH_UPGRADE_REQUIRED',
   'UNAUTHORIZED',
   'INVALID_CREDENTIALS',
   'ACCOUNT_LOCKED',
