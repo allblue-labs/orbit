@@ -24,6 +24,8 @@ import { isKnownPlan } from '../catalog/plan-registry';
 import { SubscriptionRepository } from './subscription.repository';
 import { SubscriptionService } from './subscription.service';
 import { TrialEligibilityService } from './trial-eligibility.service';
+import type { PrismaTransactionClient } from '../../../database/prisma.types';
+import { TrialNotEligibleException } from './subscription.errors';
 
 export interface ProvisionInput {
   organizationId: string;
@@ -42,6 +44,43 @@ export class SubscriptionProvisioningService {
     private readonly trials: TrialEligibilityService,
     private readonly repository: SubscriptionRepository,
   ) {}
+
+  /** Canonical, atomic local boundary for durable administrative provisioning. */
+  async provisionIn(tx: PrismaTransactionClient, input: ProvisionInput) {
+    if (!isKnownPlan(input.planKey))
+      throw new Error('ADMIN_PLAN_NOT_SUPPORTED');
+    const current = await this.repository.findCurrent(input.organizationId, tx);
+    if (current) return current; // Resume observes effects, never overwrites them.
+    const startsAt = input.at ?? new Date();
+    let trial: { startsAt: Date; endsAt: Date } | null = null;
+    if (this.trials.offersTrial(input.planKey)) {
+      try {
+        trial = await this.trials.grantTrial(
+          {
+            organizationId: input.organizationId,
+            planCode: input.planKey,
+            legalDocument: input.legalDocument,
+            at: startsAt,
+          },
+          tx,
+        );
+      } catch (error) {
+        if (!(error instanceof TrialNotEligibleException)) throw error;
+      }
+    }
+    return this.subscriptions.create(
+      {
+        organizationId: input.organizationId,
+        planCode: input.planKey,
+        billingInterval: input.billingInterval ?? BillingInterval.MONTHLY,
+        startsAt,
+        access: trial
+          ? { kind: 'TRIAL', ...trial }
+          : { kind: 'PAYMENT_REQUIRED' },
+      },
+      tx,
+    );
+  }
 
   /**
    * Provisiona a assinatura do cadastro.

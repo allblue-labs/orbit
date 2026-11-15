@@ -199,6 +199,7 @@ async function provision(): Promise<void> {
        * depois — que é exatamente o que ela existe para impedir.
        */
       'billing_webhook_events',
+      'platform_tenant_provisionings',
     ]) {
       await admin.query(
         `DO $$

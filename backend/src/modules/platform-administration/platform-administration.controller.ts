@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   HttpCode,
   HttpStatus,
   Param,
@@ -9,9 +10,11 @@ import {
   Post,
   Query,
   Req,
+  Res,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiAcceptedResponse,
   ApiCreatedResponse,
   ApiOperation,
   ApiTags,
@@ -25,6 +28,7 @@ import {
   UpdatePlatformOrganizationDto,
 } from './dto/platform-administration.dto';
 import { PlatformAdministrationService } from './platform-administration.service';
+import type { Response } from 'express';
 
 @ApiTags('Platform Administration')
 @ApiBearerAuth()
@@ -52,7 +56,10 @@ export class PlatformAdministrationController {
   }
 
   @Patch('organizations/:id')
-  @ApiOperation({ summary: 'Manage tenant status, subscription and plan' })
+  @ApiOperation({
+    summary:
+      'Update tenant display name/segment with optimistic concurrency; financial fields are read-only',
+  })
   updateOrganization(
     @Param('id', ParseUUIDv7Pipe) id: string,
     @Req() request: IdentityRequest,
@@ -61,19 +68,51 @@ export class PlatformAdministrationController {
     return this.platform.updateOrganization(id, request.identity!.id, input);
   }
 
+  @ApiAcceptedResponse({
+    description:
+      'Provisioning remains pending; consult provisioning.id and resume the same operation',
+  })
   @Post('tenants')
   @HttpCode(HttpStatus.CREATED)
   @ApiCreatedResponse({
-    description: 'Tenant, organization, primary unit and owner created',
+    description:
+      'Local provisioning persisted; owner setup and payment remain independent states',
   })
   @ApiOperation({
     summary: 'Provision a tenant and its first organization owner',
   })
-  createTenant(
+  async createTenant(
     @Req() request: IdentityRequest,
     @Body() input: CreatePlatformTenantDto,
+    @Headers('idempotency-key') key: string | undefined,
+    @Res({ passthrough: true }) response: Response,
   ) {
-    return this.platform.createTenant(request.identity!.id, input);
+    const result = await this.platform.createTenant(
+      request.identity!.id,
+      input,
+      key,
+    );
+    response.status(
+      result?.provisioning?.complete ? HttpStatus.CREATED : HttpStatus.ACCEPTED,
+    );
+    return result;
+  }
+
+  @Get('tenant-provisionings/:id')
+  provisioning(@Param('id', ParseUUIDv7Pipe) id: string) {
+    return this.platform.provisioning(id);
+  }
+
+  @Post('tenant-provisionings/:id/resume')
+  async resume(
+    @Param('id', ParseUUIDv7Pipe) id: string,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await this.platform.resumeProvisioning(id);
+    response.status(
+      result?.provisioning?.complete ? HttpStatus.OK : HttpStatus.ACCEPTED,
+    );
+    return result;
   }
 
   @Get('users')

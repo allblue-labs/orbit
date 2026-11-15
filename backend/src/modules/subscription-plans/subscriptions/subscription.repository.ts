@@ -308,8 +308,17 @@ export class SubscriptionRepository {
       riskSignals?: Prisma.InputJsonValue;
     },
     transaction?: PrismaTransactionClient,
+    conflictSafe = false,
   ): Promise<{ id: string } | null> {
     const trabalho = async (tx: PrismaTransactionClient) => {
+      if (conflictSafe) {
+        const id = generateUuidV7();
+        const inserted = await tx.subscriptionTrialGrant.createMany({
+          data: { id, status: 'GRANTED', ...data },
+          skipDuplicates: true,
+        });
+        return inserted.count === 1 ? { id } : null;
+      }
       try {
         return await tx.subscriptionTrialGrant.create({
           data: { id: generateUuidV7(), status: 'GRANTED', ...data },

@@ -23,6 +23,25 @@ const TOKEN =
   "Ab3-_xYz01234567890123456789012345678901234567890123456789012xZ_";
 
 describe("inspectPath", () => {
+  it.each([
+    ["/platform-admin/tenants", "POST"],
+    [
+      "/platform-admin/tenant-provisionings/00000000-0000-7000-8000-000000000001",
+      "GET",
+    ],
+    [
+      "/platform-admin/tenant-provisionings/00000000-0000-7000-8000-000000000001/resume",
+      "POST",
+    ],
+  ] as const)(
+    "mantém autenticação no provisionamento administrativo %s %s",
+    (path, method) => {
+      expect(inspectPath(path, method)).toEqual({
+        allowed: true,
+        requiresSession: true,
+      });
+    },
+  );
   const quoteToken = "Ab3_".repeat(16);
   it.each([
     ["/identity/email/verify", "POST"],

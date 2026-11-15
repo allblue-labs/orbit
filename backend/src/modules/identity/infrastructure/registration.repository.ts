@@ -31,6 +31,7 @@ export type TenantProvisioningOptions = {
 export class RegistrationRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  /** Optional local transaction keeps administrative workflow and owner atomic. */
   register(
     input: RegisterOrganizationDto,
     passwordHash: string,
@@ -41,6 +42,7 @@ export class RegistrationRepository {
       tx: Prisma.TransactionClient,
       userId: string,
     ) => Promise<void>,
+    existingTransaction?: Prisma.TransactionClient,
   ) {
     const userId = generateUuidV7();
     const organizationId = generateUuidV7();
@@ -49,7 +51,7 @@ export class RegistrationRepository {
     const trialEndsAt = new Date(now);
     trialEndsAt.setUTCDate(trialEndsAt.getUTCDate() + 14);
 
-    return this.prisma.$transaction(async (transaction) => {
+    const work = async (transaction: Prisma.TransactionClient) => {
       const plan = await transaction.plan.findFirst({
         where: { key: input.planKey, isActive: true },
       });
@@ -229,7 +231,10 @@ export class RegistrationRepository {
       }
       await queueWelcome?.(transaction, userId);
       return { userId, organizationId, businessUnitId };
-    });
+    };
+    return existingTransaction
+      ? work(existingTransaction)
+      : this.prisma.$transaction(work);
   }
 
   private setLocal(

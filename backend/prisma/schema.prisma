@@ -132,6 +132,9 @@ model User {
 
   @@index([status, deletedAt])
   @@map("users")
+  initiatedTenantProvisionings PlatformTenantProvisioning[] @relation("ProvisioningActor")
+  ownedTenantProvisionings PlatformTenantProvisioning[] @relation("ProvisioningOwner")
+
 }
 
 model Credential {
@@ -194,6 +197,8 @@ model PasswordResetToken {
 
   @@index([userId, expiresAt])
   @@map("password_reset_tokens")
+  tenantProvisionings PlatformTenantProvisioning[]
+
 }
 
 model IdentityInvitation {
@@ -427,6 +432,8 @@ model Organization {
   @@index([ownerUserId, status])
   @@index([planId, subscriptionStatus])
   @@map("organizations")
+  adminProvisionings PlatformTenantProvisioning[]
+
 }
 
 model BusinessUnit {
@@ -4970,4 +4977,34 @@ model QuoteAcceptanceLink {
 
   @@index([organizationId, quoteId, createdAt])
   @@map("quote_acceptance_links")
+}
+
+/// Durable local administration workflow; not a Nexus command inbox.
+model PlatformTenantProvisioning {
+  id String @id @default(uuid(7)) @db.Uuid
+  actorUserId String @map("actor_user_id") @db.Uuid
+  idempotencyKey String @map("idempotency_key") @db.Char(64)
+  requestHash String @map("request_hash") @db.Char(64)
+  correlationId String @map("correlation_id") @db.VarChar(128)
+  planCode String @map("plan_code") @db.VarChar(60)
+  billingInterval String @map("billing_interval") @db.VarChar(20)
+  status String @default("RECEIVED") @db.VarChar(32)
+  organizationId String? @unique @map("organization_id") @db.Uuid
+  ownerUserId String? @map("owner_user_id") @db.Uuid
+  primaryBusinessUnitId String? @map("primary_business_unit_id") @db.Uuid
+  ownerPasswordProvided Boolean @default(false) @map("owner_password_provided")
+  ownerSetupTokenId String? @map("owner_setup_token_id") @db.Uuid
+  lastErrorCode String? @map("last_error_code") @db.VarChar(80)
+  attempts Int @default(0)
+  version Int @default(1)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  completedAt DateTime? @map("completed_at") @db.Timestamptz(3)
+  actor User @relation("ProvisioningActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  owner User? @relation("ProvisioningOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  ownerSetupToken PasswordResetToken? @relation(fields: [ownerSetupTokenId], references: [id], onDelete: SetNull)
+  @@unique([actorUserId, idempotencyKey])
+  @@index([status, updatedAt])
+  @@map("platform_tenant_provisionings")
 }

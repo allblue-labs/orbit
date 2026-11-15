@@ -23,6 +23,7 @@
  * log, que tem outra plateia.
  */
 import { Injectable, Logger } from '@nestjs/common';
+import type { PrismaTransactionClient } from '../../../database/prisma.types';
 import { Prisma } from '@prisma/client';
 import {
   PlanCode,
@@ -164,7 +165,10 @@ export class TrialEligibilityService {
    * mesmo tempo com o mesmo documento têm de resultar em **uma** concessão.
    * A verificação prévia existe para dar a resposta barata no caso comum.
    */
-  async grantTrial(input: GrantTrialInput): Promise<GrantedTrial> {
+  async grantTrial(
+    input: GrantTrialInput,
+    transaction?: PrismaTransactionClient,
+  ): Promise<GrantedTrial> {
     if (!this.offersTrial(input.planCode)) {
       throw new TrialNotEligibleException(
         `plan ${input.planCode} does not offer trial`,
@@ -175,31 +179,34 @@ export class TrialEligibilityService {
     const fim = new Date(inicio.getTime() + TRIAL_DAYS * DIA_MS);
 
     /**
-     * Transação própria, com a organização declarada.
+     * Por padrão, transação própria, com a organização declarada.
      *
      * Própria porque a recusa vem de uma violação de unicidade, e um erro do
      * Postgres aborta a transação inteira em que acontece: tentar aqui dentro
      * da transação de outra escrita faria essa outra escrita falhar em
      * seguida, com uma mensagem que não tem nada a ver com avaliação.
+     * O provisionamento administrativo pode fornecer sua transação local:
+     * nesse caso o repositório usa ON CONFLICT, sem abortar o restante dela.
      */
-    const concessao = await this.repository.runAsOrganization(
-      input.organizationId,
-      (tx) =>
-        this.repository.grantTrial(
-          {
-            organizationId: input.organizationId,
-            planCode: input.planCode,
-            legalDocumentFingerprint: impressao,
-            startsAt: inicio,
-            endsAt: fim,
-            riskDecision: TrialRiskDecision.ALLOW,
-            ...(input.signals
-              ? { riskSignals: input.signals as Prisma.InputJsonValue }
-              : {}),
-          },
-          tx,
-        ),
-    );
+    const work = (tx: PrismaTransactionClient) =>
+      this.repository.grantTrial(
+        {
+          organizationId: input.organizationId,
+          planCode: input.planCode,
+          legalDocumentFingerprint: impressao,
+          startsAt: inicio,
+          endsAt: fim,
+          riskDecision: TrialRiskDecision.ALLOW,
+          ...(input.signals
+            ? { riskSignals: input.signals as Prisma.InputJsonValue }
+            : {}),
+        },
+        tx,
+        !!transaction,
+      );
+    const concessao = transaction
+      ? await work(transaction)
+      : await this.repository.runAsOrganization(input.organizationId, work);
 
     if (!concessao) {
       /**

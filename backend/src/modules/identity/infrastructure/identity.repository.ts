@@ -418,8 +418,9 @@ export class IdentityRepository {
     tokenHash: string,
     expiresAt: Date,
     emailToken?: string,
+    existingTransaction?: PrismaTransactionClient,
   ) {
-    return this.prisma.$transaction(async (transaction) => {
+    const work = async (transaction: PrismaTransactionClient) => {
       await transaction.$executeRaw`SELECT id FROM users WHERE id=${userId}::uuid FOR UPDATE`;
       await this.setLocal(transaction, 'app.user_id', userId);
       await transaction.passwordResetToken.deleteMany({ where: { userId } });
@@ -440,7 +441,10 @@ export class IdentityRepository {
         });
       }
       return reset;
-    });
+    };
+    return existingTransaction
+      ? work(existingTransaction)
+      : this.prisma.$transaction(work);
   }
 
   findPasswordReset(tokenHash: string) {
