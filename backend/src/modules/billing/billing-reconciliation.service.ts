@@ -37,6 +37,7 @@ import {
   BillingCheckoutFulfillmentService,
 } from './billing-checkout-fulfillment.service';
 import { BillingRepository } from './billing.repository';
+import { BillingWorkBudget } from './billing-work-budget';
 import {
   BILLING_PROVIDER,
   ProviderFinancialAdjustmentType,
@@ -44,16 +45,20 @@ import {
   ProviderInvoiceStatus,
   type BillingProvider,
   type ProviderSubscription,
+  type ProviderInvoice,
 } from './billing.types';
 
 /** Eventos que este código sabe transformar em comando. O resto é ignorado. */
 const EVENTOS_TRATADOS = new Set([
+  'orbit.subscription.recovery',
   'checkout.session.completed',
   'checkout.session.async_payment_succeeded',
   'customer.subscription.created',
   'customer.subscription.updated',
   'customer.subscription.deleted',
   'invoice.paid',
+  'invoice.payment_succeeded',
+  'invoice_payment.paid',
   'invoice.payment_failed',
   'invoice.created',
   'invoice.finalized',
@@ -97,6 +102,10 @@ export class BillingReconciliationService {
 
   /** Processa a caixa de entrada. Repetir não muda o resultado. */
   async drainInbox(): Promise<BillingReconciliationSummary> {
+    return BillingWorkBudget.run(60, 30_000, () => this.drainBoundedInbox());
+  }
+  private async drainBoundedInbox(): Promise<BillingReconciliationSummary> {
+    const until = Date.now() + 30_000;
     const resumo = {
       examined: 0,
       processed: 0,
@@ -106,10 +115,11 @@ export class BillingReconciliationService {
     };
     if (!this.provider.isEnabled()) return resumo;
 
-    for (let index = 0; index < LOTE; index += 1) {
+    for (let index = 0; index < LOTE && Date.now() < until; index += 1) {
       const evento = await this.repository.claimNextEvent({
         leaseMs: LEASE_MS,
         maxAttempts: MAX_ATTEMPTS,
+        mode: this.provider.mode,
       });
       if (!evento) break;
       resumo.examined += 1;
@@ -127,7 +137,9 @@ export class BillingReconciliationService {
       const isCheckout =
         evento.eventType === 'checkout.session.completed' ||
         evento.eventType === 'checkout.session.async_payment_succeeded';
-      const isInvoice = evento.eventType.startsWith('invoice.');
+      const isInvoicePayment = evento.eventType === 'invoice_payment.paid';
+      const isInvoice =
+        evento.eventType.startsWith('invoice.') || isInvoicePayment;
       const adjustmentType = evento.eventType.startsWith('refund.')
         ? ProviderFinancialAdjustmentType.REFUND
         : evento.eventType.startsWith('charge.dispute.')
@@ -183,32 +195,43 @@ export class BillingReconciliationService {
       }
 
       try {
-        const providerSubscriptionId = isCheckout
-          ? await this.checkoutFulfillment.fulfill(evento.providerObjectId!)
-          : isInvoice
-            ? await this.reconcileProviderInvoice(
+        await this.repository.withClaim(evento, async () => {
+          let providerInvoiceId = evento.providerObjectId;
+          if (isInvoicePayment) {
+            if (!this.provider.retrieveInvoicePaymentInvoice)
+              throw new Error('BILLING_PAYMENT_EVENT_UNSUPPORTED');
+            providerInvoiceId =
+              await this.provider.retrieveInvoicePaymentInvoice(
                 evento.providerObjectId!,
-                evento.providerEventId,
-              )
-            : adjustmentType
-              ? await this.reconcileProviderAdjustment(
-                  adjustmentType,
-                  evento.providerObjectId!,
+              );
+          }
+          const providerSubscriptionId = isCheckout
+            ? await this.checkoutFulfillment.fulfill(evento.providerObjectId!)
+            : isInvoice
+              ? await this.reconcileProviderInvoice(
+                  providerInvoiceId!,
                   evento.providerEventId,
                 )
-              : evento.providerSubscriptionId!;
-        if (providerSubscriptionId) {
-          await this.reconcileProviderSubscription(
-            providerSubscriptionId,
-            evento.providerEventId,
-          );
-        }
-        await this.repository.finishClaimedEvent({
-          id: evento.id,
-          processingToken: evento.processingToken,
-          status: 'PROCESSED',
+              : adjustmentType
+                ? await this.reconcileProviderAdjustment(
+                    adjustmentType,
+                    evento.providerObjectId!,
+                    evento.providerEventId,
+                  )
+                : evento.providerSubscriptionId!;
+          if (providerSubscriptionId) {
+            await this.reconcileProviderSubscription(
+              providerSubscriptionId,
+              evento.providerEventId,
+            );
+          }
+          await this.repository.finishClaimedEvent({
+            id: evento.id,
+            processingToken: evento.processingToken,
+            status: 'PROCESSED',
+          });
+          resumo.processed += 1;
         });
-        resumo.processed += 1;
       } catch (error) {
         if (error instanceof BillingCheckoutAwaitingPaymentError) {
           await this.repository.finishClaimedEvent({
@@ -221,17 +244,22 @@ export class BillingReconciliationService {
           continue;
         }
         const errorCode = this.safeErrorCode(error);
+        if (errorCode === 'BILLING_LEASE_LOST') {
+          resumo.deferred += 1;
+          continue;
+        }
         const permanent = this.isPermanent(errorCode);
         const exhausted = evento.attempts >= MAX_ATTEMPTS;
         await this.repository.retryClaimedEvent({
           id: evento.id,
           processingToken: evento.processingToken,
-          errorCode: exhausted ? 'RETRY_EXHAUSTED' : errorCode,
+          errorCode,
           nextAttemptAt: new Date(Date.now() + this.backoff(evento.attempts)),
           deadLetter: permanent || exhausted,
         });
         if (permanent || exhausted) resumo.failed += 1;
         else resumo.deferred += 1;
+        if (errorCode === 'BILLING_WORK_BUDGET_EXHAUSTED') break;
       }
     }
 
@@ -249,6 +277,12 @@ export class BillingReconciliationService {
   }
 
   private safeErrorCode(error: unknown): string {
+    if (
+      error instanceof Error &&
+      (error.message.includes('BILLING_LEASE_LOST') ||
+        error.message.includes('Billing event lease was lost'))
+    )
+      return 'BILLING_LEASE_LOST';
     if (
       error instanceof Error &&
       /^[A-Z][A-Z0-9_]{2,79}$/.test(error.message)
@@ -274,41 +308,12 @@ export class BillingReconciliationService {
    * processamento falho convergem aqui, perguntando ao provedor o estado das
    * assinaturas que **já conhecemos** — nunca varrendo o provedor inteiro.
    */
-  async reconcileLinkedSubscriptions(): Promise<BillingReconciliationSummary> {
-    const resumo = {
-      examined: 0,
-      processed: 0,
-      ignored: 0,
-      failed: 0,
-      deferred: 0,
-    };
-    if (!this.provider.isEnabled()) return resumo;
-
-    let cursor: string | undefined;
-    for (;;) {
-      const lote = await this.repository.linkedSubscriptions(LOTE, cursor);
-      if (lote.length === 0) break;
-      cursor = lote[lote.length - 1]!.id;
-
-      for (const assinatura of lote) {
-        resumo.examined += 1;
-        try {
-          await this.reconcileProviderSubscription(
-            assinatura.providerSubscriptionId!,
-            null,
-          );
-          resumo.processed += 1;
-        } catch (error) {
-          if (error instanceof BillingProviderUnavailableException) {
-            resumo.deferred += 1;
-            continue;
-          }
-          resumo.failed += 1;
-        }
-      }
-      if (lote.length < LOTE) break;
-    }
-    return resumo;
+  async reconcileLinkedSubscriptions(take = 25, after?: string) {
+    return this.repository.linkedSubscriptions(
+      Math.min(25, Math.max(1, take)),
+      after,
+      this.provider.mode,
+    );
   }
 
   /**
@@ -322,6 +327,7 @@ export class BillingReconciliationService {
     providerSubscriptionId: string,
     providerEventId: string | null,
   ): Promise<void> {
+    const observationVersion = await this.repository.nextObservation();
     const provedor = await this.provider.retrieveSubscription(
       providerSubscriptionId,
     );
@@ -345,6 +351,7 @@ export class BillingReconciliationService {
       return;
     }
     if (
+      (provedor.mode && provedor.mode !== this.provider.mode) ||
       !local.providerCustomerId ||
       local.providerCustomerId !== provedor.providerCustomerId
     ) {
@@ -361,14 +368,42 @@ export class BillingReconciliationService {
      * isso, as leituras voltavam vazias e a reconciliação não fazia nada,
      * silenciosamente.
      */
-    await this.comoInquilino(local.organizationId, async () => {
-      const atual = await this.subscriptions.currentOrNull(
-        local.organizationId,
+    const proof = provedor.latestInvoiceId
+      ? await this.provider.retrieveInvoice(provedor.latestInvoiceId)
+      : null;
+    if (providerEventId?.startsWith('orbit:') && proof)
+      await this.reconcileProviderInvoice(
+        proof.providerInvoiceId,
+        `${providerEventId}:invoice`,
       );
-      // Um evento antigo não pode encerrar a nova contratação da organização.
-      if (!atual || atual.id !== local.id) return;
-      await this.aplicar(atual, provedor, providerEventId);
-    });
+    await this.comoInquilino(local.organizationId, () =>
+      this.repository.atomic(async () => {
+        await this.repository.assertBinding(
+          local.organizationId,
+          provedor.providerCustomerId,
+          this.provider.mode,
+        );
+        await this.repository.lockContract(local.id);
+        const atual = await this.subscriptions.currentOrNull(
+          local.organizationId,
+        );
+        // Um evento antigo não pode encerrar a nova contratação da organização.
+        if (!atual || atual.id !== local.id) return;
+        if (atual.version !== local.version)
+          throw new Error('BILLING_CONTRACT_VERSION_CHANGED');
+        if ((atual.providerObservationVersion ?? 0n) >= observationVersion)
+          return;
+        if (
+          this.comandoPara(atual, provedor) !== 'NONE' ||
+          atual.cancelAtPeriodEnd !== provedor.cancelAtPeriodEnd ||
+          (this.config.catalogEntryForPrice(provedor.providerPriceId ?? '')
+            ?.planCode ?? atual.planCode) !== atual.planCode
+        )
+          this.repository.noteDivergence();
+        await this.aplicar(atual, provedor, providerEventId, proof);
+        await this.repository.completeObservation(atual.id, observationVersion);
+      }),
+    );
   }
 
   /**
@@ -381,7 +416,11 @@ export class BillingReconciliationService {
     providerInvoiceId: string,
     providerEventId: string,
   ): Promise<string | null> {
-    const invoice = await this.provider.retrieveInvoice(providerInvoiceId);
+    const observationVersion = await this.repository.nextObservation();
+    const invoice = {
+      ...(await this.provider.retrieveInvoice(providerInvoiceId)),
+      observationVersion,
+    };
     if (!invoice.providerSubscriptionId) {
       this.logger.warn(
         JSON.stringify({ stage: 'billing-invoice-without-subscription' }),
@@ -393,22 +432,28 @@ export class BillingReconciliationService {
     );
     if (!local) throw new Error('BILLING_INVOICE_SUBSCRIPTION_UNLINKED');
     if (
+      (invoice.mode && invoice.mode !== this.provider.mode) ||
       !local.providerCustomerId ||
       local.providerCustomerId !== invoice.providerCustomerId
     ) {
       throw new Error('BILLING_INVOICE_CUSTOMER_MISMATCH');
     }
 
-    await this.comoInquilino(local.organizationId, () =>
-      this.repository.recordInvoice({
+    await this.comoInquilino(local.organizationId, async () => {
+      await this.repository.assertBinding(
+        local.organizationId,
+        invoice.providerCustomerId,
+        this.provider.mode,
+      );
+      return this.repository.recordInvoice({
         organizationId: local.organizationId,
         subscriptionId: local.id,
         provider: this.provider.name,
         mode: this.provider.mode,
         providerEventId,
         invoice,
-      }),
-    );
+      });
+    });
     return invoice.providerSubscriptionId;
   }
 
@@ -417,41 +462,55 @@ export class BillingReconciliationService {
     providerObjectId: string,
     providerEventId: string,
   ): Promise<string | null> {
-    const adjustment = await this.provider.retrieveFinancialAdjustment(
-      type,
-      providerObjectId,
-    );
-    const invoice = await this.provider.retrieveInvoice(
-      adjustment.providerInvoiceId,
-    );
+    const observationVersion = await this.repository.nextObservation();
+    const adjustment = {
+      ...(await this.provider.retrieveFinancialAdjustment(
+        type,
+        providerObjectId,
+      )),
+      observationVersion,
+    };
+    const invoiceVersion = await this.repository.nextObservation();
+    const invoice = {
+      ...(await this.provider.retrieveInvoice(adjustment.providerInvoiceId)),
+      observationVersion: invoiceVersion,
+    };
     if (!invoice.providerSubscriptionId) return null;
     const local = await this.repository.findSubscriptionForLedgerByProviderId(
       invoice.providerSubscriptionId,
     );
     if (!local) throw new Error('BILLING_ADJUSTMENT_SUBSCRIPTION_UNLINKED');
     if (
+      (invoice.mode && invoice.mode !== this.provider.mode) ||
       !local.providerCustomerId ||
       local.providerCustomerId !== invoice.providerCustomerId
     ) {
       throw new Error('BILLING_ADJUSTMENT_CUSTOMER_MISMATCH');
     }
 
-    await this.comoInquilino(local.organizationId, async () => {
-      await this.repository.recordInvoice({
-        organizationId: local.organizationId,
-        subscriptionId: local.id,
-        provider: this.provider.name,
-        mode: this.provider.mode,
-        providerEventId,
-        invoice,
-      });
-      await this.repository.recordFinancialAdjustment({
-        organizationId: local.organizationId,
-        provider: this.provider.name,
-        providerEventId,
-        adjustment,
-      });
-    });
+    await this.comoInquilino(local.organizationId, () =>
+      this.repository.atomic(async () => {
+        await this.repository.assertBinding(
+          local.organizationId,
+          invoice.providerCustomerId,
+          this.provider.mode,
+        );
+        await this.repository.recordInvoice({
+          organizationId: local.organizationId,
+          subscriptionId: local.id,
+          provider: this.provider.name,
+          mode: this.provider.mode,
+          providerEventId,
+          invoice,
+        });
+        await this.repository.recordFinancialAdjustment({
+          organizationId: local.organizationId,
+          provider: this.provider.name,
+          providerEventId,
+          adjustment,
+        });
+      }),
+    );
     return invoice.providerSubscriptionId;
   }
 
@@ -495,10 +554,49 @@ export class BillingReconciliationService {
       currentPeriodStart: Date;
       currentPeriodEnd: Date;
       cancelAtPeriodEnd: boolean;
+      trialEndsAt?: Date | null;
     },
     provedor: ProviderSubscription,
     providerEventId: string | null,
+    proof: ProviderInvoice | null,
   ): Promise<void> {
+    const needsPayment =
+      provedor.state === ProviderBillingState.ACTIVE &&
+      (atual.effectiveStatus !== SubscriptionStatus.ACTIVE ||
+        atual.currentPeriodStart.getTime() !==
+          provedor.currentPeriodStart?.getTime() ||
+        atual.currentPeriodEnd.getTime() !==
+          provedor.currentPeriodEnd?.getTime() ||
+        (provedor.providerPriceId &&
+          this.config.catalogEntryForPrice(provedor.providerPriceId) &&
+          this.config.catalogEntryForPrice(provedor.providerPriceId)
+            ?.planCode !== atual.planCode));
+    if (
+      needsPayment &&
+      (!proof ||
+        proof.providerSubscriptionId !== provedor.providerSubscriptionId ||
+        proof.providerCustomerId !== provedor.providerCustomerId ||
+        proof.status !== ProviderInvoiceStatus.PAID ||
+        proof.amountRemainingMinor !== 0 ||
+        !proof.subscriptionLines?.some(
+          (line) =>
+            line.subscriptionId === provedor.providerSubscriptionId &&
+            line.priceId === provedor.providerPriceId &&
+            line.periodStart.getTime() ===
+              provedor.currentPeriodStart?.getTime() &&
+            line.periodEnd.getTime() === provedor.currentPeriodEnd?.getTime(),
+        ))
+    )
+      throw new Error('BILLING_PLAN_PAYMENT_NOT_CONFIRMED');
+    // A remote trial cannot grant or extend Orbit's locally approved trial.
+    if (
+      provedor.state === ProviderBillingState.TRIALING &&
+      (!('trialEndsAt' in atual) ||
+        !(atual.trialEndsAt instanceof Date) ||
+        !provedor.trialEndsAt ||
+        provedor.trialEndsAt > atual.trialEndsAt)
+    )
+      throw new Error('BILLING_TRIAL_NOT_GRANTED');
     const catalogEntry = provedor.providerPriceId
       ? this.config.catalogEntryForPrice(provedor.providerPriceId)
       : null;
@@ -529,10 +627,9 @@ export class BillingReconciliationService {
       ) {
         if (!provedor.latestInvoiceId)
           throw new Error('BILLING_PLAN_PAYMENT_NOT_CONFIRMED');
-        const invoice = await this.provider.retrieveInvoice(
-          provedor.latestInvoiceId,
-        );
+        const invoice = proof;
         if (
+          !invoice ||
           invoice.providerSubscriptionId !== provedor.providerSubscriptionId ||
           invoice.providerCustomerId !== provedor.providerCustomerId ||
           invoice.status !== ProviderInvoiceStatus.PAID ||

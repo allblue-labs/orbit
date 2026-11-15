@@ -48,6 +48,7 @@ export interface SubscriptionRow {
   providerStatus: string | null;
   providerLastEventId: string | null;
   providerUpdatedAt: Date | null;
+  providerObservationVersion?: bigint;
 }
 
 @Injectable()

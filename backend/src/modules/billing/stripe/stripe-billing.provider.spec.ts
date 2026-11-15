@@ -17,6 +17,7 @@ afterEach(() => jest.useRealTimers());
 describe('StripeBillingProvider subscription commands', () => {
   const current = (overrides: Record<string, unknown> = {}) => ({
     id: 'sub_test_1',
+    livemode: false,
     customer: 'cus_test_1',
     status: 'active',
     cancel_at_period_end: false,
@@ -125,9 +126,15 @@ describe('StripeBillingProvider subscription commands', () => {
       },
     };
     const invoices = { retrieve: jest.fn() };
+    const events = {
+      list: jest.fn().mockResolvedValue({ data: [], has_more: false }),
+    };
     const refunds = { retrieve: jest.fn() };
     const disputes = { retrieve: jest.fn() };
-    const invoicePayments = { list: jest.fn() };
+    const invoicePayments = {
+      retrieve: jest.fn(),
+      list: jest.fn().mockResolvedValue({ data: [], has_more: false }),
+    };
     const provider = new StripeBillingProvider(config as never);
     Object.defineProperty(provider, 'client', {
       value: {
@@ -138,6 +145,7 @@ describe('StripeBillingProvider subscription commands', () => {
         subscriptions,
         subscriptionSchedules,
         invoices,
+        events,
         refunds,
         disputes,
         invoicePayments,
@@ -154,6 +162,7 @@ describe('StripeBillingProvider subscription commands', () => {
       subscriptions,
       subscriptionSchedules,
       invoices,
+      events,
       refunds,
       disputes,
       invoicePayments,
@@ -258,6 +267,7 @@ describe('StripeBillingProvider subscription commands', () => {
     const { provider } = setup();
     const payload = JSON.stringify({
       id: 'evt_unit',
+      livemode: false,
       type: 'customer.subscription.updated',
       api_version: '2026-08-26.dahlia',
       created: Math.floor(Date.now() / 1000),
@@ -286,6 +296,7 @@ describe('StripeBillingProvider subscription commands', () => {
     const { provider } = setup();
     const payload = JSON.stringify({
       id: 'evt_unit',
+      livemode: false,
       type: 'customer.subscription.updated',
       data: { object: { id: 'sub_unit' } },
     });
@@ -465,6 +476,7 @@ describe('StripeBillingProvider subscription commands', () => {
     const { provider, invoices } = setup();
     invoices.retrieve.mockResolvedValue({
       id: 'in_test_1',
+      livemode: false,
       customer: 'cus_test_1',
       parent: {
         subscription_details: { subscription: 'sub_test_1' },
@@ -534,7 +546,7 @@ describe('StripeBillingProvider subscription commands', () => {
       receipt_number: 'secret_receipt_not_projected',
     });
     invoicePayments.list.mockResolvedValue({
-      data: [{ invoice: 'in_test_1' }],
+      data: [{ invoice: 'in_test_1', livemode: false }],
       has_more: false,
     });
 
@@ -555,5 +567,211 @@ describe('StripeBillingProvider subscription commands', () => {
     expect(JSON.stringify(adjustment)).not.toContain(
       'secret_receipt_not_projected',
     );
+  });
+  const cashInvoice = () => ({
+    id: 'in_cash',
+    livemode: false,
+    customer: 'cus_test_1',
+    parent: { subscription_details: { subscription: 'sub_test_1' } },
+    number: null,
+    status: 'paid',
+    currency: 'brl',
+    subtotal: 5000,
+    total: 5000,
+    amount_due: 5000,
+    amount_paid: 5000,
+    amount_remaining: 0,
+    pre_payment_credit_notes_amount: 0,
+    post_payment_credit_notes_amount: 0,
+    attempted: true,
+    attempt_count: 1,
+    billing_reason: 'subscription_cycle',
+    collection_method: 'charge_automatically',
+    period_start: 1791158400,
+    period_end: 1793836800,
+    due_date: null,
+    next_payment_attempt: null,
+    status_transitions: {
+      finalized_at: 1791158400,
+      paid_at: 1791158500,
+      voided_at: null,
+      marked_uncollectible_at: null,
+    },
+    created: 1791158400,
+  });
+  const cashPayment = () => ({
+    id: 'inpay_cash',
+    invoice: 'in_cash',
+    livemode: false,
+    status: 'paid',
+    amount_paid: 5000,
+    currency: 'brl',
+    status_transitions: { paid_at: 1791158500 },
+    payment: {
+      type: 'payment_intent',
+      payment_intent: {
+        id: 'pi_cash',
+        status: 'succeeded',
+        customer: 'cus_test_1',
+        currency: 'brl',
+        amount_received: 5000,
+        livemode: false,
+      },
+    },
+  });
+  it('PAID and a payment record alone do not assert Stripe cash', async () => {
+    const { provider, invoices, invoicePayments } = setup();
+    invoices.retrieve.mockResolvedValue(cashInvoice());
+    invoicePayments.list.mockResolvedValue({
+      data: [
+        {
+          ...cashPayment(),
+          payment: { type: 'payment_record', payment_record: 'pyr_external' },
+        },
+      ],
+      has_more: false,
+    });
+    expect((await provider.retrieveInvoice('in_cash')).paymentEvidence).toEqual(
+      [],
+    );
+  });
+  it('records only a succeeded, correlated Stripe PaymentIntent and original paid timestamp', async () => {
+    const { provider, invoices, invoicePayments } = setup();
+    invoices.retrieve.mockResolvedValue(cashInvoice());
+    invoicePayments.list.mockResolvedValue({
+      data: [cashPayment()],
+      has_more: false,
+    });
+    expect((await provider.retrieveInvoice('in_cash')).paymentEvidence).toEqual(
+      [
+        {
+          invoicePaymentId: 'inpay_cash',
+          paymentIntentId: 'pi_cash',
+          amountMinor: 5000,
+          currency: 'brl',
+          confirmedAt: new Date(1791158500000).toISOString(),
+        },
+      ],
+    );
+  });
+  it.each(['WRONG_CUSTOMER', 'PROCESSING', 'SHORT_AMOUNT', 'WRONG_CURRENCY'])(
+    'does not assert cash without valid payment evidence: %s',
+    async (scenario) => {
+      const { provider, invoices, invoicePayments } = setup();
+      invoices.retrieve.mockResolvedValue(cashInvoice());
+      const payment = cashPayment();
+      if (scenario === 'WRONG_CUSTOMER')
+        payment.payment.payment_intent.customer = 'cus_other';
+      if (scenario === 'PROCESSING')
+        payment.payment.payment_intent.status = 'processing';
+      if (scenario === 'SHORT_AMOUNT')
+        payment.payment.payment_intent.amount_received = 1;
+      if (scenario === 'WRONG_CURRENCY')
+        payment.payment.payment_intent.currency = 'usd';
+      invoicePayments.list.mockResolvedValue({
+        data: [payment],
+        has_more: false,
+      });
+      expect(
+        (await provider.retrieveInvoice('in_cash')).paymentEvidence,
+      ).toEqual([]);
+    },
+  );
+  it('fails closed for a LIVE invoice in a TEST provider', async () => {
+    const { provider, invoices } = setup();
+    invoices.retrieve.mockResolvedValue({ ...cashInvoice(), livemode: true });
+    await expect(provider.retrieveInvoice('in_cash')).rejects.toThrow(
+      'BILLING_MODE_MISMATCH',
+    );
+  });
+  it('fails closed on unbounded payment pagination', async () => {
+    const { provider, invoices, invoicePayments } = setup();
+    invoices.retrieve.mockResolvedValue(cashInvoice());
+    invoicePayments.list.mockResolvedValue({
+      data: [cashPayment()],
+      has_more: true,
+    });
+    await expect(provider.retrieveInvoice('in_cash')).rejects.toThrow(
+      'BILLING_PAYMENT_PAGE_LIMIT',
+    );
+    expect(invoicePayments.list).toHaveBeenCalledTimes(3);
+  });
+  it('discovers bounded Stripe event history with original occurrence time and cursor', async () => {
+    const { provider, events } = setup();
+    events.list.mockResolvedValue({
+      data: [
+        {
+          id: 'evt_recovered',
+          type: 'invoice.paid',
+          livemode: false,
+          created: 1791158500,
+          api_version: '2026-08-26.dahlia',
+          data: {
+            object: {
+              id: 'in_cash',
+              parent: { subscription_details: { subscription: 'sub_test_1' } },
+            },
+          },
+        },
+      ],
+      has_more: true,
+    });
+    const from = new Date('2026-10-01'),
+      through = new Date('2026-10-02');
+    const page = await provider.listRecoveryEvents({
+      from,
+      through,
+      after: 'evt_after',
+      limit: 25,
+    });
+    expect(events.list).toHaveBeenCalledWith({
+      created: {
+        gte: Math.floor(from.getTime() / 1000),
+        lte: Math.floor(through.getTime() / 1000),
+      },
+      starting_after: 'evt_after',
+      limit: 25,
+    });
+    expect(page.events[0]).toMatchObject({
+      mode: 'TEST',
+      providerEventId: 'evt_recovered',
+      objectId: 'in_cash',
+      subscriptionId: 'sub_test_1',
+      createdAt: new Date(1791158500000),
+    });
+    expect(page.hasMore).toBe(true);
+  });
+  it('rejects a signed LIVE webhook in TEST mode', () => {
+    const { provider } = setup();
+    const payload = JSON.stringify({
+      id: 'evt_live',
+      type: 'invoice.paid',
+      livemode: true,
+      data: { object: { id: 'in_live' } },
+    });
+    const signature = Stripe.webhooks.generateTestHeaderString({
+      payload,
+      secret: 'whsec_unit_only',
+    });
+    expect(() =>
+      provider.verifyWebhook(Buffer.from(payload), signature),
+    ).toThrow('mode mismatch');
+  });
+  it('correlates invoice_payment.paid through the authoritative InvoicePayment', async () => {
+    const { provider, invoicePayments } = setup();
+    invoicePayments.retrieve.mockResolvedValue({
+      invoice: 'in_cash',
+      livemode: false,
+    });
+    await expect(
+      provider.retrieveInvoicePaymentInvoice('inpay_cash'),
+    ).resolves.toBe('in_cash');
+    invoicePayments.retrieve.mockResolvedValue({
+      invoice: 'in_live',
+      livemode: true,
+    });
+    await expect(
+      provider.retrieveInvoicePaymentInvoice('inpay_live'),
+    ).rejects.toThrow('BILLING_MODE_MISMATCH');
   });
 });

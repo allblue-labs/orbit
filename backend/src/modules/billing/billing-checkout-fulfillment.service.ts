@@ -88,6 +88,11 @@ export class BillingCheckoutFulfillmentService {
       planCode !== undefined && billingInterval !== undefined,
       'CHECKOUT_CATALOG_VALUE_INVALID',
     );
+    this.assert(
+      attempt.mode === this.provider.mode &&
+        attempt.billingCustomer.mode === this.provider.mode,
+      'CHECKOUT_MODE_MISMATCH',
+    );
     const expectedPrice = this.config.priceId(planCode, billingInterval);
     this.assert(
       expectedPrice !== null && expectedPrice === session.providerPriceId,
@@ -99,59 +104,62 @@ export class BillingCheckoutFulfillmentService {
     );
     const providerSubscriptionId = session.providerSubscriptionId;
 
-    await this.asTenant(attempt.organizationId, async () => {
-      const current = await this.subscriptions.requireCurrent(
-        attempt.organizationId,
-      );
-      const replay = current.providerSubscriptionId === providerSubscriptionId;
-      const sameSelection =
-        current.planCode === attempt.planCode &&
-        current.billingInterval === attempt.billingInterval;
-      const approvedChange =
-        attempt.subscriptionVersion != null &&
-        attempt.subscriptionVersion === current.version &&
-        !current.providerSubscriptionId &&
-        (current.effectiveStatus === SubscriptionStatus.PENDING_PAYMENT ||
+    await this.asTenant(attempt.organizationId, () =>
+      this.repository.atomic(async () => {
+        await this.repository.lockContract(attempt.subscriptionId);
+        const current = await this.subscriptions.requireCurrent(
+          attempt.organizationId,
+        );
+        const replay =
+          current.providerSubscriptionId === providerSubscriptionId;
+        const sameSelection =
+          current.planCode === attempt.planCode &&
+          current.billingInterval === attempt.billingInterval;
+        const approvedChange =
+          attempt.subscriptionVersion != null &&
+          attempt.subscriptionVersion === current.version &&
+          !current.providerSubscriptionId &&
+          (current.effectiveStatus === SubscriptionStatus.PENDING_PAYMENT ||
+            (current.effectiveStatus === SubscriptionStatus.TRIALING &&
+              (attempt.planCode === PlanCode.ESSENTIAL || attempt.endsTrial)));
+        this.assert(
+          current.id === attempt.subscriptionId &&
+            (replay || sameSelection || approvedChange),
+          'CHECKOUT_LOCAL_SUBSCRIPTION_MISMATCH',
+        );
+        this.assert(
+          replay ||
+            attempt.subscriptionVersion == null ||
+            current.version === attempt.subscriptionVersion,
+          'CHECKOUT_STALE_SUBSCRIPTION',
+        );
+        this.assert(
+          ['CREATING', 'OPEN', 'COMPLETED'].includes(attempt.status),
+          'CHECKOUT_ATTEMPT_INACTIVE',
+        );
+        const acceptablePayment =
+          session.paymentStatus === 'paid' ||
           (current.effectiveStatus === SubscriptionStatus.TRIALING &&
-            (attempt.planCode === PlanCode.ESSENTIAL || attempt.endsTrial)));
-      this.assert(
-        current.id === attempt.subscriptionId &&
-          (replay || sameSelection || approvedChange),
-        'CHECKOUT_LOCAL_SUBSCRIPTION_MISMATCH',
-      );
-      this.assert(
-        replay ||
-          attempt.subscriptionVersion == null ||
-          current.version === attempt.subscriptionVersion,
-        'CHECKOUT_STALE_SUBSCRIPTION',
-      );
-      this.assert(
-        ['CREATING', 'OPEN', 'COMPLETED'].includes(attempt.status),
-        'CHECKOUT_ATTEMPT_INACTIVE',
-      );
-      const acceptablePayment =
-        session.paymentStatus === 'paid' ||
-        (current.effectiveStatus === SubscriptionStatus.TRIALING &&
-          attempt.planCode === PlanCode.ESSENTIAL &&
-          !attempt.endsTrial &&
-          session.paymentStatus === 'no_payment_required');
-      if (!acceptablePayment) throw new BillingCheckoutAwaitingPaymentError();
+            attempt.planCode === PlanCode.ESSENTIAL &&
+            !attempt.endsTrial &&
+            session.paymentStatus === 'no_payment_required');
+        if (!acceptablePayment) throw new BillingCheckoutAwaitingPaymentError();
 
-      await this.subscriptions.linkProvider(current.id, {
-        expectedVersion: current.version,
-        provider: this.provider.name,
-        providerSubscriptionId,
-        providerCustomerId,
-        providerPriceId: session.providerPriceId,
-        providerStatus: `checkout:${session.rawStatus}`,
-      });
-    });
-
-    await this.repository.completeCheckoutAttempt({
-      id: attempt.id,
-      providerSessionId,
-      providerSubscriptionId,
-    });
+        await this.subscriptions.linkProvider(current.id, {
+          expectedVersion: current.version,
+          provider: this.provider.name,
+          providerSubscriptionId,
+          providerCustomerId,
+          providerPriceId: session.providerPriceId,
+          providerStatus: `checkout:${session.rawStatus}`,
+        });
+        await this.repository.completeCheckoutAttempt({
+          id: attempt.id,
+          providerSessionId,
+          providerSubscriptionId,
+        });
+      }),
+    );
     return providerSubscriptionId;
   }
 

@@ -793,6 +793,7 @@ model OrganizationSubscription {
   /// O último evento do provedor já aplicado a esta linha.
   providerLastEventId    String?   @map("provider_last_event_id") @db.VarChar(255)
   providerUpdatedAt      DateTime? @map("provider_updated_at") @db.Timestamptz(3)
+  providerObservationVersion BigInt @default(0) @map("provider_observation_version")
 
   /// Controle otimista: dois comandos concorrentes não produzem estado torto.
   version   Int      @default(1)
@@ -978,7 +979,9 @@ model BillingInvoice {
   markedUncollectibleAt DateTime? @map("marked_uncollectible_at") @db.Timestamptz(3)
   providerCreatedAt     DateTime  @map("provider_created_at") @db.Timestamptz(3)
   providerObservedAt    DateTime  @map("provider_observed_at") @db.Timestamptz(3)
+  observationVersion BigInt @default(0) @map("observation_version")
   lastProviderEventId   String?   @map("last_provider_event_id") @db.VarChar(255)
+  paymentEvidence Json @default("[]") @map("payment_evidence") @db.JsonB
 
   version   Int      @default(1)
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -1008,6 +1011,9 @@ model BillingInvoiceTransition {
   amountPaidMinor      Int      @map("amount_paid_minor")
   amountRemainingMinor Int      @map("amount_remaining_minor")
   attemptCount         Int      @map("attempt_count")
+  sourceEventType String? @map("source_event_type") @db.VarChar(120)
+  sourceOccurredAt DateTime? @map("source_occurred_at") @db.Timestamptz(3)
+  adjustmentFact Json? @map("adjustment_fact") @db.JsonB
   observedAt           DateTime @map("observed_at") @db.Timestamptz(3)
   createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
@@ -1034,6 +1040,7 @@ model BillingFinancialAdjustment {
   reason              String?  @db.VarChar(80)
   occurredAt          DateTime @map("occurred_at") @db.Timestamptz(3)
   providerObservedAt  DateTime @map("provider_observed_at") @db.Timestamptz(3)
+  observationVersion BigInt @default(0) @map("observation_version")
   lastProviderEventId String   @map("last_provider_event_id") @db.VarChar(255)
   version             Int      @default(1)
   createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -1073,6 +1080,9 @@ model BillingFinancialAdjustment {
 model BillingWebhookEvent {
   id String @id @default(uuid(7)) @db.Uuid
 
+  mode                   String? @db.VarChar(10)
+  source                 String @default("WEBHOOK") @db.VarChar(20)
+  reconciliationOutcome String? @map("reconciliation_outcome") @db.VarChar(30)
   provider               String  @db.VarChar(20)
   providerEventId        String  @map("provider_event_id") @db.VarChar(255)
   eventType              String  @map("event_type") @db.VarChar(120)
@@ -1102,6 +1112,7 @@ model BillingWebhookEvent {
   @@index([processingStatus, receivedAt])
   @@index([processingStatus, nextAttemptAt, leaseExpiresAt], map: "billing_webhook_events_claim_idx")
   @@index([providerSubscriptionId])
+  @@index([mode, processingStatus, receivedAt], map: "billing_events_mode_backlog")
   @@map("billing_webhook_events")
 }
 
@@ -5007,4 +5018,22 @@ model PlatformTenantProvisioning {
   @@unique([actorUserId, idempotencyKey])
   @@index([status, updatedAt])
   @@map("platform_tenant_provisionings")
+}
+
+/// Worker-only checkpoints. No tenant or financial payloads.
+model BillingRecoveryCheckpoint {
+  key String @id @db.VarChar(80)
+  mode String @db.VarChar(10)
+  stream String @db.VarChar(20)
+  cursor Json @default("{}") @db.JsonB
+  token String? @db.Uuid
+  leaseUntil DateTime? @map("lease_until") @db.Timestamptz(3)
+  nextRunAt DateTime @default(now()) @map("next_run_at") @db.Timestamptz(3)
+  attempts Int @default(0)
+  status String @default("READY") @db.VarChar(20)
+  lastErrorCode String? @map("last_error_code") @db.VarChar(80)
+  lastCompletedAt DateTime? @map("last_completed_at") @db.Timestamptz(3)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(3)
+  stats Json @default("{}") @db.JsonB
+  @@map("billing_recovery_checkpoints")
 }

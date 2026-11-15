@@ -39,6 +39,7 @@ import {
   type ProviderPlanChange,
   type ProviderSubscription,
 } from '../src/modules/billing/billing.types';
+import { BillingRepository } from '../src/modules/billing/billing.repository';
 import { BillingReconciliationService } from '../src/modules/billing/billing-reconciliation.service';
 import {
   BillingProviderUnavailableException,
@@ -220,7 +221,21 @@ class ProvedorDeTeste implements BillingProvider {
         providerInvoiceId: objeto['id'],
         providerSubscriptionId:
           typeof assinatura === 'string' ? assinatura : null,
-        providerCustomerId: 'cus_test_suite',
+        providerCustomerId:
+          this.assinaturas.get(String(assinatura))?.providerCustomerId ??
+          'cus_test_suite',
+        subscriptionLines: this.assinaturas.has(String(assinatura))
+          ? [
+              {
+                subscriptionId: String(assinatura),
+                priceId: 'price_test_suite',
+                periodStart: this.assinaturas.get(String(assinatura))!
+                  .currentPeriodStart!,
+                periodEnd: this.assinaturas.get(String(assinatura))!
+                  .currentPeriodEnd!,
+              },
+            ]
+          : [],
         number: 'TEST-0001',
         status: paid ? ProviderInvoiceStatus.PAID : ProviderInvoiceStatus.OPEN,
         currency: 'brl',
@@ -252,6 +267,15 @@ class ProvedorDeTeste implements BillingProvider {
         providerObservedAt: now,
       });
     }
+    if (
+      evento.type.startsWith('invoice.') &&
+      typeof assinatura === 'string' &&
+      this.assinaturas.has(assinatura)
+    )
+      this.assinaturas.set(assinatura, {
+        ...this.assinaturas.get(assinatura)!,
+        latestInvoiceId: String(objeto['id']),
+      });
     return {
       providerEventId: evento.id,
       type: evento.type,
@@ -270,12 +294,17 @@ class ProvedorDeTeste implements BillingProvider {
   declara(id: string, state: ProviderBillingState, rawStatus: string) {
     this.assinaturas.set(id, {
       providerSubscriptionId: id,
-      providerCustomerId: 'cus_test_suite',
+      providerCustomerId:
+        this.assinaturas.get(id)?.providerCustomerId ?? 'cus_test_suite',
       providerPriceId: 'price_test_suite',
       state,
       rawStatus,
-      currentPeriodStart: new Date(),
-      currentPeriodEnd: new Date(Date.now() + 30 * 86_400_000),
+      latestInvoiceId: this.assinaturas.get(id)?.latestInvoiceId,
+      currentPeriodStart:
+        this.assinaturas.get(id)?.currentPeriodStart ?? new Date(),
+      currentPeriodEnd:
+        this.assinaturas.get(id)?.currentPeriodEnd ??
+        new Date(Date.now() + 30 * 86_400_000),
       cancelAtPeriodEnd: false,
       trialEndsAt: null,
       providerUpdatedAt: new Date(),
@@ -401,7 +430,7 @@ describe('Stripe billing integration and webhook reconciliation (e2e)', () => {
       subscriptions.linkProvider(assinatura.id, {
         provider: 'STRIPE',
         providerSubscriptionId,
-        providerCustomerId: 'cus_test_suite',
+        providerCustomerId: `cus_test_${organizationId}`,
         providerPriceId: 'price_test_suite',
         providerStatus: 'active',
       }),
@@ -410,6 +439,21 @@ describe('Stripe billing integration and webhook reconciliation (e2e)', () => {
       providerSubscriptionId,
       ProviderBillingState.ACTIVE,
       'active',
+    );
+    const declared = provedor.assinaturas.get(providerSubscriptionId)!;
+    provedor.assinaturas.set(providerSubscriptionId, {
+      ...declared,
+      providerCustomerId: `cus_test_${organizationId}`,
+      currentPeriodStart: assinatura.currentPeriodStart,
+      currentPeriodEnd: assinatura.currentPeriodEnd,
+    });
+    await como(organizationId, () =>
+      app.get(BillingRepository).linkCustomer({
+        organizationId,
+        provider: 'STRIPE',
+        mode: 'TEST',
+        providerCustomerId: `cus_test_${organizationId}`,
+      }),
     );
     if (alreadyPaid) {
       const current = await como(organizationId, () =>
@@ -870,7 +914,30 @@ describe('Stripe billing integration and webhook reconciliation (e2e)', () => {
         ProviderBillingState.PAYMENT_FAILED,
         'past_due',
       );
-      await reconciliation.reconcileLinkedSubscriptions();
+      let linked = await reconciliation.reconcileLinkedSubscriptions();
+      let found = linked.some(
+        (row) => row.providerSubscriptionId === providerId,
+      );
+      for (let page = 0; !found && linked.length && page < 10; page++) {
+        expect(linked.length).toBeLessThanOrEqual(25);
+        linked = await reconciliation.reconcileLinkedSubscriptions(
+          25,
+          linked.at(-1)!.id,
+        );
+        found = linked.some((row) => row.providerSubscriptionId === providerId);
+      }
+      expect(found).toBe(true);
+      await app.get(BillingRepository).recordEvent({
+        mode: 'TEST',
+        provider: 'STRIPE',
+        providerEventId: `orbit:test:${providerId}`,
+        eventType: 'orbit.subscription.recovery',
+        providerObjectId: providerId,
+        providerSubscriptionId: providerId,
+        apiVersion: null,
+        providerCreatedAt: new Date(),
+      });
+      await reconciliation.drainInbox();
 
       const atual = await como(inquilino.organizationId, () =>
         subscriptions.requireCurrent(inquilino.organizationId),

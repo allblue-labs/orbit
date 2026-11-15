@@ -19,6 +19,7 @@
  * instalado, não presumido.
  */
 import { Injectable, Logger } from '@nestjs/common';
+import { BillingWorkBudget } from '../billing-work-budget';
 import Stripe from 'stripe';
 import { InfrastructureException } from '../../../exceptions';
 import {
@@ -67,9 +68,18 @@ export class StripeBillingProvider implements BillingProvider {
 
   private readonly logger = new Logger(StripeBillingProvider.name);
   private readonly client: Stripe | null;
+  private readonly recoveryClient: Stripe | null;
   private accountPortalConfiguration: Promise<string> | null = null;
 
   constructor(private readonly config: BillingConfig) {
+    this.recoveryClient = config.enabled
+      ? new Stripe(config.secretKey, {
+          apiVersion: STRIPE_API_VERSION,
+          timeout: 5_000,
+          maxNetworkRetries: 0,
+          telemetry: false,
+        })
+      : null;
     this.client = config.enabled
       ? new Stripe(config.secretKey, {
           apiVersion: STRIPE_API_VERSION,
@@ -370,13 +380,76 @@ export class StripeBillingProvider implements BillingProvider {
 
   async retrieveInvoice(providerInvoiceId: string): Promise<ProviderInvoice> {
     const stripe = this.require();
+    const observedAt = new Date();
     const invoice = await this.chamar('retrieveInvoice', () =>
       stripe.invoices.retrieve(providerInvoiceId),
     );
     if ('deleted' in invoice && invoice.deleted) {
       throw new BillingProviderUnavailableException('invoice was deleted');
     }
-    return this.normalizarFatura(invoice);
+    const normalized = {
+      ...this.normalizarFatura(invoice),
+      providerObservedAt: observedAt,
+    };
+    // A paid invoice can be zero, credited or marked out of band. Only a
+    // correlated successful PaymentIntent is a confirmed Stripe payment fact.
+    const paymentEvidence: NonNullable<
+      ProviderInvoice['paymentEvidence']
+    >[number][] = [];
+    let after: string | undefined;
+    for (let page = 0; page < 3; page++) {
+      const payments = await this.chamar('invoicePayments', () =>
+        stripe.invoicePayments.list({
+          invoice: invoice.id,
+          limit: 20,
+          starting_after: after,
+          expand: ['data.payment.payment_intent'],
+        }),
+      );
+      for (const payment of payments.data) {
+        this.assertMode(payment.livemode);
+        const intent = payment.payment.payment_intent;
+        if (
+          payment.status === 'paid' &&
+          payment.amount_paid &&
+          payment.status_transitions.paid_at &&
+          intent &&
+          typeof intent !== 'string' &&
+          intent.status === 'succeeded' &&
+          intent.currency === invoice.currency &&
+          payment.currency === invoice.currency &&
+          this.idDoObjeto(intent.customer) === normalized.providerCustomerId &&
+          this.idDoObjeto(payment.invoice) === invoice.id &&
+          payment.amount_paid <= intent.amount_received
+        ) {
+          this.assertMode(intent.livemode);
+          paymentEvidence.push({
+            invoicePaymentId: payment.id,
+            paymentIntentId: intent.id,
+            amountMinor: payment.amount_paid,
+            currency: payment.currency,
+            confirmedAt: new Date(
+              payment.status_transitions.paid_at * 1000,
+            ).toISOString(),
+          });
+        }
+      }
+      if (!payments.has_more) return { ...normalized, paymentEvidence };
+      after = payments.data.at(-1)?.id;
+    }
+    throw new Error('BILLING_PAYMENT_PAGE_LIMIT');
+  }
+
+  async retrieveInvoicePaymentInvoice(
+    providerInvoicePaymentId: string,
+  ): Promise<string> {
+    const payment = await this.chamar('retrieveInvoicePayment', () =>
+      this.require().invoicePayments.retrieve(providerInvoicePaymentId),
+    );
+    this.assertMode(payment.livemode);
+    const invoice = this.idDoObjeto(payment.invoice);
+    if (!invoice) throw new Error('BILLING_PAYMENT_INVOICE_MISSING');
+    return invoice;
   }
 
   async retrieveFinancialAdjustment(
@@ -384,6 +457,7 @@ export class StripeBillingProvider implements BillingProvider {
     providerObjectId: string,
   ): Promise<ProviderFinancialAdjustment> {
     const stripe = this.require();
+    const observedAt = new Date();
     let paymentIntentId: string | null;
     let rawStatus: string;
     let reason: string | null;
@@ -407,6 +481,7 @@ export class StripeBillingProvider implements BillingProvider {
       const dispute = await this.chamar('retrieveDispute', () =>
         stripe.disputes.retrieve(providerObjectId),
       );
+      this.assertMode(dispute.livemode);
       paymentIntentId = this.idDoObjeto(dispute.payment_intent);
       rawStatus = dispute.status;
       reason = dispute.reason;
@@ -431,6 +506,7 @@ export class StripeBillingProvider implements BillingProvider {
         'financial adjustment invoice correlation is ambiguous',
       );
     }
+    this.assertMode(payments.data[0]!.livemode);
     const providerInvoiceId = this.idDoObjeto(payments.data[0]!.invoice);
     if (!providerInvoiceId) {
       throw new BillingProviderUnavailableException(
@@ -450,7 +526,7 @@ export class StripeBillingProvider implements BillingProvider {
       currency: currency.toLowerCase(),
       reason: reason?.slice(0, 80) ?? null,
       occurredAt,
-      providerObservedAt: new Date(),
+      providerObservedAt: observedAt,
     };
   }
 
@@ -729,8 +805,11 @@ export class StripeBillingProvider implements BillingProvider {
       throw new BillingWebhookInvalidException('signature verification failed');
     }
 
+    if (evento.livemode !== (this.mode === 'LIVE'))
+      throw new BillingWebhookInvalidException('mode mismatch');
     const objeto = evento.data.object as unknown as { id?: unknown };
     return {
+      mode: this.mode,
       providerEventId: evento.id,
       type: evento.type,
       apiVersion: evento.api_version ?? null,
@@ -898,8 +977,10 @@ export class StripeBillingProvider implements BillingProvider {
   }
 
   private normalizar(assinatura: Stripe.Subscription): ProviderSubscription {
+    this.assertMode(assinatura.livemode);
     const item = assinatura.items.data[0];
     return {
+      mode: this.mode,
       latestInvoiceId: this.idDoObjeto(assinatura.latest_invoice),
       providerSubscriptionId: assinatura.id,
       providerCustomerId:
@@ -924,6 +1005,7 @@ export class StripeBillingProvider implements BillingProvider {
   }
 
   private normalizarFatura(invoice: Stripe.Invoice): ProviderInvoice {
+    this.assertMode(invoice.livemode);
     const providerCustomerId = this.idDoObjeto(invoice.customer);
     if (!providerCustomerId) {
       throw new BillingProviderUnavailableException('invoice without customer');
@@ -945,6 +1027,7 @@ export class StripeBillingProvider implements BillingProvider {
     const at = (seconds: number | null): Date | null =>
       seconds === null ? null : new Date(seconds * 1000);
     return {
+      mode: this.mode,
       providerInvoiceId: invoice.id,
       providerSubscriptionId,
       providerCustomerId,
@@ -1057,7 +1140,7 @@ export class StripeBillingProvider implements BillingProvider {
 
   private require(): Stripe {
     if (!this.client) throw new BillingNotConfiguredException();
-    return this.client;
+    return BillingWorkBudget.active() ? this.recoveryClient! : this.client;
   }
 
   /**
@@ -1068,10 +1151,48 @@ export class StripeBillingProvider implements BillingProvider {
    * E indisponibilidade **não** é pagamento recusado — confundir os dois
    * suspenderia clientes em dia num dia ruim do fornecedor.
    */
+  private assertMode(live: boolean): void {
+    if (live !== (this.mode === 'LIVE'))
+      throw new Error('BILLING_MODE_MISMATCH');
+  }
+
+  async listRecoveryEvents(input: {
+    from: Date;
+    through: Date;
+    after?: string;
+    limit: number;
+  }) {
+    const page = await this.chamar('recoveryEvents', () =>
+      this.require().events.list({
+        created: {
+          gte: Math.floor(input.from.getTime() / 1000),
+          lte: Math.floor(input.through.getTime() / 1000),
+        },
+        starting_after: input.after,
+        limit: Math.min(100, Math.max(1, input.limit)),
+      }),
+    );
+    const events: ProviderEvent[] = page.data.map((event) => {
+      this.assertMode(event.livemode);
+      const object = event.data.object as { id?: string };
+      return {
+        mode: this.mode,
+        providerEventId: event.id,
+        type: event.type,
+        apiVersion: event.api_version ?? null,
+        createdAt: new Date(event.created * 1000),
+        objectId: object.id ?? null,
+        subscriptionId: this.assinaturaDoEvento(event),
+      };
+    });
+    return { events, hasMore: page.has_more };
+  }
+
   private async chamar<T>(
     operacao: string,
     work: () => Promise<T>,
   ): Promise<T> {
+    BillingWorkBudget.consume();
     try {
       return await work();
     } catch (error) {

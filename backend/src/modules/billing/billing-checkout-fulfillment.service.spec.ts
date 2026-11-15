@@ -80,6 +80,8 @@ describe('BillingCheckoutFulfillmentService', () => {
       retrieveCheckoutSession: jest.fn().mockResolvedValue(canonicalSession()),
     } as unknown as BillingProvider;
     const repository = {
+      atomic: jest.fn((work: () => Promise<unknown>) => work()),
+      lockContract: jest.fn().mockResolvedValue(undefined),
       findCheckoutAttemptForFulfillment: jest.fn().mockResolvedValue(attempt()),
       completeCheckoutAttempt: jest.fn().mockResolvedValue(undefined),
     };

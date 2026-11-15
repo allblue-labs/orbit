@@ -48,6 +48,7 @@ export type ProviderBillingState =
 
 /** O retrato normalizado de uma assinatura no provedor. */
 export interface ProviderSubscription {
+  readonly mode?: BillingMode;
   readonly latestInvoiceId?: string | null;
   readonly providerSubscriptionId: string;
   readonly providerCustomerId: string;
@@ -92,6 +93,16 @@ export type ProviderInvoiceStatus =
 
 /** Fatura normalizada; deliberadamente sem PII ou dados do meio de pagamento. */
 export interface ProviderInvoice {
+  readonly observationVersion?: bigint;
+  readonly mode?: BillingMode;
+  /** Cash evidence is independent of invoice PAID; IDs support durable export dedupe. */
+  readonly paymentEvidence?: readonly {
+    invoicePaymentId: string;
+    paymentIntentId: string;
+    amountMinor: number;
+    currency: string;
+    confirmedAt: string;
+  }[];
   readonly providerInvoiceId: string;
   readonly providerSubscriptionId: string | null;
   readonly providerCustomerId: string;
@@ -138,6 +149,7 @@ export type ProviderFinancialAdjustmentType =
   (typeof ProviderFinancialAdjustmentType)[keyof typeof ProviderFinancialAdjustmentType];
 
 export interface ProviderFinancialAdjustment {
+  readonly observationVersion?: bigint;
   readonly type: ProviderFinancialAdjustmentType;
   readonly providerObjectId: string;
   readonly providerInvoiceId: string;
@@ -202,6 +214,7 @@ export interface BillingPortalSession {
 }
 
 export interface ProviderEvent {
+  readonly mode?: BillingMode;
   readonly providerEventId: string;
   readonly type: string;
   readonly apiVersion: string | null;
@@ -256,6 +269,9 @@ export interface BillingProvider {
   ): Promise<ProviderSubscription>;
 
   retrieveInvoice(providerInvoiceId: string): Promise<ProviderInvoice>;
+  retrieveInvoicePaymentInvoice?(
+    providerInvoicePaymentId: string,
+  ): Promise<string>;
 
   retrieveFinancialAdjustment(
     type: ProviderFinancialAdjustmentType,
@@ -292,6 +308,14 @@ export interface BillingProvider {
 
   /** Valida o catálogo de preços contra o do Orbit. */
   verifyPriceCatalog(): Promise<readonly PriceVerification[]>;
+
+  /** Stripe retains events for a limited window. No account mutations. */
+  listRecoveryEvents?(input: {
+    from: Date;
+    through: Date;
+    after?: string;
+    limit: number;
+  }): Promise<{ events: readonly ProviderEvent[]; hasMore: boolean }>;
 }
 
 export interface PriceVerification {

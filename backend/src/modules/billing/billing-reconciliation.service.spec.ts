@@ -48,6 +48,15 @@ describe('BillingReconciliationService durable inbox', () => {
       retrieveFinancialAdjustment: jest.fn(),
     } as unknown as BillingProvider;
     const repository = {
+      withClaim: jest.fn((_claim: unknown, work: () => Promise<unknown>) =>
+        work(),
+      ),
+      atomic: jest.fn((work: () => Promise<unknown>) => work()),
+      noteDivergence: jest.fn(),
+      nextObservation: jest.fn().mockResolvedValue(1n),
+      completeObservation: jest.fn().mockResolvedValue(undefined),
+      assertBinding: jest.fn().mockResolvedValue(undefined),
+      lockContract: jest.fn().mockResolvedValue(undefined),
       claimNextEvent: jest
         .fn()
         .mockResolvedValueOnce(claimed)
@@ -129,6 +138,7 @@ describe('BillingReconciliationService durable inbox', () => {
       id: 'old_subscription',
       organizationId: 'org_1',
       providerCustomerId: 'cus_test_1',
+      version: 4,
     });
     subscriptions.currentOrNull.mockResolvedValue({
       id: 'new_subscription',
@@ -172,7 +182,7 @@ describe('BillingReconciliationService durable inbox', () => {
 
     expect(repository.retryClaimedEvent).toHaveBeenCalledWith(
       expect.objectContaining({
-        errorCode: 'RETRY_EXHAUSTED',
+        errorCode: 'Error',
         deadLetter: true,
       }),
     );
@@ -206,6 +216,7 @@ describe('BillingReconciliationService durable inbox', () => {
       id: '01900000-0000-7000-8000-000000000098',
       organizationId: '01900000-0000-7000-8000-000000000099',
       providerCustomerId: 'cus_test_1',
+      version: 4,
     });
     subscriptions.currentOrNull.mockResolvedValue({
       id: '01900000-0000-7000-8000-000000000098',
@@ -277,6 +288,7 @@ describe('BillingReconciliationService durable inbox', () => {
         id: 'local_1',
         organizationId: 'org_1',
         providerCustomerId: 'cus_test_1',
+        version: 3,
       });
       subscriptions.currentOrNull.mockResolvedValue({
         id: 'local_1',
@@ -285,6 +297,8 @@ describe('BillingReconciliationService durable inbox', () => {
         effectiveStatus: SubscriptionStatus.ACTIVE,
         planCode: PlanCode.ESSENTIAL,
         billingInterval: BillingInterval.MONTHLY,
+        currentPeriodStart: new Date('2026-11-01'),
+        currentPeriodEnd: new Date('2026-12-01'),
       });
       await expect(
         service.reconcileProviderSubscription('sub_test_1', 'evt_1'),
@@ -344,7 +358,7 @@ describe('BillingReconciliationService durable inbox', () => {
       provider: BillingProviderName.STRIPE,
       mode: BillingMode.TEST,
       providerEventId: 'evt_invoice_1',
-      invoice,
+      invoice: { ...invoice, observationVersion: 1n },
     });
   });
 
@@ -415,14 +429,14 @@ describe('BillingReconciliationService durable inbox', () => {
       expect.objectContaining({
         organizationId: '01900000-0000-7000-8000-000000000099',
         providerEventId: 'evt_refund_1',
-        invoice,
+        invoice: { ...invoice, observationVersion: 1n },
       }),
     );
     expect(repository.recordFinancialAdjustment).toHaveBeenCalledWith({
       organizationId: '01900000-0000-7000-8000-000000000099',
       provider: BillingProviderName.STRIPE,
       providerEventId: 'evt_refund_1',
-      adjustment,
+      adjustment: { ...adjustment, observationVersion: 1n },
     });
   });
 });

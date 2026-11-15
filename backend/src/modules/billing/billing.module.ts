@@ -11,6 +11,10 @@ import { SubscriptionDataRetentionService } from './retention/subscription-data-
 import { SubscriptionDataRetentionWorker } from './retention/subscription-data-retention.worker';
 import { Module } from '@nestjs/common';
 import { SubscriptionPlansModule } from '../subscription-plans/subscription-plans.module';
+import {
+  BillingRecoveryService,
+  BillingRecoveryWorker,
+} from './billing-recovery.service';
 import { BillingConfig } from './billing.config';
 import { BillingCheckoutFulfillmentService } from './billing-checkout-fulfillment.service';
 import { BillingController } from './billing.controller';
@@ -29,6 +33,8 @@ import { SubscriptionBillingController } from './subscription-billing.controller
   controllers: [BillingController, SubscriptionBillingController],
   providers: [
     BillingConfig,
+    BillingRecoveryService,
+    BillingRecoveryWorker,
     SubscriptionDataRetentionService,
     SubscriptionDataRetentionWorker,
     BillingRepository,
