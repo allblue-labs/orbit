@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.allblue-labs.com/federation/1.0.0/directory.schema.json",
+  "title": "PROPOSED / PENDING_NEXUS_DECISION — directory.schema.json",
+  "type": "object",
+  "properties": {
+    "protocolVersion": {
+      "const": "1.0.0"
+    },
+    "snapshotId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "asOf": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "watermark": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "nextCursor": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "freshness": {
+      "$ref": "common.schema.json#/$defs/freshness"
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "$ref": "common.schema.json#/$defs/target"
+          },
+          "registered": {
+            "const": true
+          },
+          "operationalStatus": {
+            "enum": [
+              "ACTIVE",
+              "ONBOARDING",
+              "SUSPENDED",
+              "UNAVAILABLE"
+            ]
+          },
+          "subscriptionStatus": {
+            "$ref": "common.schema.json#/$defs/subscriptionStatus"
+          },
+          "linkId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "target",
+          "registered",
+          "operationalStatus",
+          "subscriptionStatus",
+          "linkId"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 200
+    }
+  },
+  "required": [
+    "protocolVersion",
+    "snapshotId",
+    "asOf",
+    "watermark",
+    "nextCursor",
+    "freshness",
+    "items"
+  ],
+  "additionalProperties": false
+}

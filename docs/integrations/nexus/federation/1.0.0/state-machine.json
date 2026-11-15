@@ -1,0 +1,61 @@
+{
+  "status": "PENDING_NEXUS_DECISION",
+  "transitions": {
+    "ACCEPTED": [
+      "AWAITING_APPROVAL",
+      "EXECUTING",
+      "REJECTED",
+      "EXPIRED"
+    ],
+    "AWAITING_APPROVAL": [
+      "EXECUTING",
+      "REJECTED",
+      "EXPIRED"
+    ],
+    "EXECUTING": [
+      "AWAITING_CUSTOMER_ACTION",
+      "SUCCEEDED",
+      "FAILED",
+      "REJECTED"
+    ],
+    "AWAITING_CUSTOMER_ACTION": [
+      "EXECUTING",
+      "REJECTED",
+      "EXPIRED"
+    ],
+    "SUCCEEDED": [],
+    "REJECTED": [],
+    "FAILED": [],
+    "EXPIRED": []
+  },
+  "effectsByCommand": {
+    "tenant.provision.v1": [
+      "PROVISIONED"
+    ],
+    "tenant.update.v1": [
+      "APPLIED",
+      "UNCHANGED"
+    ],
+    "subscription.request_plan_change.v1": [
+      "SCHEDULED",
+      "APPLIED",
+      "UNCHANGED"
+    ],
+    "subscription.request_cancel.v1": [
+      "CANCELLATION_SCHEDULED",
+      "UNCHANGED"
+    ],
+    "subscription.request_keep.v1": [
+      "APPLIED",
+      "UNCHANGED"
+    ],
+    "tenant.request_suspend.v1": [
+      "APPLIED",
+      "UNCHANGED"
+    ],
+    "tenant.request_reactivate.v1": [
+      "APPLIED",
+      "UNCHANGED"
+    ]
+  }
+}

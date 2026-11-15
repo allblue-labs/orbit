@@ -1,0 +1,1609 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.allblue-labs.com/federation/1.0.0/event.schema.json",
+  "title": "PROPOSED / PENDING_NEXUS_DECISION — event.schema.json",
+  "type": "object",
+  "properties": {
+    "specversion": {
+      "const": "1.0"
+    },
+    "id": {
+      "$ref": "common.schema.json#/$defs/uuid"
+    },
+    "source": {
+      "type": "string",
+      "pattern": "^urn:allblue:[a-z][a-z0-9-]*:(staging|production):[a-z0-9][a-z0-9-]*$"
+    },
+    "type": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^tenants/[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "time": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "occurrencebasis": {
+      "enum": [
+        "RECORDED",
+        "PROVIDER",
+        "UNKNOWN"
+      ]
+    },
+    "observedat": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "datacontenttype": {
+      "const": "application/json"
+    },
+    "dataschema": {
+      "const": "https://contracts.allblue-labs.com/federation/1.0.0/event.schema.json"
+    },
+    "correlationid": {
+      "$ref": "common.schema.json#/$defs/uuid"
+    },
+    "data": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "specversion",
+    "id",
+    "source",
+    "type",
+    "subject",
+    "occurrencebasis",
+    "observedat",
+    "datacontenttype",
+    "dataschema",
+    "correlationid",
+    "data"
+  ],
+  "additionalProperties": false,
+  "oneOf": [
+    {
+      "properties": {
+        "type": {
+          "pattern": "^com\\.allbluelabs\\.[a-z][a-z0-9-]*\\.tenant\\.created\\.v1$"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "target": {
+              "$ref": "common.schema.json#/$defs/target"
+            },
+            "aggregate": {
+              "$ref": "common.schema.json#/$defs/aggregate"
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "provenance": {
+              "enum": [
+                "CANONICAL_COMMIT",
+                "PROVIDER_RECONCILIATION"
+              ]
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "registered": {
+                  "const": true
+                },
+                "provisioningState": {
+                  "enum": [
+                    "TENANT_CREATED",
+                    "SUBSCRIPTION_READY",
+                    "COMPLETED"
+                  ]
+                }
+              },
+              "required": [
+                "registered",
+                "provisioningState"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "schemaVersion",
+            "target",
+            "aggregate",
+            "sequence",
+            "provenance",
+            "payload"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type",
+        "data"
+      ]
+    },
+    {
+      "properties": {
+        "type": {
+          "pattern": "^com\\.allbluelabs\\.[a-z][a-z0-9-]*\\.tenant\\.updated\\.v1$"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "target": {
+              "$ref": "common.schema.json#/$defs/target"
+            },
+            "aggregate": {
+              "$ref": "common.schema.json#/$defs/aggregate"
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "provenance": {
+              "enum": [
+                "CANONICAL_COMMIT",
+                "PROVIDER_RECONCILIATION"
+              ]
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "changedFields": {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "displayName",
+                      "primarySegment"
+                    ]
+                  },
+                  "maxItems": 2,
+                  "minItems": 1,
+                  "uniqueItems": true
+                }
+              },
+              "required": [
+                "changedFields"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "schemaVersion",
+            "target",
+            "aggregate",
+            "sequence",
+            "provenance",
+            "payload"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type",
+        "data"
+      ]
+    },
+    {
+      "properties": {
+        "type": {
+          "pattern": "^com\\.allbluelabs\\.[a-z][a-z0-9-]*\\.tenant\\.suspended\\.v1$"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "target": {
+              "$ref": "common.schema.json#/$defs/target"
+            },
+            "aggregate": {
+              "$ref": "common.schema.json#/$defs/aggregate"
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "provenance": {
+              "enum": [
+                "CANONICAL_COMMIT",
+                "PROVIDER_RECONCILIATION"
+              ]
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "const": "SUSPENDED"
+                },
+                "operationalVersion": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "reasonCode": {
+                  "enum": [
+                    "SECURITY",
+                    "ABUSE",
+                    "ADMINISTRATIVE"
+                  ]
+                }
+              },
+              "required": [
+                "status",
+                "operationalVersion",
+                "reasonCode"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "schemaVersion",
+            "target",
+            "aggregate",
+            "sequence",
+            "provenance",
+            "payload"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type",
+        "data"
+      ]
+    },
+    {
+      "properties": {
+        "type": {
+          "pattern": "^com\\.allbluelabs\\.[a-z][a-z0-9-]*\\.tenant\\.reactivated\\.v1$"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "target": {
+              "$ref": "common.schema.json#/$defs/target"
+            },
+            "aggregate": {
+              "$ref": "common.schema.json#/$defs/aggregate"
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "provenance": {
+              "enum": [
+                "CANONICAL_COMMIT",
+                "PROVIDER_RECONCILIATION"
+              ]
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "const": "ACTIVE"
+                },
+                "operationalVersion": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "reasonCode": {
+                  "enum": [
+                    "RESOLVED"
+                  ]
+                }
+              },
+              "required": [
+                "status",
+                "operationalVersion",
+                "reasonCode"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "schemaVersion",
+            "target",
+            "aggregate",
+            "sequence",
+            "provenance",
+            "payload"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type",
+        "data"
+      ]
+    },
+    {
+      "properties": {
+        "type": {
+          "pattern": "^com\\.allbluelabs\\.[a-z][a-z0-9-]*\\.subscription\\.created\\.v1$"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "target": {
+              "$ref": "common.schema.json#/$defs/target"
+            },
+            "aggregate": {
+              "$ref": "common.schema.json#/$defs/aggregate"
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "provenance": {
+              "enum": [
+                "CANONICAL_COMMIT",
+                "PROVIDER_RECONCILIATION"
+              ]
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "subscriptionId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "subscriptionVersion": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "status": {
+                  "$ref": "common.schema.json#/$defs/subscriptionStatus"
+                },
+                "planCode": {
+                  "anyOf": [
+                    {
+                      "$ref": "common.schema.json#/$defs/planCode"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "billingInterval": {
+                  "anyOf": [
+                    {
+                      "$ref": "common.schema.json#/$defs/billingInterval"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "catalogVersion": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "rightsVersion": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "currentPeriodEnd": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "Z$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "trialEndsAt": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "Z$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "priceVersionRef": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "subscriptionId",
+                "subscriptionVersion",
+                "status",
+                "planCode",
+                "billingInterval",
+                "catalogVersion",
+                "rightsVersion",
+                "currentPeriodEnd",
+                "trialEndsAt",
+                "priceVersionRef"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "schemaVersion",
+            "target",
+            "aggregate",
+            "sequence",
+            "provenance",
+            "payload"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type",
+        "data"
+      ]
+    },
+    {
+      "properties": {
+        "type": {
+          "pattern": "^com\\.allbluelabs\\.[a-z][a-z0-9-]*\\.subscription\\.changed\\.v1$"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "target": {
+              "$ref": "common.schema.json#/$defs/target"
+            },
+            "aggregate": {
+              "$ref": "common.schema.json#/$defs/aggregate"
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "provenance": {
+              "enum": [
+                "CANONICAL_COMMIT",
+                "PROVIDER_RECONCILIATION"
+              ]
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "subscriptionId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "subscriptionVersion": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "status": {
+                  "$ref": "common.schema.json#/$defs/subscriptionStatus"
+                },
+                "planCode": {
+                  "anyOf": [
+                    {
+                      "$ref": "common.schema.json#/$defs/planCode"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "billingInterval": {
+                  "anyOf": [
+                    {
+                      "$ref": "common.schema.json#/$defs/billingInterval"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "catalogVersion": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "rightsVersion": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "currentPeriodEnd": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "Z$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "trialEndsAt": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "Z$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "priceVersionRef": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "subscriptionId",
+                "subscriptionVersion",
+                "status",
+                "planCode",
+                "billingInterval",
+                "catalogVersion",
+                "rightsVersion",
+                "currentPeriodEnd",
+                "trialEndsAt",
+                "priceVersionRef"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "schemaVersion",
+            "target",
+            "aggregate",
+            "sequence",
+            "provenance",
+            "payload"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type",
+        "data"
+      ]
+    },
+    {
+      "properties": {
+        "type": {
+          "pattern": "^com\\.allbluelabs\\.[a-z][a-z0-9-]*\\.subscription\\.change_scheduled\\.v1$"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "target": {
+              "$ref": "common.schema.json#/$defs/target"
+            },
+            "aggregate": {
+              "$ref": "common.schema.json#/$defs/aggregate"
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "provenance": {
+              "enum": [
+                "CANONICAL_COMMIT",
+                "PROVIDER_RECONCILIATION"
+              ]
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "subscriptionId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "subscriptionVersion": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "currentPlanCode": {
+                  "$ref": "common.schema.json#/$defs/planCode"
+                },
+                "targetPlanCode": {
+                  "$ref": "common.schema.json#/$defs/planCode"
+                },
+                "billingInterval": {
+                  "$ref": "common.schema.json#/$defs/billingInterval"
+                },
+                "effectiveAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "Z$"
+                },
+                "targetPriceVersionRef": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "subscriptionId",
+                "subscriptionVersion",
+                "currentPlanCode",
+                "targetPlanCode",
+                "billingInterval",
+                "effectiveAt",
+                "targetPriceVersionRef"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "schemaVersion",
+            "target",
+            "aggregate",
+            "sequence",
+            "provenance",
+            "payload"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type",
+        "data"
+      ]
+    },
+    {
+      "properties": {
+        "type": {
+          "pattern": "^com\\.allbluelabs\\.[a-z][a-z0-9-]*\\.subscription\\.cancellation_scheduled\\.v1$"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "target": {
+              "$ref": "common.schema.json#/$defs/target"
+            },
+            "aggregate": {
+              "$ref": "common.schema.json#/$defs/aggregate"
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "provenance": {
+              "enum": [
+                "CANONICAL_COMMIT",
+                "PROVIDER_RECONCILIATION"
+              ]
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "subscriptionId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "subscriptionVersion": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "accessUntil": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "Z$"
+                },
+                "recurrenceCanceled": {
+                  "const": true
+                }
+              },
+              "required": [
+                "subscriptionId",
+                "subscriptionVersion",
+                "accessUntil",
+                "recurrenceCanceled"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "schemaVersion",
+            "target",
+            "aggregate",
+            "sequence",
+            "provenance",
+            "payload"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type",
+        "data"
+      ]
+    },
+    {
+      "properties": {
+        "type": {
+          "pattern": "^com\\.allbluelabs\\.[a-z][a-z0-9-]*\\.subscription\\.canceled\\.v1$"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "target": {
+              "$ref": "common.schema.json#/$defs/target"
+            },
+            "aggregate": {
+              "$ref": "common.schema.json#/$defs/aggregate"
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "provenance": {
+              "enum": [
+                "CANONICAL_COMMIT",
+                "PROVIDER_RECONCILIATION"
+              ]
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "subscriptionId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "subscriptionVersion": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "endedAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "Z$"
+                }
+              },
+              "required": [
+                "subscriptionId",
+                "subscriptionVersion",
+                "endedAt"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "schemaVersion",
+            "target",
+            "aggregate",
+            "sequence",
+            "provenance",
+            "payload"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type",
+        "data"
+      ]
+    },
+    {
+      "properties": {
+        "type": {
+          "pattern": "^com\\.allbluelabs\\.[a-z][a-z0-9-]*\\.billing\\.invoice_settled\\.v1$"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "target": {
+              "$ref": "common.schema.json#/$defs/target"
+            },
+            "aggregate": {
+              "$ref": "common.schema.json#/$defs/aggregate"
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "provenance": {
+              "enum": [
+                "CANONICAL_COMMIT",
+                "PROVIDER_RECONCILIATION"
+              ]
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "invoiceId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "subscriptionId": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "billing": {
+                  "$ref": "common.schema.json#/$defs/billingContext"
+                },
+                "currency": {
+                  "$ref": "common.schema.json#/$defs/currency"
+                },
+                "amountMinor": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "settledAt": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "Z$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "settlementBasis": {
+                  "enum": [
+                    "PROVIDER_PAYMENT",
+                    "OUT_OF_BAND",
+                    "CREDIT",
+                    "ZERO_AMOUNT",
+                    "UNKNOWN"
+                  ]
+                }
+              },
+              "required": [
+                "invoiceId",
+                "subscriptionId",
+                "billing",
+                "currency",
+                "amountMinor",
+                "settledAt",
+                "settlementBasis"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "schemaVersion",
+            "target",
+            "aggregate",
+            "sequence",
+            "provenance",
+            "payload"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type",
+        "data"
+      ]
+    },
+    {
+      "properties": {
+        "type": {
+          "pattern": "^com\\.allbluelabs\\.[a-z][a-z0-9-]*\\.billing\\.payment_succeeded\\.v1$"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "target": {
+              "$ref": "common.schema.json#/$defs/target"
+            },
+            "aggregate": {
+              "$ref": "common.schema.json#/$defs/aggregate"
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "provenance": {
+              "enum": [
+                "CANONICAL_COMMIT",
+                "PROVIDER_RECONCILIATION"
+              ]
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "invoiceId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "subscriptionId": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "billing": {
+                  "$ref": "common.schema.json#/$defs/billingContext"
+                },
+                "currency": {
+                  "$ref": "common.schema.json#/$defs/currency"
+                },
+                "amountMinor": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "paymentId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "invoicePaymentRef": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "providerPaymentRef": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "confirmationBasis": {
+                  "const": "CORRELATED_PROVIDER_PAYMENT"
+                },
+                "confirmedAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "Z$"
+                }
+              },
+              "required": [
+                "invoiceId",
+                "subscriptionId",
+                "billing",
+                "currency",
+                "amountMinor",
+                "paymentId",
+                "invoicePaymentRef",
+                "providerPaymentRef",
+                "confirmationBasis",
+                "confirmedAt"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "schemaVersion",
+            "target",
+            "aggregate",
+            "sequence",
+            "provenance",
+            "payload"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type",
+        "data"
+      ]
+    },
+    {
+      "properties": {
+        "type": {
+          "pattern": "^com\\.allbluelabs\\.[a-z][a-z0-9-]*\\.billing\\.payment_failed\\.v1$"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "target": {
+              "$ref": "common.schema.json#/$defs/target"
+            },
+            "aggregate": {
+              "$ref": "common.schema.json#/$defs/aggregate"
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "provenance": {
+              "enum": [
+                "CANONICAL_COMMIT",
+                "PROVIDER_RECONCILIATION"
+              ]
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "invoiceId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "subscriptionId": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "billing": {
+                  "$ref": "common.schema.json#/$defs/billingContext"
+                },
+                "currency": {
+                  "$ref": "common.schema.json#/$defs/currency"
+                },
+                "amountMinor": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "attemptId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "failureCategory": {
+                  "enum": [
+                    "DECLINED",
+                    "AUTHENTICATION_REQUIRED",
+                    "PROCESSING",
+                    "UNKNOWN"
+                  ]
+                }
+              },
+              "required": [
+                "invoiceId",
+                "subscriptionId",
+                "billing",
+                "currency",
+                "amountMinor",
+                "attemptId",
+                "failureCategory"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "schemaVersion",
+            "target",
+            "aggregate",
+            "sequence",
+            "provenance",
+            "payload"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type",
+        "data"
+      ]
+    },
+    {
+      "properties": {
+        "type": {
+          "pattern": "^com\\.allbluelabs\\.[a-z][a-z0-9-]*\\.billing\\.adjustment_updated\\.v1$"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "target": {
+              "$ref": "common.schema.json#/$defs/target"
+            },
+            "aggregate": {
+              "$ref": "common.schema.json#/$defs/aggregate"
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "provenance": {
+              "enum": [
+                "CANONICAL_COMMIT",
+                "PROVIDER_RECONCILIATION"
+              ]
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "invoiceId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "subscriptionId": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "billing": {
+                  "$ref": "common.schema.json#/$defs/billingContext"
+                },
+                "currency": {
+                  "$ref": "common.schema.json#/$defs/currency"
+                },
+                "amountMinor": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "adjustmentId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "kind": {
+                  "enum": [
+                    "REFUND",
+                    "DISPUTE"
+                  ]
+                },
+                "status": {
+                  "enum": [
+                    "PENDING",
+                    "SUCCEEDED",
+                    "FAILED",
+                    "CANCELED",
+                    "OPEN",
+                    "WON",
+                    "LOST",
+                    "CLOSED",
+                    "UNKNOWN"
+                  ]
+                }
+              },
+              "required": [
+                "invoiceId",
+                "subscriptionId",
+                "billing",
+                "currency",
+                "amountMinor",
+                "adjustmentId",
+                "kind",
+                "status"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "schemaVersion",
+            "target",
+            "aggregate",
+            "sequence",
+            "provenance",
+            "payload"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type",
+        "data"
+      ]
+    },
+    {
+      "properties": {
+        "type": {
+          "pattern": "^com\\.allbluelabs\\.[a-z][a-z0-9-]*\\.billing\\.refund_completed\\.v1$"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "target": {
+              "$ref": "common.schema.json#/$defs/target"
+            },
+            "aggregate": {
+              "$ref": "common.schema.json#/$defs/aggregate"
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "provenance": {
+              "enum": [
+                "CANONICAL_COMMIT",
+                "PROVIDER_RECONCILIATION"
+              ]
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "invoiceId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "subscriptionId": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "billing": {
+                  "$ref": "common.schema.json#/$defs/billingContext"
+                },
+                "currency": {
+                  "$ref": "common.schema.json#/$defs/currency"
+                },
+                "amountMinor": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "adjustmentId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "kind": {
+                  "const": "REFUND"
+                },
+                "status": {
+                  "const": "SUCCEEDED"
+                },
+                "completionOccurredAt": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "Z$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "invoiceId",
+                "subscriptionId",
+                "billing",
+                "currency",
+                "amountMinor",
+                "adjustmentId",
+                "kind",
+                "status",
+                "completionOccurredAt"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "schemaVersion",
+            "target",
+            "aggregate",
+            "sequence",
+            "provenance",
+            "payload"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type",
+        "data"
+      ]
+    },
+    {
+      "properties": {
+        "type": {
+          "pattern": "^com\\.allbluelabs\\.[a-z][a-z0-9-]*\\.usage\\.metrics_recorded\\.v1$"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "target": {
+              "$ref": "common.schema.json#/$defs/target"
+            },
+            "aggregate": {
+              "$ref": "common.schema.json#/$defs/aggregate"
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "provenance": {
+              "enum": [
+                "CANONICAL_COMMIT",
+                "PROVIDER_RECONCILIATION"
+              ]
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "definitionRef": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "definitionVersion": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "value": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "unit": {
+                  "enum": [
+                    "COUNT",
+                    "BYTES"
+                  ]
+                },
+                "window": {
+                  "type": "object",
+                  "properties": {
+                    "from": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "Z$"
+                    },
+                    "until": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "Z$"
+                    },
+                    "timeZone": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80
+                    }
+                  },
+                  "required": [
+                    "from",
+                    "until",
+                    "timeZone"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "definitionRef",
+                "definitionVersion",
+                "value",
+                "unit",
+                "window"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "schemaVersion",
+            "target",
+            "aggregate",
+            "sequence",
+            "provenance",
+            "payload"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type",
+        "data"
+      ]
+    }
+  ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "occurrencebasis": {
+            "const": "UNKNOWN"
+          }
+        },
+        "required": [
+          "occurrencebasis"
+        ]
+      },
+      "then": {
+        "not": {
+          "required": [
+            "time"
+          ]
+        }
+      },
+      "else": {
+        "required": [
+          "time"
+        ]
+      }
+    }
+  ]
+}

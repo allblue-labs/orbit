@@ -1,0 +1,28 @@
+{
+  "protocolVersion": "1.0.0",
+  "commandId": "00000000-0000-7000-8000-000000000002",
+  "receiptId": "00000000-0000-7000-8000-000000000003",
+  "commandType": "subscription.request_plan_change.v1",
+  "target": {
+    "productId": "orbit-v2",
+    "environment": "staging",
+    "instanceId": "orbit-staging-01",
+    "tenantId": "00000000-0000-7000-8000-000000000001"
+  },
+  "processingStatus": "REJECTED",
+  "receiptVersion": 3,
+  "acceptedAt": "2026-11-15T12:00:00Z",
+  "updatedAt": "2026-11-15T12:00:03Z",
+  "correlationId": "00000000-0000-7000-8000-000000000002",
+  "confirmedBy": "orbit-v2",
+  "effect": {
+    "kind": "NONE"
+  },
+  "error": {
+    "protocolVersion": "1.0.0",
+    "code": "FORBIDDEN",
+    "correlationId": "00000000-0000-7000-8000-000000000002",
+    "retryable": false,
+    "message": "Solicitação não concluída."
+  }
+}

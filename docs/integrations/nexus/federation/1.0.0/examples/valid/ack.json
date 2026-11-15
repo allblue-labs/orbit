@@ -1,0 +1,8 @@
+{
+  "protocolVersion": "1.0.0",
+  "eventId": "00000000-0000-7000-8000-000000000002",
+  "source": "urn:allblue:orbit-v2:staging:orbit-staging-01",
+  "payloadSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "durablyPersisted": true,
+  "persistedAt": "2026-11-15T12:00:00Z"
+}

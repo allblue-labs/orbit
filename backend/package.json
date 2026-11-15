@@ -6,6 +6,7 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
+    "contracts:nexus": "node --test scripts/nexus-contracts.test.cjs",
     "contracts:guard": "ts-node scripts/check-contract-boundaries.ts",
     "lint:public-errors": "ts-node scripts/check-public-error-contract.ts",
     "build": "nest build",
@@ -95,6 +96,8 @@
     "@types/qrcode": "^1.5.6",
     "@types/supertest": "^6.0.2",
     "@types/web-push": "^3.6.4",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
     "eslint-plugin-prettier": "^5.2.2",

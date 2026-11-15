@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.allblue-labs.com/federation/1.0.0/ack.schema.json",
+  "title": "PROPOSED / PENDING_NEXUS_DECISION — ack.schema.json",
+  "type": "object",
+  "properties": {
+    "protocolVersion": {
+      "const": "1.0.0"
+    },
+    "eventId": {
+      "$ref": "common.schema.json#/$defs/uuid"
+    },
+    "source": {
+      "type": "string",
+      "format": "uri"
+    },
+    "payloadSha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "durablyPersisted": {
+      "const": true
+    },
+    "persistedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    }
+  },
+  "required": [
+    "protocolVersion",
+    "eventId",
+    "source",
+    "payloadSha256",
+    "durablyPersisted",
+    "persistedAt"
+  ],
+  "additionalProperties": false
+}

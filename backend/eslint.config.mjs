@@ -49,4 +49,10 @@ export default tseslint.config(
       'orbit/no-concurrent-transaction-queries': 'error',
     },
   },
+  {
+    files: ['scripts/nexus-contract*.cjs'],
+    extends: [tseslint.configs.disableTypeChecked],
+    languageOptions: { parserOptions: { projectService: false } },
+    rules: { '@typescript-eslint/no-require-imports': 'off' },
+  },
 );

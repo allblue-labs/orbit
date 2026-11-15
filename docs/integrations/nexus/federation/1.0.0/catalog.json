@@ -1,0 +1,54 @@
+{
+  "protocolVersion": "1.0.0",
+  "status": "PENDING_NEXUS_DECISION",
+  "runtimeImplemented": false,
+  "schemaBase": "https://contracts.allblue-labs.com/federation/1.0.0/",
+  "eventTypes": [
+    "tenant.created",
+    "tenant.updated",
+    "tenant.suspended",
+    "tenant.reactivated",
+    "subscription.created",
+    "subscription.changed",
+    "subscription.change_scheduled",
+    "subscription.cancellation_scheduled",
+    "subscription.canceled",
+    "billing.invoice_settled",
+    "billing.payment_succeeded",
+    "billing.payment_failed",
+    "billing.adjustment_updated",
+    "billing.refund_completed",
+    "usage.metrics_recorded"
+  ],
+  "commands": [
+    "tenant.provision.v1",
+    "tenant.update.v1",
+    "subscription.request_plan_change.v1",
+    "subscription.request_cancel.v1",
+    "subscription.request_keep.v1",
+    "tenant.request_suspend.v1",
+    "tenant.request_reactivate.v1"
+  ],
+  "deferred": [
+    "usage.metrics_recorded",
+    "support.*",
+    "price.create",
+    "refund.create",
+    "tenant.delete",
+    "trial.grant",
+    "grant.platform_admin"
+  ],
+  "schemas": [
+    "ack.schema.json",
+    "authority-context.schema.json",
+    "command.schema.json",
+    "common.schema.json",
+    "directory.schema.json",
+    "error.schema.json",
+    "event-page.schema.json",
+    "event.schema.json",
+    "link.schema.json",
+    "read.schema.json",
+    "receipt.schema.json"
+  ]
+}
