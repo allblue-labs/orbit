@@ -1,3 +1,4 @@
+import { TenantOperationPolicy } from '../tenant-operations/tenant-operation.policy';
 import {
   CanActivate,
   ExecutionContext,
@@ -11,8 +12,11 @@ import { verifyUploadGrant } from './upload-grant';
 /** Validate the capability before Multer allocates memory for the multipart body. */
 @Injectable()
 export class StorageUploadGuard implements CanActivate {
-  constructor(@Inject(STORAGE_CONFIG) private readonly config: StorageConfig) {}
-  canActivate(context: ExecutionContext): boolean {
+  constructor(
+    @Inject(STORAGE_CONFIG) private readonly config: StorageConfig,
+    private readonly policy: TenantOperationPolicy,
+  ) {}
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const { query } = context.switchToHttp().getRequest<Request>();
     if (
       query.operation !== 'upload' ||
@@ -33,6 +37,10 @@ export class StorageUploadGuard implements CanActivate {
         'Invalid or expired upload signature',
         'STORAGE_SIGNATURE_INVALID',
       );
+    const organizationId = query.key.split('/')[1];
+    if (!organizationId || !/^[0-9a-f-]{36}$/.test(organizationId))
+      throw new ForbiddenException('Invalid upload scope');
+    await this.policy.assertCapabilityTenant(organizationId);
     return true;
   }
 }

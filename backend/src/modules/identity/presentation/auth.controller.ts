@@ -1,3 +1,4 @@
+import { TenantRecovery } from '../../tenant-operations/tenant-operation.policy';
 import {
   Body,
   Controller,
@@ -78,6 +79,7 @@ export class AuthController {
     );
   }
 
+  @TenantRecovery('identity')
   @Post('logout')
   @Surfaces('WEB', 'MOBILE', 'API')
   @HttpCode(HttpStatus.NO_CONTENT)

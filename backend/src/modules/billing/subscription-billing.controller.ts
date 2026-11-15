@@ -1,3 +1,4 @@
+import { TenantRecovery } from '../tenant-operations/tenant-operation.policy';
 /**
  * Comandos comerciais da assinatura.
  *
@@ -20,6 +21,7 @@ import { SubscriptionService } from '../subscription-plans/subscriptions/subscri
 import { BillingService } from './billing.service';
 
 @ApiTags('Billing')
+@TenantRecovery('billing')
 @Controller('organizations/current/subscription')
 export class SubscriptionBillingController {
   constructor(

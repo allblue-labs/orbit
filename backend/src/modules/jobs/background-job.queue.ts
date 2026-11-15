@@ -1,3 +1,4 @@
+import { TENANT_DEFER_MS } from '../tenant-operations/tenant-operation.policy';
 /**
  * Fila sobre Postgres.
  *
@@ -241,6 +242,38 @@ export class BackgroundJobQueue {
     });
 
     return row ? this.fromRow(row) : null;
+  }
+
+  /** Deliberate policy deferral does not consume a processor attempt or dead-letter the job. */
+  async defer(
+    job: BackgroundJobRecord,
+    reason:
+      | 'ORGANIZATION_SUSPENDED'
+      | 'ORGANIZATION_UNAVAILABLE'
+      | 'SUBSCRIPTION_NOT_ACTIVE',
+  ): Promise<void> {
+    await this.asWorker((tx) =>
+      tx.backgroundJob.updateMany({
+        where: { id: job.id, status: 'RUNNING', attempts: job.attempts },
+        data: {
+          status: 'PENDING',
+          attempts: { decrement: 1 },
+          availableAt: new Date(Date.now() + TENANT_DEFER_MS),
+          lockedAt: null,
+          lockedBy: null,
+          lastError: reason,
+        },
+      }),
+    );
+    this.logger.log(
+      JSON.stringify({
+        jobId: job.id,
+        organizationId: job.organizationId,
+        correlationId: job.correlationId,
+        outcome: 'DEFERRED',
+        reason,
+      }),
+    );
   }
 
   async succeed(id: string): Promise<void> {

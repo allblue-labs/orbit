@@ -1,4 +1,6 @@
 import './configure-environment';
+import { TenantOperationsModule } from './modules/tenant-operations/tenant-operations.module';
+import { TenantOperationGuard } from './modules/tenant-operations/tenant-operation.guard';
 import { Module } from '@nestjs/common';
 import { LegalModule } from './modules/legal/legal.module';
 import { APP_GUARD } from '@nestjs/core';
@@ -84,6 +86,7 @@ import {
     StorageModule,
     ArtifactManifestModule,
     JobsModule,
+    TenantOperationsModule,
     ArtifactRenderingModule,
     RvtModule,
     MobileFieldModule,
@@ -104,6 +107,7 @@ import {
      * entitlements podem consultar o contexto estabelecido pelo JWT.
      */
     { provide: APP_GUARD, useClass: JwtAuthenticationGuard },
+    { provide: APP_GUARD, useClass: TenantOperationGuard },
     { provide: APP_GUARD, useClass: SurfaceGuard },
     { provide: APP_GUARD, useClass: PermissionGuard },
     { provide: APP_GUARD, useClass: RoleGuard },

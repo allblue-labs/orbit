@@ -1,3 +1,4 @@
+import { TenantRecovery } from '../tenant-operations/tenant-operation.policy';
 /**
  * As rotas de cobrança.
  *
@@ -27,6 +28,7 @@ import { BillingReadService } from './billing-read.service';
 import { CreateCheckoutSessionDto } from './billing.dto';
 
 @ApiTags('Billing')
+@TenantRecovery('billing')
 @Controller('billing')
 export class BillingController {
   constructor(

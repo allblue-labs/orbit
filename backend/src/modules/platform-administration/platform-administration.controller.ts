@@ -1,4 +1,10 @@
 import {
+  TenantRecovery,
+  TenantOperationalChange,
+} from '../tenant-operations/tenant-operation.policy';
+import { TenantOperationAdminService } from '../tenant-operations/tenant-operation-admin.service';
+import { ChangeTenantOperationDto } from '../tenant-operations/tenant-operation.dto';
+import {
   Body,
   Controller,
   Get,
@@ -32,11 +38,25 @@ import type { Response } from 'express';
 
 @ApiTags('Platform Administration')
 @ApiBearerAuth()
+@TenantRecovery('platform')
 @Controller('platform-admin')
 @Roles('PLATFORM_ADMIN')
 @Permissions('platform.admin')
 export class PlatformAdministrationController {
-  constructor(private readonly platform: PlatformAdministrationService) {}
+  constructor(
+    private readonly platform: PlatformAdministrationService,
+    private readonly operations: TenantOperationAdminService,
+  ) {}
+
+  @Post('organizations/:id/operational-status')
+  @TenantOperationalChange()
+  changeOperationalStatus(
+    @Param('id', ParseUUIDv7Pipe) id: string,
+    @Body() input: ChangeTenantOperationDto,
+    @Headers('idempotency-key') key: string | undefined,
+  ) {
+    return this.operations.change(id, input, key);
+  }
 
   @Get('overview')
   @ApiOperation({ summary: 'Return global platform administration totals' })

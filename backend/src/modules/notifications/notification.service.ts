@@ -132,13 +132,23 @@ export class NotificationService {
   async markRead(id: string, organizationId: string, userId: string) {
     await this.get(id, organizationId, userId);
     await this.repository.markRead(id, organizationId, userId);
-    this.gateway.emitToUser(userId, 'notification:read', { id });
+    await this.gateway.emitToUser(
+      userId,
+      'notification:read',
+      { id },
+      organizationId,
+    );
     return this.get(id, organizationId, userId);
   }
 
   async markAllRead(organizationId: string, userId: string) {
     const result = await this.repository.markAllRead(organizationId, userId);
-    this.gateway.emitToUser(userId, 'notifications:read-all', {});
+    await this.gateway.emitToUser(
+      userId,
+      'notifications:read-all',
+      {},
+      organizationId,
+    );
     return { updated: result.count };
   }
 
@@ -201,7 +211,7 @@ export class NotificationService {
     if (channel === 'IN_APP')
       return { status: 'SENT', provider: 'orbit-database' };
     if (channel === 'REALTIME') {
-      this.gateway.emitToUser(
+      await this.gateway.emitToUser(
         notification.recipientUserId,
         'notification:created',
         {
@@ -212,6 +222,7 @@ export class NotificationService {
           payload: notification.payload,
           createdAt: notification.createdAt,
         },
+        notification.organizationId,
       );
       return { status: 'SENT', provider: 'socket.io' };
     }

@@ -1,3 +1,4 @@
+import { TenantOperationPolicy } from '../tenant-operations/tenant-operation.policy';
 import { Injectable } from '@nestjs/common';
 import { Prisma, type QuoteAcceptanceLink } from '@prisma/client';
 import { randomBytes } from 'node:crypto';
@@ -42,6 +43,7 @@ export class QuoteAcceptanceService {
     private readonly mapper: QuoteMapper,
     private readonly files: FileObjectService,
     private readonly acceptedDocuments: QuoteAcceptedDocumentService,
+    private readonly operational: TenantOperationPolicy,
   ) {}
 
   async create(id: string, organizationId: string, actorId: string) {
@@ -280,6 +282,7 @@ export class QuoteAcceptanceService {
       }
     }
     return this.scoped(token, async (tx, context) => {
+      await this.operational.assertOperational();
       // Mesma ordem de locks da geração; conteúdo e resposta são decididos juntos.
       await tx.$executeRaw`SELECT id FROM quotes WHERE id=${context.quote_id}::uuid AND organization_id=${context.organization_id}::uuid FOR UPDATE`;
       await tx.$executeRaw`SELECT id FROM quote_acceptance_links WHERE id=${context.link_id}::uuid FOR UPDATE`;

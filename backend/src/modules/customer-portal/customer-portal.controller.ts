@@ -1,3 +1,4 @@
+import { TenantRecovery } from '../tenant-operations/tenant-operation.policy';
 import { requestClientIp } from '../../common/trusted-client-origin';
 import {
   Body,
@@ -114,6 +115,7 @@ export class CustomerPortalAuthController {
     return this.portal.confirmPasswordReset(input, metadata(request));
   }
 
+  @TenantRecovery('identity')
   @Post('logout')
   @UseGuards(CustomerPortalGuard)
   @ApiBearerAuth('customer-portal')
@@ -124,6 +126,7 @@ export class CustomerPortalAuthController {
     return this.portal.logout(request.portalActor);
   }
 
+  @TenantRecovery('identity')
   @Patch('password')
   @UseGuards(CustomerPortalGuard)
   @ApiBearerAuth('customer-portal')
@@ -148,6 +151,7 @@ export class CustomerPortalAuthController {
 export class CustomerPortalController {
   constructor(private readonly portal: CustomerPortalService) {}
 
+  @TenantRecovery('identity')
   @Get('me')
   @ApiOkResponse({ type: CustomerPortalMeSchema })
   me(

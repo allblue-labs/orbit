@@ -23,6 +23,7 @@ function setup(status: string | null = 'IN_PROGRESS', count = 0) {
     {} as never,
     {} as never,
     {} as never,
+    undefined as never, // Operational policy is not exercised by this unit fixture.
   );
   const files = { storeWith: jest.fn().mockResolvedValue({ id: 'file' }) };
   const controller = new PmocWebEvidenceController(repository, files as never);

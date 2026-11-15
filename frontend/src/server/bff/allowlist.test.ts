@@ -24,6 +24,11 @@ const TOKEN =
 
 describe("inspectPath", () => {
   it.each([
+    ["/organizations/current/operational-access", "GET"],
+    [
+      "/platform-admin/organizations/00000000-0000-7000-8000-000000000001/operational-status",
+      "POST",
+    ],
     ["/platform-admin/tenants", "POST"],
     [
       "/platform-admin/tenant-provisionings/00000000-0000-7000-8000-000000000001",

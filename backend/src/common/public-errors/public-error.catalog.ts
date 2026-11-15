@@ -11,6 +11,21 @@ export interface PublicErrorDefinition {
 }
 
 const entries = [
+  [
+    'ORGANIZATION_REACTIVATION_REQUIRES_SUBSCRIPTION',
+    HttpStatus.CONFLICT,
+    'Regularize a contratação da organização antes de reativá-la.',
+  ],
+  [
+    'ORGANIZATION_SUSPENDED',
+    HttpStatus.FORBIDDEN,
+    'A organização está suspensa. Entre em contato com o responsável.',
+  ],
+  [
+    'ORGANIZATION_UNAVAILABLE',
+    HttpStatus.FORBIDDEN,
+    'A organização não está disponível para operações. Entre em contato com o responsável.',
+  ],
   ['VALIDATION_ERROR', HttpStatus.BAD_REQUEST, 'Revise os campos informados.'],
   [
     'MOBILE_PUSH_UPGRADE_REQUIRED',

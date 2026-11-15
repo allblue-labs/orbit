@@ -8,6 +8,17 @@ function http(code: string, status: number, message: string) {
 }
 
 describe("mensagem pública de erro", () => {
+  it("mantém o código e a mensagem de suspensão como restrição, sem tratar como sessão expirada", () => {
+    const error = http(
+      "ORGANIZATION_SUSPENDED",
+      403,
+      "A organização está suspensa. Entre em contato com o responsável.",
+    );
+    expect(error.code).toBe("ORGANIZATION_SUSPENDED");
+    expect(error.status).toBe(403);
+    expect(error.isUnauthorized).toBe(false);
+    expect(errorCopy(error)).toBe(error.message);
+  });
   it("exibe a mensagem PT-BR publicada sem tradução por texto", () => {
     expect(
       errorCopy(

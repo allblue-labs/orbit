@@ -1,3 +1,7 @@
+import { ForbiddenException } from '../../exceptions';
+import { TenantOperationPolicy } from '../tenant-operations/tenant-operation.policy';
+import { toAuthenticatedIdentity } from '../identity/application/authentication.service';
+import { allowsSurface } from '../identity/domain/surface-access';
 import {
   OnGatewayConnection,
   OnGatewayDisconnect,
@@ -31,6 +35,7 @@ export class NotificationGateway
   constructor(
     private readonly tokens: IdentityTokenService,
     private readonly identities: IdentityRepository,
+    private readonly operational: TenantOperationPolicy,
   ) {}
 
   async handleConnection(client: AuthenticatedSocket) {
@@ -46,13 +51,24 @@ export class NotificationGateway
       ) {
         throw new Error('Invalid session');
       }
+      const user = await this.identities.findById(claims.sub);
+      if (
+        !user ||
+        user.status !== 'ACTIVE' ||
+        user.deletedAt ||
+        !allowsSurface(user, session.client)
+      )
+        throw new Error('Invalid identity');
+      const identity = toAuthenticatedIdentity(user, claims.sid);
+      if (!identity.organizationId) throw new Error('Organization required');
+      await this.operational.assertCapabilityTenant(identity.organizationId);
       const data = client.data as unknown as NotificationSocketData;
-      data.userId = claims.sub;
-      data.organizationId = claims.organizationId ?? undefined;
+      data.userId = identity.id;
+      data.organizationId = identity.organizationId;
       data.sessionId = claims.sid;
-      await client.join(`user:${claims.sub}`);
-      if (claims.organizationId)
-        await client.join(`organization:${claims.organizationId}`);
+      await client.join(
+        `organization:${identity.organizationId}:user:${identity.id}`,
+      );
       client.emit('notifications:ready', { connected: true });
     } catch {
       client.disconnect(true);
@@ -63,8 +79,29 @@ export class NotificationGateway
     client.removeAllListeners();
   }
 
-  emitToUser(userId: string, event: string, payload: unknown) {
-    this.server.to(`user:${userId}`).emit(event, payload);
+  async emitToUser(
+    userId: string,
+    event: string,
+    payload: unknown,
+    organizationId: string,
+  ): Promise<boolean> {
+    try {
+      // Recheck at every delivery: sockets established before suspension cannot keep receiving tenant data.
+      await this.operational.assertCapabilityTenant(organizationId);
+    } catch (error) {
+      if (
+        error instanceof ForbiddenException &&
+        ['ORGANIZATION_SUSPENDED', 'ORGANIZATION_UNAVAILABLE'].includes(
+          error.code,
+        )
+      )
+        return false;
+      throw error;
+    }
+    this.server
+      .to(`organization:${organizationId}:user:${userId}`)
+      .emit(event, payload);
+    return true;
   }
 
   private bearer(client: Socket): string {

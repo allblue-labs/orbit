@@ -1,3 +1,8 @@
+import { Reflector } from '@nestjs/core';
+import {
+  TENANT_RECOVERY,
+  TenantOperationPolicy,
+} from '../tenant-operations/tenant-operation.policy';
 import {
   type CanActivate,
   type ExecutionContext,
@@ -24,6 +29,8 @@ export class CustomerPortalGuard implements CanActivate {
   constructor(
     private readonly tokens: CustomerPortalTokenService,
     private readonly repository: CustomerPortalRepository,
+    private readonly policy: TenantOperationPolicy,
+    private readonly reflector: Reflector,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -57,6 +64,13 @@ export class CustomerPortalGuard implements CanActivate {
         organizationId: this.tokens.asUuid(session.organizationId),
         customerId: this.tokens.asUuid(session.customerId),
       };
+      if (
+        !this.reflector.getAllAndOverride<string>(TENANT_RECOVERY, [
+          context.getHandler(),
+          context.getClass(),
+        ])
+      )
+        await this.policy.assertCapabilityTenant(actor.organizationId);
       request.portalActor = actor;
       request.actorType = actor.actorType;
       request.portalIdentityId = actor.identityId;

@@ -20,6 +20,8 @@ describe('BackgroundJobWorker lifecycle', () => {
       queue as unknown as BackgroundJobQueue,
       {} as RequestContextStorage,
       registry as unknown as JobProcessorRegistry,
+      {} as never,
+      {} as never,
     );
 
     const tick = worker.tick();

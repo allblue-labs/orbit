@@ -1,3 +1,4 @@
+import { TenantRecovery } from '../tenant-operations/tenant-operation.policy';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { imageUploadOptions } from '../storage/image-upload.options';
 import {
@@ -58,6 +59,7 @@ export class OrganizationController {
     );
   }
 
+  @TenantRecovery('context')
   @Get('current')
   @Surfaces('WEB', 'MOBILE', 'API')
   @RequiresActivePlan()

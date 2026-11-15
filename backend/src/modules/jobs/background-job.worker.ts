@@ -1,3 +1,8 @@
+import {
+  CONTINUING_QUEUES,
+  TenantOperationPolicy,
+} from '../tenant-operations/tenant-operation.policy';
+import { SubscriptionPlanService } from '../subscription-plans/subscription-plan.service';
 /**
  * Worker de jobs.
  *
@@ -67,6 +72,8 @@ export class BackgroundJobWorker implements OnModuleInit, OnModuleDestroy {
     private readonly queue: BackgroundJobQueue,
     private readonly storage: RequestContextStorage,
     private readonly registry: JobProcessorRegistry,
+    private readonly operational: TenantOperationPolicy,
+    private readonly plans: SubscriptionPlanService,
   ) {}
 
   onModuleInit(): void {
@@ -165,6 +172,25 @@ export class BackgroundJobWorker implements OnModuleInit, OnModuleDestroy {
 
     await this.withTenantContext(job, units, async () => {
       try {
+        if (!CONTINUING_QUEUES.has(job.queue)) {
+          const state = await this.operational.snapshot();
+          const eligible =
+            state.operational &&
+            this.plans.grantsAccess(
+              await this.plans.getEntitlements(job.organizationId),
+            );
+          if (!eligible) {
+            await this.queue.defer(
+              job,
+              state.operational
+                ? 'SUBSCRIPTION_NOT_ACTIVE'
+                : state.status === 'SUSPENDED'
+                  ? 'ORGANIZATION_SUSPENDED'
+                  : 'ORGANIZATION_UNAVAILABLE',
+            );
+            return;
+          }
+        }
         await processor.process(job);
         await this.queue.succeed(job.id);
         this.logger.log(

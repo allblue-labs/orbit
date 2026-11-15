@@ -75,6 +75,7 @@ function repositoryFixture() {
     {} as never,
     {} as never,
     {} as never,
+    undefined as never, // Operational policy is not exercised by this unit fixture.
   );
   return { tx, repository };
 }

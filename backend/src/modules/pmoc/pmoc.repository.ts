@@ -1,3 +1,4 @@
+import { TenantOperationPolicy } from '../tenant-operations/tenant-operation.policy';
 import { Optional } from '@nestjs/common';
 import { FieldAssignmentOutbox } from '../notifications/field-assignment-outbox';
 /**
@@ -278,6 +279,7 @@ export class PmocRepository {
      * declarar. A credencial é o token, e a validação dele é dentro da função.
      */
     private readonly prisma: PrismaService,
+    private readonly operational: TenantOperationPolicy,
     @Optional() private readonly assignmentPush?: FieldAssignmentOutbox,
   ) {}
 
@@ -421,7 +423,10 @@ export class PmocRepository {
       { organization_id: string | null }[]
     >`
       SELECT app_pmoc_signature_upload_scope(${tokenHash}) AS organization_id`;
-    return rows[0]?.organization_id ?? null;
+    const organizationId = rows[0]?.organization_id ?? null;
+    if (organizationId)
+      await this.operational.assertCapabilityTenant(organizationId);
+    return organizationId;
   }
 
   async signByToken(input: {

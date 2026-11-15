@@ -142,6 +142,42 @@ void main() {
     return (client: client, adapter: adapter, plain: plainAdapter);
   }
 
+  test(
+    'suspensão operacional mantém a sessão e não dispara refresh nem repete o comando',
+    () async {
+      final storage = InMemoryTokenStorage(
+        const TokenPair(
+          accessToken: 'kept-access',
+          refreshToken: 'kept-refresh',
+          expiresIn: 900,
+        ),
+      );
+      final setup = build(
+        storage: storage,
+        onRequest: (_) async => _json(
+          errorEnvelope(
+            code: 'ORGANIZATION_SUSPENDED',
+            message:
+                'A organização está suspensa. Entre em contato com o responsável.',
+          ),
+          status: 403,
+        ),
+      );
+      await expectLater(
+        setup.client.post<Map<String, dynamic>>('/operations'),
+        throwsA(
+          isA<OrbitException>()
+              .having((e) => e.code, 'code', 'ORGANIZATION_SUSPENDED')
+              .having((e) => e.isUnauthorized, 'unauthorized', false)
+              .having((e) => e.isForbidden, 'forbidden', true),
+        ),
+      );
+      expect(setup.adapter.requests, hasLength(1));
+      expect(setup.plain.requests, isEmpty);
+      expect((await storage.read())?.refreshToken, 'kept-refresh');
+    },
+  );
+
   test('desembrulha o envelope de sucesso', () async {
     final setup = build(
       onRequest: (_) async => _json(envelope({'id': 'op-1', 'code': 'OP-1'})),
