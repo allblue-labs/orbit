@@ -2,7 +2,7 @@
   "pr": "PR-08",
   "date": "2026-11-16",
   "baseCommit": "0dcc7ea81245e64796364039c12d485610cb3833",
-  "implementationCommit": "Identified by fix(email): PR-08 SNS feedback and durable suppression; registered after commit",
+  "implementationCommit": "82fe62346e92e4a9fe310075c6697432fe9d7611",
   "finding": "F11",
   "qualification": "Implemented and locally tested; real SES/SNS delivery, subscription and AWS production access remain externally pending.",
   "migration": "20261116120000_ses_feedback_suppression",

@@ -1,6 +1,7 @@
 # PR-08 — SNS, bounces, complaints e supressão
 
 Achado **F11**, base limpa `0dcc7ea`, implementação de 16/11/2026.
+Commit de implementação: `82fe62346e92e4a9fe310075c6697432fe9d7611`.
 Código implementado e validado localmente. **Homologação SES/SNS real pendente**;
 esta entrega não qualifica envio externo ou saída da sandbox. Sem push, merge,
 deploy, alteração de recursos AWS ou envio de mensagens reais.
