@@ -14,12 +14,16 @@ AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=
 AWS_REGION=us-east-1
 AWS_SES_FROM_EMAIL=no-reply@allblue-labs.com
+# Gerar uma vez: openssl rand -base64 32. Preservar entre réplicas/backups.
+EMAIL_SUPPRESSION_HASH_KEY=
 IDENTITY_PUBLIC_WEB_URL=https://orbit.allblue-labs.com
 # Somente para credenciais temporárias:
 AWS_SESSION_TOKEN=
 ```
 
-Os quatro campos AWS são obrigatórios em produção. O cliente recebe credenciais
+Os quatro campos AWS e a chave dedicada `EMAIL_SUPPRESSION_HASH_KEY` são
+obrigatórios em produção. A chave de supressão deve conter 32 bytes em base64;
+consulte o [guia de feedback PR-08](amazon-ses-feedback.md) antes do upgrade. O cliente recebe credenciais
 explicitamente dessas variáveis; não lê `~/.aws`, AWS_PROFILE ou metadata de EC2.
 Nunca use `NEXT_PUBLIC_*`, não inclua segredos em imagens e não versione `.env`.
 Os slots criados no `.env` da raiz estão vazios; valores preexistentes foram
@@ -228,20 +232,28 @@ Falhas permanentes antigas não são reabertas: solicitar um link novo. O worker
 continua independente de uma consulta remota por e-mail; indisponibilidade do
 preflight não bloqueia requisições de cadastro/recuperação.
 
-## Futuro webhook SNS: bounces e complaints
+## Webhook SNS e supressão — PR-08
 
-O roteiro de implementação seguro está em
-`src/modules/email/ses-feedback.blueprint.ts`. Ele é deliberadamente um esqueleto,
-sem controller público registrado: não existe uma rota que aceite notificações
-sem autenticação da origem. Antes de habilitá-lo, implemente validação de assinatura,
-allowlist do TopicArn, idempotência, supressão de envio e vínculo com a mensagem
-original. Não desative usuários nem exclua dados por um simples POST externo.
+Implementado `POST /api/v1/email/webhooks/ses-sns`, com assinatura SNS v2,
+tópico/conta/região/identidade esperados, associação a envio conhecido,
+persistência idempotente e supressão de hard bounce/complaint. O blueprint
+foi substituído pela implementação. Não há exclusão/desativação de contas.
+
+**Antes da nova API:** aplicar a migration de feedback e configurar
+`EMAIL_SUPPRESSION_HASH_KEY` (32 bytes em base64, própria e estável), mesmo se
+`AWS_SES_FEEDBACK_ENABLED=false`. O remetente sempre consulta as supressões.
+Não reutilizar/rotacionar essa chave junto de `ENCRYPTION_KEY`.
+
+Configuração AWS, permissões, novas envs, assinatura v2 e comando de homologação
+estão no [guia SES/SNS](amazon-ses-feedback.md). O preflight local agora também
+valida a chave de supressão; o preflight remoto continua sendo consulta SES,
+não comprovação de entrega/assinatura do SNS.
 
 Referências:
 - https://docs.aws.amazon.com/sns/latest/dg/sns-verify-signature-of-message.html
 - https://docs.aws.amazon.com/ses/latest/dg/notification-contents.html
 
-## Validação da implementação
+## Validação histórica da integração inicial
 
 Foram exercitados testes direcionados do backend, 27 testes do allowlist do
 frontend e três cenários no navegador, além de verificações de tipos e lint.
@@ -251,6 +263,7 @@ e recuperação de senha com revogação de sessões. Nenhum e-mail real foi env
 a entrega deve ser validada na conta SES após configurar as variáveis.
 
 A dependência `nodemailer` foi removida; o achado de `proxy-addr` foi corrigido.
-Ainda há nove ocorrências preexistentes em outras dependências de produção
+Naquela revisão inicial havia nove ocorrências preexistentes em outras dependências de produção
 (quatro altas e cinco moderadas), fora do transporte SES. Esta validação não
-equivale a uma auditoria completa de segurança do repositório.
+equivale a uma auditoria completa de segurança do repositório. Para a qualificação
+atual, consultar os relatórios de release PR-01 em diante, incluindo a PR-08.

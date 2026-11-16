@@ -1,6 +1,7 @@
 import { InfrastructureException } from './exceptions';
 import { isEmail } from 'class-validator';
 import { emailConfiguration } from './modules/email/email.config';
+import { sesFeedbackConfiguration } from './modules/email/ses-feedback.config';
 
 const PLACEHOLDER = /change[-_]?me|placeholder|example|dummy|test[-_]?only/i;
 
@@ -29,6 +30,15 @@ export function validateReleaseEnvironment(
   secret('TRUSTED_PROXY_SECRET', 32);
 
   const email = emailConfiguration(environment);
+  try {
+    sesFeedbackConfiguration(environment);
+  } catch (error) {
+    throw new InfrastructureException(
+      error instanceof Error
+        ? error.message
+        : 'Invalid SES feedback configuration',
+    );
+  }
   for (const key of [
     'IDENTITY_PUBLIC_WEB_URL',
     'AWS_ACCESS_KEY_ID',

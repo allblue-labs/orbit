@@ -147,6 +147,11 @@ A API exige `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`
 e `AWS_SES_FROM_EMAIL` reais mesmo no staging. Use IAM com `ses:SendEmail`
 restrito à identidade verificada e credenciais próprias do staging. A região
 inicial sugerida é `us-east-2`: confirme onde a identidade SES foi verificada.
+Desde a PR-08, `EMAIL_SUPPRESSION_HASH_KEY` também é obrigatória: chave própria
+de 32 bytes em base64, estável entre réplicas e backups. O inicializador gera-a
+somente para ambientes novos; não execute-o sobre `.env` existente. Para upgrade,
+gere a chave uma vez e adicione-a ao secret manager/`.env` protegido antes da API.
+Configuração SNS e homologação: [guia de feedback SES](../../backend/docs/amazon-ses-feedback.md).
 Na sandbox, tanto remetente quanto destinatário precisam estar verificados.
 Não use credenciais fictícias para contornar o preflight.
 

@@ -16,6 +16,7 @@ export class TransactionalIdentityTokenDelivery implements IIdentityTokenDeliver
     purpose: IdentityTokenPurpose,
     recipient: string,
     token: string,
+    identityDeliveryId?: string,
   ): Promise<EmailSendResult> {
     const copy = {
       EMAIL_VERIFICATION: {
@@ -44,6 +45,7 @@ export class TransactionalIdentityTokenDelivery implements IIdentityTokenDeliver
     }[purpose];
     return this.email.send({
       to: recipient,
+      ...(identityDeliveryId ? { identityDeliveryId } : {}),
       ...actionEmail({ ...copy, link: identityTokenLink(purpose, token) }),
     });
   }

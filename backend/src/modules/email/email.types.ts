@@ -3,6 +3,7 @@ export interface EmailMessage {
   subject: string;
   text: string;
   html?: string;
+  identityDeliveryId?: string;
 }
 export type EmailSendResult =
   | { status: 'SENT'; provider: 'ses'; providerMessageId?: string }

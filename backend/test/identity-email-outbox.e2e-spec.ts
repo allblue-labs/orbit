@@ -208,6 +208,7 @@ describe('PR-07: outbox SES com HTTP, reinício e RLS real', () => {
       'PASSWORD_RESET',
       principal.email,
       original.token,
+      first.id,
     );
     const done = await row();
     expect(done.status).toBe('ACCEPTED_BY_PROVIDER');
@@ -410,6 +411,7 @@ describe('PR-07: outbox SES com HTTP, reinício e RLS real', () => {
       'PASSWORD_RESET',
       email,
       payload(pending).token,
+      pending.id,
     );
   });
   it('RLS não expõe a fila a requisições nem usa privilégio de worker em tabelas de tenant', async () => {

@@ -6,6 +6,8 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
+    "email:feedback:simulate": "node dist/src/scripts/simulate-ses-feedback.js",
+    "email:feedback:simulate:dev": "ts-node src/scripts/simulate-ses-feedback.ts",
     "contracts:nexus": "node --test scripts/nexus-contracts.test.cjs",
     "contracts:guard": "ts-node scripts/check-contract-boundaries.ts",
     "lint:public-errors": "ts-node scripts/check-public-error-contract.ts",
@@ -47,6 +49,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1167.0",
     "@aws-sdk/client-sesv2": "^3.1165.0",
+    "@aws-sdk/client-sns": "3.1169.0",
     "@aws-sdk/s3-request-presigner": "^3.1167.0",
     "@nestjs/common": "^11.2.3",
     "@nestjs/core": "^11.2.3",

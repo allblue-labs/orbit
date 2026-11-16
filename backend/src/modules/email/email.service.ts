@@ -17,6 +17,10 @@ import {
 } from './email.config';
 
 import type { EmailMessage, EmailSendResult } from './email.types';
+import {
+  EmailTransportRepository,
+  normalizeEmail,
+} from './email-transport.repository';
 export type { EmailMessage, EmailSendResult } from './email.types';
 
 /** Shared transactional sender. No recipients, bodies, links or credentials enter logs. */
@@ -27,20 +31,39 @@ export class EmailService implements OnModuleDestroy {
   constructor(
     @Inject(EMAIL_CONFIGURATION) private readonly config: EmailConfiguration,
     @Inject(SES_EMAIL_CLIENT) private readonly ses: SESv2Client | null,
+    private readonly repository: EmailTransportRepository,
   ) {}
 
   async send(message: EmailMessage): Promise<EmailSendResult> {
     const provider = this.config.provider;
     if (provider === 'noop') return { status: 'SKIPPED', provider };
+    let outboundId: string | undefined;
+    let accepted = false;
     try {
       if (!isEmail(message.to) || /[\r\n]/.test(message.subject))
         return this.failed('INVALID_MESSAGE', false);
-      if (!this.config.from || !this.ses)
+      if (!this.config.from || !this.config.region || !this.ses)
         return this.failed('EMAIL_NOT_CONFIGURED', false);
+      try {
+        const prepared = await this.repository.prepare(
+          message.to,
+          this.config.from,
+          this.config.region,
+          message.identityDeliveryId,
+        );
+        if (!prepared) return this.failed('EMAIL_SUPPRESSED', false);
+        outboundId = prepared;
+      } catch {
+        return this.failed('EMAIL_STATE_UNAVAILABLE', true);
+      }
       const result = await this.ses.send(
         new SendEmailCommand({
           FromEmailAddress: this.config.from,
-          Destination: { ToAddresses: [message.to] },
+          Destination: { ToAddresses: [normalizeEmail(message.to)] },
+          EmailTags: [{ Name: 'orbit_delivery_id', Value: outboundId }],
+          ...(this.config.configurationSet
+            ? { ConfigurationSetName: this.config.configurationSet }
+            : {}),
           Content: {
             Simple: {
               Subject: { Data: message.subject, Charset: 'UTF-8' },
@@ -54,6 +77,13 @@ export class EmailService implements OnModuleDestroy {
           },
         }),
       );
+      accepted = true;
+      if (!result.MessageId) return this.failed('SES_MESSAGE_ID_MISSING', true);
+      try {
+        await this.repository.accepted(outboundId, result.MessageId);
+      } catch {
+        return this.failed('EMAIL_STATE_UNAVAILABLE', true);
+      }
       return {
         status: 'SENT',
         provider,
@@ -81,8 +111,14 @@ export class EmailService implements OnModuleDestroy {
           error.$metadata.httpStatusCode === 429 ||
           (error.$metadata.httpStatusCode ?? 0) >= 500 ||
           Boolean(error.$retryable);
+        if (outboundId && !accepted)
+          await this.repository
+            .failed(outboundId, retryable)
+            .catch(() => undefined);
         return this.failed(codes[error.name] ?? 'SES_SERVICE_ERROR', retryable);
       }
+      if (outboundId && !accepted)
+        await this.repository.failed(outboundId, true).catch(() => undefined);
       // Never log SDK error messages: they may contain recipients or signed links.
       return this.failed('EMAIL_TRANSPORT_ERROR', true);
     }

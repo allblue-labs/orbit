@@ -19,6 +19,8 @@ export class EmailNotificationProvider {
     text: string;
   }): Promise<DeliveryResult> {
     const result = await this.email.send(input);
+    if (result.status === 'FAILED' && result.code === 'EMAIL_SUPPRESSED')
+      return { status: 'SKIPPED', provider: 'ses-suppressed' };
     if (result.status === 'FAILED')
       throw new InfrastructureException('Email notification delivery failed');
     return result;

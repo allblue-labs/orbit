@@ -10,6 +10,7 @@ import { FileObjectService } from './file-object.service';
 import { STORAGE_CONFIG } from './storage.config';
 import { STORAGE_PROVIDER } from './storage.types';
 import { uploadGrant } from './upload-grant';
+import { TenantOperationPolicy } from '../tenant-operations/tenant-operation.policy';
 
 const config = {
   localPublicBaseUrl: 'https://orbit.allblue-labs.com',
@@ -23,6 +24,9 @@ describe('signed multipart image gateway', () => {
   let contexts: RequestContextService;
   let body: Buffer;
   let path: string;
+  const policy = {
+    assertCapabilityTenant: jest.fn().mockResolvedValue(undefined),
+  };
   beforeAll(async () => {
     const contextStorage = new RequestContextStorage();
     contexts = new RequestContextService(contextStorage);
@@ -31,6 +35,7 @@ describe('signed multipart image gateway', () => {
       controllers: [StorageObjectController],
       providers: [
         StorageUploadGuard,
+        { provide: TenantOperationPolicy, useValue: policy },
         { provide: STORAGE_CONFIG, useValue: config },
         { provide: STORAGE_PROVIDER, useValue: {} },
         { provide: FileObjectService, useValue: { uploadReserved: receive } },
@@ -59,7 +64,10 @@ describe('signed multipart image gateway', () => {
   afterAll(async () => {
     await app.close();
   });
-  beforeEach(() => receive.mockClear());
+  beforeEach(() => {
+    receive.mockClear();
+    policy.assertCapabilityTenant.mockReset().mockResolvedValue(undefined);
+  });
   it('accepts multipart and scopes the unsigned transport identity to its tenant', async () => {
     receive.mockImplementationOnce(() => {
       expect(contexts.get().organizationId).toBe(organizationId);
@@ -77,6 +85,7 @@ describe('signed multipart image gateway', () => {
       body,
       'image/png',
     );
+    expect(policy.assertCapabilityTenant).toHaveBeenCalledWith(organizationId);
   });
   it('keeps installed raw-PUT mobile clients compatible', async () => {
     await request(app.getHttpServer() as Server)

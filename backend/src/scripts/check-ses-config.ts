@@ -10,6 +10,10 @@ import {
   validateSesConfiguration,
   sesPreflightFailureCode,
 } from '../modules/email/ses-preflight';
+import {
+  emailSuppressionHashKey,
+  sesFeedbackConfiguration,
+} from '../modules/email/ses-feedback.config';
 
 loadEnv({ path: resolve(process.cwd(), '.env'), quiet: true });
 loadEnv({ path: resolve(process.cwd(), '../.env'), quiet: true });
@@ -17,6 +21,8 @@ loadEnv({ path: resolve(process.cwd(), '../.env'), quiet: true });
 async function main() {
   const config = emailConfiguration();
   validateSesConfiguration(config);
+  emailSuppressionHashKey(process.env.EMAIL_SUPPRESSION_HASH_KEY);
+  sesFeedbackConfiguration();
   if (!process.argv.includes('--remote')) {
     console.log(
       'Configuração local válida. Para consultar identidade, envio, sandbox e quotas na AWS, acrescente --remote. Nenhum e-mail será enviado.',
@@ -42,7 +48,7 @@ void main().catch((error: unknown) => {
     }),
   );
   console.error(
-    'Não foi possível validar o SES. Confira AWS_REGION, AWS_SES_FROM_EMAIL e as credenciais; a consulta remota exige ses:GetAccount e ses:GetEmailIdentity na região selecionada.',
+    'Não foi possível validar o SES. Confira AWS_REGION, AWS_SES_FROM_EMAIL, EMAIL_SUPPRESSION_HASH_KEY, as credenciais e a configuração SNS quando habilitada; a consulta remota exige ses:GetAccount e ses:GetEmailIdentity na região selecionada.',
   );
   process.exitCode = 1;
 });

@@ -7,6 +7,7 @@ export interface EmailConfiguration {
   secretAccessKey?: string;
   sessionToken?: string;
   from?: string;
+  configurationSet?: string;
 }
 
 /** Only environment variables are consulted; AWS profiles/metadata are never used. */
@@ -21,6 +22,7 @@ export function emailConfiguration(
     secretAccessKey: env.AWS_SECRET_ACCESS_KEY?.trim(),
     sessionToken: env.AWS_SESSION_TOKEN?.trim() || undefined,
     from: env.AWS_SES_FROM_EMAIL?.trim(),
+    configurationSet: env.AWS_SES_CONFIGURATION_SET?.trim() || undefined,
   };
 }
 

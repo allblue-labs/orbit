@@ -245,6 +245,8 @@ model IdentityEmailDelivery {
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
+  outboundMessages EmailOutboundMessage[]
+
   user         User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
   organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
@@ -253,6 +255,75 @@ model IdentityEmailDelivery {
   @@index([status, lockedAt])
   @@index([providerMessageId])
   @@map("identity_email_deliveries")
+}
+
+// Global transactional delivery metadata. No plaintext addresses, tokens or bodies.
+model EmailOutboundMessage {
+  id                 String                 @id @default(uuid(7)) @db.Uuid
+  region             String                 @db.VarChar(30)
+  sourceHash         String                 @map("source_hash") @db.Char(64)
+  recipientHashes    String[]               @map("recipient_hashes")
+  identityDeliveryId String?                @map("identity_delivery_id") @db.Uuid
+  providerMessageId  String?                @map("provider_message_id") @db.VarChar(255)
+  status             String                 @default("PREPARED") @db.VarChar(20)
+  feedbackStatus     String                 @default("UNOBSERVED") @map("feedback_status") @db.VarChar(20)
+  acceptedAt         DateTime?              @map("accepted_at") @db.Timestamptz(3)
+  createdAt          DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
+  identityDelivery   IdentityEmailDelivery? @relation(fields: [identityDeliveryId], references: [id], onDelete: SetNull)
+  feedbackEvents     EmailFeedbackEvent[]
+  providerMessages   EmailProviderMessage[]
+
+  @@unique([id, region])
+  @@unique([region, providerMessageId])
+  @@index([identityDeliveryId])
+  @@map("email_outbound_messages")
+}
+
+// An SDK/network retry can accept more than one SES ID for one logical attempt.
+model EmailProviderMessage {
+  region            String @db.VarChar(30)
+  providerMessageId String @map("provider_message_id") @db.VarChar(255)
+  outboundId       String @map("outbound_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  outbound         EmailOutboundMessage @relation(fields: [outboundId, region], references: [id, region], onDelete: Restrict)
+  @@id([region, providerMessageId])
+  @@index([outboundId])
+  @@map("email_provider_messages")
+}
+
+model EmailFeedbackEvent {
+  id              String                @id @default(uuid(7)) @db.Uuid
+  topicArn        String                @map("topic_arn") @db.VarChar(300)
+  snsMessageId    String                @map("sns_message_id") @db.Uuid
+  payloadHash     String                @map("payload_hash") @db.Char(64)
+  kind            String                @db.VarChar(30)
+  outboundId      String?               @map("outbound_id") @db.Uuid
+  recipientHashes String[]              @map("recipient_hashes")
+  status          String                @default("PROCESSED") @db.VarChar(20)
+  leaseId         String?               @map("lease_id") @db.Uuid
+  leaseExpiresAt  DateTime?             @map("lease_expires_at") @db.Timestamptz(3)
+  subscriptionArn String?               @map("subscription_arn") @db.VarChar(400)
+  occurredAt      DateTime?             @map("occurred_at") @db.Timestamptz(3)
+  createdAt       DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+  outbound        EmailOutboundMessage? @relation(fields: [outboundId], references: [id], onDelete: Restrict)
+  suppressions    EmailSuppression[]
+
+  @@unique([topicArn, snsMessageId])
+  @@index([outboundId])
+  @@map("email_feedback_events")
+}
+
+model EmailSuppression {
+  recipientHash     String             @id @map("recipient_hash") @db.Char(64)
+  reason            String             @db.VarChar(20)
+  feedbackEventId   String             @map("feedback_event_id") @db.Uuid
+  firstSuppressedAt DateTime           @default(now()) @map("first_suppressed_at") @db.Timestamptz(3)
+  lastObservedAt    DateTime           @default(now()) @map("last_observed_at") @db.Timestamptz(3)
+  feedbackEvent     EmailFeedbackEvent @relation(fields: [feedbackEventId], references: [id], onDelete: Restrict)
+
+  @@map("email_suppressions")
 }
 
 model AuthRateLimitBucket {

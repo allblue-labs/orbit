@@ -149,6 +149,10 @@ na região correta e de teste posterior, conduzido com o owner.
 
 ### PR-08 — Feedback SNS e supressão
 
+**Implementação local:** [PR-08 e evidências](pr-08-ses-feedback.md).
+Webhook autenticado, associações duráveis e supressão implementados. O aceite
+real SES/SNS permanece pendente; sem deploy nem envio de mensagens nesta PR.
+
 Implementar o blueprint com verificação de assinatura/certificado SNS, TopicArn e
 conta/região esperados; validar SubscriptionConfirmation sem buscar URL arbitrária.
 Persistir evento idempotente associado a entrega conhecida e aplicar supressão de
@@ -305,4 +309,6 @@ o parecer bloqueado para o recurso correspondente.
 | 04 | Implementada; gates locais aprovados | `605fa10` | [Resultados](pr-04-identity-concurrency.md): MFA atômico, refresh canônico entre réplicas, login concorrente e recovery de 16 caracteres; backend 2.009 + 39, web 673 + 2 + 5, mobile 125; migration obrigatória, sem deploy/push |
 | 05 | Implementada; gates locais aprovados | `bc2026c` | [Resultados](pr-05-rate-limit-proxies.md): contagem SQL entre réplicas, origem autenticada Nginx/BFF/API e sessão preservada em 429; backend 2.025 + 46, web 678 + 2 + 6, mobile 155; migration e dois novos segredos obrigatórios; sem deploy/push |
 | 06 | Código implementado; aceite externo obrigatório pendente | Identificado por `fix(notifications): PR-06` na mensagem | [Resultados](pr-06-firebase-push.md): FCM Android/iOS, filas de atribuição/autorização, navegação por destinatário e barreira de release; backend 2.030, push/RLS 15, mobile 1.278, web 678; builds Debug aprovados; configurar Firebase/APNs e testar aparelhos físicos antes de qualificar; sem deploy/push |
-| 07–19 | Planejadas | — | Executar sequencialmente; critérios acima |
+| 07 | Código implementado; aceite externo pendente | `3a13b34f48fc` | [Resultados](pr-07-ses-durable-delivery.md): outbox durável e preflight; aprovação regional AWS e recebimento real pendentes; sem deploy/push |
+| 08 | Código implementado; aceite SES/SNS externo pendente | Identificado por `fix(email): PR-08` na mensagem | [Resultados](pr-08-ses-feedback.md): SNS v2, correlação durável, hard bounce/complaint e supressão; backend 2.151 + 94, migration e chave HMAC obrigatórias; homologação real pendente; sem deploy/push |
+| 09–19 | Planejadas | — | Executar sequencialmente; critérios acima |

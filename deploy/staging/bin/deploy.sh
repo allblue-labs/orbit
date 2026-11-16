@@ -7,7 +7,7 @@ compose=(docker compose --env-file .env -f docker-compose.yml -f docker-compose.
 "${compose[@]}" config --quiet
 # Valida sem imprimir valores e impede Stripe real neste staging.
 python3 - <<'PY'
-import json, re, subprocess, sys
+import base64, json, re, subprocess, sys
 x=json.loads(subprocess.check_output(['docker','compose','--env-file','.env','-f','docker-compose.yml','-f','docker-compose.lock.yml','config','--format','json']))
 env=x['services']['api']['environment']
 web=x['services']['frontend']['environment']
@@ -22,9 +22,15 @@ if env.get('DATABASE_URL') != env.get('APP_DATABASE_URL') or env.get('PLATFORM_A
 for service in ['api','migrate','frontend']:
     if not re.search(r'@sha256:[a-f0-9]{64}$',x['services'][service]['image']):
         sys.exit('Use uma imagem por digest no lock: '+service)
-required=['R2_ACCOUNT_ID','R2_ACCESS_KEY_ID','R2_SECRET_ACCESS_KEY','R2_ENDPOINT','R2_PUBLIC_URL','R2_BUCKET_NAME','R2_PRIVATE_BUCKET_NAME','AWS_ACCESS_KEY_ID','AWS_SECRET_ACCESS_KEY','AWS_REGION','AWS_SES_FROM_EMAIL']
+required=['R2_ACCOUNT_ID','R2_ACCESS_KEY_ID','R2_SECRET_ACCESS_KEY','R2_ENDPOINT','R2_PUBLIC_URL','R2_BUCKET_NAME','R2_PRIVATE_BUCKET_NAME','AWS_ACCESS_KEY_ID','AWS_SECRET_ACCESS_KEY','AWS_REGION','AWS_SES_FROM_EMAIL','EMAIL_SUPPRESSION_HASH_KEY']
+if str(env.get('AWS_SES_FEEDBACK_ENABLED','false')).lower() == 'true':
+    required += ['AWS_SES_CONFIGURATION_SET','AWS_SES_FEEDBACK_ACCOUNT_ID','AWS_SES_FEEDBACK_TOPIC_ARN','AWS_SES_FEEDBACK_IDENTITY_ARN']
 missing=[key for key in required if not str(env.get(key,'')).strip()]
 if missing: sys.exit('Preencha as variáveis: '+', '.join(missing))
+try:
+    if len(base64.b64decode(env['EMAIL_SUPPRESSION_HASH_KEY'], validate=True)) != 32: raise ValueError()
+except (ValueError, TypeError):
+    sys.exit('EMAIL_SUPPRESSION_HASH_KEY deve ser uma chave própria de 32 bytes em base64.')
 if str(env.get('STRIPE_ENABLED','')).lower() == 'true' and not str(env.get('STRIPE_SECRET_KEY','')).startswith(('sk_test_', 'rk_test_')):
     sys.exit('Staging aceita somente chave de teste do Stripe.')
 if any('build' in s for s in x['services'].values()): sys.exit('Build no servidor não é permitido.')

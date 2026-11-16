@@ -10,6 +10,7 @@ import { actionEmail } from './email-template';
 import { Test } from '@nestjs/testing';
 import { EmailModule } from './email.module';
 import { EMAIL_CONFIGURATION, SES_EMAIL_CLIENT } from './email.config';
+import { EmailTransportRepository } from './email-transport.repository';
 
 const config: EmailConfiguration = {
   provider: 'ses',
@@ -25,19 +26,64 @@ const message = {
   html: '<p>Bem-vindo ao Orbit</p>',
 };
 function fixture() {
+  const repository = {
+    prepare: jest
+      .fn()
+      .mockResolvedValue('00000000-0000-7000-8000-000000000001'),
+    accepted: jest.fn().mockResolvedValue(undefined),
+    failed: jest.fn().mockResolvedValue(undefined),
+  };
   const client = {
     send: jest
       .fn<Promise<{ MessageId: string }>, [SendEmailCommand]>()
       .mockResolvedValue({ MessageId: 'ses-message-id' }),
     destroy: jest.fn(),
   };
-  const service = new EmailService(config, client as unknown as SESv2Client);
-  return { service, client };
+  const service = new EmailService(
+    config,
+    client as unknown as SESv2Client,
+    repository as unknown as EmailTransportRepository,
+  );
+  return { service, client, repository };
 }
 
 describe('EmailService / Amazon SES', () => {
+  it('fails closed on suppression and state-store errors, without calling SES', async () => {
+    const { service, client, repository } = fixture();
+    repository.prepare.mockResolvedValueOnce(null);
+    await expect(service.send(message)).resolves.toMatchObject({
+      status: 'FAILED',
+      code: 'EMAIL_SUPPRESSED',
+      retryable: false,
+    });
+    repository.prepare.mockRejectedValueOnce(
+      new Error('RECIPIENT_AND_TOKEN_CANARY'),
+    );
+    await expect(service.send(message)).resolves.toMatchObject({
+      status: 'FAILED',
+      code: 'EMAIL_STATE_UNAVAILABLE',
+      retryable: true,
+    });
+    expect(client.send).not.toHaveBeenCalled();
+    expect(JSON.stringify(logs.mock.calls)).not.toContain(
+      'RECIPIENT_AND_TOKEN_CANARY',
+    );
+  });
+  it('preserves ambiguous acceptance on a bookkeeping failure and does not call it delivered', async () => {
+    const { service, client, repository } = fixture();
+    repository.accepted.mockRejectedValueOnce(new Error('STATE_STORE_CANARY'));
+    await expect(service.send(message)).resolves.toMatchObject({
+      status: 'FAILED',
+      code: 'EMAIL_STATE_UNAVAILABLE',
+      retryable: true,
+    });
+    expect(client.send).toHaveBeenCalledTimes(1);
+    expect(repository.failed).not.toHaveBeenCalled();
+  });
   it('injeta credenciais explícitas e limites de rede no cliente real, sem chamar a AWS', async () => {
     const module = await Test.createTestingModule({ imports: [EmailModule] })
+      .overrideProvider(EmailTransportRepository)
+      .useValue(fixture().repository)
       .overrideProvider(EMAIL_CONFIGURATION)
       .useValue(config)
       .compile();
@@ -71,6 +117,12 @@ describe('EmailService / Amazon SES', () => {
     expect(command).toBeInstanceOf(SendEmailCommand);
     expect(command?.input).toEqual({
       FromEmailAddress: config.from,
+      EmailTags: [
+        {
+          Name: 'orbit_delivery_id',
+          Value: '00000000-0000-7000-8000-000000000001',
+        },
+      ],
       Destination: { ToAddresses: [message.to] },
       Content: {
         Simple: {
@@ -138,13 +190,21 @@ describe('EmailService / Amazon SES', () => {
   it('não tenta a rede quando faltam configurações ou a mensagem é inválida', async () => {
     const { client } = fixture();
     await expect(
-      new EmailService({ provider: 'ses' }, null).send(message),
+      new EmailService(
+        { provider: 'ses' },
+        null,
+        fixture().repository as unknown as EmailTransportRepository,
+      ).send(message),
     ).resolves.toMatchObject({
       status: 'FAILED',
       code: 'EMAIL_NOT_CONFIGURED',
     });
     await expect(
-      new EmailService(config, client as unknown as SESv2Client).send({
+      new EmailService(
+        config,
+        client as unknown as SESv2Client,
+        fixture().repository as unknown as EmailTransportRepository,
+      ).send({
         ...message,
         subject: 'Título\r\nBcc: bad@example.test',
       }),
@@ -156,7 +216,11 @@ describe('EmailService / Amazon SES', () => {
     service.onModuleDestroy();
     expect(client.destroy).toHaveBeenCalledTimes(1);
     await expect(
-      new EmailService({ provider: 'noop' }, null).send(message),
+      new EmailService(
+        { provider: 'noop' },
+        null,
+        fixture().repository as unknown as EmailTransportRepository,
+      ).send(message),
     ).resolves.toEqual({ status: 'SKIPPED', provider: 'noop' });
   });
   it('o modo SES considera somente os campos AWS de ambiente fornecidos', () => {

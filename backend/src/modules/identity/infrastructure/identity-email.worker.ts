@@ -101,6 +101,7 @@ export class IdentityEmailWorker implements OnModuleInit, OnModuleDestroy {
         row.purpose as IdentityTokenPurpose,
         message.recipient,
         message.token,
+        row.id,
       );
     } catch {
       result = {

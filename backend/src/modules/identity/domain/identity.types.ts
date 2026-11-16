@@ -70,6 +70,7 @@ export interface IIdentityTokenDelivery {
     purpose: IdentityTokenPurpose,
     recipient: string,
     token: string,
+    identityDeliveryId?: string,
   ): Promise<EmailSendResult>;
 }
 

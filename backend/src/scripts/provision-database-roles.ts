@@ -200,6 +200,10 @@ async function provision(): Promise<void> {
        */
       'billing_webhook_events',
       'platform_tenant_provisionings',
+      'email_outbound_messages',
+      'email_provider_messages',
+      'email_feedback_events',
+      'email_suppressions',
     ]) {
       await admin.query(
         `DO $$

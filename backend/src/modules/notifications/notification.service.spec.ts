@@ -55,6 +55,7 @@ describe('NotificationService', () => {
       'user',
       'notification:read',
       { id: 'notification' },
+      'org',
     );
   });
 });

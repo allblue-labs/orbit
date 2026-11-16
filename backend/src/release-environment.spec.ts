@@ -8,6 +8,7 @@ const valid = (): NodeJS.ProcessEnv => ({
   AUTH_RATE_LIMIT_SECRET: 'r'.repeat(48),
   TRUSTED_PROXY_SECRET: 'p'.repeat(48),
   ENCRYPTION_KEY: Buffer.alloc(32, 7).toString('base64'),
+  EMAIL_SUPPRESSION_HASH_KEY: Buffer.alloc(32, 11).toString('base64'),
   FRONTEND_ORIGIN: 'https://app.example.test',
   AWS_REGION: 'us-east-1',
   AWS_ACCESS_KEY_ID: 'environment-access-key',
@@ -67,6 +68,7 @@ describe('release environment', () => {
     'AUTH_RATE_LIMIT_SECRET',
     'TRUSTED_PROXY_SECRET',
     'ENCRYPTION_KEY',
+    'EMAIL_SUPPRESSION_HASH_KEY',
     'FRONTEND_ORIGIN',
     'IDENTITY_PUBLIC_WEB_URL',
   ])('fails closed when %s is missing', (key) => {
