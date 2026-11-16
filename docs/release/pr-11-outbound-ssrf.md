@@ -1,7 +1,7 @@
 # PR-11 — Contenção SSRF na saída HTTP
 
 Achado **F07**, base limpa `2fb5038`, implementação local em 16/11/2026.
-Commit de implementação: a registrar após os gates locais.
+Commit de implementação: `4cb1c986fae269ebfd55419e34fcdac0ac21abbe`.
 Sem push, merge, deploy, alteração de firewall ou chamadas IA/Web Push/FCM reais.
 
 A validação de integrações OpenAI-compatible, o adapter que executa IA e o

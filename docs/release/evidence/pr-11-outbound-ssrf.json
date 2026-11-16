@@ -2,7 +2,7 @@
   "pr": "PR-11",
   "date": "2026-11-16",
   "baseCommit": "2fb50381ca4925d8383a27de3c76f77709f821e5",
-  "implementationCommit": null,
+  "implementationCommit": "4cb1c986fae269ebfd55419e34fcdac0ac21abbe",
   "finding": "F07",
   "qualification": "Implemented and locally tested. No push, merge, deploy, firewall change, production database or real upstream IA/Web Push/FCM call. Final Node 22/Linux and physical/external qualification remain separate.",
   "decision": "Central deployment-controlled outbound policy and bounded pinned-IP HTTPS for tenant-controlled AI and Web Push URLs.",
