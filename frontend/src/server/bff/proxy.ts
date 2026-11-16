@@ -1,3 +1,4 @@
+import { readBffBody, BffBodyError } from "./request-body";
 /**
  * Proxy do BFF: `/api/orbit/**` → NestJS.
  *
@@ -75,7 +76,12 @@ export async function proxyToBackend(
     } catch (error) {
       const apiError = toApiError(error);
       return bffError({
-        status: apiError.status === 429 ? 429 : 503,
+        status:
+          error instanceof BffBodyError
+            ? error.status
+            : apiError.status === 429
+              ? 429
+              : 503,
         code: apiError.code,
         message: apiError.message,
         requestId: readContextFromRequest(request).requestId,
@@ -135,15 +141,18 @@ async function proxyWithOrigin(
     return response;
   }
 
-  /** Materializado para permitir a reexecução após renovar o token. */
-  const body = METHODS_WITH_BODY.includes(method)
-    ? await request.arrayBuffer()
-    : null;
-
+  let retained: { body: ArrayBuffer | null; release: () => void } = {
+    body: null,
+    release: () => undefined,
+  };
   let rotated: TokenPair | null = access.rotated;
   let accessToken = access.accessToken;
 
   try {
+    // Retain bounded bytes throughout the token-refresh retry.
+    if (METHODS_WITH_BODY.includes(method))
+      retained = await readBffBody(request);
+    const body = retained.body;
     let upstream = await forward({
       request,
       requestContext,
@@ -190,14 +199,26 @@ async function proxyWithOrigin(
     return response;
   } catch (error) {
     const apiError = toApiError(error);
-    return bffError({
+    const response = bffError({
       status:
-        apiError.status === 429 ? 429 : apiError.kind === "timeout" ? 504 : 502,
+        error instanceof BffBodyError
+          ? error.status
+          : apiError.status === 429
+            ? 429
+            : apiError.kind === "timeout"
+              ? 504
+              : 502,
       code: apiError.code,
       message: apiError.message,
       details: apiError.details,
       requestId,
     });
+    if (error instanceof BffBodyError)
+      response.headers.set("Connection", "close");
+    if (rotated) persistSession(response.cookies, rotated);
+    return response;
+  } finally {
+    retained.release();
   }
 }
 
@@ -233,6 +254,11 @@ function forward(input: ForwardInput): Promise<Response> {
     businessUnitId: input.requestContext.businessUnitId ?? input.businessUnitId,
     /** O retry idempotente do BFF é desligado: quem decide é o cliente. */
     retries: 0,
+    signal: input.request.signal,
+    ...(input.request.headers.get("content-type")?.startsWith("multipart/") ||
+    input.path.startsWith("/storage/")
+      ? { timeoutMs: 60_000 }
+      : {}),
   });
 }
 

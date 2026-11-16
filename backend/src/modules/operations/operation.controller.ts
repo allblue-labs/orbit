@@ -1,3 +1,4 @@
+import { UploadLimitsInterceptor } from '../storage/upload-limits.interceptor';
 import {
   Body,
   Controller,
@@ -328,9 +329,17 @@ export class OperationController {
   @Permissions('operations.attachments.create')
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(
+    UploadLimitsInterceptor,
     FileInterceptor('file', {
       storage: memoryStorage(),
-      limits: { fileSize: 20 * 1024 * 1024, files: 1 },
+      limits: {
+        fileSize: 20 * 1024 * 1024,
+        files: 1,
+        fields: 0,
+        parts: 2,
+        headerPairs: 30,
+        fieldNameSize: 100,
+      },
     }),
   )
   async attach(

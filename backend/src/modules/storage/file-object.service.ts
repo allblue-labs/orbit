@@ -1,6 +1,6 @@
 import { StorageCleanupService } from './storage-cleanup.service';
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
+import type { Prisma, StorageFile } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import { extname } from 'node:path';
 import { EntityNotFoundException, ValidationException } from '../../exceptions';
@@ -22,6 +22,8 @@ import {
   MAX_IMAGE_BYTES,
 } from './image-optimization.service';
 import { uploadGrant } from './upload-grant';
+import { UPLOAD_LIMITS } from './upload-budget.service';
+import { ACCEPTED_IMAGE_MIME_TYPES } from './image-signature';
 
 export const STORAGE_NAMESPACES = {
   manifest: 'manifests',
@@ -70,8 +72,11 @@ export class FileObjectService {
     return this.storeUsing(input, (data) => this.repository.create(data));
   }
   async storeWith(tx: Prisma.TransactionClient, input: StoreObjectInput) {
-    return this.storeUsing(input, (data) =>
-      this.repository.createWith(tx, data),
+    // The caller owns this transaction and must roll it back when create fails.
+    return this.storeUsing(
+      input,
+      (data) => this.repository.createWith(tx, data),
+      false,
     );
   }
   private async storeUsing(
@@ -79,6 +84,7 @@ export class FileObjectService {
     create: (
       data: CreateStorageFileData,
     ) => ReturnType<StorageFileRepository['create']>,
+    ownsCommit = true,
   ) {
     const normalized = await this.normalize(input);
     const objectKey = this.buildObjectKey(normalized);
@@ -92,11 +98,22 @@ export class FileObjectService {
     try {
       return await create(data);
     } catch (error) {
+      if (ownsCommit) return this.recoverPublication(data, error);
       await this.cleanup(data.bucket, objectKey);
       throw error;
     }
   }
   async reserve(input: ReserveObjectInput) {
+    if (
+      ![...ACCEPTED_IMAGE_MIME_TYPES, 'application/pdf'].includes(
+        input.mimeType,
+      )
+    )
+      throw new ValidationException(
+        'Formato de arquivo não permitido.',
+        undefined,
+        'FILE_INVALID',
+      );
     const image = input.mimeType.startsWith('image/');
     if (
       !Number.isSafeInteger(input.sizeBytes) ||
@@ -115,13 +132,53 @@ export class FileObjectService {
     const data = this.toData(input, objectKey, BigInt(input.sizeBytes), null);
     data.bucket = this.config.bucket;
     data.metadata = { ...input.metadata, namespace: input.namespace };
-    const file = await this.repository.create(data);
+    const file = await this.repository.createReserved(data);
     const signed = uploadGrant(this.config, {
       ...file,
       operation: 'upload',
       expiresInSeconds: this.config.signedUrlTtlSeconds,
     });
     return { file, signed };
+  }
+  /** The grant must resolve to its original reservation, never a canonical key. */
+  async describeUpload(
+    organizationId: string,
+    bucket: string,
+    objectKey: string,
+  ) {
+    const file = await this.repository.findByRef(
+      organizationId,
+      bucket,
+      objectKey,
+    );
+    if (
+      !file ||
+      file.provider !== this.provider.name ||
+      !['PENDING', 'AVAILABLE'].includes(file.status)
+    )
+      throw new EntityNotFoundException('Upload');
+    const metadata = (file.metadata ?? {}) as Record<string, unknown>;
+    if (
+      file.status === 'AVAILABLE' &&
+      (metadata.sourceObjectKey !== objectKey ||
+        metadata.sourceBucket !== bucket)
+    )
+      throw new EntityNotFoundException('Upload');
+    const sizeBytes =
+      file.status === 'PENDING'
+        ? Number(file.sizeBytes)
+        : metadata.sourceSizeBytes;
+    const mimeType =
+      file.status === 'PENDING' ? file.mimeType : metadata.sourceMimeType;
+    if (
+      typeof sizeBytes !== 'number' ||
+      !Number.isSafeInteger(sizeBytes) ||
+      sizeBytes <= 0 ||
+      sizeBytes > UPLOAD_LIMITS.maxBytes ||
+      typeof mimeType !== 'string'
+    )
+      throw new EntityNotFoundException('Upload');
+    return { file, sizeBytes, mimeType };
   }
   /** Called only after verifying the upload grant. CAS prevents replay/overwrites after activation. */
   async uploadReserved(
@@ -131,12 +188,11 @@ export class FileObjectService {
     body: Buffer,
     mimeType: string,
   ) {
-    const file = await this.repository.findByRef(
+    const { file } = await this.describeUpload(
       organizationId,
       bucket,
       objectKey,
     );
-    if (!file) throw new EntityNotFoundException('Upload');
     const source = (file.metadata ?? {}) as Record<string, unknown>;
     if (file.status === 'AVAILABLE') {
       if (
@@ -160,6 +216,15 @@ export class FileObjectService {
     const namespace = metadata.namespace as StorageNamespace;
     if (!Object.values(STORAGE_NAMESPACES).includes(namespace))
       throw new ValidationException('Upload inválido.');
+    if (
+      mimeType === 'application/pdf' &&
+      body.subarray(0, 5).toString('ascii') !== '%PDF-'
+    )
+      throw new ValidationException(
+        'O conteúdo não corresponde a um PDF.',
+        undefined,
+        'FILE_INVALID',
+      );
     const input = await this.normalize({ ...file, namespace, body, metadata });
     const canonicalKey = this.buildObjectKey(input);
     const data = this.toData(
@@ -196,9 +261,43 @@ export class FileObjectService {
         throw new ValidationException('Este upload já foi utilizado.');
       return saved;
     } catch (error) {
-      await this.cleanup(data.bucket, canonicalKey);
+      return this.recoverPublication(data, error);
+    }
+  }
+  private async recoverPublication(
+    data: CreateStorageFileData,
+    error: unknown,
+  ) {
+    let published: StorageFile | null;
+    try {
+      published = await this.repository.resolvePublication(data);
+    } catch {
+      // Never delete bytes whose database commit may have succeeded. Operator
+      // reconciliation may collect an orphan later; availability wins here.
+      this.logger.error(
+        JSON.stringify({
+          stage: 'storage-publication-uncertain',
+          organizationId: data.organizationId,
+          objectFingerprint: FileObjectService.hash(
+            Buffer.from(data.objectKey),
+          ),
+        }),
+      );
       throw error;
     }
+    if (published) {
+      if (
+        !published.deletedAt &&
+        published.status === 'AVAILABLE' &&
+        published.sha256 === data.sha256 &&
+        published.sizeBytes === data.sizeBytes &&
+        published.mimeType === data.mimeType
+      )
+        return published;
+      throw error;
+    }
+    await this.cleanup(data.bucket, data.objectKey);
+    throw error;
   }
   async confirm(id: string, organizationId: string) {
     const file = await this.confirmRegistered(id, organizationId);
@@ -236,6 +335,8 @@ export class FileObjectService {
       objectKey: string;
       fileName: string;
       mimeType: string;
+      status?: string;
+      metadata?: unknown;
     },
     operation: SignedUrlOperation,
     expiresInSeconds?: number,
@@ -245,7 +346,32 @@ export class FileObjectService {
       operation,
       expiresInSeconds: expiresInSeconds ?? this.config.signedUrlTtlSeconds,
     };
-    if (operation === 'upload') return uploadGrant(this.config, request);
+    if (operation === 'upload') {
+      // A resumed mobile intent may already have uploaded canonical bytes but
+      // still await domain finalization. Renew the source capability, never PUT
+      // authority for the canonical key (whose MIME may now be WebP).
+      if (file.status === 'AVAILABLE') {
+        const source =
+          file.metadata && typeof file.metadata === 'object'
+            ? (file.metadata as Record<string, unknown>)
+            : {};
+        if (
+          typeof source.sourceBucket !== 'string' ||
+          typeof source.sourceObjectKey !== 'string' ||
+          typeof source.sourceMimeType !== 'string'
+        )
+          throw new ValidationException(
+            'Este arquivo não aceita um novo envio.',
+          );
+        return uploadGrant(this.config, {
+          ...request,
+          bucket: source.sourceBucket,
+          objectKey: source.sourceObjectKey,
+          mimeType: source.sourceMimeType,
+        });
+      }
+      return uploadGrant(this.config, request);
+    }
     if (this.config.publicUrl && file.bucket === this.config.publicBucket)
       return {
         url: `${this.config.publicUrl}/${file.objectKey.split('/').map(encodeURIComponent).join('/')}`,

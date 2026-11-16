@@ -1,3 +1,5 @@
+import { UploadBudgetService } from '../storage/upload-budget.service';
+import { RequestContextStorage } from '../../context';
 import type { INestApplication, Type } from '@nestjs/common';
 import { MODULE_METADATA } from '@nestjs/common/constants';
 import { Test } from '@nestjs/testing';
@@ -43,6 +45,13 @@ describe('Operations HTTP routing', () => {
       controllers,
       providers: [
         AuthorizationService,
+        RequestContextStorage,
+        {
+          provide: UploadBudgetService,
+          useValue: {
+            acquire: jest.fn().mockResolvedValue(() => Promise.resolve()),
+          },
+        },
         { provide: OperationScheduleService, useValue: {} },
         { provide: RecurringAuthorizationService, useValue: {} },
         { provide: OperationService, useValue: operations },

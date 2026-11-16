@@ -1,3 +1,4 @@
+import { InfrastructureException } from '../../exceptions';
 /**
  * Persistência dos objetos de arquivo.
  *
@@ -9,6 +10,7 @@ import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { RlsTransaction } from '../../database';
 import { generateUuidV7 } from '../../utils';
+import { UPLOAD_LIMITS, uploadBusy } from './upload-budget.service';
 
 export interface CreateStorageFileData {
   organizationId: string;
@@ -33,6 +35,22 @@ export class StorageFileRepository {
     return this.rls.run((tx) => this.createWith(tx, data));
   }
 
+  createReserved(data: CreateStorageFileData) {
+    return this.rls.run(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'upload-budget:' + data.organizationId},0))`;
+      const [budget] = await tx.$queryRaw<
+        { count: bigint; bytes: bigint }[]
+      >`SELECT count(*) AS count, coalesce(sum(size_bytes),0)::bigint AS bytes FROM storage_files WHERE organization_id=${data.organizationId}::uuid AND status='PENDING' AND deleted_at IS NULL AND created_at>now()-interval '1 hour'`;
+      if (
+        !budget ||
+        Number(budget.count) >= UPLOAD_LIMITS.pendingFiles ||
+        budget.bytes + data.sizeBytes > BigInt(UPLOAD_LIMITS.pendingBytes)
+      )
+        throw uploadBusy(60);
+      return this.createWith(tx, data);
+    });
+  }
+
   /**
    * Criação dentro de uma transação já aberta.
    *
@@ -40,7 +58,8 @@ export class StorageFileRepository {
    * manifest emitido apontando para um arquivo que não existe é um estado que
    * o banco não deve conseguir representar nem por um instante.
    */
-  createWith(tx: Prisma.TransactionClient, data: CreateStorageFileData) {
+  async createWith(tx: Prisma.TransactionClient, data: CreateStorageFileData) {
+    await this.publicationLock(tx, data);
     return tx.storageFile.create({
       data: {
         id: generateUuidV7(),
@@ -57,6 +76,42 @@ export class StorageFileRepository {
         metadata: (data.metadata ?? {}) as Prisma.InputJsonValue,
         createdById: data.createdById,
       },
+    });
+  }
+
+  private publicationLock(
+    tx: Prisma.TransactionClient,
+    data: Pick<CreateStorageFileData, 'provider' | 'bucket' | 'objectKey'>,
+  ) {
+    return tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'storage-publication:' + data.provider + ':' + data.bucket + ':' + data.objectKey},0))`;
+  }
+
+  /** Wait for the original publication transaction, including an ambiguous COMMIT ACK. */
+  resolvePublication(
+    data: Pick<
+      CreateStorageFileData,
+      'organizationId' | 'provider' | 'bucket' | 'objectKey'
+    >,
+  ) {
+    return this.rls.run(async (tx) => {
+      // The second statement must see the commit that released the lock. A
+      // deployment with a different isolation level must preserve, never delete.
+      const [isolation] = await tx.$queryRaw<
+        { level: string }[]
+      >`SELECT current_setting('transaction_isolation') AS level`;
+      if (isolation?.level !== 'read committed')
+        throw new InfrastructureException(
+          'Storage publication state could not be confirmed',
+        );
+      await this.publicationLock(tx, data);
+      return tx.storageFile.findFirst({
+        where: {
+          organizationId: data.organizationId,
+          provider: data.provider,
+          bucket: data.bucket,
+          objectKey: data.objectKey,
+        },
+      });
     });
   }
 
@@ -112,6 +167,14 @@ export class StorageFileRepository {
     },
   ) {
     return this.rls.run(async (tx) => {
+      const existing = await tx.storageFile.findFirstOrThrow({
+        where: { id, organizationId },
+      });
+      await this.publicationLock(tx, {
+        provider: existing.provider,
+        bucket: data.bucket,
+        objectKey: data.objectKey,
+      });
       const changed = await tx.storageFile.updateMany({
         where: {
           id,

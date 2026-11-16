@@ -165,6 +165,10 @@ com simulator/SNS e registrar o vínculo real no SES quando disponível.
 
 ### PR-09 — Upload e integridade
 
+**Implementação local:** [PR-09 e evidências](pr-09-upload-integrity.md).
+Limites de transporte, admissão compartilhada, publicação imutável e proteção da
+compensação de COMMIT implementados; sem alteração em servidor/bucket real.
+
 Limitar bytes durante leitura e transmissão, rejeitar cedo tamanho/MIME inválidos,
 cancelar streaming e tratar abortos. Evitar buffer irrestrito no BFF/API. Associar
 upload à reserva e estado; promover para chave final imutável após validar conteúdo
@@ -311,4 +315,5 @@ o parecer bloqueado para o recurso correspondente.
 | 06 | Código implementado; aceite externo obrigatório pendente | Identificado por `fix(notifications): PR-06` na mensagem | [Resultados](pr-06-firebase-push.md): FCM Android/iOS, filas de atribuição/autorização, navegação por destinatário e barreira de release; backend 2.030, push/RLS 15, mobile 1.278, web 678; builds Debug aprovados; configurar Firebase/APNs e testar aparelhos físicos antes de qualificar; sem deploy/push |
 | 07 | Código implementado; aceite externo pendente | `3a13b34f48fc` | [Resultados](pr-07-ses-durable-delivery.md): outbox durável e preflight; aprovação regional AWS e recebimento real pendentes; sem deploy/push |
 | 08 | Código implementado; aceite SES/SNS externo pendente | `82fe62346e92` | [Resultados](pr-08-ses-feedback.md): SNS v2, correlação durável, hard bounce/complaint e supressão; backend 2.151 + 94, migration e chave HMAC obrigatórias; homologação real pendente; sem deploy/push |
-| 09–19 | Planejadas | — | Executar sequencialmente; critérios acima |
+| 09 | Código implementado; gates locais aprovados | Identificado por `fix(storage): PR-09` na mensagem | [Resultados](pr-09-upload-integrity.md): backend 2.156 + 28, web 693 + oito smokes da imagem Node 22, mobile 63; migration e atualização Nginx necessárias; sem push/deploy; CI remota aguarda owner |
+| 10–19 | Planejadas | — | Executar sequencialmente; critérios acima |

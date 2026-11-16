@@ -1,0 +1,258 @@
+{
+  "pr": "PR-09",
+  "date": "2026-11-16",
+  "baseCommit": "0e12923df5fa37f54b21a31d06537dd3906e76c9",
+  "implementationCommit": "Identified by fix(storage): PR-09 bounded uploads and immutable publication; registered after commit",
+  "finding": "F08",
+  "qualification": "Implemented and locally tested on final source; no deployment or real R2 account access. Overall production approval still depends on remaining PRs and external qualification.",
+  "migration": "20261116180000_bounded_immutable_uploads",
+  "newRuntimeDependencies": false,
+  "newEnvironmentSecrets": false,
+  "existingGenericAttachmentContractBytes": 20971520,
+  "reservedImageMaxBytes": 10000000,
+  "reservedPdfMaxBytes": 20000000,
+  "multipartWireMaxBytes": 21037056,
+  "limits": {
+    "apiPerProcess": 8,
+    "apiPerTenantAcrossReplicas": 2,
+    "oneAdmissionPerReservation": true,
+    "bodyMs": 60000,
+    "idleMs": 15000,
+    "leaseSeconds": 180,
+    "pendingRecentFiles": 20,
+    "pendingRecentBytes": 100000000,
+    "pendingWindowSeconds": 3600,
+    "bffMediaPerProcess": 4,
+    "bffJsonPerProcess": 32,
+    "sdkPutTotalDeadlineMs": 45000
+  },
+  "immutability": {
+    "LOCAL": "Temporary private file and atomic exclusive hard-link publication",
+    "S3_R2_MINIO": "PutObject IfNoneMatch=*; direct presigned PUTs disabled",
+    "domain": "Separate canonical key, conditional PENDING publication, source hash/size/MIME used for exact replay",
+    "commitRecovery": "Publication transaction lock plus READ COMMITTED recheck. Confirmed bytes preserved after lost COMMIT ACK; unknown outcome or unsupported isolation preserves rather than deletes. storeWith joins caller transaction and requires caller rollback on error.",
+    "scope": "Application-controlled uploads, not WORM against administrators holding storage credentials"
+  },
+  "minioFixture": {
+    "sourceRelease": "RELEASE.2025-10-15T17-29-55Z",
+    "go": "1.26.3",
+    "moduleVersion": "v0.0.0-20251015172955-9e49d5e7a648",
+    "moduleChecksum": "h1:6TdolSCLSs2nwm8i0PpWDqf9iX2Ty9WQK8wmr7dCnUM=",
+    "productionRecommendation": false,
+    "loopbackOnly": true
+  },
+  "checks": {
+    "backendFull": {
+      "command": "npm test -- --runInBand --watchman=false",
+      "suites": 266,
+      "passed": 2156,
+      "failed": 0,
+      "seconds": 113.578
+    },
+    "storageIntegration": {
+      "command": "ORBIT_MINIO_BIN=<verified-local-build> node scripts/verify-storage-integrity.mjs",
+      "suites": 2,
+      "passed": 28,
+      "failed": 0,
+      "seconds": 107.318,
+      "storageCases": 20,
+      "mobileEvidenceCases": 8,
+      "migrationsApplied": 121,
+      "tablesGranted": 149,
+      "database": "Disposable PostgreSQL 17.11, tmpfs 512MiB, restricted orbit_app with RLS, two Nest replicas",
+      "providers": [
+        "LOCAL",
+        "MINIO"
+      ],
+      "proofs": [
+        "raw and multipart",
+        "chunked without Content-Length",
+        "declared excess",
+        "invalid MIME/content and deleted reservation",
+        "interrupted upload has no publication",
+        "renew source capability after upload before domain finalization",
+        "concurrent CAS, loser compensation, rollback",
+        "COMMIT ACK loss and uncertain reconciliation do not delete confirmed bytes",
+        "provider overwrite refused; canonical grant refused",
+        "identical replay stable; download matches canonical SHA256",
+        "shared per-tenant and per-file admissions, expiry, RLS and tenant FK",
+        "atomic pending count/byte quota and safe logs"
+      ]
+    },
+    "backendTypecheck": {
+      "command": "npm run typecheck",
+      "exitCode": 0
+    },
+    "backendBuild": {
+      "command": "npm run build",
+      "exitCode": 0
+    },
+    "backendLint": {
+      "scope": "All modified/added backend TypeScript files",
+      "exitCode": 0
+    },
+    "frontendFull": {
+      "command": "npm test",
+      "files": 72,
+      "passed": 693,
+      "failed": 0,
+      "seconds": 17.5
+    },
+    "frontendTypecheck": {
+      "command": "npm run typecheck",
+      "exitCode": 0
+    },
+    "frontendLint": {
+      "command": "npm run lint",
+      "exitCode": 0,
+      "productLanguage": "passed"
+    },
+    "frontendProductionBuild": {
+      "command": "docker build --file frontend/Dockerfile --tag orbit-pr09-frontend:review frontend",
+      "exitCode": 0,
+      "node": "22.23.5",
+      "platform": "Linux",
+      "bundler": "Default Next 16.4.6 Turbopack",
+      "localImageId": "sha256:c6ed908b3f2a008006402457501ad2df411c29c7044078804aaa078b478dec85",
+      "published": false,
+      "note": "Local macOS Turbopack attempts hit EPERM opening their internal socket; these are not counted as successful builds. No webpack fallback or changed production command."
+    },
+    "frontendImageHttp": {
+      "command": "node scripts/verify-upload-bff-image.mjs orbit-pr09-frontend:review",
+      "checks": 8,
+      "status": "PASS",
+      "upstream": "Synthetic server inside a readonly non-root container, no real session or database",
+      "checksCovered": [
+        "401 without synthetic session",
+        "413 for declared excess",
+        "413 for chunked excess",
+        "20MiB raw bytes and SHA256",
+        "20MiB multipart file bytes, SHA256 and boundary preserved",
+        "four retained media requests and fifth 429/Retry-After",
+        "four requests complete",
+        "capacity reused after completion"
+      ],
+      "authenticationQualification": false
+    },
+    "proxy": {
+      "command": "node scripts/verify-proxy-ingress.mjs",
+      "exitCode": 0,
+      "fixture": "Disposable production Nginx configuration and synthetic TLS certificate",
+      "checks": [
+        "syntax",
+        "untrusted spoofing",
+        "trusted edge",
+        "429 Retry-After",
+        "413 at wire ceiling",
+        "capability absent from access/error logs on malformed protocol"
+      ]
+    },
+    "mobile": {
+      "command": "flutter test --no-pub test/features/media_upload_test.dart test/core/upload_queue_test.dart test/core/upload_destination_test.dart test/features/evidence_test.dart",
+      "passed": 63,
+      "failed": 0,
+      "analysis": "Two changed Dart files, no issues",
+      "nativeBuildClaimed": false
+    },
+    "prisma": {
+      "command": "npx prisma validate",
+      "exitCode": 0
+    },
+    "contractBoundaries": {
+      "command": "npm run contracts:guard",
+      "exitCode": 0
+    },
+    "publicErrors": {
+      "command": "npm run lint:public-errors",
+      "exitCode": 0,
+      "publicCodes": 75
+    },
+    "helperSyntax": {
+      "commands": [
+        "node --check scripts/verify-storage-integrity.mjs",
+        "node --check scripts/verify-upload-bff-image.mjs",
+        "node --check scripts/verify-proxy-ingress.mjs",
+        "node --check scripts/lib/integration-environment.mjs",
+        "CI YAML parsed with js-yaml"
+      ],
+      "exitCode": 0
+    },
+    "diffWhitespace": {
+      "command": "git -c core.fsmonitor=false diff --check",
+      "exitCode": 0
+    }
+  },
+  "diagnosticHistory": [
+    "An initial HTTP unit run was blocked by sandbox socket permissions and repeated with the original tests outside sandbox.",
+    "Operations routing unit fixture was updated to provide the new interceptor dependencies; no upload controls were overridden.",
+    "An integration attempt passed all 18 then-new storage cases, then hit PostgreSQL SQLSTATE 53100 due to full local Docker disk during mobile fixture setup. A RAM-backed disposable DB repeated the complete gate; later COMMIT-ambiguity cases expanded it to 28. No existing Docker data were pruned.",
+    "Real standalone smoke caught premature NextRequest cancellation resetting the socket; corrected to stop reading and close transport after returning the HTTP error.",
+    "Official MinIO image registries were unavailable. Fixture uses a pinned verified official source build; not a replacement production service."
+  ],
+  "remaining": {
+    "deployment": [
+      "Apply migration and grants before new API; coordinate the index write lock",
+      "Publish API/web and install/test/reload the versioned Nginx configuration through the authorized release process",
+      "Ship the mobile retry improvement in the next app build"
+    ],
+    "qualification": [
+      "Remote CI awaits owner push",
+      "No real R2 bucket test performed by this PR",
+      "Final load, restore, provenance and signed release artifacts remain in PR-19"
+    ],
+    "operational": [
+      "If storage/publication outcome cannot be checked because DB is unavailable, an unreferenced object may remain. Preserve confirmed data and reconcile later (PR-15); never blindly delete on a failed COMMIT response.",
+      "Generic private attachments retain prior formats; MIME recognition is not antivirus or full PDF sanitization.",
+      "Gateway/admission do not hold DB connections during network I/O; pre-existing caller-owned storeWith transaction work is not rearchitected in this PR."
+    ]
+  },
+  "sourceSha256": {
+    ".github/workflows/ci.yml": "f80f0817804169c3d770cdbbbce68adb8ccb3cf72d95c32cca339bdf84a453c9",
+    "backend/docs/upload-integrity.md": "1ef841b0330b123d27469a9bc7f562dc83cc2888b4daa216f10f429186d3c616",
+    "backend/prisma/migrations/20261116180000_bounded_immutable_uploads/migration.sql": "c24c98c266067b2e7fef5189b3360e8c307eea927ca9a0e32d755c01b526685b",
+    "backend/prisma/schema.prisma": "8689ec27c19aa90abe4fa33544d5dfbc5606ffa651c6206a405fedfafed9b801",
+    "backend/src/modules/billing/retention/purge-tables.spec.ts": "2c24dbc59690860a0b54dba1af68b04fa7be665438e21b73e5eecfb0ee616fda",
+    "backend/src/modules/billing/retention/purge-tables.ts": "cf607f166d52e7863cdb52e637a55a4d149407936465b16ceaa702d5c306a669",
+    "backend/src/modules/operations/operation.controller.ts": "1cba5fd8e738cc47a7de508cb93e10e7ddc863315cf263946ea751b752cac7ee",
+    "backend/src/modules/operations/operations-routing.spec.ts": "8f0a00cb2cac249ab0a674b0992bf13316fe2ceb21bc525e0e5c32a5d78dacbc",
+    "backend/src/modules/organizations/business-units/business-unit.controller.ts": "68a5e4440d1a71dc071c8ea4694c8ff4aac82ff3edd164209db5b0d41f71184e",
+    "backend/src/modules/organizations/organization.controller.ts": "4bf858224c89e5c94009c0563602fd5d3cef6274cac73e6648244e2e3fd82249",
+    "backend/src/modules/pmoc/pmoc-web-evidence.controller.ts": "4f18961b286435bb832153a6fe6e7a6af5b00838a851689984c8bcf7c0de1740",
+    "backend/src/modules/storage/file-object.repository.ts": "2b0a138ba796c6e92f8d5f63f8c92824e3f96017afdfd72e918bb11f42483c03",
+    "backend/src/modules/storage/file-object.service.ts": "9487088a29568c4b98e09f2e3c64e6d49fe23eff8cc175a93ca2193ed7b1a3c6",
+    "backend/src/modules/storage/image-upload.options.ts": "1640d857e63c07bcb2201349fcfe8da4765cc1c0db2b9641d7ba6edbd77949cb",
+    "backend/src/modules/storage/providers/local-filesystem.storage.spec.ts": "52c1057e165bf56fd7f20f60e3e360a6d6c233805672ec67e9e38af463612d95",
+    "backend/src/modules/storage/providers/local-filesystem.storage.ts": "b4b5e25bd6a988e5f1e54d4a69d85c8c5ed10ec34727d884be8d1a7748ebd654",
+    "backend/src/modules/storage/providers/minio-roundtrip.spec.ts": "61f337051106bbd63f8c5a99242c194c73d2397707a154554c5803e3e367e3e5",
+    "backend/src/modules/storage/providers/s3-compatible.storage.ts": "c533204aadd42bb95230b9d1ae0937d14bc0ea33ef4eddeea6781bd3f87feddb",
+    "backend/src/modules/storage/r2-media.spec.ts": "9e0b4be9f5e82e465b037b28ba4f19ed48fd4fa087a4ebb276f7726a1b337fc0",
+    "backend/src/modules/storage/storage-object.controller.ts": "df8b4134f5bd8be9d1db233bdd4df8fcf1c580c33e695bf3ea892e0d11b1559e",
+    "backend/src/modules/storage/storage-upload.guard.ts": "dd00b2f6c052c2e879b650dfa3928f1988ec11eb79807a24d8dfdd22ad928ba6",
+    "backend/src/modules/storage/storage-upload.http.spec.ts": "028d94c5095d617e0a3fb5c5ffee5c22bbbc68a6d93b4125a447bb2cf7e3e232",
+    "backend/src/modules/storage/storage.module.ts": "6580595b548131bb0a91a8e87b63be38cb64d6df70b9632159a8bbf115f30d72",
+    "backend/src/modules/storage/storage.types.ts": "75464ac0e53d746b8e7e3813d1214f9e132906a7c9d7077aebac201b8924b50e",
+    "backend/src/modules/storage/upload-budget.service.ts": "2bea61b19121ee5c1ae37461f605174fcab8a8b425ae306be12c65dcd1bfcbfc",
+    "backend/src/modules/storage/upload-context.ts": "7028e9a9b3faea47342e2a8dcb0c27ea54a01162c61ffe04298b9ac9dddafc32",
+    "backend/src/modules/storage/upload-limits.interceptor.spec.ts": "4da686bfd6cb20b8102c620940aa7964161fd2136d10034b5717c16bd370a72a",
+    "backend/src/modules/storage/upload-limits.interceptor.ts": "c416bd953a1c65f476ddff4ae8bec1294590c995b13447c57e9404ab2ae55122",
+    "backend/test/storage-integrity.e2e-spec.ts": "d8804601c3cb6f1c1799a5c492d23493d3642adcdd597d0c9875fb3add5554d3",
+    "deploy/staging/nginx/orbit-tls.conf": "7c854941d833a720e4cba58bb60eee0d1b080047f90771a6b1e92da74016e8df",
+    "deploy/staging/nginx/proxy-common.inc": "10e1ebcf19928f5f0eec1282ef24572bb8e7ba09e3b8ee11b7724841cbf2b297",
+    "frontend/src/server/bff/proxy.test.ts": "ffb206b10ff7298c162c43d9e10f23dd7b0da598c8d31fa91c17d49e6676a4b9",
+    "frontend/src/server/bff/proxy.ts": "81185782edd4731fa8f797ca93429cbbff1162c820a5205e279d74854e2e08a5",
+    "frontend/src/server/bff/request-body.test.ts": "32521169fa67c42b1af2b872f3153d12a0e4e18b9a6fa565c7054db3574e0897",
+    "frontend/src/server/bff/request-body.ts": "5e9aee02c73c386b07cf258a2971cfb1826ce0cb16c2fb0bcfb280d713ca68c1",
+    "mobile/lib/features/evidence/application/media_upload_controller.dart": "4528cd8f5ad83c9a484544754f30743f2fa2cc438bb8ba39fcff0f6c5cc1876f",
+    "mobile/test/features/media_upload_test.dart": "efca792379241539131edbffaebe487bd914016aca3ddbb0a70bf7e3bc5b0643",
+    "scripts/lib/integration-environment.mjs": "2c4b8008b907a7d8edf7043521cf8b433c85fed7ebe8279b889fe29fc49311aa",
+    "scripts/verify-proxy-ingress.mjs": "e6153d40946777fc77a4f287431c9b7a82b3b02ea2ff6c8b679a9e71bb8fc2fa",
+    "scripts/verify-storage-integrity.mjs": "b8599588c7a9f8de47f318a76d7951ec0d4bd140db11e13302af97dc9dc0c71a",
+    "scripts/verify-upload-bff-image.mjs": "a893c46599998273a11b7b52426dd4fcc97c4c065fcd87c73365a3ff8c228731"
+  },
+  "realCloudAccess": false,
+  "deploymentExecuted": false,
+  "pushExecuted": false,
+  "mergeExecuted": false,
+  "pr10Started": false,
+  "backendLocalNode": "25.1.0"
+}

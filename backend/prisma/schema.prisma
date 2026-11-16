@@ -505,6 +505,8 @@ model Organization {
   @@map("organizations")
   adminProvisionings PlatformTenantProvisioning[]
 
+  uploadAdmissions StorageUploadAdmission[]
+
 }
 
 model BusinessUnit {
@@ -2329,6 +2331,9 @@ model StorageFile {
   @@unique([provider, bucket, objectKey])
   @@index([organizationId, status, createdAt])
   @@map("storage_files")
+  uploadAdmissions StorageUploadAdmission[]
+  @@unique([id, organizationId])
+
 }
 
 /// Intenção autorizada e temporária de upload direto. Não é evidência até que
@@ -5107,4 +5112,16 @@ model BillingRecoveryCheckpoint {
   updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(3)
   stats Json @default("{}") @db.JsonB
   @@map("billing_recovery_checkpoints")
+}
+
+// Short transport leases; never grant access to the file without its verified capability.
+model StorageUploadAdmission {
+  id String @id @db.Uuid
+  organizationId String @map("organization_id") @db.Uuid
+  storageFileId String? @unique @map("storage_file_id") @db.Uuid
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  storageFile StorageFile? @relation(fields: [storageFileId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  @@index([organizationId, expiresAt])
+  @@map("storage_upload_admissions")
 }

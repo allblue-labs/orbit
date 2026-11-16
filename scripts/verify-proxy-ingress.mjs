@@ -74,7 +74,14 @@ try {
   assert.equal(blocked.headers['retry-after'], '60');
   assert.equal(JSON.parse(blocked.body).error.code, 'RATE_LIMITED');
   assert.ok(blocked.headers['strict-transport-security']);
-  process.stdout.write('Nginx ingress: syntax, untrusted spoofing, trusted edge and 429/Retry-After passed.\n');
+  const capabilityCanary = 'PR09_CAPABILITY_MUST_NOT_BE_LOGGED';
+  const malformed = await send('/api/v1/storage/objects?signature=' + capabilityCanary, { 'content-length': 'invalid' });
+  assert.equal(malformed.status, 400);
+  assert.equal((await send('/api/v1/storage/objects?signature=' + capabilityCanary, { 'content-length': '21037057' })).status, 413);
+  const accessLog = await exec('docker', ['exec', container, 'cat', '/var/log/nginx/orbit-access.log']);
+  const errorLog = await exec('docker', ['logs', container]);
+  assert.ok(!(accessLog.stdout + errorLog.stdout + errorLog.stderr).includes(capabilityCanary));
+  process.stdout.write('Nginx ingress: syntax, untrusted spoofing, trusted edge and 429/Retry-After and protocol-error capability redaction passed.\n');
 } finally {
   if (started) await exec('docker', ['stop', '--timeout', '5', container]);
   await rm(directory, { recursive: true, force: true });

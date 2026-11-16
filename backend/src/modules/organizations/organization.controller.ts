@@ -1,3 +1,4 @@
+import { UploadLimitsInterceptor } from '../storage/upload-limits.interceptor';
 import { TenantRecovery } from '../tenant-operations/tenant-operation.policy';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { imageUploadOptions } from '../storage/image-upload.options';
@@ -255,7 +256,10 @@ export class OrganizationController {
 
   /** `PUT` e não `PATCH`: o recurso é a imagem inteira, substituída de uma vez. */
   @Put('current/logo')
-  @UseInterceptors(FileInterceptor('file', imageUploadOptions))
+  @UseInterceptors(
+    UploadLimitsInterceptor,
+    FileInterceptor('file', imageUploadOptions),
+  )
   @RequiresActivePlan()
   @Permissions('organization.update')
   async setLogo(

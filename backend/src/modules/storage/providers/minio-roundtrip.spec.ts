@@ -134,26 +134,28 @@ describe('S3CompatibleStorageProvider contra MinIO', () => {
     expect(response.headers.get('content-disposition')).toBe('inline');
   });
 
-  online('emite URL de upload que o servidor aceita', async () => {
-    const uploadKey = `qa/${randomUUID()}.bin`;
-    const signed = await provider.sign({
-      bucket: BUCKET,
-      objectKey: uploadKey,
-      operation: 'upload',
-      expiresInSeconds: 120,
-      mimeType: 'application/octet-stream',
-    });
-
-    const upload = await fetch(signed.url, {
-      method: 'PUT',
-      headers: signed.requiredHeaders,
-      body: new Uint8Array(Buffer.from('conteudo enviado direto')),
-    });
-    expect(upload.status).toBe(200);
-
-    const stored = await provider.get({ bucket: BUCKET, objectKey: uploadKey });
-    expect(stored.toString()).toBe('conteudo enviado direto');
-  });
+  online(
+    'refuses direct upload URLs and overwriting stored bytes',
+    async () => {
+      await expect(
+        provider.sign({
+          bucket: BUCKET,
+          objectKey,
+          operation: 'upload',
+          expiresInSeconds: 120,
+        }),
+      ).rejects.toThrow();
+      await expect(
+        provider.put({
+          bucket: BUCKET,
+          objectKey,
+          body: Buffer.from('overwrite'),
+          mimeType: 'text/plain',
+        }),
+      ).rejects.toThrow();
+      expect(await provider.get({ bucket: BUCKET, objectKey })).toEqual(body);
+    },
+  );
 
   online('recusa assinatura adulterada', async () => {
     const signed = await provider.sign({

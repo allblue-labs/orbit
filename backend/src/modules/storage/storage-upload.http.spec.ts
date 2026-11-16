@@ -1,3 +1,4 @@
+import { UploadBudgetService } from './upload-budget.service';
 import type { Server } from 'node:http';
 import { Test } from '@nestjs/testing';
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
@@ -38,7 +39,25 @@ describe('signed multipart image gateway', () => {
         { provide: TenantOperationPolicy, useValue: policy },
         { provide: STORAGE_CONFIG, useValue: config },
         { provide: STORAGE_PROVIDER, useValue: {} },
-        { provide: FileObjectService, useValue: { uploadReserved: receive } },
+        {
+          provide: FileObjectService,
+          useValue: {
+            uploadReserved: receive,
+            describeUpload: jest.fn(() =>
+              Promise.resolve({
+                file: { id: 'file' },
+                sizeBytes: body.length,
+                mimeType: 'image/png',
+              }),
+            ),
+          },
+        },
+        {
+          provide: UploadBudgetService,
+          useValue: {
+            acquire: jest.fn(() => Promise.resolve(() => Promise.resolve())),
+          },
+        },
         { provide: RequestContextStorage, useValue: contextStorage },
       ],
     }).compile();

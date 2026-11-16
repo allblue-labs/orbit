@@ -45,7 +45,7 @@ export function run(command, args, options = {}) {
 }
 
 /** Every database is newly created here. Host DATABASE_URL is never consumed. */
-export async function withIntegrationEnvironment(work) {
+export async function withIntegrationEnvironment(work, isolation = {}) {
   const directory = await mkdtemp(join(tmpdir(), "orbit-integration-"));
   const compiled = join(directory, "compiled");
   const suffix = randomBytes(8).toString("hex");
@@ -134,6 +134,8 @@ export async function withIntegrationEnvironment(work) {
         "1g",
         "--cpus",
         "2",
+        // Optional RAM-backed data for storage stress tests; never a host DB/volume.
+        ...(isolation.postgresTmpfs ? ['--tmpfs', '/var/lib/postgresql/data:rw,size=512m'] : []),
         "--publish",
         "127.0.0.1::5432",
         "--env",

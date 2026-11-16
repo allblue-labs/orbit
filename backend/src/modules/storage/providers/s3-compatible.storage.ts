@@ -44,7 +44,11 @@ export class S3CompatibleStorageProvider
       requestChecksumCalculation: 'WHEN_REQUIRED',
       responseChecksumValidation: 'WHEN_REQUIRED',
       maxAttempts: 3,
-      requestHandler: { connectionTimeout: 5_000, requestTimeout: 30_000 },
+      requestHandler: {
+        connectionTimeout: 5_000,
+        requestTimeout: 30_000,
+        throwOnRequestTimeout: true,
+      },
     });
   }
   onModuleDestroy() {
@@ -59,9 +63,11 @@ export class S3CompatibleStorageProvider
           Body: input.body,
           ContentType: input.mimeType,
           ContentLength: input.body.length,
+          IfNoneMatch: '*',
           CacheControl: input.cacheControl ?? 'private, no-store',
           Metadata: input.metadata,
         }),
+        { abortSignal: AbortSignal.timeout(45_000) },
       );
       return {
         bucket: input.bucket,
@@ -118,32 +124,27 @@ export class S3CompatibleStorageProvider
     );
   }
   async sign(request: SignedUrlRequest): Promise<SignedUrl> {
+    if (request.operation === 'upload')
+      throw new InfrastructureException(
+        'Uploads require a reserved gateway capability',
+      );
     return this.execute<SignedUrl>('sign', async () => {
-      const command =
-        request.operation === 'upload'
-          ? new PutObjectCommand({
-              Bucket: this.bucket(request.bucket),
-              Key: request.objectKey,
-              ContentType: request.mimeType,
-            })
-          : new GetObjectCommand({
-              Bucket: this.bucket(request.bucket),
-              Key: request.objectKey,
-              ResponseContentType: request.mimeType,
-              ResponseContentDisposition:
-                request.operation === 'preview'
-                  ? 'inline'
-                  : `attachment; filename*=UTF-8''${encodeURIComponent(request.fileName ?? 'arquivo')}`,
-            });
+      const command = new GetObjectCommand({
+        Bucket: this.bucket(request.bucket),
+        Key: request.objectKey,
+        ResponseContentType: request.mimeType,
+        ResponseContentDisposition:
+          request.operation === 'preview'
+            ? 'inline'
+            : `attachment; filename*=UTF-8''${encodeURIComponent(request.fileName ?? 'arquivo')}`,
+      });
       const requiredHeaders: Record<string, string> = {};
-      if (request.operation === 'upload' && request.mimeType)
-        requiredHeaders['content-type'] = request.mimeType;
       return {
         url: await getSignedUrl(this.client, command, {
           expiresIn: request.expiresInSeconds,
         }),
         expiresAt: new Date(Date.now() + request.expiresInSeconds * 1000),
-        method: request.operation === 'upload' ? 'PUT' : 'GET',
+        method: 'GET',
         requiredHeaders,
       };
     });

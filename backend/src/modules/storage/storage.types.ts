@@ -92,6 +92,7 @@ export interface StorageProvider {
   /** Bucket usado quando o chamador não informa outro. */
   readonly defaultBucket: string;
 
+  /** Create-only: an existing key is never overwritten, including concurrent writes. */
   put(input: PutObjectInput): Promise<ObjectStat>;
   get(ref: StorageObjectRef): Promise<Buffer>;
   head(ref: StorageObjectRef): Promise<ObjectStat | null>;

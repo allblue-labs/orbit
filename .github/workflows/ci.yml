@@ -15,7 +15,8 @@ concurrency:
 jobs:
   backend:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    # Includes the source-pinned MinIO build and a second disposable database gate.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -46,6 +47,8 @@ jobs:
       # seeds catalogues, enforces the restricted runtime role and always cleans up.
       - run: npm run test:e2e
         working-directory: backend
+      # Hard gate: real disposable MinIO from pinned official source; no cloud credentials.
+      - run: node scripts/verify-storage-integrity.mjs
 
   web:
     runs-on: ubuntu-24.04
@@ -72,6 +75,8 @@ jobs:
       # Includes a production Next build and a real, isolated Nest/Postgres stack.
       - run: npm run test:e2e
         working-directory: frontend
+      - run: docker build --file frontend/Dockerfile --tag orbit-upload-bff:ci frontend
+      - run: node scripts/verify-upload-bff-image.mjs orbit-upload-bff:ci
 
   mobile:
     runs-on: ubuntu-24.04

@@ -33,6 +33,7 @@ export const OPERATIONAL_PURGE_TABLES = [
   'artifact_execution_attachments',
   'artifact_execution_signatures',
   'artifact_execution_insights',
+  'storage_upload_admissions',
   'storage_files',
   'field_evidence_uploads',
   'field_evidence',

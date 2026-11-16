@@ -410,6 +410,20 @@ void main() {
       expect((await harness.queue.read()).media, isEmpty);
     });
 
+    test('timeout de upload volta para a fila sem perder a foto', () async {
+      final backend = Backend(putStatus: 408);
+      final harness = build(backend);
+      await harness.controller.enqueue(await capture(harness.files));
+      await harness.controller.process(manual: true);
+      expect(
+        (await harness.queue.read()).media.single.state,
+        LocalMediaState.pending,
+      );
+      backend.putStatus = 200;
+      await harness.controller.process(manual: true);
+      expect((await harness.queue.read()).media, isEmpty);
+    });
+
     test('janela expirada não fica tentando para sempre', () async {
       final backend = Backend(reserveExpiresAt: '2020-01-01T00:00:00.000Z');
       final harness = build(backend);

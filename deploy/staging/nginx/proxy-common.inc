@@ -16,3 +16,7 @@ proxy_connect_timeout 5s;
 proxy_send_timeout 60s;
 proxy_read_timeout 90s;
 proxy_redirect off;
+
+# Upload bodies and private documents must not spill to proxy temp files.
+proxy_request_buffering off;
+proxy_buffering off;

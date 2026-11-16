@@ -1,3 +1,5 @@
+import { UPLOAD_RESERVATION, type UploadRequest } from './upload-context';
+import { UploadLimitsInterceptor } from './upload-limits.interceptor';
 import { requestClientIp } from '../../common/trusted-client-origin';
 import { StorageUploadGuard } from './storage-upload.guard';
 /** Signed upload gateway: buffers are bounded, validated and optimized before storage.
@@ -105,10 +107,21 @@ export class StorageObjectController {
   @UseGuards(StorageUploadGuard)
   @HttpCode(HttpStatus.OK)
   @UseInterceptors(
+    UploadLimitsInterceptor,
     FileInterceptor('file', {
       storage: memoryStorage(),
-      limits: { fileSize: 20_000_000, files: 1, fields: 0 },
-      fileFilter: (_request, file, callback) => {
+      limits: {
+        fileSize: 20_000_000,
+        files: 1,
+        fields: 0,
+        parts: 2,
+        headerPairs: 30,
+        fieldNameSize: 100,
+      },
+      fileFilter: (uploadRequest, file, callback) => {
+        const reservation = (uploadRequest as UploadRequest)[
+          UPLOAD_RESERVATION
+        ];
         const allowed = [
           'image/jpeg',
           'image/png',
@@ -117,10 +130,12 @@ export class StorageObjectController {
           'application/pdf',
         ];
         callback(
-          allowed.includes(file.mimetype)
+          allowed.includes(file.mimetype) &&
+            reservation?.mimeType === file.mimetype
             ? null
             : new ValidationException('Formato de arquivo não permitido.'),
-          allowed.includes(file.mimetype),
+          allowed.includes(file.mimetype) &&
+            reservation?.mimeType === file.mimetype,
         );
       },
     }),

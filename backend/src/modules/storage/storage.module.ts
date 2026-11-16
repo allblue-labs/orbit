@@ -1,3 +1,5 @@
+import { UploadBudgetService } from './upload-budget.service';
+import { UploadLimitsInterceptor } from './upload-limits.interceptor';
 import { StorageUploadGuard } from './storage-upload.guard';
 import { StorageCleanupService } from './storage-cleanup.service';
 /**
@@ -74,6 +76,8 @@ export function createStorageProvider(config: StorageConfig): StorageProvider {
     BrandImageService,
     StorageCleanupService,
     StorageUploadGuard,
+    UploadBudgetService,
+    UploadLimitsInterceptor,
   ],
   exports: [
     STORAGE_PROVIDER,
@@ -83,6 +87,8 @@ export function createStorageProvider(config: StorageConfig): StorageProvider {
     BrandImageService,
     StorageCleanupService,
     StorageUploadGuard,
+    UploadBudgetService,
+    UploadLimitsInterceptor,
     StorageFileRepository,
     StorageFileMapper,
   ],

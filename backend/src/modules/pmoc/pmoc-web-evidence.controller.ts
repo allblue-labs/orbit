@@ -1,3 +1,4 @@
+import { UploadLimitsInterceptor } from '../storage/upload-limits.interceptor';
 import {
   Controller,
   Param,
@@ -38,7 +39,10 @@ export class PmocWebEvidenceController {
   @Capabilities('pmoc.manage')
   @Permissions('pmoc.manage')
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileInterceptor('file', imageUploadOptions))
+  @UseInterceptors(
+    UploadLimitsInterceptor,
+    FileInterceptor('file', imageUploadOptions),
+  )
   async upload(
     @Req() request: IdentityRequest,
     @Param('executionId', ParseUUIDv7Pipe) executionId: string,

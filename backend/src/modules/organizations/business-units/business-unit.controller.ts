@@ -1,3 +1,4 @@
+import { UploadLimitsInterceptor } from '../../storage/upload-limits.interceptor';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { imageUploadOptions } from '../../storage/image-upload.options';
 import {
@@ -89,7 +90,10 @@ export class BusinessUnitController {
    * clientes e forem reimpressos.
    */
   @Put(':id/logo')
-  @UseInterceptors(FileInterceptor('file', imageUploadOptions))
+  @UseInterceptors(
+    UploadLimitsInterceptor,
+    FileInterceptor('file', imageUploadOptions),
+  )
   @Permissions('business_units.update')
   @Capabilities('business_units.manage')
   async setLogo(

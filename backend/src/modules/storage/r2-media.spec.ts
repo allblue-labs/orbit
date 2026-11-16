@@ -59,6 +59,14 @@ function setup() {
     ),
   };
   const repository = {
+    resolvePublication: jest.fn((data: CreateStorageFileData) =>
+      Promise.resolve(
+        [...rows.values()].find(
+          (row) =>
+            row.bucket === data.bucket && row.objectKey === data.objectKey,
+        ) ?? null,
+      ),
+    ),
     markDeletedByRef: jest.fn().mockResolvedValue({ count: 1 }),
     create: jest.fn((data: CreateStorageFileData) => {
       const row = {
@@ -110,6 +118,7 @@ function setup() {
       },
     ),
   };
+  Object.assign(repository, { createReserved: repository.create });
   return {
     files: new FileObjectService(
       provider as unknown as StorageProvider,
@@ -239,6 +248,9 @@ describe('R2 image pipeline', () => {
       ),
     ).rejects.toThrow();
     expect(provider.put).toHaveBeenCalledTimes(1);
+    const resumed = await files.sign(stored, 'upload');
+    expect(new URL(resumed.url).searchParams.get('key')).toBe(grant.key);
+    expect(resumed.requiredHeaders['content-type']).toBe('image/png');
     expect((await files.sign(stored, 'preview')).url).toBe(
       `${config.publicUrl}/${stored.objectKey}`,
     );
