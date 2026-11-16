@@ -1,3 +1,4 @@
+import { OutboundModule } from '../../network/outbound.module';
 import { Module } from '@nestjs/common';
 import { FieldAssignmentOutbox } from './field-assignment-outbox';
 import { EmailModule } from '../email/email.module';
@@ -26,7 +27,7 @@ import { MobilePushRepository } from './mobile-push.repository';
 import { PushNotificationService } from './push-notification.service';
 
 @Module({
-  imports: [IdentityModule, EmailModule],
+  imports: [OutboundModule, IdentityModule, EmailModule],
   controllers: [
     NotificationPreferencesController,
     NotificationController,

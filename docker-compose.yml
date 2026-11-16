@@ -127,6 +127,9 @@ services:
       PUSH_GATEWAY_CREDENTIAL: ${PUSH_GATEWAY_CREDENTIAL:-}
       JOBS_WORKER_ENABLED: ${JOBS_WORKER_ENABLED:-true}
       JOBS_POLL_INTERVAL_MS: ${JOBS_POLL_INTERVAL_MS:-2000}
+      OUTBOUND_AI_ORIGINS: ${OUTBOUND_AI_ORIGINS-https://api.openai.com}
+      OUTBOUND_WEB_PUSH_ORIGINS: ${OUTBOUND_WEB_PUSH_ORIGINS-https://fcm.googleapis.com,https://updates.push.services.mozilla.com,https://web.push.apple.com}
+      OUTBOUND_AI_PRIVATE_ROUTES: ${OUTBOUND_AI_PRIVATE_ROUTES:-[]}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@orbit.local}
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}

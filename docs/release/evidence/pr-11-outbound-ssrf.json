@@ -1,0 +1,153 @@
+{
+  "pr": "PR-11",
+  "date": "2026-11-16",
+  "baseCommit": "2fb50381ca4925d8383a27de3c76f77709f821e5",
+  "implementationCommit": null,
+  "finding": "F07",
+  "qualification": "Implemented and locally tested. No push, merge, deploy, firewall change, production database or real upstream IA/Web Push/FCM call. Final Node 22/Linux and physical/external qualification remain separate.",
+  "decision": "Central deployment-controlled outbound policy and bounded pinned-IP HTTPS for tenant-controlled AI and Web Push URLs.",
+  "newRuntimeDependencies": false,
+  "lockChanges": false,
+  "migration": null,
+  "environment": [
+    "OUTBOUND_AI_ORIGINS",
+    "OUTBOUND_WEB_PUSH_ORIGINS",
+    "OUTBOUND_AI_PRIVATE_ROUTES"
+  ],
+  "controls": {
+    "origins": "Exact canonical HTTPS origins, public port 443, no credentials/fragment/wildcards; AI query denied, push capability query preserved only for its approved endpoint.",
+    "dns": "Per-operation cancellable resolver, all A and AAAA validated; no second lookup, no shared connection agent.",
+    "addresses": "Public profiles deny private/special/metadata/transition/mapped addresses. IPv6 conservatively 2000::/3 excluding special ranges.",
+    "privateAi": "Deployment-only exact origin/port and exact RFC1918/ULA addresses; never inherited by Web Push or tenant flags. AWS/Google metadata ULA prefixes and Azure infrastructure virtual address also denied.",
+    "tls": "Pinned IP, original Host/SNI, explicit CA/hostname verification and remote IP check before req.end sends HTTP credentials/body.",
+    "redirects": "All non-2xx, including 3xx, rejected; no redirects, cookies, retries or global proxy agent.",
+    "response": "Streaming byte bound with/without Content-Length, no decompression; connection closed on error/abort/deadline.",
+    "logging": "Static purpose/reason, no endpoint token, credential, arbitrary upstream response or error body. Private route configuration is logged only as count and SHA256 digest.",
+    "webPush": "Official SDK VAPID/encryption via generateRequestDetails; bounded common transport replaces sendNotification. Location no longer persisted as message ID."
+  },
+  "limits": {
+    "activeRequestsPerProcess": 16,
+    "activeDnsPerProcess": 32,
+    "dnsMs": 5000,
+    "connectionMs": 5000,
+    "idleMs": 30000,
+    "aiTotalMaxMs": 120000,
+    "aiDefaultMs": 60000,
+    "pushTotalMs": 15000,
+    "requestBytes": 2097152,
+    "responseHeaderBytes": 16384,
+    "aiResponseBytes": 1048576,
+    "pushResponseBytes": 65536
+  },
+  "checks": {
+    "backendFull": {
+      "command": "npm test -- --runInBand --watchman=false",
+      "suites": 271,
+      "passed": 2271,
+      "failed": 0,
+      "seconds": 101.841
+    },
+    "integration": {
+      "runner": "withIntegrationEnvironment with postgresTmpfs:true; test:e2e:jest --runInBand --watchman=false --runTestsByPath",
+      "files": [
+        "test/outbound-ssrf.e2e-spec.ts",
+        "test/notification-isolation.e2e-spec.ts",
+        "test/mobile-push-device.e2e-spec.ts"
+      ],
+      "suites": 3,
+      "passed": 25,
+      "failed": 0,
+      "seconds": 47.388,
+      "migrationsApplied": 122,
+      "tablesGranted": 149,
+      "runtimeRole": "orbit_app",
+      "rolsuper": false,
+      "rolbypassrls": false,
+      "upstreamNetwork": "Prohibited in new SSRF cases; controlled DNS only",
+      "newSecurityCases": 4
+    },
+    "realTlsGate": {
+      "file": "src/network/outbound-http.http.spec.ts",
+      "interface": "Local RFC1918 interface, ephemeral synthetic HTTPS server",
+      "injected": "Controlled resolver and synthetic CA trust only; real HTTPS sockets, policy and peer checks",
+      "cases": [
+        "approved exact private route",
+        "mixed DNS blocked before request",
+        "DNS changed next request; no second connect lookup",
+        "301/302/307/308 no follow",
+        "wrong TLS identity sends no credentials",
+        "global TLS bypass does not override explicit validation",
+        "declared/chunked response limit",
+        "encoding/aborted/error response",
+        "slow response hard deadline",
+        "concurrency denial and recovery"
+      ]
+    },
+    "backendBuild": "passed",
+    "backendFullTypecheck": "passed",
+    "changedTypeScriptLint": "passed",
+    "contracts": "passed",
+    "publicErrorCodes": 75,
+    "composeSyntax": "passed",
+    "harnessSyntax": "passed",
+    "diffCheck": "passed",
+    "securityAudit": {
+      "production": {
+        "total": 0,
+        "high": 0,
+        "critical": 0
+      },
+      "full": {
+        "moderate": 25,
+        "high": 0,
+        "critical": 0
+      },
+      "existingToolingReviewUntil": "2026-11-26"
+    },
+    "localNode": "25.1.0",
+    "newNode22Image": false,
+    "frontendOrNativeBuild": false,
+    "realFcmOrVapidAcceptance": false
+  },
+  "intermediateFailures": [
+    "Parameterized Jest table and mock types fixed; no product assertions weakened.",
+    "Harness blanks unknown app envs, so explicit safe public origin defaults added for positive integration fixtures.",
+    "Full unit gate exposed a pre-existing Supertest implicit-listener socket hang up; personal-preference fixture now listens on loopback for its whole suite.",
+    "Initial restricted NPM audit had no registry result; repeated with registry access and policy passed."
+  ],
+  "deploymentRequirements": [
+    "Inventory and approve existing integration/push origins before API rollout.",
+    "Use consistent lists and private route policy in every sender replica/worker.",
+    "No migration needed; no server operation performed.",
+    "Do not restore arbitrary destinations as rollback."
+  ],
+  "sourceSha256": {
+    ".env.example": "bf281fe24d2baa9f8e62509582e8ed4db6b3f526e6895583d18487642dd64eaf",
+    "backend/src/modules/ai-panel/ai-panel.module.ts": "9a807e2d260e785525efac82e2d914dfefd9de83f1783268414b38422ef24bb3",
+    "backend/src/modules/ai-panel/ai-provider.spec.ts": "2fc969e3d4696050fbf1b4f69d6537e17e427e173a247846f5f7b12153efc080",
+    "backend/src/modules/ai-panel/ai-provider.ts": "9f12e708e212d84bac09c95b7a497c9abeab12ff2d15be13ce2f0dddeeba4cc8",
+    "backend/src/modules/integrations/integrations.module.ts": "81e69892d436bc3934bccfb9c43569d544af7da34ca86419aa671e6abdf78de7",
+    "backend/src/modules/integrations/provider/openai-compatible-integration.adapter.ts": "3a5c435e64346cc36bd7901c9a8017fdf7ca5852ec5832b02f3bb1ce5984c614",
+    "backend/src/modules/notifications/notification-delivery.providers.ts": "7aed876483e5aadb5c6604920796d071ea18d50912298fe7a96fb93c257368a7",
+    "backend/src/modules/notifications/notification-preferences.http.spec.ts": "10403082fa9c3937badb59e73e19a9afce64ff317d93db3af7a4b6f2e4d3b2c7",
+    "backend/src/modules/notifications/notification.service.spec.ts": "77e1308f9230ba2cd6866d752d34a485c3a93ad096780f4e769d3ed6d9f2dfdd",
+    "backend/src/modules/notifications/notification.service.ts": "6c09ba723733ae17860a0153514ee3cb7fbd74efffff3305e755139bc9af37a6",
+    "backend/src/modules/notifications/notifications.module.ts": "05f8a4a74a9c8e3a11a944474cc03ea98ae3845c407cce0de109891bedfe349a",
+    "backend/src/release-environment.spec.ts": "be7bccf4816d1423a89d74ac517d87a908e10dafdbdd6bd0cb7fc81d57c1df31",
+    "backend/src/release-environment.ts": "8e42187c390deac81e78b1917d88b970ad217c9935cbeb7d4318fb6e8d5880d3",
+    "docker-compose.yml": "294a85bd6ac437a0d1d92e03f5ee3d89ed81ee19e6aa8d00dd2981e7571c0166",
+    "scripts/lib/integration-environment.mjs": "b49efa492e38bad3d006ff22732bbc237fb95f43fadbf2e2a8ce3247a50afb0d",
+    "backend/src/modules/integrations/provider/openai-compatible-integration.adapter.spec.ts": "6465cf0caa038183245a1c78743c857308064981e18b0c947ad735b664aae200",
+    "backend/src/modules/notifications/notification-delivery.providers.spec.ts": "4829970091e23336afb6aca274c714e9b9362e612d7a88d69fd457a28c97d504",
+    "backend/src/network/outbound-address.ts": "ef17226c17b0a4dde2f2fcfffaf2ee3f3af43d18deffcaf8d5e211c2203e3714",
+    "backend/src/network/outbound-dns.spec.ts": "0d67c5a69f7955af04fb6779da483b4b06690ebe86052817258a1a9a2b871515",
+    "backend/src/network/outbound-dns.ts": "33676f057e19ae617f7897f2df5f0a94a7cd2a24b4e7238a78416e036e8c702e",
+    "backend/src/network/outbound-http.http.spec.ts": "9ab5accea6bad5adf8f33b5b6b90e5aead8ace0befe2dcd829ba4cfc9125ba68",
+    "backend/src/network/outbound-http.ts": "0f9184c3172dc432cb0685ec0948003bfda7465ad21d7df9a87761e8e169fa84",
+    "backend/src/network/outbound-policy.spec.ts": "f6e3d93c960613d700068226e4836fcceac87462efedca3f331ba90903c9bc3f",
+    "backend/src/network/outbound-policy.ts": "b6f2dcaea19e20ba4284cb8fc30aba0ec710f535a636af7134fc7b3747ff48d5",
+    "backend/src/network/outbound.config.ts": "df523effb61d5a22e60a8db837a2cc4e9e3579663002f5d0e5716faea1191025",
+    "backend/src/network/outbound.module.ts": "1b5c71e43c74480b8087dc01f32e6812666c677a96c66cb67179cb42d667c9ac",
+    "backend/test/outbound-ssrf.e2e-spec.ts": "579733ef6803e3168f82c3a4c28e10c7f588c711b40857037b4afd7105617278"
+  }
+}

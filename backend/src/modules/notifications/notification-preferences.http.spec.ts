@@ -64,7 +64,9 @@ describe('notification preferences HTTP routes for a mobile-only operator', () =
         forbidNonWhitelisted: true,
       }),
     );
-    await app.init();
+    // Keep one listening server for the suite: Supertest must not close/rebind
+    // an implicit listener while another request still holds a keep-alive socket.
+    await app.listen(0, '127.0.0.1');
   });
   afterAll(async () => {
     await app?.close();

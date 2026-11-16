@@ -180,12 +180,13 @@ export class NotificationService {
     );
   }
 
-  registerPush(
+  async registerPush(
     organizationId: string,
     userId: string,
     input: RegisterPushSubscriptionDto,
     userAgent?: string,
   ) {
+    await this.push.validateEndpoint(input.endpoint);
     return this.repository.upsertSubscription({
       organizationId,
       userId,

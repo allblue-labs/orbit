@@ -111,6 +111,11 @@ export async function withIntegrationEnvironment(work, isolation = {}) {
     STORAGE_PUBLIC_API_URL: "http://127.0.0.1:6001/api/v1",
     IDENTITY_PUBLIC_WEB_URL: "http://127.0.0.1:3000",
     FRONTEND_ORIGIN: "http://127.0.0.1:3000",
+    // Explicit safe outbound defaults; blank envs must not inherit developer config.
+    OUTBOUND_AI_ORIGINS: "https://api.openai.com",
+    OUTBOUND_WEB_PUSH_ORIGINS:
+      "https://fcm.googleapis.com,https://updates.push.services.mozilla.com,https://web.push.apple.com",
+    OUTBOUND_AI_PRIVATE_ROUTES: "[]",
     PUSH_PROVIDER: "disabled",
     STRIPE_ENABLED: "false",
     JOBS_WORKER_ENABLED: "false",
@@ -135,7 +140,9 @@ export async function withIntegrationEnvironment(work, isolation = {}) {
         "--cpus",
         "2",
         // Optional RAM-backed data for storage stress tests; never a host DB/volume.
-        ...(isolation.postgresTmpfs ? ['--tmpfs', '/var/lib/postgresql/data:rw,size=512m'] : []),
+        ...(isolation.postgresTmpfs
+          ? ["--tmpfs", "/var/lib/postgresql/data:rw,size=512m"]
+          : []),
         "--publish",
         "127.0.0.1::5432",
         "--env",

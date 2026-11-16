@@ -118,3 +118,15 @@ describe('release environment', () => {
     }
   });
 });
+
+describe('outbound deployment policy preflight', () => {
+  it('fails production startup on dangerous private-route configuration', () => {
+    expect(() =>
+      validateReleaseEnvironment({
+        ...valid(),
+        OUTBOUND_AI_PRIVATE_ROUTES:
+          '[{"origin":"https://internal","addresses":["169.254.169.254"]}]',
+      }),
+    ).toThrow('Invalid outbound HTTP destination policy');
+  });
+});

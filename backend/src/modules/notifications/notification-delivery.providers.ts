@@ -1,3 +1,5 @@
+import { OutboundHttp } from '../../network/outbound-http';
+import { OutboundPolicy } from '../../network/outbound-policy';
 import { Injectable } from '@nestjs/common';
 import { EmailService } from '../email/email.service';
 import { InfrastructureException } from '../../exceptions';
@@ -31,7 +33,10 @@ export class EmailNotificationProvider {
 export class PushNotificationProvider {
   private readonly configured: boolean;
 
-  constructor() {
+  constructor(
+    private readonly http: OutboundHttp,
+    private readonly outbound: OutboundPolicy,
+  ) {
     const publicKey = process.env.VAPID_PUBLIC_KEY;
     const privateKey = process.env.VAPID_PRIVATE_KEY;
     this.configured = Boolean(publicKey && privateKey);
@@ -44,6 +49,10 @@ export class PushNotificationProvider {
     }
   }
 
+  async validateEndpoint(endpoint: string) {
+    await this.outbound.authorize('WEB_PUSH', endpoint);
+  }
+
   async send(
     subscription: {
       endpoint: string;
@@ -54,7 +63,8 @@ export class PushNotificationProvider {
   ): Promise<DeliveryResult> {
     if (!this.configured)
       return { status: 'SKIPPED', provider: 'web-push-unconfigured' };
-    const result = await webpush.sendNotification(
+    this.http.url('WEB_PUSH', subscription.endpoint);
+    const details = webpush.generateRequestDetails(
       {
         endpoint: subscription.endpoint,
         keys: { p256dh: subscription.p256dh, auth: subscription.auth },
@@ -62,10 +72,13 @@ export class PushNotificationProvider {
       JSON.stringify(payload),
       { TTL: 60 * 60, urgency: 'normal' },
     );
+    await this.http.request('WEB_PUSH', details.endpoint, {
+      headers: details.headers,
+      body: details.body ?? Buffer.alloc(0),
+    });
     return {
       status: 'SENT',
       provider: 'web-push',
-      providerMessageId: result.headers.location,
     };
   }
 }

@@ -12,15 +12,27 @@ describe('NotificationService — durable HTTP inbox', () => {
     markSent: jest.fn(),
     markRead: jest.fn(),
     markAllRead: jest.fn(),
+    upsertSubscription: jest.fn(),
   };
   const email = { send: jest.fn() };
-  const push = { send: jest.fn() };
+  const push = { send: jest.fn(), validateEndpoint: jest.fn() };
   const service = new NotificationService(
     repository as never,
     email as never,
     push as never,
   );
   beforeEach(() => jest.resetAllMocks());
+
+  it('does not persist a denied web push endpoint', async () => {
+    push.validateEndpoint.mockRejectedValue(new Error('blocked'));
+    await expect(
+      service.registerPush('org', 'user', {
+        endpoint: 'https://127.0.0.1/token',
+        keys: { p256dh: 'key', auth: 'auth' },
+      }),
+    ).rejects.toThrow('blocked');
+    expect(repository.upsertSubscription).not.toHaveBeenCalled();
+  });
 
   it.each([['EMAIL'], ['REALTIME'], ['IN_APP', 'REALTIME']])(
     'always persists one inbox delivery, including legacy channel %s',

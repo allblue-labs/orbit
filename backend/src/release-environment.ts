@@ -1,3 +1,4 @@
+import { outboundConfiguration } from './network/outbound.config';
 import { InfrastructureException } from './exceptions';
 import { isEmail } from 'class-validator';
 import { emailConfiguration } from './modules/email/email.config';
@@ -13,6 +14,13 @@ export function validateReleaseEnvironment(
   environment: NodeJS.ProcessEnv,
 ): void {
   if (environment.NODE_ENV !== 'production') return;
+  try {
+    outboundConfiguration(environment);
+  } catch {
+    throw new InfrastructureException(
+      'Invalid outbound HTTP destination policy configuration',
+    );
+  }
 
   const secret = (key: string, minimum: number): string => {
     const value = environment[key]?.trim() ?? '';

@@ -1,3 +1,4 @@
+import { OutboundModule } from '../../network/outbound.module';
 import { Module } from '@nestjs/common';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { AiController } from './ai.controller';
@@ -6,7 +7,7 @@ import { AiRepository } from './ai.repository';
 import { AiService } from './ai.service';
 
 @Module({
-  imports: [NotificationsModule],
+  imports: [OutboundModule, NotificationsModule],
   controllers: [AiController],
   providers: [
     AiRepository,
