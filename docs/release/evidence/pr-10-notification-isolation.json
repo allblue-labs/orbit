@@ -2,7 +2,7 @@
   "pr": "PR-10",
   "date": "2026-11-16",
   "baseCommit": "495e223a64ab88028c1abf1053211301d8ad98e3",
-  "implementationCommit": null,
+  "implementationCommit": "f23cb8d6048c9b8485d01eba4aae4167d56aae21",
   "finding": "F06",
   "qualification": "Local gates on final source. No push, merge, deploy, real Firebase/SES call or production database. Final consolidated Node 22/Linux qualification and external FCM/SES gates remain separate.",
   "decision": "Remove unsupported Socket.IO gateway from runtime and source; retain authenticated HTTP inbox and native FCM.",

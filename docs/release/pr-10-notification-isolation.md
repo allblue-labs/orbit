@@ -1,7 +1,7 @@
 # PR-10 — Notificações com autorização atual
 
 Achado **F06**, base limpa `495e223`, implementação local em 16/11/2026.
-Commit de implementação: a registrar após os gates locais.
+Commit de implementação: `f23cb8d6048c9b8485d01eba4aae4167d56aae21`.
 Sem push, merge, deploy ou chamadas Firebase/SES reais.
 
 O gateway Socket.IO legado foi removido do módulo e do código. Nenhum cliente
