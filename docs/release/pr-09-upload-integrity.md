@@ -1,6 +1,7 @@
 # PR-09 — Upload limitado e integridade dos objetos
 
 Achado **F08**, base limpa `0e12923`, implementação local em 16/11/2026.
+Commit de implementação: `8a9680f3382687df37e62e4dc9da6146b987fe05`.
 Sem push, merge, deploy ou operação em buckets/bancos reais. A aprovação geral
 de produção continua condicionada às demais PRs e aos aceites externos do plano.
 

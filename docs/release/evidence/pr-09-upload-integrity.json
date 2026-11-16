@@ -2,7 +2,7 @@
   "pr": "PR-09",
   "date": "2026-11-16",
   "baseCommit": "0e12923df5fa37f54b21a31d06537dd3906e76c9",
-  "implementationCommit": "Identified by fix(storage): PR-09 bounded uploads and immutable publication; registered after commit",
+  "implementationCommit": "8a9680f3382687df37e62e4dc9da6146b987fe05",
   "finding": "F08",
   "qualification": "Implemented and locally tested on final source; no deployment or real R2 account access. Overall production approval still depends on remaining PRs and external qualification.",
   "migration": "20261116180000_bounded_immutable_uploads",
