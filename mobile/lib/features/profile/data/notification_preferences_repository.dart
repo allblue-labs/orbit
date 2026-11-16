@@ -49,7 +49,7 @@ class NoticePreference {
   const NoticePreference({
     required this.type,
     required this.enabled,
-    this.channels = const ['IN_APP', 'REALTIME'],
+    this.channels = const ['IN_APP'],
   });
 
   factory NoticePreference.fromJson(Map<String, dynamic> json) =>

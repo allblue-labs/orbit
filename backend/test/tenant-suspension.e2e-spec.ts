@@ -36,7 +36,6 @@ import { snapshotOf } from '../src/modules/subscription-plans/subscriptions/subs
 import { planDefinition } from '../src/modules/subscription-plans/catalog/plan-registry';
 import { CATALOG_VERSION } from '../src/modules/subscription-plans/catalog/plan-catalog.types';
 import { IdentityTokenService } from '../src/modules/identity/application/token.service';
-import { NotificationGateway } from '../src/modules/notifications/notification.gateway';
 import {
   STORAGE_CONFIG,
   type StorageConfig,
@@ -965,13 +964,20 @@ describe('ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL)',
       error: { code: 'STORAGE_SIGNATURE_INVALID' },
     });
   });
-  it('does not emit realtime tenant data into sockets established before suspension', async () => {
+  it('exposes no legacy realtime handshake even with a token issued before suspension', async () => {
+    const token = tenant.pair.accessToken;
     await change(tenant, 'SUSPENDED');
-    expect(
-      await app
-        .get(NotificationGateway)
-        .emitToUser(tenant.ownerId, 'nx03:test', { test: true }, tenant.id),
-    ).toBe(false);
+    await http()
+      .get('/socket.io/?EIO=4&transport=polling')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(404);
+    const response = await auth(
+      http().get('/api/v1/notifications'),
+      token,
+    ).expect(403);
+    expect(response.body).toMatchObject({
+      error: { code: 'ORGANIZATION_SUSPENDED' },
+    });
   });
   it('does not reactivate retained, canceled or purging organizations', async () => {
     await admin.organization.update({

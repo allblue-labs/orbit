@@ -2731,7 +2731,7 @@ model Notification {
   recipientUserId String    @map("recipient_user_id") @db.Uuid
   type            String    @db.VarChar(80)
   dedupeKey       String?   @map("dedupe_key") @db.VarChar(180)
-  channels        String[]  @default(["IN_APP", "REALTIME"]) @db.VarChar(30)
+  channels        String[]  @default(["IN_APP"]) @db.VarChar(30)
   title           String    @db.VarChar(180)
   body            String    @db.Text
   status          String    @default("PENDING") @db.VarChar(40)
@@ -2819,7 +2819,7 @@ model NotificationPreference {
   organizationId String   @map("organization_id") @db.Uuid
   userId         String   @map("user_id") @db.Uuid
   type           String   @db.VarChar(80)
-  channels       String[] @default(["IN_APP", "REALTIME"]) @db.VarChar(30)
+  channels       String[] @default(["IN_APP"]) @db.VarChar(30)
   enabled        Boolean  @default(true)
   quietHours     Json?    @map("quiet_hours") @db.JsonB
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)

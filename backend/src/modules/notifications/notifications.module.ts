@@ -8,7 +8,6 @@ import {
 } from './notification-delivery.providers';
 import { NotificationController } from './notification.controller';
 import { NotificationPreferencesController } from './notification-preferences.controller';
-import { NotificationGateway } from './notification.gateway';
 import { NotificationRepository } from './notification.repository';
 import { NotificationService } from './notification.service';
 import { MobileDeviceController } from './mobile-device.controller';
@@ -37,7 +36,6 @@ import { PushNotificationService } from './push-notification.service';
     FieldAssignmentOutbox,
     NotificationRepository,
     NotificationService,
-    NotificationGateway,
     EmailNotificationProvider,
     PushNotificationProvider,
     MobileDeviceRepository,
@@ -54,7 +52,6 @@ import { PushNotificationService } from './push-notification.service';
   exports: [
     FieldAssignmentOutbox,
     NotificationService,
-    NotificationGateway,
     MobileNotificationService,
     PushNotificationService,
   ],

@@ -29,7 +29,7 @@ const identityInclude = {
     include: { role: true },
   },
   organizationMemberships: {
-    where: { status: 'ACTIVE', deletedAt: null },
+    where: { status: 'ACTIVE', deletedAt: null, role: { deletedAt: null } },
     include: { role: true },
   },
   businessUnitMemberships: {
@@ -71,7 +71,11 @@ export class IdentityRepository {
       await this.setLocal(transaction, 'app.user_id', id);
       await this.setLocal(transaction, 'app.is_platform_admin', 'false');
       const organization = await transaction.organizationMembership.findFirst({
-        where: { userId: id, status: 'ACTIVE', deletedAt: null },
+        where: {
+          userId: id,
+          status: 'ACTIVE',
+          deletedAt: null,
+        },
         select: { organizationId: true },
         orderBy: { joinedAt: 'asc' },
       });
@@ -118,11 +122,17 @@ export class IdentityRepository {
         where: { id },
         include: identityInclude,
       });
+      // Role visibility requires the tenant context set above. Never join roles
+      // in the initial membership lookup, before RLS knows that tenant.
+      const hasMembership = user?.organizationMemberships.some(
+        (membership) =>
+          membership.organizationId === organization?.organizationId,
+      );
       return user
         ? {
             ...user,
-            isOrganizationOwner,
-            effectiveBusinessUnitIds: unitIds,
+            isOrganizationOwner: Boolean(hasMembership && isOrganizationOwner),
+            effectiveBusinessUnitIds: hasMembership ? unitIds : [],
             platformAuthority:
               VerifiedPlatformAuthority.fromPersistedAssignments(
                 user.id,

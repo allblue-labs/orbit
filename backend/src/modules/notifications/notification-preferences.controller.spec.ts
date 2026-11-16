@@ -105,6 +105,29 @@ describe('personal notification preferences', () => {
     expect(service.preferences).toHaveBeenLastCalledWith('org-b', 'operator-b');
   });
 
+  it.each(['list', 'get', 'markRead', 'markAllRead'])(
+    'allows mobile surface for personal inbox %s without bypassing permissions',
+    (method) => {
+      const execution = context(NotificationController, method);
+      expect(new SurfaceGuard(reflector).canActivate(execution)).toBe(true);
+      expect(() =>
+        new PermissionGuard(reflector, authorization as never).canActivate(
+          execution,
+        ),
+      ).toThrow();
+    },
+  );
+  it.each(['create', 'dispatch', 'registerPush', 'unregisterPush'])(
+    'keeps administrative and web push route %s outside mobile-only surface',
+    (method) => {
+      expect(() =>
+        new SurfaceGuard(reflector).canActivate(
+          context(NotificationController, method),
+        ),
+      ).toThrow();
+    },
+  );
+
   it('does not grant reading or managing notifications to an operator without permission', () => {
     for (const method of ['list', 'create', 'dispatch', 'markRead'] as const) {
       const execution = context(NotificationController, method);
@@ -121,7 +144,6 @@ describe('personal notification preferences', () => {
     const personal = new NotificationPreferencesController(
       new NotificationService(
         { upsertPreference } as never,
-        {} as never,
         {} as never,
         {} as never,
       ),
