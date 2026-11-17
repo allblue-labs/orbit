@@ -86,7 +86,7 @@ A execução foi corrigida para arquivo no servidor com stdin fechado; a publica
 prosseguiu com backup validado e nenhum dado foi restaurado/removido automaticamente.
 
 A credencial inicialmente recusou SNS:CreateTopic (403). O usuário aplicou a
-política restrita de preparação/confirmacão do tópico exclusivo do staging. O SNS
+política restrita de preparação/confirmação do tópico exclusivo do staging. O SNS
 confirmou uma subscription HTTPS, SignatureVersion=2, zero pendentes; o SES remoto
 retornou READY, produção e envio habilitados. Orbit e Nexus responderam HTTPS 200.
 Na página de recuperação publicada: no-referrer, no-store e noindex/nofollow.
@@ -104,9 +104,42 @@ confirmaram feedback e supressão, incluindo tentativa subsequente recusada sem
 outro SendEmail. Dois testes de regressão cobrem a seleção da identidade individual
 e o fallback ao domínio; a seleção passou a ser compartilhada com o preflight.
 Quatro suítes direcionadas / 46 testes passaram após o ajuste, além de TypeScript
-sem erros. A imagem operacional será atualizada para incluir esse provisionador.
+sem erros. A imagem operacional foi atualizada no fechamento para incluir esse provisionador.
 
 Depois de validar a versão final do provisionador, remover os statements IAM
 OrbitStagingFeedbackBootstrapSNS e OrbitStagingFeedbackBootstrapSES da política
 adicionada; manter OrbitStagingFeedbackRuntime e as permissões SES pré-existentes.
 As permissões de preparação não são necessárias para os envios normais.
+
+## Fechamento da publicação
+
+Release corretiva `513c431bc9d2d7e3dc5d3bc0a9d0d6fc734b4ece` publicada e aplicada;
+API, frontend e PostgreSQL saudáveis. O provisionador compilado da própria release
+retornou o ARN da identidade EMAIL_ADDRESS correta. Preflight SES novamente READY,
+com dois envios reais na quota; nenhum reenvio dos testes para o Gmail.
+
+API em Node 22.23.5, orbit_app restrito e referências de imagens imutáveis.
+A conferência externa retornou HTTPS 200 para Orbit e Nexus; a página de redefinição
+preserva no-referrer, no-store e noindex/nofollow. DKIM verificado no SES; SPF e
+DMARC presentes no DNS, política DMARC quarantine. Isso não atesta a leitura ou
+classificação das duas mensagens no Gmail: o ledger delas permaneceu UNOBSERVED
+porque seus eventos chegaram antes do ajuste do ARN. O teste DELIVERY posterior
+foi realizado exclusivamente no Mailbox Simulator.
+
+Fila antiga vazia antes da liberação; dois owners originais vinculados, nenhuma
+organização primária sem procedência identificada. Nenhum e-mail retroativo foi
+criado. `ACCOUNT_EMAIL_DELIVERY_ENABLED=true` e `AWS_SES_FEEDBACK_ENABLED=true` no
+runtime final. `SUBSCRIPTION_DATA_RETENTION_ENABLED=false` permanece intencional,
+aguardando o trabalho separado do CDN/legado/backup da PR-13.
+
+As referências das duas publicações e os recibos de teste constam nos arquivos de
+[evidência](evidence/ses-production-activation-2026-11-17.json) e
+[imagens](evidence/ses-production-activation-2026-11-17-images.json). Nenhum segredo,
+corpo de e-mail, token de identidade ou dump de banco foi incluído no Git.
+
+O usuário confirmou a redução da política IAM para somente o statement de runtime
+(sns:ConfirmSubscription no tópico do staging). A consulta real GetTopicAttributes
+passou a ser recusada com AuthorizationErrorException, conforme esperado após
+remover as permissões de preparação. O preflight SES continuou READY, com dois
+envios reais registrados. O aplicativo não recebeu permissões para administrar IAM.
+Sem Git push, merge ou alteração de Nexus.

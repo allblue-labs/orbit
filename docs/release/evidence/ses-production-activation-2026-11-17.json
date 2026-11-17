@@ -1,7 +1,7 @@
 {
   "date": "2026-11-17",
   "baseline": "6f7d9e9",
-  "status": "STAGING_DEPLOYED_SNS_AND_SUPPRESSION_VERIFIED_EMAIL_CONSUMER_PAUSED",
+  "status": "STAGING_SES_QUALIFIED",
   "tests": {
     "backendUnit": {
       "suites": 275,
@@ -52,17 +52,25 @@
     "backup": "/var/backups/orbit/20261117T125307Z",
     "roleNamespaceConflicts": 0,
     "invalidGlobalAssignments": 0,
-    "automaticEmailPaused": true,
+    "automaticEmailPaused": false,
     "retentionPaused": true,
     "deployed": true,
-    "currentCommit": "02926a3eb80c37c3d13f3eda2860150f273b7af4",
+    "currentCommit": "513c431bc9d2d7e3dc5d3bc0a9d0d6fc734b4ece",
     "appliedMigrations": 14,
     "totalMigrations": 125,
     "relationalRules": 199,
     "relationalFindings": 0,
     "httpsOrbit": 200,
     "httpsNexus": 200,
-    "freshBackup": "/home/ninja/orbit-releases/ses-20261117/before/postgres-before-migrations-20261117T155717Z.dump"
+    "freshBackup": "/home/ninja/orbit-releases/ses-20261117/before/postgres-before-migrations-20261117T155717Z.dump",
+    "finalApiReady": true,
+    "finalFrontendReady": true,
+    "finalHttpsOrbit": 200,
+    "finalHttpsNexus": 200,
+    "nodeVersion": "22.23.5",
+    "pendingEmailBeforeEnable": 0,
+    "firstOwnerBindings": 2,
+    "unprovenPrimaryRegistrations": 0
   },
   "secretsIncluded": false,
   "gitPush": false,
@@ -82,7 +90,9 @@
       "providerMessageIds": [
         "010f01a1ea42ae37-ff229589-666a-45f6-a5cc-b9403f337dd5-000000",
         "010f01a1ea42afc7-5d317d63-e184-45ab-85e5-bbfcb6ded877-000000"
-      ]
+      ],
+      "feedbackStatus": "UNOBSERVED",
+      "inboxOrReadConfirmed": false
     },
     "simulator": {
       "success": {
@@ -110,5 +120,19 @@
         "suppressionVerified": true
       }
     }
+  },
+  "domainAuthentication": {
+    "dkimVerifiedBySES": true,
+    "spfRecordPresent": true,
+    "dmarcRecordPresent": true,
+    "dmarcPolicy": "quarantine"
+  },
+  "iam": {
+    "bootstrapPolicyAppliedByUser": true,
+    "cleanupStatus": "CONFIRMED_BY_USER_AND_READ_PERMISSION_DENIED",
+    "runtimePolicyFile": "/private/tmp/orbit-ses-staging-iam-runtime-policy.json",
+    "cleanupConfirmedByUser": true,
+    "bootstrapGetTopicAttributesResult": "AuthorizationErrorException",
+    "sesAfterCleanup": "READY"
   }
 }

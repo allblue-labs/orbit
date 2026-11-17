@@ -1,27 +1,56 @@
 {
-  "commit": "02926a3eb80c37c3d13f3eda2860150f273b7af4",
-  "created": "2026-11-17T15:33:26Z",
-  "tag": "staging-02926a3eb80c",
-  "images": {
-    "api": {
-      "tag": "docker.io/allbluelabs/orbit-api:staging-02926a3eb80c-api",
-      "digest": "docker.io/allbluelabs/orbit-api@sha256:6604ed78ead09049f202b26b0d650335f567a53c4764cc85ea572dfe843bda5f"
-    },
-    "migrate": {
-      "tag": "docker.io/allbluelabs/orbit-api:staging-02926a3eb80c-migrator",
-      "digest": "docker.io/allbluelabs/orbit-api@sha256:c8676683f32c49405ee3c1f57d06829608ec3c3071c447e5e566317ef2e8067e"
-    },
-    "bootstrap-admin": {
-      "tag": "docker.io/allbluelabs/orbit-api:staging-02926a3eb80c-migrator",
-      "digest": "docker.io/allbluelabs/orbit-api@sha256:c8676683f32c49405ee3c1f57d06829608ec3c3071c447e5e566317ef2e8067e"
-    },
-    "storage-migration": {
-      "tag": "docker.io/allbluelabs/orbit-api:staging-02926a3eb80c-migrator",
-      "digest": "docker.io/allbluelabs/orbit-api@sha256:c8676683f32c49405ee3c1f57d06829608ec3c3071c447e5e566317ef2e8067e"
-    },
-    "frontend": {
-      "tag": "docker.io/allbluelabs/orbit-api:staging-02926a3eb80c-frontend",
-      "digest": "docker.io/allbluelabs/orbit-api@sha256:d64a54453ff6ce11bb80f2807aafb85dc4f2efe9f462f8e041bbcf0a0b18b42a"
+  "initialRelease": {
+    "commit": "02926a3eb80c37c3d13f3eda2860150f273b7af4",
+    "created": "2026-11-17T15:33:26Z",
+    "tag": "staging-02926a3eb80c",
+    "images": {
+      "api": {
+        "tag": "docker.io/allbluelabs/orbit-api:staging-02926a3eb80c-api",
+        "digest": "docker.io/allbluelabs/orbit-api@sha256:6604ed78ead09049f202b26b0d650335f567a53c4764cc85ea572dfe843bda5f"
+      },
+      "migrate": {
+        "tag": "docker.io/allbluelabs/orbit-api:staging-02926a3eb80c-migrator",
+        "digest": "docker.io/allbluelabs/orbit-api@sha256:c8676683f32c49405ee3c1f57d06829608ec3c3071c447e5e566317ef2e8067e"
+      },
+      "bootstrap-admin": {
+        "tag": "docker.io/allbluelabs/orbit-api:staging-02926a3eb80c-migrator",
+        "digest": "docker.io/allbluelabs/orbit-api@sha256:c8676683f32c49405ee3c1f57d06829608ec3c3071c447e5e566317ef2e8067e"
+      },
+      "storage-migration": {
+        "tag": "docker.io/allbluelabs/orbit-api:staging-02926a3eb80c-migrator",
+        "digest": "docker.io/allbluelabs/orbit-api@sha256:c8676683f32c49405ee3c1f57d06829608ec3c3071c447e5e566317ef2e8067e"
+      },
+      "frontend": {
+        "tag": "docker.io/allbluelabs/orbit-api:staging-02926a3eb80c-frontend",
+        "digest": "docker.io/allbluelabs/orbit-api@sha256:d64a54453ff6ce11bb80f2807aafb85dc4f2efe9f462f8e041bbcf0a0b18b42a"
+      }
+    }
+  },
+  "finalRelease": {
+    "commit": "513c431bc9d2d7e3dc5d3bc0a9d0d6fc734b4ece",
+    "created": "2026-11-17T16:22:11Z",
+    "tag": "staging-513c431bc9d2",
+    "images": {
+      "api": {
+        "tag": "docker.io/allbluelabs/orbit-api:staging-513c431bc9d2-api",
+        "digest": "docker.io/allbluelabs/orbit-api@sha256:7514f77cf9057556a47626060cdf195507f69814fb4fd2af48708a75cfebbf10"
+      },
+      "migrate": {
+        "tag": "docker.io/allbluelabs/orbit-api:staging-513c431bc9d2-migrator",
+        "digest": "docker.io/allbluelabs/orbit-api@sha256:11b5768673d4b27f596182d95c20ce6efbfb2d08cc5b108b5f9b4c5eccb1cfc7"
+      },
+      "bootstrap-admin": {
+        "tag": "docker.io/allbluelabs/orbit-api:staging-513c431bc9d2-migrator",
+        "digest": "docker.io/allbluelabs/orbit-api@sha256:11b5768673d4b27f596182d95c20ce6efbfb2d08cc5b108b5f9b4c5eccb1cfc7"
+      },
+      "storage-migration": {
+        "tag": "docker.io/allbluelabs/orbit-api:staging-513c431bc9d2-migrator",
+        "digest": "docker.io/allbluelabs/orbit-api@sha256:11b5768673d4b27f596182d95c20ce6efbfb2d08cc5b108b5f9b4c5eccb1cfc7"
+      },
+      "frontend": {
+        "tag": "docker.io/allbluelabs/orbit-api:staging-513c431bc9d2-frontend",
+        "digest": "docker.io/allbluelabs/orbit-api@sha256:0afcbe580683285efe5a91edcb095dbf1d7165db01e68dc92494032d9ddd3afa"
+      }
     }
   }
 }
