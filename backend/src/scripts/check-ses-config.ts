@@ -9,6 +9,7 @@ import {
   sesPreflight,
   validateSesConfiguration,
   sesPreflightFailureCode,
+  resolveSesIdentity,
 } from '../modules/email/ses-preflight';
 import {
   emailSuppressionHashKey,
@@ -22,7 +23,7 @@ async function main() {
   const config = emailConfiguration();
   validateSesConfiguration(config);
   emailSuppressionHashKey(process.env.EMAIL_SUPPRESSION_HASH_KEY);
-  sesFeedbackConfiguration();
+  const feedback = sesFeedbackConfiguration();
   if (!process.argv.includes('--remote')) {
     console.log(
       'Configuração local válida. Para consultar identidade, envio, sandbox e quotas na AWS, acrescente --remote. Nenhum e-mail será enviado.',
@@ -33,6 +34,18 @@ async function main() {
   if (!client) throw new Error('SES_PREFLIGHT_UNAVAILABLE');
   try {
     const report = await sesPreflight(client, config);
+    if (feedback.enabled) {
+      for (const [from, expected] of Object.entries(
+        feedback.senderIdentities ?? { [feedback.from]: feedback.identityArn },
+      )) {
+        const resolved = await resolveSesIdentity(client, { ...config, from });
+        const actual = resolved?.details.VerifiedForSendingStatus
+          ? `arn:aws:ses:${config.region}:${feedback.accountId}:identity/${resolved.name}`
+          : null;
+        if (actual !== expected)
+          throw new Error('SES_SENDER_FEEDBACK_IDENTITY_MISMATCH');
+      }
+    }
     console.log(JSON.stringify(report, null, 2));
     if (report.status !== 'READY') process.exitCode = 2;
   } finally {

@@ -258,6 +258,7 @@ describe('PR-08: SES/SNS HTTP, atomic suppression and restricted PostgreSQL', ()
     const command = ses.send.mock.calls.at(-1)![0];
     expect(command.input.EmailTags).toEqual([
       { Name: 'orbit_delivery_id', Value: row.id },
+      { Name: 'orbit_category', Value: 'TRANSACTIONAL' },
     ]);
     expect(command.input.ConfigurationSetName).toBe('orbit-test');
   });

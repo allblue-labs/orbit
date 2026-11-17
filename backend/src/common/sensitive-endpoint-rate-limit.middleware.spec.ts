@@ -22,6 +22,7 @@ describe('SensitiveEndpointRateLimitMiddleware', () => {
     '/api/v1/identity/email/resend',
     '/API/V1/IDENTITY/LOGIN/',
     '/identity/password/forgot',
+    '/api/v1/public/contact',
     '/identity/password/reset/validate',
     '/api/v1/billing/checkout-session',
   ])(

@@ -33,6 +33,16 @@ const entries = [
   ],
   ['VALIDATION_ERROR', HttpStatus.BAD_REQUEST, 'Revise os campos informados.'],
   [
+    'PUBLIC_CONTACT_CONFLICT',
+    HttpStatus.CONFLICT,
+    'A mensagem foi alterada durante uma tentativa anterior. Recarregue o formulário e envie novamente.',
+  ],
+  [
+    'PUBLIC_CONTACT_UNAVAILABLE',
+    HttpStatus.SERVICE_UNAVAILABLE,
+    'O formulário está temporariamente indisponível. Tente novamente mais tarde.',
+  ],
+  [
     'PASSWORD_RESET_INVALID',
     HttpStatus.BAD_REQUEST,
     'Este link de recuperação é inválido, expirou ou já foi utilizado. Solicite um novo link.',

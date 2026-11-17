@@ -1,3 +1,4 @@
+import { PublicContactModule } from './modules/public-contact/public-contact.module';
 import './configure-environment';
 import { TenantOperationsModule } from './modules/tenant-operations/tenant-operations.module';
 import { TenantOperationGuard } from './modules/tenant-operations/tenant-operation.guard';
@@ -57,6 +58,7 @@ import {
 @Module({
   imports: [
     LegalModule,
+    PublicContactModule,
     FoundationModule,
     PrismaModule,
     IdentityModule,

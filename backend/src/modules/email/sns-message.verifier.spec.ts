@@ -261,7 +261,10 @@ describe('PR-08 SNS cryptographic trust boundary', () => {
       AWS_SES_CONFIGURATION_SET: 'orbit-test',
       EMAIL_SUPPRESSION_HASH_KEY: fixture.config.hashKey,
     };
-    expect(sesFeedbackConfiguration(env)).toEqual(fixture.config);
+    expect(sesFeedbackConfiguration(env)).toEqual({
+      ...fixture.config,
+      senderIdentities: { [fixture.config.from]: fixture.config.identityArn },
+    });
     expect(() =>
       sesFeedbackConfiguration({
         ...env,

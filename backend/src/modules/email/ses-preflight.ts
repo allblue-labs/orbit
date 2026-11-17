@@ -79,7 +79,21 @@ export async function sesPreflight(
   };
   const productionAccess = account.ProductionAccessEnabled === true;
   const sendingEnabled = account.SendingEnabled === true;
-  const identityVerified = identity?.details.VerifiedForSendingStatus === true;
+  let identityVerified = identity?.details.VerifiedForSendingStatus === true;
+  const senders = [
+    ...new Set(
+      Object.values(config.routes ?? {})
+        .map((route) => route.from)
+        .filter(
+          (address): address is string => !!address && address !== config.from,
+        ),
+    ),
+  ];
+  for (const from of senders) {
+    const routeIdentity = await resolveSesIdentity(client, { ...config, from });
+    if (routeIdentity?.details.VerifiedForSendingStatus !== true)
+      identityVerified = false;
+  }
   // SES uses -1 for an unlimited 24-hour quota; missing data never means ready.
   const quotaKnown = [
     account.SendQuota?.Max24HourSend,

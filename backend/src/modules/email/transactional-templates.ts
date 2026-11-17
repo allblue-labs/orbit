@@ -1,4 +1,5 @@
 import { actionEmail } from './email-template';
+import type { EmailCategory } from './email.types';
 export const TRANSACTIONAL_TEMPLATES = [
   'WELCOME',
   'EMAIL_VERIFICATION',
@@ -66,7 +67,11 @@ export function transactionalEmail(
         'Este aviso não altera o plano, não realiza cobranças e não exclui dados. Quando houver prazo de adequação, a data e os acessos afetados são mostrados no Orbit.',
     },
   }[template];
-  return actionEmail({ ...copy, link: input.link });
+  const category: EmailCategory =
+    template === 'PLAN_EXPIRED' || template === 'PLAN_LIMIT_REACHED'
+      ? 'INFORMATIONAL'
+      : 'TRANSACTIONAL';
+  return { ...actionEmail({ ...copy, link: input.link }), category };
 }
 /** Non-secret navigation only. Identity action links use identityTokenLink. */
 export function accountEmailLink(security = false): string {

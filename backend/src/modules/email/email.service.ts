@@ -13,6 +13,7 @@ import { isEmail } from 'class-validator';
 import {
   EMAIL_CONFIGURATION,
   SES_EMAIL_CLIENT,
+  emailRoute,
   type EmailConfiguration,
 } from './email.config';
 
@@ -40,16 +41,38 @@ export class EmailService implements OnModuleDestroy {
     let outboundId: string | undefined;
     let accepted = false;
     try {
+      const route = emailRoute(this.config, message.category);
+      const from = route.from;
+      const replyTo = message.replyTo ?? route.replyTo;
       if (!isEmail(message.to) || /[\r\n]/.test(message.subject))
         return this.failed('INVALID_MESSAGE', false);
-      if (!this.config.from || !this.config.region || !this.ses)
+      if (
+        (replyTo && (!isEmail(replyTo) || /[\r\n]/.test(replyTo))) ||
+        (message.identityDeliveryId && message.contactSubmissionId)
+      )
+        return this.failed('INVALID_MESSAGE', false);
+      if (!from || !this.config.region || !this.ses)
         return this.failed('EMAIL_NOT_CONFIGURED', false);
       try {
         if (message.identityDeliveryId) {
           const previous = await this.repository.acceptedDelivery(
             message.identityDeliveryId,
             message.to,
-            this.config.from,
+            from,
+            this.config.region,
+          );
+          if (previous)
+            return {
+              status: 'SENT',
+              provider: 'ses',
+              providerMessageId: previous,
+            };
+        }
+        if (message.contactSubmissionId) {
+          const previous = await this.repository.acceptedContactDelivery(
+            message.contactSubmissionId,
+            message.to,
+            from,
             this.config.region,
           );
           if (previous)
@@ -61,9 +84,10 @@ export class EmailService implements OnModuleDestroy {
         }
         const prepared = await this.repository.prepare(
           message.to,
-          this.config.from,
+          from,
           this.config.region,
           message.identityDeliveryId,
+          ...(message.contactSubmissionId ? [message.contactSubmissionId] : []),
         );
         if (!prepared) return this.failed('EMAIL_SUPPRESSED', false);
         outboundId = prepared;
@@ -72,9 +96,16 @@ export class EmailService implements OnModuleDestroy {
       }
       const result = await this.ses.send(
         new SendEmailCommand({
-          FromEmailAddress: this.config.from,
+          FromEmailAddress: from,
+          ...(replyTo ? { ReplyToAddresses: [replyTo] } : {}),
           Destination: { ToAddresses: [normalizeEmail(message.to)] },
-          EmailTags: [{ Name: 'orbit_delivery_id', Value: outboundId }],
+          EmailTags: [
+            { Name: 'orbit_delivery_id', Value: outboundId },
+            {
+              Name: 'orbit_category',
+              Value: message.category ?? 'TRANSACTIONAL',
+            },
+          ],
           ...(this.config.configurationSet
             ? { ConfigurationSetName: this.config.configurationSet }
             : {}),

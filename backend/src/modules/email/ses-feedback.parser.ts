@@ -37,11 +37,15 @@ export function parseSesFeedback(
   }
   const input = record(decoded),
     mail = record(input.mail);
+  const source =
+    typeof mail.source === 'string' ? normalizeEmail(mail.source) : '';
+  const expectedIdentity =
+    config.senderIdentities?.[source] ??
+    (source === config.from ? config.identityArn : undefined);
   if (
     mail.sendingAccountId !== config.accountId ||
-    mail.sourceArn !== config.identityArn ||
-    typeof mail.source !== 'string' ||
-    normalizeEmail(mail.source) !== config.from
+    !expectedIdentity ||
+    mail.sourceArn !== expectedIdentity
   )
     throw new SesFeedbackError('SES_IDENTITY_DENIED', 403);
   if (
@@ -111,7 +115,7 @@ export function parseSesFeedback(
   return {
     sesMessageId: mail.messageId,
     outboundId,
-    source: normalizeEmail(mail.source),
+    source,
     destination,
     recipients,
     kind,

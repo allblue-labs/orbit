@@ -6,6 +6,9 @@ export interface EmailInlineImage {
 }
 
 export interface EmailMessage {
+  category?: EmailCategory;
+  replyTo?: string;
+  contactSubmissionId?: string;
   to: string;
   subject: string;
   text: string;
@@ -22,3 +25,4 @@ export type EmailSendResult =
       code: string;
       retryable: boolean;
     };
+export type EmailCategory = 'TRANSACTIONAL' | 'INFORMATIONAL' | 'SUPPORT';

@@ -81,6 +81,7 @@ const TOKEN_ROUTES: readonly string[] = [
  */
 const PUBLIC_ENDPOINTS: ReadonlySet<string> = new Set([
   "GET /plans",
+  "POST /public/contact",
   "POST /identity/password/forgot",
   "POST /identity/password/reset",
   "POST /identity/password/reset/validate",

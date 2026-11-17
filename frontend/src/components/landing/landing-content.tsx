@@ -32,6 +32,7 @@
  * verificável: os módulos que existem e o que cada um faz.
  */
 import Link from "next/link";
+import { ContactSection } from "./contact-section";
 import {
   ArrowRight,
   CalendarClock,
@@ -319,6 +320,7 @@ const COLUNAS: {
   {
     titulo: "Suporte",
     itens: [
+      { rotulo: "Suporte e feedback", href: "#contato", externo: false },
       {
         rotulo: "Falar com a AllBlue Labs",
         href: "https://allblue-labs.com",
@@ -695,6 +697,7 @@ export function LandingContent({ catalog }: { catalog: PlanCatalog }) {
             </Button>
           </div>
         </section>
+        <ContactSection />
         <section
           id="app-mobile"
           aria-labelledby="app-mobile-title"

@@ -46,6 +46,7 @@ export class EmailTransportRepository {
     from: string,
     region: string,
     identityDeliveryId?: string,
+    contactSubmissionId?: string,
   ): Promise<string | null> {
     const recipientHash = this.hash(to);
     return this.transaction(async (tx) => {
@@ -59,6 +60,7 @@ export class EmailTransportRepository {
           sourceHash: this.hash(from),
           recipientHashes: [recipientHash],
           identityDeliveryId,
+          contactSubmissionId,
         },
       });
       return row.id;
@@ -74,6 +76,31 @@ export class EmailTransportRepository {
       const message = await tx.emailOutboundMessage.findFirst({
         where: {
           identityDeliveryId,
+          region,
+          status: 'ACCEPTED',
+          sourceHash: this.hash(from),
+          recipientHashes: { equals: [this.hash(to)] },
+        },
+        orderBy: { createdAt: 'asc' },
+        include: { providerMessages: { take: 1 } },
+      });
+      return (
+        message?.providerMessageId ??
+        message?.providerMessages[0]?.providerMessageId ??
+        null
+      );
+    });
+  }
+  acceptedContactDelivery(
+    contactSubmissionId: string,
+    to: string,
+    from: string,
+    region: string,
+  ) {
+    return this.transaction(async (tx) => {
+      const message = await tx.emailOutboundMessage.findFirst({
+        where: {
+          contactSubmissionId,
           region,
           status: 'ACCEPTED',
           sourceHash: this.hash(from),

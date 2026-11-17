@@ -49,6 +49,7 @@ describe("inspectPath", () => {
   );
   const quoteToken = "Ab3_".repeat(16);
   it.each([
+    ["/public/contact", "POST"],
     ["/identity/password/reset/validate", "POST"],
     ["/identity/email/verify", "POST"],
     ["/identity/email/resend", "POST"],
@@ -64,6 +65,8 @@ describe("inspectPath", () => {
   });
   it.each([
     ["/identity/email/verify", "GET"],
+    ["/public/contact", "GET"],
+    ["/public/contact/other", "POST"],
     ["/identity/password/reset/validate", "GET"],
     ["/identity/email/resend", "GET"],
     ["/identity/email/other", "POST"],

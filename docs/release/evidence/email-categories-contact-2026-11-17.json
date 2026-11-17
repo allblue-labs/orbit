@@ -1,0 +1,78 @@
+{
+  "date": "2026-11-17",
+  "baseline": "ceb244a",
+  "status": "LOCAL_QUALIFIED",
+  "tests": {
+    "backendUnit": {
+      "suites": 276,
+      "tests": 2312,
+      "passed": true
+    },
+    "frontendUnit": {
+      "files": 73,
+      "tests": 702,
+      "passed": true
+    },
+    "integration": {
+      "suites": 3,
+      "tests": 45,
+      "passed": true,
+      "database": "disposable PostgreSQL 17.11",
+      "restrictedRole": true,
+      "apiReplicas": 2
+    },
+    "browser": {
+      "tests": 12,
+      "passed": true,
+      "nextStandalone": true
+    },
+    "typescript": [
+      "backend",
+      "frontend"
+    ],
+    "eslintChangedFiles": true,
+    "prismaSchemaValid": true,
+    "productionFrontendBuild": true
+  },
+  "categories": {
+    "TRANSACTIONAL": "AWS_SES_FROM_TRANSACTIONAL_EMAIL",
+    "INFORMATIONAL": "AWS_SES_FROM_INFORMATIONAL_EMAIL",
+    "SUPPORT": "AWS_SES_FROM_SUPPORT_EMAIL"
+  },
+  "contact": {
+    "recipientEnv": "ORBIT_SUPPORT_TO_EMAIL",
+    "defaultRecipient": "contato@allblue-labs.com",
+    "replyTo": "validated visitor email",
+    "automaticVisitorEmail": false,
+    "createsAccount": false,
+    "durableQueue": true,
+    "encryptedPayload": true,
+    "forceRls": true,
+    "idempotentSubmit": true,
+    "providerAcceptanceDeduplicated": true,
+    "limits": {
+      "perEmailPerHour": 3,
+      "perOriginPerHour": 5,
+      "globalRolling24h": 100
+    },
+    "maxAttempts": 6,
+    "maxDeliveryAgeDays": 7,
+    "terminalMetadataRetentionDays": 30,
+    "clearPayloadOnFinalization": true
+  },
+  "feedback": {
+    "exactSenderIdentityMap": true,
+    "legacySenderPreserved": true,
+    "noWildcards": true,
+    "readOnlyAwsPreflightSendersVerified": 4,
+    "region": "us-east-2"
+  },
+  "migration": "20261117210000_public_contact_delivery",
+  "localEnvSecretsPreserved": true,
+  "localEnvFileModes": {
+    ".env": "600",
+    "backend/.env": "600"
+  },
+  "realEmailsSentByLocalTests": 0,
+  "gitPush": false
+}

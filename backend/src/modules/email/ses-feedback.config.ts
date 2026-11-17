@@ -9,6 +9,7 @@ export interface SesFeedbackConfiguration {
   identityArn: string;
   from: string;
   hashKey: string;
+  senderIdentities?: Readonly<Record<string, string>>;
 }
 export const SES_FEEDBACK_CONFIGURATION = Symbol('SES_FEEDBACK_CONFIGURATION');
 export const SES_SNS_CLIENT = Symbol('SES_SNS_CLIENT');
@@ -66,13 +67,53 @@ export function sesFeedbackConfiguration(
     throw new Error(
       'SES feedback identity must match the configured sender, region and account',
     );
+  const email = emailConfiguration(env);
+  let mapped: unknown = {};
+  try {
+    mapped = JSON.parse(env.AWS_SES_FEEDBACK_SENDER_IDENTITIES?.trim() || '{}');
+  } catch {
+    throw new Error('AWS_SES_FEEDBACK_SENDER_IDENTITIES must be a JSON object');
+  }
+  if (!mapped || typeof mapped !== 'object' || Array.isArray(mapped))
+    throw new Error('AWS_SES_FEEDBACK_SENDER_IDENTITIES must be a JSON object');
+  const identities: Record<string, string> = {
+    [config.from]: config.identityArn,
+  };
+  const senders = new Set([
+    config.from,
+    ...Object.values(email.routes ?? {})
+      .map((route) => route.from)
+      .filter((v): v is string => !!v),
+  ]);
+  for (const [sender, arn] of Object.entries(mapped)) {
+    const domain = sender.slice(sender.lastIndexOf('@') + 1);
+    if (
+      !senders.has(sender) ||
+      typeof arn !== 'string' ||
+      !arn.startsWith(identityPrefix) ||
+      ![sender, domain].includes(arn.slice(identityPrefix.length))
+    )
+      throw new Error(
+        'SES sender identity must match an explicit configured address, account and region',
+      );
+    if (sender === config.from && arn !== config.identityArn)
+      throw new Error(
+        'SES default identity conflicts with sender identity map',
+      );
+    identities[sender] = arn;
+  }
+  for (const sender of senders)
+    if (!identities[sender])
+      throw new Error(
+        'Resolve each category sender in AWS_SES_FEEDBACK_SENDER_IDENTITIES before enabling feedback',
+      );
   if (
     !/^[A-Za-z0-9_-]{1,64}$/.test(env.AWS_SES_CONFIGURATION_SET?.trim() ?? '')
   )
     throw new Error(
       'AWS_SES_CONFIGURATION_SET is required for SES feedback correlation',
     );
-  return config;
+  return { ...config, senderIdentities: identities };
 }
 
 export function createSesSnsClient(

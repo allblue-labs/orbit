@@ -148,6 +148,7 @@ describe('EmailService / Amazon SES', () => {
           Name: 'orbit_delivery_id',
           Value: '00000000-0000-7000-8000-000000000001',
         },
+        { Name: 'orbit_category', Value: 'TRANSACTIONAL' },
       ],
       Destination: { ToAddresses: [message.to] },
       Content: {
@@ -266,6 +267,12 @@ describe('EmailService / Amazon SES', () => {
       secretAccessKey: 'env-secret',
       from: 'no-reply@example.test',
       sessionToken: undefined,
+      routes: {
+        TRANSACTIONAL: { from: 'no-reply@example.test' },
+        INFORMATIONAL: { from: 'no-reply@example.test', replyTo: undefined },
+        SUPPORT: { from: 'no-reply@example.test', replyTo: undefined },
+      },
+      supportInbox: 'contato@allblue-labs.com',
     });
     expect(emailConfiguration({ NODE_ENV: 'production' }).provider).toBe('ses');
     expect(emailConfiguration({ NODE_ENV: 'development' }).provider).toBe(

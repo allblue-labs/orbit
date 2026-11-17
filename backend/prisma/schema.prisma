@@ -264,6 +264,8 @@ model EmailOutboundMessage {
   sourceHash         String                 @map("source_hash") @db.Char(64)
   recipientHashes    String[]               @map("recipient_hashes")
   identityDeliveryId String?                @map("identity_delivery_id") @db.Uuid
+  contactSubmissionId String? @map("contact_submission_id") @db.Uuid
+  contactSubmission PublicContactSubmission? @relation(fields: [contactSubmissionId], references: [id], onDelete: SetNull)
   providerMessageId  String?                @map("provider_message_id") @db.VarChar(255)
   status             String                 @default("PREPARED") @db.VarChar(20)
   feedbackStatus     String                 @default("UNOBSERVED") @map("feedback_status") @db.VarChar(20)
@@ -277,6 +279,7 @@ model EmailOutboundMessage {
   @@unique([id, region])
   @@unique([region, providerMessageId])
   @@index([identityDeliveryId])
+  @@index([contactSubmissionId])
   @@map("email_outbound_messages")
 }
 
@@ -5164,4 +5167,24 @@ model AccountEmailOwner {
   registrationOrganizationId String @unique @map("registration_organization_id") @db.Uuid
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   @@map("account_email_owners")
+}
+
+model PublicContactSubmission {
+  id String @id @default(uuid(7)) @db.Uuid
+  requestKey String @unique @map("request_key") @db.Char(64)
+  payloadHash String @map("payload_hash") @db.Char(64)
+  encryptedPayload String? @map("encrypted_payload")
+  status String @default("PENDING") @db.VarChar(20)
+  attempts Int @default(0)
+  availableAt DateTime @default(now()) @map("available_at") @db.Timestamptz(3)
+  lockedAt DateTime? @map("locked_at") @db.Timestamptz(3)
+  leaseId String? @map("lease_id") @db.Uuid
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+  acceptedAt DateTime? @map("accepted_at") @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  outboundMessages EmailOutboundMessage[]
+  @@index([status, availableAt])
+  @@index([createdAt])
+  @@map("public_contact_submissions")
 }

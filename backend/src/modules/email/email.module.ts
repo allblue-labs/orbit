@@ -39,6 +39,6 @@ import { SnsCertificateFetcher } from './sns-certificate.fetcher';
     },
     EmailService,
   ],
-  exports: [EmailService],
+  exports: [EmailService, EMAIL_CONFIGURATION],
 })
 export class EmailModule {}
