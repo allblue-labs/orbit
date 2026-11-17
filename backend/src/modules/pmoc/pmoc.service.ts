@@ -308,6 +308,7 @@ export class PmocService {
       createdById: actor.actorId,
       expectedVersion: plan.updatedAt,
       documentBucket: this.storage.defaultBucket,
+      documentProvider: this.storage.name,
       documentObjectKey,
       documentSha256: createHash('sha256').update(document.bytes).digest('hex'),
       publicSummary: {

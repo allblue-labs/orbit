@@ -41,6 +41,7 @@ describe('Operation responsible and auxiliary technicians (e2e)', () => {
   let unitId: string;
   let ownerId: string;
   let auxiliaryId: string;
+  let foreignTechnicianId: string;
 
   const api = () => request(app.getHttpServer());
   const auth = (test: request.Test) =>
@@ -96,7 +97,7 @@ describe('Operation responsible and auxiliary technicians (e2e)', () => {
     ownerId = organization.ownerUserId;
     unitId = organization.businessUnits[0]!.id;
     const role = await prisma.role.findFirstOrThrow({
-      where: { organizationId },
+      where: { organizationId, key: 'FIELD_TECHNICIAN' },
       select: { id: true },
     });
     auxiliaryId = generateUuidV7();
@@ -134,6 +135,85 @@ describe('Operation responsible and auxiliary technicians (e2e)', () => {
         },
       ],
       skipDuplicates: true,
+    });
+    await prisma.professionalProfile.updateMany({
+      where: { organizationId, userId: { in: [ownerId, auxiliaryId] } },
+      data: { fieldTechnicianEnabled: true },
+    });
+    // Own the foreign fixture: never depend on another test file leaving a tenant behind.
+    const foreignEmail = `assignment.foreign.${randomUUID()}@orbit.local`;
+    const foreignUser = await prisma.user.create({
+      data: {
+        email: foreignEmail,
+        normalizedEmail: foreignEmail,
+        firstName: 'Foreign',
+        lastName: 'Technician',
+        displayName: 'Foreign technician',
+        status: 'ACTIVE',
+      },
+    });
+    foreignTechnicianId = foreignUser.id;
+    const origin = await prisma.organization.findUniqueOrThrow({
+      where: { id: organizationId },
+    });
+    const foreignOrg = await prisma.organization.create({
+      data: {
+        ownerUserId: foreignUser.id,
+        planId: origin.planId,
+        slug: `assignment-foreign-${randomUUID()}`,
+        displayName: 'Foreign fixture',
+        primarySegment: 'HVAC',
+        status: 'ACTIVE',
+        subscriptionStatus: 'ACTIVE',
+      },
+    });
+    const foreignUnit = await prisma.businessUnit.create({
+      data: {
+        organizationId: foreignOrg.id,
+        slug: 'matriz',
+        type: 'HEADQUARTERS',
+        isPrimary: true,
+        legalName: 'Foreign fixture',
+        documentType: 'CNPJ',
+        documentNumber: cnpj(),
+        city: 'Recife',
+        street: 'Rua B',
+        status: 'ACTIVE',
+      },
+    });
+    const currentRole = await prisma.role.findUniqueOrThrow({
+      where: { id: role.id },
+    });
+    const foreignRole = await prisma.role.create({
+      data: {
+        organizationId: foreignOrg.id,
+        key: 'FIELD_TECHNICIAN',
+        name: 'Field technician',
+        permissions: currentRole.permissions,
+        allowedSurfaces: currentRole.allowedSurfaces,
+      },
+    });
+    await prisma.organizationMembership.create({
+      data: {
+        organizationId: foreignOrg.id,
+        userId: foreignUser.id,
+        roleId: foreignRole.id,
+      },
+    });
+    await prisma.businessUnitMembership.create({
+      data: {
+        organizationId: foreignOrg.id,
+        businessUnitId: foreignUnit.id,
+        userId: foreignUser.id,
+        roleId: foreignRole.id,
+      },
+    });
+    await prisma.professionalProfile.create({
+      data: {
+        organizationId: foreignOrg.id,
+        userId: foreignUser.id,
+        fieldTechnicianEnabled: true,
+      },
     });
   });
 
@@ -196,21 +276,13 @@ describe('Operation responsible and auxiliary technicians (e2e)', () => {
   });
 
   it('fails closed for a cross-tenant technician', async () => {
-    const foreign = await prisma.user.findFirstOrThrow({
-      where: {
-        organizationMemberships: {
-          some: { organizationId: { not: organizationId } },
-        },
-      },
-      select: { id: true },
-    });
     await auth(api().post('/api/v1/operations'))
       .send({
         businessUnitId: unitId,
         code: `OS-X-${Date.now()}`,
         kind: 'MAINTENANCE',
         title: 'Cross tenant',
-        responsibleFieldTechnicianId: foreign.id,
+        responsibleFieldTechnicianId: foreignTechnicianId,
       })
       .expect(400);
   });

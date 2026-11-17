@@ -1,3 +1,5 @@
+import { OutboundModule } from '../../network/outbound.module';
+import { PublicMediaCacheService } from './public-media-cache.service';
 import { UploadBudgetService } from './upload-budget.service';
 import { UploadLimitsInterceptor } from './upload-limits.interceptor';
 import { StorageUploadGuard } from './storage-upload.guard';
@@ -60,7 +62,7 @@ export function createStorageProvider(config: StorageConfig): StorageProvider {
 
 @Global()
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, OutboundModule],
   controllers: [StorageObjectController],
   providers: [
     { provide: STORAGE_CONFIG, useFactory: loadStorageConfig },
@@ -75,6 +77,7 @@ export function createStorageProvider(config: StorageConfig): StorageProvider {
     ImageOptimizationService,
     BrandImageService,
     StorageCleanupService,
+    PublicMediaCacheService,
     StorageUploadGuard,
     UploadBudgetService,
     UploadLimitsInterceptor,
@@ -86,6 +89,7 @@ export function createStorageProvider(config: StorageConfig): StorageProvider {
     ImageOptimizationService,
     BrandImageService,
     StorageCleanupService,
+    PublicMediaCacheService,
     StorageUploadGuard,
     UploadBudgetService,
     UploadLimitsInterceptor,

@@ -214,6 +214,17 @@ plano de identidade, sem simplesmente habilitar RLS em tabelas globais e quebrar
 
 ### PR-13 — Retenção física e providers
 
+**Implementação local concluída em 17/11/2026.**
+[Relatório](pr-13-storage-retention.md) e
+[evidências](evidence/pr-13-storage-retention.json): 273 suítes/2.278 testes
+unitários, 52 suítes/670 E2E, 77 testes LOCAL/MinIO/S3/R2, build/TypeScript/lint e
+contratos aprovados. Retenção com ledger/outbox durável, proteção a reativação e
+escritas em andamento, legado com proveniência e purge direcionado de cache.
+Sem push, merge, deploy ou purge real. Rollout exige preflight/atestado de legado,
+token Cloudflare de cache e aceite da política externa de backup/restore.
+A qualificação integral permanece condicionada à PR-19.
+
+
 Reconciliar a exclusão operacional após 30 dias com `remove` de S3/MinIO, anexos e
 documentos legados, órfãos e a outbox de exclusão. Preservar acesso até o prazo
 contratado e abortar purge diante de reativação/pagamento em reconciliação.

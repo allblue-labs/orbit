@@ -159,6 +159,8 @@ export class SubscriptionRepository {
     transaction?: PrismaTransactionClient,
   ): Promise<SubscriptionRow | null> {
     const trabalho = async (tx: PrismaTransactionClient) => {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(organization_id::text, 0))::text
+        FROM organization_subscriptions WHERE id=${id}::uuid`;
       const { count } = await tx.organizationSubscription.updateMany({
         where: { id, version: expectedVersion },
         data: {

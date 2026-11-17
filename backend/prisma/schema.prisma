@@ -1903,6 +1903,8 @@ model OperationHistory {
 }
 
 model OperationAttachment {
+  storageProvider String? @map("storage_provider") @db.VarChar(40)
+  storageBucket String? @map("storage_bucket") @db.VarChar(160)
   id           String    @id @default(uuid(7)) @db.Uuid
   operationId  String    @map("operation_id") @db.Uuid
   uploadedById String    @map("uploaded_by_id") @db.Uuid
@@ -2205,6 +2207,8 @@ model ArtifactExecutionResponse {
 }
 
 model ArtifactExecutionAttachment {
+  storageProvider String? @map("storage_provider") @db.VarChar(40)
+  storageBucket String? @map("storage_bucket") @db.VarChar(160)
   id             String                     @id @default(uuid(7)) @db.Uuid
   organizationId String                     @map("organization_id") @db.Uuid
   executionId    String                     @map("execution_id") @db.Uuid
@@ -2670,6 +2674,7 @@ model Report {
 }
 
 model GeneratedDocument {
+  storageProvider String? @map("storage_provider") @db.VarChar(40)
   id             String   @id @default(uuid(7)) @db.Uuid
   organizationId String   @map("organization_id") @db.Uuid
   reportId       String   @map("report_id") @db.Uuid
@@ -4455,6 +4460,7 @@ model PmocUnit {
 /// Só o SHA-256 dele, como em `customer_portal_invitations`. Vazando o banco, ninguém
 /// assina em nome de ninguém: o segredo existe uma vez, na resposta que o dono copia.
 model PmocPlanSignatureLink {
+  documentProvider String? @map("document_provider") @db.VarChar(40)
   id             String    @id @default(uuid(7)) @db.Uuid
   organizationId String    @map("organization_id") @db.Uuid
   planId         String    @map("plan_id") @db.Uuid
@@ -5005,14 +5011,22 @@ model OrganizationLegalAcceptance {
 
 /// Outbox: remoção de arquivo é repetida até o storage confirmar a exclusão.
 model StorageDeletionJob {
-  id             String   @id @default(uuid(7)) @db.Uuid
-  organizationId String   @map("organization_id") @db.Uuid
-  provider       String   @db.VarChar(40)
-  bucket         String   @db.VarChar(160)
-  objectKey      String   @map("object_key") @db.VarChar(1024)
-  attempts       Int      @default(0)
-  nextAttemptAt  DateTime @default(now()) @map("next_attempt_at") @db.Timestamptz(3)
-  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  id              String    @id @default(uuid(7)) @db.Uuid
+  organizationId  String    @map("organization_id") @db.Uuid
+  provider        String    @db.VarChar(40)
+  bucket          String    @db.VarChar(160)
+  objectKey       String    @map("object_key") @db.VarChar(1024)
+  attempts        Int       @default(0)
+  nextAttemptAt   DateTime  @default(now()) @map("next_attempt_at") @db.Timestamptz(3)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  status          String    @default("PENDING") @db.VarChar(40)
+  reason          String    @default("CLEANUP") @db.VarChar(40)
+  purgeId         String?   @map("purge_id") @db.Uuid
+  leaseToken      String?   @map("lease_token") @db.Uuid
+  leaseUntil      DateTime? @map("lease_until") @db.Timestamptz(3)
+  completedAt     DateTime? @map("completed_at") @db.Timestamptz(3)
+  originDeletedAt DateTime? @map("origin_deleted_at") @db.Timestamptz(3)
+  lastErrorCode   String?   @map("last_error_code") @db.VarChar(80)
 
   @@unique([provider, bucket, objectKey])
   @@index([nextAttemptAt], map: "storage_deletion_jobs_due_idx")
@@ -5124,4 +5138,22 @@ model StorageUploadAdmission {
   storageFile StorageFile? @relation(fields: [storageFileId, organizationId], references: [id, organizationId], onDelete: Cascade)
   @@index([organizationId, expiresAt])
   @@map("storage_upload_admissions")
+}
+
+model TenantDataPurge {
+  id               String    @id @default(uuid(7)) @db.Uuid
+  organizationId   String    @map("organization_id") @db.Uuid
+  subscriptionId   String    @map("subscription_id") @db.Uuid
+  retentionEndsAt  DateTime  @map("retention_ends_at") @db.Timestamptz(3)
+  status           String    @default("PREPARING") @db.VarChar(40)
+  claimedAt        DateTime  @default(now()) @map("claimed_at") @db.Timestamptz(3)
+  databasePurgedAt DateTime? @map("database_purged_at") @db.Timestamptz(3)
+  completedAt      DateTime? @map("completed_at") @db.Timestamptz(3)
+  objectCount      Int       @default(0) @map("object_count")
+  lastErrorCode    String?   @map("last_error_code") @db.VarChar(80)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([id, organizationId])
+  @@unique([organizationId, subscriptionId, retentionEndsAt])
+  @@map("tenant_data_purges")
 }

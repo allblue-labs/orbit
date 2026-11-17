@@ -159,7 +159,12 @@ async function main() {
           if (apply) {
             if (kind === 'documents')
               await client.query(
-                'UPDATE generated_documents SET storage_bucket=$1 WHERE id=$2',
+                "UPDATE generated_documents SET storage_bucket=$1,storage_provider='R2' WHERE id=$2",
+                [config.bucket, file.id],
+              );
+            if (kind === 'attachments')
+              await client.query(
+                "UPDATE operation_attachments SET storage_provider='R2',storage_bucket=$1 WHERE id=$2",
                 [config.bucket, file.id],
               );
             migrated++;
@@ -187,7 +192,7 @@ async function main() {
       );
       if (apply) {
         await client.query(
-          'UPDATE pmoc_plan_signature_links SET document_bucket=$1 WHERE id=$2',
+          "UPDATE pmoc_plan_signature_links SET document_bucket=$1,document_provider='R2' WHERE id=$2",
           [config.bucket, link.id],
         );
         migrated++;

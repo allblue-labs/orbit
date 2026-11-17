@@ -9,6 +9,8 @@ import {
 import { ImageOptimizationService } from '../storage/image-optimization.service';
 export interface StoredOperationFile {
   storageKey: string;
+  storageProvider: string;
+  storageBucket: string;
   checksum: string;
   size: number;
   mimeType: string;
@@ -44,6 +46,8 @@ export class OperationStorageService {
     });
     return {
       storageKey,
+      storageProvider: this.provider.name,
+      storageBucket: this.provider.defaultBucket,
       checksum: createHash('sha256').update(body).digest('hex'),
       size: body.length,
       mimeType,

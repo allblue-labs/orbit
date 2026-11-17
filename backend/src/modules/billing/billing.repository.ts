@@ -142,6 +142,8 @@ export class BillingRepository {
   }
   async atomic<T>(work: () => Promise<T>): Promise<T> {
     return this.rls.runAmbient(async (tx) => {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(current_setting('app.organization_id', true), 0))::text
+        WHERE nullif(current_setting('app.organization_id', true), '') IS NOT NULL`;
       const claim = this.claimed.getStore();
       if (claim)
         await tx.$queryRaw`SELECT billing_assert_event_lease(${claim.id}::uuid, ${claim.processingToken}::uuid)::text`;

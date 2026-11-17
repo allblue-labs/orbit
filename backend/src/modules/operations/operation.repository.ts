@@ -965,7 +965,12 @@ export class OperationRepository {
     return this.rls.run(async (transaction) => {
       const attachment = await transaction.operationAttachment.create({
         data,
-        omit: { storageKey: true, deletedAt: true },
+        omit: {
+          storageKey: true,
+          storageProvider: true,
+          storageBucket: true,
+          deletedAt: true,
+        },
       });
       await transaction.operationHistory.create({
         data: {

@@ -46,7 +46,7 @@ try {
   console.log(JSON.stringify({ stage: 'storage-integrity', minioSourceRelease: release, realCloudAccess: false }));
   await withIntegrationEnvironment(async ({ env }) => {
     Object.assign(env, { ORBIT_MINIO_TEST_ENDPOINT: endpoint, ORBIT_MINIO_TEST_ACCESS_KEY: credentials.accessKeyId, ORBIT_MINIO_TEST_SECRET_KEY: credentials.secretAccessKey });
-    await run('npm', ['run','test:e2e:jest','--','--runInBand','--watchman=false','--testPathPatterns=storage-integrity|mobile-evidence|avatar'], { cwd: backend, env });
+    await run('npm', ['run','test:e2e:jest','--','--runInBand','--watchman=false','--testPathPatterns=storage-integrity|storage-retention|mobile-evidence|avatar'], { cwd: backend, env });
   }, { postgresTmpfs: true });
 } finally {
   if (child && child.exitCode === null && !child.killed) {

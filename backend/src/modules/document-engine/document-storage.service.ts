@@ -20,6 +20,7 @@ export class DocumentStorageService {
     });
     return {
       storageBucket: this.provider.defaultBucket,
+      storageProvider: this.provider.name,
       storageKey,
       sizeBytes: BigInt(buffer.length),
       sha256: createHash('sha256').update(buffer).digest('hex'),

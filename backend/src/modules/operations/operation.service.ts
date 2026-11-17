@@ -647,6 +647,8 @@ export class OperationService {
           mimeType: stored.mimeType || 'application/octet-stream',
           size: stored.size,
           storageKey: stored.storageKey,
+          storageProvider: stored.storageProvider,
+          storageBucket: stored.storageBucket,
           checksum: stored.checksum,
         },
         actorId,

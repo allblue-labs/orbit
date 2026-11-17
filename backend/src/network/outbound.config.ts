@@ -1,7 +1,7 @@
 import { isIP } from 'node:net';
 import { isPrivateRouteAddress } from './outbound-address';
 
-export type OutboundPurpose = 'AI' | 'WEB_PUSH';
+export type OutboundPurpose = 'AI' | 'WEB_PUSH' | 'CACHE_PURGE';
 export interface PrivateRoute {
   origin: string;
   addresses: readonly string[];

@@ -84,6 +84,7 @@ export class S3CompatibleStorageProvider
           Bucket: this.bucket(ref.bucket),
           Key: ref.objectKey,
         }),
+        { abortSignal: AbortSignal.timeout(45_000) },
       );
       if (!result.Body) throw new Error('Empty object body');
       return Buffer.from(await result.Body.transformToByteArray());
@@ -97,6 +98,7 @@ export class S3CompatibleStorageProvider
             Bucket: this.bucket(ref.bucket),
             Key: ref.objectKey,
           }),
+          { abortSignal: AbortSignal.timeout(45_000) },
         );
         return {
           ...ref,
@@ -120,6 +122,7 @@ export class S3CompatibleStorageProvider
           Bucket: this.bucket(ref.bucket),
           Key: ref.objectKey,
         }),
+        { abortSignal: AbortSignal.timeout(45_000) },
       ),
     );
   }

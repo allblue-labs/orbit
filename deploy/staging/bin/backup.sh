@@ -18,6 +18,26 @@ if [[ -n "$api_running" ]]; then
 fi
 "${compose[@]}" exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom' > "$target/database.dump"
 "${compose[@]}" exec -T postgres sh -c 'pg_restore --list' < "$target/database.dump" > "$target/database.contents"
+# Preserve a minimal deletion ledger independently of an older database restore.
+# Only IDs, timestamps and object locators; no document contents or secrets.
+ledger_table=$("${compose[@]}" exec -T postgres sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At' <<'SQL'
+SELECT to_regclass('public.tenant_data_purges') IS NOT NULL;
+SQL
+)
+if [[ "$ledger_table" == "t" ]]; then
+    "${compose[@]}" exec -T postgres sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At' > "$target/retention-ledger.jsonl" <<'SQL'
+SELECT jsonb_build_object('kind','purge','organizationId',organization_id,'id',id,
+  'retentionEndsAt',retention_ends_at,'databasePurgedAt',database_purged_at,
+  'completedAt',completed_at,'status',status)
+FROM tenant_data_purges WHERE database_purged_at IS NOT NULL
+UNION ALL
+SELECT jsonb_build_object('kind','object','organizationId',organization_id,
+  'purgeId',purge_id,'provider',provider,'bucket',bucket,'objectKey',object_key,'status',status)
+FROM storage_deletion_jobs WHERE reason='RETENTION';
+SQL
+    cp "$target/retention-ledger.jsonl" /var/backups/orbit/retention-ledger-latest.jsonl.tmp
+    mv /var/backups/orbit/retention-ledger-latest.jsonl.tmp /var/backups/orbit/retention-ledger-latest.jsonl
+fi
 # R2 objects are not on this server. Back up buckets separately; the database
 # snapshot preserves their keys and SHA-256 values. Legacy volumes remain untouched.
 cp docker-compose.yml "$target/"

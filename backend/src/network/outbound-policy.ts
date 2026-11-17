@@ -67,7 +67,11 @@ export class OutboundPolicy {
       purpose === 'AI' &&
       this.config.privateAiRoutes.some((r) => r.origin === url.origin);
     const origins =
-      purpose === 'AI' ? this.config.aiOrigins : this.config.pushOrigins;
+      purpose === 'AI'
+        ? this.config.aiOrigins
+        : purpose === 'CACHE_PURGE'
+          ? ['https://api.cloudflare.com']
+          : this.config.pushOrigins;
     if (!privateRoute && !origins.includes(url.origin))
       throw new OutboundDenied('ORIGIN_DENIED');
     return url;

@@ -32,13 +32,12 @@ function fixture() {
     retrieveCheckoutSession: jest.fn(),
     expireCheckoutSession: jest.fn(),
   };
-  const files = { remove: jest.fn() };
+  const files = { drain: jest.fn() };
   return {
     service: new SubscriptionDataRetentionService(
       prisma as never,
       provider as never,
       files as never,
-      { name: 'LOCAL' } as never,
     ),
     tx,
     provider,
@@ -56,7 +55,7 @@ describe('automatic cancellation retention safeguards', () => {
     await service.run();
     expect(provider.retrieveSubscription).not.toHaveBeenCalled();
     expect(tx.organizationSubscription.update).not.toHaveBeenCalled();
-    expect(tx.$queryRaw).toHaveBeenCalledTimes(3);
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(2);
   });
   it('continues scanning when the first page is waiting for financial confirmation', async () => {
     const { service, tx, provider } = fixture();
@@ -93,7 +92,7 @@ describe('automatic cancellation retention safeguards', () => {
       expect.objectContaining({ where: { dataRetentionEndsAt: { lte: at } } }),
     );
     expect(provider.retrieveSubscription).toHaveBeenCalledWith('sub_remote');
-    expect(tx.$queryRaw).toHaveBeenCalledTimes(3); // Scoped reads, no claim/purge.
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(2); // Scoped reads, no claim/purge.
   });
 
   it.each(['COMPLETE', 'UNKNOWN'])(
@@ -108,7 +107,7 @@ describe('automatic cancellation retention safeguards', () => {
       await service.run();
       expect(provider.expireCheckoutSession).not.toHaveBeenCalled();
       expect(tx.billingCheckoutAttempt.updateMany).not.toHaveBeenCalled();
-      expect(tx.$queryRaw).toHaveBeenCalledTimes(3);
+      expect(tx.$queryRaw).toHaveBeenCalledTimes(2);
     },
   );
 
@@ -123,44 +122,11 @@ describe('automatic cancellation retention safeguards', () => {
     expect(tx.billingCheckoutAttempt.updateMany).not.toHaveBeenCalled();
   });
 
-  it('deletes a queued object before acknowledging its removal', async () => {
+  it('delegates physical cleanup to the shared leased consumer', async () => {
     const { service, tx, files } = fixture();
     tx.organizationSubscription.findMany.mockResolvedValue([]);
-    tx.storageDeletionJob.findMany.mockResolvedValue([
-      { id: 'job', provider: 'LOCAL', bucket: 'bucket', objectKey: 'key' },
-    ]);
     await service.run();
-    expect(files.remove).toHaveBeenCalledWith('bucket', 'key');
-    expect(tx.storageDeletionJob.deleteMany).toHaveBeenCalledWith({
-      where: { id: 'job' },
-    });
-    expect(files.remove.mock.invocationCallOrder[0]).toBeLessThan(
-      tx.storageDeletionJob.deleteMany.mock.invocationCallOrder[0]!,
-    );
-  });
-
-  it('retries storage failures without losing the only object reference', async () => {
-    const { service, tx, files } = fixture();
-    const at = new Date('2026-10-23T12:00:00Z');
-    tx.organizationSubscription.findMany.mockResolvedValue([]);
-    tx.storageDeletionJob.findMany.mockResolvedValue([
-      {
-        id: 'job',
-        provider: 'LOCAL',
-        bucket: 'bucket',
-        objectKey: 'key',
-        attempts: 0,
-      },
-    ]);
-    files.remove.mockRejectedValue(new Error('storage unavailable'));
-    await service.run(at);
-    expect(tx.storageDeletionJob.deleteMany).not.toHaveBeenCalled();
-    expect(tx.storageDeletionJob.updateMany).toHaveBeenCalledWith({
-      where: { id: 'job' },
-      data: {
-        attempts: { increment: 1 },
-        nextAttemptAt: new Date(at.getTime() + 60_000),
-      },
-    });
+    expect(files.drain).toHaveBeenCalledTimes(1);
+    expect(tx.storageDeletionJob.findMany).not.toHaveBeenCalled();
   });
 });

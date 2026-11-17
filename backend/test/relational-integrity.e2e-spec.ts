@@ -179,7 +179,7 @@ describe('PR-12 — real PostgreSQL relational boundaries and safe upgrade', () 
     }>('SELECT rolsuper,rolbypassrls FROM pg_roles WHERE rolname=current_user');
     expect(role.rows[0]).toEqual({ rolsuper: false, rolbypassrls: false });
     const rows = await db.query<{ name: string }>(
-      "SELECT conname AS name FROM pg_constraint c JOIN pg_namespace n ON n.oid=c.connamespace WHERE n.nspname='public' AND contype='f' AND conname NOT LIKE 'pr12_%'",
+      "SELECT conname AS name FROM pg_constraint c JOIN pg_namespace n ON n.oid=c.connamespace WHERE n.nspname='public' AND contype='f' AND conname NOT LIKE 'pr12_%' AND conname NOT LIKE 'pr13_%'",
     );
     expect(rows.rows.map((r) => r.name).sort()).toEqual(
       manifest.baselineForeignKeys.map((r) => r.conname).sort(),

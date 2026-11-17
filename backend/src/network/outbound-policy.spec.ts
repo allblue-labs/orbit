@@ -181,4 +181,22 @@ describe('OutboundPolicy — no network', () => {
     expect(sameAddress('fd00::1', 'fd00:0:0:0:0:0:0:1')).toBe(true);
     expect(sameAddress(public4, '127.0.0.1')).toBe(false);
   });
+  it('allows cache purge only on the fixed Cloudflare origin with public DNS', async () => {
+    await expect(
+      policy().authorize(
+        'CACHE_PURGE',
+        'https://api.cloudflare.com/client/v4/zones/id/purge_cache',
+      ),
+    ).resolves.toBeDefined();
+    await expect(
+      policy().authorize('CACHE_PURGE', 'https://push.example.test/'),
+    ).rejects.toThrow();
+    dns.resolve.mockResolvedValue([{ address: '127.0.0.1', family: 4 }]);
+    await expect(
+      policy().authorize(
+        'CACHE_PURGE',
+        'https://api.cloudflare.com/client/v4/zones/id/purge_cache',
+      ),
+    ).rejects.toThrow();
+  });
 });

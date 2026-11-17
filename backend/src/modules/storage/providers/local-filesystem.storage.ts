@@ -97,8 +97,15 @@ export class LocalFilesystemStorageProvider implements StorageProvider {
         sizeBytes: info.size,
         mimeType: null,
       };
-    } catch {
-      return null;
+    } catch (error) {
+      if (
+        error &&
+        typeof error === 'object' &&
+        'code' in error &&
+        error.code === 'ENOENT'
+      )
+        return null;
+      throw new InfrastructureException('Unable to inspect the storage object');
     }
   }
 
@@ -182,7 +189,11 @@ export class LocalFilesystemStorageProvider implements StorageProvider {
   private resolvePath(ref: StorageObjectRef): string {
     const base = resolve(this.root, ref.bucket);
     const path = resolve(base, ref.objectKey);
-    if (path !== base && !path.startsWith(`${base}${sep}`)) {
+    if (
+      !base.startsWith(`${resolve(this.root)}${sep}`) ||
+      path === base ||
+      !path.startsWith(`${base}${sep}`)
+    ) {
       throw new InfrastructureException('Invalid storage object key');
     }
     return path;

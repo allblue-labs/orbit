@@ -307,6 +307,7 @@ export class PmocRepository {
     expectedVersion: Date;
     publicSummary: Prisma.InputJsonValue;
     documentBucket: string;
+    documentProvider: string;
     documentObjectKey: string;
     documentSha256: string;
   }) {
@@ -345,6 +346,7 @@ export class PmocRepository {
           createdById: data.createdById,
           publicSummary: data.publicSummary,
           documentBucket: data.documentBucket,
+          documentProvider: data.documentProvider,
           documentObjectKey: data.documentObjectKey,
           documentSha256: data.documentSha256,
         },

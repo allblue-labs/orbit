@@ -1,7 +1,7 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { RlsTransaction } from '../../database';
 import { generateUuidV7 } from '../../utils';
-import { BaseException } from '../../exceptions';
+import { BaseException, ForbiddenException } from '../../exceptions';
 
 export const UPLOAD_LIMITS = Object.freeze({
   process: 8,
@@ -39,6 +39,19 @@ export class UploadBudgetService {
     try {
       await this.rls.run(async (tx) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'upload-budget:' + organizationId},0))`;
+        const organization = await tx.organization.findUnique({
+          where: { id: organizationId },
+          select: { dataPurgeStartedAt: true, dataPurgedAt: true },
+        });
+        if (
+          !organization ||
+          organization.dataPurgeStartedAt ||
+          organization.dataPurgedAt
+        )
+          throw new ForbiddenException(
+            'O envio não está disponível para esta organização.',
+            'ORGANIZATION_UNAVAILABLE',
+          );
         await tx.$executeRaw`DELETE FROM storage_upload_admissions WHERE organization_id=${organizationId}::uuid AND expires_at<=now()`;
         const rows = await tx.storageUploadAdmission.findMany({
           where: { organizationId },
