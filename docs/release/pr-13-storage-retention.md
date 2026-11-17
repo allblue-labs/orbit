@@ -1,6 +1,7 @@
 # PR-13 — Retenção operacional e exclusão física de mídia
 
 Achado **F13**, base limpa `f7bdc7d`, implementação local em 17/11/2026.
+Commit de implementação: `a23e9c2fccccc87c8b5c4d28d049dd6c486f3c11`.
 Sem push, merge, deploy, purge real ou acesso a banco/bucket de cliente.
 
 ## O que foi corrigido

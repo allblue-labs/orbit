@@ -214,7 +214,7 @@ plano de identidade, sem simplesmente habilitar RLS em tabelas globais e quebrar
 
 ### PR-13 — Retenção física e providers
 
-**Implementação local concluída em 17/11/2026.**
+**Implementação local concluída em 17/11/2026 — commit `a23e9c2`.**
 [Relatório](pr-13-storage-retention.md) e
 [evidências](evidence/pr-13-storage-retention.json): 273 suítes/2.278 testes
 unitários, 52 suítes/670 E2E, 77 testes LOCAL/MinIO/S3/R2, build/TypeScript/lint e
