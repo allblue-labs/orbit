@@ -3,6 +3,7 @@ import { validateReleaseEnvironment } from './release-environment';
 
 const valid = (): NodeJS.ProcessEnv => ({
   NODE_ENV: 'production',
+  APP_DATABASE_URL: 'postgresql://orbit_app:synthetic-password@localhost/orbit',
   JWT_ACCESS_SECRET: 'j'.repeat(48),
   TRIAL_FINGERPRINT_SECRET: 't'.repeat(48),
   AUTH_RATE_LIMIT_SECRET: 'r'.repeat(48),
@@ -35,6 +36,39 @@ describe('release environment', () => {
       validateReleaseEnvironment({ ...valid(), AWS_REGION: region }),
     ).toThrow(/código da região do SES, como sa-east-1 ou us-east-1/);
   });
+  it.each([
+    'DATABASE_URL',
+    'POSTGRES_PASSWORD',
+    'PLATFORM_ADMIN_PASSWORD',
+    'OWNER_PASSWORD',
+  ])('recusa a credencial administrativa %s sem expor seu valor', (key) => {
+    const value = 'private-canary-must-never-appear';
+    try {
+      validateReleaseEnvironment({ ...valid(), [key]: value });
+      throw new Error('expected rejection');
+    } catch (error) {
+      expect((error as Error).message).toContain(key);
+      expect((error as Error).message).not.toContain(value);
+    }
+  });
+  it.each([
+    '',
+    'not-a-url',
+    'https://user:password@localhost/db',
+    'postgresql://localhost/db',
+  ])('exige conexão explícita do papel restrito: %s', (url) => {
+    expect(() =>
+      validateReleaseEnvironment({ ...valid(), APP_DATABASE_URL: url }),
+    ).toThrow('APP_DATABASE_URL');
+  });
+  it('não permite desativar a verificação do papel em produção', () => {
+    expect(() =>
+      validateReleaseEnvironment({
+        ...valid(),
+        DATABASE_ENFORCE_RESTRICTED_ROLE: 'false',
+      }),
+    ).toThrow('DATABASE_ENFORCE_RESTRICTED_ROLE');
+  });
   it('SES utiliza somente as credenciais explícitas de ambiente', () => {
     expect(() =>
       validateReleaseEnvironment({ ...valid(), AWS_PROFILE: 'ignored' }),
@@ -63,6 +97,7 @@ describe('release environment', () => {
   });
 
   it.each([
+    'APP_DATABASE_URL',
     'JWT_ACCESS_SECRET',
     'TRIAL_FINGERPRINT_SECRET',
     'AUTH_RATE_LIMIT_SECRET',

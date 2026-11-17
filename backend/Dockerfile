@@ -1,4 +1,4 @@
-FROM node:22-bookworm-slim AS builder
+FROM node:22.23.5-bookworm-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee AS builder
 
 WORKDIR /app
 ENV NODE_ENV=development
@@ -56,7 +56,7 @@ FROM builder AS production-dependencies
 
 RUN npm prune --omit=dev
 
-FROM node:22-bookworm-slim AS runner
+FROM node:22.23.5-bookworm-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee AS runner
 
 ARG ORBIT_COMMIT_SHA=unknown
 ARG ORBIT_BUILD_TIME=unknown
@@ -65,7 +65,7 @@ LABEL org.opencontainers.image.revision=$ORBIT_COMMIT_SHA \
   org.opencontainers.image.source="https://github.com/allbluelabs/orbit"
 
 ENV NODE_ENV=production
-ENV PORT=3001
+ENV PORT=5001
 ENV ORBIT_COMMIT_SHA=$ORBIT_COMMIT_SHA
 ENV ORBIT_BUILD_TIME=$ORBIT_BUILD_TIME
 WORKDIR /app
@@ -74,18 +74,17 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends openssl \
   && rm -rf /var/lib/apt/lists/* \
   && groupadd --system --gid 1001 orbit \
-  && useradd --system --uid 1001 --gid orbit orbit \
-  && chown -R orbit:orbit /app
+  && useradd --system --uid 1001 --gid orbit orbit
 
-COPY --from=production-dependencies --chown=orbit:orbit /app/node_modules ./node_modules
-COPY --from=production-dependencies --chown=orbit:orbit /app/dist ./dist
-COPY --from=production-dependencies --chown=orbit:orbit /app/package.json ./package.json
+COPY --from=production-dependencies /app/node_modules ./node_modules
+COPY --from=production-dependencies /app/dist ./dist
+COPY --from=production-dependencies /app/package.json ./package.json
 # Sem as fontes na imagem, `registerFonts` cai no apelido de Helvetica e **todo**
 # documento premium sai com a tipografia errada — quando não estourava `ENOENT`,
 # antes de o apelido existir. São ~430 KB de TTF, e o desenho depende deles.
-COPY --from=production-dependencies --chown=orbit:orbit /app/assets ./assets
+COPY --from=production-dependencies /app/assets ./assets
 
 USER orbit
-EXPOSE 3001
+EXPOSE 5001
 
 CMD ["node", "dist/src/main.js"]

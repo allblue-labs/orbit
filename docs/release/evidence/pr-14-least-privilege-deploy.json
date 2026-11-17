@@ -1,0 +1,89 @@
+{
+  "pr": "PR-14",
+  "date": "2026-11-17",
+  "baseCommit": "f8ea54483b35f81ea91f0b38cfd81689568098d3",
+  "status": "local-implementation-and-qualification-complete",
+  "scope": [
+    "runtime-credential-separation",
+    "mandatory-production-database-role-check",
+    "non-root-immutable-images",
+    "restricted-ephemeral-admin-jobs",
+    "deployment-preflight-and-ci"
+  ],
+  "nodeBase": "node:22.23.5-bookworm-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee",
+  "postgres": "17.11-alpine3.24",
+  "migrations": 126,
+  "runtimeTablesWithSelect": 152,
+  "checks": {
+    "productionEnvironmentUnitTests": 36,
+    "postgresRlsAndRoleTests": {
+      "suites": 2,
+      "tests": 28
+    },
+    "composeTests": {
+      "cases": 3,
+      "unsafeMutations": 18
+    },
+    "mobileTests": 66,
+    "productionNextUploadChecks": 8,
+    "realImageQualification": {
+      "result": "PASS",
+      "postgresStorage": "tmpfs",
+      "checks": [
+        "migrations-and-catalogues-read-only-non-root",
+        "explicit-admin-and-owner-bootstrap-only",
+        "api-production-without-administrative-credentials",
+        "customer-equipment-create-with-restricted-role",
+        "web-login-profile-and-allowed-business-routes",
+        "mobile-equipment-qr-resolution",
+        "mobile-login-profile-and-allowed-business-routes",
+        "next-bff-login-and-secure-cookies"
+      ]
+    },
+    "nginxIngress": "PASS",
+    "backendTypeScript": "PASS",
+    "changedTypeScriptEslint": "PASS",
+    "pythonStaticChecks": "PASS",
+    "gitDiffCheck": "PASS",
+    "apiProductionNpmAudit": {
+      "vulnerabilities": 0
+    }
+  },
+  "images": {
+    "api": {
+      "localTag": "orbit-pr14-api:local",
+      "localBuildManifestDigest": "sha256:49be73aea07fa6b24914062c422306afc5423740b571538a0fe959a708825b37",
+      "platform": "linux/amd64",
+      "published": false
+    },
+    "migrator": {
+      "localTag": "orbit-pr14-migrator:local",
+      "localBuildManifestDigest": "sha256:6c28b419944b318045bd4f0df61d4cea5d2c96466addefbdf8b8ea304df6663a",
+      "platform": "linux/amd64",
+      "published": false
+    },
+    "frontend": {
+      "localTag": "orbit-pr14-frontend:local",
+      "localBuildManifestDigest": "sha256:b66cbb3f2a7483d0804872cc50aef176f7f9a54f8a919936346027326e5437c9",
+      "platform": "linux/amd64",
+      "published": false
+    }
+  },
+  "safety": {
+    "developerEnvConsumed": false,
+    "realCloudCredentialsUsed": false,
+    "providerMessagesSent": false,
+    "stagingChanged": false,
+    "imagesPublished": false,
+    "gitPushed": false,
+    "secretsRotated": false,
+    "existingVolumesDeleted": false,
+    "allDisposableProjectsRemoved": true
+  },
+  "limitations": [
+    "Local Docker disk exhaustion required a RAM-backed disposable PostgreSQL; canonical persistent-volume initialization remains a CI gate.",
+    "No new live rollout or backup/restore qualification.",
+    "PR-13 CDN/legacy/backup acceptance remains pending; keep staging retention disabled.",
+    "Final production qualification remains PR-19."
+  ]
+}

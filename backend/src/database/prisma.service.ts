@@ -1,25 +1,7 @@
 /**
- * O cliente Prisma da aplicação — e o papel com que ele conecta.
- *
- * ## Dois papéis, um banco
- *
- * `DATABASE_URL` é a credencial **administrativa**: dona do schema, usada por
- * `prisma migrate` e pelos scripts de provisionamento. `APP_DATABASE_URL` é a
- * credencial de **runtime**, sem `SUPERUSER` e sem `BYPASSRLS`.
- *
- * Enquanto a aplicação conectava com a administrativa, as 68 tabelas com
- * `FORCE ROW LEVEL SECURITY` eram decorativas: nenhuma política era avaliada,
- * e o isolamento real era só o da camada de aplicação. A separação existe para
- * que a RLS seja a segunda camada que ela sempre pretendeu ser.
- *
- * ## O aviso na inicialização
- *
- * O processo pergunta ao Postgres, na subida, se o papel com que acabou de
- * conectar contorna políticas — e diz em voz alta quando contorna. Não é
- * verificação decorativa: `rolbypassrls` pode ser concedido depois, fora do
- * deploy, e sem esta pergunta ninguém perceberia. `DATABASE_ENFORCE_RESTRICTED_ROLE`
- * transforma o aviso em recusa de subir, e é assim que o `docker-compose`
- * roda.
+ * Runtime uses APP_DATABASE_URL. Only non-production development may fall back
+ * to DATABASE_URL. Production always verifies the connected role before serving
+ * requests; migration and bootstrap jobs use their own administrative client.
  */
 import {
   Injectable,
@@ -35,6 +17,11 @@ interface RolePrivileges {
   role: string;
   rolsuper: boolean;
   rolbypassrls: boolean;
+  rolcreatedb: boolean;
+  rolcreaterole: boolean;
+  rolreplication: boolean;
+  privileged_membership: boolean;
+  owns_application_objects: boolean;
 }
 
 @Injectable()
@@ -54,7 +41,9 @@ export class PrismaService
       adapter: new PrismaPg({
         connectionString:
           environment.getOptional('APP_DATABASE_URL')?.trim() ||
-          environment.get('DATABASE_URL'),
+          (environment.getOptional('NODE_ENV') === 'production'
+            ? environment.get('APP_DATABASE_URL')
+            : environment.get('DATABASE_URL')),
         /**
          * O padrão do `pg` é 10 conexões — e 10 é pouco quando HTTP e worker
          * dividem o mesmo processo. Uma transação interativa **segura** a
@@ -91,34 +80,62 @@ export class PrismaService
    */
   async onModuleInit(): Promise<void> {
     const [privileges] = await this.$queryRaw<RolePrivileges[]>`
-      SELECT current_user::text AS role, rolsuper, rolbypassrls
-        FROM pg_roles
+      SELECT current_user::text AS role, rolsuper, rolbypassrls,
+             rolcreatedb, rolcreaterole, rolreplication,
+             EXISTS (
+               SELECT 1 FROM pg_roles parent
+                WHERE parent.oid <> runtime.oid
+                  AND pg_has_role(current_user, parent.oid, 'MEMBER')
+                  AND (parent.rolsuper OR parent.rolbypassrls OR
+                       parent.rolcreatedb OR parent.rolcreaterole OR
+                       parent.rolreplication OR parent.rolname IN (
+                         'pg_read_all_data', 'pg_write_all_data',
+                         'pg_read_server_files', 'pg_write_server_files',
+                         'pg_execute_server_program', 'pg_signal_backend',
+                         'pg_checkpoint', 'pg_create_subscription',
+                         'pg_maintain', 'pg_use_reserved_connections'
+                       ))
+             ) AS privileged_membership,
+             (
+               EXISTS (SELECT 1 FROM pg_database WHERE datname = current_database()
+                        AND pg_has_role(current_user, datdba, 'MEMBER')) OR
+               EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'public'
+                        AND pg_has_role(current_user, nspowner, 'MEMBER')) OR
+               EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+                        WHERE n.nspname = 'public'
+                          AND pg_has_role(current_user, c.relowner, 'MEMBER'))
+             ) AS owns_application_objects
+        FROM pg_roles runtime
        WHERE rolname = current_user
     `;
 
-    if (!privileges) return;
-
-    const bypasses = privileges.rolsuper || privileges.rolbypassrls;
-    const detail = JSON.stringify({
-      stage: 'database-role',
-      role: privileges.role,
-      rolsuper: privileges.rolsuper,
-      rolbypassrls: privileges.rolbypassrls,
-      rlsEnforced: !bypasses,
-    });
-
-    if (!bypasses) {
-      this.logger.log(detail);
-      return;
-    }
-
     const enforce =
+      this.environment.getOptional('NODE_ENV') === 'production' ||
       this.environment
         .getOptional('DATABASE_ENFORCE_RESTRICTED_ROLE')
         ?.trim() === 'true';
+    if (!privileges) {
+      if (enforce)
+        throw new Error(
+          'Não foi possível verificar o papel restrito do banco.',
+        );
+      this.logger.warn('Não foi possível verificar o papel restrito do banco.');
+      return;
+    }
 
-    const message = `A aplicação conectou com um papel que contorna RLS (${privileges.role}). Nenhuma política é avaliada. ${detail}`;
-
+    const unsafe = Object.entries(privileges).some(
+      ([key, value]) => key !== 'role' && value === true,
+    );
+    const detail = JSON.stringify({
+      stage: 'database-role',
+      ...privileges,
+      restrictedRole: !unsafe,
+    });
+    if (!unsafe) {
+      this.logger.log(detail);
+      return;
+    }
+    const message = `O papel de runtime possui privilégios administrativos ou ownership indevido. ${detail}`;
     if (enforce) throw new Error(message);
     this.logger.warn(message);
   }

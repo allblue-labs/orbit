@@ -67,11 +67,15 @@ O migrator cria/reconcilia primeiro somente os atributos seguros do papel,
 executa `prisma migrate deploy`, reconcilia todos os grants de `orbit_app` e,
 por fim, executa o seed idempotente dos quatro planos comerciais. Esse catálogo
 é referência obrigatória para cadastro e billing e não é dado demo. O runtime
-usa `APP_DATABASE_URL`, valida `NOSUPERUSER` e `NOBYPASSRLS` na inicialização.
+usa somente `APP_DATABASE_URL` e recusa privilégios administrativos diretos,
+herdados e ownership de objetos da aplicação na inicialização. A verificação
+é obrigatória em produção, mesmo sem a flag de enforcement.
 Seeds de owner/admin e o bootstrap de assinaturas existentes continuam sendo
 ações operacionais explícitas, nunca parte do boot normal.
-O `DATABASE_URL` do runtime também usa o papel restrito. A senha administrativa
-do PostgreSQL e `PLATFORM_ADMIN_PASSWORD` não entram no ambiente da API.
+O runtime de produção recusa `DATABASE_URL`, `POSTGRES_PASSWORD`,
+`PLATFORM_ADMIN_PASSWORD` e `OWNER_PASSWORD`; elas pertencem exclusivamente
+aos jobs administrativos. Ao atualizar uma implantação externa ao Compose,
+remova essas variáveis da API/worker antes de iniciar esta release.
 Para provisionar o administrador global após as migrations, preencha os campos
 `PLATFORM_ADMIN_*` e execute `docker compose --profile admin run --rm bootstrap-admin`
 (inclua o arquivo de lock do ambiente, se houver). Remova a senha do `.env`
@@ -114,3 +118,36 @@ aplicação; banco só é revertido manualmente com plano aprovado.
   promova subscription com evento incompleto.
 - Storage: preserve banco e objetos, bloqueie emissão nova se o provider não
   puder garantir durabilidade e valide hashes após recuperação.
+
+## Gate de menor privilégio (PR-14)
+
+O script `deploy/staging/bin/deploy.sh --check` usa o módulo
+`deployment_preflight.py` instalado no mesmo diretório. Copie ambos ao atualizar
+o deploy; a validação captura o Compose normalizado sem expor valores. Exige
+imagens por digest, papel distinto para migrations, portas internas canônicas,
+UID/GID sem root, limites e filesystem protegido. O profile `admin` só cria uma
+conta quando invocado explicitamente. O profile de migração offline de mídia
+continua separado e não é iniciado pelo deploy normal.
+
+As bases Node dos Dockerfiles fixam patch e digest. Uma atualização de segurança
+exige atualizar os dois Dockerfiles, repetir os gates e gerar novos digests de
+release. O código nas imagens de runtime pertence a root, mas o processo usa
+UID 1001. Migrate/bootstrap usam UID 1000, capabilities removidas, filesystem
+somente leitura e `/tmp` limitado em memória; somente PostgreSQL persiste dados.
+`API_HOST` é uma configuração de execução fora de Docker. Dentro do Compose a
+API escuta em `0.0.0.0:5001`, publicada em `127.0.0.1:6001` para Nginx.
+
+Qualificação local sem credenciais reais e sem publicar imagens:
+
+```bash
+python3 scripts/test_deployment_preflight.py
+docker build --target migrator --tag orbit-pr14-migrator:local backend
+docker build --target runner --tag orbit-pr14-api:local backend
+docker build --target runner --tag orbit-pr14-frontend:local frontend
+python3 scripts/verify-deployment-images.py
+```
+
+O último gate cria projeto, redes, volumes e banco exclusivos; aplica migrations,
+executa bootstrap explicitamente e verifica login WEB/MOBILE e BFF. Remove apenas
+os recursos descartáveis que criou. Não usa `.env` do desenvolvedor nem envia
+mensagens aos providers. O CI executa o mesmo gate.

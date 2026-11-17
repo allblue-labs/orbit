@@ -2,7 +2,8 @@ node_modules
 dist
 coverage
 storage
-.env
+.env*
+!.env.example
 .git
 *.log
 test

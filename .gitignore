@@ -112,3 +112,7 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 /mobile/android/app/google-service.json
 /mobile/ios/Runner/GoogleService-Info.plist
 /mobile/ios/Runner/Google-Service-Info.plist
+
+# Python deployment checks
+__pycache__/
+*.py[cod]

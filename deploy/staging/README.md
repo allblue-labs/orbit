@@ -180,6 +180,9 @@ tag registrada no manifest (os serviços efetivamente usam digests do lock).
 bash ~/orbit-bootstrap/bin/deploy.sh
 ```
 
+Atualize `bin/deploy.sh` e `bin/deployment_preflight.py` juntos no servidor.
+O preflight do PR-14 exige esse módulo no mesmo diretório.
+
 Use `bash ~/orbit-bootstrap/bin/deploy.sh --check` para validar sem baixar
 imagens nem alterar os containers. O preflight recusa origens localhost,
 cookies inseguros, portas diferentes do Nginx, imagens sem digest e Stripe

@@ -130,8 +130,11 @@ privado pelo chat nem considerar mocks como comprovação de entrega real.
 ### PR-07 — SES durável e prontidão da conta
 
 **Implementação local:** [PR-07 e evidências](pr-07-ses-durable-delivery.md).
-A consulta AWS em 14/11/2026 confirmou sandbox em us-east-2; aprovação e teste de
-envio real continuam pendentes. Não houve deploy nem envio de e-mail.
+O checkpoint de 14/11 registrou sandbox. A [ativação posterior em 17/11](ses-production-activation-2026-11-17.md)
+confirmou produção em us-east-2 e integração real SES/SNS. Os fluxos foram
+implantados no staging; [categorias e feedback de entrega](email-categories-contact-2026-11-17.md)
+também foram qualificados. Consulte os relatórios para distinguir aceite SES,
+feedback de entrega e recebimento observado pelo destinatário.
 
 Criar outbox transacional para boas-vindas, recuperação e convites, com idempotência,
 retry/backoff e erro permanente. Impedir que uma falha de envio transforme um
@@ -151,7 +154,9 @@ na região correta e de teste posterior, conduzido com o owner.
 
 **Implementação local:** [PR-08 e evidências](pr-08-ses-feedback.md).
 Webhook autenticado, associações duráveis e supressão implementados. O aceite
-real SES/SNS permanece pendente; sem deploy nem envio de mensagens nesta PR.
+real SES/SNS foi registrado na [ativação posterior](ses-production-activation-2026-11-17.md),
+com a política IAM reduzida ao runtime após preparação. O checkpoint original
+desta PR continua preservado; staging já inclui essa implementação.
 
 Implementar o blueprint com verificação de assinatura/certificado SNS, TopicArn e
 conta/região esperados; validar SubscriptionConfirmation sem buscar URL arbitrária.
@@ -235,6 +240,16 @@ objetos antes/depois; política de backups documentada. Não executar purge real
 nem migração destrutiva automaticamente sobre dados de cliente.
 
 ### PR-14 — Menor privilégio no deploy
+
+**Implementação e qualificação local concluídas em 17/11/2026.**
+[Relatório](pr-14-least-privilege-deploy.md) e
+[evidências](evidence/pr-14-least-privilege-deploy.json). API sem URL/senhas
+administrativas, verificação obrigatória do papel real, jobs protegidos, imagens
+sem root com base fixa e gate de configuração/imagens no CI. Builds, 36 testes
+de configuração, 28 E2E, 66 mobile, Nginx e 8 testes de upload aprovados.
+Ensaio das imagens com PostgreSQL real em memória aprovado; Docker local sem
+espaço para inicializar o volume descartável. CI mantém volume persistente.
+Sem push/deploy; ativação externa da PR-13 e gate final PR-19 permanecem pendentes.
 
 **Cobertura antecipada no staging (12/11/2026):** o trabalho de infraestrutura
 retirou credenciais administrativas do runtime, separou bootstrap, restringiu

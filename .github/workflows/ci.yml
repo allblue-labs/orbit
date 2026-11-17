@@ -36,6 +36,7 @@ jobs:
         working-directory: backend
       - run: node --test scripts/audit-policy.test.mjs
       - run: python3 scripts/test_proxy_origin.py
+      - run: python3 scripts/test_deployment_preflight.py
       - run: node scripts/verify-proxy-ingress.mjs
       - run: npm run security:audit
         working-directory: backend
@@ -108,3 +109,16 @@ jobs:
       - run: node scripts/verify-integrations.mjs mobile
       - run: flutter build apk --debug --dart-define=ORBIT_API_URL=https://orbit.allblue-labs.com/api/v1
         working-directory: mobile
+
+  deployment:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      # No registry push, cloud credentials or existing DB: each gate uses its own project.
+      - run: docker build --target migrator --tag orbit-pr14-migrator:local backend
+      - run: docker build --target runner --tag orbit-pr14-api:local backend
+      - run: docker build --target runner --tag orbit-pr14-frontend:local frontend
+      - run: python3 scripts/verify-deployment-images.py

@@ -14,6 +14,40 @@ export function validateReleaseEnvironment(
   environment: NodeJS.ProcessEnv,
 ): void {
   if (environment.NODE_ENV !== 'production') return;
+  // Only explicit administrative jobs may receive these credentials. Reject
+  // even an unused duplicate: an HTTP/worker compromise must not expose it.
+  for (const key of [
+    'DATABASE_URL',
+    'POSTGRES_PASSWORD',
+    'PLATFORM_ADMIN_PASSWORD',
+    'OWNER_PASSWORD',
+  ]) {
+    if (environment[key]?.trim()) {
+      throw new InfrastructureException(
+        `${key} is reserved for explicit migration/bootstrap jobs; use APP_DATABASE_URL for runtime`,
+      );
+    }
+  }
+  try {
+    const url = new URL(environment.APP_DATABASE_URL ?? '');
+    if (
+      !['postgres:', 'postgresql:'].includes(url.protocol) ||
+      !url.hostname ||
+      !url.username ||
+      !url.password ||
+      url.pathname.length < 2
+    )
+      throw new Error('invalid runtime database URL');
+  } catch {
+    throw new InfrastructureException(
+      'APP_DATABASE_URL must be an explicit PostgreSQL runtime connection URL',
+    );
+  }
+  if (environment.DATABASE_ENFORCE_RESTRICTED_ROLE?.trim() === 'false') {
+    throw new InfrastructureException(
+      'DATABASE_ENFORCE_RESTRICTED_ROLE cannot be disabled in production',
+    );
+  }
   try {
     outboundConfiguration(environment);
   } catch {

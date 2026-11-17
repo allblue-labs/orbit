@@ -30,6 +30,7 @@ services:
       - no-new-privileges:true
 
   api:
+    user: "1001:1001"
     cap_drop: [ALL]
     pids_limit: 512
     mem_limit: 3g
@@ -43,9 +44,8 @@ services:
     environment:
       NODE_ENV: production
       PORT: 5001
-      HOST: ${API_HOST:-0.0.0.0}
+      HOST: 0.0.0.0
       # O processo HTTP não recebe credenciais administrativas do banco.
-      DATABASE_URL: postgresql://${APP_DATABASE_USER:-orbit_app}:${APP_DATABASE_PASSWORD:?APP_DATABASE_PASSWORD is required}@postgres:5432/${POSTGRES_DB}?schema=public
       # Papel restrito (PR-26.6): sem SUPERUSER e sem BYPASSRLS. É com ele que
       # as políticas de RLS passam a ser efetivamente avaliadas.
       APP_DATABASE_URL: postgresql://${APP_DATABASE_USER:-orbit_app}:${APP_DATABASE_PASSWORD:?APP_DATABASE_PASSWORD is required}@postgres:5432/${POSTGRES_DB}?schema=public
@@ -174,6 +174,13 @@ services:
       - no-new-privileges:true
 
   migrate:
+    user: "1000:1000"
+    cap_drop: [ALL]
+    read_only: true
+    init: true
+    cpus: 2
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=268435456,uid=1000,gid=1000,mode=1777
     mem_limit: 2g
     pids_limit: 512
     image: ${ORBIT_MIGRATOR_IMAGE:-docker.io/allbluelabs/orbit-api:${ORBIT_VERSION:?ORBIT_VERSION is required}-migrator}
@@ -200,6 +207,15 @@ services:
 
   # Ação administrativa explícita. Nunca é executada por `compose up` normal.
   bootstrap-admin:
+    user: "1000:1000"
+    cap_drop: [ALL]
+    read_only: true
+    init: true
+    cpus: 2
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=268435456,uid=1000,gid=1000,mode=1777
+    mem_limit: 1g
+    pids_limit: 256
     profiles: [admin]
     image: ${ORBIT_MIGRATOR_IMAGE:-docker.io/allbluelabs/orbit-api:${ORBIT_VERSION:?ORBIT_VERSION is required}-migrator}
     restart: "no"
@@ -224,6 +240,7 @@ services:
       - no-new-privileges:true
 
   frontend:
+    user: "1001:1001"
     cap_drop: [ALL]
     pids_limit: 512
     mem_limit: 1536m

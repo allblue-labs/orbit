@@ -5,6 +5,7 @@ cd /opt/stacks/orbit
 [[ $(stat -c '%a' .env) == 600 ]] || { echo 'Use chmod 600 .env.' >&2; exit 1; }
 compose=(docker compose --env-file .env -f docker-compose.yml -f docker-compose.lock.yml)
 "${compose[@]}" config --quiet
+"${compose[@]}" --profile admin config --format json | python3 "$(dirname "$(readlink -f "$0")")/deployment_preflight.py"
 # Valida sem imprimir valores e impede Stripe real neste staging.
 python3 - <<'PY'
 import base64, json, re, subprocess, sys
@@ -17,7 +18,7 @@ for key, value in [('FRONTEND_ORIGIN',origin),('IDENTITY_PUBLIC_WEB_URL',origin)
 if web.get('FRONTEND_ORIGIN') != origin: sys.exit('Use uma única origem HTTPS no frontend.')
 if str(web.get('AUTH_COOKIE_SECURE')).lower() != 'true' or str(web.get('ALLOW_INSECURE_LOCAL_COOKIES')).lower() != 'false':
     sys.exit('Staging exige cookies Secure e proíbe a exceção de HTTP local.')
-if env.get('DATABASE_URL') != env.get('APP_DATABASE_URL') or env.get('PLATFORM_ADMIN_PASSWORD'):
+if not env.get('APP_DATABASE_URL') or any(env.get(k) for k in ['DATABASE_URL','POSTGRES_PASSWORD','PLATFORM_ADMIN_PASSWORD','OWNER_PASSWORD']):
     sys.exit('O runtime não pode receber credenciais administrativas.')
 for service in ['api','migrate','frontend']:
     if not re.search(r'@sha256:[a-f0-9]{64}$',x['services'][service]['image']):
