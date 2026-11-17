@@ -1,7 +1,7 @@
 {
   "date": "2026-11-17",
   "baseline": "ceb244a",
-  "status": "LOCAL_QUALIFIED",
+  "status": "STAGING_DEPLOYED_AND_VERIFIED",
   "tests": {
     "backendUnit": {
       "suites": 276,
@@ -32,7 +32,13 @@
     ],
     "eslintChangedFiles": true,
     "prismaSchemaValid": true,
-    "productionFrontendBuild": true
+    "productionFrontendBuild": true,
+    "productionApiBuild": {
+      "passed": true,
+      "platform": "linux/amd64",
+      "nodeMajor": 22,
+      "productionDependencyAuditVulnerabilities": 0
+    }
   },
   "categories": {
     "TRANSACTIONAL": "AWS_SES_FROM_TRANSACTIONAL_EMAIL",
@@ -74,5 +80,71 @@
     "backend/.env": "600"
   },
   "realEmailsSentByLocalTests": 0,
-  "gitPush": false
+  "gitPush": false,
+  "implementationCommit": "e133b24a2f8fd4412f65d85def1e6875a360a66f",
+  "staging": {
+    "verifiedAt": "2026-11-17T21:45:18Z",
+    "releaseTag": "staging-e133b24a2f8f",
+    "imagesManifest": "email-categories-contact-images-2026-11-17.json",
+    "services": {
+      "api": "healthy",
+      "frontend": "healthy",
+      "postgres": "healthy"
+    },
+    "apiReadiness": "ok",
+    "frontendPublicCommit": "e133b24a2f8fd4412f65d85def1e6875a360a66f",
+    "publicHttp": {
+      "landing": 200,
+      "honeypotContactProbe": 202,
+      "nexus": 200
+    },
+    "contactFormPresentInPublicHtml": true,
+    "contactProbeSavedMessage": false,
+    "contactProbeSentEmail": false,
+    "ses": {
+      "status": "READY",
+      "region": "us-east-2",
+      "productionAccess": true,
+      "sendingEnabled": true,
+      "allSenderIdentitiesVerified": true,
+      "quotaAvailable": true
+    },
+    "mailboxSimulator": {
+      "messagesSent": 3,
+      "humanRecipients": 0,
+      "providerAccepted": 3,
+      "snsDeliveryConfirmed": 3,
+      "categories": [
+        "TRANSACTIONAL",
+        "INFORMATIONAL",
+        "SUPPORT"
+      ],
+      "correlationCheckedInTransportLedger": true
+    },
+    "senderRouting": {
+      "TRANSACTIONAL": "no-reply@allblue-labs.com",
+      "INFORMATIONAL": "avisos-orbit@allblue-labs.com",
+      "SUPPORT": "suporte-orbit@allblue-labs.com"
+    },
+    "supportReplyTo": "contato@allblue-labs.com",
+    "publicFormRecipient": "contato@allblue-labs.com",
+    "feedbackEnabled": true,
+    "temporaryBootstrapIamPermissionsAdded": false,
+    "newMigrationApplied": "20261117210000_public_contact_delivery",
+    "databaseRole": {
+      "name": "orbit_app",
+      "superuser": false,
+      "bypassRls": false,
+      "tablesGranted": 152
+    },
+    "backup": {
+      "path": "/home/ninja/orbit-releases/contact-e133b24a2f8f/before/postgres.dump",
+      "format": "custom",
+      "pgRestoreListPassed": true,
+      "mode": "600"
+    },
+    "environmentFileMode": "600",
+    "awsCredentialsPreserved": true,
+    "testAccountsCreated": 0
+  }
 }

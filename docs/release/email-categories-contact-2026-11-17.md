@@ -31,5 +31,38 @@ Validação local:
 - Nenhum e-mail real enviado pelos testes locais.
 
 [Configuração e comportamento](../../backend/docs/email-categories-and-contact.md).
-A aplicação no staging e as evidências finais serão registradas após a publicação.
+## Staging aplicado
+
+Commit e133b24a2f8fd4412f65d85def1e6875a360a66f, com imagens Linux/amd64
+imutáveis em [manifesto](evidence/email-categories-contact-images-2026-11-17.json).
+A API compilou, e a auditoria das dependências de produção retornou zero
+vulnerabilidades. Backup custom validado antes da migration em
+`/home/ninja/orbit-releases/contact-e133b24a2f8f/before/postgres.dump`, modo 600,
+com configuração anterior preservada para reversão.
+
+A migration 20261117210000_public_contact_delivery foi aplicada. O papel orbit_app
+continuou sem SUPERUSER/BYPASSRLS, com 152 tabelas concedidas sob suas políticas.
+API, frontend e PostgreSQL ficaram healthy. Preflight remoto SES READY antes e
+depois da troca, incluindo todas as identidades dos remetentes e o mapa de feedback.
+O .env do staging ficou em modo 600, com os novos campos, credenciais anteriores
+preservadas e nenhum retorno das permissões temporárias de bootstrap SNS.
+
+Foi enviado exatamente um teste por categoria ao endereço de sucesso do
+simulador oficial do SES: três mensagens aceitas e três eventos DELIVERY
+correlacionados no ledger pela assinatura SNS e identidade exata. Nenhum
+destinatário humano nem dados de clientes foram usados nesses testes. Os IDs do
+provedor ficaram apenas no registro protegido da release; a evidência versionada
+contém totais e resultados.
+
+A landing pública retornou 200, contém a seção/formulário e identifica o mesmo
+commit em /api/release. O POST público, com Fetch Metadata de mesma origem e
+honeypot preenchido, respondeu 202 pelo caminho que descarta a mensagem, sem
+inserir pedido ou enviar e-mail. Não foi enviada mensagem fictícia à caixa da
+equipe para testar o formulário. O caminho real de enfileirar/enviar foi exercitado
+com PostgreSQL real e SDK simulado nos testes locais. O Nexus seguiu em HTTP 200.
+
+O formulário está em https://orbit.allblue-labs.com/#contato. Para alterar endereços,
+use as envs documentadas; valide os remetentes e regenere o mapa após modificar
+identidades no SES. Não é preciso criar novas caixas no SES para esses aliases.
+As respostas informativas/suporte são encaminhadas à caixa contato já utilizada.
 Sem Git push.
