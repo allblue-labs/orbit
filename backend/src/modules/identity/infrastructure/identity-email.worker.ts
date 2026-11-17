@@ -1,3 +1,6 @@
+import { EmailService } from '../../email/email.service';
+import { AccountNoticesService } from '../../email/account-notices.service';
+import { isAccountEmailPurpose } from '../../email/account-email-policy';
 import {
   Inject,
   Injectable,
@@ -27,10 +30,16 @@ export class IdentityEmailWorker implements OnModuleInit, OnModuleDestroy {
     private readonly outbox: IdentityEmailOutbox,
     @Inject(IDENTITY_TOKEN_DELIVERY)
     private readonly delivery: IIdentityTokenDelivery,
+    private readonly email: EmailService,
+    private readonly notices: AccountNoticesService,
   ) {}
 
   onModuleInit() {
-    if ((process.env.JOBS_WORKER_ENABLED ?? 'true').trim() === 'false') return;
+    if (
+      (process.env.JOBS_WORKER_ENABLED ?? 'true').trim() === 'false' ||
+      (process.env.ACCOUNT_EMAIL_DELIVERY_ENABLED ?? 'true').trim() === 'false'
+    )
+      return;
     const interval = Number(process.env.JOBS_POLL_INTERVAL_MS ?? 2000);
     this.timer = setInterval(
       () => {
@@ -82,7 +91,11 @@ export class IdentityEmailWorker implements OnModuleInit, OnModuleDestroy {
       log('FAILED', 'ATTEMPTS_EXHAUSTED');
       return true;
     }
-    let message: { recipient: string; token: string };
+    let message: {
+      recipient: string;
+      token: string;
+      data?: Record<string, unknown>;
+    };
     try {
       message = this.outbox.decrypt(row);
     } catch {
@@ -97,12 +110,36 @@ export class IdentityEmailWorker implements OnModuleInit, OnModuleDestroy {
     }
     let result: EmailSendResult;
     try {
-      result = await this.delivery.deliver(
-        row.purpose as IdentityTokenPurpose,
-        message.recipient,
-        message.token,
-        row.id,
-      );
+      if (isAccountEmailPurpose(row.purpose)) {
+        const prepared = await this.notices.prepare(row, message.data ?? {});
+        if (!prepared) {
+          await this.outbox.finish(row, 'SKIPPED', 'NOTICE_NO_LONGER_CURRENT');
+          return true;
+        }
+        result = await this.email.send({
+          to: message.recipient,
+          identityDeliveryId: row.id,
+          ...prepared,
+        });
+      } else if (
+        row.purpose === 'EMAIL_VERIFICATION' &&
+        message.data?.welcome === true
+      ) {
+        result = await this.delivery.deliver(
+          'EMAIL_VERIFICATION',
+          message.recipient,
+          message.token,
+          row.id,
+          'WELCOME',
+        );
+      } else {
+        result = await this.delivery.deliver(
+          row.purpose as IdentityTokenPurpose,
+          message.recipient,
+          message.token,
+          row.id,
+        );
+      }
     } catch {
       result = {
         status: 'FAILED',

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { EmailService, type EmailSendResult } from '../../email/email.service';
-import { actionEmail } from '../../email/email-template';
+import { transactionalEmail } from '../../email/transactional-templates';
 import {
   IdentityTokenPurpose,
   type IIdentityTokenDelivery,
@@ -17,36 +17,21 @@ export class TransactionalIdentityTokenDelivery implements IIdentityTokenDeliver
     recipient: string,
     token: string,
     identityDeliveryId?: string,
+    template?: 'WELCOME',
   ): Promise<EmailSendResult> {
-    const copy = {
-      EMAIL_VERIFICATION: {
-        title: 'Bem-vindo ao Orbit! Confirme seu e-mail',
-        introduction:
-          'Sua conta foi criada. Confirme seu endereço de e-mail para manter seus dados de acesso atualizados e receber as comunicações do Orbit.',
-        action: 'Confirmar meu e-mail',
-        expiry:
-          'Este link é exclusivo, pode ser usado uma única vez e vale por até 24 horas após a solicitação.',
-      },
-      PASSWORD_RESET: {
-        title: 'Redefinição de senha do Orbit',
-        introduction:
-          'Recebemos uma solicitação para redefinir sua senha. Use o botão abaixo para escolher uma nova senha com segurança.',
-        action: 'Redefinir minha senha',
-        expiry:
-          'Este link é temporário e pode ser usado uma única vez. Se você não fez a solicitação, sua senha permanece a mesma.',
-      },
-      INVITATION: {
-        title: 'Você foi convidado para o Orbit',
-        introduction:
-          'Você recebeu um convite para participar de uma equipe no Orbit. Aceite o convite e defina sua senha.',
-        action: 'Aceitar convite',
-        expiry: 'Este convite vale por até 7 dias após a solicitação.',
-      },
-    }[purpose];
+    if (purpose === 'INVITATION')
+      return { status: 'SKIPPED', provider: 'noop' };
     return this.email.send({
       to: recipient,
       ...(identityDeliveryId ? { identityDeliveryId } : {}),
-      ...actionEmail({ ...copy, link: identityTokenLink(purpose, token) }),
+      ...transactionalEmail(
+        purpose === 'EMAIL_VERIFICATION' && template === 'WELCOME'
+          ? 'WELCOME'
+          : purpose,
+        {
+          link: identityTokenLink(purpose, token),
+        },
+      ),
     });
   }
 }

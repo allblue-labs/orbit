@@ -1,0 +1,56 @@
+{
+  "date": "2026-11-17",
+  "baseline": "6f7d9e9",
+  "status": "LOCAL_QUALIFIED_STAGING_PREPARED",
+  "tests": {
+    "backendUnit": {
+      "suites": 275,
+      "tests": 2289,
+      "passed": true
+    },
+    "backendIntegration": {
+      "suites": 52,
+      "tests": 673,
+      "passed": true
+    },
+    "firstOwnerRegression": {
+      "suites": 2,
+      "tests": 31,
+      "passed": true
+    },
+    "frontendUnit": {
+      "files": 73,
+      "tests": 695,
+      "passed": true
+    },
+    "browserIdentityLinks": {
+      "tests": 4,
+      "passed": true
+    },
+    "typescript": [
+      "backend",
+      "frontend"
+    ],
+    "lint": "changed TypeScript files passed"
+  },
+  "awsPreflight": {
+    "region": "us-east-2",
+    "productionAccess": true,
+    "sendingEnabled": true,
+    "identityVerified": true,
+    "dkimVerified": true,
+    "max24HourSend": 50000,
+    "maxSendRate": 14,
+    "emailsSentByPreflight": 0
+  },
+  "staging": {
+    "backup": "/var/backups/orbit/20261117T125307Z",
+    "roleNamespaceConflicts": 0,
+    "invalidGlobalAssignments": 0,
+    "automaticEmailPaused": true,
+    "retentionPaused": true,
+    "deployed": false
+  },
+  "secretsIncluded": false,
+  "gitPush": false
+}

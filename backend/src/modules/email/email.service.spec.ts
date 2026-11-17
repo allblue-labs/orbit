@@ -27,6 +27,7 @@ const message = {
 };
 function fixture() {
   const repository = {
+    acceptedDelivery: jest.fn().mockResolvedValue(null),
     prepare: jest
       .fn()
       .mockResolvedValue('00000000-0000-7000-8000-000000000001'),
@@ -94,7 +95,7 @@ describe('EmailService / Amazon SES', () => {
         secretAccessKey: config.secretAccessKey,
       });
       expect(await client.config.region()).toBe('us-east-1');
-      expect(await client.config.maxAttempts()).toBe(3);
+      expect(await client.config.maxAttempts()).toBe(1);
     } finally {
       await module.close();
     }
@@ -259,5 +260,20 @@ describe('EmailService / Amazon SES', () => {
     expect(result.html).toContain('&lt;script&gt;');
     expect(result.html).toContain('abc&amp;other=1');
     expect(result.text).toContain('abc&other=1');
+  });
+  it('reuses a previously accepted logical delivery after a lost outbox acknowledgement', async () => {
+    const { service, client, repository } = fixture();
+    repository.acceptedDelivery.mockResolvedValue('ses-original-id');
+    await expect(
+      service.send({
+        ...message,
+        identityDeliveryId: '00000000-0000-7000-8000-000000000001',
+      }),
+    ).resolves.toMatchObject({
+      status: 'SENT',
+      providerMessageId: 'ses-original-id',
+    });
+    expect(client.send).not.toHaveBeenCalled();
+    expect(repository.prepare).not.toHaveBeenCalled();
   });
 });

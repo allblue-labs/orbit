@@ -279,6 +279,24 @@ describe('PR-08: SES/SNS HTTP, atomic suppression and restricted PostgreSQL', ()
       .get<IHashProvider>(HASH_PROVIDER)
       .hash('Fixture#MailRecovery2026');
     await admin.credential.create({ data: { userId: user.id, passwordHash } });
+    const plan = await admin.plan.findFirstOrThrow({
+      where: { isActive: true },
+    });
+    const organization = await admin.organization.create({
+      data: {
+        ownerUserId: user.id,
+        planId: plan.id,
+        slug: `feedback-owner-${randomUUID()}`,
+        displayName: 'SES owner fixture',
+        primarySegment: 'HVAC',
+        status: 'ACTIVE',
+        subscriptionStatus: 'ACTIVE',
+      },
+    });
+    organizationIds.push(organization.id);
+    await admin.accountEmailOwner.create({
+      data: { userId: user.id, registrationOrganizationId: organization.id },
+    });
     await http()
       .post('/api/v1/identity/password/forgot')
       .send({ email })
@@ -312,6 +330,10 @@ describe('PR-08: SES/SNS HTTP, atomic suppression and restricted PostgreSQL', ()
       ),
     ).expect(200);
     const calls = ses.send.mock.calls.length;
+    await admin.passwordResetToken.updateMany({
+      where: { userId: user.id },
+      data: { createdAt: new Date(Date.now() - 61000) },
+    });
     await http(1)
       .post('/api/v1/identity/password/forgot')
       .send({ email })
@@ -396,7 +418,10 @@ describe('PR-08: SES/SNS HTTP, atomic suppression and restricted PostgreSQL', ()
         apps[1]!
           .get(EmailNotificationProvider)
           .send({ to: recipient, subject: 'Aviso', text: 'Suprimido' }),
-      ).resolves.toEqual({ status: 'SKIPPED', provider: 'ses-suppressed' });
+      ).resolves.toEqual({
+        status: 'SKIPPED',
+        provider: 'email-template-required',
+      });
       expect(ses.send.mock.calls).toHaveLength(sentBefore);
     }
     expect(

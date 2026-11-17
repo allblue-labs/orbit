@@ -45,6 +45,20 @@ export class EmailService implements OnModuleDestroy {
       if (!this.config.from || !this.config.region || !this.ses)
         return this.failed('EMAIL_NOT_CONFIGURED', false);
       try {
+        if (message.identityDeliveryId) {
+          const previous = await this.repository.acceptedDelivery(
+            message.identityDeliveryId,
+            message.to,
+            this.config.from,
+            this.config.region,
+          );
+          if (previous)
+            return {
+              status: 'SENT',
+              provider: 'ses',
+              providerMessageId: previous,
+            };
+        }
         const prepared = await this.repository.prepare(
           message.to,
           this.config.from,
@@ -76,6 +90,7 @@ export class EmailService implements OnModuleDestroy {
             },
           },
         }),
+        { abortSignal: AbortSignal.timeout(15000) },
       );
       accepted = true;
       if (!result.MessageId) return this.failed('SES_MESSAGE_ID_MISSING', true);

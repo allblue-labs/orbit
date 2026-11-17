@@ -1,3 +1,6 @@
+import type { Prisma } from '@prisma/client';
+import { AccountNoticesService } from '../src/modules/email/account-notices.service';
+import { EmailService } from '../src/modules/email/email.service';
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
@@ -84,6 +87,7 @@ describe('PR-07: outbox SES com HTTP, reinício e RLS real', () => {
     };
   const row = () =>
     admin.identityEmailDelivery.findFirstOrThrow({
+      where: { purpose: { in: ['EMAIL_VERIFICATION', 'PASSWORD_RESET'] } },
       orderBy: { createdAt: 'desc' },
     });
   const forgot = (email = principal.email) =>
@@ -145,6 +149,9 @@ describe('PR-07: outbox SES com HTTP, reinício e RLS real', () => {
   beforeEach(async () => {
     await admin.identityEmailDelivery.deleteMany();
     await admin.authRateLimitBucket.deleteMany();
+    await admin.passwordResetToken.deleteMany({
+      where: { userId: principal.id },
+    });
     sender.deliver.mockClear();
     sender.deliver.mockResolvedValue({
       status: 'SENT',
@@ -320,6 +327,10 @@ describe('PR-07: outbox SES com HTTP, reinício e RLS real', () => {
           .send({ token: original.token, password })
           .expect(204);
       if (reason === 'replaced') {
+        await admin.passwordResetToken.updateMany({
+          where: { userId: principal.id },
+          data: { createdAt: new Date(Date.now() - 61000) },
+        });
         await forgot().expect(202);
         await admin.identityEmailDelivery.deleteMany({
           where: { id: { not: queued.id } },
@@ -350,69 +361,278 @@ describe('PR-07: outbox SES com HTTP, reinício e RLS real', () => {
       }
     },
   );
-  it('convite reenviado invalida entrega anterior; revogar impede retry', async () => {
-    const created = await auth(http().post('/api/v1/identity/invitations'))
+  it('convites e membros, mesmo com e-mail real, usam links manuais e não geram e-mail transacional', async () => {
+    const invited = await auth(http().post('/api/v1/identity/invitations'))
       .send({
-        email: `inv.${randomUUID()}@orbit.local`,
+        email: `inv.${randomUUID()}@example.com`,
         roleId: principal.role,
       })
       .expect(201);
-    const id = data<{ id: string }>(created).id;
-    const first = await row();
-    await auth(http().post(`/api/v1/identity/invitations/${id}/resend`)).expect(
-      201,
-    );
-    await worker().tick();
-    expect(
-      (
-        await admin.identityEmailDelivery.findUniqueOrThrow({
-          where: { id: first.id },
-        })
-      ).status,
-    ).toBe('SKIPPED');
-    await auth(http().delete(`/api/v1/identity/invitations/${id}`)).expect(204);
-    await worker(1).tick();
-    expect(sender.deliver).not.toHaveBeenCalled();
-    expect((await row()).status).toBe('SKIPPED');
-  });
-  it('cadastro de equipe e link de senha enfileiram sem afirmar entrega', async () => {
-    const email = `fixture.member.email.${randomUUID()}@orbit.local`;
-    const member = await auth(
-      http().post('/api/v1/organizations/current/team/members'),
-    )
-      .send({
-        email,
-        firstName: 'Técnico',
-        lastName: 'Email',
-        roleId: principal.role,
-        businessUnitIds: [principal.unit],
-      })
-      .expect(201);
-    const id = data<{ member: { userId: string } }>(member).member.userId;
-    const welcome = await row();
-    expect(welcome.userId).toBe(id);
-    expect(welcome.purpose).toBe('EMAIL_VERIFICATION');
-    expect(sender.deliver).not.toHaveBeenCalled();
-    await worker().tick();
-    const link = await auth(
-      http().post(
-        `/api/v1/organizations/current/team/members/${id}/password-link`,
-      ),
+    const inviteId = data<{ id: string }>(invited).id;
+    await auth(
+      http().post(`/api/v1/identity/invitations/${inviteId}/resend`),
     ).expect(201);
-    expect(
-      data<{ emailSent: boolean; emailQueued: boolean }>(link),
-    ).toMatchObject({ emailSent: false, emailQueued: true });
-    const pending = await row();
-    expect(pending.userId).toBe(id);
-    expect(pending.purpose).toBe('PASSWORD_RESET');
-    expect(pending.status).toBe('PENDING');
+    await auth(
+      http().delete(`/api/v1/identity/invitations/${inviteId}`),
+    ).expect(204);
+    for (const domain of ['orbit.local', 'example.com']) {
+      const email = `fixture.member.email.${randomUUID()}@${domain}`;
+      const member = await auth(
+        http().post('/api/v1/organizations/current/team/members'),
+      )
+        .send({
+          email,
+          firstName: 'Técnico',
+          lastName: 'Email',
+          roleId: principal.role,
+          businessUnitIds: [principal.unit],
+        })
+        .expect(201);
+      const id = data<{ member: { userId: string } }>(member).member.userId;
+      expect(
+        await admin.accountEmailOwner.findUnique({ where: { userId: id } }),
+      ).toBeNull();
+      expect(
+        await admin.emailVerificationToken.count({ where: { userId: id } }),
+      ).toBe(0);
+      const link = await auth(
+        http().post(
+          `/api/v1/organizations/current/team/members/${id}/password-link`,
+        ),
+      ).expect(201);
+      expect(
+        data<{ emailSent: boolean; emailQueued: boolean; link: string }>(link),
+      ).toMatchObject({
+        emailSent: false,
+        emailQueued: false,
+        link: expect.any(String) as unknown,
+      });
+      await forgot(email).expect(202);
+    }
+    expect(await admin.identityEmailDelivery.count()).toBe(0);
     await worker().tick();
-    expect(sender.deliver).toHaveBeenCalledWith(
-      'PASSWORD_RESET',
-      email,
-      payload(pending).token,
-      pending.id,
-    );
+    expect(sender.deliver).not.toHaveBeenCalled();
+  });
+
+  it('owner original tem proveniência persistida e reenvios respeitam cooldown e orçamento sem invalidar o último link', async () => {
+    expect(
+      await admin.accountEmailOwner.findUnique({
+        where: { userId: principal.id },
+      }),
+    ).toMatchObject({ registrationOrganizationId: principal.org });
+    const resend = () =>
+      http()
+        .post('/api/v1/identity/email/resend')
+        .send({ email: principal.email });
+    for (let i = 0; i < 7; i++) {
+      await admin.emailVerificationToken.updateMany({
+        where: { userId: principal.id },
+        data: { createdAt: new Date(Date.now() - 61000) },
+      });
+      await resend().expect(202);
+    }
+    const deliveries = await admin.identityEmailDelivery.findMany({
+      where: { userId: principal.id, purpose: 'EMAIL_VERIFICATION' },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(deliveries).toHaveLength(5);
+    expect(
+      await admin.emailVerificationToken.findUnique({
+        where: { userId: principal.id },
+      }),
+    ).toMatchObject({ tokenHash: deliveries[0]!.tokenHash });
+    await forgot().expect(202);
+    await forgot().expect(202);
+    expect(
+      await admin.identityEmailDelivery.count({
+        where: { userId: principal.id, purpose: 'PASSWORD_RESET' },
+      }),
+    ).toBe(1);
+  });
+  it('alteração efetiva da senha persiste somente um aviso de segurança e não inclui senha no payload', async () => {
+    const changed = 'Orbit#Changed@2026';
+    await auth(http().post('/api/v1/identity/me/password'))
+      .send({ currentPassword: password, newPassword: changed })
+      .expect(204);
+    try {
+      const notice = await admin.identityEmailDelivery.findFirstOrThrow({
+        where: { userId: principal.id, purpose: 'PASSWORD_CHANGED' },
+      });
+      const decoded = crypto.decrypt(notice.encryptedPayload!);
+      expect(decoded).not.toContain(password);
+      expect(decoded).not.toContain(changed);
+      expect(decoded).not.toContain('passwordHash');
+      const prepared = await apps[0]!
+        .get(AccountNoticesService)
+        .prepare({ ...notice, leaseId: 'test' }, {});
+      expect(prepared?.subject).toContain('senha');
+      expect(prepared?.text).toContain('/perfil');
+    } finally {
+      await auth(http().post('/api/v1/identity/me/password'))
+        .send({ currentPassword: changed, newPassword: password })
+        .expect(204);
+    }
+    expect(
+      await admin.identityEmailDelivery.count({
+        where: { userId: principal.id, purpose: 'PASSWORD_CHANGED' },
+      }),
+    ).toBe(1);
+  });
+  it('aviso de plano vencido é deduplicado entre réplicas e cancelado se houver reativação antes do envio', async () => {
+    const user = await admin.user.findUniqueOrThrow({
+      where: { id: principal.id },
+    });
+    const sub = await admin.organizationSubscription.findFirstOrThrow({
+      where: { organizationId: principal.org, endedAt: null },
+    });
+    const day = 86400000;
+    await admin.user.update({
+      where: { id: principal.id },
+      data: { emailVerifiedAt: new Date() },
+    });
+    await admin.organizationSubscription.update({
+      where: { id: sub.id },
+      data: {
+        status: 'CANCELED',
+        currentPeriodStart: new Date(Date.now() - 32 * day),
+        currentPeriodEnd: new Date(Date.now() - 2 * day),
+        graceStartsAt: null,
+        graceEndsAt: null,
+        endedAt: new Date(Date.now() - 2 * day),
+      },
+    });
+    try {
+      await Promise.all([
+        apps[0]!.get(AccountNoticesService).scan(),
+        apps[1]!.get(AccountNoticesService).scan(),
+      ]);
+      const notices = await admin.identityEmailDelivery.findMany({
+        where: { userId: principal.id, purpose: 'PLAN_EXPIRED' },
+      });
+      expect(notices).toHaveLength(1);
+      await admin.organizationSubscription.update({
+        where: { id: sub.id },
+        data: {
+          status: sub.status,
+          currentPeriodStart: sub.currentPeriodStart,
+          currentPeriodEnd: sub.currentPeriodEnd,
+          endedAt: sub.endedAt,
+          graceStartsAt: sub.graceStartsAt,
+          graceEndsAt: sub.graceEndsAt,
+        },
+      });
+      const send = jest.spyOn(apps[0]!.get(EmailService), 'send');
+      try {
+        await worker().tick();
+        expect(
+          await admin.identityEmailDelivery.findUnique({
+            where: { id: notices[0]!.id },
+          }),
+        ).toMatchObject({
+          status: 'SKIPPED',
+          lastErrorCode: 'NOTICE_NO_LONGER_CURRENT',
+        });
+        expect(send).not.toHaveBeenCalled();
+      } finally {
+        send.mockRestore();
+      }
+    } finally {
+      await admin.user.update({
+        where: { id: principal.id },
+        data: { emailVerifiedAt: user.emailVerifiedAt },
+      });
+      await admin.organizationSubscription.update({
+        where: { id: sub.id },
+        data: {
+          status: sub.status,
+          currentPeriodStart: sub.currentPeriodStart,
+          currentPeriodEnd: sub.currentPeriodEnd,
+          endedAt: sub.endedAt,
+          graceStartsAt: sub.graceStartsAt,
+          graceEndsAt: sub.graceEndsAt,
+        },
+      });
+    }
+  });
+
+  it('consolida limites reais em um aviso por período e descarta o aviso depois da adequação', async () => {
+    const user = await admin.user.findUniqueOrThrow({
+      where: { id: principal.id },
+    });
+    const sub = await admin.organizationSubscription.findFirstOrThrow({
+      where: { organizationId: principal.org, endedAt: null },
+    });
+    const snapshot = sub.entitlementsSnapshot as Prisma.JsonObject;
+    const allocation = snapshot.allocation as Prisma.JsonObject;
+    const customers: string[] = [];
+    await admin.user.update({
+      where: { id: principal.id },
+      data: { emailVerifiedAt: new Date() },
+    });
+    await admin.organizationSubscription.update({
+      where: { id: sub.id },
+      data: {
+        entitlementsSnapshot: {
+          ...snapshot,
+          allocation: { ...allocation, ACTIVE_CUSTOMERS: 1 },
+        },
+      },
+    });
+    try {
+      await apps[0]!.get(AccountNoticesService).scan();
+      expect(
+        await admin.identityEmailDelivery.count({
+          where: { userId: principal.id, purpose: 'PLAN_LIMIT_REACHED' },
+        }),
+      ).toBe(0);
+      for (let n = 0; n < 2; n++)
+        customers.push(
+          (
+            await admin.customer.create({
+              data: {
+                organizationId: principal.org,
+                legalName: 'Limit fixture',
+              },
+            })
+          ).id,
+        );
+      await Promise.all([
+        apps[0]!.get(AccountNoticesService).scan(),
+        apps[1]!.get(AccountNoticesService).scan(),
+      ]);
+      const notices = await admin.identityEmailDelivery.findMany({
+        where: { userId: principal.id, purpose: 'PLAN_LIMIT_REACHED' },
+      });
+      expect(notices).toHaveLength(1);
+      const decoded = JSON.parse(
+        crypto.decrypt(notices[0]!.encryptedPayload!),
+      ) as { data: Record<string, unknown> };
+      const prepared = await apps[0]!
+        .get(AccountNoticesService)
+        .prepare({ ...notices[0]!, leaseId: 'test' }, decoded.data);
+      expect(prepared?.text).toContain('clientes ativos');
+      expect(prepared?.text).not.toContain('ACTIVE_CUSTOMERS');
+      await admin.customer.deleteMany({ where: { id: { in: customers } } });
+      await worker().tick();
+      expect(
+        await admin.identityEmailDelivery.findUnique({
+          where: { id: notices[0]!.id },
+        }),
+      ).toMatchObject({
+        status: 'SKIPPED',
+        lastErrorCode: 'NOTICE_NO_LONGER_CURRENT',
+      });
+    } finally {
+      await admin.customer.deleteMany({ where: { id: { in: customers } } });
+      await admin.user.update({
+        where: { id: principal.id },
+        data: { emailVerifiedAt: user.emailVerifiedAt },
+      });
+      await admin.organizationSubscription.update({
+        where: { id: sub.id },
+        data: { entitlementsSnapshot: snapshot },
+      });
+    }
   });
   it('RLS não expõe a fila a requisições nem usa privilégio de worker em tabelas de tenant', async () => {
     await forgot().expect(202);
@@ -437,12 +657,15 @@ describe('PR-07: outbox SES com HTTP, reinício e RLS real', () => {
     await expect(
       runtime.$transaction(async (tx) => {
         await tx.$queryRaw`SELECT set_config('app.user_id',${principal.id},true)`;
-        await outbox().enqueueIn(tx, {
-          purpose: 'PASSWORD_RESET',
-          recipient: 'foreign@orbit.local',
-          token: 'synthetic-private-token',
-          userId: foreign.id,
-          expiresAt: new Date(Date.now() + 60000),
+        await tx.identityEmailDelivery.create({
+          data: {
+            id: randomUUID(),
+            purpose: 'PASSWORD_RESET',
+            userId: foreign.id,
+            tokenHash: HashHelper.sha256('synthetic-private-token'),
+            encryptedPayload: 'synthetic-encrypted-payload',
+            expiresAt: new Date(Date.now() + 60000),
+          },
         });
       }),
     ).rejects.toThrow();

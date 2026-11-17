@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
-import { IdentityEmailOutbox } from './infrastructure/identity-email.outbox';
 import { IdentityEmailWorker } from './infrastructure/identity-email.worker';
-import { EmailModule } from '../email/email.module';
+import { AccountEmailModule } from '../email/account-email.module';
 import { JwtModule } from '@nestjs/jwt';
 import { EnvironmentProvider } from '../../providers';
 import { AuthenticationService } from './application/authentication.service';
@@ -27,7 +26,7 @@ import { EmailVerificationController } from './presentation/email-verification.c
 
 @Module({
   imports: [
-    EmailModule,
+    AccountEmailModule,
     JwtModule.registerAsync({
       inject: [EnvironmentProvider],
       useFactory: (environment: EnvironmentProvider) => ({
@@ -55,7 +54,6 @@ import { EmailVerificationController } from './presentation/email-verification.c
   ],
   providers: [
     IdentityRepository,
-    IdentityEmailOutbox,
     IdentityEmailWorker,
     RegistrationRepository,
     IdentityTokenService,

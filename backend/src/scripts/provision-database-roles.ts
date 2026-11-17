@@ -254,6 +254,12 @@ async function provision(): Promise<void> {
       END IF;
     END $$`);
 
+    await admin.query(`DO $$ BEGIN
+      IF to_regclass('public.account_email_owners') IS NOT NULL THEN
+        EXECUTE 'REVOKE INSERT, UPDATE, DELETE ON TABLE public.account_email_owners FROM ${role}';
+      END IF;
+    END $$`);
+
     const attributes = (
       await admin.query<RoleAttributes>(
         'SELECT rolsuper, rolbypassrls, rolcreatedb, rolcreaterole FROM pg_roles WHERE rolname = $1',

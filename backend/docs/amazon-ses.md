@@ -1,7 +1,10 @@
 # E-mails transacionais com Amazon SES
 
-O `EmailModule` exporta `EmailService.send({ to, subject, text, html? })`. Cadastro,
-confirmação, recuperação de senha, convites e notificações usam o mesmo remetente.
+O `EmailModule` exporta `EmailService.send({ to, subject, text, html? })`. O catálogo de comunicações de conta atende exclusivamente o **primeiro owner**,
+com procedência positiva de cadastro público ou do provisionamento administrativo
+canônico. Cadastro/convite de equipe, mesmo com e-mail real, não dispara esses e-mails.
+Notificações operacionais continuam na central e no push; textos genéricos de
+notificação não são encaminhados por e-mail.
 O SDK oficial AWS para JavaScript v3 (`@aws-sdk/client-sesv2`) está no lockfile de
 produção. Node 22, já usado pelo Dockerfile, atende aos requisitos do pacote.
 
@@ -12,13 +15,15 @@ Configure no `.env` da implantação ou injete como variáveis do container da A
 ```dotenv
 AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=
-AWS_REGION=us-east-1
+AWS_REGION=us-east-2
 AWS_SES_FROM_EMAIL=no-reply@allblue-labs.com
 # Gerar uma vez: openssl rand -base64 32. Preservar entre réplicas/backups.
 EMAIL_SUPPRESSION_HASH_KEY=
 IDENTITY_PUBLIC_WEB_URL=https://orbit.allblue-labs.com
 # Somente para credenciais temporárias:
 AWS_SESSION_TOKEN=
+# Controle do consumidor: a fila continua sendo gravada durante a pausa.
+ACCOUNT_EMAIL_DELIVERY_ENABLED=true
 ```
 
 Os quatro campos AWS e a chave dedicada `EMAIL_SUPPRESSION_HASH_KEY` são
@@ -126,11 +131,13 @@ Referências oficiais:
 
 ## Fluxos e garantias
 
-- Cadastro público, provisionamento pela administração e cadastro direto de equipe:
-  usuário, hash de verificação (token aleatório de 48 bytes, prazo de 24h) e intenção
+- Cadastro público do owner inicial: usuário, vínculo de procedência, hash de verificação (token aleatório de 48 bytes, prazo de 24h) e intenção
   de e-mail cifrada são gravados na mesma transação. O HTTP não chama SES.
   Uma falha no SES não desfaz a conta; falha de persistência na fila desfaz toda a
   transação, evitando uma conta criada sem a comunicação correspondente.
+- O provisionamento administrativo canônico preserva o e-mail de configuração inicial
+  do primeiro owner, com vínculo validado pela operação de provisionamento. Não se
+  estende a membros de equipe, novos papéis OWNER ou organizações secundárias.
 - `emailVerifiedAt` fica vazio até a confirmação. A mudança não acrescenta um
   bloqueio de login, mobile, checkout ou teste de plano. Contas antigas não são
   desverificadas; convite aceito continua sendo prova de posse do e-mail.
@@ -141,15 +148,22 @@ Referências oficiais:
   o mesmo endereço existente na emissão. Tokens antigos não confirmam um e-mail
   alterado posteriormente. Confirmação não altera senha, organização ou sessão.
 - `POST /identity/email/resend` recebe `{ "email": "..." }` e responde 202 com
-  mensagem genérica. Há intervalo mínimo de 60 segundos por usuário e limite
-  por IP; reemitir invalida o link anterior. Nunca retorna tokens.
+  mensagem genérica. Há intervalo mínimo de 60 segundos por usuário, teto de cinco mensagens
+  desse propósito em 24 horas e limite por IP; somente uma reemissão permitida
+  invalida o link anterior. Nunca retorna tokens.
 - Recuperação existente: `POST /identity/password/forgot` grava hash, expiração
   de 30 minutos e intenção de envio na mesma transação. A resposta genérica em
   português permanece igual para conta inexistente e falha ao enfileirar,
   evitando enumeração de contas. O reset consome uma vez e revoga
-  as sessões existentes. O link HTTPS aponta ao formulário já implementado.
-- SES: conexão limitada a 2s, timeout de requisição de 5s e até 3 tentativas do
-  SDK para falhas elegíveis. Resultado `SENT` significa aceitação pelo provedor,
+  as sessões existentes. Há intervalo de 60 segundos enquanto o último link continua
+  válido e não usado, e teto de cinco e-mails desse propósito em 24 horas.
+  O link HTTPS aponta ao formulário já implementado. Links novos de confirmação,
+  recuperação e convite transportam o token em `#token=`, sem query no GET.
+  O frontend mantém compatibilidade com links legados, retira o token da URL
+  após capturá-lo em memória e aplica `Referrer-Policy: no-referrer` nessas páginas.
+- SES: conexão limitada a 2s, timeout de requisição de 5s, prazo total de 15s
+  e uma tentativa do SDK. A fila controla as novas tentativas para evitar
+  multiplicação de retries. Resultado `SENT` significa aceitação pelo provedor,
   não entrega na caixa de entrada. Para identidade, a outbox durável acrescenta
   até seis tentativas com backoff, reaproveitando o mesmo token enquanto válido.
   Antes de cada envio, reconfere conta/e-mail, uso, expiração e token atual;
@@ -171,11 +185,16 @@ pendente. O payload recuperável é removido quando a entrega termina (aceita,
 ignorada ou falha permanente); os metadados do resultado permanecem sem o link.
 A RLS da fila não permite leitura em requisições normais.
 
-Convites e reenvios também gravam token e mensagem juntos. A fila usa unicidade
+Reenvios elegíveis gravam token e mensagem juntos. Convites e cadastros de equipe
+continuam com os links manuais existentes, sem fila de e-mail para endereços
+fictícios. O vínculo `account_email_owners` não pode ser inserido/alterado pelo
+papel HTTP diretamente; funções guardadas validam a procedência. A fila usa unicidade
 por propósito/hash, `SKIP LOCKED`, lease de cinco minutos e conclusão condicionada
 à lease para impedir que uma réplica antiga altere a entrega reivindicada por outra.
 O backoff é de 5s, 10s, 20s, 40s e 80s, limitado a seis tentativas do worker.
-Uma falha antes de confirmar o resultado pode repetir o mesmo e-mail: a API SES
+Um recibo de aceitação já persistido é reaproveitado por entrega lógica, inclusive
+quando a fila perde o ACK. Uma falha de rede/commit sem recibo observável ainda
+pode repetir o mesmo e-mail: a API SES
 SendEmail não oferece chave de idempotência. O link continua de uso único;
 não se promete exactly-once nem se cria outra conta/token a cada retry.
 
@@ -267,3 +286,79 @@ Naquela revisão inicial havia nove ocorrências preexistentes em outras depend�
 (quatro altas e cinco moderadas), fora do transporte SES. Esta validação não
 equivale a uma auditoria completa de segurança do repositório. Para a qualificação
 atual, consultar os relatórios de release PR-01 em diante, incluindo a PR-08.
+
+## Catálogo e frequência — ativação de produção (2026-11-17)
+
+| Modelo | Gatilho e proteção |
+| --- | --- |
+| Boas-vindas + confirmação | Uma mensagem no cadastro inicial; token de 24h. Não há disparo retroativo na migration. |
+| Confirmação de e-mail | Reenvio solicitado, até cinco por 24h e intervalo de 60s. |
+| Redefinição de senha | Solicitação do owner inicial; token de 30min e limites próprios de reenvio. |
+| Senha alterada | Após a troca efetiva, na mesma transação; até cinco por 24h e intervalo de uma hora. Sem senha ou hash no conteúdo. |
+| Plano expirado e não reativado | Owner verificado; entre 24h e sete dias após a perda efetiva do acesso, sem checkout aberto. Um aviso por vencimento. |
+| Limites do plano | Owner verificado; um aviso consolidado por assinatura/plano/período mensal/alteração de limites. Cadastros precisam ultrapassar o teto; consumo positivo precisa atingir o teto. |
+
+Avisos de plano compartilham teto de dois envios por owner em 24h e intervalo de
+uma hora por propósito. A fila tem unicidade durável por evento, trava por owner
+e reconfere o estado antes de enviar: reativação/adequação elimina avisos antigos.
+Somente a organização original é considerada. A varredura percorre páginas de
+25 owners, até quatro páginas por ciclo de um minuto, com orçamento de 20s entre
+páginas. Não há campanhas, rastreamento de abertura ou cliques.
+
+As configurações em banco e as filas existentes usam migrations normais. Aplicar
+todas as migrations e o provisionamento de papéis antes de iniciar a API nova;
+`provision-database-roles` preserva a revogação de escrita da tabela de procedência.
+Não modificar o baseline congelado de integridade PR-12.
+
+### Preparação SES/SNS do staging
+
+O comando operador abaixo cria/atualiza apenas o tópico e o configuration set
+`orbit-feedback-staging` em `AWS_REGION`. O modo padrão exibe o plano sem mudar a
+AWS. `--apply` prepara os recursos; `--subscribe` solicita a assinatura HTTPS
+somente depois que a API nova estiver saudável.
+
+```sh
+node dist/src/scripts/configure-ses-staging.js
+node dist/src/scripts/configure-ses-staging.js --apply
+node dist/src/scripts/configure-ses-staging.js --apply --subscribe
+```
+
+O provisionador requer `sns:CreateTopic`, `sns:GetTopicAttributes`,
+`sns:SetTopicAttributes`, `sns:TagResource`, `sns:Subscribe`,
+`ses:CreateConfigurationSet`, `ses:CreateConfigurationSetEventDestination` e
+`ses:UpdateConfigurationSetEventDestination`, limitados aos recursos de staging
+e à região. São permissões de implantação; o processo HTTP precisa apenas de
+`ses:SendEmail` e `sns:ConfirmSubscription` no tópico autorizado, além das
+permissões de leitura se executar preflight. Não conceder `iam:*` ou administrar
+políticas pelo aplicativo. Se houver AccessDenied, o administrador deve ajustar
+a identidade de implantação no console e repetir somente a operação necessária.
+
+O JSON de resultado contém apenas metadados de implantação. Configure
+`AWS_SES_CONFIGURATION_SET`, `AWS_SES_FEEDBACK_ENABLED=true`,
+`AWS_SES_FEEDBACK_ACCOUNT_ID`, `AWS_SES_FEEDBACK_TOPIC_ARN` e
+`AWS_SES_FEEDBACK_IDENTITY_ARN` segundo o resultado. A política SNS restringe a
+publicação ao SES da mesma conta e ao ARN desse configuration set.
+Consulte os testes de bounce/complaint e assinatura no [guia SNS](amazon-ses-feedback.md).
+
+### Teste real solicitado pelo administrador
+
+```sh
+node dist/src/scripts/check-ses-config.js --remote
+node dist/src/scripts/send-email-preview.js --to=darlansimplicio@gmail.com --send
+```
+
+O preview envia **duas mensagens**: uma prévia combinada dos seis modelos e uma
+confirmação simples da integração. Não cria conta, não altera senha/plano, não
+emite tokens e não consome a fila dos clientes. Não repetir automaticamente em
+uma falha ambígua; conferir primeiro os recibos. `SENT` comprova aceitação pelo
+SES; `DELIVERY` no SNS comprova aceitação pelo servidor do destinatário, sem
+comprovar caixa principal, leitura ou ausência de spam.
+
+Durante a qualificação, usar `ACCOUNT_EMAIL_DELIVERY_ENABLED=false`. Habilitar
+após migrations, preflight, revisão dos pendentes e teste real. Manter
+`SUBSCRIPTION_DATA_RETENTION_ENABLED=false` no staging até qualificar as
+credenciais de purge do CDN e os requisitos de backup/legado da PR-13. Essa
+pausa da exclusão é independente do envio de e-mails e não simula aprovação da AWS.
+
+Referências: [publicação SNS por configuration set](https://docs.aws.amazon.com/ses/latest/dg/event-publishing-add-event-destination-sns.html),
+[erros e ambiguidade de timeout do SES](https://docs.aws.amazon.com/ses/latest/dg/troubleshoot-error-messages.html).

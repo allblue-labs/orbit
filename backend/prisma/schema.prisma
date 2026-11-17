@@ -5157,3 +5157,11 @@ model TenantDataPurge {
   @@unique([organizationId, subscriptionId, retentionEndsAt])
   @@map("tenant_data_purges")
 }
+
+/// Immutable first-owner registration provenance; roles do not confer email eligibility.
+model AccountEmailOwner {
+  userId String @id @map("user_id") @db.Uuid
+  registrationOrganizationId String @unique @map("registration_organization_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  @@map("account_email_owners")
+}

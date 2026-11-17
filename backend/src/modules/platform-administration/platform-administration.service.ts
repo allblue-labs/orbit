@@ -463,6 +463,8 @@ export class PlatformAdministrationService {
     try {
       await this.locked(id, async (tx, op) => {
         if (op.status !== 'SUBSCRIPTION_READY') return;
+        // Canonical provisioning is positive provenance for this initial owner, never for team members.
+        await tx.$queryRaw`SELECT app_register_account_email_owner(${op.ownerUserId!}::uuid,${op.organizationId!}::uuid)::text`;
         const owner = await tx.user.findUniqueOrThrow({
           where: { id: op.ownerUserId! },
         });

@@ -15,16 +15,15 @@ describe('TransactionalIdentityTokenDelivery', () => {
   });
 
   it.each([
-    [IdentityTokenPurpose.INVITATION, '/convite?token=', 'Você foi convidado'],
     [
       IdentityTokenPurpose.PASSWORD_RESET,
-      '/redefinir-senha?token=',
+      '/redefinir-senha#token=',
       'Redefinição de senha',
     ],
     [
       IdentityTokenPurpose.EMAIL_VERIFICATION,
       '/confirmar-email#token=',
-      'Bem-vindo ao Orbit',
+      'Confirme seu e-mail',
     ],
   ] as const)(
     'envia %s pela classe central com texto e HTML em português',
@@ -67,5 +66,16 @@ describe('TransactionalIdentityTokenDelivery', () => {
       status: 'FAILED',
       code: 'SES_MESSAGE_REJECTED',
     });
+  });
+  it('never sends team invitations by email; the owner can share the existing link manually', async () => {
+    const email = { send: jest.fn() };
+    await expect(
+      new TransactionalIdentityTokenDelivery(email as never).deliver(
+        'INVITATION',
+        'staff@example.test',
+        token,
+      ),
+    ).resolves.toMatchObject({ status: 'SKIPPED' });
+    expect(email.send).not.toHaveBeenCalled();
   });
 });

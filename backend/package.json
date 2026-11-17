@@ -47,7 +47,8 @@
     "email:check:dev": "ts-node src/scripts/check-ses-config.ts",
     "integrity:check": "node dist/src/scripts/check-relational-integrity.js",
     "integrity:generate": "ts-node scripts/generate-relational-integrity.ts",
-    "storage:retention:check": "node dist/src/scripts/check-storage-retention.js"
+    "storage:retention:check": "node dist/src/scripts/check-storage-retention.js",
+    "email:preview": "node dist/src/scripts/send-email-preview.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1167.0",

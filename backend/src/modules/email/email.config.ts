@@ -48,7 +48,7 @@ export function createSesEmailClient(
       secretAccessKey: config.secretAccessKey,
       sessionToken: config.sessionToken,
     },
-    maxAttempts: 3,
+    maxAttempts: 1,
     retryMode: 'standard',
     requestHandler: {
       connectionTimeout: 2_000,

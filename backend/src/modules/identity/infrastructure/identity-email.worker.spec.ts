@@ -42,7 +42,12 @@ function fixture(attempts = 1) {
         providerMessageId: 'ses-id',
       }),
   };
-  const worker = new IdentityEmailWorker(outbox as never, delivery);
+  const worker = new IdentityEmailWorker(
+    outbox as never,
+    delivery,
+    { send: jest.fn() } as never,
+    { prepare: jest.fn() } as never,
+  );
   return { row, outbox, delivery, worker };
 }
 describe('worker durável de identidade', () => {
@@ -153,6 +158,7 @@ describe('worker durável de identidade', () => {
     expect(outbox.decrypt(valid as never)).toEqual({
       recipient: data.recipient,
       token: data.token,
+      data: {},
     });
     expect(() =>
       outbox.decrypt({

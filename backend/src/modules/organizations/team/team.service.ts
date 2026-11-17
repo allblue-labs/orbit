@@ -228,7 +228,7 @@ export class TeamService {
       link: identityTokenLink(IdentityTokenPurpose.PASSWORD_RESET, token),
       expiresAt,
       emailSent: false,
-      emailQueued: true,
+      emailQueued: false,
       member: membro,
     };
   }

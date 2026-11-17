@@ -479,9 +479,11 @@ describe('Team members, temporary password and recovery (e2e)', () => {
       ),
     ).expect(201);
     const link = (emitido.body as Envelope<{ link: string }>).data.link;
-    expect(link).toContain('/redefinir-senha?token=');
+    expect(link).toContain('/redefinir-senha#token=');
 
-    const token = new URL(link).searchParams.get('token')!;
+    const token = new URLSearchParams(new URL(link).hash.slice(1)).get(
+      'token',
+    )!;
     const senha = 'Tecnico#PeloLink@2026';
     await http()
       .post('/api/v1/identity/password/reset')

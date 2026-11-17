@@ -229,6 +229,8 @@ export class RegistrationRepository {
           },
         });
       }
+      if (options.publicSignup && !options.platformAdmin)
+        await transaction.$queryRaw`SELECT app_register_account_email_owner(${userId}::uuid,${organizationId}::uuid)::text`;
       await queueWelcome?.(transaction, userId);
       return { userId, organizationId, businessUnitId };
     };

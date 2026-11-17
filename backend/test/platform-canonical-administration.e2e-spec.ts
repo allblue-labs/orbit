@@ -444,7 +444,41 @@ describe('ORB-NX-02 canonical platform administration (HTTP / restricted Postgre
       }),
     ).toBe(0);
     spy.mockRestore();
-    const result = await resume(org.provisioning.id);
+    // A different verified global administrator may resume the canonical first-owner setup.
+    const email = `nx02.second-admin.${randomUUID()}@example.test`;
+    owners.push(email);
+    await admin.user.create({
+      data: {
+        email,
+        normalizedEmail: email,
+        firstName: 'Second',
+        lastName: 'Admin',
+        displayName: 'Second Admin',
+        status: 'ACTIVE',
+        credential: {
+          create: {
+            passwordHash: await app
+              .get<IHashProvider>(HASH_PROVIDER)
+              .hash(PASSWORD),
+          },
+        },
+        platformRoleAssignments: { create: { roleId: globalRoleId } },
+      },
+    });
+    const secondToken = unwrap<{ accessToken: string }>(
+      await http()
+        .post('/api/v1/identity/login')
+        .send({ email, password: PASSWORD, client: 'WEB' })
+        .expect(200),
+    ).accessToken;
+    const result = unwrap<Organization>(
+      await auth(
+        http().post(
+          `/api/v1/platform-admin/tenant-provisionings/${org.provisioning.id}/resume`,
+        ),
+        secondToken,
+      ).expect(200),
+    );
     expect(result.id).toBe(org.id);
     expect(result.provisioning.complete).toBe(true);
     expect(

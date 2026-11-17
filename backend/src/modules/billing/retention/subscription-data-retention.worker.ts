@@ -15,7 +15,12 @@ export class SubscriptionDataRetentionWorker
   private readonly logger = new Logger(SubscriptionDataRetentionWorker.name);
   constructor(private readonly retention: SubscriptionDataRetentionService) {}
   onModuleInit() {
-    if ((process.env.JOBS_WORKER_ENABLED ?? 'true').trim() === 'false') return;
+    if (
+      (process.env.JOBS_WORKER_ENABLED ?? 'true').trim() === 'false' ||
+      (process.env.SUBSCRIPTION_DATA_RETENTION_ENABLED ?? 'true').trim() ===
+        'false'
+    )
+      return;
     this.timer = setInterval(() => void this.tick(), 5 * 60_000);
     this.timer.unref();
     void this.tick();

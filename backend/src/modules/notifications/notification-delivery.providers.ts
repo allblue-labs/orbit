@@ -1,8 +1,6 @@
 import { OutboundHttp } from '../../network/outbound-http';
 import { OutboundPolicy } from '../../network/outbound-policy';
 import { Injectable } from '@nestjs/common';
-import { EmailService } from '../email/email.service';
-import { InfrastructureException } from '../../exceptions';
 import webpush from 'web-push';
 
 export type DeliveryResult = {
@@ -13,19 +11,19 @@ export type DeliveryResult = {
 
 @Injectable()
 export class EmailNotificationProvider {
-  constructor(private readonly email: EmailService) {}
+  constructor() {}
 
-  async send(input: {
+  send(input: {
     to: string;
     subject: string;
     text: string;
   }): Promise<DeliveryResult> {
-    const result = await this.email.send(input);
-    if (result.status === 'FAILED' && result.code === 'EMAIL_SUPPRESSED')
-      return { status: 'SKIPPED', provider: 'ses-suppressed' };
-    if (result.status === 'FAILED')
-      throw new InfrastructureException('Email notification delivery failed');
-    return result;
+    // Operational notifications remain in the inbox/push. Only the owner template outbox sends mail.
+    void input;
+    return Promise.resolve({
+      status: 'SKIPPED',
+      provider: 'email-template-required',
+    });
   }
 }
 

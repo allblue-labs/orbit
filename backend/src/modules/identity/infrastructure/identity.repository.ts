@@ -1,3 +1,4 @@
+import { accountEmailOwner } from '../../email/account-email-policy';
 import { IdentityEmailOutbox } from './identity-email.outbox';
 import { VerifiedPlatformAuthority } from '../../../common/verified-platform-authority';
 import { Injectable } from '@nestjs/common';
@@ -179,6 +180,7 @@ export class IdentityRepository {
   ): Promise<void> {
     return this.prisma
       .$transaction(async (transaction) => {
+        await this.setLocal(transaction, 'app.user_id', userId);
         await transaction.credential.update({
           where: { userId },
           data: {
@@ -197,6 +199,12 @@ export class IdentityRepository {
           },
           data: { revokedAt: new Date() },
         });
+        await this.emailOutbox.enqueueNoticeIn(
+          transaction,
+          userId,
+          'PASSWORD_CHANGED',
+          `profile:${Date.now()}`,
+        );
       })
       .then(() => undefined);
   }
@@ -375,6 +383,7 @@ export class IdentityRepository {
   ): Promise<string | null> {
     return this.prisma.$transaction(async (tx) => {
       await this.setLocal(tx, 'app.user_id', userId);
+      if (!(await accountEmailOwner(tx, userId))) return null;
       await tx.$executeRaw`SELECT id FROM users WHERE id=${userId}::uuid FOR UPDATE`;
       const user = await tx.user.findFirst({
         where: {
@@ -391,6 +400,14 @@ export class IdentityRepository {
         select: { createdAt: true },
       });
       if (previous && previous.createdAt.getTime() > Date.now() - 60_000)
+        return null;
+      if (
+        !(await this.emailOutbox.canQueueIdentityIn(
+          tx,
+          userId,
+          'EMAIL_VERIFICATION',
+        ))
+      )
         return null;
       const data = {
         email: user.normalizedEmail,
@@ -433,11 +450,30 @@ export class IdentityRepository {
     const work = async (transaction: PrismaTransactionClient) => {
       await transaction.$executeRaw`SELECT id FROM users WHERE id=${userId}::uuid FOR UPDATE`;
       await this.setLocal(transaction, 'app.user_id', userId);
+      let queueEmail = Boolean(emailToken);
+      if (emailToken && (await accountEmailOwner(transaction, userId))) {
+        const previous = await transaction.passwordResetToken.findFirst({
+          where: { userId, usedAt: null, expiresAt: { gt: new Date() } },
+          orderBy: { createdAt: 'desc' },
+        });
+        if (previous && previous.createdAt.getTime() > Date.now() - 60000)
+          return previous;
+        if (
+          !(await this.emailOutbox.canQueueIdentityIn(
+            transaction,
+            userId,
+            'PASSWORD_RESET',
+          ))
+        ) {
+          if (previous) return previous;
+          queueEmail = false;
+        }
+      }
       await transaction.passwordResetToken.deleteMany({ where: { userId } });
       const reset = await transaction.passwordResetToken.create({
         data: { userId, tokenHash, expiresAt },
       });
-      if (emailToken) {
+      if (emailToken && queueEmail) {
         const user = await transaction.user.findUniqueOrThrow({
           where: { id: userId },
           select: { email: true },
@@ -468,6 +504,7 @@ export class IdentityRepository {
   ): Promise<void> {
     return this.prisma
       .$transaction(async (transaction) => {
+        await this.setLocal(transaction, 'app.user_id', userId);
         const consumed = await transaction.passwordResetToken.updateMany({
           where: { id: tokenId, usedAt: null, expiresAt: { gt: new Date() } },
           data: { usedAt: new Date() },
@@ -491,6 +528,12 @@ export class IdentityRepository {
           where: { userId, revokedAt: null },
           data: { revokedAt: new Date() },
         });
+        await this.emailOutbox.enqueueNoticeIn(
+          transaction,
+          userId,
+          'PASSWORD_CHANGED',
+          `reset:${tokenId}`,
+        );
       })
       .then(() => undefined);
   }

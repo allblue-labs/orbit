@@ -64,6 +64,31 @@ export class EmailTransportRepository {
       return row.id;
     });
   }
+  acceptedDelivery(
+    identityDeliveryId: string,
+    to: string,
+    from: string,
+    region: string,
+  ) {
+    return this.transaction(async (tx) => {
+      const message = await tx.emailOutboundMessage.findFirst({
+        where: {
+          identityDeliveryId,
+          region,
+          status: 'ACCEPTED',
+          sourceHash: this.hash(from),
+          recipientHashes: { equals: [this.hash(to)] },
+        },
+        orderBy: { createdAt: 'asc' },
+        include: { providerMessages: { take: 1 } },
+      });
+      return (
+        message?.providerMessageId ??
+        message?.providerMessages[0]?.providerMessageId ??
+        null
+      );
+    });
+  }
   accepted(id: string, providerMessageId: string) {
     return this.transaction(async (tx) => {
       const { region } = await tx.emailOutboundMessage.findUniqueOrThrow({

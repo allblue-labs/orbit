@@ -71,6 +71,7 @@ export interface IIdentityTokenDelivery {
     recipient: string,
     token: string,
     identityDeliveryId?: string,
+    template?: 'WELCOME',
   ): Promise<EmailSendResult>;
 }
 

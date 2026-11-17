@@ -34,7 +34,7 @@ const nextConfig = {
         ],
       },
       {
-        source: "/confirmar-email",
+        source: "/:identityLink(confirmar-email|redefinir-senha|convite)",
         headers: [
           { key: "Referrer-Policy", value: "no-referrer" },
           { key: "X-Robots-Tag", value: "noindex, nofollow" },

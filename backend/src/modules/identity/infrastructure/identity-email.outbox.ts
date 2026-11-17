@@ -1,3 +1,8 @@
+import {
+  accountEmailOwner,
+  isAccountEmailPurpose,
+  type AccountEmailPurpose,
+} from '../../email/account-email-policy';
 import { Inject, Injectable } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import type { IdentityEmailDelivery } from '@prisma/client';
@@ -12,12 +17,13 @@ import type { IdentityTokenPurpose } from '../domain/identity.types';
 export const IDENTITY_EMAIL_MAX_ATTEMPTS = 6;
 export const IDENTITY_EMAIL_LEASE_MS = 5 * 60_000;
 export interface IdentityEmailInput {
-  purpose: IdentityTokenPurpose;
+  purpose: IdentityTokenPurpose | AccountEmailPurpose;
   recipient: string;
   token: string;
   expiresAt: Date;
   userId?: string;
   organizationId?: string;
+  data?: Record<string, unknown>;
 }
 export type ClaimedIdentityEmail = IdentityEmailDelivery & { leaseId: string };
 
@@ -30,6 +36,13 @@ export class IdentityEmailOutbox {
   ) {}
 
   async enqueueIn(tx: PrismaTransactionClient, input: IdentityEmailInput) {
+    if (input.purpose === 'INVITATION' || !input.userId) return;
+    const owner = await accountEmailOwner(tx, input.userId);
+    if (
+      !owner ||
+      owner.email.trim().toLowerCase() !== input.recipient.trim().toLowerCase()
+    )
+      return;
     const id = generateUuidV7();
     // Bind ciphertext to the row identity and immutable routing metadata.
     const encryptedPayload = this.crypto.encrypt(
@@ -38,6 +51,7 @@ export class IdentityEmailOutbox {
         purpose: input.purpose,
         recipient: input.recipient,
         token: input.token,
+        data: input.data ?? {},
         userId: input.userId ?? null,
         organizationId: input.organizationId ?? null,
         expiresAt: input.expiresAt.toISOString(),
@@ -60,6 +74,7 @@ export class IdentityEmailOutbox {
 
   /** Called INSIDE registration/member creation, so neither fact can be lost. */
   async welcomeIn(tx: PrismaTransactionClient, userId: string, email: string) {
+    if (!(await accountEmailOwner(tx, userId))) return;
     const token = randomBytes(48).toString('base64url');
     const expiresAt = new Date(Date.now() + 24 * 60 * 60_000);
     await tx.$queryRaw`SELECT set_config('app.user_id', ${userId}, true)`;
@@ -73,11 +88,88 @@ export class IdentityEmailOutbox {
     });
     await this.enqueueIn(tx, {
       purpose: 'EMAIL_VERIFICATION',
+      data: { welcome: true },
       userId,
       recipient: email,
       token,
       expiresAt,
     });
+  }
+
+  async canQueueIdentityIn(
+    tx: PrismaTransactionClient,
+    userId: string,
+    purpose: 'EMAIL_VERIFICATION' | 'PASSWORD_RESET',
+  ) {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'account-email:' + userId},0))::text`;
+    const [context] = await tx.$queryRaw<
+      { previous: string | null }[]
+    >`SELECT current_setting('app.identity_email_worker',true) AS previous`;
+    await tx.$queryRaw`SELECT set_config('app.identity_email_worker','true',true)`;
+    try {
+      return (
+        (await tx.identityEmailDelivery.count({
+          where: {
+            userId,
+            purpose,
+            createdAt: { gte: new Date(Date.now() - 86400000) },
+          },
+        })) < 5
+      );
+    } finally {
+      await tx.$queryRaw`SELECT set_config('app.identity_email_worker',${context?.previous ?? ''},true)`;
+    }
+  }
+  async enqueueNoticeIn(
+    tx: PrismaTransactionClient,
+    userId: string,
+    purpose: AccountEmailPurpose,
+    eventKey: string,
+    data: Record<string, unknown> = {},
+  ) {
+    const owner = await accountEmailOwner(tx, userId);
+    if (!owner || (purpose !== 'PASSWORD_CHANGED' && !owner.verifiedAt)) return;
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'account-email:' + userId},0))::text`;
+    const [context] = await tx.$queryRaw<
+      { previous: string | null }[]
+    >`SELECT current_setting('app.identity_email_worker',true) AS previous`;
+    await tx.$queryRaw`SELECT set_config('app.identity_email_worker','true',true)`;
+    try {
+      const since = new Date(Date.now() - 24 * 60 * 60_000);
+      const recent = await tx.identityEmailDelivery.count({
+        where: {
+          userId,
+          purpose: {
+            in:
+              purpose === 'PASSWORD_CHANGED'
+                ? ['PASSWORD_CHANGED']
+                : ['PLAN_EXPIRED', 'PLAN_LIMIT_REACHED'],
+          },
+          createdAt: { gte: since },
+        },
+      });
+      if (recent >= (purpose === 'PASSWORD_CHANGED' ? 5 : 2)) return;
+      const last = await tx.identityEmailDelivery.findFirst({
+        where: {
+          userId,
+          purpose,
+          createdAt: { gte: new Date(Date.now() - 60 * 60_000) },
+        },
+        select: { id: true },
+      });
+      if (last) return;
+      const token = HashHelper.sha256(`${purpose}:${userId}:${eventKey}`);
+      await this.enqueueIn(tx, {
+        purpose,
+        userId,
+        recipient: owner.email,
+        token,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60_000),
+        data,
+      });
+    } finally {
+      await tx.$queryRaw`SELECT set_config('app.identity_email_worker',${context?.previous ?? ''},true)`;
+    }
   }
 
   private asWorker<T>(
@@ -107,7 +199,11 @@ export class IdentityEmailOutbox {
     });
   }
 
-  decrypt(row: ClaimedIdentityEmail): { recipient: string; token: string } {
+  decrypt(row: ClaimedIdentityEmail): {
+    recipient: string;
+    token: string;
+    data: Record<string, unknown>;
+  } {
     const data = JSON.parse(
       this.crypto.decrypt(row.encryptedPayload!),
     ) as Record<string, unknown>;
@@ -122,7 +218,14 @@ export class IdentityEmailOutbox {
       HashHelper.sha256(data.token) !== row.tokenHash
     )
       throw new Error('IDENTITY_EMAIL_PAYLOAD_INVALID');
-    return { recipient: data.recipient, token: data.token };
+    return {
+      recipient: data.recipient,
+      token: data.token,
+      data:
+        data.data && typeof data.data === 'object' && !Array.isArray(data.data)
+          ? (data.data as Record<string, unknown>)
+          : {},
+    };
   }
 
   /** Fresh authority immediately before every provider attempt, never a frozen claim. */
@@ -132,21 +235,17 @@ export class IdentityEmailOutbox {
       await tx.$queryRaw`SELECT set_config('app.user_id', ${row.userId ?? ''}, true),
         set_config('app.organization_id', ${row.organizationId ?? ''}, true)`;
       const live = { tokenHash: row.tokenHash, expiresAt: { gt: new Date() } };
-      if (row.purpose === 'INVITATION') {
-        return !!(await tx.identityInvitation.findFirst({
-          where: {
-            ...live,
-            organizationId: row.organizationId!,
-            status: 'PENDING',
-            normalizedEmail: recipient.trim().toLowerCase(),
-            organization: { deletedAt: null, status: 'ACTIVE' },
-          },
-          select: { id: true },
-        }));
-      }
+      if (row.purpose === 'INVITATION' || !row.userId) return false;
+      const owner = await accountEmailOwner(tx, row.userId);
+      if (
+        !owner ||
+        owner.email.trim().toLowerCase() !== recipient.trim().toLowerCase()
+      )
+        return false;
+      if (isAccountEmailPurpose(row.purpose)) return true;
       const user = await tx.user.findFirst({
         where: {
-          id: row.userId!,
+          id: row.userId,
           normalizedEmail: recipient.trim().toLowerCase(),
           status: 'ACTIVE',
           deletedAt: null,

@@ -1,4 +1,5 @@
 "use client";
+import { useIdentityLinkToken } from "@/hooks/auth/use-identity-link-token";
 
 import { Suspense, useState } from "react";
 import Link from "next/link";
@@ -44,7 +45,8 @@ export default function ResetPasswordPage() {
  */
 function ResetPasswordView() {
   const params = useSearchParams();
-  const token = params.get("token") ?? "";
+  const linkToken = useIdentityLinkToken();
+  const token = linkToken ?? "";
   const mandatory = params.get("motivo") === "obrigatorio";
   const [showPassword, setShowPassword] = useState(false);
   const [password, setPassword] = useState("");
@@ -79,6 +81,8 @@ function ResetPasswordView() {
       });
     }
   }
+
+  if (linkToken === null) return <SessionLoading label="Verificando link…" />;
 
   return (
     <main className="flex min-h-dvh flex-col px-6 py-8 sm:px-10">
