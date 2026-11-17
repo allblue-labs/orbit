@@ -19,6 +19,12 @@ não comprova que os recursos AWS/deploy já estejam configurados.
 | `AWS_SES_FEEDBACK_TOPIC_ARN` | ARN exato do tópico Standard, mesma conta/região |
 | `AWS_SES_FEEDBACK_IDENTITY_ARN` | ARN da identidade SES realmente usada: `arn:aws:ses:REGIAO:CONTA:identity/DOMINIO` ou identidade do e-mail remetente |
 
+O ARN deve representar a identidade **efetivamente usada** pelo SES. Se o remetente
+individual também estiver verificado, ele tem precedência sobre o domínio.
+O provisionador do staging consulta essa identidade na AWS; não deduza o ARN
+apenas removendo a parte anterior ao @. O parser mantém a comparação exata e
+rejeita identidades diferentes.
+
 Gere a chave HMAC **uma vez**, por exemplo com `openssl rand -base64 32`, e
 armazene-a no secret manager/`.env` protegido; não a envie pelo chat nem a versione.
 Todas as réplicas e as ferramentas de operação devem usar a mesma chave do banco.

@@ -1,7 +1,7 @@
 {
   "date": "2026-11-17",
   "baseline": "6f7d9e9",
-  "status": "LOCAL_QUALIFIED_STAGING_PREPARED",
+  "status": "STAGING_DEPLOYED_SNS_AND_SUPPRESSION_VERIFIED_EMAIL_CONSUMER_PAUSED",
   "tests": {
     "backendUnit": {
       "suites": 275,
@@ -31,7 +31,12 @@
       "backend",
       "frontend"
     ],
-    "lint": "changed TypeScript files passed"
+    "lint": "changed TypeScript files passed",
+    "verifiedIdentityRegression": {
+      "suites": 4,
+      "tests": 46,
+      "passed": true
+    }
   },
   "awsPreflight": {
     "region": "us-east-2",
@@ -49,8 +54,61 @@
     "invalidGlobalAssignments": 0,
     "automaticEmailPaused": true,
     "retentionPaused": true,
-    "deployed": false
+    "deployed": true,
+    "currentCommit": "02926a3eb80c37c3d13f3eda2860150f273b7af4",
+    "appliedMigrations": 14,
+    "totalMigrations": 125,
+    "relationalRules": 199,
+    "relationalFindings": 0,
+    "httpsOrbit": 200,
+    "httpsNexus": 200,
+    "freshBackup": "/home/ninja/orbit-releases/ses-20261117/before/postgres-before-migrations-20261117T155717Z.dump"
   },
   "secretsIncluded": false,
-  "gitPush": false
+  "gitPush": false,
+  "sns": {
+    "signatureVersion": 2,
+    "confirmedSubscriptions": 1,
+    "pendingSubscriptions": 0,
+    "effectiveIdentityType": "EMAIL_ADDRESS",
+    "exactIdentityCheckPreserved": true
+  },
+  "realTests": {
+    "gmail": {
+      "requestedRecipient": "darlansimplicio@gmail.com",
+      "sent": 2,
+      "resent": 0,
+      "status": "ACCEPTED_BY_PROVIDER",
+      "providerMessageIds": [
+        "010f01a1ea42ae37-ff229589-666a-45f6-a5cc-b9403f337dd5-000000",
+        "010f01a1ea42afc7-5d317d63-e184-45ab-85e5-bbfcb6ded877-000000"
+      ]
+    },
+    "simulator": {
+      "success": {
+        "event": "ses_simulator",
+        "scenario": "success",
+        "providerMessageId": "010f01a1ea494d6f-318d52c4-f024-46e0-9377-454824d1e7ef-000000",
+        "status": "FEEDBACK_CONFIRMED",
+        "feedback": "DELIVERY",
+        "suppressionVerified": false
+      },
+      "bounce": {
+        "event": "ses_simulator",
+        "scenario": "bounce",
+        "providerMessageId": "010f01a1ea4b3b70-8d1883df-d5f9-487e-910a-993fbfdc08bd-000000",
+        "status": "FEEDBACK_CONFIRMED",
+        "feedback": "HARD_BOUNCE",
+        "suppressionVerified": true
+      },
+      "complaint": {
+        "event": "ses_simulator",
+        "scenario": "complaint",
+        "providerMessageId": "010f01a1ea4b48a3-98685d6e-c7b4-487f-a789-94670fb9a358-000000",
+        "status": "FEEDBACK_CONFIRMED",
+        "feedback": "COMPLAINT",
+        "suppressionVerified": true
+      }
+    }
+  }
 }

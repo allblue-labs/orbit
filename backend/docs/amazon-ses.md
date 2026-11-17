@@ -333,6 +333,11 @@ permissões de leitura se executar preflight. Não conceder `iam:*` ou administr
 políticas pelo aplicativo. Se houver AccessDenied, o administrador deve ajustar
 a identidade de implantação no console e repetir somente a operação necessária.
 
+O provisionador consulta a identidade verificada mais específica: e-mail antes
+do domínio e de seus pais. Usa a mesma resolução do preflight, sem presumir um
+ARN de domínio quando uma identidade EMAIL_ADDRESS já existe. A validação de
+identidade do webhook continua exata, sem wildcard nem confiança no payload.
+
 O JSON de resultado contém apenas metadados de implantação. Configure
 `AWS_SES_CONFIGURATION_SET`, `AWS_SES_FEEDBACK_ENABLED=true`,
 `AWS_SES_FEEDBACK_ACCOUNT_ID`, `AWS_SES_FEEDBACK_TOPIC_ARN` e

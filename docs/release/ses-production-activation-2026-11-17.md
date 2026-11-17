@@ -71,3 +71,42 @@ já documentados na PR-13. A pausa de retenção independe do envio transacional
 
 Nenhuma configuração do Nexus, certificado TLS, chave de criptografia existente
 ou credencial de banco foi substituída. Sem Git push ou merge.
+
+## Primeira publicação e qualificação real
+
+Commit de implementação `02926a3eb80c37c3d13f3eda2860150f273b7af4`, imagens
+publicadas no Docker Hub privado por digest. Staging recebeu as 14 migrations
+pendentes (125 no total). Papel orbit_app confirmado sem SUPERUSER/BYPASSRLS;
+preflight das 199 invariantes relacionais concluído sem achados. Backup consistente
+adicional, validado por pg_restore --list:
+`/home/ninja/orbit-releases/ses-20261117/before/postgres-before-migrations-20261117T155717Z.dump`.
+
+A primeira chamada remota por stdin encerrou após pausar a API, antes da migration.
+A execução foi corrigida para arquivo no servidor com stdin fechado; a publicação
+prosseguiu com backup validado e nenhum dado foi restaurado/removido automaticamente.
+
+A credencial inicialmente recusou SNS:CreateTopic (403). O usuário aplicou a
+política restrita de preparação/confirmacão do tópico exclusivo do staging. O SNS
+confirmou uma subscription HTTPS, SignatureVersion=2, zero pendentes; o SES remoto
+retornou READY, produção e envio habilitados. Orbit e Nexus responderam HTTPS 200.
+Na página de recuperação publicada: no-referrer, no-store e noindex/nofollow.
+
+**Exatamente dois envios para darlansimplicio@gmail.com**, ambos aceitos pelo SES:
+prévia combinada dos seis modelos e confirmação simples. Nenhum reenvio ao Gmail
+foi feito. Os recibos comprovam aceitação; não equivalem a comprovação de leitura
+ou caixa principal. Não houve criação/alteração de conta, senha ou token nesses testes.
+
+O primeiro teste real mostrou SES_IDENTITY_DENIED: o remetente individual está
+verificado e tem precedência sobre o domínio. O ARN esperado foi corrigido para
+essa identidade, preservando a validação estrita do webhook. Um novo teste apenas
+no Mailbox Simulator confirmou DELIVERY; os cenários de HARD_BOUNCE e COMPLAINT
+confirmaram feedback e supressão, incluindo tentativa subsequente recusada sem
+outro SendEmail. Dois testes de regressão cobrem a seleção da identidade individual
+e o fallback ao domínio; a seleção passou a ser compartilhada com o preflight.
+Quatro suítes direcionadas / 46 testes passaram após o ajuste, além de TypeScript
+sem erros. A imagem operacional será atualizada para incluir esse provisionador.
+
+Depois de validar a versão final do provisionador, remover os statements IAM
+OrbitStagingFeedbackBootstrapSNS e OrbitStagingFeedbackBootstrapSES da política
+adicionada; manter OrbitStagingFeedbackRuntime e as permissões SES pré-existentes.
+As permissões de preparação não são necessárias para os envios normais.

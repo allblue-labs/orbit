@@ -34,13 +34,11 @@ export interface SesPreflightReport {
   };
 }
 
-/** Read-only regional AWS state. No SendEmail, account changes or local approval flags. */
-export async function sesPreflight(
+/** Resolve the most specific verified identity exactly as sending does; never guess its ARN. */
+export async function resolveSesIdentity(
   client: Pick<SESv2Client, 'send'>,
   config: EmailConfiguration,
-): Promise<SesPreflightReport> {
-  validateSesConfiguration(config);
-  const account = await client.send(new GetAccountCommand({}));
+) {
   const address = config.from!;
   const domain = address.slice(address.lastIndexOf('@') + 1).toLowerCase();
   const labels = domain.split('.');
@@ -48,19 +46,32 @@ export async function sesPreflight(
     address,
     ...labels.slice(0, -1).map((_, i) => labels.slice(i).join('.')),
   ];
-  let identity: GetEmailIdentityCommandOutput | undefined;
+  let identity:
+    { name: string; details: GetEmailIdentityCommandOutput } | undefined;
   for (const name of identities) {
     try {
       const candidate = await client.send(
         new GetEmailIdentityCommand({ EmailIdentity: name }),
+        { abortSignal: AbortSignal.timeout(15000) },
       );
-      identity = candidate;
+      identity = { name, details: candidate };
       if (candidate.VerifiedForSendingStatus === true) break;
     } catch (error) {
       if (!(error instanceof Error && error.name === 'NotFoundException'))
         throw error;
     }
   }
+  return identity;
+}
+
+/** Read-only regional AWS state. No SendEmail, account changes or local approval flags. */
+export async function sesPreflight(
+  client: Pick<SESv2Client, 'send'>,
+  config: EmailConfiguration,
+): Promise<SesPreflightReport> {
+  validateSesConfiguration(config);
+  const account = await client.send(new GetAccountCommand({}));
+  const identity = await resolveSesIdentity(client, config);
   const quota = {
     max24HourSend: account.SendQuota?.Max24HourSend ?? 0,
     maxSendRate: account.SendQuota?.MaxSendRate ?? 0,
@@ -68,7 +79,7 @@ export async function sesPreflight(
   };
   const productionAccess = account.ProductionAccessEnabled === true;
   const sendingEnabled = account.SendingEnabled === true;
-  const identityVerified = identity?.VerifiedForSendingStatus === true;
+  const identityVerified = identity?.details.VerifiedForSendingStatus === true;
   // SES uses -1 for an unlimited 24-hour quota; missing data never means ready.
   const quotaKnown = [
     account.SendQuota?.Max24HourSend,

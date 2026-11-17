@@ -2,7 +2,11 @@ import {
   GetAccountCommand,
   GetEmailIdentityCommand,
 } from '@aws-sdk/client-sesv2';
-import { sesPreflight, validateSesConfiguration } from './ses-preflight';
+import {
+  resolveSesIdentity,
+  sesPreflight,
+  validateSesConfiguration,
+} from './ses-preflight';
 
 const config = {
   provider: 'ses' as const,
@@ -49,6 +53,22 @@ describe('preflight SES regional, somente leitura', () => {
           command instanceof GetEmailIdentityCommand,
       ),
     ).toBe(true);
+  });
+  it('prefers the verified email identity over an also verified domain for the feedback ARN', async () => {
+    const { client, send } = fixture();
+    send.mockResolvedValue({
+      VerifiedForSendingStatus: true,
+      IdentityType: 'EMAIL_ADDRESS',
+    });
+    const selected = await resolveSesIdentity(client, config);
+    expect(selected?.name).toBe(config.from);
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+  it('uses the verified domain when the exact sender identity does not exist', async () => {
+    const { client } = fixture();
+    expect((await resolveSesIdentity(client, config))?.name).toBe(
+      'example.test',
+    );
   });
   it('sandbox só muda após autorização real da AWS, não por flag local', async () => {
     const { client } = fixture({ ProductionAccessEnabled: false });

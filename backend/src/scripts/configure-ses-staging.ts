@@ -12,7 +12,10 @@ import {
   SESv2Client,
 } from '@aws-sdk/client-sesv2';
 import { emailConfiguration } from '../modules/email/email.config';
-import { validateSesConfiguration } from '../modules/email/ses-preflight';
+import {
+  resolveSesIdentity,
+  validateSesConfiguration,
+} from '../modules/email/ses-preflight';
 /** Operator-only, explicit apply. Touches only named Orbit staging resources. No emails. */
 async function main() {
   const config = emailConfiguration();
@@ -49,6 +52,9 @@ async function main() {
     });
   const sendOptions = { abortSignal: AbortSignal.timeout(15000) };
   try {
+    const identity = await resolveSesIdentity(ses, config);
+    if (!identity?.details.VerifiedForSendingStatus)
+      throw new Error('SES_IDENTITY_NOT_VERIFIED');
     const created = await sns.send(
       new CreateTopicCommand({
         Name: name,
@@ -167,7 +173,7 @@ async function main() {
         accountId: account,
         topicArn: arn,
         configurationSet: name,
-        identityArn: `arn:aws:ses:${config.region}:${account}:identity/${config.from!.split('@')[1]}`,
+        identityArn: `arn:aws:ses:${config.region}:${account}:identity/${identity.name}`,
         subscriptionRequested: process.argv.includes('--subscribe'),
       }),
     );
