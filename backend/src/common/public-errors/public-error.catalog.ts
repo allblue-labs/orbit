@@ -33,6 +33,11 @@ const entries = [
   ],
   ['VALIDATION_ERROR', HttpStatus.BAD_REQUEST, 'Revise os campos informados.'],
   [
+    'PASSWORD_RESET_INVALID',
+    HttpStatus.BAD_REQUEST,
+    'Este link de recuperação é inválido, expirou ou já foi utilizado. Solicite um novo link.',
+  ],
+  [
     'MOBILE_PUSH_UPGRADE_REQUIRED',
     HttpStatus.BAD_REQUEST,
     'Atualize o Orbit para ativar os avisos neste aparelho.',

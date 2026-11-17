@@ -43,7 +43,8 @@ describe('recuperação de senha por e-mail', () => {
       'RAW_RESET_TOKEN',
     );
     const expires = repository.createPasswordReset.mock.calls[0]?.[2] as Date;
-    expect(expires.getTime()).toBeGreaterThanOrEqual(now + 30 * 60_000);
+    expect(expires.getTime()).toBeGreaterThanOrEqual(now + 3 * 60 * 60_000);
+    expect(expires.getTime()).toBeLessThanOrEqual(Date.now() + 3 * 60 * 60_000);
   });
   it('responde igualmente para conta inexistente e envio recusado', async () => {
     const { repository, service } = fixture();
@@ -79,18 +80,20 @@ describe('recuperação de senha por e-mail', () => {
       userId: 'user',
       usedAt: new Date(),
       expiresAt: new Date(Date.now() + 60_000),
+      createdAt: new Date(),
     },
     {
       id: 'reset',
       userId: 'user',
       usedAt: null,
       expiresAt: new Date(Date.now() - 60_000),
+      createdAt: new Date(),
     },
   ])('recusa token inexistente, usado ou expirado', async (reset) => {
     const { repository, service } = fixture();
     repository.findPasswordReset.mockResolvedValue(reset);
     await expect(service.reset('raw-token', 'new-password')).rejects.toThrow(
-      /Invalid or expired/,
+      /inválido, expirou ou já foi utilizado/,
     );
     expect(repository.consumePasswordReset).not.toHaveBeenCalled();
   });
@@ -101,6 +104,7 @@ describe('recuperação de senha por e-mail', () => {
       userId: 'user',
       usedAt: null,
       expiresAt: new Date(Date.now() + 60_000),
+      createdAt: new Date(),
     });
     await service.reset('raw-token', 'new-password');
     expect(repository.consumePasswordReset).toHaveBeenCalledWith(
@@ -108,5 +112,32 @@ describe('recuperação de senha por e-mail', () => {
       'user',
       'NEW_PASSWORD_HASH',
     );
+  });
+  it('a validação ao abrir o link não consome nem altera a senha', async () => {
+    const { repository, service, hashes } = fixture();
+    repository.findPasswordReset.mockResolvedValue({
+      id: 'reset',
+      userId: 'user',
+      usedAt: null,
+      createdAt: new Date(),
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    await expect(service.validate('raw-token')).resolves.toBeUndefined();
+    expect(repository.consumePasswordReset).not.toHaveBeenCalled();
+    expect(hashes.hash).not.toHaveBeenCalled();
+  });
+  it('recusa um token com mais de 3 horas mesmo com expiração legada maior', async () => {
+    const { repository, service } = fixture();
+    repository.findPasswordReset.mockResolvedValue({
+      id: 'reset',
+      userId: 'user',
+      usedAt: null,
+      createdAt: new Date(Date.now() - 3 * 60 * 60_000),
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    await expect(
+      service.reset('raw-token', 'new-password'),
+    ).rejects.toMatchObject({ code: 'PASSWORD_RESET_INVALID' });
+    expect(repository.consumePasswordReset).not.toHaveBeenCalled();
   });
 });

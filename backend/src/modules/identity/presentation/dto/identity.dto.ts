@@ -228,12 +228,15 @@ export class ForgotPasswordDto {
   email!: string;
 }
 
-export class ResetPasswordDto {
+export class ResetPasswordTokenDto {
   @ApiProperty()
   @IsString()
   @MinLength(32)
+  @MaxLength(128)
   token!: string;
+}
 
+export class ResetPasswordDto extends ResetPasswordTokenDto {
   @ApiProperty()
   @IsString()
   @MinLength(12)

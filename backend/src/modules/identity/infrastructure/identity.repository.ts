@@ -1,5 +1,9 @@
 import { accountEmailOwner } from '../../email/account-email-policy';
 import { IdentityEmailOutbox } from './identity-email.outbox';
+import {
+  PASSWORD_RESET_TTL_MS,
+  PASSWORD_RESET_INVALID_MESSAGE,
+} from '../domain/password-reset.policy';
 import { VerifiedPlatformAuthority } from '../../../common/verified-platform-authority';
 import { Injectable } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
@@ -462,7 +466,12 @@ export class IdentityRepository {
       let queueEmail = Boolean(emailToken);
       if (emailToken && (await accountEmailOwner(transaction, userId))) {
         const previous = await transaction.passwordResetToken.findFirst({
-          where: { userId, usedAt: null, expiresAt: { gt: new Date() } },
+          where: {
+            userId,
+            usedAt: null,
+            expiresAt: { gt: new Date() },
+            createdAt: { gt: new Date(Date.now() - PASSWORD_RESET_TTL_MS) },
+          },
           orderBy: { createdAt: 'desc' },
         });
         if (previous && previous.createdAt.getTime() > Date.now() - 60000)
@@ -503,7 +512,16 @@ export class IdentityRepository {
   }
 
   findPasswordReset(tokenHash: string) {
-    return this.prisma.passwordResetToken.findUnique({ where: { tokenHash } });
+    return this.prisma.passwordResetToken.findUnique({
+      where: {
+        tokenHash,
+        user: {
+          status: 'ACTIVE',
+          deletedAt: null,
+          credential: { isNot: null },
+        },
+      },
+    });
   }
 
   consumePasswordReset(
@@ -514,13 +532,20 @@ export class IdentityRepository {
     return this.prisma
       .$transaction(async (transaction) => {
         await this.setLocal(transaction, 'app.user_id', userId);
-        const consumed = await transaction.passwordResetToken.updateMany({
-          where: { id: tokenId, usedAt: null, expiresAt: { gt: new Date() } },
-          data: { usedAt: new Date() },
-        });
-        if (consumed.count !== 1) {
+        // CAS rechecks eligibility after a concurrent consumer's row lock.
+        // The database clock also enforces the 3h ceiling on older long-lived links.
+        const consumed = await transaction.$executeRaw`
+          UPDATE password_reset_tokens AS reset SET used_at = clock_timestamp()
+          WHERE reset.id = ${tokenId}::uuid AND reset.user_id = ${userId}::uuid
+            AND reset.used_at IS NULL AND reset.expires_at > clock_timestamp()
+            AND reset.created_at > clock_timestamp() - (${PASSWORD_RESET_TTL_MS} * interval '1 millisecond')
+            AND EXISTS (SELECT 1 FROM users u WHERE u.id = reset.user_id
+              AND u.status = 'ACTIVE' AND u.deleted_at IS NULL)`;
+        if (consumed !== 1) {
           throw new ValidationException(
-            'Este link de recuperação é inválido, expirou ou já foi utilizado.',
+            PASSWORD_RESET_INVALID_MESSAGE,
+            undefined,
+            'PASSWORD_RESET_INVALID',
           );
         }
         await transaction.credential.update({

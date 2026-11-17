@@ -42,7 +42,7 @@ export function transactionalEmail(
       introduction: `${greeting}Recebemos uma solicitação para redefinir sua senha. Use o botão para escolher uma nova senha com segurança.`,
       action: 'Redefinir minha senha',
       expiry:
-        'O link pode ser usado uma vez e expira em 30 minutos. Se você não solicitou a alteração, sua senha permanece a mesma.',
+        'O link pode ser usado uma vez e expira em 3 horas. Após salvar a nova senha, ele deixa de funcionar imediatamente. Se você não solicitou a alteração, sua senha permanece a mesma.',
     },
     PASSWORD_CHANGED: {
       title: 'Sua senha do Orbit foi alterada',

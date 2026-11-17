@@ -87,6 +87,18 @@ export class EmailService implements OnModuleDestroy {
                   ? { Html: { Data: message.html, Charset: 'UTF-8' } }
                   : {}),
               },
+              ...(message.html && message.inlineImages?.length
+                ? {
+                    Attachments: message.inlineImages.map((image) => ({
+                      RawContent: image.content,
+                      FileName: image.fileName,
+                      ContentId: image.contentId,
+                      ContentType: image.contentType,
+                      ContentDisposition: 'INLINE' as const,
+                      ContentTransferEncoding: 'BASE64' as const,
+                    })),
+                  }
+                : {}),
             },
           },
         }),

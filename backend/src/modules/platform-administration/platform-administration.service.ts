@@ -1,3 +1,4 @@
+import { PASSWORD_RESET_TTL_MS } from '../identity/domain/password-reset.policy';
 import { Inject, Injectable } from '@nestjs/common';
 import { createHash, createHmac } from 'node:crypto';
 import { Prisma, type PlatformTenantProvisioning } from '@prisma/client';
@@ -476,7 +477,7 @@ export class PlatformAdministrationService {
           const reset = await this.identities.createPasswordReset(
             owner.id,
             this.tokens.hashOpaqueToken(token),
-            new Date(Date.now() + 30 * 60_000),
+            new Date(Date.now() + PASSWORD_RESET_TTL_MS),
             token,
             tx,
           );

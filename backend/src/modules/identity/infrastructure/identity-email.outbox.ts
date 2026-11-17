@@ -1,3 +1,4 @@
+import { PASSWORD_RESET_TTL_MS } from '../domain/password-reset.policy';
 import {
   accountEmailOwner,
   isAccountEmailPurpose,
@@ -267,7 +268,12 @@ export class IdentityEmailOutbox {
           select: { id: true },
         }));
       return !!(await tx.passwordResetToken.findFirst({
-        where: { ...live, userId: user.id, usedAt: null },
+        where: {
+          ...live,
+          userId: user.id,
+          usedAt: null,
+          createdAt: { gt: new Date(Date.now() - PASSWORD_RESET_TTL_MS) },
+        },
         select: { id: true },
       }));
     });

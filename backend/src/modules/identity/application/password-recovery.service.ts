@@ -4,6 +4,11 @@ import { HASH_PROVIDER } from '../../../providers';
 import { ValidationException } from '../../../exceptions';
 import { IdentityRepository } from '../infrastructure/identity.repository';
 import { IdentityTokenService } from './token.service';
+import {
+  PASSWORD_RESET_TTL_MS,
+  PASSWORD_RESET_INVALID_MESSAGE,
+  usablePasswordReset,
+} from '../domain/password-reset.policy';
 
 @Injectable()
 export class PasswordRecoveryService {
@@ -24,7 +29,7 @@ export class PasswordRecoveryService {
       await this.repository.createPasswordReset(
         user.id,
         this.tokens.hashOpaqueToken(token),
-        new Date(Date.now() + 30 * 60_000),
+        new Date(Date.now() + PASSWORD_RESET_TTL_MS),
         token,
       );
     } catch {
@@ -35,13 +40,27 @@ export class PasswordRecoveryService {
     }
   }
 
-  async reset(token: string, password: string): Promise<void> {
+  private async validReset(token: string) {
     const reset = await this.repository.findPasswordReset(
       this.tokens.hashOpaqueToken(token),
     );
-    if (!reset || reset.usedAt || reset.expiresAt.getTime() <= Date.now()) {
-      throw new ValidationException('Invalid or expired reset token');
+    if (!reset || !usablePasswordReset(reset)) {
+      throw new ValidationException(
+        PASSWORD_RESET_INVALID_MESSAGE,
+        undefined,
+        'PASSWORD_RESET_INVALID',
+      );
     }
+    return reset;
+  }
+
+  /** Read-only check; opening an email never consumes its token. */
+  async validate(token: string): Promise<void> {
+    await this.validReset(token);
+  }
+
+  async reset(token: string, password: string): Promise<void> {
+    const reset = await this.validReset(token);
     await this.repository.consumePasswordReset(
       reset.id,
       reset.userId,

@@ -120,7 +120,9 @@ export function useForgotPassword() {
 }
 
 /** Define a nova senha a partir do token recebido por e-mail. */
-export function useResetPassword(options: { redirectTo?: string } = {}) {
+export function useResetPassword(
+  options: { redirectTo?: string | false } = {},
+) {
   const router = useRouter();
   const redirectTo = options.redirectTo ?? ROUTES.login;
 
@@ -128,7 +130,7 @@ export function useResetPassword(options: { redirectTo?: string } = {}) {
     (input) => authService.resetPassword(input),
     {
       onSuccess: () => {
-        router.replace(redirectTo);
+        if (redirectTo !== false) router.replace(redirectTo);
       },
     },
   );

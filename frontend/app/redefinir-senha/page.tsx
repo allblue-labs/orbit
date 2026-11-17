@@ -1,7 +1,7 @@
 "use client";
 import { useIdentityLinkToken } from "@/hooks/auth/use-identity-link-token";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -11,6 +11,7 @@ import {
   Loader2,
   Lock,
   ShieldAlert,
+  ShieldCheck,
 } from "lucide-react";
 import { motion } from "motion/react";
 import { toast } from "sonner";
@@ -27,6 +28,8 @@ import { ROUTES } from "@/lib/routes";
 import { useOptionalSession } from "@/providers";
 import { passwordPolicyIssues } from "@/lib/password-policy";
 import { PasswordRequirements } from "@/components/auth/password-requirements";
+import { authService } from "@/services/auth.service";
+import { ApiError } from "@/lib/api-error";
 
 export default function ResetPasswordPage() {
   return (
@@ -50,10 +53,43 @@ function ResetPasswordView() {
   const mandatory = params.get("motivo") === "obrigatorio";
   const [showPassword, setShowPassword] = useState(false);
   const [password, setPassword] = useState("");
-  const resetPassword = useResetPassword();
+  const resetPassword = useResetPassword({ redirectTo: false });
+  const [completed, setCompleted] = useState(false);
+  const [checkAttempt, setCheckAttempt] = useState(0);
+  const [validation, setValidation] = useState<{
+    token: string;
+    status: "valid" | "invalid" | "error";
+  } | null>(null);
+  const tokenStatus =
+    validation?.token === token ? validation.status : "checking";
+
+  useEffect(() => {
+    if (!token) return;
+    let active = true;
+    authService.validateResetToken({ token }).then(
+      () => {
+        if (active) setValidation({ token, status: "valid" });
+      },
+      (error: unknown) => {
+        if (active)
+          setValidation({
+            token,
+            status:
+              error instanceof ApiError &&
+              error.code === "PASSWORD_RESET_INVALID"
+                ? "invalid"
+                : "error",
+          });
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [token, checkAttempt]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (resetPassword.isPending || completed || tokenStatus !== "valid") return;
     const form = new FormData(event.currentTarget);
     const submittedPassword = String(form.get("password") ?? "");
     const issues = passwordPolicyIssues(submittedPassword);
@@ -69,10 +105,16 @@ function ResetPasswordView() {
     }
     try {
       await resetPassword.mutateAsync({ token, password: submittedPassword });
-      toast.success("Senha atualizada", {
-        description: "Entre novamente com a nova senha.",
-      });
+      setPassword("");
+      setCompleted(true);
     } catch (error) {
+      if (
+        error instanceof ApiError &&
+        error.code === "PASSWORD_RESET_INVALID"
+      ) {
+        setValidation({ token, status: "invalid" });
+        setPassword("");
+      }
       toast.error("Não foi possível redefinir a senha", {
         description:
           error instanceof Error
@@ -106,11 +148,16 @@ function ResetPasswordView() {
           className="w-full max-w-sm"
         >
           <h1 className="font-display text-3xl font-bold tracking-tight text-foreground">
-            {mandatory ? "Defina uma nova senha" : "Nova senha"}
+            {completed
+              ? "Senha atualizada"
+              : mandatory
+                ? "Defina uma nova senha"
+                : "Nova senha"}
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            A nova senha vale para todos os acessos da sua conta. Atenda aos
-            requisitos abaixo.
+            {completed
+              ? "Sua nova senha foi salva com segurança. Entre novamente para continuar."
+              : "A nova senha vale para todos os acessos da sua conta. Atenda aos requisitos abaixo."}
           </p>
 
           {mandatory ? (
@@ -124,7 +171,67 @@ function ResetPasswordView() {
             </Alert>
           ) : null}
 
-          {token ? (
+          {completed ? (
+            <div className="mt-8 space-y-6">
+              <Alert>
+                <ShieldCheck className="size-4" />
+                <AlertTitle>Redefinição concluída</AlertTitle>
+                <AlertDescription>
+                  Este link já foi utilizado e não permite novas alterações de
+                  senha.
+                </AlertDescription>
+              </Alert>
+              <Button asChild className="w-full" size="lg">
+                <Link href={ROUTES.login}>Entrar com a nova senha</Link>
+              </Button>
+            </div>
+          ) : token && tokenStatus !== "valid" ? (
+            <div className="mt-8 space-y-6">
+              {tokenStatus === "checking" ? (
+                <p
+                  role="status"
+                  className="flex items-center gap-3 text-sm text-muted-foreground"
+                >
+                  <Loader2 aria-hidden="true" className="size-5 animate-spin" />
+                  Verificando a validade do link…
+                </p>
+              ) : (
+                <>
+                  <Alert>
+                    <ShieldAlert className="size-4" />
+                    <AlertTitle>
+                      {tokenStatus === "invalid"
+                        ? "Link inválido ou já utilizado"
+                        : "Não foi possível verificar o link"}
+                    </AlertTitle>
+                    <AlertDescription>
+                      {tokenStatus === "invalid"
+                        ? "O link expira em até 3 horas e só pode ser usado uma vez. Solicite um novo para redefinir sua senha."
+                        : "Confira sua conexão e tente novamente. Sua senha não foi alterada."}
+                    </AlertDescription>
+                  </Alert>
+                  {tokenStatus === "error" ? (
+                    <Button
+                      className="w-full"
+                      size="lg"
+                      onClick={() => {
+                        setValidation(null);
+                        setCheckAttempt((attempt) => attempt + 1);
+                      }}
+                    >
+                      Verificar novamente
+                    </Button>
+                  ) : (
+                    <Button asChild className="w-full" size="lg">
+                      <Link href={ROUTES.forgotPassword}>
+                        Solicitar novo link
+                      </Link>
+                    </Button>
+                  )}
+                </>
+              )}
+            </div>
+          ) : token ? (
             <form onSubmit={handleSubmit} className="mt-8 space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="password">Nova senha</Label>

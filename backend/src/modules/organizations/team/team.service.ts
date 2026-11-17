@@ -1,3 +1,4 @@
+import { PASSWORD_RESET_TTL_MS } from '../../identity/domain/password-reset.policy';
 import { Inject, Injectable } from '@nestjs/common';
 import type { IHashProvider } from '../../../contracts';
 import { HASH_PROVIDER } from '../../../providers';
@@ -24,7 +25,6 @@ import { executesFieldWork } from '../../workforce/field-eligibility';
 import { EmailVerificationService } from '../../identity/application/email-verification.service';
 
 /** Quanto tempo o link de definição de senha vale. */
-const VALIDADE_DO_LINK_MS = 24 * 60 * 60_000;
 
 export interface TeamActor {
   organizationId: string;
@@ -216,7 +216,7 @@ export class TeamService {
     }
 
     const token = this.tokens.generateOpaqueToken();
-    const expiresAt = new Date(Date.now() + VALIDADE_DO_LINK_MS);
+    const expiresAt = new Date(Date.now() + PASSWORD_RESET_TTL_MS);
     await this.identity.createPasswordReset(
       userId,
       this.tokens.hashOpaqueToken(token),

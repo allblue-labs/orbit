@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   HttpCode,
+  Header,
   HttpStatus,
   Post,
   Req,
@@ -23,6 +24,7 @@ import {
   RefreshTokenDto,
   RegisterOrganizationDto,
   ResetPasswordDto,
+  ResetPasswordTokenDto,
 } from './dto/identity.dto';
 
 @ApiTags('Identity')
@@ -101,8 +103,17 @@ export class AuthController {
   }
 
   @Public()
+  @Post('password/reset/validate')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Header('Cache-Control', 'no-store')
+  validateResetPassword(@Body() input: ResetPasswordTokenDto) {
+    return this.recovery.validate(input.token);
+  }
+
+  @Public()
   @Post('password/reset')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @Header('Cache-Control', 'no-store')
   resetPassword(@Body() input: ResetPasswordDto) {
     return this.recovery.reset(input.token, input.password);
   }

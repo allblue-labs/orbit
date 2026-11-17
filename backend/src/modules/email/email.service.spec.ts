@@ -7,6 +7,10 @@ import {
 import { EmailService } from './email.service';
 import { emailConfiguration, type EmailConfiguration } from './email.config';
 import { actionEmail } from './email-template';
+import {
+  transactionalEmail,
+  TRANSACTIONAL_TEMPLATES,
+} from './transactional-templates';
 import { Test } from '@nestjs/testing';
 import { EmailModule } from './email.module';
 import { EMAIL_CONFIGURATION, SES_EMAIL_CLIENT } from './email.config';
@@ -49,6 +53,27 @@ function fixture() {
 }
 
 describe('EmailService / Amazon SES', () => {
+  it.each(TRANSACTIONAL_TEMPLATES)(
+    '%s envia as duas logos inline pelo SDK SES',
+    async (template) => {
+      const { service, client } = fixture();
+      const content = transactionalEmail(template, {
+        link: 'https://orbit.example.test/login',
+      });
+      await expect(
+        service.send({ to: message.to, ...content }),
+      ).resolves.toMatchObject({ status: 'SENT' });
+      const simple = client.send.mock.calls[0]![0].input.Content!.Simple!;
+      expect(simple.Attachments).toHaveLength(2);
+      for (const image of simple.Attachments!) {
+        expect(image.ContentDisposition).toBe('INLINE');
+        expect(image.ContentTransferEncoding).toBe('BASE64');
+        expect(image.ContentType).toBe('image/png');
+        expect(simple.Body!.Html!.Data).toContain(`cid:${image.ContentId}`);
+        expect(image.RawContent!.byteLength).toBeGreaterThan(1000);
+      }
+    },
+  );
   it('fails closed on suppression and state-store errors, without calling SES', async () => {
     const { service, client, repository } = fixture();
     repository.prepare.mockResolvedValueOnce(null);

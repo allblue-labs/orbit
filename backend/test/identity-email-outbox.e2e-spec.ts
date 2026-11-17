@@ -1,3 +1,4 @@
+import { IdentityRepository } from '../src/modules/identity/infrastructure/identity.repository';
 import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import type { Prisma } from '@prisma/client';
 import { AccountNoticesService } from '../src/modules/email/account-notices.service';
@@ -311,6 +312,182 @@ describe('PR-07: outbox SES com HTTP, reinício e RLS real', () => {
         })
       ).tokenHash,
     ).toBe(previous.tokenHash);
+  });
+  it('recuperação não permite reutilizar o mesmo link após salvar a senha', async () => {
+    await forgot().expect(202);
+    const token = payload(await row()).token;
+    try {
+      await http()
+        .post('/api/v1/identity/password/reset')
+        .send({ token, password })
+        .expect(204);
+      const saved = await admin.credential.findUniqueOrThrow({
+        where: { userId: principal.id },
+      });
+      for (let attempt = 0; attempt < 3; attempt++) {
+        await http(1)
+          .post('/api/v1/identity/password/reset')
+          .send({ token, password: 'Senha#Replay@2026' })
+          .expect(400);
+      }
+      expect(
+        (
+          await admin.credential.findUniqueOrThrow({
+            where: { userId: principal.id },
+          })
+        ).passwordHash,
+      ).toBe(saved.passwordHash);
+      expect(
+        (
+          await admin.passwordResetToken.findFirstOrThrow({
+            where: { userId: principal.id },
+          })
+        ).usedAt,
+      ).not.toBeNull();
+    } finally {
+      const login = await http()
+        .post('/api/v1/identity/login')
+        .send({ email: principal.email, password, client: 'WEB' })
+        .expect(200);
+      principal.token = data<{ accessToken: string }>(login).accessToken;
+    }
+  });
+  it('o link vale por 3h; verificar não o consome e a expiração legada não amplia o prazo', async () => {
+    const now = Date.now();
+    await forgot().expect(202);
+    const token = payload(await row()).token;
+    const reset = await admin.passwordResetToken.findFirstOrThrow({
+      where: { userId: principal.id },
+    });
+    expect(reset.expiresAt.getTime()).toBeGreaterThanOrEqual(
+      now + 3 * 60 * 60_000,
+    );
+    expect(reset.expiresAt.getTime()).toBeLessThanOrEqual(
+      Date.now() + 3 * 60 * 60_000,
+    );
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const response = await http()
+        .post('/api/v1/identity/password/reset/validate')
+        .send({ token })
+        .expect(204);
+      expect(response.headers['cache-control']).toBe('no-store');
+    }
+    expect(
+      (
+        await admin.passwordResetToken.findUniqueOrThrow({
+          where: { id: reset.id },
+        })
+      ).usedAt,
+    ).toBeNull();
+    await admin.passwordResetToken.update({
+      where: { id: reset.id },
+      data: { createdAt: new Date(Date.now() - (3 * 60 * 60_000 - 60_000)) },
+    });
+    await http()
+      .post('/api/v1/identity/password/reset/validate')
+      .send({ token })
+      .expect(204);
+    await admin.passwordResetToken.update({
+      where: { id: reset.id },
+      data: { createdAt: new Date(Date.now() - 3 * 60 * 60_000 - 1000) },
+    });
+    for (const path of ['validate', 'consume']) {
+      const response = await http()
+        .post(
+          `/api/v1/identity/password/reset${path === 'validate' ? '/validate' : ''}`,
+        )
+        .send(path === 'validate' ? { token } : { token, password })
+        .expect(400);
+      expect(response.body).toMatchObject({
+        error: {
+          code: 'PASSWORD_RESET_INVALID',
+          message:
+            'Este link de recuperação é inválido, expirou ou já foi utilizado. Solicite um novo link.',
+        },
+      });
+    }
+    // Bypass the service's precheck to prove the atomic DB claim has its own age ceiling.
+
+    await expect(
+      apps[0]!
+        .get(IdentityRepository)
+        .consumePasswordReset(reset.id, principal.id, 'UNREACHABLE_HASH'),
+    ).rejects.toMatchObject({ code: 'PASSWORD_RESET_INVALID' });
+    expect(
+      (
+        await admin.passwordResetToken.findUniqueOrThrow({
+          where: { id: reset.id },
+        })
+      ).usedAt,
+    ).toBeNull();
+  });
+  it('somente uma réplica consome o link em requisições simultâneas e as sessões antigas são revogadas', async () => {
+    await forgot().expect(202);
+    const token = payload(await row()).token;
+    try {
+      const attempts = await Promise.all(
+        [0, 1].map((replica) =>
+          http(replica)
+            .post('/api/v1/identity/password/reset')
+            .send({ token, password }),
+        ),
+      );
+      expect(attempts.map((r) => r.status).sort()).toEqual([204, 400]);
+      await http()
+        .post('/api/v1/identity/password/reset/validate')
+        .send({ token })
+        .expect(400);
+      await auth(http().get('/api/v1/identity/me')).expect(401);
+      expect(
+        await admin.session.count({
+          where: { userId: principal.id, revokedAt: null },
+        }),
+      ).toBe(0);
+    } finally {
+      const login = await http()
+        .post('/api/v1/identity/login')
+        .send({ email: principal.email, password, client: 'WEB' })
+        .expect(200);
+      principal.token = data<{ accessToken: string }>(login).accessToken;
+    }
+  });
+  it('um reenvio permitido invalida o link anterior e conta desativada não aceita recuperação', async () => {
+    await forgot().expect(202);
+    const oldToken = payload(await row()).token;
+    await admin.passwordResetToken.updateMany({
+      where: { userId: principal.id },
+      data: { createdAt: new Date(Date.now() - 61000) },
+    });
+    await forgot().expect(202);
+    const newToken = payload(await row()).token;
+    expect(newToken).not.toBe(oldToken);
+    await http()
+      .post('/api/v1/identity/password/reset/validate')
+      .send({ token: oldToken })
+      .expect(400);
+    await http()
+      .post('/api/v1/identity/password/reset/validate')
+      .send({ token: newToken })
+      .expect(204);
+    await admin.user.update({
+      where: { id: principal.id },
+      data: { status: 'INACTIVE' },
+    });
+    try {
+      await http()
+        .post('/api/v1/identity/password/reset/validate')
+        .send({ token: newToken })
+        .expect(400);
+      await http()
+        .post('/api/v1/identity/password/reset')
+        .send({ token: newToken, password })
+        .expect(400);
+    } finally {
+      await admin.user.update({
+        where: { id: principal.id },
+        data: { status: 'ACTIVE' },
+      });
+    }
   });
   it.each(['expired', 'used', 'replaced', 'disabled'] as const)(
     'não envia recuperação %s',

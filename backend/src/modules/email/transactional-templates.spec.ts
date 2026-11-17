@@ -14,6 +14,18 @@ describe('owner transactional templates', () => {
         resources: ['clientes ativos'],
       });
       expect(result.html).toContain('lang="pt-BR"');
+      for (const image of result.inlineImages) {
+        expect(result.html).toContain(`src="cid:${image.contentId}"`);
+        expect(image.contentType).toBe('image/png');
+        expect(Buffer.from(image.content).subarray(0, 8).toString('hex')).toBe(
+          '89504e470d0a1a0a',
+        );
+      }
+      expect(result.inlineImages.map((image) => image.fileName)).toEqual([
+        'allblue-logo.png',
+        'orbit-logo.png',
+      ]);
+      expect(result.html).not.toMatch(/<img[^>]+src="https?:/);
       expect(result.text.length).toBeGreaterThan(100);
       expect(result.html).not.toContain('<script>');
       expect(result.html).not.toContain('<img src=x');
@@ -21,6 +33,13 @@ describe('owner transactional templates', () => {
       expect(result.subject).not.toMatch(/[\r\n]/);
     },
   );
+  it('explica o uso único e o prazo de três horas na recuperação', () => {
+    const result = transactionalEmail('PASSWORD_RESET', {
+      link: 'https://orbit.example.com/redefinir-senha#token=example',
+    });
+    expect(result.text).toContain('expira em 3 horas');
+    expect(result.text).toContain('pode ser usado uma vez');
+  });
   it('never embeds a password or a payment charge promise in security notices', () => {
     const result = transactionalEmail('PASSWORD_CHANGED', {
       link: 'https://orbit.example.com/perfil',

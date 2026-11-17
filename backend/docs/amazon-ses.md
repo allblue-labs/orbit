@@ -155,7 +155,7 @@ Referências oficiais:
   desse propósito em 24 horas e limite por IP; somente uma reemissão permitida
   invalida o link anterior. Nunca retorna tokens.
 - Recuperação existente: `POST /identity/password/forgot` grava hash, expiração
-  de 30 minutos e intenção de envio na mesma transação. A resposta genérica em
+  de três horas e intenção de envio na mesma transação. A resposta genérica em
   português permanece igual para conta inexistente e falha ao enfileirar,
   evitando enumeração de contas. O reset consome uma vez e revoga
   as sessões existentes. Há intervalo de 60 segundos enquanto o último link continua
@@ -164,6 +164,15 @@ Referências oficiais:
   recuperação e convite transportam o token em `#token=`, sem query no GET.
   O frontend mantém compatibilidade com links legados, retira o token da URL
   após capturá-lo em memória e aplica `Referrer-Policy: no-referrer` nessas páginas.
+  Antes de mostrar o formulário, a web valida o token por
+  `POST /identity/password/reset/validate` (204 válido; 400
+  `PASSWORD_RESET_INVALID` para inexistente, usado ou expirado). Essa consulta
+  não consome o link e recebe os mesmos limites de autenticação. Consumo usa
+  uma atualização condicional atômica e o relógio do PostgreSQL; mesmo links
+  legados com `expires_at` maior deixam de valer três horas após a emissão.
+  O primeiro consumo salva a senha e revoga sessões na mesma transação.
+  A página remove o formulário após sucesso e mostra confirmação definitiva.
+
 - SES: conexão limitada a 2s, timeout de requisição de 5s, prazo total de 15s
   e uma tentativa do SDK. A fila controla as novas tentativas para evitar
   multiplicação de retries. Resultado `SENT` significa aceitação pelo provedor,
@@ -391,3 +400,22 @@ Número (`number`, até 30 caracteres) e complemento (`complement`, até 160) s�
 opcionais no endereço do cadastro e persistem na unidade matriz. Valores vazios
 viram null; espaços externos são removidos. CEP continua preenchendo rua/cidade/UF,
 sem inventar número/complemento. As colunas já existem; não há migration nova.
+
+## Identidade visual nos e-mails
+
+Todos os seis templates transacionais incluem os símbolos Allblue Labs e Orbit
+com texto alternativo, além da versão em texto simples. As imagens PNG são
+anexadas inline (`ContentDisposition: INLINE`, `ContentId` + `cid:`) pela API
+SESv2. Não há imagem externa, URL rastreável nem dependência do domínio CDN.
+As versões otimizadas em `backend/assets/email` são derivadas de
+`allblue-logo.png` e `orbit_logo.png` da raiz. Para regenerá-las:
+
+```sh
+node backend/scripts/prepare-email-branding.cjs
+```
+
+A imagem Docker já copia `assets` para o runtime. Nenhuma env, bucket, política
+IAM nem migration adicional é necessária para a marca ou a nova validade.
+
+Referências: [anexos inline no SES](https://docs.aws.amazon.com/ses/latest/dg/attachments.html)
+e [recuperação de senha OWASP](https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html).
