@@ -305,7 +305,7 @@ atual, consultar os relatórios de release PR-01 em diante, incluindo a PR-08.
 | --- | --- |
 | Boas-vindas + confirmação | Uma mensagem no cadastro inicial; token de 24h. Não há disparo retroativo na migration. |
 | Confirmação de e-mail | Reenvio solicitado, até cinco por 24h e intervalo de 60s. |
-| Redefinição de senha | Solicitação do owner inicial; token de 30min e limites próprios de reenvio. |
+| Redefinição de senha | Solicitação do owner inicial; token de 3h e limites próprios de reenvio. |
 | Senha alterada | Após a troca efetiva, na mesma transação; até cinco por 24h e intervalo de uma hora. Sem senha ou hash no conteúdo. |
 | Plano expirado e não reativado | Owner verificado; entre 24h e sete dias após a perda efetiva do acesso, sem checkout aberto. Um aviso por vencimento. |
 | Limites do plano | Owner verificado; um aviso consolidado por assinatura/plano/período mensal/alteração de limites. Cadastros precisam ultrapassar o teto; consumo positivo precisa atingir o teto. |

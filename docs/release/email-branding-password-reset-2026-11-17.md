@@ -55,9 +55,38 @@ A validade da recuperação por e-mail era 30 minutos; a de links manuais, 24 ho
   standalone de produção aprovados. Arquivos PNG/CID conferidos em todos os
   templates e no comando SES produzido pelo sender.
 
-A publicação e as verificações de runtime do staging serão registradas após
-aplicar as imagens imutáveis. Os testes não enviam e-mails reais nem alteram
-contas do servidor. Sem Git push.
+## Staging aplicado
+
+Commit `03513ed1f90ce2113d1822d6236c99f32cdcd363`, publicado e aplicado em
+17/11/2026. [Manifesto imutável das imagens](evidence/email-branding-password-reset-images-2026-11-17.json).
+Builds Linux/amd64 da API, migrador e frontend concluídos; auditoria da instalação
+de dependências de produção da API retornou zero vulnerabilidades.
+
+Backup custom PostgreSQL feito antes da troca em
+`/home/ninja/orbit-releases/email-security-03513ed1f90c/before/postgres.dump`,
+validado com pg_restore --list e protegido com modo 600. .env preservado em modo
+600. O migrador encontrou 125 migrations e nenhuma pendente, e reconciliou
+orbit_app sem SUPERUSER/BYPASSRLS. API, frontend e banco ficaram healthy.
+
+Uma execução na imagem real, com sender SES substituído somente em memória,
+conferiu os seis templates, ambas as imagens inline, a política de três horas e
+as recusas por uso, expiração e idade legada. Não chamou a AWS nem gravou dados.
+O preflight remoto real do SES retornou READY em us-east-2, com produção,
+envio, identidade verificada e quota disponíveis. Entrega de conta e feedback
+seguiram habilitados; a retenção automática permaneceu desativada como antes.
+Nenhuma permissão temporária de bootstrap SNS foi reintroduzida.
+
+A URL pública do frontend identificou o mesmo commit. A página de redefinição
+retornou 200 com no-store/no-referrer/noindex. O novo endpoint recusou um token
+fictício com 400/PASSWORD_RESET_INVALID e mensagem pt-BR, sem exigir sessão.
+A chamada sem Fetch Metadata foi recusada pelo BFF (403), preservando sua política
+de origem; com os headers de um navegador da própria aplicação, chegou à API.
+O Nexus permaneceu em HTTP 200.
+
+Os testes e as checagens desta release não enviaram e-mails reais, não criaram
+contas no staging e não alteraram senhas de usuários. A validação de MIME foi
+feita no comando do SDK; a renderização em cada cliente de e-mail depende desse
+cliente. Sem Git push.
 
 Referências: [SES inline attachments](https://docs.aws.amazon.com/ses/latest/dg/attachments.html),
 [OWASP Forgot Password](https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html).
