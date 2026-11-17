@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+import { adminPrisma, disconnectAdminPrisma } from './support/admin-prisma';
 import { Logger, ValidationPipe, type INestApplication } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import request from 'supertest';
@@ -39,7 +41,50 @@ const identityFixture = (
   ],
 });
 
+const admin = adminPrisma();
+async function activeScopeFixture() {
+  const email = `fixture.guard-order.${randomUUID()}@orbit.local`;
+  const user = await admin.user.create({
+    data: {
+      email,
+      normalizedEmail: email,
+      firstName: 'Fixture',
+      lastName: 'Guards',
+      displayName: 'Guards fixture',
+      status: 'ACTIVE',
+    },
+  });
+  const plan = await admin.plan.findFirstOrThrow({ where: { isActive: true } });
+  const organization = await admin.organization.create({
+    data: {
+      ownerUserId: user.id,
+      planId: plan.id,
+      slug: `guards-${randomUUID()}`,
+      displayName: 'Active guard fixture',
+      primarySegment: 'HVAC',
+      status: 'ACTIVE',
+      subscriptionStatus: 'ACTIVE',
+    },
+  });
+  const unit = await admin.businessUnit.create({
+    data: {
+      organizationId: organization.id,
+      slug: 'matriz',
+      type: 'HEADQUARTERS',
+      isPrimary: true,
+      legalName: 'Fixture LTDA',
+      documentType: 'CNPJ',
+      documentNumber: randomUUID().replace(/-/g, '').slice(0, 14),
+      city: 'Recife',
+      street: 'Rua Teste',
+      status: 'ACTIVE',
+    },
+  });
+  return { user: user.id, organization: organization.id, unit: unit.id };
+}
+
 describe('AppController (e2e)', () => {
+  afterAll(async () => disconnectAdminPrisma());
   let app: INestApplication<App>;
 
   beforeEach(async () => {
@@ -121,7 +166,9 @@ describe('AppController (e2e)', () => {
   });
 
   it('runs authentication and authorization guards before payload validation', async () => {
-    let lastUserId = 'user-id';
+    const scope = await activeScopeFixture();
+    const withoutCapabilityUser = randomUUID();
+    let lastUserId = scope.user;
     const verifyAccessToken = jest.fn((token: string) => {
       if (token === 'invalid') {
         throw Object.assign(new Error('invalid signature'), {
@@ -129,14 +176,14 @@ describe('AppController (e2e)', () => {
         });
       }
       const withoutCapability = token === 'valid-without-capability';
-      lastUserId = withoutCapability ? 'user-without-capability' : 'user-id';
+      lastUserId = withoutCapability ? withoutCapabilityUser : scope.user;
       return Promise.resolve({
         sub: lastUserId,
         sid: 'session-id',
-        organizationId: 'organization-id',
+        organizationId: scope.organization,
         roles: [],
         permissions: ['artifact_executions.create'],
-        businessUnitIds: ['unit-id'],
+        businessUnitIds: [scope.unit],
       });
     });
     const pipelineModule = await Test.createTestingModule({
@@ -150,7 +197,7 @@ describe('AppController (e2e)', () => {
           .fn()
           .mockImplementation(() =>
             Promise.resolve(
-              identityFixture(lastUserId, 'organization-id', 'unit-id', [
+              identityFixture(lastUserId, scope.organization, scope.unit, [
                 'artifact_executions.create',
               ]),
             ),
@@ -170,7 +217,7 @@ describe('AppController (e2e)', () => {
           (_organizationId: string, access: { userId: string }) =>
             Promise.resolve({
               capabilities:
-                access.userId === 'user-without-capability'
+                access.userId === withoutCapabilityUser
                   ? []
                   : ['artifact_executions.manage'],
             }),
@@ -310,6 +357,7 @@ describe('AppController (e2e)', () => {
   });
 
   it('does not mask an entitlement lookup failure as 403 or 404', async () => {
+    const scope = await activeScopeFixture();
     const failure = Object.assign(
       new Error('simulated pool acquisition timeout'),
       {
@@ -321,12 +369,12 @@ describe('AppController (e2e)', () => {
       .overrideProvider(IdentityTokenService)
       .useValue({
         verifyAccessToken: jest.fn().mockResolvedValue({
-          sub: '01900000-0000-7000-8000-000000000001',
+          sub: scope.user,
           sid: '01900000-0000-7000-8000-000000000002',
-          organizationId: '01900000-0000-7000-8000-000000000003',
+          organizationId: scope.organization,
           roles: [],
           permissions: ['artifact_executions.read'],
-          businessUnitIds: ['01900000-0000-7000-8000-000000000004'],
+          businessUnitIds: [scope.unit],
         }),
       })
       .overrideProvider(IdentityRepository)
@@ -334,16 +382,13 @@ describe('AppController (e2e)', () => {
         findById: jest
           .fn()
           .mockResolvedValue(
-            identityFixture(
-              '01900000-0000-7000-8000-000000000001',
-              '01900000-0000-7000-8000-000000000003',
-              '01900000-0000-7000-8000-000000000004',
-              ['artifact_executions.read'],
-            ),
+            identityFixture(scope.user, scope.organization, scope.unit, [
+              'artifact_executions.read',
+            ]),
           ),
         findSessionById: jest.fn().mockResolvedValue({
           id: '01900000-0000-7000-8000-000000000002',
-          userId: '01900000-0000-7000-8000-000000000001',
+          userId: scope.user,
           revokedAt: null,
           expiresAt: new Date(Date.now() + 60_000),
         }),

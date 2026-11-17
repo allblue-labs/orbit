@@ -148,9 +148,29 @@ async function provision(): Promise<void> {
     await admin.query(
       `GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ${role}`,
     );
+    // Publish broad grants and private-trigger revocations atomically.
+    await admin.query('BEGIN');
     await admin.query(
       `GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO ${role}`,
     );
+
+    // Trigger-only SECURITY DEFINER checks are invoked by PostgreSQL, never by
+    // application RPCs. Do not restore their default EXECUTE grants to runtime.
+    for (const name of [
+      'pr12_check_scope',
+      'pr12_rvt_asset_scope',
+      'pr12_rvt_occurrence_assets',
+    ]) {
+      const signature = `public.${quoteIdentifier(name)}()`;
+      const present = await admin.query<{ id: string | null }>(
+        'SELECT to_regprocedure($1)::text AS id',
+        [signature],
+      );
+      if (present.rows[0]?.id)
+        await admin.query(`REVOKE ALL ON FUNCTION ${signature} FROM ${role}`);
+    }
+
+    await admin.query('COMMIT');
 
     /** Cobre o que a próxima migration criar antes deste script rodar de novo. */
     await admin.query(

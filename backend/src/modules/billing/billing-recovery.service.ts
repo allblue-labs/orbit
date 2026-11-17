@@ -66,8 +66,10 @@ export class BillingRecoveryService {
     return this.repository.comoPlataforma(async (tx) => {
       await tx.$executeRaw`UPDATE billing_recovery_checkpoints SET status='DEAD_LETTER', token=NULL,
         lease_until=NULL,last_error_code='RETRY_EXHAUSTED' WHERE key=${key} AND attempts>=8 AND lease_until<=now()`;
-      await tx.$executeRaw`INSERT INTO billing_recovery_checkpoints(key,mode,stream)
-        VALUES(${key},${mode},${stream}) ON CONFLICT DO NOTHING`;
+      // timestamptz(3) rounds now() and can put a fresh checkpoint fractionally
+      // after this transaction's stable now(). Truncate so it is due immediately.
+      await tx.$executeRaw`INSERT INTO billing_recovery_checkpoints(key,mode,stream,next_run_at)
+        VALUES(${key},${mode},${stream},date_trunc('milliseconds',now())) ON CONFLICT DO NOTHING`;
       const rows = await tx.$queryRaw<RecoveryClaim[]>`
         WITH candidate AS (SELECT key FROM billing_recovery_checkpoints
           WHERE key=${key} AND status<>'DEAD_LETTER' AND next_run_at<=now()

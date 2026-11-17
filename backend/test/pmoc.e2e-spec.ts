@@ -674,9 +674,11 @@ describe('PMOC (e2e)', () => {
         .send({})
         .expect(201);
     }
-    const contenders = await Promise.all(
-      Array.from({ length: 4 }, (_, index) => reserveEvidence(index + 5)),
-    );
+    // This scenario races finalization, not ingress admission (two uploads per
+    // tenant). Reserve/upload first, then keep the four finalizers concurrent.
+    const contenders: string[] = [];
+    for (let index = 0; index < 4; index++)
+      contenders.push(await reserveEvidence(index + 5));
     const finalized = await Promise.all(
       contenders.map((uploadId) =>
         auth(

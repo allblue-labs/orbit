@@ -72,7 +72,9 @@ describe('Operations HTTP routing', () => {
       });
       next();
     });
-    await app.init();
+    // Retain a stable listener so pooled sockets cannot outlive an implicit
+    // Supertest port between route assertions.
+    await app.listen(0, '127.0.0.1');
   });
 
   beforeEach(() => {

@@ -947,11 +947,28 @@ describe('Plans, entitlements and monthly usage limits (e2e)', () => {
     });
 
     it('o inquilino anterior ao catálogo continua sem teto', async () => {
-      const legado = await prisma.organization.findFirst({
-        where: { plan: { key: 'STARTER' }, deletedAt: null },
-        select: { id: true },
+      // STARTER is also the compatibility plan FK of new canonical subscriptions.
+      // Build a genuinely pre-catalog tenant instead of choosing an arbitrary row
+      // (or silently skipping when none happens to exist).
+      const oldPlan = await prisma.plan.findUniqueOrThrow({
+        where: { key: 'STARTER' },
       });
-      if (!legado) return;
+      const legado = await prisma.organization.create({
+        data: {
+          ownerUserId: userId,
+          planId: oldPlan.id,
+          slug: `legacy-${randomUUID()}`,
+          displayName: 'Pre-catalog fixture',
+          primarySegment: 'HVAC',
+          status: 'ACTIVE',
+          subscriptionStatus: 'ACTIVE',
+        },
+      });
+      expect(
+        await prisma.organizationSubscription.count({
+          where: { organizationId: legado.id },
+        }),
+      ).toBe(0);
       const direitos = await como(legado.id, () =>
         entitlements.resolve(legado.id),
       );

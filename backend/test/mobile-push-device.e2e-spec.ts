@@ -7,6 +7,7 @@ import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { configureApiVersioning } from '../src/configure-api';
+import { BackgroundJobQueue } from '../src/modules/jobs/background-job.queue';
 import { BackgroundJobWorker } from '../src/modules/jobs/background-job.worker';
 import {
   MOBILE_PUSH_PROVIDER,
@@ -320,8 +321,55 @@ describe('Mobile Push & Device Registry (e2e)', () => {
   it('rebinds the same installation on user switch and logout removes eligibility', async () => {
     const deviceInstanceId = `switch-${randomUUID()}`;
     await registerDevice(deviceInstanceId, tokenValue('owner'));
+    const installation =
+      await prisma.mobileDeviceInstallation.findUniqueOrThrow({
+        where: { deviceInstanceId },
+      });
+    const notification = await prisma.notification.create({
+      data: {
+        organizationId,
+        recipientUserId: actorId,
+        type: 'SYSTEM',
+        title: 'Private previous-account notice',
+        body: 'Synthetic private content',
+      },
+    });
+    const pending = await prisma.mobilePushDelivery.create({
+      data: {
+        organizationId,
+        notificationId: notification.id,
+        installationId: installation.id,
+      },
+    });
+    await app.get(RequestContextStorage).run(
+      new RequestContext({
+        requestId: randomUUID(),
+        actorType: 'SYSTEM',
+        userId: actorId as UUID,
+        organizationId: organizationId as UUID,
+        businessUnitId: unitId as UUID,
+        businessUnitIds: [unitId as UUID],
+        roles: ['OWNER'],
+        permissions: ['*'],
+        ip: null,
+        userAgent: null,
+        locale: 'pt-BR',
+      }),
+      () =>
+        app.get(BackgroundJobQueue).enqueue({
+          organizationId,
+          businessUnitId: unitId,
+          scope: 'BUSINESS_UNIT',
+          queue: 'mobile.push.delivery',
+          jobKey: `pr12-old-device:${pending.id}`,
+          payload: { deliveryId: pending.id },
+          correlationId: randomUUID(),
+          actorUserId: actorId,
+        }),
+    );
+    const replacementToken = tokenValue('foreign');
     await auth(api().post('/api/v1/mobile/devices'), foreignToken)
-      .send(device(deviceInstanceId, tokenValue('foreign')))
+      .send(device(deviceInstanceId, replacementToken))
       .expect(201);
     const switched = await prisma.mobileDeviceInstallation.findUniqueOrThrow({
       where: { deviceInstanceId },
@@ -330,6 +378,24 @@ describe('Mobile Push & Device Registry (e2e)', () => {
     expect(
       (await auth(api().get('/api/v1/mobile/devices')).expect(200)).body,
     ).not.toEqual(expect.objectContaining({ deviceInstanceId }));
+
+    await drain(notification.id);
+    expect(
+      await prisma.mobilePushDelivery.findUniqueOrThrow({
+        where: { id: pending.id },
+      }),
+    ).toMatchObject({
+      organizationId,
+      notificationId: notification.id,
+      status: 'SKIPPED',
+    });
+    expect(
+      provider.calls.some(
+        (call) =>
+          call.token === replacementToken ||
+          call.payload.notificationId === notification.id,
+      ),
+    ).toBe(false);
 
     await auth(
       api().delete(`/api/v1/mobile/devices/${deviceInstanceId}`),
