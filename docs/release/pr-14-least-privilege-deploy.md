@@ -1,6 +1,6 @@
 # PR-14 — Menor privilégio no deploy
 
-Implementação local em 17/11/2026, sobre `f8ea544`. Complementa o hardening de
+Implementação local em 17/11/2026, commit `c4afc2c`, sobre `f8ea544`. Complementa o hardening de
 staging de 12/11, preservando a topologia Nginx, os contratos web/mobile e os
 providers já configurados. Não houve push, deploy ou rotação de segredos nesta PR.
 

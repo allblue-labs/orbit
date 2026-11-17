@@ -241,7 +241,7 @@ nem migração destrutiva automaticamente sobre dados de cliente.
 
 ### PR-14 — Menor privilégio no deploy
 
-**Implementação e qualificação local concluídas em 17/11/2026.**
+**Implementação e qualificação local concluídas em 17/11/2026 — commit `c4afc2c`.**
 [Relatório](pr-14-least-privilege-deploy.md) e
 [evidências](evidence/pr-14-least-privilege-deploy.json). API sem URL/senhas
 administrativas, verificação obrigatória do papel real, jobs protegidos, imagens

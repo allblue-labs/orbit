@@ -85,5 +85,6 @@
     "No new live rollout or backup/restore qualification.",
     "PR-13 CDN/legacy/backup acceptance remains pending; keep staging retention disabled.",
     "Final production qualification remains PR-19."
-  ]
+  ],
+  "implementationCommit": "c4afc2ca0c95a9a3a5899d9f17ae7672bb1ea201"
 }
