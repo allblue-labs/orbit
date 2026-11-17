@@ -1,3 +1,4 @@
+import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
@@ -48,24 +49,21 @@ describe('orçamentos e equipamentos no aplicativo (HTTP e RLS)', () => {
     test.set('Authorization', `Bearer ${token}`);
   async function tenant(): Promise<Tenant> {
     const suffix = randomUUID();
-    const registered = await http()
-      .post('/api/v1/identity/register')
-      .send({
-        ...REGISTRATION_LEGAL_ACCEPTANCE,
-        email: `quotes.docs.${suffix}@orbit.local`,
-        firstName: 'Owner',
-        lastName: 'Documentos',
-        password,
-        organizationName: `Documentos ${suffix}`,
-        legalName: 'Documentos de teste',
-        documentType: 'CPF',
-        documentNumber: cpf(),
-        city: 'Recife',
-        street: 'Rua de teste',
-        stateCode: 'PE',
-        planKey: 'ESSENTIAL',
-      })
-      .expect(201);
+    const registered = await registerVerifiedOwner(app, {
+      ...REGISTRATION_LEGAL_ACCEPTANCE,
+      email: `quotes.docs.${suffix}@orbit.local`,
+      firstName: 'Owner',
+      lastName: 'Documentos',
+      password,
+      organizationName: `Documentos ${suffix}`,
+      legalName: 'Documentos de teste',
+      documentType: 'CPF',
+      documentNumber: cpf(),
+      city: 'Recife',
+      street: 'Rua de teste',
+      stateCode: 'PE',
+      planKey: 'ESSENTIAL',
+    });
     const token = data<{ accessToken: string }>(registered).accessToken;
     const current = await auth(
       http().get('/api/v1/organizations/current'),

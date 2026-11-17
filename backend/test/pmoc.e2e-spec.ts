@@ -1,3 +1,4 @@
+import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import { replaceFixtureOwner } from './support/member-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
@@ -171,23 +172,20 @@ describe('PMOC (e2e)', () => {
   async function register(label: string) {
     const suffix = randomUUID().slice(0, 8);
     const email = `pmoc.${label}.${suffix}@orbit.local`;
-    const registration = await http()
-      .post('/api/v1/identity/register')
-      .send({
-        ...REGISTRATION_LEGAL_ACCEPTANCE,
-        email,
-        firstName: 'Pmoc',
-        lastName: 'E2E',
-        password: PASSWORD,
-        organizationName: `Pmoc ${label} ${suffix}`,
-        legalName: `Pmoc ${label} ${suffix} LTDA`,
-        documentType: 'CNPJ',
-        documentNumber: cnpj(),
-        city: 'Recife',
-        street: 'Rua da Aurora',
-        stateCode: 'PE',
-      })
-      .expect(201);
+    const registration = await registerVerifiedOwner(app, {
+      ...REGISTRATION_LEGAL_ACCEPTANCE,
+      email,
+      firstName: 'Pmoc',
+      lastName: 'E2E',
+      password: PASSWORD,
+      organizationName: `Pmoc ${label} ${suffix}`,
+      legalName: `Pmoc ${label} ${suffix} LTDA`,
+      documentType: 'CNPJ',
+      documentNumber: cnpj(),
+      city: 'Recife',
+      street: 'Rua da Aurora',
+      stateCode: 'PE',
+    });
     return {
       email,
       token: (registration.body as Envelope<{ accessToken: string }>).data

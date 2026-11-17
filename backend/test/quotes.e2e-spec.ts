@@ -1,3 +1,4 @@
+import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
  * E2E do Commercial Engine.
@@ -97,23 +98,20 @@ describe('Quotes (e2e)', () => {
 
   async function register(label: string): Promise<Tenant> {
     const suffix = randomUUID().slice(0, 8);
-    const registration = await http()
-      .post('/api/v1/identity/register')
-      .send({
-        ...REGISTRATION_LEGAL_ACCEPTANCE,
-        email: `quotes.${label}.${suffix}@orbit.local`,
-        firstName: 'Quote',
-        lastName: 'E2E',
-        password: 'Orbit#Quote@2026',
-        organizationName: `Quote ${label} ${suffix}`,
-        legalName: `Quote ${label} ${suffix} LTDA`,
-        documentType: 'CNPJ',
-        documentNumber: cnpj(),
-        city: 'Recife',
-        street: 'Rua da Aurora',
-        stateCode: 'PE',
-      })
-      .expect(201);
+    const registration = await registerVerifiedOwner(app, {
+      ...REGISTRATION_LEGAL_ACCEPTANCE,
+      email: `quotes.${label}.${suffix}@orbit.local`,
+      firstName: 'Quote',
+      lastName: 'E2E',
+      password: 'Orbit#Quote@2026',
+      organizationName: `Quote ${label} ${suffix}`,
+      legalName: `Quote ${label} ${suffix} LTDA`,
+      documentType: 'CNPJ',
+      documentNumber: cnpj(),
+      city: 'Recife',
+      street: 'Rua da Aurora',
+      stateCode: 'PE',
+    });
 
     const token = (registration.body as Envelope<{ accessToken: string }>).data
       .accessToken;

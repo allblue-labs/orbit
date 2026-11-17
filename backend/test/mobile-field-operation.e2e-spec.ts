@@ -1,3 +1,4 @@
+import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument */
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
@@ -416,23 +417,20 @@ describe('Mobile Field Operation execution contract (e2e)', () => {
 
   async function register(label: string): Promise<string> {
     const suffix = randomUUID().slice(0, 8);
-    const response = await api()
-      .post('/api/v1/identity/register')
-      .send({
-        ...REGISTRATION_LEGAL_ACCEPTANCE,
-        email: `field.execution.${label}.${suffix}@orbit.local`,
-        firstName: 'Field',
-        lastName: label,
-        password: PASSWORD,
-        organizationName: `Field ${label} ${suffix}`,
-        legalName: `Field ${label} ${suffix} LTDA`,
-        documentType: 'CNPJ',
-        documentNumber: cnpj(),
-        city: 'Recife',
-        street: 'Rua Field',
-        stateCode: 'PE',
-      })
-      .expect(201);
+    const response = await registerVerifiedOwner(app, {
+      ...REGISTRATION_LEGAL_ACCEPTANCE,
+      email: `field.execution.${label}.${suffix}@orbit.local`,
+      firstName: 'Field',
+      lastName: label,
+      password: PASSWORD,
+      organizationName: `Field ${label} ${suffix}`,
+      legalName: `Field ${label} ${suffix} LTDA`,
+      documentType: 'CNPJ',
+      documentNumber: cnpj(),
+      city: 'Recife',
+      street: 'Rua Field',
+      stateCode: 'PE',
+    });
     return (response.body as Envelope<{ accessToken: string }>).data
       .accessToken;
   }

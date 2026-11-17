@@ -43,13 +43,12 @@ export class AuthController {
     @Body() input: RegisterOrganizationDto,
     @Req() request: IdentityRequest,
   ) {
-    const session = await this.registration.register(input, {
+    return this.registration.register(input, {
       client: input.client,
       deviceId: input.deviceId,
       userAgent: request.header('user-agent'),
       ipAddress: requestClientIp(request),
     });
-    return this.readModels.session(session);
   }
 
   @Public()

@@ -122,3 +122,30 @@ test("sem token oferece reenvio com resposta genérica em português", async ({
     },
   ]);
 });
+
+test("o reenvio permite uma nova tentativa depois de um minuto, sem disparos automáticos", async ({
+  page,
+}) => {
+  await page.clock.install();
+  const { writes } = await setup(page);
+  await page.goto("/confirmar-email");
+  await page
+    .getByRole("textbox", { name: "Seu e-mail" })
+    .fill("owner@example.test");
+  await page
+    .getByRole("button", { name: "Solicitar novo e-mail", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Aguarde um minuto para reenviar" }),
+  ).toBeDisabled();
+  expect(writes).toHaveLength(1);
+  await page.clock.fastForward(61000);
+  const resend = page.getByRole("button", {
+    name: "Solicitar novo e-mail",
+    exact: true,
+  });
+  await expect(resend).toBeEnabled();
+  expect(writes).toHaveLength(1);
+  await resend.click();
+  await expect.poll(() => writes.length).toBe(2);
+});

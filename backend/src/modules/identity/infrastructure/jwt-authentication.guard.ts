@@ -82,6 +82,13 @@ export class JwtAuthenticationGuard implements CanActivate {
         await this.repository.revokeSession(session.id);
         throw new UnauthorizedException();
       }
+      if (user.requiresEmailVerification) {
+        await this.repository.revokeSession(session.id);
+        throw new UnauthorizedException(
+          'Confirme seu e-mail antes de entrar.',
+          'EMAIL_VERIFICATION_REQUIRED',
+        );
+      }
       // RBAC, scope and ownership are resolved from current server state on
       // every request. A still-signed token cannot preserve revoked access.
       const identity = toAuthenticatedIdentity(user, claims.sid);

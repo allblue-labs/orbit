@@ -6,6 +6,7 @@
  * browser — sempre sem expor tokens.
  */
 import { cookies } from "next/headers";
+import type { IdentityRegistrationReadModel } from "@/types/contracts/modules/identity/identity.read-models";
 
 import { ApiError } from "@/lib/api-error";
 import { backendJson, jsonBody } from "@/server/backend-client";
@@ -250,9 +251,11 @@ export function login(input: LoginInput): Promise<TokenPair> {
   });
 }
 
-/** Cria organização + usuário e devolve o par de tokens. */
-export function register(input: RegisterInput): Promise<TokenPair> {
-  return backendJson<TokenPair>({
+/** Cria o cadastro pendente; confirmação de e-mail precede qualquer sessão. */
+export function register(
+  input: RegisterInput,
+): Promise<IdentityRegistrationReadModel> {
+  return backendJson<IdentityRegistrationReadModel>({
     method: "POST",
     path: "/identity/register",
     body: jsonBody({ client: "WEB", ...input }),

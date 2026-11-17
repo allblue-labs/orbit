@@ -1,3 +1,4 @@
+import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
  * Assinatura, períodos e elegibilidade de avaliação — contra o banco de verdade.
@@ -113,25 +114,22 @@ describe('Subscription lifecycle, billing periods and trial (e2e)', () => {
   ): Promise<Inquilino> {
     const local = randomUUID().slice(0, 8);
     const email = `subscriptions.${rotulo}.${local}@orbit.local`;
-    const resposta = await http()
-      .post('/api/v1/identity/register')
-      .send({
-        ...REGISTRATION_LEGAL_ACCEPTANCE,
-        email,
-        firstName: 'Assinatura',
-        lastName: rotulo,
-        password: PASSWORD,
-        organizationName: `Assinatura ${rotulo} ${local}`,
-        legalName: `Assinatura ${rotulo} ${local} LTDA`,
-        documentType: 'CNPJ',
-        documentNumber: documento,
-        city: 'Recife',
-        street: 'Rua do Sol',
-        stateCode: 'PE',
-        planKey,
-        billingInterval,
-      })
-      .expect(201);
+    const resposta = await registerVerifiedOwner(app, {
+      ...REGISTRATION_LEGAL_ACCEPTANCE,
+      email,
+      firstName: 'Assinatura',
+      lastName: rotulo,
+      password: PASSWORD,
+      organizationName: `Assinatura ${rotulo} ${local}`,
+      legalName: `Assinatura ${rotulo} ${local} LTDA`,
+      documentType: 'CNPJ',
+      documentNumber: documento,
+      city: 'Recife',
+      street: 'Rua do Sol',
+      stateCode: 'PE',
+      planKey,
+      billingInterval,
+    });
     const token = (resposta.body as Envelope<{ accessToken: string }>).data
       .accessToken;
     const dono = await prisma.user.findUniqueOrThrow({

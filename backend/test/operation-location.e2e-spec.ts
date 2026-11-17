@@ -1,3 +1,4 @@
+import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
  * Endereço de atendimento, setor e equipamentos por ordem.
@@ -87,23 +88,20 @@ describe('Service address, sector and operation equipment (e2e)', () => {
     http = () => request(app.getHttpServer());
 
     const suffix = randomUUID().slice(0, 8);
-    const registro = await http()
-      .post('/api/v1/identity/register')
-      .send({
-        ...REGISTRATION_LEGAL_ACCEPTANCE,
-        email: `location.${suffix}@orbit.local`,
-        firstName: 'Local',
-        lastName: 'E2E',
-        password: PASSWORD,
-        organizationName: `Local ${suffix}`,
-        legalName: `Local ${suffix} LTDA`,
-        documentType: 'CNPJ',
-        documentNumber: cnpj(),
-        city: 'Recife',
-        street: 'Rua do Sol',
-        stateCode: 'PE',
-      })
-      .expect(201);
+    const registro = await registerVerifiedOwner(app, {
+      ...REGISTRATION_LEGAL_ACCEPTANCE,
+      email: `location.${suffix}@orbit.local`,
+      firstName: 'Local',
+      lastName: 'E2E',
+      password: PASSWORD,
+      organizationName: `Local ${suffix}`,
+      legalName: `Local ${suffix} LTDA`,
+      documentType: 'CNPJ',
+      documentNumber: cnpj(),
+      city: 'Recife',
+      street: 'Rua do Sol',
+      stateCode: 'PE',
+    });
     token = (registro.body as Envelope<{ accessToken: string }>).data
       .accessToken;
 

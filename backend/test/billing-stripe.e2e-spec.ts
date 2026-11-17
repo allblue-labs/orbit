@@ -1,3 +1,4 @@
+import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
  * Integração de cobrança — contra o banco de verdade, sem cobrar ninguém.
@@ -386,24 +387,21 @@ describe('Stripe billing integration and webhook reconciliation (e2e)', () => {
   ): Promise<Inquilino> {
     const local = randomUUID().slice(0, 8);
     const email = `billing.${rotulo}.${local}@orbit.local`;
-    const resposta = await http()
-      .post('/api/v1/identity/register')
-      .send({
-        ...REGISTRATION_LEGAL_ACCEPTANCE,
-        email,
-        firstName: 'Cobranca',
-        lastName: rotulo,
-        password: PASSWORD,
-        organizationName: `Cobranca ${rotulo} ${local}`,
-        legalName: `Cobranca ${rotulo} ${local} LTDA`,
-        documentType: 'CNPJ',
-        documentNumber: cnpj(),
-        city: 'Recife',
-        street: 'Rua do Sol',
-        stateCode: 'PE',
-        planKey,
-      })
-      .expect(201);
+    const resposta = await registerVerifiedOwner(app, {
+      ...REGISTRATION_LEGAL_ACCEPTANCE,
+      email,
+      firstName: 'Cobranca',
+      lastName: rotulo,
+      password: PASSWORD,
+      organizationName: `Cobranca ${rotulo} ${local}`,
+      legalName: `Cobranca ${rotulo} ${local} LTDA`,
+      documentType: 'CNPJ',
+      documentNumber: cnpj(),
+      city: 'Recife',
+      street: 'Rua do Sol',
+      stateCode: 'PE',
+      planKey,
+    });
     const token = (resposta.body as Envelope<{ accessToken: string }>).data
       .accessToken;
     const dono = await prisma.user.findUniqueOrThrow({

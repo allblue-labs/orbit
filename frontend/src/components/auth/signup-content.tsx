@@ -1,4 +1,5 @@
 "use client";
+import { ConfirmEmail } from "@/components/auth/confirm-email";
 
 import Link from "next/link";
 import { useState } from "react";
@@ -102,7 +103,7 @@ const fieldsByStep: (keyof FormValues)[][] = [
   ["planKey", "billingInterval"],
   ["firstName", "lastName", "email", "password", "confirmPassword"],
   ["organizationName", "legalName", "documentNumber", "primarySegment"],
-  ["city", "street", "stateCode", "terms"],
+  ["city", "street", "number", "complement", "stateCode", "terms"],
 ];
 
 /**
@@ -294,6 +295,7 @@ export function SignupContent({
   initialSelection?: { planKey: string; billingInterval: BillingIntervalCode };
 }) {
   const createAccount = useRegister();
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
   const [registrationError, setRegistrationError] = useState<{
     message: string;
     canSignIn: boolean;
@@ -316,6 +318,8 @@ export function SignupContent({
     defaultValues: {
       primarySegment: "Serviços",
       stateCode: "",
+      number: "",
+      complement: "",
       planKey: initialSelection.planKey,
       billingInterval: initialSelection.billingInterval,
       terms: false,
@@ -345,7 +349,7 @@ export function SignupContent({
     setRegistrationError(null);
     const { confirmPassword: _, terms: __, ...payload } = values;
     try {
-      await createAccount.mutateAsync({
+      const pending = await createAccount.mutateAsync({
         ...payload,
         acceptTerms: values.terms,
         termsVersion: LEGAL_DOCUMENT_VERSION,
@@ -356,7 +360,8 @@ export function SignupContent({
         client: "WEB",
         businessUnitType: "HEADQUARTERS",
       });
-      toast.success("Cadastro concluído");
+      setPendingEmail(pending.email);
+      toast.success("Confirme seu e-mail para continuar");
     } catch (error) {
       const message = errorCopy(error);
       const code = error instanceof ApiError ? error.code : "";
@@ -375,6 +380,8 @@ export function SignupContent({
       }
     }
   }
+
+  if (pendingEmail) return <ConfirmEmail initialEmail={pendingEmail} />;
 
   return (
     <main className="grid min-h-dvh bg-background lg:grid-cols-[22rem_1fr]">
@@ -765,6 +772,39 @@ export function SignupContent({
                       <Label htmlFor="street">Endereço da matriz</Label>
                       <Input id="street" {...register("street")} />
                       <FieldError message={errors.street?.message} />
+                    </div>
+                    <div className="grid gap-5 sm:col-span-2 sm:grid-cols-[8rem_1fr]">
+                      <div className="min-w-0 space-y-2">
+                        <Label htmlFor="number">
+                          Número{" "}
+                          <span className="font-normal text-muted-foreground">
+                            (opcional)
+                          </span>
+                        </Label>
+                        <Input
+                          id="number"
+                          maxLength={30}
+                          placeholder="Ex.: 120 ou s/n"
+                          {...register("number")}
+                        />
+                        <FieldError message={errors.number?.message} />
+                      </div>
+                      <div className="min-w-0 space-y-2">
+                        <Label htmlFor="complement">
+                          Complemento{" "}
+                          <span className="font-normal text-muted-foreground">
+                            (opcional)
+                          </span>
+                        </Label>
+                        <Input
+                          id="complement"
+                          autoComplete="address-line2"
+                          maxLength={160}
+                          placeholder="Apartamento, sala, bloco…"
+                          {...register("complement")}
+                        />
+                        <FieldError message={errors.complement?.message} />
+                      </div>
                     </div>
                     <div className="sm:col-span-2">
                       <LegalDocumentsPanel compact />

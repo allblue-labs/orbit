@@ -1,3 +1,4 @@
+import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import { paidSubscriptionFixture } from './support/paid-subscription-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
@@ -154,24 +155,21 @@ describe('Plans, entitlements and monthly usage limits (e2e)', () => {
   async function registrar(planKey: string, label: string) {
     const local = randomUUID().slice(0, 8);
     const email = `entitlements.${label}.${local}@orbit.local`;
-    const response = await http()
-      .post('/api/v1/identity/register')
-      .send({
-        ...REGISTRATION_LEGAL_ACCEPTANCE,
-        email,
-        firstName: 'Cota',
-        lastName: label,
-        password: PASSWORD,
-        organizationName: `Cota ${label} ${local}`,
-        legalName: `Cota ${label} ${local} LTDA`,
-        documentType: 'CNPJ',
-        documentNumber: cnpj(),
-        city: 'Recife',
-        street: 'Rua do Sol',
-        stateCode: 'PE',
-        planKey,
-      })
-      .expect(201);
+    const response = await registerVerifiedOwner(app, {
+      ...REGISTRATION_LEGAL_ACCEPTANCE,
+      email,
+      firstName: 'Cota',
+      lastName: label,
+      password: PASSWORD,
+      organizationName: `Cota ${label} ${local}`,
+      legalName: `Cota ${label} ${local} LTDA`,
+      documentType: 'CNPJ',
+      documentNumber: cnpj(),
+      city: 'Recife',
+      street: 'Rua do Sol',
+      stateCode: 'PE',
+      planKey,
+    });
     await paidSubscriptionFixture(app, prisma, email);
     return {
       email,

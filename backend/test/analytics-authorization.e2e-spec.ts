@@ -1,3 +1,4 @@
+import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import { replaceFixtureOwner } from './support/member-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 import { type INestApplication } from '@nestjs/common';
@@ -66,25 +67,22 @@ describe('Analytics compound authorization (e2e)', () => {
 
     email = `analytics.${randomUUID()}@orbit.local`;
     const suffix = randomUUID().slice(0, 8);
-    await http()
-      .post('/api/v1/identity/register')
-      .send({
-        ...REGISTRATION_LEGAL_ACCEPTANCE,
-        email,
-        firstName: 'Analytics',
-        lastName: 'Gate',
-        password: PASSWORD,
-        client: 'WEB',
-        organizationName: `Analytics Gate ${suffix}`,
-        legalName: `Analytics Gate ${suffix} LTDA`,
-        documentType: 'CNPJ',
-        documentNumber: cnpj(),
-        city: 'Recife',
-        street: 'Rua do Sol',
-        stateCode: 'PE',
-        primarySegment: 'HVAC-R',
-      })
-      .expect(201);
+    await registerVerifiedOwner(app, {
+      ...REGISTRATION_LEGAL_ACCEPTANCE,
+      email,
+      firstName: 'Analytics',
+      lastName: 'Gate',
+      password: PASSWORD,
+      client: 'WEB',
+      organizationName: `Analytics Gate ${suffix}`,
+      legalName: `Analytics Gate ${suffix} LTDA`,
+      documentType: 'CNPJ',
+      documentNumber: cnpj(),
+      city: 'Recife',
+      street: 'Rua do Sol',
+      stateCode: 'PE',
+      primarySegment: 'HVAC-R',
+    });
     const user = await prisma.user.findFirstOrThrow({
       where: { email },
       select: {

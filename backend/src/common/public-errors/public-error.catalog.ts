@@ -12,6 +12,11 @@ export interface PublicErrorDefinition {
 
 const entries = [
   [
+    'EMAIL_VERIFICATION_REQUIRED',
+    HttpStatus.UNAUTHORIZED,
+    'Confirme seu e-mail para liberar o acesso ao Orbit. Abra o link recebido ou solicite um novo e-mail de confirmação.',
+  ],
+  [
     'ORGANIZATION_REACTIVATION_REQUIRES_SUBSCRIPTION',
     HttpStatus.CONFLICT,
     'Regularize a contratação da organização antes de reativá-la.',

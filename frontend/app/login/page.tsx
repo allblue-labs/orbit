@@ -16,6 +16,8 @@ import {
 import { motion } from "motion/react";
 import { toast } from "sonner";
 
+import { ConfirmEmail } from "@/components/auth/confirm-email";
+import { toApiError } from "@/lib/api-error";
 import { loginFailure } from "@/lib/login-failure";
 import { OrbitLogo } from "@/components/brand/orbit-logo";
 import { Button } from "@/components/ui/button";
@@ -56,6 +58,7 @@ export default function LoginPage() {
 function LoginView() {
   const [showPassword, setShowPassword] = useState(false);
   const [requiresMfa, setRequiresMfa] = useState(false);
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
   const params = useSearchParams();
   const reason = REASON_MESSAGES[params.get(LOGIN_REASON_PARAM) ?? ""];
   const destination = params.get("destino") ?? undefined;
@@ -76,12 +79,17 @@ function LoginView() {
       /* A decisão é pelo código publicado do erro, e vive em `login-failure`
          para poder ser testada sem DOM. Ver o comentário de lá: comparar a
          mensagem interna trancava fora quem ativava o segundo fator. */
+      if (toApiError(error).code === "EMAIL_VERIFICATION_REQUIRED") {
+        setPendingEmail(String(form.get("email") ?? ""));
+        return;
+      }
       const acao = loginFailure(error);
       if (acao.revealMfa) setRequiresMfa(true);
       toast.error(acao.title, { description: acao.description });
     }
   }
 
+  if (pendingEmail) return <ConfirmEmail initialEmail={pendingEmail} />;
   return (
     <div className="grid min-h-dvh lg:grid-cols-2">
       {/* Form side */}

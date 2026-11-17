@@ -1,3 +1,4 @@
+import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
  * Estresse de concorrência sobre o contexto de RLS.
@@ -100,23 +101,20 @@ describe('Concorrência e contexto RLS (e2e)', () => {
   async function register(label: string) {
     const suffix = randomUUID().slice(0, 8);
     const email = `conc.${label}.${suffix}@orbit.local`;
-    const registration = await http()
-      .post('/api/v1/identity/register')
-      .send({
-        ...REGISTRATION_LEGAL_ACCEPTANCE,
-        email,
-        firstName: 'Conc',
-        lastName: 'E2E',
-        password: PASSWORD,
-        organizationName: `Conc ${label} ${suffix}`,
-        legalName: `Conc ${label} ${suffix} LTDA`,
-        documentType: 'CNPJ',
-        documentNumber: cnpj(),
-        city: 'Recife',
-        street: 'Rua da Aurora',
-        stateCode: 'PE',
-      })
-      .expect(201);
+    const registration = await registerVerifiedOwner(app, {
+      ...REGISTRATION_LEGAL_ACCEPTANCE,
+      email,
+      firstName: 'Conc',
+      lastName: 'E2E',
+      password: PASSWORD,
+      organizationName: `Conc ${label} ${suffix}`,
+      legalName: `Conc ${label} ${suffix} LTDA`,
+      documentType: 'CNPJ',
+      documentNumber: cnpj(),
+      city: 'Recife',
+      street: 'Rua da Aurora',
+      stateCode: 'PE',
+    });
     return {
       email,
       token: (registration.body as Envelope<{ accessToken: string }>).data

@@ -62,3 +62,15 @@ inválidos mantêm a escolha do plano como primeiro passo.
 “Alterar plano” permite rever a escolha sem perder o formulário. O campo
 `billingInterval` também viaja no POST de registro e no provisionamento da
 assinatura. Clientes antigos que não enviam esse campo continuam no mensal.
+
+## Confirmação do e-mail antes do acesso
+
+O cadastro público agora termina em EMAIL_VERIFICATION_REQUIRED, sem emitir sessão.
+Boas-vindas e link exclusivo são persistidos na outbox SES na mesma transação da
+conta. O wizard permanece na orientação de confirmação; o checkout não começa
+antes dela. Ao confirmar e fazer login, o estado canônico da assinatura mantém
+plano e periodicidade: a navegação continua para o teste elegível ou para a
+contratação pendente. Não é necessário cadastrar a organização novamente.
+Owners originais ainda não confirmados devem usar o link recebido ou solicitar
+outro na página de confirmação. O cadastro aceita número e complemento opcionais,
+persistidos no endereço da matriz; omissão ou texto em branco não bloqueia o fluxo.

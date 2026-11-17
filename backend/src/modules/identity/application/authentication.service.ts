@@ -155,6 +155,12 @@ export class AuthenticationService {
       throw new SurfaceNotAllowedException(normalizeSurface(metadata.client));
     }
 
+    if (user.requiresEmailVerification)
+      throw new UnauthorizedException(
+        'Confirme seu e-mail antes de entrar.',
+        'EMAIL_VERIFICATION_REQUIRED',
+      );
+
     const sessionId = this.uuids.generate();
     const identity = toAuthenticatedIdentity(user, sessionId);
     const pair = await this.tokens.issue(identity);
@@ -188,6 +194,13 @@ export class AuthenticationService {
       if (!user || user.deletedAt || user.status !== 'ACTIVE') {
         await this.repository.revokeSession(session.id);
         throw new UnauthorizedException('Invalid refresh token');
+      }
+      if (user.requiresEmailVerification) {
+        await this.repository.revokeSession(session.id);
+        throw new UnauthorizedException(
+          'Confirme seu e-mail antes de entrar.',
+          'EMAIL_VERIFICATION_REQUIRED',
+        );
       }
       if (!allowsSurface(user, session.client)) {
         await this.repository.revokeSession(session.id);

@@ -43,9 +43,9 @@ describe('public signup document reservation', () => {
       subscriptions = { provision: jest.fn() };
     const service = new RegistrationService(
       repository as never,
-      authentication as never,
       { hash: jest.fn().mockResolvedValue('hash') } as never,
       subscriptions as never,
+      { queueWelcomeIn: jest.fn() } as never,
     );
     await expect(
       service.register(
@@ -67,7 +67,7 @@ describe('public signup document reservation', () => {
       'empresa',
       { publicSignup: true },
       { client: 'WEB' },
-      undefined,
+      expect.any(Function),
     );
     expect(subscriptions.provision).not.toHaveBeenCalled();
     expect(authentication.login).not.toHaveBeenCalled();

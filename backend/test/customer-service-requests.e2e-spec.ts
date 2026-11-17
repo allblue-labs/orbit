@@ -1,3 +1,4 @@
+import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment */
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
@@ -353,23 +354,20 @@ describe('Customer Service Requests (e2e)', () => {
 
   async function createTenant(marker: string) {
     const email = `request.owner.${marker}.${randomUUID()}@orbit.local`;
-    const registration = await api()
-      .post('/api/v1/identity/register')
-      .send({
-        ...REGISTRATION_LEGAL_ACCEPTANCE,
-        email,
-        firstName: 'Service',
-        lastName: `Request ${marker}`,
-        password: PASSWORD,
-        organizationName: `Service Request ${marker} ${randomUUID().slice(0, 6)}`,
-        legalName: `Service Request ${marker} LTDA`,
-        documentType: 'CNPJ',
-        documentNumber: cnpj(),
-        city: 'Recife',
-        street: 'Rua dos Chamados',
-        stateCode: 'PE',
-      })
-      .expect(201);
+    const registration = await registerVerifiedOwner(app, {
+      ...REGISTRATION_LEGAL_ACCEPTANCE,
+      email,
+      firstName: 'Service',
+      lastName: `Request ${marker}`,
+      password: PASSWORD,
+      organizationName: `Service Request ${marker} ${randomUUID().slice(0, 6)}`,
+      legalName: `Service Request ${marker} LTDA`,
+      documentType: 'CNPJ',
+      documentNumber: cnpj(),
+      city: 'Recife',
+      street: 'Rua dos Chamados',
+      stateCode: 'PE',
+    });
     const token = registration.body.data.accessToken as string;
     const organization = await asInternal(
       api().get('/api/v1/organizations/current'),

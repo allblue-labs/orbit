@@ -1,3 +1,4 @@
+import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import { imageFixture } from './support/image-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument */
@@ -600,23 +601,20 @@ describe('Mobile signatures and customer acknowledgement (e2e)', () => {
 
   async function register(label: string): Promise<string> {
     const suffix = randomUUID().slice(0, 8);
-    const response = await api()
-      .post('/api/v1/identity/register')
-      .send({
-        ...REGISTRATION_LEGAL_ACCEPTANCE,
-        email: `mobile.sign.${label}.${suffix}@orbit.local`,
-        firstName: 'Mobile',
-        lastName: label,
-        password: PASSWORD,
-        organizationName: `Mobile ${label} ${suffix}`,
-        legalName: `Mobile ${label} ${suffix} LTDA`,
-        documentType: 'CNPJ',
-        documentNumber: cnpj(),
-        city: 'Recife',
-        street: 'Rua Mobile',
-        stateCode: 'PE',
-      })
-      .expect(201);
+    const response = await registerVerifiedOwner(app, {
+      ...REGISTRATION_LEGAL_ACCEPTANCE,
+      email: `mobile.sign.${label}.${suffix}@orbit.local`,
+      firstName: 'Mobile',
+      lastName: label,
+      password: PASSWORD,
+      organizationName: `Mobile ${label} ${suffix}`,
+      legalName: `Mobile ${label} ${suffix} LTDA`,
+      documentType: 'CNPJ',
+      documentNumber: cnpj(),
+      city: 'Recife',
+      street: 'Rua Mobile',
+      stateCode: 'PE',
+    });
     return (response.body as Envelope<{ accessToken: string }>).data
       .accessToken;
   }

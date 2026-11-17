@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { CheckCircle2, Loader2, MailCheck, Send } from "lucide-react";
 import { apiClient } from "@/api/client";
@@ -20,13 +20,21 @@ function fragmentToken() {
   return /^[A-Za-z0-9_-]{64}$/.test(value) ? value : "";
 }
 
-export function ConfirmEmail() {
+export function ConfirmEmail({
+  initialEmail = "",
+}: { initialEmail?: string } = {}) {
   const token = useSyncExternalStore(subscribeToHash, fragmentToken, () => "");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(initialEmail);
   const [busy, setBusy] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(false);
+  useEffect(() => {
+    if (!resendCooldown) return;
+    const timer = window.setTimeout(() => setResendCooldown(false), 60_000);
+    return () => window.clearTimeout(timer);
+  }, [resendCooldown]);
   const confirm = async () => {
     if (busy) return;
     setBusy(true);
@@ -49,7 +57,7 @@ export function ConfirmEmail() {
   };
   const resend = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (busy) return;
+    if (busy || resendCooldown) return;
     setBusy(true);
     setError(null);
     try {
@@ -59,6 +67,7 @@ export function ConfirmEmail() {
         { retries: 0 },
       );
       setSent(true);
+      setResendCooldown(true);
     } catch {
       setError(
         "Não foi possível enviar a solicitação agora. Aguarde um momento e tente novamente.",
@@ -93,8 +102,10 @@ export function ConfirmEmail() {
             </h1>
             <p className="text-sm leading-relaxed text-muted-foreground">
               {confirmed
-                ? "Seu endereço de e-mail foi confirmado com sucesso. Sua conta do Orbit está atualizada."
-                : "Bem-vindo ao Orbit! Confirme que este endereço pertence a você. O link recebido por e-mail é exclusivo e vale por 24 horas."}
+                ? "Seu endereço de e-mail foi confirmado com sucesso. Entre para continuar com o plano escolhido."
+                : initialEmail
+                  ? `Seu cadastro aguarda a confirmação de ${initialEmail}. Abra o link recebido por e-mail ou solicite outro abaixo. Confirme o endereço para liberar o acesso e continuar com o plano escolhido.`
+                  : "Bem-vindo ao Orbit! Confirme que este endereço pertence a você. O link recebido por e-mail é exclusivo e vale por 24 horas."}
             </p>
           </div>
           {error ? (
@@ -145,13 +156,13 @@ export function ConfirmEmail() {
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
                     placeholder="voce@empresa.com"
-                    disabled={busy || sent}
+                    disabled={busy || resendCooldown}
                   />
                 </div>
                 <Button
                   type="submit"
                   variant="outline"
-                  disabled={busy || sent}
+                  disabled={busy || resendCooldown}
                   className="w-full"
                 >
                   {busy ? (
@@ -159,7 +170,9 @@ export function ConfirmEmail() {
                   ) : (
                     <Send className="size-4" />
                   )}
-                  Solicitar novo e-mail
+                  {resendCooldown
+                    ? "Aguarde um minuto para reenviar"
+                    : "Solicitar novo e-mail"}
                 </Button>
                 {sent ? (
                   <p
@@ -172,6 +185,9 @@ export function ConfirmEmail() {
                   </p>
                 ) : null}
               </form>
+              <Button asChild variant="ghost" className="w-full">
+                <Link href="/login">Já confirmei meu e-mail — entrar</Link>
+              </Button>
             </>
           )}
         </section>

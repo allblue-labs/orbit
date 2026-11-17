@@ -1,3 +1,4 @@
+import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import { paidSubscriptionFixture } from './support/paid-subscription-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
@@ -96,24 +97,21 @@ describe('Team members, temporary password and recovery (e2e)', () => {
   async function register(label: string) {
     const suffix = randomUUID().slice(0, 8);
     const email = `team.${label}.${suffix}@orbit.local`;
-    const response = await http()
-      .post('/api/v1/identity/register')
-      .send({
-        ...REGISTRATION_LEGAL_ACCEPTANCE,
-        email,
-        firstName: 'Team',
-        lastName: label,
-        password: PASSWORD,
-        organizationName: `Team ${label} ${suffix}`,
-        legalName: `Team ${label} ${suffix} LTDA`,
-        documentType: 'CNPJ',
-        documentNumber: cnpj(),
-        city: 'Recife',
-        street: 'Rua do Sol',
-        stateCode: 'PE',
-        planKey: 'ENTERPRISE_UNLIMITED',
-      })
-      .expect(201);
+    const response = await registerVerifiedOwner(app, {
+      ...REGISTRATION_LEGAL_ACCEPTANCE,
+      email,
+      firstName: 'Team',
+      lastName: label,
+      password: PASSWORD,
+      organizationName: `Team ${label} ${suffix}`,
+      legalName: `Team ${label} ${suffix} LTDA`,
+      documentType: 'CNPJ',
+      documentNumber: cnpj(),
+      city: 'Recife',
+      street: 'Rua do Sol',
+      stateCode: 'PE',
+      planKey: 'ENTERPRISE_UNLIMITED',
+    });
     return {
       email,
       token: (response.body as Envelope<{ accessToken: string }>).data

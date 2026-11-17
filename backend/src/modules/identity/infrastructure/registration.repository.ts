@@ -197,6 +197,8 @@ export class RegistrationRepository {
           city: input.city.trim(),
           street: input.street.trim(),
           stateCode: input.stateCode.toUpperCase(),
+          number: input.number?.trim() || null,
+          complement: input.complement?.trim() || null,
         },
       });
       await transaction.organizationMembership.create({

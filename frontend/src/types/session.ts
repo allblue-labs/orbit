@@ -164,6 +164,8 @@ export interface RegisterInput {
   documentNumber: string;
   city: string;
   street: string;
+  number?: string;
+  complement?: string;
   stateCode: string;
   primarySegment?: string;
   planKey?: string;

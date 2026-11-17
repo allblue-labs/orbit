@@ -42,6 +42,7 @@ const identityInclude = {
 export type IdentityUser = Prisma.UserGetPayload<{
   include: typeof identityInclude;
 }> & {
+  readonly requiresEmailVerification?: boolean;
   readonly isOrganizationOwner: boolean;
   readonly effectiveBusinessUnitIds: readonly string[];
   readonly platformAuthority?: VerifiedPlatformAuthority;
@@ -132,6 +133,14 @@ export class IdentityRepository {
       return user
         ? {
             ...user,
+            requiresEmailVerification:
+              !user.emailVerifiedAt &&
+              Boolean(
+                await transaction.accountEmailOwner.findUnique({
+                  where: { userId: id },
+                  select: { userId: true },
+                }),
+              ),
             isOrganizationOwner: Boolean(hasMembership && isOrganizationOwner),
             effectiveBusinessUnitIds: hasMembership ? unitIds : [],
             platformAuthority:

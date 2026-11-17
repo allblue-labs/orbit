@@ -1,0 +1,60 @@
+{
+  "date": "2026-11-17",
+  "baseline": "9d01053",
+  "status": "LOCAL_QUALIFIED",
+  "tests": {
+    "backendUnit": {
+      "suites": 275,
+      "tests": 2291,
+      "passed": true
+    },
+    "integration": {
+      "suites": 53,
+      "tests": 677,
+      "passed": true
+    },
+    "frontendUnit": {
+      "files": 73,
+      "tests": 697,
+      "passed": true
+    },
+    "browser": {
+      "tests": 14,
+      "passed": true
+    },
+    "typescript": [
+      "backend",
+      "frontend"
+    ],
+    "productionApiBuild": {
+      "nodeMajor": 22,
+      "platform": "linux/amd64",
+      "passed": true
+    }
+  },
+  "requiresNewMigration": false,
+  "security": {
+    "signupCreatesSession": false,
+    "signupExposesTokens": false,
+    "signupPersistsAuthCookies": false,
+    "loginBeforeEmailConfirmation": false,
+    "oldAccessAndRefreshChecked": true,
+    "graceRotationChecked": true,
+    "verificationUsesDurableSesOutbox": true,
+    "teamVirtualEmailAccessPreserved": true,
+    "environmentVerificationBypass": false
+  },
+  "address": {
+    "number": {
+      "optional": true,
+      "maxLength": 30
+    },
+    "complement": {
+      "optional": true,
+      "maxLength": 160
+    },
+    "persistedIn": "business_units"
+  },
+  "realEmailsSentByTests": 0,
+  "gitPush": false
+}

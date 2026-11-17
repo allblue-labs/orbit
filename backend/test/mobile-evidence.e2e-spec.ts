@@ -1,3 +1,4 @@
+import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import { memberFixture } from './support/member-fixture';
 import { imageFixture } from './support/image-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
@@ -459,23 +460,20 @@ describe('Mobile Evidence & Media Pipeline (e2e)', () => {
   }
   async function register(label: string): Promise<string> {
     const suffix = randomUUID().slice(0, 8);
-    const response = await api()
-      .post('/api/v1/identity/register')
-      .send({
-        ...REGISTRATION_LEGAL_ACCEPTANCE,
-        email: `evidence.${label}.${suffix}@orbit.local`,
-        firstName: 'Evidence',
-        lastName: label,
-        password: PASSWORD,
-        organizationName: `Evidence ${label} ${suffix}`,
-        legalName: `Evidence ${label} ${suffix} LTDA`,
-        documentType: 'CNPJ',
-        documentNumber: cnpj(),
-        city: 'Recife',
-        street: 'Rua Evidence',
-        stateCode: 'PE',
-      })
-      .expect(201);
+    const response = await registerVerifiedOwner(app, {
+      ...REGISTRATION_LEGAL_ACCEPTANCE,
+      email: `evidence.${label}.${suffix}@orbit.local`,
+      firstName: 'Evidence',
+      lastName: label,
+      password: PASSWORD,
+      organizationName: `Evidence ${label} ${suffix}`,
+      legalName: `Evidence ${label} ${suffix} LTDA`,
+      documentType: 'CNPJ',
+      documentNumber: cnpj(),
+      city: 'Recife',
+      street: 'Rua Evidence',
+      stateCode: 'PE',
+    });
     return (response.body as Envelope<any>).data.accessToken;
   }
 });

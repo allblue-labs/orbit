@@ -4,7 +4,6 @@ import { RegistrationService } from './registration.service';
 import { BillingInterval } from '../../subscription-plans/catalog/plan-catalog.types';
 import type { RegisterOrganizationDto } from '../presentation/dto/identity.dto';
 import type { RegistrationRepository } from '../infrastructure/registration.repository';
-import type { AuthenticationService } from './authentication.service';
 import type { SubscriptionProvisioningService } from '../../subscription-plans/subscriptions/subscription-provisioning.service';
 import type { IHashProvider } from '../../../contracts';
 
@@ -33,8 +32,8 @@ describe('registration preserves the commercial selection', () => {
       const hashes = { hash: jest.fn() };
       const service = new RegistrationService(
         repository as never,
-        {} as never,
         hashes as never,
+        {} as never,
         {} as never,
       );
       await expect(
@@ -69,16 +68,12 @@ describe('registration preserves the commercial selection', () => {
       const subscriptions = {
         provision: jest.fn().mockResolvedValue(undefined),
       };
-      const authentication = {
-        login: jest.fn().mockResolvedValue({ accessToken: 'unit-only' }),
-      };
       const hashes = { hash: jest.fn().mockResolvedValue('unit-hash') };
       const verification = {
         queueWelcomeIn: jest.fn().mockResolvedValue(undefined),
       };
       const service = new RegistrationService(
         repository as unknown as RegistrationRepository,
-        authentication as unknown as AuthenticationService,
         hashes as unknown as IHashProvider,
         subscriptions as unknown as SubscriptionProvisioningService,
         verification as never,
@@ -94,7 +89,7 @@ describe('registration preserves the commercial selection', () => {
         documentNumber: '52998224725',
         billingInterval,
       } as RegisterOrganizationDto;
-      await service.register(input, { client: 'WEB' });
+      const pending = await service.register(input, { client: 'WEB' });
       const callback = repository.register.mock.calls[0]?.[5] as (
         tx: unknown,
         userId: string,
@@ -112,7 +107,11 @@ describe('registration preserves the commercial selection', () => {
         legalDocument: '52998224725',
         billingInterval,
       });
-      expect(authentication.login).toHaveBeenCalledTimes(1);
+      expect(pending).toEqual({
+        status: 'EMAIL_VERIFICATION_REQUIRED',
+        email: input.email,
+      });
+      expect(pending).not.toHaveProperty('accessToken');
     },
   );
 });

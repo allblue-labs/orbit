@@ -1,3 +1,4 @@
+import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
@@ -87,23 +88,20 @@ describe('RVT PR-30.1 closure (e2e)', () => {
   async function register(label: string) {
     const suffix = randomUUID().slice(0, 8);
     const email = `rvt.${label}.${suffix}@orbit.local`;
-    const response = await http()
-      .post('/api/v1/identity/register')
-      .send({
-        ...REGISTRATION_LEGAL_ACCEPTANCE,
-        email,
-        firstName: 'RVT',
-        lastName: label,
-        password: PASSWORD,
-        organizationName: `RVT ${label} ${suffix}`,
-        legalName: `RVT ${label} ${suffix} LTDA`,
-        documentType: 'CNPJ',
-        documentNumber: cnpj(),
-        city: 'Recife',
-        street: 'Rua da Agenda',
-        stateCode: 'PE',
-      })
-      .expect(201);
+    const response = await registerVerifiedOwner(app, {
+      ...REGISTRATION_LEGAL_ACCEPTANCE,
+      email,
+      firstName: 'RVT',
+      lastName: label,
+      password: PASSWORD,
+      organizationName: `RVT ${label} ${suffix}`,
+      legalName: `RVT ${label} ${suffix} LTDA`,
+      documentType: 'CNPJ',
+      documentNumber: cnpj(),
+      city: 'Recife',
+      street: 'Rua da Agenda',
+      stateCode: 'PE',
+    });
     return {
       email,
       token: (response.body as Envelope<{ accessToken: string }>).data

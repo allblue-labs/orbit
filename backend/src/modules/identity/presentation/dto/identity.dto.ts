@@ -154,6 +154,20 @@ export class RegisterOrganizationDto {
   @Length(2, 2)
   stateCode!: string;
 
+  @ApiPropertyOptional({ description: 'Número do endereço (opcional)' })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(30)
+  number?: string;
+
+  @ApiPropertyOptional({ description: 'Complemento do endereço (opcional)' })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(160)
+  complement?: string;
+
   @ApiPropertyOptional({ default: 'SERVICES' })
   @IsOptional()
   @IsString()

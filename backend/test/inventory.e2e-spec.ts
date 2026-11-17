@@ -1,3 +1,4 @@
+import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
  * E2E do Inventory Engine.
@@ -99,23 +100,20 @@ describe('Inventory (e2e)', () => {
 
   async function register(label: string) {
     const suffix = randomUUID().slice(0, 8);
-    const registration = await http()
-      .post('/api/v1/identity/register')
-      .send({
-        ...REGISTRATION_LEGAL_ACCEPTANCE,
-        email: `inv.${label}.${suffix}@orbit.local`,
-        firstName: 'Inv',
-        lastName: 'E2E',
-        password: 'Orbit#Inventory@2026',
-        organizationName: `Inv ${label} ${suffix}`,
-        legalName: `Inv ${label} ${suffix} LTDA`,
-        documentType: 'CNPJ',
-        documentNumber: cnpj(),
-        city: 'Recife',
-        street: 'Rua da Aurora',
-        stateCode: 'PE',
-      })
-      .expect(201);
+    const registration = await registerVerifiedOwner(app, {
+      ...REGISTRATION_LEGAL_ACCEPTANCE,
+      email: `inv.${label}.${suffix}@orbit.local`,
+      firstName: 'Inv',
+      lastName: 'E2E',
+      password: 'Orbit#Inventory@2026',
+      organizationName: `Inv ${label} ${suffix}`,
+      legalName: `Inv ${label} ${suffix} LTDA`,
+      documentType: 'CNPJ',
+      documentNumber: cnpj(),
+      city: 'Recife',
+      street: 'Rua da Aurora',
+      stateCode: 'PE',
+    });
     return {
       token: (registration.body as Envelope<{ accessToken: string }>).data
         .accessToken,

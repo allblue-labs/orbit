@@ -10,6 +10,7 @@
  *
  * Nenhum token trafega até o browser em qualquer um dos caminhos.
  */
+import type { IdentityRegistrationReadModel } from "@/types/contracts/modules/identity/identity.read-models";
 import { apiClient, authClient } from "@/api/client";
 import type {
   AcceptInvitationInput,
@@ -25,12 +26,16 @@ export interface AuthResult {
   authenticated: boolean;
 }
 
+export interface RegistrationResult extends IdentityRegistrationReadModel {
+  authenticated: false;
+}
+
 export const authService = {
   login: (input: LoginInput): Promise<AuthResult> =>
     authClient.post<AuthResult>("/login", input),
 
-  register: (input: RegisterInput): Promise<AuthResult> =>
-    authClient.post<AuthResult>("/register", input),
+  register: (input: RegisterInput): Promise<RegistrationResult> =>
+    authClient.post<RegistrationResult>("/register", input),
 
   logout: (): Promise<AuthResult> => authClient.post<AuthResult>("/logout"),
 

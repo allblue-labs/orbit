@@ -138,9 +138,12 @@ Referências oficiais:
 - O provisionamento administrativo canônico preserva o e-mail de configuração inicial
   do primeiro owner, com vínculo validado pela operação de provisionamento. Não se
   estende a membros de equipe, novos papéis OWNER ou organizações secundárias.
-- `emailVerifiedAt` fica vazio até a confirmação. A mudança não acrescenta um
-  bloqueio de login, mobile, checkout ou teste de plano. Contas antigas não são
-  desverificadas; convite aceito continua sendo prova de posse do e-mail.
+- `emailVerifiedAt` fica vazio até a confirmação. Owners iniciais registrados em `account_email_owners` precisam confirmar o
+  endereço antes de autenticar. Cadastro público não emite tokens nem sessão.
+  Login, refresh e API autenticada consultam o estado atual e recusam um owner
+  não confirmado com `EMAIL_VERIFICATION_REQUIRED` em pt-BR. Operadores/usuários
+  internos sem esse vínculo continuam com seu fluxo próprio de acesso. Contas
+  confirmadas não são desverificadas; convites não confirmam um owner existente.
 - O link `/confirmar-email#token=...` abre uma página pública em português. O
   fragmento não é enviado ao servidor nos acessos HTTP. Somente o botão do
   usuário chama `POST /identity/email/verify`, evitando consumo por scanners.
@@ -367,3 +370,24 @@ pausa da exclusão é independente do envio de e-mails e não simula aprovação
 
 Referências: [publicação SNS por configuration set](https://docs.aws.amazon.com/ses/latest/dg/event-publishing-add-event-destination-sns.html),
 [erros e ambiguidade de timeout do SES](https://docs.aws.amazon.com/ses/latest/dg/troubleshoot-error-messages.html).
+
+## Cadastro pendente e endereço da matriz
+
+`POST /identity/register` responde 201 com `{status: "EMAIL_VERIFICATION_REQUIRED",
+email: "endereco-normalizado"}`. Não retorna accessToken/refreshToken nem cria
+sessão. O BFF responde `authenticated:false`, remove cookies de sessão antigos
+e publica somente status/e-mail, sem repassar propriedades arbitrárias da API.
+O wizard mostra a orientação para confirmar/reemitir o link sem abrir checkout.
+Após confirmar explicitamente, o usuário entra com sua senha; o fluxo já existente
+continua o plano escolhido (teste elegível ou pagamento pendente).
+
+A confirmação é exigida também de owners originais já existentes e ainda não
+confirmados. Um token assinado antigo não preserva acesso: guard e refresh
+revogam a sessão quando a confirmação está pendente. Recuperar senha ou aceitar
+um convite manual não confirma o endereço de um owner já existente. Não há
+exceção de domínio, papel ou NODE_ENV para ignorar essa verificação.
+
+Número (`number`, até 30 caracteres) e complemento (`complement`, até 160) são
+opcionais no endereço do cadastro e persistem na unidade matriz. Valores vazios
+viram null; espaços externos são removidos. CEP continua preenchendo rua/cidade/UF,
+sem inventar número/complemento. As colunas já existem; não há migration nova.

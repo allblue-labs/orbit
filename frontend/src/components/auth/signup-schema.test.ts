@@ -26,6 +26,25 @@ const valid: SignupFormValues = {
 };
 
 describe("signup validation with Zod 4 and React Hook Form", () => {
+  it("accepts optional number/complement and trims them without dropping the address", () => {
+    expect(
+      signupSchema.parse({ ...valid, number: " 42A ", complement: " Sala 6 " }),
+    ).toMatchObject({
+      number: "42A",
+      complement: "Sala 6",
+      street: valid.street,
+    });
+    expect(
+      signupSchema.safeParse({ ...valid, number: "", complement: "" }).success,
+    ).toBe(true);
+    expect(
+      signupSchema.safeParse({ ...valid, number: "x".repeat(31) }).success,
+    ).toBe(false);
+    expect(
+      signupSchema.safeParse({ ...valid, complement: "x".repeat(161) }).success,
+    ).toBe(false);
+  });
+
   it.each(["529.982.247-25", "11.222.333/0001-81"])(
     "preserves valid CPF/CNPJ and all supported billing intervals: %s",
     (documentNumber) => {

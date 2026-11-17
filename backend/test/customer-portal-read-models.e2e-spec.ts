@@ -1,3 +1,4 @@
+import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument */
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
@@ -397,23 +398,20 @@ describe('Customer Portal operational Read Models (e2e)', () => {
 
   async function createTenant(marker: string) {
     const email = `portal.e2e.read.owner.${marker}.${randomUUID()}@orbit.local`;
-    const registration = await api()
-      .post('/api/v1/identity/register')
-      .send({
-        ...REGISTRATION_LEGAL_ACCEPTANCE,
-        email,
-        firstName: 'Portal',
-        lastName: `Read ${marker}`,
-        password: PASSWORD,
-        organizationName: `Portal Read ${marker} ${randomUUID().slice(0, 6)}`,
-        legalName: `Portal Read ${marker} LTDA`,
-        documentType: 'CNPJ',
-        documentNumber: cnpj(),
-        city: 'Recife',
-        street: 'Rua dos Read Models',
-        stateCode: 'PE',
-      })
-      .expect(201);
+    const registration = await registerVerifiedOwner(app, {
+      ...REGISTRATION_LEGAL_ACCEPTANCE,
+      email,
+      firstName: 'Portal',
+      lastName: `Read ${marker}`,
+      password: PASSWORD,
+      organizationName: `Portal Read ${marker} ${randomUUID().slice(0, 6)}`,
+      legalName: `Portal Read ${marker} LTDA`,
+      documentType: 'CNPJ',
+      documentNumber: cnpj(),
+      city: 'Recife',
+      street: 'Rua dos Read Models',
+      stateCode: 'PE',
+    });
     const token = (registration.body as Envelope<any>).data.accessToken;
     const organization = await internal(
       api().get('/api/v1/organizations/current'),

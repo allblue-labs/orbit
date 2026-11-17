@@ -1,3 +1,4 @@
+import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument */
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
@@ -95,23 +96,20 @@ describe('Customer Portal identity & security boundary (e2e)', () => {
 
     const suffix = randomUUID().slice(0, 8);
     email = `portal.e2e.${suffix}@orbit.local`;
-    const registration = await api()
-      .post('/api/v1/identity/register')
-      .send({
-        ...REGISTRATION_LEGAL_ACCEPTANCE,
-        email,
-        firstName: 'Portal',
-        lastName: 'Owner',
-        password: INTERNAL_PASSWORD,
-        organizationName: `Portal E2E ${suffix}`,
-        legalName: `Portal E2E ${suffix} LTDA`,
-        documentType: 'CNPJ',
-        documentNumber: cnpj(),
-        city: 'Recife',
-        street: 'Rua Portal',
-        stateCode: 'PE',
-      })
-      .expect(201);
+    const registration = await registerVerifiedOwner(app, {
+      ...REGISTRATION_LEGAL_ACCEPTANCE,
+      email,
+      firstName: 'Portal',
+      lastName: 'Owner',
+      password: INTERNAL_PASSWORD,
+      organizationName: `Portal E2E ${suffix}`,
+      legalName: `Portal E2E ${suffix} LTDA`,
+      documentType: 'CNPJ',
+      documentNumber: cnpj(),
+      city: 'Recife',
+      street: 'Rua Portal',
+      stateCode: 'PE',
+    });
     internalToken = (registration.body as Envelope<{ accessToken: string }>)
       .data.accessToken;
     const organization = await internal(
@@ -199,23 +197,20 @@ describe('Customer Portal identity & security boundary (e2e)', () => {
   it('allows the same portal email in another organization without merging actors', async () => {
     const suffix = randomUUID().slice(0, 8);
     const ownerEmail = `portal.e2e.ownerb.${suffix}@orbit.local`;
-    const registration = await api()
-      .post('/api/v1/identity/register')
-      .send({
-        ...REGISTRATION_LEGAL_ACCEPTANCE,
-        email: ownerEmail,
-        firstName: 'Portal',
-        lastName: 'Owner B',
-        password: INTERNAL_PASSWORD,
-        organizationName: `Portal E2E B ${suffix}`,
-        legalName: `Portal E2E B ${suffix} LTDA`,
-        documentType: 'CNPJ',
-        documentNumber: cnpj(),
-        city: 'Recife',
-        street: 'Rua Portal B',
-        stateCode: 'PE',
-      })
-      .expect(201);
+    const registration = await registerVerifiedOwner(app, {
+      ...REGISTRATION_LEGAL_ACCEPTANCE,
+      email: ownerEmail,
+      firstName: 'Portal',
+      lastName: 'Owner B',
+      password: INTERNAL_PASSWORD,
+      organizationName: `Portal E2E B ${suffix}`,
+      legalName: `Portal E2E B ${suffix} LTDA`,
+      documentType: 'CNPJ',
+      documentNumber: cnpj(),
+      city: 'Recife',
+      street: 'Rua Portal B',
+      stateCode: 'PE',
+    });
     const tokenB = (registration.body as Envelope<{ accessToken: string }>).data
       .accessToken;
     const customerB = await api()

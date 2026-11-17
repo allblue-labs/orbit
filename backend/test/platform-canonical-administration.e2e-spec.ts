@@ -251,6 +251,29 @@ describe('ORB-NX-02 canonical platform administration (HTTP / restricted Postgre
       .post('/api/v1/identity/password/reset')
       .send({ token: payload.token, password: PASSWORD })
       .expect(400);
+    await http()
+      .post('/api/v1/identity/login')
+      .send({ email: org.owner.email, password: PASSWORD, client: 'WEB' })
+      .expect(401);
+    await http()
+      .post('/api/v1/identity/email/resend')
+      .send({ email: org.owner.email })
+      .expect(202);
+    const confirmation = await admin.identityEmailDelivery.findFirstOrThrow({
+      where: { userId: org.owner.id, purpose: 'EMAIL_VERIFICATION' },
+      orderBy: { createdAt: 'desc' },
+    });
+    const confirmationToken = (
+      JSON.parse(
+        app
+          .get<ICryptoProvider>(CRYPTO_PROVIDER)
+          .decrypt(confirmation.encryptedPayload!),
+      ) as { token: string }
+    ).token;
+    await http()
+      .post('/api/v1/identity/email/verify')
+      .send({ token: confirmationToken })
+      .expect(204);
     const access = unwrap<{ accessToken: string }>(
       await http()
         .post('/api/v1/identity/login')

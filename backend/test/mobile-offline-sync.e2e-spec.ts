@@ -1,3 +1,4 @@
+import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import { memberFixture } from './support/member-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return */
@@ -773,23 +774,20 @@ describe('Mobile Offline Command & Sync Protocol (e2e)', () => {
   }
   async function register(label: string): Promise<string> {
     const suffix = randomUUID().slice(0, 8);
-    const response = await api()
-      .post('/api/v1/identity/register')
-      .send({
-        ...REGISTRATION_LEGAL_ACCEPTANCE,
-        email: `offline.${label}.${suffix}@orbit.local`,
-        firstName: 'Offline',
-        lastName: label,
-        password: PASSWORD,
-        organizationName: `Offline ${label} ${suffix}`,
-        legalName: `Offline ${label} ${suffix} LTDA`,
-        documentType: 'CNPJ',
-        documentNumber: cnpj(),
-        city: 'Recife',
-        street: 'Rua Offline',
-        stateCode: 'PE',
-      })
-      .expect(201);
+    const response = await registerVerifiedOwner(app, {
+      ...REGISTRATION_LEGAL_ACCEPTANCE,
+      email: `offline.${label}.${suffix}@orbit.local`,
+      firstName: 'Offline',
+      lastName: label,
+      password: PASSWORD,
+      organizationName: `Offline ${label} ${suffix}`,
+      legalName: `Offline ${label} ${suffix} LTDA`,
+      documentType: 'CNPJ',
+      documentNumber: cnpj(),
+      city: 'Recife',
+      street: 'Rua Offline',
+      stateCode: 'PE',
+    });
     return (response.body as Envelope<{ accessToken: string }>).data
       .accessToken;
   }

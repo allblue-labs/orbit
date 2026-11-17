@@ -33,6 +33,16 @@ export const signupSchema = z
     primarySegment: requiredText("Informe o segmento"),
     city: requiredText("Informe a cidade"),
     street: requiredText("Informe o endereço"),
+    number: z
+      .string()
+      .trim()
+      .max(30, "Use até 30 caracteres no número")
+      .optional(),
+    complement: z
+      .string()
+      .trim()
+      .max(160, "Use até 160 caracteres no complemento")
+      .optional(),
     stateCode: z
       .string({ error: "Use a sigla do estado" })
       .length(2, "Use a sigla do estado"),

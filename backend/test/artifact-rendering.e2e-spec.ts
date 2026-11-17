@@ -1,3 +1,4 @@
+import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
  * E2E do Rendering Engine.
@@ -92,23 +93,20 @@ describe('Artifact Rendering (e2e)', () => {
     http = () => request(app.getHttpServer());
 
     const suffix = randomUUID().slice(0, 8);
-    const registration = await http()
-      .post('/api/v1/identity/register')
-      .send({
-        ...REGISTRATION_LEGAL_ACCEPTANCE,
-        email: `render.e2e.${suffix}@orbit.local`,
-        firstName: 'Render',
-        lastName: 'E2E',
-        password: 'Orbit#Render@2026',
-        organizationName: `Render E2E ${suffix}`,
-        legalName: `Render E2E ${suffix} LTDA`,
-        documentType: 'CNPJ',
-        documentNumber: cnpj(),
-        city: 'Recife',
-        street: 'Rua da Aurora',
-        stateCode: 'PE',
-      })
-      .expect(201);
+    const registration = await registerVerifiedOwner(app, {
+      ...REGISTRATION_LEGAL_ACCEPTANCE,
+      email: `render.e2e.${suffix}@orbit.local`,
+      firstName: 'Render',
+      lastName: 'E2E',
+      password: 'Orbit#Render@2026',
+      organizationName: `Render E2E ${suffix}`,
+      legalName: `Render E2E ${suffix} LTDA`,
+      documentType: 'CNPJ',
+      documentNumber: cnpj(),
+      city: 'Recife',
+      street: 'Rua da Aurora',
+      stateCode: 'PE',
+    });
 
     token = (registration.body as { data: { accessToken: string } }).data
       .accessToken;

@@ -1,3 +1,4 @@
+import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import type { Prisma } from '@prisma/client';
 import { AccountNoticesService } from '../src/modules/email/account-notices.service';
 import { EmailService } from '../src/modules/email/email.service';
@@ -121,10 +122,7 @@ describe('PR-07: outbox SES com HTTP, reinício e RLS real', () => {
     }
     crypto = apps[0]!.get<ICryptoProvider>(CRYPTO_PROVIDER);
     const input = signup();
-    const registered = await http()
-      .post('/api/v1/identity/register')
-      .send(input)
-      .expect(201);
+    const registered = await registerVerifiedOwner(apps[0]!, input);
     const user = await admin.user.findUniqueOrThrow({
       where: { normalizedEmail: input.email },
     });
@@ -147,6 +145,10 @@ describe('PR-07: outbox SES com HTTP, reinício e RLS real', () => {
     };
   });
   beforeEach(async () => {
+    await admin.user.update({
+      where: { id: principal.id },
+      data: { emailVerifiedAt: new Date() },
+    });
     await admin.identityEmailDelivery.deleteMany();
     await admin.authRateLimitBucket.deleteMany();
     await admin.passwordResetToken.deleteMany({
@@ -415,6 +417,10 @@ describe('PR-07: outbox SES com HTTP, reinício e RLS real', () => {
   });
 
   it('owner original tem proveniência persistida e reenvios respeitam cooldown e orçamento sem invalidar o último link', async () => {
+    await admin.user.update({
+      where: { id: principal.id },
+      data: { emailVerifiedAt: null },
+    });
     expect(
       await admin.accountEmailOwner.findUnique({
         where: { userId: principal.id },

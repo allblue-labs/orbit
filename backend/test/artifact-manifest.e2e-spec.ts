@@ -1,3 +1,4 @@
+import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
  * E2E do documento oficial.
@@ -88,23 +89,20 @@ describe('Artifact Manifest (e2e)', () => {
     /** Nome único: o slug da organização é único e o teste pode rodar de novo. */
     const suffix = randomUUID().slice(0, 8);
     const email = `manifest.e2e.${suffix}@orbit.local`;
-    const registration = await http()
-      .post('/api/v1/identity/register')
-      .send({
-        ...REGISTRATION_LEGAL_ACCEPTANCE,
-        email,
-        firstName: 'Manifest',
-        lastName: 'E2E',
-        password: 'Orbit#Manifest@2026',
-        organizationName: `Manifest E2E ${suffix}`,
-        legalName: `Manifest E2E ${suffix} LTDA`,
-        documentType: 'CNPJ',
-        documentNumber: cnpj(),
-        city: 'Recife',
-        street: 'Rua da Aurora',
-        stateCode: 'PE',
-      })
-      .expect(201);
+    const registration = await registerVerifiedOwner(app, {
+      ...REGISTRATION_LEGAL_ACCEPTANCE,
+      email,
+      firstName: 'Manifest',
+      lastName: 'E2E',
+      password: 'Orbit#Manifest@2026',
+      organizationName: `Manifest E2E ${suffix}`,
+      legalName: `Manifest E2E ${suffix} LTDA`,
+      documentType: 'CNPJ',
+      documentNumber: cnpj(),
+      city: 'Recife',
+      street: 'Rua da Aurora',
+      stateCode: 'PE',
+    });
 
     token = (registration.body as { data: { accessToken: string } }).data
       .accessToken;
