@@ -1,7 +1,7 @@
 # PR-12 — Integridade entre organizações e unidades
 
 Achado **F12**, base limpa `7e5edf3`, implementação local em 16/11/2026.
-Commit de implementação: a registrar após os gates locais.
+Commit de implementação: `60f51a92e09bae93869cafbba5ff3c7f851c2ee1`.
 Sem push, merge, deploy, operação em banco de cliente ou migração destrutiva.
 
 ## Implementação
