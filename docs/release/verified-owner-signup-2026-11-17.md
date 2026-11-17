@@ -52,7 +52,36 @@ ESLint nos arquivos alterados e git diff --check. A API também compilou na imag
 Linux/amd64 com Node 22. O reenvio ficou utilizável após o cooldown de um minuto,
 com botão para voltar ao login quando o endereço já estiver confirmado.
 
-A publicação no staging será registrada após aplicar as imagens imutáveis.
-Nenhum e-mail real será disparado pelos testes automatizados; utilizam NODE_ENV=test
+Nenhum e-mail real foi disparado pelos testes automatizados; utilizam NODE_ENV=test
 com PostgreSQL real isolado e orbit_app restrito. A checagem de confirmação no
 backend continua ativa nesse ambiente. Sem Git push.
+
+## Staging aplicado
+
+Implementação `9c23e630ebca3035c4ea343a865869c7ae422b42`, publicada e aplicada em
+17/11/2026, com imagens Linux/amd64 imutáveis. A compilação de produção do frontend
+também concluiu, incluindo TypeScript e geração de páginas. Os digests e as tags
+estão em [evidência das imagens](evidence/verified-owner-signup-images-2026-11-17.json).
+
+Antes da troca, foi feito backup PostgreSQL custom validado com pg_restore --list,
+em `/home/ninja/orbit-releases/verified-owner-9c23e630ebca/before/postgres.dump`,
+com modo 600, junto da configuração anterior protegida. O .env permaneceu com modo
+600. Não houve migration nova: o migrador encontrou 125 migrations, sem pendências,
+e reconciliou o papel orbit_app sem SUPERUSER nem BYPASSRLS.
+
+API, frontend e PostgreSQL ficaram healthy. O readiness da API passou; login e
+confirmação de e-mail públicos retornaram HTTP 200. A confirmação publica
+Cache-Control: no-store, Referrer-Policy: no-referrer e X-Robots-Tag: noindex,
+nofollow. O Nexus continuou retornando HTTP 200.
+
+Uma checagem somente de leitura executou o IdentityRepository real da nova imagem:
+os três owners originais ativos e ainda não confirmados retornaram
+requiresEmailVerification=true. Isso inclui as contas anteriores à release;
+precisam solicitar o e-mail na tela de confirmação e abrir o link antes de entrar.
+Não foram criadas contas, sessões nem novos envios de teste nessa checagem.
+
+SES remoto retornou READY em us-east-2, com productionAccess, sendingEnabled,
+identityVerified e quotaAvailable verdadeiros. ACCOUNT_EMAIL_DELIVERY_ENABLED e
+AWS_SES_FEEDBACK_ENABLED continuaram true. As permissões temporárias de bootstrap
+do SNS não foram reintroduzidas. A retenção automática permaneceu desativada,
+conforme o rollout anterior, aguardando a qualificação separada de CDN/backup.
