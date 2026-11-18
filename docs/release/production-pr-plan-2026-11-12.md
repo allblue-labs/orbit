@@ -349,6 +349,14 @@ conferidos. Capturas atualizadas somente após inspeção visual das telas reais
 
 ### PR-19 — Qualificação final da release
 
+**Qualificação executada parcialmente em 18/11/2026. O parecer permanece bloqueado.**
+[Relatório](pr-19-release-qualification.md) e
+[evidências](evidence/pr-19-release-qualification.json).
+O ensaio de restore LOCAL e rollback de código passou. A auditoria completa
+encontrou um aviso alto sem versão corrigida publicada. Permanecem pendentes
+as rodadas globais, as imagens de release, o restore de R2 e os aceites
+físicos e operacionais do candidato.
+
 Repetir a matriz consolidada no SHA final, gerar imagens/artefatos assinados com
 proveniência e SBOM, conferir migrations e restore conjunto banco/objetos, testar
 rollback e carga. Atualizar os registros antigos de dívidas com evidências desta
@@ -381,4 +389,4 @@ o parecer bloqueado para o recurso correspondente.
 | 13–16 | Implementadas | Ver checkpoints nas seções acima | Aceites e pendências descritos em cada seção |
 | 17 | Implementada; validação local aprovada | `ee49cba` | [Resultados](pr-17-rvt-contracts.md) |
 | 18 | Implementada; validação local aprovada | `389625a` | [Resultados](pr-18-production-journeys.md) |
-| 19 | Planejada | — | Qualificação integrada e aceites externos |
+| 19 | Qualificação parcial; release bloqueada | `262aec5`, `ecb8287` | [Resultados](pr-19-release-qualification.md) |

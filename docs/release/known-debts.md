@@ -1,4 +1,9 @@
-# Known debts — PR-36
+# Dívidas e gates da release
+
+O [parecer do PR-19](pr-19-release-qualification.md) documenta o candidato
+atual. Permanecem bloqueadores na auditoria do toolchain, na matriz completa,
+na emissão de imagens e nos aceites de distribuição e infraestrutura.
+Os registros abaixo preservam os achados da PR-36.
 
 ## Resolved in the release gate
 
@@ -22,7 +27,9 @@
   exclusivamente; a configuração AWS é obrigatória e fail-closed em produção.
   O modo sem envio fica restrito a `NODE_ENV=test`; tokens nunca são registrados.
   A PR-07 acrescenta outbox cifrada/transacional, retries e preflight regional.
-  Aprovação AWS, teste real de entrega e feedback SNS/supressão seguem pendentes.
+  SES saiu da sandbox em us-east-2. O staging comprovou aceitação pelo
+  provedor, feedback do simulador e supressão. A confirmação de leitura
+  do e-mail real segue pendente. [Evidências](ses-production-activation-2026-11-17.md).
 - **Security sessions:** o overview passou a buscar as 100 sessões mais
   recentes com índice dedicado, em vez de materializar histórico ilimitado.
 - **Operation workspace history:** a leitura de workspace foi limitada no
@@ -35,20 +42,19 @@
 
 ## Accepted for this release
 
-- Rate limit sensível é um brake por processo. A topologia V1 do Compose tem
-  uma réplica da API. Antes de escalar horizontalmente, mover counters para um
-  store distribuído e configurar proxy/IP confiável.
+- A PR-05 passou a contar tentativas sensíveis no PostgreSQL entre réplicas
+  e validou a origem propagada por Nginx e BFF. A inspeção da implantação
+  candidata ainda precisa de prova real do ingress. [PR-05](pr-05-rate-limit-proxies.md).
 - A rota raiz histórica (`Hello World!`) permanece por compatibilidade; probes
   operacionais usam exclusivamente `/health/live` e `/health/ready`.
-- A suíte Playwright completa ainda requer o tenant E2E provisionado para
-  cenários legados com PMOC, RVT, profissionais, roteiros e modelos nomeados.
-  O smoke de ambiente limpo permanece separado e não recebe dados demo.
+- O runner Playwright cria o tenant de referência, PMOC, RVT,
+  profissionais e roteiros por API em banco descartável.
 - O `format:check` global do frontend encontra 256 arquivos legados fora do
   padrão atual. Arquivos tocados pelo gate são formatados; uma reescrita
   mecânica de todo o portal não foi misturada ao release gate.
-- O audit completo do frontend contém duas vulnerabilidades moderadas somente
-  no toolchain Vitest 3; o audit de produção está limpo. A correção disponível
-  exige a major Vitest 4 e fica para upgrade dedicado.
+- A PR-03 migrou o frontend para Vitest 4. As auditorias de produção de
+  backend e web seguem limpas. O aviso alto atual no grafo de desenvolvimento
+  bloqueia a auditoria completa. [PR-19](pr-19-release-qualification.md).
 
 ## Must fix before release
 
@@ -59,14 +65,13 @@ Esta seção deve estar vazia para declarar `READY FOR PRODUCTION`.
 - reconstruir e registrar Android/iOS e imagens com o SHA do commit final;
 - concluir SBOM/CVE das imagens finais e restore conjunto de banco + storage.
 
-Esses gates foram interrompidos por decisão do owner em 15/09/2026. Os
-resultados já obtidos continuam registrados, mas não são promovidos a sucesso
-completo.
+O PR-19 reabriu esses gates. O Android está assinado, o iOS compilou localmente
+e o restore LOCAL preservou dados e autorização. Os resultados de imagens,
+R2 e rodadas globais estão registrados por escopo no parecer atual.
 
 ## Post-release / deferred
 
 - redesign visual do Orbit Mobile V2: `deferred post-backend-release-gate`;
-- aceitação física em aparelhos Android/iOS e VoiceOver/TalkBack: registrada
-  como gate operacional manual posterior, não gate visual desta PR backend;
-- distribuição de rate limit para futura topologia multi-réplica;
+- avaliação completa com VoiceOver/TalkBack. O aceite físico de FCM em
+  Android/iOS pertence à qualificação final;
 - portal do cliente: novo release gate próprio com UI, email real e smokes.

@@ -2,6 +2,10 @@
 
 Marque somente com evidência da mesma árvore/SHA usada no build final.
 
+O [checkpoint do PR-19](pr-19-release-qualification.md) registra quais
+validações do candidato passaram em ambiente local e o que ainda bloqueia
+a qualificação de produção.
+
 ## Source e build
 
 - [ ] branch, HEAD e dirty tree registrados;
