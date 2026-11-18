@@ -77,4 +77,46 @@ describe('resumo que o cliente confirma', () => {
     expect(summary).not.toContain('[object Object]');
     expect(summary).not.toContain('internal');
   });
+
+  it('descreve respostas compostas sem expor referências internas', () => {
+    const id = '01a15e84-fad4-7218-a0ae-a0dec9273012';
+    const summary = attendanceSummary({
+      title: 'Revisão',
+      checklistExecutions: [
+        {
+          templateSnapshot: {
+            name: 'Inspeção técnica',
+            items: [
+              { key: 'pressao', label: 'Pressão' },
+              { key: 'componentes', label: 'Componentes' },
+              { key: 'registro', label: 'Registro', type: 'PHOTO' },
+              { key: 'comprovante', label: 'Comprovante', type: 'SIGNATURE' },
+              { key: 'observacao_interna' },
+            ],
+          },
+          answers: {
+            pressao: {
+              value: 0,
+              unit: 'bar',
+              note: 'Equipamento desligado',
+              id,
+            },
+            componentes: [{ label: 'Filtro', value: id }, { checked: false }],
+            registro: id,
+            comprovante: id,
+            observacao_interna: id,
+          },
+        },
+      ],
+    });
+    expect(summary).toContain(
+      'Pressão: 0 bar — Observação: Equipamento desligado',
+    );
+    expect(summary).toContain('Componentes: Filtro, Não realizado');
+    expect(summary).toContain('Registro: Foto registrada');
+    expect(summary).toContain('Comprovante: Assinatura registrada');
+    expect(summary).toContain('Item: Não informado');
+    expect(summary).not.toMatch(/observacao_interna|\[object Object\]/);
+    expect(summary).not.toContain(id);
+  });
 });

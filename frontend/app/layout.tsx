@@ -30,17 +30,21 @@ const ibmPlexMono = IBM_Plex_Mono({
   weight: ["400", "500"],
 });
 
+const title = "Orbit | Gestão de serviços e manutenção";
+const description =
+  "Gerencie clientes, equipamentos, orçamentos e equipes de campo. Acompanhe ordens de serviço, PMOC, visitas técnicas e relatórios em um só lugar.";
+
 export const metadata: Metadata = {
-  title: "Orbit Design System — Fundação Visual",
-  description:
-    "Fundação do design system do Orbit Operations ERP: tokens, componentes, layout e motion.",
+  title,
+  description,
   openGraph: {
-    title: "Orbit Design System — Fundação Visual",
-    description:
-      "Tokens, biblioteca de componentes e layout base da plataforma Orbit.",
+    title,
+    description,
+    siteName: "Orbit",
+    locale: "pt_BR",
     type: "website",
   },
-  twitter: { card: "summary_large_image" },
+  twitter: { card: "summary_large_image", title, description },
   /**
    * O símbolo do Orbit na aba do navegador.
    *

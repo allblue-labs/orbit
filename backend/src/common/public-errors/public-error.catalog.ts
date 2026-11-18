@@ -111,6 +111,31 @@ const entries = [
     HttpStatus.FORBIDDEN,
     'Você não tem permissão para realizar esta ação.',
   ],
+  [
+    'ATTENDANCE_NOT_ASSIGNED',
+    HttpStatus.FORBIDDEN,
+    'Esta ação é reservada ao técnico atribuído ao atendimento. Se precisar executá-la, peça ao responsável pela organização para conferir a atribuição.',
+  ],
+  [
+    'PMOC_ACTION_FORBIDDEN',
+    HttpStatus.FORBIDDEN,
+    'Seu acesso não permite esta ação no PMOC. Se precisar realizá-la, peça ao responsável pela organização para revisar suas permissões.',
+  ],
+  [
+    'PMOC_ATTENDANCE_UNAVAILABLE',
+    HttpStatus.CONFLICT,
+    'Não é possível iniciar este atendimento. Atualize a página e confira se o PMOC está ativo e o ciclo está em aberto.',
+  ],
+  [
+    'PMOC_EQUIPMENT_INACTIVE',
+    HttpStatus.CONFLICT,
+    'O equipamento está inativo. Peça ao responsável pela organização para revisar o cadastro antes de iniciar.',
+  ],
+  [
+    'PMOC_TECHNICAL_RESPONSIBLE_REQUIRED',
+    HttpStatus.BAD_REQUEST,
+    'Defina um Responsável Técnico habilitado na unidade deste PMOC. Confira o cadastro em Equipe e edite o plano.',
+  ],
   /**
    * A credencial está certa; o lugar é que não.
    *

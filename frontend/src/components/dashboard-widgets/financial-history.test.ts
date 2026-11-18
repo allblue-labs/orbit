@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   deveDesenharEvolucao,
   deveMarcarPontos,
+  financialDate,
   historyWindow,
   HISTORY_MONTHS,
 } from "./financial-history";
@@ -37,6 +38,23 @@ describe("a janela da evolução", () => {
     expect(historyWindow("2026-10-02T23:59:59.000Z", HOJE).to).toBe(
       "2026-10-02",
     );
+  });
+
+  it.each([
+    ["Asia/Tokyo", "2026-09-30T15:00:00.000Z", "2026-10-02T14:59:59.000Z"],
+    [
+      "America/Los_Angeles",
+      "2026-10-01T07:00:00.000Z",
+      "2026-10-03T06:59:59.000Z",
+    ],
+  ])("mantém os mesmos dias civis no fuso %s", (zone, from, to) => {
+    expect(financialDate(from, zone)).toBe("2026-10-01");
+    expect(financialDate(to, zone)).toBe("2026-10-02");
+    expect(financialDate("2026-10-01", zone)).toBe("2026-10-01");
+    expect(historyWindow(to, HOJE, zone)).toEqual({
+      from: "2025-11-01",
+      to: "2026-10-02",
+    });
   });
 
   it("sem fim escolhido, termina hoje", () => {

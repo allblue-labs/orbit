@@ -1,6 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { BillingOverview } from "../src/types/billing";
 
+const SIGNUP_EMAIL = "owner@example.test";
+const SIGNUP_PASSWORD = "Orbit#Signup2026";
+const VERIFICATION_TOKEN = "Ab3_".repeat(16);
+
 const period = {
   start: new Date().toISOString(),
   end: new Date(Date.now() + 20 * 86400000).toISOString(),
@@ -92,7 +96,8 @@ async function fixture(
     cancelFails?: boolean;
   } = {},
 ) {
-  let registered = !options.signup;
+  let authenticated = !options.signup;
+  let emailVerified = !options.signup;
   const writes: { path: string; body: Record<string, unknown> }[] = [];
   const data = overview(options.status);
   if (options.status === "ACTIVE")
@@ -117,7 +122,7 @@ async function fixture(
     };
   const profile = {
     id: "billing-user",
-    email: "owner@example.test",
+    email: SIGNUP_EMAIL,
     firstName: "Marina",
     lastName: "Silva",
     displayName: "Marina Silva",
@@ -125,7 +130,7 @@ async function fixture(
     welcomeDismissedAt: new Date().toISOString(),
   };
   const session = () =>
-    registered
+    authenticated
       ? {
           authenticated: true,
           user: profile,
@@ -176,7 +181,7 @@ async function fixture(
       },
     ]);
   }
-  if (registered) await cookie();
+  if (authenticated) await cookie();
   await page.route("https://checkout.stripe.test/**", (route) =>
     route.fulfill({
       contentType: "text/html",
@@ -202,7 +207,37 @@ async function fixture(
         body: route.request().postDataJSON() as Record<string, unknown>,
       });
     if (path === "/api/auth/register") {
-      registered = true;
+      return route.fulfill({
+        status: 201,
+        json: {
+          success: true,
+          data: {
+            authenticated: false,
+            status: "EMAIL_VERIFICATION_REQUIRED",
+            email: body.email,
+          },
+        },
+      });
+    } else if (path.endsWith("/identity/email/verify")) {
+      expect(writes.some((write) => write.path === "/api/auth/register")).toBe(
+        true,
+      );
+      expect(body).toEqual({ token: VERIFICATION_TOKEN });
+      emailVerified = true;
+      return route.fulfill({ status: 204 });
+    } else if (path === "/api/auth/login") {
+      if (!emailVerified)
+        return route.fulfill({
+          status: 403,
+          json: {
+            success: false,
+            error: {
+              code: "EMAIL_VERIFICATION_REQUIRED",
+              message: "Confirme seu e-mail.",
+            },
+          },
+        });
+      authenticated = true;
       await cookie();
       result = { authenticated: true };
     } else if (path === "/api/auth/session") result = session();
@@ -305,9 +340,9 @@ async function fillSignup(page: Page, planCode = "PROFESSIONAL") {
   for (const [label, value] of [
     ["Nome", "Marina"],
     ["Sobrenome", "Silva"],
-    ["E-mail corporativo", "owner@example.test"],
-    ["Senha", "Orbit#Signup2026"],
-    ["Confirmar senha", "Orbit#Signup2026"],
+    ["E-mail corporativo", SIGNUP_EMAIL],
+    ["Senha", SIGNUP_PASSWORD],
+    ["Confirmar senha", SIGNUP_PASSWORD],
   ])
     await page.getByLabel(label, { exact: true }).fill(value);
   await page.getByRole("button", { name: "Continuar", exact: true }).click();
@@ -326,6 +361,33 @@ async function fillSignup(page: Page, planCode = "PROFESSIONAL") {
     .fill("Rua da Aurora, 100");
   await page.locator("#terms").check();
   await page.getByRole("button", { name: /Criar/ }).click();
+}
+
+async function verifyEmailAndSignIn(page: Page) {
+  const pending = page.getByRole("heading", { name: "Confirme seu e-mail" });
+  await expect(pending).toBeFocused();
+  await expect(page.getByText(SIGNUP_EMAIL, { exact: false })).toBeVisible();
+  await page.goto(`/confirmar-email#token=${VERIFICATION_TOKEN}`);
+  await expect(pending).toBeFocused();
+  await expect(
+    page.getByRole("button", { name: "Confirmar meu e-mail" }),
+  ).toBeVisible();
+  await page.keyboard.press("Tab");
+  await expect(
+    page.getByRole("button", { name: "Confirmar meu e-mail" }),
+  ).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(
+    page.getByRole("heading", { name: "E-mail confirmado!" }),
+  ).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(
+    page.getByRole("link", { name: "Continuar para o Orbit" }),
+  ).toBeFocused();
+  await page.keyboard.press("Enter");
+  await page.locator("#email").fill(SIGNUP_EMAIL);
+  await page.locator("#password").fill(SIGNUP_PASSWORD);
+  await page.getByRole("button", { name: "Entrar", exact: true }).click();
 }
 
 test("canceling renewal explains automatic deletion and preserves the paid plan", async ({
@@ -421,7 +483,7 @@ test("settings makes both legal documents readable after login", async ({
   ).toBeVisible();
 });
 
-test("paid signup opens Stripe after creating the account exactly once", async ({
+test("o cadastro pago exige confirmação e login antes de abrir o pagamento", async ({
   page,
 }) => {
   const { writes } = await fixture(page, {
@@ -429,12 +491,23 @@ test("paid signup opens Stripe after creating the account exactly once", async (
     status: "PENDING_PAYMENT",
   });
   await fillSignup(page);
+  await expect(
+    page.getByRole("heading", { name: "Confirme seu e-mail" }),
+  ).toBeVisible();
+  expect(writes.map((write) => write.path)).toEqual(["/api/auth/register"]);
+  await verifyEmailAndSignIn(page);
+  await expect(page).toHaveURL(/configuracoes\?secao=assinatura/);
+  await page
+    .getByRole("button", { name: "Continuar para o pagamento", exact: true })
+    .click();
   await expect(page).toHaveURL("https://checkout.stripe.test/pay");
   expect(writes.map((write) => write.path)).toEqual([
     "/api/auth/register",
+    "/api/orbit/identity/email/verify",
+    "/api/auth/login",
     "/api/orbit/billing/checkout-session",
   ]);
-  expect(writes[1].body).toMatchObject({
+  expect(writes.at(-1)?.body).toMatchObject({
     planCode: "PROFESSIONAL",
     billingInterval: "MONTHLY",
   });
@@ -449,15 +522,19 @@ test("checkout failure preserves signup and offers payment recovery", async ({
     checkoutFails: true,
   });
   await fillSignup(page);
-  await expect(page).toHaveURL(
-    /configuracoes\?secao=assinatura&cadastro=concluido&pagamento=pendente/,
-  );
+  await verifyEmailAndSignIn(page);
+  const pay = page.getByRole("button", {
+    name: "Continuar para o pagamento",
+    exact: true,
+  });
+  await pay.click();
+  await expect(page).toHaveURL(/configuracoes\?secao=assinatura/);
   await expect(
     page.getByText("Seu cadastro está concluído. Falta finalizar o pagamento."),
   ).toBeVisible();
+  await expect(pay).toBeEnabled();
   await expect(
-    page.getByRole("button", {
-      name: "Continuar para o pagamento",
+    page.getByText("Não foi possível abrir o pagamento. Tente novamente.", {
       exact: true,
     }),
   ).toBeVisible();
@@ -560,8 +637,13 @@ test("Essential trial signup enters the app without opening a paid checkout", as
 }) => {
   const { writes } = await fixture(page, { signup: true, status: "TRIALING" });
   await fillSignup(page, "ESSENTIAL");
+  await verifyEmailAndSignIn(page);
   await expect(page).toHaveURL(/dashboard$/);
-  expect(writes.map((write) => write.path)).toEqual(["/api/auth/register"]);
+  expect(writes.map((write) => write.path)).toEqual([
+    "/api/auth/register",
+    "/api/orbit/identity/email/verify",
+    "/api/auth/login",
+  ]);
 });
 
 test("active customer schedules the change at renewal and keeps the paid plan", async ({

@@ -42,7 +42,7 @@ const rate = (id: string, sampleSize: number, value = 75) => ({
   dataQuality: "DERIVED",
 });
 
-async function setup(page: Page, empty = false) {
+async function setup(page: Page, empty = false, financialZone?: string) {
   const claims = {
     sub: "owner",
     sid: "test",
@@ -88,6 +88,7 @@ async function setup(page: Page, empty = false) {
           id: "owner",
           firstName: "Ana",
           displayName: "Ana",
+          timezone: financialZone,
           welcomeDismissedAt: stamp,
         },
         scope: {
@@ -114,6 +115,16 @@ async function setup(page: Page, empty = false) {
         layout: {
           version: 1,
           widgets: [
+            ...(financialZone
+              ? [
+                  {
+                    id: "financial-health",
+                    title: "Saúde financeira",
+                    size: "LARGE",
+                    order: 30,
+                  },
+                ]
+              : []),
             {
               id: "operations-comparative-radar",
               title: "Radar comparativo",
@@ -192,9 +203,52 @@ async function setup(page: Page, empty = false) {
       };
     else if (path.endsWith("/environmental-impact"))
       data = { indicators: [], impacts: [] };
-    else if (path.endsWith("/agenda"))
+    else if (path === "/api/orbit/financial/analytics/summary") {
+      const totals = { confirmed: "0", pending: "0", cancelled: "0", count: 0 };
+      data = {
+        period: {
+          from: url.searchParams.get("from"),
+          to: url.searchParams.get("to"),
+        },
+        currency: "BRL",
+        income: totals,
+        expense: totals,
+        overdue: totals,
+        netConfirmed: "0",
+        netPending: "0",
+      };
+    } else if (path.endsWith("/agenda"))
       data = { days: [], occurrences: [], warnings: [] };
     await route.fulfill({ json: { success: true, data } });
+  });
+}
+
+for (const zone of ["Asia/Tokyo", "America/Los_Angeles"]) {
+  test(`saúde financeira envia o dia civil da preferência em ${zone}`, async ({
+    page,
+  }) => {
+    await page.clock.setFixedTime(new Date("2026-11-10T12:00:00Z"));
+    await setup(page, false, zone);
+    const summary = page.waitForRequest(
+      (request) =>
+        new URL(request.url()).pathname ===
+        "/api/orbit/financial/analytics/summary",
+    );
+    const timeline = page.waitForRequest(
+      (request) =>
+        new URL(request.url()).pathname ===
+        "/api/orbit/financial/analytics/timeline",
+    );
+    await page.goto("/dashboard");
+    await expect(page.locator('[data-panel="financial-health"]')).toContainText(
+      "Previsto no período",
+    );
+    const dates = new URL((await summary).url()).searchParams;
+    expect(dates.get("from")).toBe("2026-10-12");
+    expect(dates.get("to")).toBe("2026-11-10");
+    const history = new URL((await timeline).url()).searchParams;
+    expect(history.get("from")).toBe("2025-12-01");
+    expect(history.get("to")).toBe("2026-11-10");
   });
 }
 

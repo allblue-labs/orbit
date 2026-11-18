@@ -121,7 +121,11 @@ class AttendanceTechnicalSummary extends ConsumerWidget {
                 if (value.customerName != null)
                   Text('Cliente: ${value.customerName}'),
                 for (final equipment in value.equipment)
-                  Text('${equipment.name} · ${equipment.code}'),
+                  Text(
+                    equipment.code.isEmpty || equipment.code == equipment.id
+                        ? equipment.name
+                        : '${equipment.name} · ${equipment.code}',
+                  ),
                 const SizedBox(height: OrbitSpacing.sm),
                 Text(value.serviceSummary, style: const TextStyle(height: 1.5)),
               ],

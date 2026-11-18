@@ -270,6 +270,15 @@ void main() {
     /// Compartilhar primeiro: um relatório existe para chegar ao cliente.
     expect(find.text('Compartilhar documento'), findsOneWidget);
     expect(find.text('Baixar neste aparelho'), findsOneWidget);
+    final share = find.widgetWithText(FilledButton, 'Compartilhar documento');
+    final download = find.widgetWithText(
+      OutlinedButton,
+      'Baixar neste aparelho',
+    );
+    for (final action in [share, download]) {
+      expect(action.hitTestable(), findsOneWidget);
+      expect(tester.getSize(action).height, greaterThanOrEqualTo(48));
+    }
   });
 
   testWidgets('o nome do arquivo chega legível ao cliente', (tester) async {

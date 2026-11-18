@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { CheckCircle2, Loader2, MailCheck, Send } from "lucide-react";
 import { apiClient } from "@/api/client";
@@ -30,6 +30,10 @@ export function ConfirmEmail({
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(false);
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    heading.current?.focus();
+  }, [confirmed]);
   useEffect(() => {
     if (!resendCooldown) return;
     const timer = window.setTimeout(() => setResendCooldown(false), 60_000);
@@ -96,6 +100,8 @@ export function ConfirmEmail({
           <div className="space-y-2">
             <h1
               id="email-confirmation-title"
+              ref={heading}
+              tabIndex={-1}
               className="font-display text-2xl font-bold"
             >
               {confirmed ? "E-mail confirmado!" : "Confirme seu e-mail"}

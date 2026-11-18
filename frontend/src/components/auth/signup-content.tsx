@@ -2,7 +2,7 @@
 import { ConfirmEmail } from "@/components/auth/confirm-email";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AnimatePresence, motion } from "motion/react";
 import {
@@ -84,10 +84,14 @@ const steps = [
     description: "Defina o plano da assinatura",
     icon: Sparkles,
   },
-  { title: "Sua conta", description: "Você será o owner", icon: UserRound },
+  {
+    title: "Sua conta",
+    description: "Acesso de proprietário",
+    icon: UserRound,
+  },
   {
     title: "Organização",
-    description: "Identidade do workspace",
+    description: "Dados da empresa",
     icon: Building2,
   },
   {
@@ -120,8 +124,12 @@ const LIMITES_EM_DESTAQUE = [
   "ACTIVE_CUSTOMERS",
 ] as const;
 
-function FieldError({ message }: { message?: string }) {
-  return message ? <p className="text-xs text-destructive">{message}</p> : null;
+function FieldError({ message, id }: { message?: string; id?: string }) {
+  return message ? (
+    <p id={id} className="text-xs text-destructive">
+      {message}
+    </p>
+  ) : null;
 }
 
 /**
@@ -330,6 +338,14 @@ export function SignupContent({
   const plan = catalog.plans.find((entry) => entry.code === selectedPlan);
   const documentNumber = useWatch({ control, name: "documentNumber" });
   const password = useWatch({ control, name: "password" }) ?? "";
+  const focusStep = useCallback((heading: HTMLHeadingElement | null) => {
+    heading?.focus();
+  }, []);
+  function fieldAccessibility(name: keyof FormValues) {
+    return errors[name]
+      ? { "aria-invalid": true, "aria-describedby": `cadastro-${name}-erro` }
+      : {};
+  }
 
   async function next() {
     // O retorno do servidor pertence à tentativa anterior. Revalide os campos
@@ -337,7 +353,7 @@ export function SignupContent({
     for (const field of fieldsByStep[step]) {
       if (errors[field]?.type === "server") clearErrors(field);
     }
-    if (await trigger(fieldsByStep[step])) {
+    if (await trigger(fieldsByStep[step], { shouldFocus: true })) {
       setRegistrationError(null);
       setStep((current) =>
         current === step ? Math.min(current + 1, LAST_STEP) : current,
@@ -538,7 +554,11 @@ export function SignupContent({
                     <Sparkles className="size-3.5 text-primary" />
                     {TRIAL_DAYS} dias grátis no Essencial
                   </span>
-                  <h2 className="mt-4 font-display text-3xl font-bold tracking-tight">
+                  <h2
+                    ref={focusStep}
+                    tabIndex={-1}
+                    className="mt-4 font-display text-3xl font-bold tracking-tight"
+                  >
                     {steps[step].title}
                   </h2>
                   <p className="mt-2 text-sm text-muted-foreground">
@@ -613,18 +633,26 @@ export function SignupContent({
                       <Input
                         id="firstName"
                         autoComplete="given-name"
+                        {...fieldAccessibility("firstName")}
                         {...register("firstName")}
                       />
-                      <FieldError message={errors.firstName?.message} />
+                      <FieldError
+                        id="cadastro-firstName-erro"
+                        message={errors.firstName?.message}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="lastName">Sobrenome</Label>
                       <Input
                         id="lastName"
                         autoComplete="family-name"
+                        {...fieldAccessibility("lastName")}
                         {...register("lastName")}
                       />
-                      <FieldError message={errors.lastName?.message} />
+                      <FieldError
+                        id="cadastro-lastName-erro"
+                        message={errors.lastName?.message}
+                      />
                     </div>
                     <div className="space-y-2 sm:col-span-2">
                       <Label htmlFor="email">E-mail corporativo</Label>
@@ -632,9 +660,13 @@ export function SignupContent({
                         id="email"
                         type="email"
                         autoComplete="email"
+                        {...fieldAccessibility("email")}
                         {...register("email")}
                       />
-                      <FieldError message={errors.email?.message} />
+                      <FieldError
+                        id="cadastro-email-erro"
+                        message={errors.email?.message}
+                      />
                     </div>
                     {(["password", "confirmPassword"] as const).map((name) => (
                       <div key={name} className="space-y-2">
@@ -647,6 +679,7 @@ export function SignupContent({
                             type={showPassword ? "text" : "password"}
                             autoComplete="new-password"
                             className="pr-10"
+                            {...fieldAccessibility(name)}
                             {...register(name)}
                           />
                           <button
@@ -665,7 +698,10 @@ export function SignupContent({
                         {name === "password" ? (
                           <PasswordRequirements password={password} />
                         ) : null}
-                        <FieldError message={errors[name]?.message} />
+                        <FieldError
+                          id={`cadastro-${name}-erro`}
+                          message={errors[name]?.message}
+                        />
                       </div>
                     ))}
                   </div>
@@ -680,14 +716,25 @@ export function SignupContent({
                       <Input
                         id="organizationName"
                         placeholder="Como sua equipe conhece a empresa"
+                        {...fieldAccessibility("organizationName")}
                         {...register("organizationName")}
                       />
-                      <FieldError message={errors.organizationName?.message} />
+                      <FieldError
+                        id="cadastro-organizationName-erro"
+                        message={errors.organizationName?.message}
+                      />
                     </div>
                     <div className="space-y-2 sm:col-span-2">
                       <Label htmlFor="legalName">Razão social</Label>
-                      <Input id="legalName" {...register("legalName")} />
-                      <FieldError message={errors.legalName?.message} />
+                      <Input
+                        id="legalName"
+                        {...fieldAccessibility("legalName")}
+                        {...register("legalName")}
+                      />
+                      <FieldError
+                        id="cadastro-legalName-erro"
+                        message={errors.legalName?.message}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="documentNumber">
@@ -702,6 +749,7 @@ export function SignupContent({
                         autoComplete="off"
                         placeholder="000.000.000-00 ou 00.000.000/0000-00"
                         maxLength={18}
+                        {...fieldAccessibility("documentNumber")}
                         {...register("documentNumber", {
                           onChange: (event) => {
                             setValue(
@@ -712,15 +760,22 @@ export function SignupContent({
                           },
                         })}
                       />
-                      <FieldError message={errors.documentNumber?.message} />
+                      <FieldError
+                        id="cadastro-documentNumber-erro"
+                        message={errors.documentNumber?.message}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="primarySegment">Segmento principal</Label>
                       <Input
                         id="primarySegment"
+                        {...fieldAccessibility("primarySegment")}
                         {...register("primarySegment")}
                       />
-                      <FieldError message={errors.primarySegment?.message} />
+                      <FieldError
+                        id="cadastro-primarySegment-erro"
+                        message={errors.primarySegment?.message}
+                      />
                     </div>
                   </div>
                 )}
@@ -755,8 +810,15 @@ export function SignupContent({
 
                     <div className="space-y-2">
                       <Label htmlFor="city">Cidade</Label>
-                      <Input id="city" {...register("city")} />
-                      <FieldError message={errors.city?.message} />
+                      <Input
+                        id="city"
+                        {...fieldAccessibility("city")}
+                        {...register("city")}
+                      />
+                      <FieldError
+                        id="cadastro-city-erro"
+                        message={errors.city?.message}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="stateCode">UF</Label>
@@ -764,14 +826,25 @@ export function SignupContent({
                         id="stateCode"
                         maxLength={2}
                         className="uppercase"
+                        {...fieldAccessibility("stateCode")}
                         {...register("stateCode")}
                       />
-                      <FieldError message={errors.stateCode?.message} />
+                      <FieldError
+                        id="cadastro-stateCode-erro"
+                        message={errors.stateCode?.message}
+                      />
                     </div>
                     <div className="space-y-2 sm:col-span-2">
                       <Label htmlFor="street">Endereço da matriz</Label>
-                      <Input id="street" {...register("street")} />
-                      <FieldError message={errors.street?.message} />
+                      <Input
+                        id="street"
+                        {...fieldAccessibility("street")}
+                        {...register("street")}
+                      />
+                      <FieldError
+                        id="cadastro-street-erro"
+                        message={errors.street?.message}
+                      />
                     </div>
                     <div className="grid gap-5 sm:col-span-2 sm:grid-cols-[8rem_1fr]">
                       <div className="min-w-0 space-y-2">
@@ -785,9 +858,13 @@ export function SignupContent({
                           id="number"
                           maxLength={30}
                           placeholder="Ex.: 120 ou s/n"
+                          {...fieldAccessibility("number")}
                           {...register("number")}
                         />
-                        <FieldError message={errors.number?.message} />
+                        <FieldError
+                          id="cadastro-number-erro"
+                          message={errors.number?.message}
+                        />
                       </div>
                       <div className="min-w-0 space-y-2">
                         <Label htmlFor="complement">
@@ -801,9 +878,13 @@ export function SignupContent({
                           autoComplete="address-line2"
                           maxLength={160}
                           placeholder="Apartamento, sala, bloco…"
+                          {...fieldAccessibility("complement")}
                           {...register("complement")}
                         />
-                        <FieldError message={errors.complement?.message} />
+                        <FieldError
+                          id="cadastro-complement-erro"
+                          message={errors.complement?.message}
+                        />
                       </div>
                     </div>
                     <div className="sm:col-span-2">

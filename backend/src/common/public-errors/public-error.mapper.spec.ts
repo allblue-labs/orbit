@@ -6,7 +6,9 @@ import {
 import {
   ConflictException,
   EntityNotFoundException,
+  ForbiddenException,
   RateLimitException,
+  ValidationException,
 } from '../../exceptions';
 import { PublicErrorMapper } from './public-error.mapper';
 
@@ -98,6 +100,32 @@ describe('PublicErrorMapper', () => {
       message: 'O serviço está temporariamente indisponível. Tente novamente.',
       status: 503,
     });
+  });
+
+  it('publishes actionable PMOC errors without exposing technical details', () => {
+    const notAssigned = mapper.map(
+      new ForbiddenException('PMOC execution id', 'ATTENDANCE_NOT_ASSIGNED'),
+    );
+    expect(notAssigned).toMatchObject({
+      code: 'ATTENDANCE_NOT_ASSIGNED',
+      status: 403,
+    });
+    expect(notAssigned.message).toContain('conferir a atribuição');
+    const missingResponsible = mapper.map(
+      new ValidationException(
+        'technicalResponsibleUserId',
+        undefined,
+        'PMOC_TECHNICAL_RESPONSIBLE_REQUIRED',
+      ),
+    );
+    expect(missingResponsible).toMatchObject({
+      code: 'PMOC_TECHNICAL_RESPONSIBLE_REQUIRED',
+      status: 400,
+    });
+    expect(missingResponsible.message).toContain('Responsável Técnico');
+    expect(JSON.stringify([notAssigned, missingResponsible])).not.toMatch(
+      /PMOC execution id|technicalResponsibleUserId/,
+    );
   });
 
   it('maps unexpected errors to a safe fallback', () => {

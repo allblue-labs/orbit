@@ -422,7 +422,8 @@ export class MobileSignatureService {
       operation.startedByUserId;
     if (actual !== actor.id)
       throw new ForbiddenException(
-        'Somente o Técnico em Campo efetivo pode coletar o reconhecimento',
+        'Somente o técnico atribuído pode confirmar este atendimento com o cliente.',
+        'ATTENDANCE_NOT_ASSIGNED',
       );
     return operation;
   }

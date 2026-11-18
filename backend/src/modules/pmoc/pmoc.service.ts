@@ -1694,6 +1694,7 @@ export class PmocService {
     )
       throw new ForbiddenException(
         'Este atendimento de PMOC não está atribuído a você.',
+        'ATTENDANCE_NOT_ASSIGNED',
       );
 
     const technicalResponsibleEligibility = data.plan.technicalResponsibleUserId
@@ -2148,12 +2149,20 @@ export class PmocService {
       preparation.cycle.status !== 'PENDING'
     )
       throw new ConflictException(
-        'PMOC plan and cycle must be active and pending',
+        'O PMOC deve estar ativo e o ciclo deve estar em aberto para iniciar o atendimento.',
+        'PMOC_ATTENDANCE_UNAVAILABLE',
       );
     if (preparation.coverage.asset.status !== 'ACTIVE')
-      throw new ConflictException('Equipment is inactive');
+      throw new ConflictException(
+        'O equipamento está inativo no cadastro.',
+        'PMOC_EQUIPMENT_INACTIVE',
+      );
     if (!preparation.plan.technicalResponsibleUserId)
-      throw new ValidationException('TECHNICAL_RESPONSIBLE_MISSING');
+      throw new ValidationException(
+        'Defina o Responsável Técnico antes de iniciar este atendimento.',
+        undefined,
+        'PMOC_TECHNICAL_RESPONSIBLE_REQUIRED',
+      );
     await this.assertTechnicalResponsible(
       preparation.plan.technicalResponsibleUserId,
       actor,
@@ -2173,7 +2182,7 @@ export class PmocService {
     const eligible = new Set(professionals.map((item) => item.id));
     if (!eligible.has(input.responsibleFieldTechnicianId))
       throw new ValidationException(
-        'Responsible field technician is not eligible for this business unit',
+        'Selecione um técnico de campo habilitado nesta unidade.',
       );
     const auxiliaries = [...new Set(input.auxiliaryTechnicianIds ?? [])].filter(
       (id) => id !== input.responsibleFieldTechnicianId,
@@ -2183,7 +2192,7 @@ export class PmocService {
     );
     if (auxiliaries.some((id) => !eligibleAssistants.has(id)))
       throw new ValidationException(
-        'One or more auxiliary technicians are not eligible for this business unit',
+        'Selecione auxiliares habilitados nesta unidade.',
       );
     const result = await this.repository.startEquipmentExecution({
       organizationId: actor.organizationId,
@@ -2277,7 +2286,8 @@ export class PmocService {
       );
     if (result.limitReached)
       throw new ConflictException(
-        'A PMOC equipment execution accepts at most 6 evidence files',
+        'O atendimento aceita até 6 arquivos de evidência.',
+        'EVIDENCE_LIMIT_REACHED',
       );
     return { id: result.evidence.id };
   }
@@ -2355,6 +2365,7 @@ export class PmocService {
          não que o documento falhou. */
       throw new ForbiddenException(
         'Só o técnico escalado para esta execução — ou o dono da organização — pode emitir o relatório dela.',
+        'ATTENDANCE_NOT_ASSIGNED',
       );
     }
     if (
@@ -2443,10 +2454,14 @@ export class PmocService {
          procurar o estado errado. */
       throw new ForbiddenException(
         'Só o técnico escalado para esta execução — ou o dono da organização — pode concluí-la.',
+        'ATTENDANCE_NOT_ASSIGNED',
       );
     }
     if (result.refused === 'NOT_IN_PROGRESS') {
-      throw new ConflictException('Equipment execution is not in progress');
+      throw new ConflictException(
+        'Este atendimento já saiu de andamento. Atualize para ver a situação.',
+        'RESOURCE_VERSION_CONFLICT',
+      );
     }
     if (result.allResolved) {
       const refreshed = await this.plan(planId, actor);
@@ -2768,6 +2783,8 @@ export class PmocService {
     if (!userId)
       throw new ValidationException(
         'Defina um Responsável Técnico para este PMOC antes de salvar ou ativar o plano.',
+        undefined,
+        'PMOC_TECHNICAL_RESPONSIBLE_REQUIRED',
       );
     await this.assertTechnicalResponsible(userId, actor, businessUnitId);
   }
@@ -2792,6 +2809,10 @@ export class PmocService {
         professional
           ? 'O Responsável Técnico precisa cadastrar uma assinatura ativa antes de iniciar a execução do PMOC.'
           : 'Selecione um Responsável Técnico ativo e habilitado na unidade deste PMOC. Confira o perfil profissional em Equipe.',
+        undefined,
+        professional
+          ? 'SIGNATURE_MISSING'
+          : 'PMOC_TECHNICAL_RESPONSIBLE_REQUIRED',
       );
     }
   }
@@ -2820,7 +2841,10 @@ export class PmocService {
       actor.businessUnitIds.length > 0 &&
       !actor.businessUnitIds.includes(businessUnitId)
     ) {
-      throw new ForbiddenException('This business unit is out of your scope');
+      throw new ForbiddenException(
+        'Seu acesso não inclui esta unidade.',
+        'PMOC_ACTION_FORBIDDEN',
+      );
     }
   }
 
@@ -2831,7 +2855,7 @@ export class PmocService {
   ): void {
     const granted = new Set(actor.permissions);
     if (!granted.has('*') && !granted.has(permission)) {
-      throw new ForbiddenException(message);
+      throw new ForbiddenException(message, 'PMOC_ACTION_FORBIDDEN');
     }
   }
 

@@ -79,6 +79,19 @@ test("changing the preselected plan preserves account data", async ({
   );
 });
 
+test("o teclado leva ao primeiro campo inválido com descrição do erro", async ({
+  page,
+}) => {
+  await page.goto("/cadastro?plano=PROFESSIONAL");
+  await expect(page.getByRole("heading", { name: "Sua conta" })).toBeFocused();
+  const firstName = page.getByLabel("Nome", { exact: true });
+  await firstName.focus();
+  await page.keyboard.press("Enter");
+  await expect(firstName).toBeFocused();
+  await expect(firstName).toHaveAttribute("aria-invalid", "true");
+  await expect(firstName).toHaveAccessibleDescription(/nome|obrigatório/i);
+});
+
 test("the registration request preserves the paid plan and billing interval", async ({
   page,
 }) => {

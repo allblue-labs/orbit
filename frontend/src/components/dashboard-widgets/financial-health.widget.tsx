@@ -62,22 +62,21 @@ import { formatMonth } from "@/components/financial/financial-presentation";
 import {
   deveDesenharEvolucao,
   deveMarcarPontos,
+  financialDate,
   historyWindow,
 } from "./financial-history";
 import type { WidgetProps } from "./widget-registry";
-
-/** `2026-08-09T00:00:00.000Z` → `2026-08-09`. */
-const toDay = (iso: string | undefined): string | undefined =>
-  iso?.slice(0, 10);
 
 export function FinancialHealthWidget({ widget, analytics }: WidgetProps) {
   const { timeZone } = useTimeZone();
   const session = useSession();
   const allowed = session.hasCapability("financial.read");
+  const now = new Date();
 
   const query: FinancialAnalyticsQuery = {
-    from: toDay(analytics.query.from),
-    to: toDay(analytics.query.to),
+    from: financialDate(analytics.query.from, timeZone),
+    to:
+      financialDate(analytics.query.to, timeZone) ?? zonedDateKey(now, timeZone),
     businessUnitId: analytics.query.businessUnitId,
   };
 
@@ -102,7 +101,7 @@ export function FinancialHealthWidget({ widget, analytics }: WidgetProps) {
   const timeline = useFinancialTimeline(
     allowed
       ? {
-          ...historyWindow(query.to, new Date(), timeZone),
+          ...historyWindow(query.to, now, timeZone),
           businessUnitId: query.businessUnitId,
         }
       : undefined,

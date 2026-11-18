@@ -364,6 +364,11 @@ void main() {
     expect(find.byType(OrbitSignaturePad), findsOneWidget);
     expect(find.text('Assine neste espaço'), findsOneWidget);
     expect(find.text('Limpar'), findsOneWidget);
+    final confirm = find.widgetWithText(FilledButton, 'Confirmar atendimento');
+    await tester.ensureVisible(confirm);
+    await tester.pumpAndSettle();
+    expect(confirm.hitTestable(), findsOneWidget);
+    expect(tester.getSize(confirm).height, greaterThanOrEqualTo(48));
   });
 
   testWidgets('OS B abre com o pad vazio — a assinatura da OS A não volta', (

@@ -25,9 +25,14 @@ import { zonedDateKey } from "@/lib/scheduling/timezone";
 
 export const HISTORY_MONTHS = 12;
 
-/** `2026-10-02T12:00:00.000Z` ou `2026-10-02` → `2026-10-02`. */
-const toDay = (value: string | undefined): string | undefined =>
-  value?.slice(0, 10);
+/** Converte um instante para o dia civil usado nas consultas financeiras. */
+export function financialDate(
+  value: string | undefined,
+  timeZone: string,
+): string | undefined {
+  if (value === undefined || /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  return zonedDateKey(new Date(value), timeZone);
+}
 
 /**
  * O primeiro dia do mês, `HISTORY_MONTHS - 1` meses antes do dia informado.
@@ -60,7 +65,7 @@ export function historyWindow(
   now = new Date(),
   timeZone = DEFAULT_TIMEZONE,
 ): { from: string; to: string } {
-  const fim = toDay(to) ?? zonedDateKey(now, timeZone);
+  const fim = financialDate(to, timeZone) ?? zonedDateKey(now, timeZone);
   return { from: firstDayMonthsBefore(fim, HISTORY_MONTHS - 1), to: fim };
 }
 

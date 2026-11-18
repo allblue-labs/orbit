@@ -165,9 +165,9 @@ export const EXECUTION_BLOCKED_REASONS: Readonly<Record<string, string>> = {
   CYCLE_NOT_PENDING: "Este ciclo já foi encerrado.",
   EQUIPMENT_INACTIVE: "O equipamento está inativo no cadastro.",
   TECHNICAL_RESPONSIBLE_MISSING:
-    "O plano não tem Responsável Técnico definido.",
+    "Edite o plano e selecione um Responsável Técnico.",
   TECHNICAL_RESPONSIBLE_INELIGIBLE:
-    "O Responsável Técnico do plano não está elegível para assinar o PMOC.",
+    "Confira o perfil e a assinatura do Responsável Técnico em Equipe.",
 };
 
 /* ------------------------------------------------------------------ */
@@ -233,6 +233,6 @@ export function executionBlockedLabel(
   return (
     EXECUTION_BLOCKED_REASONS[reason] ??
     professionalFallback(reason) ??
-    "Execução indisponível no momento."
+    "Atualize o PMOC. Se o atendimento continuar indisponível, peça a quem gerencia a manutenção para revisar o plano."
   );
 }
