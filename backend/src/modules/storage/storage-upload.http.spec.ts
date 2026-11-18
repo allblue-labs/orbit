@@ -1,5 +1,5 @@
 import { UploadBudgetService } from './upload-budget.service';
-import type { Server } from 'node:http';
+import { request as httpRequest, type Server } from 'node:http';
 import { Test } from '@nestjs/testing';
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import request from 'supertest';
@@ -25,6 +25,7 @@ describe('signed multipart image gateway', () => {
   let contexts: RequestContextService;
   let body: Buffer;
   let path: string;
+  let port: number;
   const policy = {
     assertCapabilityTenant: jest.fn().mockResolvedValue(undefined),
   };
@@ -65,7 +66,11 @@ describe('signed multipart image gateway', () => {
     app.useGlobalPipes(
       new ValidationPipe({ transform: true, whitelist: true }),
     );
-    await app.init();
+    await app.listen(0, '127.0.0.1');
+    const address = (app.getHttpServer() as Server).address();
+    if (!address || typeof address === 'string')
+      throw new Error('Test HTTP server must listen on a TCP port');
+    port = address.port;
     body = await sharp({
       create: { width: 10, height: 10, channels: 3, background: '#2563eb' },
     })
@@ -135,12 +140,34 @@ describe('signed multipart image gateway', () => {
         contentType: 'image/svg+xml',
       })
       .expect(400);
-    await request(app.getHttpServer() as Server)
-      .put(path)
-      .set('content-type', 'image/png')
-      .set('content-length', '10000001')
-      .send(Buffer.from([1]))
-      .expect(400);
+    // The header must be rejected before the client sends any file bytes.
+    const status = await new Promise<number | undefined>((resolve, reject) => {
+      const upload = httpRequest(
+        {
+          hostname: '127.0.0.1',
+          port,
+          method: 'PUT',
+          path,
+          agent: false,
+          timeout: 5_000,
+          headers: {
+            'content-type': 'image/png',
+            'content-length': '10000001',
+          },
+        },
+        (response) => {
+          response.once('error', reject);
+          response.once('end', () => resolve(response.statusCode));
+          response.resume();
+        },
+      );
+      upload.once('error', reject);
+      upload.once('timeout', () =>
+        upload.destroy(new Error('Upload header was not rejected')),
+      );
+      upload.flushHeaders();
+    });
+    expect(status).toBe(400);
     expect(receive).not.toHaveBeenCalled();
   });
 });

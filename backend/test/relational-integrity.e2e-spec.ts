@@ -182,8 +182,28 @@ describe('PR-12 — real PostgreSQL relational boundaries and safe upgrade', () 
       "SELECT conname AS name FROM pg_constraint c JOIN pg_namespace n ON n.oid=c.connamespace WHERE n.nspname='public' AND contype='f' AND conname NOT LIKE 'pr12_%' AND conname NOT LIKE 'pr13_%' AND conname NOT LIKE 'ses_owner_%'",
     );
     expect(rows.rows.map((r) => r.name).sort()).toEqual(
-      manifest.baselineForeignKeys.map((r) => r.conname).sort(),
+      [
+        ...manifest.baselineForeignKeys.map((r) => r.conname),
+        // Added after the PR-12 inventory by the public contact migration.
+        'email_outbound_contact_fk',
+      ].sort(),
     );
+    const contactLink = await db.query<{
+      definition: string;
+      validated: boolean;
+    }>(
+      `SELECT pg_get_constraintdef(oid) AS definition, convalidated AS validated
+       FROM pg_constraint
+       WHERE conrelid = 'public.email_outbound_messages'::regclass
+         AND conname = 'email_outbound_contact_fk'`,
+    );
+    expect(contactLink.rows).toEqual([
+      {
+        definition:
+          'FOREIGN KEY (contact_submission_id) REFERENCES public_contact_submissions(id) ON DELETE SET NULL',
+        validated: true,
+      },
+    ]);
     const invalid = await db.query(
       "SELECT conname FROM pg_constraint WHERE conname LIKE 'pr12_%' AND NOT convalidated",
     );
