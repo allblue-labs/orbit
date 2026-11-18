@@ -18,7 +18,7 @@ describe('NotificationService — durable HTTP inbox', () => {
   const push = { send: jest.fn(), validateEndpoint: jest.fn() };
   const service = new NotificationService(
     repository as never,
-    email as never,
+    email,
     push as never,
   );
   beforeEach(() => jest.resetAllMocks());

@@ -223,7 +223,7 @@ export async function withIntegrationEnvironment(work, isolation = {}) {
     await run(process.execPath, [script("provision-database-roles")], options);
     await run(process.execPath, [script("seed-plan-catalog")], options);
     await run(process.execPath, [script("seed-artifact-templates")], options);
-    await work({ env, directory, compiled, options });
+    await work({ env, directory, compiled, options, container });
   } finally {
     process.off("SIGINT", cancelRunningCommands);
     process.off("SIGTERM", cancelRunningCommands);
