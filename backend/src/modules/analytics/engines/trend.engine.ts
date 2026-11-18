@@ -13,23 +13,9 @@ import type {
 @Injectable()
 export class TrendEngine {
   execute(snapshot: AnalyticsSnapshot): TrendReadModel {
-    const operations = snapshot.operations.filter(
-      (item) => !['CANCELLED', 'CANCELED'].includes(item.status),
-    );
-    const created = this.bucket(
-      operations.map((item) => item.createdAt),
-      snapshot,
-    );
-    const completed = this.bucket(
-      operations.flatMap((item) =>
-        item.completedAt ? [item.completedAt] : [],
-      ),
-      snapshot,
-    );
-    const pmocs = this.bucket(
-      snapshot.pmocs.map((item) => item.createdAt),
-      snapshot,
-    );
+    const created = this.bucket(snapshot.trends.created, snapshot);
+    const completed = this.bucket(snapshot.trends.completed, snapshot);
+    const pmocs = this.bucket(snapshot.trends.pmoc, snapshot);
     return {
       generatedAt: new Date().toISOString(),
       period: {
@@ -80,7 +66,10 @@ export class TrendEngine {
     };
   }
 
-  private bucket(dates: Date[], snapshot: AnalyticsSnapshot): TrendPoint[] {
+  private bucket(
+    points: TrendPoint[],
+    snapshot: AnalyticsSnapshot,
+  ): TrendPoint[] {
     const result = new Map<string, number>();
     for (
       let cursor = new Date(snapshot.range.from);
@@ -89,11 +78,9 @@ export class TrendEngine {
     ) {
       result.set(this.key(cursor, snapshot.range.granularity), 0);
     }
-    dates.forEach((date) => {
-      if (date < snapshot.range.from || date > snapshot.range.to) return;
-      const key = this.key(date, snapshot.range.granularity);
-      if (result.has(key)) result.set(key, (result.get(key) ?? 0) + 1);
-    });
+    for (const { timestamp, value } of points) {
+      if (result.has(timestamp)) result.set(timestamp, value);
+    }
     return [...result].map(([timestamp, value]) => ({ timestamp, value }));
   }
 

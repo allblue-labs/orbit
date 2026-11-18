@@ -50,15 +50,13 @@ async function setup(page: Page, empty = false) {
     organizationId: "org",
     exp: Math.floor(Date.now() / 1000) + 3600,
   };
-  await page
-    .context()
-    .addCookies([
-      {
-        name: "orbit_access",
-        value: `preview.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.preview`,
-        url: test.info().project.use.baseURL as string,
-      },
-    ]);
+  await page.context().addCookies([
+    {
+      name: "orbit_access",
+      value: `preview.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.preview`,
+      url: test.info().project.use.baseURL as string,
+    },
+  ]);
   const unit = {
     id: "unit",
     legalName: "Matriz",
@@ -137,8 +135,8 @@ async function setup(page: Page, empty = false) {
           ],
         },
       };
-    else if (path === "/api/orbit/analytics/dashboard")
-      data = {
+    else if (path === "/api/orbit/analytics/panel") {
+      const dashboard = {
         generatedAt: stamp,
         metrics: [
           ...metrics,
@@ -149,8 +147,7 @@ async function setup(page: Page, empty = false) {
         forecasts: [],
         environmentalImpact: [],
       };
-    else if (path === "/api/orbit/analytics/health")
-      data = {
+      const health = {
         generatedAt: stamp,
         score: empty ? 0 : 75,
         status: "ATTENTION",
@@ -177,7 +174,8 @@ async function setup(page: Page, empty = false) {
           },
         ],
       };
-    else if (path === "/api/orbit/analytics/kpis") {
+      data = { dashboard, health, intelligence: null };
+    } else if (path === "/api/orbit/analytics/kpis") {
       data = {
         generatedAt: stamp,
         period,
@@ -203,6 +201,13 @@ async function setup(page: Page, empty = false) {
 test("mostra oito indicadores acionáveis, bases de cálculo e dimensões reais", async ({
   page,
 }) => {
+  await page.clock.setFixedTime(new Date(stamp));
+  const analyticsRequests: string[] = [];
+  page.on("request", (request) => {
+    const { pathname } = new URL(request.url());
+    if (pathname.startsWith("/api/orbit/analytics/"))
+      analyticsRequests.push(pathname.split("/").at(-1)!);
+  });
   await setup(page);
   await page.goto("/dashboard");
   const executive = page.locator('[data-panel="executive-kpis"]');
@@ -228,10 +233,11 @@ test("mostra oito indicadores acionáveis, bases de cálculo e dimensões reais"
         .getByText(axis, { exact: true }),
     ).toBeVisible();
   await expect(radar.locator(".recharts-radar-polygon")).toHaveCount(2);
-  await page.screenshot({
-    path: "/private/tmp/orbit-dashboard-review.png",
-    fullPage: true,
-  });
+  expect(analyticsRequests.filter((path) => path === "panel")).toHaveLength(1);
+  expect(analyticsRequests.filter((path) => path === "kpis")).toHaveLength(2);
+  expect(analyticsRequests).not.toContain("dashboard");
+  expect(analyticsRequests).not.toContain("health");
+  expect(analyticsRequests).not.toContain("intelligence");
 });
 
 test("organização nova distingue ausência de base de cálculo de desempenho zero", async ({

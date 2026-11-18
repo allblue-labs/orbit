@@ -172,3 +172,10 @@ export type OrbitIntelligenceAnalyticsContext = {
   forecasts: Array<{ id: string; nextValue: number; confidence: number }>;
   environmental: EnvironmentalImpactReadModel['indicators'];
 };
+
+/** One dashboard read, with intelligence present only for entitled organizations. */
+export type AnalyticsPanelReadModel = {
+  dashboard: AnalyticsDashboardReadModel;
+  health: AnalyticsHealthReadModel;
+  intelligence: OrbitIntelligenceAnalyticsContext | null;
+};

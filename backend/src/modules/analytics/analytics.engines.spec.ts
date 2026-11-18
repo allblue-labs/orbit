@@ -1,12 +1,188 @@
 import { EnvironmentalIntelligenceProvider } from '../dashboards/environmental-intelligence.provider';
 import { AnalyticsRepository } from './analytics.repository';
 import { AnalyticsService } from './analytics.service';
-import type { AnalyticsOperation, AnalyticsSnapshot } from './analytics.types';
+import type {
+  AnalyticsSnapshot,
+  AnalyticsGranularity,
+  AnalyticsRange,
+} from './analytics.types';
 import { EnvironmentalImpactEngine } from './engines/environmental-impact.engine';
 import { ForecastEngine } from './engines/forecast.engine';
 import { HealthEngine } from './engines/health.engine';
 import { KpiEngine } from './engines/kpi.engine';
 import { TrendEngine } from './engines/trend.engine';
+
+type AnalyticsOperation = {
+  id: string;
+  status: string;
+  scheduledEnd: Date | null;
+  scheduledStart?: Date | null;
+  responsibleFieldTechnicianId?: string | null;
+  startedAt: Date | null;
+  completedAt: Date | null;
+  createdAt: Date;
+  users: Array<{ user: { id: string; displayName: string } }>;
+};
+
+type AnalyticsCommitment = {
+  status: string;
+  /** Planned date, retained for the existing trend series. */
+  createdAt: Date;
+  deadlineAt?: Date;
+  finalizedAt: Date | null;
+};
+
+type FixtureRows = {
+  range: AnalyticsRange;
+  operations: AnalyticsOperation[];
+  previousOperations: AnalyticsOperation[];
+  pmocs: AnalyticsCommitment[];
+  previousPmocs?: AnalyticsCommitment[];
+  rvts?: AnalyticsCommitment[];
+  previousRvts?: AnalyticsCommitment[];
+  assets: Array<{ status: string }>;
+  customers: Array<{ status: string }>;
+};
+
+const completed = (status: string) =>
+  ['COMPLETED', 'DONE', 'CLOSED', 'FINALIZED', 'PUBLISHED'].includes(status);
+const cancelled = (status: string) =>
+  ['CANCELLED', 'CANCELED'].includes(status);
+const during = (date: Date | null | undefined, from: Date, to: Date) =>
+  Boolean(date && date >= from && date <= to);
+
+function operationStats(
+  operations: AnalyticsOperation[],
+  from: Date,
+  to: Date,
+) {
+  const active = operations.filter(
+    (op) => !cancelled(op.status) && op.createdAt <= to,
+  );
+  const cohort = active.filter((op) => during(op.createdAt, from, to));
+  const delivered = active.filter(
+    (op) => completed(op.status) && during(op.completedAt, from, to),
+  );
+  const withDeadline = delivered.filter((op) => op.scheduledEnd !== null);
+  const open = active.filter((op) => !completed(op.status));
+  return {
+    cohort,
+    delivered,
+    withDeadline,
+    open,
+    onTime: withDeadline.filter((op) => op.completedAt! <= op.scheduledEnd!)
+      .length,
+    assigned: cohort.filter((op) => Boolean(op.responsibleFieldTechnicianId))
+      .length,
+    scheduled: cohort.filter((op) => Boolean(op.scheduledStart)).length,
+    overdue: open.filter((op) => op.scheduledEnd && op.scheduledEnd < to)
+      .length,
+    openWithDeadline: open.filter((op) => op.scheduledEnd !== null).length,
+    unassigned: open.filter((op) => !op.responsibleFieldTechnicianId).length,
+    unscheduled: open.filter((op) => !op.scheduledStart).length,
+  };
+}
+
+function commitments(rows: AnalyticsCommitment[], from: Date, to: Date) {
+  const due = rows.filter(
+    (row) => !cancelled(row.status) && (row.deadlineAt ?? row.createdAt) <= to,
+  );
+  const isDone = (row: AnalyticsCommitment) =>
+    completed(row.status) && row.finalizedAt !== null && row.finalizedAt <= to;
+  const evaluated = due.filter(
+    (row) => (row.deadlineAt ?? row.createdAt) >= from || !isDone(row),
+  );
+  return {
+    total: evaluated.length,
+    overdue: due.filter((row) => !isDone(row)).length,
+    onTime: evaluated.filter(
+      (row) =>
+        isDone(row) && row.finalizedAt! <= (row.deadlineAt ?? row.createdAt),
+    ).length,
+  };
+}
+function key(date: Date, granularity: AnalyticsGranularity) {
+  const value = new Date(date);
+  value.setUTCHours(0, 0, 0, 0);
+  if (granularity === 'WEEK')
+    value.setUTCDate(value.getUTCDate() - value.getUTCDay());
+  if (granularity === 'MONTH') value.setUTCDate(1);
+  return value.toISOString();
+}
+// Reference calculations on small hand-written fixtures. Production reads only
+// aggregate results. The PostgreSQL E2E suite exercises actual source rows.
+function summarize(data: FixtureRows): AnalyticsSnapshot {
+  const { range, operations, previousOperations } = data;
+  const totals = (rows: AnalyticsOperation[], from: Date, to: Date) => {
+    const stats = operationStats(rows, from, to);
+    return {
+      ...stats,
+      cohort: stats.cohort.length,
+      delivered: stats.delivered.length,
+      withDeadline: stats.withDeadline.length,
+    };
+  };
+  const current = totals(operations, range.from, range.to);
+  const previous = totals(
+    previousOperations,
+    range.previousFrom,
+    range.previousTo,
+  );
+  const planned = operationStats(operations, range.from, range.to).cohort;
+  const { open, overdue, openWithDeadline, unassigned, unscheduled } = current;
+  const series = (dates: Date[]) => {
+    const points = new Map<string, number>();
+    for (const when of dates.filter((d) => during(d, range.from, range.to))) {
+      const timestamp = key(when, range.granularity);
+      points.set(timestamp, (points.get(timestamp) ?? 0) + 1);
+    }
+    return Array.from(points, ([timestamp, value]) => ({ timestamp, value }));
+  };
+  const visible = operations.filter((item) => !cancelled(item.status));
+  return {
+    range,
+    operations: {
+      current,
+      previous,
+      open: open.length,
+      overdue,
+      openWithDeadline,
+      unassigned,
+      unscheduled,
+      completedCohort: planned.filter(
+        (op) =>
+          completed(op.status) && op.completedAt && op.completedAt <= range.to,
+      ).length,
+      activeTechnicians: new Set(
+        planned.map((op) => op.responsibleFieldTechnicianId).filter(Boolean),
+      ).size,
+    },
+    pmoc: {
+      current: commitments(data.pmocs, range.from, range.to),
+      previous: commitments(
+        data.previousPmocs ?? [],
+        range.previousFrom,
+        range.previousTo,
+      ),
+    },
+    rvt: {
+      current: commitments(data.rvts ?? [], range.from, range.to),
+      previous: commitments(
+        data.previousRvts ?? [],
+        range.previousFrom,
+        range.previousTo,
+      ),
+    },
+    equipmentRegistered: data.assets.length,
+    trends: {
+      created: series(visible.map((op) => op.createdAt)),
+      completed: series(
+        visible.flatMap((op) => (op.completedAt ? [op.completedAt] : [])),
+      ),
+      pmoc: series(data.pmocs.map((op) => op.createdAt)),
+    },
+  };
+}
 
 const date = (value: string) => new Date(value);
 const operation = (
@@ -23,10 +199,7 @@ const operation = (
   users: [],
   ...overrides,
 });
-const snapshot = (
-  overrides: Partial<AnalyticsSnapshot> = {},
-): AnalyticsSnapshot => ({
-  organization: { id: 'org', segment: 'HVAC_R' },
+const snapshot = (overrides: Partial<FixtureRows> = {}): FixtureRows => ({
   range: {
     from: date('2026-07-01T00:00:00Z'),
     to: date('2026-07-07T23:59:59Z'),
@@ -45,16 +218,18 @@ const snapshot = (
   ...overrides,
 });
 const engine = new KpiEngine();
-const metric = (data: AnalyticsSnapshot, id: string) =>
-  engine.execute(data).indicators.find((item) => item.id === id)!;
-const health = (data: AnalyticsSnapshot) =>
-  new HealthEngine().execute(engine.execute(data));
+const metric = (data: FixtureRows, id: string) =>
+  engine.execute(summarize(data)).indicators.find((item) => item.id === id)!;
+const health = (data: FixtureRows) =>
+  new HealthEngine().execute(engine.execute(summarize(data)));
 
 describe('Analytics facts and operational health', () => {
   it('does not assign health or invented performance to an empty organization', () => {
     const data = snapshot();
     expect(
-      engine.execute(data).indicators.every((item) => item.value === 0),
+      engine
+        .execute(summarize(data))
+        .indicators.every((item) => item.value === 0),
     ).toBe(true);
     expect(
       health(data).dimensions.every((item) => item.hasData === false),
@@ -233,7 +408,7 @@ describe('Analytics facts and operational health', () => {
     });
     expect(
       engine
-        .execute(data)
+        .execute(summarize(data))
         .indicators.some(
           (item) =>
             item.id === 'contracts.active_proxy' ||
@@ -251,7 +426,7 @@ describe('Analytics facts and operational health', () => {
         }),
       ],
     });
-    const kpis = engine.execute(data);
+    const kpis = engine.execute(summarize(data));
     const environment = new EnvironmentalImpactEngine().execute(
       new EnvironmentalIntelligenceProvider().read(),
     );
@@ -267,7 +442,7 @@ describe('Analytics facts and operational health', () => {
   it('exposes eight executive indicators while retaining supplementary API metrics', () => {
     expect(
       engine
-        .execute(snapshot())
+        .execute(summarize(snapshot()))
         .indicators.filter((item) => item.executive)
         .map((item) => item.id),
     ).toEqual([
@@ -291,7 +466,7 @@ describe('Analytics facts and operational health', () => {
         }),
       ],
     });
-    const trends = new TrendEngine().execute(data);
+    const trends = new TrendEngine().execute(summarize(data));
     expect(trends.series[0]!.points).toHaveLength(7);
     expect(
       trends.series[0]!.points.reduce((sum, item) => sum + item.value, 0),
@@ -313,12 +488,14 @@ describe('Analytics facts and operational health', () => {
         operation({ status: 'CANCELLED' }),
       ],
     });
-    expect(new TrendEngine().execute(data).series[0]!.points[0]?.value).toBe(0);
+    expect(
+      new TrendEngine().execute(summarize(data)).series[0]!.points[0]?.value,
+    ).toBe(0);
   });
   it('does not publish a zero health score or simulated weather risks when there is no basis', async () => {
     const service = new AnalyticsService(
       {
-        snapshot: jest.fn().mockResolvedValue(snapshot()),
+        snapshot: jest.fn().mockResolvedValue(summarize(snapshot())),
       } as unknown as AnalyticsRepository,
       new EnvironmentalIntelligenceProvider(),
       new KpiEngine(),

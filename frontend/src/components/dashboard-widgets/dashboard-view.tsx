@@ -20,13 +20,11 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   useAgenda,
-  useAnalyticsDashboard,
-  useAnalyticsHealth,
+  useAnalyticsPanel,
   useAnalyticsQuery,
   useDashboardLayout,
   useEnvironmentalImpact,
   useMonthComparison,
-  useOrbitIntelligence,
 } from "@/hooks/dashboard/use-dashboard";
 import { useSchedulingTimeZone } from "@/components/scheduling/use-scheduling-timezone";
 import { useSession } from "@/providers/session-provider";
@@ -66,22 +64,18 @@ export function DashboardView() {
   const layout = useDashboardLayout(range);
   const comparison = useMonthComparison(timeZone);
 
-  /**
-   * Leituras compartilhadas.
-   *
-   * `/analytics/dashboard` já traz KPIs, séries, projeções e indicadores
-   * ambientais — por isso os widgets de KPI, tendência e domínio consomem
-   * essa única consulta em vez de chamar `/analytics/kpis` e
-   * `/analytics/trends` separadamente.
-   */
+  const panel = useAnalyticsPanel(analyticsQuery);
   const sources: WidgetDataSources = {
     analytics: {
       query: analyticsQuery,
-      dashboard: toPanelQuery(useAnalyticsDashboard(analyticsQuery)),
-      health: toPanelQuery(useAnalyticsHealth(analyticsQuery)),
-      intelligence: toPanelQuery(
-        useOrbitIntelligence(analyticsQuery, canUseIntelligence),
-      ),
+      dashboard: toPanelQuery({ ...panel, data: panel.data?.dashboard }),
+      health: toPanelQuery({ ...panel, data: panel.data?.health }),
+      intelligence: toPanelQuery({
+        ...panel,
+        data: canUseIntelligence
+          ? (panel.data?.intelligence ?? undefined)
+          : undefined,
+      }),
       environmentalImpact: toPanelQuery(useEnvironmentalImpact()),
     },
     scheduling: {
@@ -172,10 +166,7 @@ export function DashboardView() {
             aria-label="Atualizar dashboard"
             onClick={() => {
               void layout.refetch();
-              void sources.analytics.dashboard.refetch();
-              void sources.analytics.health.refetch();
-              if (canUseIntelligence)
-                void sources.analytics.intelligence.refetch();
+              void panel.refetch();
               void sources.scheduling.agenda.refetch();
               void sources.comparison.current.refetch();
               void sources.comparison.previous.refetch();

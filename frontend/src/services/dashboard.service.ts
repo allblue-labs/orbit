@@ -20,6 +20,7 @@ import { queryKeys, type QueryKey } from "@/api/query-keys";
 import type { QueryParams, RequestOptions } from "@/types/api";
 import type {
   AnalyticsDashboardReadModel,
+  AnalyticsPanelReadModel,
   AnalyticsHealthReadModel,
   AnalyticsQuery,
   AnalyticsTrendReadModel,
@@ -61,6 +62,12 @@ export const analyticsService = {
     options?: RequestOptions,
   ): Promise<AnalyticsDashboardReadModel> =>
     apiClient.get<AnalyticsDashboardReadModel>("/analytics/dashboard", {
+      ...options,
+      query: asParams(query),
+    }),
+
+  panel: (query: AnalyticsQuery, options?: RequestOptions) =>
+    apiClient.get<AnalyticsPanelReadModel>("/analytics/panel", {
       ...options,
       query: asParams(query),
     }),
@@ -126,6 +133,8 @@ export const analyticsService = {
     module: (): QueryKey => queryKeys.module(ANALYTICS_RESOURCE),
     dashboard: (query?: AnalyticsQuery): QueryKey =>
       queryKeys.query(ANALYTICS_RESOURCE, "dashboard", asParams(query)),
+    panel: (query: AnalyticsQuery): QueryKey =>
+      queryKeys.query(ANALYTICS_RESOURCE, "panel", asParams(query)),
     kpis: (query?: AnalyticsQuery): QueryKey =>
       queryKeys.query(ANALYTICS_RESOURCE, "kpis", asParams(query)),
     trends: (query?: AnalyticsQuery): QueryKey =>

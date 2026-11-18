@@ -290,6 +290,15 @@ memória, conexões e idade da fila com cenário documentado.
 
 ### PR-16 — Custo de analytics
 
+**Implementação e qualificação local concluídas em 17/11/2026.**
+[Relatório](pr-16-analytics-aggregation.md) e
+[evidências](evidence/pr-16-analytics-aggregation.json).
+Agregações sob RLS e painel compartilhado com autorização comercial preservada.
+No ensaio de 112 mil operações, a seleção legada retornou 12 mil linhas e
+o snapshot de todos os domínios ficou em 958 bytes, com cinco consultas de dados.
+As suítes integradas e o Chromium passaram. A próxima implantação precisa
+aplicar a migration de analytics antes da API e do frontend.
+
 Mover contagens/taxas para agregações e reaproveitar leitura de overview quando
 possível. Medir planos de consulta e índices em volume representativo. Preservar
 os critérios e estados sem dados introduzidos na revisão do dashboard.

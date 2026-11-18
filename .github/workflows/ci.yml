@@ -51,6 +51,7 @@ jobs:
       # Hard gate: real disposable MinIO from pinned official source; no cloud credentials.
       - run: node scripts/verify-storage-integrity.mjs
       - run: node scripts/verify-worker-isolation.mjs
+      - run: node --expose-gc scripts/verify-analytics-benchmark.mjs
 
   web:
     runs-on: ubuntu-24.04

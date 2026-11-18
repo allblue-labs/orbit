@@ -119,8 +119,8 @@ async function newAccount(
           ],
         },
       };
-    } else if (path === "/api/orbit/analytics/health") {
-      data = {
+    } else if (path === "/api/orbit/analytics/panel") {
+      const health = {
         score: 0,
         status: "CRITICAL",
         availability: [],
@@ -145,6 +145,11 @@ async function newAccount(
             drivers: [],
           },
         ],
+      };
+      data = {
+        dashboard: { metrics: [], series: [], forecasts: [], headline: {} },
+        health,
+        intelligence: null,
       };
     } else if (path.includes("notifications")) {
       data = { unread: 0, data: [], meta: { page: 1, total: 0 } };

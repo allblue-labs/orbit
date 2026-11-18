@@ -8,6 +8,7 @@ import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { configureApiVersioning } from '../src/configure-api';
+import type { AnalyticsPanelReadModel } from '../src/modules/analytics/analytics.read-models';
 import { adminPrisma, disconnectAdminPrisma } from './support/admin-prisma';
 
 const PASSWORD = 'Orbit#Analytics@2026';
@@ -82,6 +83,7 @@ describe('Analytics compound authorization (e2e)', () => {
       street: 'Rua do Sol',
       stateCode: 'PE',
       primarySegment: 'HVAC-R',
+      planKey: 'ESSENTIAL',
     });
     const user = await prisma.user.findFirstOrThrow({
       where: { email },
@@ -125,6 +127,19 @@ describe('Analytics compound authorization (e2e)', () => {
     expect(
       data.availability.find((item) => item.domain === 'PMOC'),
     ).toMatchObject({ available: false });
+
+    const panel = await auth('/api/v1/analytics/panel', token)
+      .expect('Cache-Control', 'private, no-store')
+      .expect(200);
+    const panelData = (panel.body as { data: AnalyticsPanelReadModel }).data;
+    expect(panelData.intelligence).toBeNull();
+    await auth('/api/v1/analytics/intelligence', token).expect(403);
+    expect(
+      panelData.dashboard.metrics.map((metric) => metric.domain),
+    ).not.toContain('PMOC');
+    expect(
+      panelData.health.dimensions.map((dimension) => dimension.domain),
+    ).not.toContain('PMOC');
 
     const dashboard = await auth('/api/v1/dashboard', token).expect(200);
     const widgets = (
@@ -179,5 +194,6 @@ describe('Analytics compound authorization (e2e)', () => {
   it('requires analytics.read even when the domain capability exists', async () => {
     const token = await permissions(['operations.read']);
     await auth('/api/v1/analytics/kpis', token).expect(403);
+    await auth('/api/v1/analytics/panel', token).expect(403);
   });
 });
