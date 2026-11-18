@@ -49,6 +49,21 @@ export function calendarKeyFrom(name: string): string {
     .slice(0, 100);
 }
 
+/** Calendário padrão da organização, ou o primeiro da lista. */
+export function defaultCalendarOf(
+  calendars: readonly SchedulingCalendar[],
+): SchedulingCalendar | undefined {
+  return calendars.find((calendar) => calendar.isDefault) ?? calendars[0];
+}
+
+export function useCanCreateSchedulingCalendar() {
+  const session = useSession();
+  return (
+    session.hasPermission("scheduling.calendars.create") &&
+    session.hasCapability("scheduling.manage")
+  );
+}
+
 export function CalendarSetup({
   timeZone,
   businessUnitId,
@@ -63,13 +78,9 @@ export function CalendarSetup({
   isFirst: boolean;
   onCreated?: (calendar: SchedulingCalendar) => void;
 }) {
-  const session = useSession();
+  const canCreate = useCanCreateSchedulingCalendar();
   const create = useCreateSchedulingCalendar();
   const [name, setName] = useState(suggestedName);
-
-  const canCreate =
-    session.hasPermission("scheduling.calendars.create") &&
-    session.hasCapability("scheduling.manage");
 
   const key = calendarKeyFrom(name);
   const valid = name.trim().length >= 2 && key.length >= 2;
@@ -77,7 +88,7 @@ export function CalendarSetup({
   if (!canCreate) {
     return (
       <p className="text-sm text-muted-foreground">
-        Não há calendário nesta organização e o seu acesso não permite criar um.
+        Não há calendário ativo para esta unidade e o seu acesso não permite criar um.
         Peça a quem administra a conta para criar o primeiro calendário — sem ele não é possível agendar.
       </p>
     );
@@ -88,10 +99,12 @@ export function CalendarSetup({
       <div className="space-y-1">
         <p className="flex items-center gap-2 text-sm font-medium">
           <CalendarPlus className="size-4 text-primary" aria-hidden />
-          {isFirst ? "Nenhum calendário nesta organização" : "Novo calendário"}
+          {isFirst ? "Nenhum calendário ativo" : "Novo calendário"}
         </p>
         <p className="text-xs text-muted-foreground">
-          Todo agendamento pertence a um calendário. Crie o primeiro para começar.
+          {isFirst
+            ? "Crie um calendário para começar a agendar."
+            : "Escolha um nome para identificar o calendário na agenda."}
         </p>
       </div>
 

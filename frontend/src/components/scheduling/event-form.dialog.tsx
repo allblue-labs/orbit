@@ -89,7 +89,7 @@ import {
   type SchedulingEventStatus,
   type SchedulingPriority,
 } from "@/types/scheduling";
-import { CalendarSetup } from "./calendar-setup";
+import { CalendarSetup, defaultCalendarOf } from "./calendar-setup";
 import { eventStatusLabel } from "./event-badges";
 
 /** Origem dos eventos nascidos na agenda — `sourceModule` é obrigatório. */
@@ -622,13 +622,6 @@ function RecurrenceFields({
       ) : null}
     </div>
   );
-}
-
-/** Calendário padrão da organização, ou o primeiro da lista. */
-function defaultCalendarOf(
-  calendars: readonly SchedulingCalendar[],
-): SchedulingCalendar | undefined {
-  return calendars.find((calendar) => calendar.isDefault) ?? calendars[0];
 }
 
 function initialState(

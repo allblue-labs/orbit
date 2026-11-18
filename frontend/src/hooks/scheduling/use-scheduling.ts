@@ -66,12 +66,16 @@ export function useSchedulingCalendars(businessUnitId?: string) {
 }
 
 /** Ocorrências da janela — fonte de todas as visões. */
-export function useSchedulingOccurrences(query: SchedulingEventQuery) {
+export function useSchedulingOccurrences(
+  query: SchedulingEventQuery,
+  enabled = true,
+) {
   return useApiQuery(
     schedulingService.keys.occurrences(query),
     ({ signal }) => schedulingService.occurrences(query, { signal }),
     {
       ...SCHEDULING_REFRESH.occurrences,
+      enabled,
       /** Mantém a grade preenchida ao navegar entre períodos. */
       placeholderData: (previous) => previous,
     },

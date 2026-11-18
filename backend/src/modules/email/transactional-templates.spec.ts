@@ -25,6 +25,12 @@ describe('owner transactional templates', () => {
         'allblue-logo.png',
         'orbit-logo.png',
       ]);
+      expect(result.html).toMatch(
+        /cid:allblue-logo@orbit"[^>]*width="32" height="32"/,
+      );
+      expect(result.html).toMatch(
+        /cid:orbit-logo@orbit"[^>]*width="144" height="46"/,
+      );
       expect(result.html).not.toMatch(/<img[^>]+src="https?:/);
       expect(result.text.length).toBeGreaterThan(100);
       expect(result.html).not.toContain('<script>');

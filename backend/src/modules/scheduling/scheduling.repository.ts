@@ -193,6 +193,15 @@ export class SchedulingRepository {
           organizationId,
           deletedAt: null,
           calendarId: query.calendarId,
+          AND:
+            query.remindersOnly === 'true'
+              ? {
+                  OR: [
+                    { sourceModule: 'scheduling', sourceEntityType: 'REMINDER' },
+                    { sourceModule: 'automations', type: 'REMINDER' },
+                  ],
+                }
+              : undefined,
           businessUnitId: query.businessUnitId,
           customerId: query.customerId,
           assetId: query.assetId,

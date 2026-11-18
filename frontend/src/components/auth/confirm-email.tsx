@@ -90,7 +90,9 @@ export function ConfirmEmail({
           className="w-full max-w-md space-y-6 rounded-3xl border border-border bg-card p-6 shadow-sm sm:p-9"
           aria-labelledby="email-confirmation-title"
         >
-          <div className="flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+          <div
+            className={`flex size-14 items-center justify-center rounded-2xl ${confirmed ? "bg-success/15 text-success" : "bg-primary/10 text-primary"}`}
+          >
             {confirmed ? (
               <CheckCircle2 className="size-7" />
             ) : (

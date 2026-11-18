@@ -165,8 +165,8 @@ function Form({ profile }: { profile: UserProfile }) {
               <Mail className="size-4 text-muted-foreground" aria-hidden />
               {profile.email}
               {profile.emailVerifiedAt ? (
-                <Badge variant="secondary" className="gap-1">
-                  <ShieldCheck className="size-3" />
+                <Badge variant="success" className="gap-1">
+                  <ShieldCheck className="size-3" aria-hidden />
                   verificado
                 </Badge>
               ) : (
