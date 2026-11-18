@@ -30,6 +30,14 @@ Docker Hub: `allbluelabs/orbit-api`, **privado**, com tags
 as três imagens são diferentes, mesmo compartilhando o repositório.
 O lock usa digests completos. Nenhum build ou checkout Git ocorre no Ubuntu.
 
+Depois da implantação, `docker compose up -d` em `/opt/stacks/orbit` usa o
+mesmo lock por meio de `COMPOSE_FILE`. Para conferir, rode
+`docker compose config --images`. Uma nova revisão no Git vira release de
+staging após publicar as três imagens, instalar o lock correspondente e
+executar o deploy. `docker compose down -v` apaga os volumes do projeto,
+incluindo o banco. Para recriar somente os contêineres, use
+`docker compose up -d --force-recreate`.
+
 PostgreSQL 17.11/Alpine 3.24 está fixado por digest; mantém-se o major 17
 suportado pelo projeto, com o patch atual, sem impor um upgrade de dados para 18.
 Nginx stable vem do repositório oficial, com chave GPG conferida e atualizações
@@ -173,8 +181,8 @@ Não altera o builder selecionado para outros projetos.
 
 Copie o `docker-compose.yml`, o lock gerado e `release.json` para o diretório
 do servidor. O servidor **não recebe** `docker-compose.build.yml`, `.git`,
-código do backend/frontend, nem segredos do Mac. Ajuste `ORBIT_VERSION` para a
-tag registrada no manifest (os serviços efetivamente usam digests do lock).
+código do backend/frontend, nem segredos do Mac. O script de deploy valida os digests em `release.json` e atualiza
+`COMPOSE_FILE` e `ORBIT_VERSION` no `.env` protegido do Ubuntu.
 
 ```bash
 bash ~/orbit-bootstrap/bin/deploy.sh

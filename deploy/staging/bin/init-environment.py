@@ -36,7 +36,7 @@ settings = {
     'PUSH_PROVIDER': 'disabled',
     'STRIPE_ENABLED': 'false',
 }
-lines = []
+lines = ['COMPOSE_FILE=docker-compose.yml:docker-compose.lock.yml']
 for line in template.read_text().splitlines():
     key = line.partition('=')[0]
     lines.append(f'{key}={settings[key]}' if key in settings else line)

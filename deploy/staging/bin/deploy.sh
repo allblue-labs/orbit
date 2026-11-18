@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 cd /opt/stacks/orbit
-[[ -f .env && -f docker-compose.lock.yml ]] || { echo 'Configure .env e o lock de imagens antes.' >&2; exit 1; }
+[[ -f .env && -f docker-compose.lock.yml && -f release.json ]] || { echo 'Configure .env, docker-compose.lock.yml e release.json antes.' >&2; exit 1; }
 [[ $(stat -c '%a' .env) == 600 ]] || { echo 'Use chmod 600 .env.' >&2; exit 1; }
 compose=(docker compose --env-file .env -f docker-compose.yml -f docker-compose.lock.yml)
 "${compose[@]}" config --quiet
@@ -9,6 +9,7 @@ compose=(docker compose --env-file .env -f docker-compose.yml -f docker-compose.
 # Valida sem imprimir valores e impede Stripe real neste staging.
 python3 - <<'PY'
 import base64, json, re, subprocess, sys
+from pathlib import Path
 x=json.loads(subprocess.check_output(['docker','compose','--env-file','.env','-f','docker-compose.yml','-f','docker-compose.lock.yml','config','--format','json']))
 env=x['services']['api']['environment']
 web=x['services']['frontend']['environment']
@@ -20,9 +21,18 @@ if str(web.get('AUTH_COOKIE_SECURE')).lower() != 'true' or str(web.get('ALLOW_IN
     sys.exit('Staging exige cookies Secure e proíbe a exceção de HTTP local.')
 if not env.get('APP_DATABASE_URL') or any(env.get(k) for k in ['DATABASE_URL','POSTGRES_PASSWORD','PLATFORM_ADMIN_PASSWORD','OWNER_PASSWORD']):
     sys.exit('O runtime não pode receber credenciais administrativas.')
-for service in ['api','migrate','frontend']:
-    if not re.search(r'@sha256:[a-f0-9]{64}$',x['services'][service]['image']):
-        sys.exit('Use uma imagem por digest no lock: '+service)
+release=json.loads(Path('release.json').read_text())
+commit=release.get('commit', '')
+if not re.fullmatch(r'[a-f0-9]{40}', commit) or release.get('tag') != 'staging-'+commit[:12]:
+    sys.exit('Revisão de staging inválida em release.json.')
+for service in ('api', 'worker', 'documents', 'migrate', 'frontend'):
+    image=x['services'][service]['image']
+    if image != release.get('images', {}).get(service, {}).get('digest'):
+        sys.exit('A imagem do lock difere de release.json: '+service)
+zone=str(env.get('CLOUDFLARE_CACHE_PURGE_ZONE_ID', '')).strip()
+token=str(env.get('CLOUDFLARE_CACHE_PURGE_TOKEN', '')).strip()
+if (zone or token) and (not token or not re.fullmatch(r'[a-f0-9]{32}',zone)):
+    sys.exit('Preencha as duas variáveis de expurgo Cloudflare com um Zone ID válido.')
 required=['R2_ACCOUNT_ID','R2_ACCESS_KEY_ID','R2_SECRET_ACCESS_KEY','R2_ENDPOINT','R2_PUBLIC_URL','R2_BUCKET_NAME','R2_PRIVATE_BUCKET_NAME','AWS_ACCESS_KEY_ID','AWS_SECRET_ACCESS_KEY','AWS_REGION','AWS_SES_FROM_EMAIL','EMAIL_SUPPRESSION_HASH_KEY']
 if str(env.get('AWS_SES_FEEDBACK_ENABLED','false')).lower() == 'true':
     required += ['AWS_SES_CONFIGURATION_SET','AWS_SES_FEEDBACK_ACCOUNT_ID','AWS_SES_FEEDBACK_TOPIC_ARN','AWS_SES_FEEDBACK_IDENTITY_ARN']
@@ -48,10 +58,48 @@ if [[ ${1:-} == --check ]]; then
     exit 0
 fi
 "${compose[@]}" pull
+# Preserve os segredos e faça o Compose sem -f usar a mesma release.
+python3 - <<'PYENV'
+import json, os, re, subprocess, tempfile
+from pathlib import Path
+
+target = Path('.env')
+release = json.loads(Path('release.json').read_text())
+settings = {
+    'COMPOSE_FILE': 'docker-compose.yml:docker-compose.lock.yml',
+    'ORBIT_VERSION': release['tag'],
+}
+lines = [
+    line for line in target.read_text().splitlines(keepends=True)
+    if not any(re.match(r'^\s*(?:export\s+)?'+key+r'\s*=', line) for key in settings)
+]
+fd, filename = tempfile.mkstemp(prefix='.env.release-', dir='.')
+try:
+    with os.fdopen(fd, 'w') as out:
+        out.write(''.join(lines).rstrip('\n') + '\n')
+        for key, value in settings.items():
+            out.write(f'{key}={value}\n')
+    preview = json.loads(subprocess.check_output(
+        ['docker', 'compose', '--env-file', filename, 'config', '--format', 'json']
+    ))
+    for service in ('api', 'worker', 'documents', 'migrate', 'frontend'):
+        if preview['services'].get(service, {}).get('image') != release['images'][service]['digest']:
+            raise SystemExit('O Compose padrão não carrega o lock para '+service)
+    os.replace(filename, target)
+finally:
+    Path(filename).unlink(missing_ok=True)
+PYENV
 "${compose[@]}" up -d --wait postgres
 # Migração é um serviço efêmero; up aguarda seu exit 0 antes de iniciar a API.
 "${compose[@]}" up -d --wait --wait-timeout 180 api frontend worker documents
 "${compose[@]}" ps
+expected_revision=$(python3 -c 'import json; print(json.load(open("release.json"))["commit"])')
+for service in api worker documents migrate frontend; do
+    container=$("${compose[@]}" ps --all --quiet "$service")
+    revision=$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$container")
+    [[ "$revision" == "$expected_revision" ]] || { echo "Revisão em execução incorreta: $service" >&2; exit 1; }
+done
+echo "Revisão aplicada: $expected_revision"
 curl --fail --silent --show-error http://127.0.0.1:6001/health/ready
 curl --fail --silent --show-error --output /dev/null http://127.0.0.1:7070/login
 echo 'API e frontend respondendo localmente. Valide o HTTPS antes de liberar usuários.'
