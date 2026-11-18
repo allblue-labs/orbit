@@ -1,6 +1,5 @@
 import { checklistDefaults } from '../operations/checklist-defaults';
 import { assignmentAuthorizationRequired } from '../operations/recurring-authorization';
-/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument, orbit/no-concurrent-transaction-queries */
 import { Injectable, Optional } from '@nestjs/common';
 import { FieldAssignmentOutbox } from '../notifications/field-assignment-outbox';
 import { Prisma } from '@prisma/client';
@@ -10,18 +9,37 @@ import { ForbiddenException } from '../../exceptions';
 import { generateUuidV7 } from '../../utils';
 import type { OccurrenceCandidate } from './rvt.domain';
 
-/**
- * O roteiro vem junto do tipo em toda leitura.
- *
- * É ele que o técnico preenche em campo e o que o relatório final descreve; um
- * tipo lido sem o roteiro obrigaria uma segunda consulta em todo lugar que
- * precisa saber se há o que preencher.
- */
-const maintenanceTypeView = {
-  checklistTemplate: {
-    select: { id: true, key: true, name: true, version: true, items: true },
-  },
-} satisfies Prisma.RvtMaintenanceTypeInclude;
+import type { PrismaTransactionClient } from '../../database/prisma.types';
+import type {
+  AddRvtEvidenceDto,
+  CaptureCustomerAcknowledgementDto,
+  RegisterRvtEquipmentDto,
+  RvtConfigurationQueryDto,
+  RvtOccurrenceQueryDto,
+  RvtTimelineQueryDto,
+  UpdateRvtConfigurationDto,
+  UpdateRvtExecutionDto,
+} from './rvt.dto';
+import {
+  equipmentSnapshotSelect,
+  executionView,
+  maintenanceTypeView,
+  type CreateAdHocRvtCommand,
+  type CreateRvtConfigurationCommand,
+  type ManageRvtOccurrenceCommand,
+  type RvtExecutionSource,
+  type ScopedRvtQuery,
+} from './rvt.persistence';
+import { readRvtConfigurations } from './rvt-configuration.query';
+import { jsonObject, rvtJson } from './rvt-json';
+import {
+  resolveRvtCalendar,
+  projectRvtOccurrence,
+} from './rvt-scheduling.persistence';
+import {
+  rvtReportSnapshot,
+  rvtReportExecutionView,
+} from './rvt-report.snapshot';
 
 @Injectable()
 export class RvtRepository {
@@ -130,7 +148,7 @@ export class RvtRepository {
   }
 
   createConfiguration(
-    input: any,
+    input: CreateRvtConfigurationCommand,
     occurrences: OccurrenceCandidate[],
     actorId: string,
   ) {
@@ -172,17 +190,17 @@ export class RvtRepository {
           coverageStart: this.date(input.coverageStart),
           coverageEnd: input.coverageEnd ? this.date(input.coverageEnd) : null,
           timezone: input.timezone,
-          serviceLocation: this.json(input.serviceLocation),
+          serviceLocation: rvtJson(input.serviceLocation),
           recurrence: input.recurrence
-            ? this.json(input.recurrence)
+            ? rvtJson(input.recurrence)
             : Prisma.JsonNull,
-          procedure: this.json(input.procedure),
+          procedure: rvtJson(input.procedure),
           technicalResponsibleUserId: input.technicalResponsibleUserId ?? null,
           defaultResponsibleFieldTechnicianId:
             input.defaultResponsibleFieldTechnicianId ?? null,
           requiresTechnicalResponsible:
             input.requiresTechnicalResponsible ?? false,
-          metadata: this.json(input.metadata ?? {}),
+          metadata: rvtJson(input.metadata ?? {}),
           createdById: actorId,
           equipment: {
             create: (input.equipmentIds ?? []).map((assetId: string) => ({
@@ -192,7 +210,7 @@ export class RvtRepository {
           },
         },
       });
-      const calendar = await this.resolveCalendar(
+      const calendar = await resolveRvtCalendar(
         tx,
         input.organizationId,
         input.businessUnitId,
@@ -214,7 +232,7 @@ export class RvtRepository {
               input.defaultResponsibleFieldTechnicianId ?? null,
           },
         });
-        const schedulingEventId = await this.createSchedulingProjection(tx, {
+        const schedulingEventId = await projectRvtOccurrence(tx, {
           occurrenceId: occurrence.id,
           organizationId: input.organizationId,
           businessUnitId: input.businessUnitId,
@@ -246,36 +264,38 @@ export class RvtRepository {
     });
   }
 
-  async listConfigurations(organizationId: string, query: any) {
-    return this.rls
-      .run((tx) =>
-        tx.rvtConfiguration.findMany({
-          where: {
-            organizationId,
-            deletedAt: null,
-            businessUnitId: query.businessUnitId ?? {
-              in: query.businessUnitIds ?? [],
-            },
-            customerId: query.customerId,
-            status: query.status,
+  listConfigurations(
+    organizationId: string,
+    query: ScopedRvtQuery<RvtConfigurationQueryDto>,
+  ) {
+    return this.rls.run(async (tx) => {
+      const rows = await tx.rvtConfiguration.findMany({
+        where: {
+          organizationId,
+          deletedAt: null,
+          businessUnitId: query.businessUnitId ?? {
+            in: [...query.businessUnitIds],
           },
-          orderBy: { createdAt: 'desc' },
-          take: query.limit ?? 50,
-          select: { id: true },
-        }),
-      )
-      .then((rows) =>
-        Promise.all(
-          rows.map((row) => this.configuration(row.id, organizationId)),
-        ),
+          customerId: query.customerId,
+          status: query.status,
+        },
+        orderBy: { createdAt: 'desc' },
+        take: query.limit ?? 50,
+        select: { id: true },
+      });
+      return readRvtConfigurations(
+        tx,
+        organizationId,
+        rows.map(({ id }) => id),
       );
+    });
   }
 
   updateConfiguration(
     id: string,
     organizationId: string,
     actorId: string,
-    input: any,
+    input: UpdateRvtConfigurationDto,
     candidates: OccurrenceCandidate[],
   ) {
     return this.rls.run(async (tx) => {
@@ -283,8 +303,6 @@ export class RvtRepository {
       const current = await tx.rvtConfiguration.findFirstOrThrow({
         where: { id, organizationId, deletedAt: null },
       });
-      if (current.scheduleMode === 'ONE_TIME' && input.scheduleMode)
-        throw new Error('RVT_SCHEDULE_MODE_IMMUTABLE');
       if (input.defaultResponsibleFieldTechnicianId)
         await this.assertProfessional(
           tx,
@@ -334,17 +352,15 @@ export class RvtRepository {
                 : undefined,
           timezone: input.timezone,
           serviceLocation: input.serviceLocation
-            ? this.json(input.serviceLocation)
+            ? rvtJson(input.serviceLocation)
             : undefined,
-          recurrence: input.recurrence
-            ? this.json(input.recurrence)
-            : undefined,
-          procedure: input.procedure ? this.json(input.procedure) : undefined,
+          recurrence: input.recurrence ? rvtJson(input.recurrence) : undefined,
+          procedure: input.procedure ? rvtJson(input.procedure) : undefined,
           technicalResponsibleUserId: input.technicalResponsibleUserId,
           defaultResponsibleFieldTechnicianId:
             input.defaultResponsibleFieldTechnicianId,
           requiresTechnicalResponsible: input.requiresTechnicalResponsible,
-          metadata: input.metadata ? this.json(input.metadata) : undefined,
+          metadata: input.metadata ? rvtJson(input.metadata) : undefined,
         },
       });
       if (input.equipmentIds) {
@@ -404,7 +420,7 @@ export class RvtRepository {
             item.localScheduledDate.toISOString().slice(0, 10),
           );
       }
-      const calendar = await this.resolveCalendar(
+      const calendar = await resolveRvtCalendar(
         tx,
         organizationId,
         current.businessUnitId,
@@ -437,7 +453,7 @@ export class RvtRepository {
           occurrence.scheduledFor?.getTime() !== target.scheduledFor.getTime()
         )
           rescheduled++;
-        const schedulingEventId = await this.createSchedulingProjection(tx, {
+        const schedulingEventId = await projectRvtOccurrence(tx, {
           existingId: occurrence.schedulingEventId,
           occurrenceId: occurrence.id,
           organizationId,
@@ -498,7 +514,7 @@ export class RvtRepository {
             responsibleFieldTechnicianId: effective.responsible,
           },
         });
-        const schedulingEventId = await this.createSchedulingProjection(tx, {
+        const schedulingEventId = await projectRvtOccurrence(tx, {
           occurrenceId: occurrence.id,
           organizationId,
           businessUnitId: current.businessUnitId,
@@ -533,76 +549,10 @@ export class RvtRepository {
   }
 
   configuration(id: string, organizationId: string) {
-    return this.rls.run(async (tx) => {
-      const rows = await tx.$queryRaw<
-        any[]
-      >`SELECT c.*, COALESCE(b.trade_name,b.legal_name) AS "businessUnitName", COALESCE(cu.trade_name,cu.legal_name) AS "customerName", tr.display_name AS "technicalResponsibleName", ft.display_name AS "fieldTechnicianName", mt.id AS "mtId", mt.key AS "mtKey", mt.label AS "mtLabel", mt.interval_days AS "mtIntervalDays", mt.interval_months AS "mtIntervalMonths", ct.id AS "mtChecklistId", ct.name AS "mtChecklistName", ct.version AS "mtChecklistVersion" FROM rvt_configurations c JOIN business_units b ON b.id=c.business_unit_id JOIN customers cu ON cu.id=c.customer_id LEFT JOIN users tr ON tr.id=c.technical_responsible_user_id LEFT JOIN users ft ON ft.id=c.default_responsible_field_technician_id LEFT JOIN rvt_maintenance_types mt ON mt.id=c.maintenance_type_id LEFT JOIN checklist_templates ct ON ct.id=mt.checklist_template_id AND ct.deleted_at IS NULL WHERE c.id=${id}::uuid AND c.organization_id=${organizationId}::uuid AND c.deleted_at IS NULL`;
-      const source = rows[0];
-      if (!source) return null;
-      source.businessUnitId = source.business_unit_id;
-      source.customerId = source.customer_id;
-      /**
-       * O tipo de manutenção, montado a partir do JOIN.
-       *
-       * Esta consulta é **SQL cru**, e por isso o compilador não a acompanhou
-       * quando `visit_type` deixou de existir: a linha antiga era
-       * `source.visitType = source.visit_type`, que passou a produzir
-       * `undefined` em silêncio — sem erro de tipo e sem erro de banco. Foi a
-       * verificação contra a API viva que mostrou.
-       */
-      source.maintenanceType = source.mtId
-        ? {
-            id: source.mtId,
-            key: source.mtKey,
-            label: source.mtLabel,
-            intervalDays: source.mtIntervalDays,
-            intervalMonths: source.mtIntervalMonths,
-            checklistTemplate: source.mtChecklistId
-              ? {
-                  id: source.mtChecklistId,
-                  name: source.mtChecklistName,
-                  version: source.mtChecklistVersion,
-                }
-              : null,
-          }
-        : null;
-      source.scheduleMode = source.schedule_mode;
-      source.calendarId = source.calendar_id;
-      source.startTime = source.start_time;
-      source.coverageStart = source.coverage_start;
-      source.coverageEnd = source.coverage_end;
-      source.serviceLocation = source.service_location;
-      source.technicalResponsibleId = source.technical_responsible_user_id;
-      source.fieldTechnicianId = source.default_responsible_field_technician_id;
-      source.requiresTechnicalResponsible =
-        source.requires_technical_responsible;
-      source.createdAt = source.created_at;
-      source.updatedAt = source.updated_at;
-      source.equipment = await tx.rvtConfigurationEquipment.findMany({
-        where: { configurationId: id, removedAt: null },
-        select: { assetId: true },
-      });
-      const assets = await tx.asset.findMany({
-        where: {
-          id: { in: source.equipment.map((link: any) => link.assetId) },
-          organizationId,
-        },
-        select: {
-          id: true,
-          name: true,
-          category: true,
-          identifier: true,
-          serialNumber: true,
-        },
-      });
-      source.equipment = assets.map((asset) => ({ asset }));
-      source.occurrences = await tx.rvtOccurrence.findMany({
-        where: { configurationId: id, deletedAt: null },
-        include: { execution: { select: { id: true } } },
-        orderBy: { sequenceNumber: 'asc' },
-      });
-      return source;
-    });
+    return this.rls.run(
+      async (tx) =>
+        (await readRvtConfigurations(tx, organizationId, [id]))[0] ?? null,
+    );
   }
 
   occurrence(id: string, organizationId: string) {
@@ -621,13 +571,16 @@ export class RvtRepository {
     });
   }
 
-  listOccurrences(organizationId: string, query: any) {
+  listOccurrences(
+    organizationId: string,
+    query: ScopedRvtQuery<RvtOccurrenceQueryDto>,
+  ) {
     return this.rls.run((tx) =>
       tx.rvtOccurrence.findMany({
         where: {
           organizationId,
           businessUnitId: query.businessUnitId ?? {
-            in: query.businessUnitIds ?? [],
+            in: [...query.businessUnitIds],
           },
           status: query.status,
           deletedAt: null,
@@ -647,7 +600,11 @@ export class RvtRepository {
     );
   }
 
-  timeline(configurationId: string, organizationId: string, query: any) {
+  timeline(
+    configurationId: string,
+    organizationId: string,
+    query: RvtTimelineQueryDto,
+  ) {
     return this.rls.run(async (tx) => {
       const configuration = await tx.rvtConfiguration.findFirstOrThrow({
         where: { id: configurationId, organizationId, deletedAt: null },
@@ -719,7 +676,7 @@ export class RvtRepository {
     configurationId: string,
     organizationId: string,
     actorId: string,
-    input: any,
+    input: ManageRvtOccurrenceCommand,
     occurrenceId?: string,
     remove = false,
   ) {
@@ -793,6 +750,11 @@ export class RvtRepository {
       });
       const sequenceNumber =
         current?.sequenceNumber ?? (maximum._max.sequenceNumber ?? 0) + 1;
+      const localDate = input.scheduledDate
+        ? this.date(input.scheduledDate)
+        : undefined;
+      if (!current && (!localDate || !input.scheduledFor))
+        throw new Error('RVT_VISIT_DATE_REQUIRED');
       const visit = current
         ? await tx.rvtOccurrence.update({
             where: { id: current.id },
@@ -821,8 +783,8 @@ export class RvtRepository {
               configurationId,
               sequenceNumber,
               scheduledFor: input.scheduledFor,
-              localScheduledDate: this.date(input.scheduledDate),
-              originalScheduledDate: this.date(input.scheduledDate),
+              localScheduledDate: localDate,
+              originalScheduledDate: localDate,
               status: input.status ?? 'SCHEDULED',
               equipmentIds,
               responsibleFieldTechnicianId: responsibleId,
@@ -839,14 +801,15 @@ export class RvtRepository {
             },
           });
       } else {
-        const calendar = await this.resolveCalendar(
+        if (!visit.scheduledFor) throw new Error('RVT_VISIT_DATE_REQUIRED');
+        const calendar = await resolveRvtCalendar(
           tx,
           organizationId,
           configuration.businessUnitId,
           configuration.timezone,
           configuration.calendarId,
         );
-        const schedulingEventId = await this.createSchedulingProjection(tx, {
+        const schedulingEventId = await projectRvtOccurrence(tx, {
           existingId: visit.schedulingEventId,
           occurrenceId: visit.id,
           organizationId,
@@ -967,6 +930,7 @@ export class RvtRepository {
           occurrence.businessUnitId,
           userId,
         );
+      const { description } = jsonObject(occurrence.configuration.procedure);
       const operation = await tx.operation.create({
         data: {
           organizationId: input.organizationId,
@@ -978,14 +942,8 @@ export class RvtRepository {
           status: 'IN_PROGRESS',
           priority: 'NORMAL',
           scheduledStart: occurrence.scheduledFor,
-          location: this.json(occurrence.configuration.serviceLocation),
-          description:
-            typeof (
-              occurrence.configuration.procedure as Record<string, unknown>
-            )?.description === 'string'
-              ? ((occurrence.configuration.procedure as Record<string, unknown>)
-                  .description as string)
-              : null,
+          location: rvtJson(occurrence.configuration.serviceLocation),
+          description: typeof description === 'string' ? description : null,
           startedAt: new Date(),
           startedByUserId: input.actorId,
           createdById: input.actorId,
@@ -1022,16 +980,7 @@ export class RvtRepository {
           customerId: occurrence.configuration.customerId,
           deletedAt: null,
         },
-        select: {
-          id: true,
-          name: true,
-          category: true,
-          identifier: true,
-          serialNumber: true,
-          manufacturer: true,
-          model: true,
-          location: true,
-        },
+        select: equipmentSnapshotSelect,
       });
       const expectedEquipmentIds = occurrence.equipmentIds.length
         ? occurrence.equipmentIds
@@ -1084,14 +1033,14 @@ export class RvtRepository {
           responsibleFieldTechnicianId: input.responsibleId,
           technicalResponsibleUserId:
             occurrence.configuration.technicalResponsibleUserId,
-          procedureSnapshot: this.json(occurrence.configuration.procedure),
-          configurationSnapshot: this.json(configurationSnapshot),
+          procedureSnapshot: rvtJson(occurrence.configuration.procedure),
+          configurationSnapshot: rvtJson(configurationSnapshot),
           startedById: input.actorId,
           equipment: {
             create: assets.map((asset) => ({
               organizationId: input.organizationId,
               assetId: asset.id,
-              assetSnapshot: this.json(asset),
+              assetSnapshot: rvtJson(asset),
               addedById: input.actorId,
             })),
           },
@@ -1129,7 +1078,7 @@ export class RvtRepository {
             progress: items.length
               ? Math.round((Object.keys(answers).length / items.length) * 100)
               : 100,
-            templateSnapshot: this.json({
+            templateSnapshot: rvtJson({
               id: roteiro.id,
               key: roteiro.key,
               name: roteiro.name,
@@ -1160,7 +1109,11 @@ export class RvtRepository {
     });
   }
 
-  createAdHoc(input: any, idempotencyKey: string, payloadHash: string) {
+  createAdHoc(
+    input: CreateAdHocRvtCommand,
+    idempotencyKey: string,
+    payloadHash: string,
+  ) {
     return this.rls.run(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`rvt:ad-hoc:${input.organizationId}:${input.actorId}:${idempotencyKey}`}))`;
       const existing = await tx.rvtAdHocCommand.findUnique({
@@ -1203,7 +1156,7 @@ export class RvtRepository {
         );
       if (Boolean(input.customerId) === Boolean(input.customer))
         throw new Error('RVT_AD_HOC_CUSTOMER_CHOICE_INVALID');
-      let customerId = input.customerId as string | undefined;
+      let customerId = input.customerId;
       if (customerId) {
         const customer = await tx.customer.findFirst({
           where: {
@@ -1215,25 +1168,27 @@ export class RvtRepository {
         });
         if (!customer) throw new Error('BUSINESS_UNIT_SCOPE_INVALID');
       } else {
+        const contextual = input.customer;
+        if (!contextual) throw new Error('RVT_AD_HOC_CUSTOMER_CHOICE_INVALID');
         const customer = await tx.customer.create({
           data: {
             organizationId: input.organizationId,
-            type: input.customer.type ?? 'COMPANY',
-            legalName: input.customer.legalName,
-            tradeName: input.customer.tradeName,
-            documentNumber: input.customer.documentNumber?.replace(/\D/g, ''),
-            email: input.customer.email,
-            phone: input.customer.phone,
-            address: this.json(input.customer.address),
+            type: contextual.type ?? 'COMPANY',
+            legalName: contextual.legalName,
+            tradeName: contextual.tradeName,
+            documentNumber: contextual.documentNumber?.replace(/\D/g, ''),
+            email: contextual.email,
+            phone: contextual.phone,
+            address: rvtJson(contextual.address),
             status: 'ACTIVE',
-            contacts: input.customer.contactName
+            contacts: contextual.contactName
               ? {
                   create: {
                     organizationId: input.organizationId,
                     businessUnitId: input.businessUnitId,
-                    name: input.customer.contactName,
-                    email: input.customer.email,
-                    phone: input.customer.phone,
+                    name: contextual.contactName,
+                    email: contextual.email,
+                    phone: contextual.phone,
                     isPrimary: true,
                   },
                 }
@@ -1260,20 +1215,11 @@ export class RvtRepository {
           customerId,
           deletedAt: null,
         },
-        select: {
-          id: true,
-          name: true,
-          category: true,
-          identifier: true,
-          serialNumber: true,
-          manufacturer: true,
-          model: true,
-          location: true,
-        },
+        select: equipmentSnapshotSelect,
       });
       if (requestedAssets.length !== (input.equipmentIds ?? []).length)
         throw new Error('BUSINESS_UNIT_SCOPE_INVALID');
-      let contextualAsset: any = null;
+      let contextualAsset: (typeof requestedAssets)[number] | null = null;
       if (input.equipment) {
         contextualAsset = await tx.asset.create({
           data: {
@@ -1288,22 +1234,13 @@ export class RvtRepository {
             location: input.equipment.location,
             status: 'ACTIVE',
           },
-          select: {
-            id: true,
-            name: true,
-            category: true,
-            identifier: true,
-            serialNumber: true,
-            manufacturer: true,
-            model: true,
-            location: true,
-          },
+          select: equipmentSnapshotSelect,
         });
         requestedAssets.push(contextualAsset);
       }
       const identity = generateUuidV7();
       const code = `ADHOC-${identity.slice(0, 18)}`;
-      const today = input.coverageStart as string;
+      const today = input.coverageStart;
       const configuration = await tx.rvtConfiguration.create({
         data: {
           organizationId: input.organizationId,
@@ -1315,12 +1252,12 @@ export class RvtRepository {
           scheduleMode: 'ONE_TIME',
           coverageStart: this.date(today),
           timezone: input.timezone,
-          serviceLocation: this.json(input.serviceLocation),
+          serviceLocation: rvtJson(input.serviceLocation),
           recurrence: Prisma.JsonNull,
-          procedure: this.json(input.procedure),
+          procedure: rvtJson(input.procedure),
           defaultResponsibleFieldTechnicianId: responsibleId,
           status: 'ACTIVE',
-          metadata: this.json({ source: 'RVT_AD_HOC' }),
+          metadata: rvtJson({ source: 'RVT_AD_HOC' }),
           createdById: input.actorId,
           equipment: {
             create: requestedAssets.map((asset) => ({
@@ -1330,7 +1267,7 @@ export class RvtRepository {
           },
         },
       });
-      const scheduledFor = input.scheduledFor as Date;
+      const scheduledFor = input.scheduledFor;
       const occurrence = await tx.rvtOccurrence.create({
         data: {
           organizationId: input.organizationId,
@@ -1344,13 +1281,13 @@ export class RvtRepository {
           equipmentIds: requestedAssets.map((asset) => asset.id),
         },
       });
-      const calendar = await this.resolveCalendar(
+      const calendar = await resolveRvtCalendar(
         tx,
         input.organizationId,
         input.businessUnitId,
         input.timezone,
       );
-      const schedulingEventId = await this.createSchedulingProjection(tx, {
+      const schedulingEventId = await projectRvtOccurrence(tx, {
         occurrenceId: occurrence.id,
         organizationId: input.organizationId,
         businessUnitId: input.businessUnitId,
@@ -1378,7 +1315,7 @@ export class RvtRepository {
           status: 'IN_PROGRESS',
           priority: 'NORMAL',
           scheduledStart: scheduledFor,
-          location: this.json(input.serviceLocation),
+          location: rvtJson(input.serviceLocation),
           description:
             typeof input.procedure?.description === 'string'
               ? input.procedure.description
@@ -1392,15 +1329,13 @@ export class RvtRepository {
             create: { userId: responsibleId, assignedById: input.actorId },
           },
           auxiliaryTechnicians: {
-            create: [
-              ...new Set<string>(
-                (input.auxiliaryTechnicianIds ?? []) as string[],
-              ),
-            ].map((userId: string) => ({
-              organizationId: input.organizationId,
-              userId,
-              assignedById: input.actorId,
-            })),
+            create: [...new Set(input.auxiliaryTechnicianIds ?? [])].map(
+              (userId: string) => ({
+                organizationId: input.organizationId,
+                userId,
+                assignedById: input.actorId,
+              }),
+            ),
           },
         },
       });
@@ -1408,7 +1343,6 @@ export class RvtRepository {
         configurationId: configuration.id,
         code,
         name: input.name,
-        visitType: input.visitType,
         scheduleMode: 'ONE_TIME',
         timezone: input.timezone,
         customerId,
@@ -1426,14 +1360,14 @@ export class RvtRepository {
           occurrenceId: occurrence.id,
           operationId: operation.id,
           responsibleFieldTechnicianId: responsibleId,
-          procedureSnapshot: this.json(input.procedure),
-          configurationSnapshot: this.json(configurationSnapshot),
+          procedureSnapshot: rvtJson(input.procedure),
+          configurationSnapshot: rvtJson(configurationSnapshot),
           startedById: input.actorId,
           equipment: {
             create: requestedAssets.map((asset) => ({
               organizationId: input.organizationId,
               assetId: asset.id,
-              assetSnapshot: this.json(asset),
+              assetSnapshot: rvtJson(asset),
               addedDuringExecution: asset.id === contextualAsset?.id,
               addedById: input.actorId,
             })),
@@ -1478,22 +1412,14 @@ export class RvtRepository {
     });
   }
 
-  execution(id: string, organizationId: string) {
+  execution(
+    id: string,
+    organizationId: string,
+  ): Promise<RvtExecutionSource | null> {
     return this.rls.run(async (tx) => {
       const execution = await tx.rvtExecution.findFirst({
         where: { id, organizationId },
-        include: {
-          equipment: true,
-          evidence: true,
-          /**
-           * O checklist da visita.
-           *
-           * Publicado no detalhe porque é o que o técnico abre para preencher
-           * e o que a tela mostra como progresso da visita.
-           */
-          checklistExecutions: { orderBy: { createdAt: 'asc' } },
-          occurrence: { include: { configuration: true } },
-        },
+        include: executionView,
       });
       if (!execution) return null;
       const users = await tx.user.findMany({
@@ -1528,7 +1454,8 @@ export class RvtRepository {
             select: { id: true, code: true, status: true, renderStatus: true },
           })
         : null;
-      return Object.assign(execution, {
+      return {
+        ...execution,
         assignmentAuthorizationRequired: await assignmentAuthorizationRequired(
           tx,
           organizationId,
@@ -1544,12 +1471,11 @@ export class RvtRepository {
             id: x.user.id,
             name: x.user.displayName,
           })) ?? [],
-        operationCode: operation?.code,
-        operationStatus: operation?.status,
-        artifactCode: artifact?.code,
-        artifactStatus: artifact?.status,
-        artifactRenderStatus: artifact?.renderStatus,
-      });
+        operation: operation
+          ? { id: operation.id, code: operation.code, status: operation.status }
+          : null,
+        artifact,
+      };
     });
   }
 
@@ -1557,7 +1483,7 @@ export class RvtRepository {
     id: string,
     organizationId: string,
     actorId: string,
-    input: any,
+    input: UpdateRvtExecutionDto,
   ) {
     return this.rls.run(async (tx) => {
       const current = await tx.rvtExecution.findFirstOrThrow({
@@ -1567,13 +1493,13 @@ export class RvtRepository {
         where: { id },
         data: {
           procedureSnapshot: input.procedure
-            ? this.json(input.procedure)
+            ? rvtJson(input.procedure)
             : undefined,
           observations: input.observations
-            ? this.json(input.observations)
+            ? rvtJson(input.observations)
             : undefined,
           recommendations: input.recommendations
-            ? this.json(input.recommendations)
+            ? rvtJson(input.recommendations)
             : undefined,
           freeTextRecommendation: input.freeTextRecommendation,
         },
@@ -1610,16 +1536,7 @@ export class RvtRepository {
           customerId: execution.occurrence.configuration.customerId,
           deletedAt: null,
         },
-        select: {
-          id: true,
-          name: true,
-          category: true,
-          identifier: true,
-          serialNumber: true,
-          manufacturer: true,
-          model: true,
-          location: true,
-        },
+        select: equipmentSnapshotSelect,
       });
       await tx.rvtExecutionEquipment.upsert({
         where: { executionId_assetId: { executionId: id, assetId } },
@@ -1627,7 +1544,7 @@ export class RvtRepository {
           organizationId,
           executionId: id,
           assetId,
-          assetSnapshot: this.json(asset),
+          assetSnapshot: rvtJson(asset),
           addedDuringExecution,
           addedById: actorId,
         },
@@ -1649,7 +1566,7 @@ export class RvtRepository {
     id: string,
     organizationId: string,
     actorId: string,
-    input: any,
+    input: RegisterRvtEquipmentDto,
   ) {
     return this.rls.run(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`rvt:asset:${id}:${input.serialNumber ?? input.name}`}))`;
@@ -1670,23 +1587,14 @@ export class RvtRepository {
           location: input.location,
           status: 'ACTIVE',
         },
-        select: {
-          id: true,
-          name: true,
-          category: true,
-          identifier: true,
-          serialNumber: true,
-          manufacturer: true,
-          model: true,
-          location: true,
-        },
+        select: equipmentSnapshotSelect,
       });
       await tx.rvtExecutionEquipment.create({
         data: {
           organizationId,
           executionId: id,
           assetId: asset.id,
-          assetSnapshot: this.json(asset),
+          assetSnapshot: rvtJson(asset),
           addedDuringExecution: true,
           addedById: actorId,
         },
@@ -1718,7 +1626,12 @@ export class RvtRepository {
     });
   }
 
-  addEvidence(id: string, organizationId: string, actorId: string, input: any) {
+  addEvidence(
+    id: string,
+    organizationId: string,
+    actorId: string,
+    input: AddRvtEvidenceDto,
+  ) {
     return this.rls.run(async (tx) => {
       await tx.rvtExecution.findFirstOrThrow({
         where: { id, organizationId, status: 'IN_PROGRESS' },
@@ -1754,7 +1667,12 @@ export class RvtRepository {
     });
   }
 
-  acknowledge(id: string, organizationId: string, actorId: string, input: any) {
+  acknowledge(
+    id: string,
+    organizationId: string,
+    actorId: string,
+    input: CaptureCustomerAcknowledgementDto,
+  ) {
     return this.rls.run(async (tx) => {
       const execution = await tx.rvtExecution.findFirstOrThrow({
         where: { id, organizationId, status: 'IN_PROGRESS' },
@@ -1776,7 +1694,7 @@ export class RvtRepository {
       };
       await tx.rvtExecution.update({
         where: { id },
-        data: { customerAcknowledgement: this.json(snapshot) },
+        data: { customerAcknowledgement: rvtJson(snapshot) },
       });
       await this.audit(
         tx,
@@ -1823,7 +1741,7 @@ export class RvtRepository {
         version: signature.version,
         signedAs: 'FIELD_TECHNICIAN',
       };
-      let rtSnapshot: Prisma.InputJsonValue | undefined;
+      let rtSnapshot: ReturnType<typeof rvtJson> | undefined;
       if (execution.occurrence.configuration.requiresTechnicalResponsible) {
         if (!execution.technicalResponsibleUserId)
           throw new Error('TECHNICAL_RESPONSIBLE_NOT_ELIGIBLE');
@@ -1848,7 +1766,7 @@ export class RvtRepository {
             revokedAt: null,
           },
         });
-        rtSnapshot = this.json({
+        rtSnapshot = rvtJson({
           userId: execution.technicalResponsibleUserId,
           name: rt.user.displayName,
           signatureAssetId: rt.storageObjectId,
@@ -1864,7 +1782,7 @@ export class RvtRepository {
           performedAt,
           completedAt: new Date(),
           completedById: actorId,
-          fieldTechnicianSignature: this.json(fieldSnapshot),
+          fieldTechnicianSignature: rvtJson(fieldSnapshot),
           technicalResponsibleSignature: rtSnapshot,
         },
       });
@@ -1899,13 +1817,7 @@ export class RvtRepository {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`rvt:artifact:${id}`}))`;
       const execution = await tx.rvtExecution.findFirstOrThrow({
         where: { id, organizationId },
-        include: {
-          occurrence: { include: { configuration: true } },
-          equipment: true,
-          evidence: true,
-          /** O checklist preenchido em campo entra no documento. */
-          checklistExecutions: { orderBy: { createdAt: 'asc' }, take: 1 },
-        },
+        include: rvtReportExecutionView,
       });
       if (execution.status !== 'COMPLETED')
         throw new Error('RVT_EXECUTION_NOT_COMPLETED');
@@ -1951,57 +1863,17 @@ export class RvtRepository {
           templateName: template.name,
           artifactType: template.artifactType,
           segment: template.segment,
-          metadata: this.json(version.metadata),
-          sections: this.json(version.sections),
-          signatureSlots: this.json(version.signatureSlots),
-          layout: this.json(version.layout),
+          metadata: rvtJson(version.metadata),
+          sections: rvtJson(version.sections),
+          signatureSlots: rvtJson(version.signatureSlots),
+          layout: rvtJson(version.layout),
           structureHash: createHash('sha256')
             .update(JSON.stringify(structure))
             .digest('hex'),
         },
       });
       const code = `RVT-${execution.occurrence.configuration.code}-${String(execution.occurrence.sequenceNumber).padStart(3, '0')}`;
-      const documentSnapshot = {
-        ...(execution.configurationSnapshot as Record<string, unknown>),
-        performedAt: execution.performedAt,
-        equipment: execution.equipment.map((x) => x.assetSnapshot),
-        procedure: execution.procedureSnapshot,
-        /**
-         * O checklist do tipo de manutenção, como o técnico preencheu.
-         *
-         * É o que o item pedia: cada check marcado em campo aparece no
-         * relatório final. Vai o roteiro **e** as respostas — só as respostas
-         * seriam um mapa de chaves sem os rótulos que dão sentido a elas, e o
-         * roteiro pode ter sido editado no catálogo desde a visita.
-         */
-        maintenanceChecklist: execution.checklistExecutions[0]
-          ? {
-              name: (
-                execution.checklistExecutions[0].templateSnapshot as {
-                  name?: string;
-                }
-              )?.name,
-              version: execution.checklistExecutions[0].templateVersion,
-              status: execution.checklistExecutions[0].status,
-              progress: execution.checklistExecutions[0].progress,
-              items: (
-                execution.checklistExecutions[0].templateSnapshot as {
-                  items?: { key: string; label: string }[];
-                }
-              )?.items,
-              answers: execution.checklistExecutions[0].answers,
-              completedAt: execution.checklistExecutions[0].completedAt,
-            }
-          : null,
-        observations: execution.observations,
-        recommendations: execution.recommendations,
-        freeTextRecommendation: execution.freeTextRecommendation,
-        evidence: execution.evidence,
-        fieldTechnicianSignature: execution.fieldTechnicianSignature,
-        technicalResponsibleSignature: execution.technicalResponsibleSignature,
-        customerAcknowledgement: execution.customerAcknowledgement,
-        rvtExecutionId: id,
-      };
+      const documentSnapshot = rvtReportSnapshot(execution);
       const artifact = await tx.artifactExecution.create({
         data: {
           organizationId,
@@ -2018,7 +1890,7 @@ export class RvtRepository {
           progress: 100,
           startedAt: execution.startedAt,
           completedAt: execution.completedAt,
-          context: this.json({
+          context: rvtJson({
             source: 'RVT',
             rvtExecutionId: id,
             documentSnapshot,
@@ -2043,141 +1915,35 @@ export class RvtRepository {
     });
   }
 
-  private async resolveCalendar(
-    tx: any,
-    organizationId: string,
-    businessUnitId: string,
-    timezone: string,
-    calendarId?: string | null,
-  ) {
-    if (calendarId) {
-      const selected = await tx.schedulingCalendar.findFirst({
-        where: {
-          id: calendarId,
-          organizationId,
-          isActive: true,
-          deletedAt: null,
-          OR: [{ businessUnitId }, { businessUnitId: null }],
-        },
-      });
-      if (!selected) throw new Error('RVT_CALENDAR_INVALID');
-      return selected;
-    }
-    const existing = await tx.schedulingCalendar.findFirst({
-      where: {
-        organizationId,
-        isActive: true,
-        deletedAt: null,
-        OR: [{ businessUnitId }, { businessUnitId: null }],
-      },
-      orderBy: [{ businessUnitId: 'desc' }, { isDefault: 'desc' }],
-    });
-    if (existing) return existing;
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`rvt:calendar:${organizationId}:${businessUnitId}`}))`;
-    const concurrent = await tx.schedulingCalendar.findFirst({
-      where: {
-        organizationId,
-        businessUnitId,
-        isActive: true,
-        deletedAt: null,
-      },
-    });
-    if (concurrent) return concurrent;
-    return tx.schedulingCalendar.create({
-      data: {
-        organizationId,
-        businessUnitId,
-        key: `rvt-${businessUnitId}`,
-        name: 'Visitas técnicas',
-        description: 'Agenda autoritativa das ocorrências RVT',
-        timezone,
-        isDefault: false,
-        isActive: true,
-      },
-    });
-  }
-
-  private async createSchedulingProjection(tx: any, input: any) {
-    const event = await tx.schedulingEvent.upsert({
-      where: { id: input.existingId ?? '00000000-0000-0000-0000-000000000000' },
-      create: {
-        organizationId: input.organizationId,
-        businessUnitId: input.businessUnitId,
-        calendarId: input.calendarId,
-        customerId: input.customerId,
-        createdById: input.actorId,
-        title: input.title,
-        description: 'Visita técnica programada pelo domínio RVT',
-        type: 'TECHNICAL_VISIT',
-        status: 'CONFIRMED',
-        priority: 'NORMAL',
-        startsAt: input.startsAt,
-        endsAt: new Date(input.startsAt.getTime() + 60 * 60_000),
-        allDay: false,
-        timezone: input.timezone,
-        sourceModule: 'RVT',
-        sourceEntityType: 'RVT_OCCURRENCE',
-        sourceEntityId: input.occurrenceId,
-        location: this.json(input.location),
-        metadata: this.json({ occurrenceId: input.occurrenceId }),
-      },
-      update: {
-        calendarId: input.calendarId,
-        startsAt: input.startsAt,
-        endsAt: new Date(input.startsAt.getTime() + 60 * 60_000),
-        status: 'CONFIRMED',
-        deletedAt: null,
-        title: input.title,
-        timezone: input.timezone,
-        location: this.json(input.location),
-      },
-      select: { id: true },
-    });
-    await tx.schedulingResourceAllocation.deleteMany({
-      where: { eventId: event.id },
-    });
-    if (input.responsibleUserId)
-      await tx.schedulingResourceAllocation.create({
-        data: {
-          eventId: event.id,
-          userId: input.responsibleUserId,
-          resourceType: 'USER',
-          role: 'FIELD_TECHNICIAN',
-          status: 'ALLOCATED',
-        },
-      });
-    return event.id;
-  }
-
   private async assertScope(
-    tx: any,
+    tx: PrismaTransactionClient,
     organizationId: string,
     businessUnitId: string,
     customerId: string,
     equipmentIds: string[],
   ) {
-    const [unit, customer, count] = await Promise.all([
-      tx.businessUnit.findFirst({
-        where: { id: businessUnitId, organizationId, deletedAt: null },
-      }),
-      tx.customer.findFirst({
-        where: { id: customerId, organizationId, deletedAt: null },
-      }),
-      tx.asset.count({
-        where: {
-          id: { in: equipmentIds },
-          organizationId,
-          businessUnitId,
-          customerId,
-          deletedAt: null,
-        },
-      }),
-    ]);
+    const unit = await tx.businessUnit.findFirst({
+      where: { id: businessUnitId, organizationId, deletedAt: null },
+      select: { id: true },
+    });
+    const customer = await tx.customer.findFirst({
+      where: { id: customerId, organizationId, deletedAt: null },
+      select: { id: true },
+    });
+    const count = await tx.asset.count({
+      where: {
+        id: { in: equipmentIds },
+        organizationId,
+        businessUnitId,
+        customerId,
+        deletedAt: null,
+      },
+    });
     if (!unit || !customer || count !== equipmentIds.length)
       throw new Error('BUSINESS_UNIT_SCOPE_INVALID');
   }
   private async assertMember(
-    tx: any,
+    tx: PrismaTransactionClient,
     organizationId: string,
     businessUnitId: string,
     userId: string,
@@ -2202,11 +1968,11 @@ export class RvtRepository {
     if (!row || !unit) throw new Error('BUSINESS_UNIT_SCOPE_INVALID');
   }
   private async assertProfessional(
-    tx: any,
+    tx: PrismaTransactionClient,
     organizationId: string,
     businessUnitId: string,
     userId: string,
-    role: string,
+    role: 'FIELD_TECHNICIAN' | 'TECHNICAL_RESPONSIBLE',
   ) {
     if (
       role === 'FIELD_TECHNICIAN' &&
@@ -2230,13 +1996,13 @@ export class RvtRepository {
     if (!p) throw new Error(`${role}_NOT_ELIGIBLE`);
   }
   private audit(
-    tx: any,
+    tx: PrismaTransactionClient,
     organizationId: string,
     businessUnitId: string,
     userId: string,
     action: string,
     entityId: string,
-    after: any,
+    after: Record<string, unknown>,
   ) {
     return tx.auditLog.create({
       data: {
@@ -2246,14 +2012,11 @@ export class RvtRepository {
         action,
         entityType: 'RVT',
         entityId,
-        after: this.json(after),
+        after: rvtJson(after),
       },
     });
   }
   private date(value: string) {
     return new Date(`${value}T00:00:00.000Z`);
-  }
-  private json(value: unknown): Prisma.InputJsonValue {
-    return value as Prisma.InputJsonValue;
   }
 }

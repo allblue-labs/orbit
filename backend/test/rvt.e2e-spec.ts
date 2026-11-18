@@ -294,6 +294,12 @@ describe('RVT PR-30.1 closure (e2e)', () => {
       '2027-02-28',
       '2027-08-31',
     ]);
+    const page = await auth(http().get('/api/v1/rvt/configurations')).expect(
+      200,
+    );
+    expect(
+      (page.body as Envelope<{ data: Configuration[] }>).data.data,
+    ).toEqual(expect.arrayContaining([weekly, semi]));
     const events = await prisma.schedulingEvent.findMany({
       where: {
         sourceEntityId: {
@@ -583,6 +589,20 @@ describe('RVT PR-30.1 closure (e2e)', () => {
       foreignToken,
     );
     expect([400, 404]).toContain(crossTenant.status);
+    await auth(
+      http().post(
+        `/api/v1/rvt/executions/${execution.id}/customer-acknowledgement`,
+      ),
+    )
+      .send({
+        name: 'Cliente presente',
+        storageFileId: signatureFileId,
+        signedAt: 'data inválida',
+      })
+      .expect(400);
+    await auth(http().post(`/api/v1/rvt/executions/${execution.id}/complete`))
+      .send({ performedAt: 'data inválida' })
+      .expect(400);
     await auth(
       http().post(
         `/api/v1/rvt/executions/${execution.id}/customer-acknowledgement`,

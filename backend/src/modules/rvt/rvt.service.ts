@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument */
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { createHash } from 'node:crypto';
@@ -11,6 +10,9 @@ import {
 import { ArtifactRenderService } from '../artifact-rendering/artifact-render.service';
 import { WorkforceService } from '../workforce/workforce.service';
 import type {
+  AddRvtEvidenceDto,
+  CaptureCustomerAcknowledgementDto,
+  RegisterRvtEquipmentDto,
   CreateAdHocRvtDto,
   CreateRvtOccurrenceDto,
   UpdateRvtOccurrenceDto,
@@ -32,6 +34,18 @@ import {
 import { RvtMapper } from './rvt.mapper';
 import { RvtRepository } from './rvt.repository';
 import { managesRecurringAssignments } from '../operations/recurring-authorization';
+import type {
+  RvtAdHocReadModel,
+  RvtArtifactReadModel,
+  RvtConfigurationReadModel,
+  RvtConfigurationUpdateReadModel,
+  RvtCursorPageReadModel,
+  RvtExecutionCompletionReadModel,
+  RvtExecutionPreparationReadModel,
+  RvtExecutionReadModel,
+  RvtOccurrenceReadModel,
+  RvtTimelineItemReadModel,
+} from './rvt.read-models';
 
 export interface RvtActor {
   organizationId: string;
@@ -187,7 +201,10 @@ export class RvtService {
     }
   }
 
-  async create(actor: RvtActor, input: CreateRvtConfigurationDto) {
+  async create(
+    actor: RvtActor,
+    input: CreateRvtConfigurationDto,
+  ): Promise<RvtConfigurationReadModel> {
     this.assertUnit(actor, input.businessUnitId);
     if (!input.equipmentIds?.length)
       throw new ValidationException(
@@ -212,14 +229,17 @@ export class RvtService {
       this.mapError(e);
     }
   }
-  async list(actor: RvtActor, query: RvtConfigurationQueryDto) {
+  async list(
+    actor: RvtActor,
+    query: RvtConfigurationQueryDto,
+  ): Promise<RvtCursorPageReadModel<RvtConfigurationReadModel>> {
     if (query.businessUnitId) this.assertUnit(actor, query.businessUnitId);
     const values = await this.repository.listConfigurations(
       actor.organizationId,
       { ...query, businessUnitIds: actor.businessUnitIds },
     );
     return {
-      data: values.filter(Boolean).map((x) => this.mapper.configuration(x)),
+      data: values.map((x) => this.mapper.configuration(x)),
       nextCursor: null,
       hasNextPage: false,
     };
@@ -248,7 +268,11 @@ export class RvtService {
     return tipo;
   }
 
-  async update(id: string, actor: RvtActor, input: UpdateRvtConfigurationDto) {
+  async update(
+    id: string,
+    actor: RvtActor,
+    input: UpdateRvtConfigurationDto,
+  ): Promise<RvtConfigurationUpdateReadModel> {
     const current = await this.get(id, actor);
     if (input.equipmentIds && !input.equipmentIds.length)
       throw new ValidationException(
@@ -280,13 +304,16 @@ export class RvtService {
       this.mapError(error);
     }
   }
-  async get(id: string, actor: RvtActor) {
+  async get(id: string, actor: RvtActor): Promise<RvtConfigurationReadModel> {
     const value = await this.repository.configuration(id, actor.organizationId);
     if (!value) throw new EntityNotFoundException('RvtConfiguration', id);
     this.assertUnit(actor, value.businessUnitId);
     return this.mapper.configuration(value);
   }
-  async occurrences(actor: RvtActor, query: RvtOccurrenceQueryDto) {
+  async occurrences(
+    actor: RvtActor,
+    query: RvtOccurrenceQueryDto,
+  ): Promise<RvtCursorPageReadModel<RvtOccurrenceReadModel>> {
     if (query.businessUnitId) this.assertUnit(actor, query.businessUnitId);
     const rows = await this.repository.listOccurrences(actor.organizationId, {
       ...query,
@@ -300,7 +327,11 @@ export class RvtService {
       hasNextPage: false,
     };
   }
-  async timeline(id: string, actor: RvtActor, query: RvtTimelineQueryDto) {
+  async timeline(
+    id: string,
+    actor: RvtActor,
+    query: RvtTimelineQueryDto,
+  ): Promise<RvtCursorPageReadModel<RvtTimelineItemReadModel>> {
     await this.get(id, actor);
     const result = await this.repository.timeline(
       id,
@@ -386,7 +417,10 @@ export class RvtService {
     }
   }
 
-  async preparation(id: string, actor: RvtActor) {
+  async preparation(
+    id: string,
+    actor: RvtActor,
+  ): Promise<RvtExecutionPreparationReadModel> {
     const occurrence = await this.repository.occurrence(
       id,
       actor.organizationId,
@@ -395,13 +429,14 @@ export class RvtService {
     this.assertAuthorized(actor, occurrence);
     this.assertUnit(actor, occurrence.businessUnitId);
     const configuration = await this.get(occurrence.configurationId, actor);
-    const execution = occurrence.execution
-      ? this.mapper.execution(
-          await this.repository.execution(
-            occurrence.execution.id,
-            actor.organizationId,
-          ),
+    const executionSource = occurrence.execution
+      ? await this.repository.execution(
+          occurrence.execution.id,
+          actor.organizationId,
         )
+      : null;
+    const execution = executionSource
+      ? this.mapper.execution(executionSource)
       : null;
     const responsibleId =
       occurrence.responsibleFieldTechnicianId ?? actor.actorId;
@@ -516,7 +551,7 @@ export class RvtService {
       this.mapError(e);
     }
   }
-  async execution(id: string, actor: RvtActor) {
+  async execution(id: string, actor: RvtActor): Promise<RvtExecutionReadModel> {
     const value = await this.repository.execution(id, actor.organizationId);
     if (!value) throw new EntityNotFoundException('RvtExecution', id);
     this.assertAuthorized(actor, {
@@ -571,7 +606,11 @@ export class RvtService {
       this.mapError(e);
     }
   }
-  async registerEquipment(id: string, actor: RvtActor, input: any) {
+  async registerEquipment(
+    id: string,
+    actor: RvtActor,
+    input: RegisterRvtEquipmentDto,
+  ) {
     await this.ensureExecution(id, actor);
     try {
       await this.repository.registerEquipment(
@@ -585,7 +624,7 @@ export class RvtService {
       this.mapError(e);
     }
   }
-  async addEvidence(id: string, actor: RvtActor, input: any) {
+  async addEvidence(id: string, actor: RvtActor, input: AddRvtEvidenceDto) {
     await this.ensureExecution(id, actor);
     try {
       await this.repository.addEvidence(
@@ -599,7 +638,11 @@ export class RvtService {
       this.mapError(e);
     }
   }
-  async acknowledge(id: string, actor: RvtActor, input: any) {
+  async acknowledge(
+    id: string,
+    actor: RvtActor,
+    input: CaptureCustomerAcknowledgementDto,
+  ) {
     await this.ensureExecution(id, actor);
     try {
       await this.repository.acknowledge(
@@ -613,7 +656,11 @@ export class RvtService {
       this.mapError(e);
     }
   }
-  async complete(id: string, actor: RvtActor, performedAt = new Date()) {
+  async complete(
+    id: string,
+    actor: RvtActor,
+    performedAt = new Date(),
+  ): Promise<RvtExecutionCompletionReadModel> {
     await this.ensureExecution(id, actor);
     try {
       await this.repository.complete(
@@ -635,7 +682,10 @@ export class RvtService {
       this.mapError(e);
     }
   }
-  async generateArtifact(id: string, actor: RvtActor) {
+  async generateArtifact(
+    id: string,
+    actor: RvtActor,
+  ): Promise<RvtArtifactReadModel> {
     await this.ensureExecution(id, actor);
     try {
       return await this.repository.generateArtifact(
@@ -672,7 +722,7 @@ export class RvtService {
     actor: RvtActor,
     idempotencyKey: string | undefined,
     input: CreateAdHocRvtDto,
-  ) {
+  ): Promise<RvtAdHocReadModel> {
     if (!idempotencyKey || !/^[A-Za-z0-9._:-]{8,160}$/.test(idempotencyKey))
       throw new ValidationException(
         'Idempotency-Key must contain 8 to 160 safe characters',
@@ -789,6 +839,7 @@ export class RvtService {
         RVT_VISIT_EQUIPMENT_OUTSIDE_CONFIGURATION:
           'Os equipamentos devem pertencer à configuração deste RVT.',
         RVT_CALENDAR_INVALID: 'Selecione uma agenda ativa desta unidade.',
+        RVT_VISIT_DATE_REQUIRED: 'Informe a data da visita.',
       };
       const message = messages[error.message];
       if (message) throw new ValidationException(message);
@@ -803,7 +854,6 @@ export class RvtService {
         'RVT_EXECUTION_NOT_COMPLETED',
         'RVT_ARTIFACT_TEMPLATE_NOT_FOUND',
         'RVT_EVIDENCE_TOO_LARGE',
-        'RVT_SCHEDULE_MODE_IMMUTABLE',
         'RVT_AD_HOC_CUSTOMER_CHOICE_INVALID',
       ];
       if (error.message === 'RVT_IDEMPOTENCY_PAYLOAD_MISMATCH')

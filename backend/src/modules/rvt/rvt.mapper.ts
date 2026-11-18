@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-argument */
 import { Injectable } from '@nestjs/common';
 import type {
   RvtConfigurationReadModel,
@@ -7,10 +6,20 @@ import type {
   RvtMaintenanceTypeReadModel,
 } from './rvt.read-models';
 import { deriveRvtDueState, formatOccurrenceSequence } from './rvt.domain';
+import type {
+  RvtOccurrenceSource,
+  RvtMaintenanceTypeSource,
+  RvtConfigurationSource,
+  RvtExecutionSource,
+} from './rvt.persistence';
+import { jsonObject } from './rvt-json';
 
 @Injectable()
 export class RvtMapper {
-  occurrence(source: any, timezone: string): RvtOccurrenceReadModel {
+  occurrence(
+    source: RvtOccurrenceSource,
+    timezone: string,
+  ): RvtOccurrenceReadModel {
     return {
       id: source.id,
       configurationId: source.configurationId,
@@ -39,7 +48,9 @@ export class RvtMapper {
    * entregava um campo com nome diferente do contrato — e como o serviço
    * repassava o retorno do repositório, o compilador não tinha o que reclamar.
    */
-  maintenanceType(source: any): RvtMaintenanceTypeReadModel {
+  maintenanceType(
+    source: RvtMaintenanceTypeSource,
+  ): RvtMaintenanceTypeReadModel {
     return {
       id: source.id,
       key: source.key,
@@ -56,7 +67,7 @@ export class RvtMapper {
     } as const;
   }
 
-  configuration(source: any): RvtConfigurationReadModel {
+  configuration(source: RvtConfigurationSource): RvtConfigurationReadModel {
     return {
       id: source.id,
       code: source.code,
@@ -82,20 +93,14 @@ export class RvtMapper {
       serviceLocation: source.serviceLocation,
       recurrence: source.recurrence,
       procedure: source.procedure,
-      technicalResponsible: source.technicalResponsibleId
-        ? {
-            id: source.technicalResponsibleId,
-            name: source.technicalResponsibleName,
-          }
-        : null,
-      defaultResponsibleFieldTechnician: source.fieldTechnicianId
-        ? { id: source.fieldTechnicianId, name: source.fieldTechnicianName }
-        : null,
+      technicalResponsible: source.technicalResponsible,
+      defaultResponsibleFieldTechnician: source.fieldTechnician,
       requiresTechnicalResponsible: source.requiresTechnicalResponsible,
-      equipment: (source.equipment ?? []).map((item: any) =>
-        this.equipment(item.asset ?? item, false),
-      ),
-      occurrences: (source.occurrences ?? []).map((item: any) =>
+      equipment: source.equipment.map((asset) => ({
+        ...this.equipment(asset),
+        addedDuringExecution: false,
+      })),
+      occurrences: source.occurrences.map((item) =>
         this.occurrence(item, source.timezone),
       ),
       createdAt: source.createdAt.toISOString(),
@@ -103,22 +108,7 @@ export class RvtMapper {
     };
   }
 
-  execution(source: any): RvtExecutionReadModel {
-    const operation = source.operationId
-      ? {
-          id: source.operationId,
-          code: source.operationCode,
-          status: source.operationStatus,
-        }
-      : null;
-    const artifact = source.artifactExecutionId
-      ? {
-          id: source.artifactExecutionId,
-          code: source.artifactCode,
-          status: source.artifactStatus,
-          renderStatus: source.artifactRenderStatus,
-        }
-      : null;
+  execution(source: RvtExecutionSource): RvtExecutionReadModel {
     return {
       id: source.id,
       occurrenceId: source.occurrenceId,
@@ -142,13 +132,24 @@ export class RvtMapper {
       observations: source.observations,
       recommendations: source.recommendations,
       freeTextRecommendation: source.freeTextRecommendation,
-      equipment: (source.equipment ?? []).map((item: any) =>
-        this.equipment(
-          { ...item.assetSnapshot, id: item.assetId },
-          item.addedDuringExecution,
-        ),
-      ),
-      evidence: (source.evidence ?? []).map((item: any) => ({
+      equipment: source.equipment.map((item) => {
+        const asset = jsonObject(item.assetSnapshot);
+        return {
+          ...this.equipment({
+            id: item.assetId,
+            name: typeof asset.name === 'string' ? asset.name : '',
+            category: typeof asset.category === 'string' ? asset.category : '',
+            identifier:
+              typeof asset.identifier === 'string' ? asset.identifier : null,
+            serialNumber:
+              typeof asset.serialNumber === 'string'
+                ? asset.serialNumber
+                : null,
+          }),
+          addedDuringExecution: item.addedDuringExecution,
+        };
+      }),
+      evidence: source.evidence.map((item) => ({
         id: item.id,
         kind: item.kind,
         caption: item.caption,
@@ -156,23 +157,31 @@ export class RvtMapper {
         assetId: item.assetId,
       })),
       customerAcknowledgement: source.customerAcknowledgement,
-      operation,
-      artifact,
+      operation: source.operation,
+      artifact: source.artifact,
       allowedActions:
         source.status === 'IN_PROGRESS'
           ? ['VIEW', 'EDIT', 'ADD_EQUIPMENT', 'ADD_EVIDENCE', 'COMPLETE']
-          : ['VIEW', ...(artifact ? ['DOWNLOAD'] : ['GENERATE_ARTIFACT'])],
+          : [
+              'VIEW',
+              ...(source.artifact ? ['DOWNLOAD'] : ['GENERATE_ARTIFACT']),
+            ],
     };
   }
 
-  private equipment(source: any, addedDuringExecution: boolean) {
+  private equipment(source: {
+    id: string;
+    name: string;
+    category: string;
+    identifier: string | null;
+    serialNumber: string | null;
+  }) {
     return {
       id: source.id,
       name: source.name,
       category: source.category,
       identifier: source.identifier ?? null,
       serialNumber: source.serialNumber ?? null,
-      addedDuringExecution,
     };
   }
 }

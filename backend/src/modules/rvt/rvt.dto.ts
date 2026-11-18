@@ -10,6 +10,7 @@ import {
   ArrayMinSize,
   ArrayUnique,
   IsBoolean,
+  IsDate,
   IsEmail,
   IsIn,
   IsObject,
@@ -244,7 +245,7 @@ export class AddRvtEvidenceDto {
   @ApiPropertyOptional({ default: 'PHOTO' })
   @IsOptional()
   @IsIn(['PHOTO', 'VIDEO', 'DOCUMENT'])
-  kind?: string;
+  kind?: 'PHOTO' | 'VIDEO' | 'DOCUMENT';
   @ApiPropertyOptional()
   @IsOptional()
   @Transform(trim)
@@ -261,11 +262,19 @@ export class CaptureCustomerAcknowledgementDto {
   @MaxLength(180)
   name!: string;
   @ApiProperty() @IsUUIDv7() storageFileId!: string;
-  @ApiPropertyOptional() @IsOptional() @Type(() => Date) signedAt?: Date;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  signedAt?: Date;
 }
 
 export class CompleteRvtExecutionDto {
-  @ApiPropertyOptional() @IsOptional() @Type(() => Date) performedAt?: Date;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  performedAt?: Date;
 }
 
 export class ContextualRvtCustomerDto {
