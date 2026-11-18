@@ -15,6 +15,7 @@ class OwnerRecords extends StatefulWidget {
     this.caption,
     this.subtitle,
     this.search = false,
+    this.searchLabel = 'Buscar',
     this.actions = const [],
   });
 
@@ -27,6 +28,7 @@ class OwnerRecords extends StatefulWidget {
   final String Function(OwnerRow)? caption;
   final String Function(OwnerRow)? subtitle;
   final bool search;
+  final String searchLabel;
   final List<Widget> actions;
 
   @override
@@ -128,7 +130,7 @@ class _OwnerRecordsState extends State<OwnerRecords> {
                 textInputAction: TextInputAction.search,
                 onSubmitted: (_) => _refresh(),
                 decoration: InputDecoration(
-                  labelText: 'Buscar',
+                  labelText: widget.searchLabel,
                   suffixIcon: IconButton(
                     tooltip: 'Buscar',
                     icon: const Icon(Icons.search),

@@ -4,6 +4,7 @@ import '../../../core/time/orbit_timezone.dart';
 import '../../authentication/domain/session.dart';
 import '../data/owner_repository.dart';
 import 'owner_controls.dart';
+import 'owner_records.dart';
 
 class OwnerTools {
   const OwnerTools(this.repo, this.session, this.access, this.zone);
@@ -22,18 +23,45 @@ class OwnerTools {
           session.hasPermission(permission) ||
           (area != 'team' && session.roles.contains('FIELD_TECHNICIAN')));
 
-  Future<OwnerRow?> customer(
-    BuildContext context, {
-    bool optional = false,
-  }) async => (await ownerPick(
-    context,
-    title: 'Cliente',
-    load: customers,
-    allowClear: optional,
-  ))?.firstOrNull;
+  Future<OwnerRow?> customer(BuildContext context) async =>
+      (await pickCustomer(context))?.value;
 
-  Future<List<OwnerRow>> customers(String search) =>
-      repo.options('/mobile/owner/customers', query: {'search': search});
+  Future<({OwnerRow? value})?> pickCustomer(
+    BuildContext context, {
+    String? alternative,
+  }) => showModalBottomSheet<({OwnerRow? value})>(
+    context: context,
+    useSafeArea: true,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (_) => FractionallySizedBox(
+      heightFactor: .82,
+      child: OwnerRecords(
+        title: 'Selecionar cliente',
+        search: true,
+        searchLabel: 'Buscar por nome, CPF ou CNPJ',
+        load: (search, page, _) => repo.list(
+          '/mobile/owner/customers',
+          query: {'page': page, if (search.isNotEmpty) 'search': search},
+        ),
+        subtitle: (row) {
+          final detail = ownerText(row, ['documentNumber', 'legalName']);
+          return detail == ownerText(row) ? '' : detail;
+        },
+        open: (sheet, row) async {
+          Navigator.pop<({OwnerRow? value})>(sheet, (value: row));
+          return false;
+        },
+        createLabel: alternative ?? '',
+        create: alternative == null
+            ? null
+            : (sheet) async {
+                Navigator.pop<({OwnerRow? value})>(sheet, (value: null));
+                return false;
+              },
+      ),
+    ),
+  );
 
   Future<List<OwnerRow>> equipment(String customerId, String search) async =>
       (await repo.options(

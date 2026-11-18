@@ -77,7 +77,7 @@ abstract final class OrbitRoutes {
   /// Perfil, sincronização e assinatura. É o "mais" do aplicativo, com o nome
   /// do que ele de fato contém.
   static const profile = '/perfil';
-  static const ownerArea = '$profile/area-proprietario';
+  static const ownerArea = '$home/area-proprietario';
 
   static String operationDetail(String id) => '$operations/$id';
 
@@ -281,6 +281,13 @@ final routerProvider = Provider<GoRouter>((ref) {
             /// One operational mobile product. Permissions change data and
             /// actions; they never select a parallel visual application.
             builder: (context, state) => const FieldDashboardScreen(),
+            routes: [
+              OrbitPageRoute(
+                path: 'area-proprietario',
+                parentNavigatorKey: rootNavigatorKey,
+                builder: (context, state) => const OwnerScreen(),
+              ),
+            ],
           ),
           OrbitPageRoute(
             path: OrbitRoutes.workQueue,
@@ -361,11 +368,6 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: OrbitRoutes.profile,
             builder: (context, state) => const ProfileScreen(),
             routes: [
-              OrbitPageRoute(
-                path: 'area-proprietario',
-                parentNavigatorKey: rootNavigatorKey,
-                builder: (context, state) => const OwnerScreen(),
-              ),
               OrbitPageRoute(
                 path: 'assinatura',
                 parentNavigatorKey: rootNavigatorKey,

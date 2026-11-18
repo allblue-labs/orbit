@@ -662,7 +662,7 @@ describe('Team members, temporary password and recovery (e2e)', () => {
         organizationId: { not: ownerOrganizationId },
         role: { key: 'OWNER' },
       },
-      select: { userId: true },
+      select: { userId: true, organizationId: true },
     });
     await management(
       http().patch(
@@ -674,12 +674,54 @@ describe('Team members, temporary password and recovery (e2e)', () => {
       .expect(404);
 
     await management(http().patch(delegationPath), mobileOwner)
-      .send({ areas: ['customers'] })
+      .send({ areas: ['customers', 'quotes'] })
       .expect(200);
     const granted = await access(technician).expect(200);
     expect((granted.body as Envelope<{ areas: string[] }>).data.areas).toEqual([
+      'quotes',
       'customers',
     ]);
+
+    const prefix = `Seleção ${randomUUID().slice(0, 8)}`;
+    const document = cnpj();
+    await prisma.customer.createMany({
+      data: [
+        ...Array.from({ length: 61 }, (_, index) => ({
+          organizationId: ownerOrganizationId,
+          legalName: `${prefix} ${String(index).padStart(2, '0')}`,
+          ...(index === 60
+            ? { documentType: 'CNPJ', documentNumber: document }
+            : {}),
+        })),
+        { organizationId: neighbour.organizationId, legalName: `${prefix} 61` },
+      ],
+    });
+    const customerOptions = (token: string, search: string, page: number) =>
+      management(http().get('/api/v1/mobile/owner/customers'), token)
+        .query({ search, page })
+        .expect(200);
+    type CustomerOptions = Envelope<{
+      data: { legalName: string; documentNumber?: string }[];
+      hasNextPage: boolean;
+    }>;
+    const firstPage = (await customerOptions(mobileOwner, prefix, 1))
+      .body as CustomerOptions;
+    expect(firstPage.data.data).toHaveLength(60);
+    expect(firstPage.data.hasNextPage).toBe(true);
+    const secondPage = (await customerOptions(mobileOwner, prefix, 2))
+      .body as CustomerOptions;
+    expect(secondPage.data.data).toEqual([
+      expect.objectContaining({
+        legalName: `${prefix} 60`,
+        documentNumber: document,
+      }),
+    ]);
+    expect(secondPage.data.hasNextPage).toBe(false);
+    const limited = (await customerOptions(technician, document, 1))
+      .body as CustomerOptions;
+    expect(limited.data.data).toHaveLength(1);
+    expect(limited.data.data[0]).not.toHaveProperty('documentNumber');
+
     const record = await management(
       http().post('/api/v1/customers'),
       technician,

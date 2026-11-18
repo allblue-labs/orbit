@@ -7,14 +7,17 @@ import {
   Query,
   Req,
 } from '@nestjs/common';
+import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayUnique,
   IsArray,
   IsIn,
+  IsInt,
   IsOptional,
   IsString,
   MaxLength,
+  Min,
 } from 'class-validator';
 import {
   MOBILE_DELEGATIONS,
@@ -58,6 +61,14 @@ class MobileOptionsQuery {
   customerId?: string;
 }
 
+class MobileCustomerOptionsQuery extends MobileOptionsQuery {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+}
+
 @Controller('mobile/owner')
 @Surfaces('MOBILE')
 export class MobileManagementController {
@@ -94,13 +105,15 @@ export class MobileManagementController {
     'pmoc',
     'rvt',
   )
-  customers(
+  async customers(
     @Req() request: IdentityRequest,
-    @Query() query: MobileOptionsQuery,
+    @Query() query: MobileCustomerOptionsQuery,
   ) {
     const organizationId = this.organizationId(request);
     const term = query.search?.trim();
-    return this.rls.run((tx) =>
+    const pageSize = 60;
+    const page = query.page;
+    const rows = await this.rls.run((tx) =>
       tx.customer.findMany({
         where: {
           organizationId,
@@ -121,10 +134,21 @@ export class MobileManagementController {
             : {}),
         },
         orderBy: [{ legalName: 'asc' }, { id: 'asc' }],
-        take: 60,
-        select: { id: true, legalName: true, tradeName: true },
+        skip: page === undefined ? undefined : (page - 1) * pageSize,
+        take: page === undefined ? pageSize : pageSize + 1,
+        select: {
+          id: true,
+          legalName: true,
+          tradeName: true,
+          documentNumber: request.mobileManagementAreas?.includes('receipts'),
+        },
       }),
     );
+    if (page === undefined) return rows;
+    return {
+      data: rows.slice(0, pageSize),
+      hasNextPage: rows.length > pageSize,
+    };
   }
 
   @Get('equipment')

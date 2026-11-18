@@ -32,7 +32,6 @@ import '../../../core/theme/orbit_theme.dart';
 import '../../authentication/domain/session.dart';
 import '../../authentication/presentation/logout_confirmation.dart';
 import '../../notifications/application/notification_providers.dart';
-import '../../owner/data/owner_repository.dart';
 import '../../signature/application/signature_providers.dart';
 import '../../sync/application/sync_controller.dart';
 import '../../sync/application/sync_providers.dart';
@@ -51,8 +50,6 @@ class ProfileScreen extends ConsumerWidget {
     final palette = context.orbit;
     final sync = ref.watch(syncControllerProvider);
     final signature = ref.watch(signatureStatusProvider);
-    final management = ref.watch(ownerAccessProvider).valueOrNull;
-    final showOwnerArea = management?.areas.isNotEmpty == true;
     final units = session.organization?.businessUnits ?? const [];
 
     return Scaffold(
@@ -112,23 +109,6 @@ class ProfileScreen extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: OrbitSpacing.lg),
-
-          if (showOwnerArea) ...[
-            OrbitSettingsGroup(
-              children: [
-                OrbitSettingsRow(
-                  key: const Key('profile.owner-area.action'),
-                  icon: Icons.admin_panel_settings_outlined,
-                  label: 'Área do proprietário',
-                  onTap: () {
-                    ref.invalidate(ownerAccessProvider);
-                    context.push(OrbitRoutes.ownerArea);
-                  },
-                ),
-              ],
-            ),
-            const SizedBox(height: OrbitSpacing.lg),
-          ],
 
           _AcoesPendentes(sync: sync),
           const SizedBox(height: OrbitSpacing.lg),

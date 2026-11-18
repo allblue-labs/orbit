@@ -125,6 +125,7 @@ class OwnerFormField {
     this.numeric = false,
     this.choices,
     this.pick,
+    this.select,
     this.many = false,
     this.date = false,
     this.time = false,
@@ -141,6 +142,7 @@ class OwnerFormField {
   final bool numeric;
   final Map<String, String>? choices;
   final Future<List<OwnerRow>> Function(String search)? pick;
+  final Future<({OwnerRow? value})?> Function(BuildContext)? select;
   final bool many;
   final bool date;
   final bool time;
@@ -379,7 +381,10 @@ class _OwnerFormSheetState extends State<_OwnerFormSheet> {
         onChanged: _saving ? null : (value) => _values[field.key] = value,
       );
     }
-    if (field.pick != null || field.date || field.time) {
+    if (field.pick != null ||
+        field.select != null ||
+        field.date ||
+        field.time) {
       final caption = value is DateTime
           ? field.time
                 ? '${DateFormat('dd/MM/yyyy').format(value)} às ${ownerTime(value)}'
@@ -401,7 +406,9 @@ class _OwnerFormSheetState extends State<_OwnerFormSheet> {
             decoration: decoration.copyWith(
               errorText: state.errorText,
               suffixIcon: Icon(
-                field.pick == null ? Icons.event_outlined : Icons.expand_more,
+                field.date || field.time
+                    ? Icons.event_outlined
+                    : Icons.expand_more,
               ),
             ),
             child: Text(caption.isEmpty ? 'Selecionar' : caption),
@@ -436,6 +443,13 @@ class _OwnerFormSheetState extends State<_OwnerFormSheet> {
   }
 
   Future<void> _choose(OwnerFormField field) async {
+    if (field.select case final select?) {
+      final result = await select(context);
+      if (mounted && result != null) {
+        setState(() => _values[field.key] = result.value);
+      }
+      return;
+    }
     if (field.pick case final load?) {
       final result = await ownerPick(
         context,

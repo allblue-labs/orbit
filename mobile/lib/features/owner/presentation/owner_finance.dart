@@ -108,23 +108,32 @@ Future<bool> _receiptActions(
 }
 
 Future<bool> _receiptForm(BuildContext context, OwnerTools tools) async {
+  final selection = await tools.pickCustomer(
+    context,
+    alternative: 'Preencher dados de novo cliente',
+  );
+  if (selection == null || !context.mounted) return false;
+  final customer = selection.value;
+
   return ownerForm(
     context,
     title: 'Novo recibo',
     action: 'Criar recibo',
     zone: tools.zone,
     fields: [
-      const OwnerFormField(
+      OwnerFormField(
         'payer',
         'Nome de quem pagou',
         required: true,
         maxLength: 180,
+        initial: customer == null ? null : ownerText(customer),
       ),
-      const OwnerFormField(
+      OwnerFormField(
         'payerDocument',
         'CPF ou CNPJ do pagador',
         maxLength: 40,
         keyboard: TextInputType.number,
+        initial: customer?['documentNumber'],
       ),
       const OwnerFormField(
         'amount',
@@ -157,7 +166,6 @@ Future<bool> _receiptForm(BuildContext context, OwnerTools tools) async {
           'Boleto': 'Boleto',
         },
       ),
-      OwnerFormField('customer', 'Vincular cliente', pick: tools.customers),
     ],
     save: (values, _) {
       final paidOn = isoDate(values, 'paidOn')!;
@@ -180,7 +188,7 @@ Future<bool> _receiptForm(BuildContext context, OwnerTools tools) async {
           'payerDocument': document,
         if (values['paymentMethod'] case final String method)
           'paymentMethod': method,
-        if (pickId(values['customer']) case final id?) 'customerId': id,
+        if (customer != null) 'customerId': ownerId(customer),
       });
     },
   );
@@ -344,7 +352,12 @@ Future<bool> _entryForm(
         )).where((row) => matches(row, search)).toList(),
       ),
       if (current == null)
-        OwnerFormField('customer', 'Cliente', pick: tools.customers),
+        OwnerFormField(
+          'customer',
+          'Cliente',
+          select: (context) =>
+              tools.pickCustomer(context, alternative: 'Sem cliente vinculado'),
+        ),
       OwnerFormField(
         'notes',
         'Observações',

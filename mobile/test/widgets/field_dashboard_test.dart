@@ -19,6 +19,7 @@ import 'package:orbit_operator/core/observability/orbit_logger.dart';
 import 'package:orbit_operator/core/design/orbit_primitives.dart';
 import 'package:orbit_operator/core/theme/orbit_theme.dart';
 import 'package:orbit_operator/features/field/presentation/field_dashboard_screen.dart';
+import 'package:orbit_operator/features/owner/data/owner_repository.dart';
 
 import '../support/fakes.dart';
 import '../support/scripted_adapter.dart';
@@ -196,9 +197,10 @@ void main() {
         )
         .where((w) => w.onTap != null);
     expect(tocaveis, isNotEmpty);
+    expect(find.byKey(const Key('home.owner-area.action')), findsNothing);
   });
 
-  testWidgets('voltar de um atendimento atualiza a home automaticamente', (
+  testWidgets('abre a área do proprietário e atualiza a Home ao voltar', (
     tester,
   ) async {
     var calls = 0;
@@ -233,8 +235,8 @@ void main() {
           builder: (_, _) => const FieldDashboardScreen(),
         ),
         GoRoute(
-          path: '/atendimento-teste',
-          builder: (_, _) => const Scaffold(body: Text('Atendimento aberto')),
+          path: OrbitRoutes.ownerArea,
+          builder: (_, _) => const Scaffold(body: Text('Área aberta')),
         ),
       ],
     );
@@ -244,6 +246,9 @@ void main() {
         overrides: [
           apiClientProvider.overrideWithValue(client),
           readCacheProvider.overrideWithValue(InMemoryReadCache()),
+          ownerAccessProvider.overrideWith(
+            (_) async => const OwnerAccess({'operations'}, false),
+          ),
         ],
         child: MaterialApp.router(
           theme: OrbitTheme.light(),
@@ -253,9 +258,11 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(calls, 1);
+    expect(find.byKey(const Key('home.owner-area.action')), findsOneWidget);
     expect(find.text('Antes do atendimento'), findsWidgets);
-    router.push('/atendimento-teste');
+    await tester.tap(find.byKey(const Key('home.owner-area.action')));
     await tester.pumpAndSettle();
+    expect(find.text('Área aberta'), findsOneWidget);
     router.pop();
     await tester.pumpAndSettle();
     expect(calls, 2);

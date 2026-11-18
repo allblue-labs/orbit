@@ -50,6 +50,7 @@ import '../../documents/presentation/documents_screen.dart'
 import '../../operations/data/operations_repository.dart' show CachedResult;
 import '../../notifications/application/notification_providers.dart';
 import '../../notifications/domain/deep_link.dart';
+import '../../owner/data/owner_repository.dart';
 import '../../profile/presentation/my_avatar.dart';
 import '../application/field_providers.dart';
 import 'widgets/work_item_row.dart';
@@ -111,6 +112,7 @@ class _FieldDashboardScreenState extends ConsumerState<FieldDashboardScreen>
     ref.invalidate(fieldHomeProvider);
     ref.invalidate(fieldDashboardProvider);
     ref.invalidate(notificationsProvider);
+    ref.invalidate(ownerAccessProvider);
   }
 
   @override
@@ -129,6 +131,13 @@ class _FieldDashboardScreenState extends ConsumerState<FieldDashboardScreen>
   Widget build(BuildContext context) {
     final home = ref.watch(fieldHomeProvider);
     final session = ref.watch(sessionProvider);
+    final showOwnerArea = ref
+        .watch(ownerAccessProvider)
+        .when(
+          data: (access) => access.areas.isNotEmpty,
+          loading: () => false,
+          error: (_, _) => false,
+        );
 
     return Scaffold(
       backgroundColor: context.orbit.background,
@@ -137,6 +146,7 @@ class _FieldDashboardScreenState extends ConsumerState<FieldDashboardScreen>
         child: RefreshIndicator(
           onRefresh: () async {
             ref.invalidate(notificationsProvider);
+            ref.invalidate(ownerAccessProvider);
             try {
               ref.invalidate(fieldHomeProvider);
               await ref.read(fieldHomeProvider.future);
@@ -154,7 +164,13 @@ class _FieldDashboardScreenState extends ConsumerState<FieldDashboardScreen>
           ///
           /// Com dado em mãos, a falha vira um aviso. Sem dado, aí sim a tela
           /// é o erro: não há o que preservar.
-          child: _corpo(ref, home, session, now: widget.now),
+          child: _corpo(
+            ref,
+            home,
+            session,
+            showOwnerArea: showOwnerArea,
+            now: widget.now,
+          ),
         ),
       ),
     );
@@ -169,6 +185,7 @@ Widget _corpo(
   WidgetRef ref,
   AsyncValue<CachedResult<MobileFieldHomeContract>> home,
   OrbitSession? session, {
+  required bool showOwnerArea,
   DateTime? now,
 }) {
   final dados = home.valueOrNull;
@@ -180,6 +197,7 @@ Widget _corpo(
       avatarUrl: session?.user.avatarUrl,
       unitName: session?.businessUnit?.name,
       currentUserId: session?.user.id,
+      showOwnerArea: showOwnerArea,
       now: now,
       refreshFailed: home.hasError,
     );
@@ -191,6 +209,7 @@ Widget _corpo(
     return ListView(
       padding: const EdgeInsets.all(OrbitSpacing.gutter),
       children: [
+        if (showOwnerArea) const _OwnerAreaButton(),
         SectionError(
           error: home.error!,
           onRetry: () => ref.invalidate(fieldHomeProvider),
@@ -205,6 +224,21 @@ Widget _corpo(
   );
 }
 
+class _OwnerAreaButton extends StatelessWidget {
+  const _OwnerAreaButton();
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: OrbitSpacing.md),
+    child: OutlinedButton.icon(
+      key: const Key('home.owner-area.action'),
+      onPressed: () => context.push(OrbitRoutes.ownerArea),
+      icon: const Icon(Icons.admin_panel_settings_outlined),
+      label: const Text('Área do proprietário'),
+    ),
+  );
+}
+
 class _Home extends ConsumerWidget {
   const _Home({
     required this.home,
@@ -213,6 +247,7 @@ class _Home extends ConsumerWidget {
     this.avatarUrl,
     this.unitName,
     required this.currentUserId,
+    required this.showOwnerArea,
     this.now,
     this.refreshFailed = false,
   });
@@ -223,6 +258,7 @@ class _Home extends ConsumerWidget {
   final String? avatarUrl;
   final String? unitName;
   final String? currentUserId;
+  final bool showOwnerArea;
   final DateTime? now;
 
   /// A última atualização não veio. Os dados abaixo continuam sendo os
@@ -269,6 +305,8 @@ class _Home extends ConsumerWidget {
           now: now,
           unread: avisos?.unread ?? 0,
         ),
+
+        if (showOwnerArea) const _OwnerAreaButton(),
 
         if (cachedAt != null)
           Padding(
