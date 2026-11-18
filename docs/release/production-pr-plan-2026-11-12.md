@@ -328,6 +328,14 @@ evidência e relatório sob testes HTTP e banco.
 
 ### PR-18 — Textos, datas e jornadas de produção
 
+**Implementação e validação local concluídas em 18/11/2026, commit `389625a`.**
+[Relatório](pr-18-production-journeys.md) e
+[evidências](evidence/pr-18-production-journeys.json).
+As correções cobrem o resumo de assinatura, as mensagens de PMOC, a janela
+civil do Financeiro, foco no cadastro e metadados públicos. Passaram 71 casos
+no Chromium e 66 casos mobile. Pagamento externo e aparelhos físicos serão
+validados na PR-19.
+
 Formatar respostas compostas de checklist de forma legível no resumo congelado;
 converter a janela financeira para data civil no fuso correto. Corrigir linguagem
 técnica em PMOC/permissões e metadados públicos do produto. Revisar os caminhos de
@@ -372,4 +380,5 @@ o parecer bloqueado para o recurso correspondente.
 | 12 | Código implementado; gates locais aprovados | `60f51a92e09b` | [Resultados](pr-12-relational-integrity.md): 185 FKs novas, guards/199 regras, preservação de identidade e rebind push; backend 2.275 + 657 E2E, upgrade sujo recusado e reparado; preflight/backup/janela exigidos antes da migration; sem push/deploy |
 | 13–16 | Implementadas | Ver checkpoints nas seções acima | Aceites e pendências descritos em cada seção |
 | 17 | Implementada; validação local aprovada | `ee49cba` | [Resultados](pr-17-rvt-contracts.md) |
-| 18–19 | Planejadas | — | Executar sequencialmente; critérios acima |
+| 18 | Implementada; validação local aprovada | `389625a` | [Resultados](pr-18-production-journeys.md) |
+| 19 | Planejada | — | Qualificação integrada e aceites externos |
