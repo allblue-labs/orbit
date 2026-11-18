@@ -25,7 +25,15 @@ def check(config, require_digests=True):
     require(
         all(
             name in services
-            for name in ["api", "frontend", "postgres", "migrate", "bootstrap-admin"]
+            for name in [
+                "api",
+                "worker",
+                "documents",
+                "frontend",
+                "postgres",
+                "migrate",
+                "bootstrap-admin",
+            ]
         ),
         "Inclua os serviços canônicos e o profile admin no preflight.",
     )
@@ -35,13 +43,40 @@ def check(config, require_digests=True):
     ]
     runtime = api.get("environment", {})
     require(bool(runtime.get("APP_DATABASE_URL")), "api: APP_DATABASE_URL obrigatório.")
-    for key in [
-        "DATABASE_URL",
-        "POSTGRES_PASSWORD",
-        "PLATFORM_ADMIN_PASSWORD",
-        "OWNER_PASSWORD",
-    ]:
-        require(not runtime.get(key), "api: credencial administrativa proibida: " + key)
+    for name in ("api", "worker", "documents"):
+        env = services[name].get("environment", {})
+        require(env.get("ORBIT_PROCESS_ROLE") == name, "Papel incorreto: " + name)
+        require(
+            env.get("APP_DATABASE_URL") == runtime["APP_DATABASE_URL"],
+            "Use o papel restrito em " + name,
+        )
+        require(
+            env.get("DATABASE_ENFORCE_RESTRICTED_ROLE") == "true",
+            "Verificação de papel obrigatória: " + name,
+        )
+        if name != "api":
+            require(
+                not services[name].get("profiles"),
+                "Consumer obrigatório fora de profiles: " + name,
+            )
+            require(
+                services[name].get("image") == api.get("image"),
+                "Use a mesma imagem da API em " + name,
+            )
+            require(
+                env.get("JOBS_WORKER_ENABLED") == "true",
+                "Consumo de fila obrigatório: " + name,
+            )
+        for key in (
+            "DATABASE_URL",
+            "POSTGRES_PASSWORD",
+            "PLATFORM_ADMIN_PASSWORD",
+            "OWNER_PASSWORD",
+        ):
+            require(
+                not env.get(key),
+                "Credencial administrativa proibida em " + name + ": " + key,
+            )
     try:
         app_url = urlsplit(runtime["APP_DATABASE_URL"])
         admin_url = urlsplit(migrate.get("environment", {}).get("DATABASE_URL", ""))
@@ -166,6 +201,20 @@ def check(config, require_digests=True):
             require(
                 not service.get("volumes"),
                 "Runtime não deve persistir arquivos: " + name,
+            )
+        elif name in ["worker", "documents"]:
+            require(
+                not service.get("ports") and not service.get("volumes"),
+                "Worker não pode publicar porta ou montar volume: " + name,
+            )
+            require(
+                set(service.get("networks", {})) == {"orbit_private", "orbit_public"},
+                "Redes incorretas: " + name,
+            )
+            require(
+                service.get("healthcheck", {}).get("test")
+                == ["CMD", "node", "dist/src/runtime/worker-health.js"],
+                "Healthcheck obrigatório: " + name,
             )
         else:
             require(

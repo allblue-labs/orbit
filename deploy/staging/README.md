@@ -181,6 +181,8 @@ bash ~/orbit-bootstrap/bin/deploy.sh
 ```
 
 Atualize `bin/deploy.sh` e `bin/deployment_preflight.py` juntos no servidor.
+Para monitorar os workers, copie também `bin/worker-observability.py` e siga
+o [runbook da PR-15](../../docs/release/pr-15-worker-isolation.md).
 O preflight do PR-14 exige esse módulo no mesmo diretório.
 
 Use `bash ~/orbit-bootstrap/bin/deploy.sh --check` para validar sem baixar

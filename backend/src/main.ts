@@ -5,10 +5,17 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { configureApiVersioning } from './configure-api';
 import { configureHttpParsers } from './configure-http-parsers';
+import { processRole } from './runtime/process-role';
 import { validateReleaseEnvironment } from './release-environment';
 
 async function bootstrap() {
   validateReleaseEnvironment(process.env);
+  const role = processRole();
+  if (role === 'worker' || role === 'documents') {
+    const worker = await NestFactory.createApplicationContext(AppModule);
+    worker.enableShutdownHooks();
+    return;
+  }
   /**
    * O corpo é interpretado por parsers que este arquivo registra, e não pelos
    * padrões do Nest.

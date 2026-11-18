@@ -73,6 +73,7 @@ interface JobRow {
   correlation_id: string;
   actor_user_id: string | null;
   last_error: string | null;
+  locked_by: string | null;
   available_at: Date;
   created_at: Date;
 }
@@ -81,7 +82,7 @@ interface JobRow {
 const JOB_COLUMNS = Prisma.sql`
   id, queue, job_key, organization_id, business_unit_id, scope,
   business_unit_ids, payload, status, attempts, max_attempts,
-  correlation_id, actor_user_id, last_error, available_at, created_at
+  correlation_id, actor_user_id, last_error, locked_by, available_at, created_at
 `;
 
 @Injectable()
@@ -254,7 +255,7 @@ export class BackgroundJobQueue {
   ): Promise<void> {
     await this.asWorker((tx) =>
       tx.backgroundJob.updateMany({
-        where: { id: job.id, status: 'RUNNING', attempts: job.attempts },
+        where: this.lease(job),
         data: {
           status: 'PENDING',
           attempts: { decrement: 1 },
@@ -276,10 +277,24 @@ export class BackgroundJobQueue {
     );
   }
 
-  async succeed(id: string): Promise<void> {
+  private lease(job: BackgroundJobRecord) {
+    if (!job.lockedBy) throw new Error('Job lease is missing');
+    return { id: job.id, status: 'RUNNING', lockedBy: job.lockedBy };
+  }
+
+  async heartbeat(job: BackgroundJobRecord): Promise<void> {
     await this.asWorker((tx) =>
-      tx.backgroundJob.update({
-        where: { id },
+      tx.backgroundJob.updateMany({
+        where: this.lease(job),
+        data: { lockedAt: new Date() },
+      }),
+    );
+  }
+
+  async succeed(job: BackgroundJobRecord): Promise<boolean> {
+    const result = await this.asWorker((tx) =>
+      tx.backgroundJob.updateMany({
+        where: this.lease(job),
         data: {
           status: 'SUCCEEDED',
           finishedAt: new Date(),
@@ -289,6 +304,7 @@ export class BackgroundJobQueue {
         },
       }),
     );
+    return result.count === 1;
   }
 
   /**
@@ -303,16 +319,16 @@ export class BackgroundJobQueue {
     job: BackgroundJobRecord,
     failureCode: string,
     permanent = false,
-  ): Promise<'RETRY' | 'DEAD'> {
+  ): Promise<'RETRY' | 'DEAD' | 'LEASE_LOST'> {
     const exhausted = permanent || job.attempts >= job.maxAttempts;
     const delay = backoffFor(job.attempts);
     const safeFailureCode = /^[A-Z0-9_.:-]{1,160}$/.test(failureCode)
       ? failureCode
       : 'UNCLASSIFIED_FAILURE';
 
-    await this.asWorker((tx) =>
-      tx.backgroundJob.update({
-        where: { id: job.id },
+    const result = await this.asWorker((tx) =>
+      tx.backgroundJob.updateMany({
+        where: this.lease(job),
         data: {
           status: exhausted ? 'DEAD' : 'PENDING',
           availableAt: exhausted ? undefined : new Date(Date.now() + delay),
@@ -326,6 +342,8 @@ export class BackgroundJobQueue {
         },
       }),
     );
+
+    if (result.count !== 1) return 'LEASE_LOST';
 
     this.logger.warn(
       JSON.stringify({
@@ -351,19 +369,104 @@ export class BackgroundJobQueue {
    * todo processador precisa ser idempotente.
    */
   async requeueStalled(queue: JobQueue, olderThanMs: number): Promise<number> {
-    const threshold = new Date(Date.now() - olderThanMs);
-    const result = await this.asWorker((tx) =>
-      tx.backgroundJob.updateMany({
-        where: { queue, status: 'RUNNING', lockedAt: { lt: threshold } },
-        data: { status: 'PENDING', lockedAt: null, lockedBy: null },
+    const count = await this.asWorker(
+      (tx) => tx.$executeRaw`
+      UPDATE background_jobs
+         SET status = CASE WHEN attempts >= max_attempts THEN 'DEAD' ELSE 'PENDING' END,
+             finished_at = CASE WHEN attempts >= max_attempts THEN now() ELSE NULL END,
+             available_at = now(), locked_at = NULL, locked_by = NULL,
+             last_error = 'JOB_LEASE_EXPIRED', updated_at = now()
+       WHERE id IN (
+         SELECT id FROM background_jobs
+          WHERE queue = ${queue} AND status = 'RUNNING'
+            AND locked_at < now() - ${olderThanMs} * interval '1 millisecond'
+          ORDER BY locked_at LIMIT 50 FOR UPDATE SKIP LOCKED
+       )
+    `,
+    );
+    if (count)
+      this.logger.warn(
+        JSON.stringify({ event: 'job_leases_expired', queue, count }),
+      );
+    return count;
+  }
+
+  snapshot(queues: readonly JobQueue[]) {
+    if (!queues.length) return Promise.resolve([]);
+    return this.asWorker(
+      (tx) => tx.$queryRaw<
+        {
+          queue: string;
+          ready: number;
+          running: number;
+          dead: number;
+          oldest_ready_ms: number;
+        }[]
+      >`
+      SELECT queue,
+             count(*) FILTER (WHERE status = 'PENDING' AND available_at <= now())::int AS ready,
+             count(*) FILTER (WHERE status = 'RUNNING')::int AS running,
+             count(*) FILTER (WHERE status = 'DEAD')::int AS dead,
+             COALESCE(extract(epoch FROM now() - min(available_at)
+               FILTER (WHERE status = 'PENDING' AND available_at <= now())) * 1000, 0)::double precision AS oldest_ready_ms
+        FROM background_jobs
+       WHERE queue IN (${Prisma.join(queues)})
+         AND status IN ('PENDING', 'RUNNING', 'DEAD')
+       GROUP BY queue
+    `,
+    );
+  }
+
+  deadLetters(queue: JobQueue) {
+    return this.asWorker((tx) =>
+      tx.backgroundJob.findMany({
+        where: { status: 'DEAD', queue },
+        select: {
+          id: true,
+          queue: true,
+          attempts: true,
+          lastError: true,
+          finishedAt: true,
+        },
+        orderBy: { finishedAt: 'desc' },
+        take: 100,
       }),
     );
-    if (result.count > 0) {
-      this.logger.warn(
-        `[jobs] ${result.count} job(s) presos em ${queue} devolvidos à fila`,
+  }
+
+  /** Preserve original scope, identity, failure code and attempt history. */
+  async replayDead(id: string, queue: JobQueue): Promise<boolean> {
+    // Only processors with durable reconciliation are eligible for manual replay.
+    if (queue !== 'artifact.render' && queue !== 'management-report.generate')
+      return false;
+    try {
+      const count = await this.asWorker(
+        (tx) => tx.$executeRaw`
+        UPDATE background_jobs dead
+           SET status = 'PENDING', available_at = now(), max_attempts = dead.attempts + 1,
+               locked_at = NULL, locked_by = NULL, finished_at = NULL, updated_at = now()
+         WHERE dead.id = ${id}::uuid AND dead.queue = ${queue} AND dead.status = 'DEAD'
+           AND (dead.last_error = 'JOB_LEASE_EXPIRED' OR dead.last_error = 'INTERNAL_ERROR:INFRASTRUCTURE_ERROR' OR
+                split_part(dead.last_error, ':', 1) IN ('DATABASE_UNAVAILABLE', 'DATABASE_TIMEOUT', 'CONNECTION_FAILURE'))
+           AND NOT EXISTS (
+             SELECT 1 FROM background_jobs other
+              WHERE other.queue = dead.queue AND other.job_key = dead.job_key
+                AND other.id <> dead.id
+                AND (other.status IN ('PENDING','RUNNING') OR other.created_at >= dead.created_at)
+           )
+      `,
       );
+      return count === 1;
+    } catch (error) {
+      // Concurrent enqueue or replay is protected by the active job unique index.
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2010' &&
+        error.meta?.code === '23505'
+      )
+        return false;
+      throw error;
     }
-    return result.count;
   }
 
   find(id: string) {
@@ -387,6 +490,7 @@ export class BackgroundJobQueue {
     correlationId: string;
     actorUserId: string | null;
     lastError: string | null;
+    lockedBy: string | null;
     availableAt: Date;
     createdAt: Date;
   }): BackgroundJobRecord {
@@ -405,6 +509,7 @@ export class BackgroundJobQueue {
       correlationId: job.correlationId,
       actorUserId: job.actorUserId,
       lastError: job.lastError,
+      lockedBy: job.lockedBy,
       availableAt: job.availableAt,
       createdAt: job.createdAt,
     };
@@ -426,6 +531,7 @@ export class BackgroundJobQueue {
       correlationId: row.correlation_id,
       actorUserId: row.actor_user_id,
       lastError: row.last_error,
+      lockedBy: row.locked_by,
       availableAt: row.available_at,
       createdAt: row.created_at,
     };

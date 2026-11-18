@@ -6,9 +6,8 @@ import { SubscriptionPlanService } from '../subscription-plans/subscription-plan
 /**
  * Worker de jobs.
  *
- * Um laço que reivindica um job por vez, roda o processador **dentro do
- * contexto do tenant dono do job** e fecha o resultado. A cadência é lenta de
- * propósito: renderização é ato deliberado, não fluxo contínuo.
+ * Cada grupo de filas reivindica um job por vez. O processador roda no contexto
+ * do tenant dono do job e o resultado é fechado pelo detentor do lease.
  *
  * ## RLS no trabalho de fundo
  *
@@ -44,13 +43,16 @@ import {
   type OnModuleDestroy,
   type OnModuleInit,
 } from '@nestjs/common';
-import { hostname } from 'node:os';
+import { rmSync, writeFileSync } from 'node:fs';
+import { processRole } from '../../runtime/process-role';
+import { performance, monitorEventLoopDelay } from 'node:perf_hooks';
 import type { UUID } from '../../contracts';
 import { RequestContext, RequestContextStorage } from '../../context';
 import { classifyInternalError, internalErrorStack } from '../../errors';
 import { generateUuidV7 } from '../../utils';
 import { BackgroundJobQueue } from './background-job.queue';
 import {
+  JOB_QUEUES,
   PermanentJobError,
   type BackgroundJobRecord,
   type JobProcessor,
@@ -63,7 +65,10 @@ const STALLED_AFTER_MS = 5 * 60_000;
 @Injectable()
 export class BackgroundJobWorker implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(BackgroundJobWorker.name);
-  private readonly identity = `${hostname()}:${process.pid}`;
+  private readonly eventLoop = monitorEventLoopDelay({ resolution: 20 });
+  private lastSample = -Infinity;
+  private sampling: Promise<void> | null = null;
+  private lastSweep = new Map<string, number>();
   private timer: NodeJS.Timeout | null = null;
   private activeTick: Promise<number> | null = null;
   private stopping = false;
@@ -77,15 +82,22 @@ export class BackgroundJobWorker implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit(): void {
-    if ((process.env.JOBS_WORKER_ENABLED ?? 'true').trim() === 'false') {
+    if (
+      processRole() === 'api' ||
+      (process.env.JOBS_WORKER_ENABLED ?? 'true').trim() === 'false'
+    ) {
       this.logger.log('[jobs] worker desligado por configuração');
       return;
     }
     const interval = Number(process.env.JOBS_POLL_INTERVAL_MS ?? 2000);
-    this.timer = setInterval(() => void this.tick(), Math.max(250, interval));
-    /** Não segura o processo aberto no encerramento. */
-    this.timer.unref?.();
-    this.logger.log(`[jobs] worker ativo (${this.identity})`);
+    this.timer = setInterval(
+      () => void this.processTick(),
+      Number.isFinite(interval) ? Math.max(250, interval) : 2000,
+    );
+    this.eventLoop.enable();
+    if (processRole() !== 'combined')
+      rmSync('/tmp/orbit-worker-ready', { force: true });
+    if (processRole() === 'combined') this.timer.unref();
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -95,10 +107,15 @@ export class BackgroundJobWorker implements OnModuleInit, OnModuleDestroy {
     /**
      * `clearInterval` impede novos claims, mas não cancela o tick que já
      * atravessou a fila. Fechar Prisma enquanto ele finaliza um job deixava a
-     * promise e o pool disputarem o teardown. Aguardar o único tick permitido
+     * promise e o pool disputarem o teardown. Aguardar os trabalhos ativos
      * mantém a ordem: parar claims -> terminar trabalho -> fechar o banco.
      */
-    await this.activeTick;
+    await Promise.all([
+      this.activeTick,
+      this.sampling,
+      ...this.activeLanes.values(),
+    ]);
+    this.eventLoop.disable();
   }
 
   /**
@@ -119,26 +136,137 @@ export class BackgroundJobWorker implements OnModuleInit, OnModuleDestroy {
   }
 
   private async processTick(): Promise<number> {
-    let processed = 0;
+    const role = processRole();
+    const documents: ReadonlySet<string> = new Set([
+      JOB_QUEUES.artifactRender,
+      JOB_QUEUES.managementReport,
+    ]);
+    const processors = this.registry
+      .all()
+      .filter(
+        ({ queue }) =>
+          role === 'combined' ||
+          (role === 'documents' ? documents.has(queue) : !documents.has(queue)),
+      );
+    if (role === 'api') return 0;
+    const lanes: JobProcessor[][] = [[], [], []];
+    for (const processor of processors) {
+      const lane =
+        role === 'combined' || documents.has(processor.queue)
+          ? 0
+          : processor.queue === JOB_QUEUES.mobilePushDelivery ||
+              processor.queue === JOB_QUEUES.mobileNotification
+            ? 1
+            : 2;
+      lanes[lane]!.push(processor);
+    }
+    // Each lane is single-flight. Independent timers can keep draining the
+    // notification lane while another lane waits on a slow external service.
+    if (
+      !this.stopping &&
+      this.timer &&
+      !this.sampling &&
+      performance.now() - this.lastSample >= 60_000
+    ) {
+      this.lastSample = performance.now();
+      this.sampling = this.sample(processors, role).finally(() => {
+        this.sampling = null;
+      });
+    }
+    const counts = await Promise.all(
+      lanes.map((lane, index) => this.runLane(lane, index)),
+    );
+    return counts.reduce((sum, count) => sum + count, 0);
+  }
+
+  private async sample(
+    processors: JobProcessor[],
+    role: string,
+  ): Promise<void> {
     try {
-      for (const processor of this.registry.all()) {
-        await this.queue.requeueStalled(processor.queue, STALLED_AFTER_MS);
-        const job = await this.queue.claim(processor.queue, this.identity);
-        if (!job) continue;
-        await this.run(processor, job);
-        processed += 1;
-      }
-    } catch (error) {
-      /** Falha do laço não derruba o worker: o próximo ciclo tenta de novo. */
-      const classified = classifyInternalError(error);
-      this.logger.error(
+      const queues = await this.queue.snapshot(
+        processors.map(({ queue }) => queue),
+      );
+      if (role !== 'combined') writeFileSync('/tmp/orbit-worker-ready', '');
+      this.logger.log(
         JSON.stringify({
-          stage: 'job-worker-cycle-failed',
-          errorCategory: classified.category,
-          exceptionClass: classified.exceptionClass,
-          errorCode: classified.code,
+          event: 'worker_queue_snapshot',
+          role,
+          queues,
+          rssBytes: process.memoryUsage.rss(),
+          eventLoopP95Ms: this.eventLoop.percentile(95) / 1e6,
         }),
       );
+      this.eventLoop.reset();
+    } catch {
+      this.logger.warn(
+        JSON.stringify({ event: 'worker_snapshot_failed', role }),
+      );
+    }
+  }
+
+  private readonly activeLanes = new Map<number, Promise<number>>();
+
+  private async runLane(
+    processors: JobProcessor[],
+    lane: number,
+  ): Promise<number> {
+    if (this.stopping || this.activeLanes.has(lane) || !processors.length)
+      return 0;
+    const running = this.drainLane(processors);
+    this.activeLanes.set(lane, running);
+    try {
+      return await running;
+    } finally {
+      this.activeLanes.delete(lane);
+    }
+  }
+
+  private async drainLane(processors: JobProcessor[]): Promise<number> {
+    let processed = 0;
+    for (const processor of processors) {
+      if (this.stopping) break;
+      try {
+        const now = performance.now();
+        if (
+          !this.lastSweep.has(processor.queue) ||
+          now - this.lastSweep.get(processor.queue)! >= 30_000
+        ) {
+          await this.queue.requeueStalled(processor.queue, STALLED_AFTER_MS);
+          this.lastSweep.set(processor.queue, now);
+        }
+        if (this.stopping) break;
+        const job = await this.queue.claim(processor.queue, generateUuidV7());
+        if (!job) continue;
+        const heartbeat = setInterval(() => {
+          void this.queue.heartbeat(job).catch(() =>
+            this.logger.warn(
+              JSON.stringify({
+                event: 'job_lease_heartbeat_failed',
+                queue: job.queue,
+              }),
+            ),
+          );
+        }, 30_000);
+        heartbeat.unref();
+        try {
+          await this.run(processor, job);
+          processed++;
+        } finally {
+          clearInterval(heartbeat);
+        }
+      } catch (error) {
+        const classified = classifyInternalError(error);
+        this.logger.error(
+          JSON.stringify({
+            stage: 'job-worker-cycle-failed',
+            queue: processor.queue,
+            errorCategory: classified.category,
+            exceptionClass: classified.exceptionClass,
+            errorCode: classified.code,
+          }),
+        );
+      }
     }
     return processed;
   }
@@ -192,7 +320,7 @@ export class BackgroundJobWorker implements OnModuleInit, OnModuleDestroy {
           }
         }
         await processor.process(job);
-        await this.queue.succeed(job.id);
+        if (!(await this.queue.succeed(job))) return;
         this.logger.log(
           JSON.stringify({
             ...this.trace(job),

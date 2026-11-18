@@ -1,3 +1,4 @@
+import { renderPdfInThread, shouldOffloadPdf } from '../../runtime/pdf-thread';
 import sharp from 'sharp';
 import { Injectable } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
@@ -28,6 +29,8 @@ export class QuoteAcceptedDocumentService {
     original: Buffer,
     acceptance: CustomerAcceptance,
   ): Promise<Buffer> {
+    if (shouldOffloadPdf())
+      return renderPdfInThread('accepted-quote', original, acceptance);
     const receipt = await this.receipt({
       ...acceptance,
       signature: await sharp(acceptance.signature, {

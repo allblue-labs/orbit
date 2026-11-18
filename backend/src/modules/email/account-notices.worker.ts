@@ -1,3 +1,4 @@
+import { runsMaintenance } from '../../runtime/process-role';
 import {
   Injectable,
   Logger,
@@ -15,7 +16,7 @@ export class AccountNoticesWorker implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AccountNoticesWorker.name);
   constructor(private readonly notices: AccountNoticesService) {}
   onModuleInit() {
-    if ((process.env.JOBS_WORKER_ENABLED ?? 'true').trim() === 'false') return;
+    if (!runsMaintenance()) return;
     this.timer = setInterval(() => void this.tick(), 60_000);
     this.timer.unref();
     void this.tick();

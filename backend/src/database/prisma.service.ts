@@ -51,6 +51,8 @@ export class PrismaService
          * o relógio do tempo limite da transação já está correndo.
          */
         max: number('DATABASE_POOL_MAX', 20),
+        application_name: `orbit-${environment.getOptional('ORBIT_PROCESS_ROLE') || 'combined'}`,
+        connectionTimeoutMillis: 5_000,
       }),
       /**
        * Janela da transação interativa.

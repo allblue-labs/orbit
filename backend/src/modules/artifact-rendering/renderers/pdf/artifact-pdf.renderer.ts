@@ -1,3 +1,7 @@
+import {
+  renderPdfInThread,
+  shouldOffloadPdf,
+} from '../../../../runtime/pdf-thread';
 import { documentContent } from '../document-content';
 /**
  * Renderer PDF.
@@ -54,6 +58,7 @@ export class ArtifactPdfRenderer implements ArtifactRenderer {
   readonly mimeType = 'application/pdf';
 
   render(input: RenderInput): Promise<RenderOutput> {
+    if (shouldOffloadPdf()) return renderPdfInThread('artifact', input);
     input = documentContent(input);
     return new Promise((resolve, reject) => {
       const document = new PDFDocument({

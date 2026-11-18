@@ -1,3 +1,7 @@
+import {
+  renderPdfInThread,
+  shouldOffloadPdf,
+} from '../../../../runtime/pdf-thread';
 import { documentContent } from '../document-content';
 /**
  * Renderer PDF premium.
@@ -49,6 +53,7 @@ export class ArtifactPremiumPdfRenderer implements ArtifactRenderer {
   readonly mimeType = 'application/pdf';
 
   render(input: RenderInput): Promise<RenderOutput> {
+    if (shouldOffloadPdf()) return renderPdfInThread('premium', input);
     input = documentContent(input);
     return new Promise((resolve, reject) => {
       const theme = buildTheme(input.branding.primaryColor);

@@ -1,3 +1,4 @@
+import { renderPdfInThread, shouldOffloadPdf } from '../../runtime/pdf-thread';
 import { documentValue } from '../../common/document-value';
 import { Injectable } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
@@ -10,6 +11,7 @@ import type {
 @Injectable()
 export class PdfRendererService {
   render(input: RenderDocumentInput): Promise<Buffer> {
+    if (shouldOffloadPdf()) return renderPdfInThread('report', input);
     return new Promise((resolve, reject) => {
       const settings = input.settings;
       const document = new PDFDocument({

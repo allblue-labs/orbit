@@ -1,3 +1,4 @@
+import { runsMaintenance } from '../../runtime/process-role';
 import { STORAGE_CONFIG, type StorageConfig } from './storage.config';
 import { hasForeignObjectReference } from './storage-ownership';
 import {
@@ -32,7 +33,7 @@ export class StorageCleanupService implements OnModuleInit, OnModuleDestroy {
     @Inject(STORAGE_CONFIG) private readonly config: StorageConfig,
   ) {}
   onModuleInit() {
-    if ((process.env.JOBS_WORKER_ENABLED ?? 'true').trim() === 'false') return;
+    if (!runsMaintenance()) return;
     this.timer = setInterval(
       () =>
         void this.drain().catch(() =>

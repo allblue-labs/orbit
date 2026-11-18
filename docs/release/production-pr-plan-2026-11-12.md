@@ -270,6 +270,15 @@ imagens rodam sem root e o ambiente não quebra recursos legítimos do mobile.
 
 ### PR-15 — Workers, storage e observabilidade
 
+**Implementação local em 17/11/2026.**
+[Relatório e runbook](pr-15-worker-isolation.md) e
+[evidências](evidence/pr-15-worker-isolation.json).
+API, worker geral e documentos com pools separados, concorrência limitada,
+lease com renovação e conferência de posse, storage com cancelamento da leitura
+e histórico de métricas. Ensaio concorrente em PostgreSQL descartável aprovado.
+Build Docker local bloqueado pelo disco da VM cheio. O gate de imagens e
+readiness dos consumidores está no CI para a próxima execução.
+
 Separar trabalho pesado do HTTP e definir filas/concorrência/backpressure para não
 fazer push aguardar PDF. Introduzir deadlines/cancelamento e retry bounded no
 provider de storage. Exportar métricas por fila e resultado de provider de forma

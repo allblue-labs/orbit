@@ -31,6 +31,7 @@ export interface StorageConfig {
 
 export interface S3Config {
   readonly endpoint: string;
+  readonly deadlineMs?: number;
   readonly region: string;
   readonly accessKeyId: string;
   readonly secretAccessKey: string;

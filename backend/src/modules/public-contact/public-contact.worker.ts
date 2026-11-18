@@ -1,3 +1,4 @@
+import { runsMaintenance } from '../../runtime/process-role';
 import {
   Injectable,
   Logger,
@@ -20,7 +21,7 @@ export class PublicContactWorker implements OnModuleInit, OnModuleDestroy {
   ) {}
   onModuleInit() {
     if (
-      (process.env.JOBS_WORKER_ENABLED ?? 'true').trim() === 'false' ||
+      !runsMaintenance() ||
       (process.env.PUBLIC_CONTACT_DELIVERY_ENABLED ?? 'true').trim() !== 'true'
     )
       return;

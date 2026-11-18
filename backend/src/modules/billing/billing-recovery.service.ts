@@ -1,3 +1,4 @@
+import { runsMaintenance } from '../../runtime/process-role';
 import {
   Inject,
   Injectable,
@@ -281,9 +282,7 @@ export class BillingRecoveryWorker implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(BillingRecoveryWorker.name);
   constructor(private readonly recovery: BillingRecoveryService) {}
   onModuleInit(): void {
-    const enabled =
-      (process.env.JOBS_WORKER_ENABLED ?? 'true') !== 'false' &&
-      this.recovery.settings.enabled;
+    const enabled = runsMaintenance() && this.recovery.settings.enabled;
     this.logger.log(
       JSON.stringify({
         stage: 'billing-recovery-worker',

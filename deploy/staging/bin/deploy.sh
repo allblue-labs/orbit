@@ -50,7 +50,7 @@ fi
 "${compose[@]}" pull
 "${compose[@]}" up -d --wait postgres
 # Migração é um serviço efêmero; up aguarda seu exit 0 antes de iniciar a API.
-"${compose[@]}" up -d --wait --wait-timeout 180 api frontend
+"${compose[@]}" up -d --wait --wait-timeout 180 api frontend worker documents
 "${compose[@]}" ps
 curl --fail --silent --show-error http://127.0.0.1:6001/health/ready
 curl --fail --silent --show-error --output /dev/null http://127.0.0.1:7070/login

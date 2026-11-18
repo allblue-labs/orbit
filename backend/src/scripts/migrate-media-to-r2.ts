@@ -264,7 +264,7 @@ async function main() {
   } finally {
     client.release();
     await pool.end();
-    storage.onModuleDestroy();
+    storage.onApplicationShutdown();
   }
 }
 void main().catch((error: unknown) => {

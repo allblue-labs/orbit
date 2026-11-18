@@ -31,7 +31,7 @@ done
 python3 - "$output" "$repository" "$tag" "$sha" "$created" <<'PY'
 import json, pathlib, re, sys
 p=pathlib.Path(sys.argv[1]); repository, tag, sha, created=sys.argv[2:]
-services={'api':'api', 'migrate':'migrator', 'bootstrap-admin':'migrator', 'storage-migration':'migrator', 'frontend':'frontend'}
+services={'api':'api', 'worker':'api', 'documents':'api', 'migrate':'migrator', 'bootstrap-admin':'migrator', 'storage-migration':'migrator', 'frontend':'frontend'}
 lock=['# Referências imutáveis publicadas no Docker Hub privado.', 'services:']
 manifest={'commit': sha, 'created': created, 'tag': tag, 'images': {}}
 for service, component in services.items():

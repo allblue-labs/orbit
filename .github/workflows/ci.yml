@@ -50,6 +50,7 @@ jobs:
         working-directory: backend
       # Hard gate: real disposable MinIO from pinned official source; no cloud credentials.
       - run: node scripts/verify-storage-integrity.mjs
+      - run: node scripts/verify-worker-isolation.mjs
 
   web:
     runs-on: ubuntu-24.04

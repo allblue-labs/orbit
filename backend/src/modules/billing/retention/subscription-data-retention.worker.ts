@@ -1,3 +1,4 @@
+import { runsMaintenance } from '../../../runtime/process-role';
 import {
   Injectable,
   Logger,
@@ -16,7 +17,7 @@ export class SubscriptionDataRetentionWorker
   constructor(private readonly retention: SubscriptionDataRetentionService) {}
   onModuleInit() {
     if (
-      (process.env.JOBS_WORKER_ENABLED ?? 'true').trim() === 'false' ||
+      !runsMaintenance() ||
       (process.env.SUBSCRIPTION_DATA_RETENTION_ENABLED ?? 'true').trim() ===
         'false'
     )

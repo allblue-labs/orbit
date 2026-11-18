@@ -1,3 +1,4 @@
+import { runsMaintenance } from '../../../runtime/process-role';
 import { EmailService } from '../../email/email.service';
 import { AccountNoticesService } from '../../email/account-notices.service';
 import { isAccountEmailPurpose } from '../../email/account-email-policy';
@@ -36,7 +37,7 @@ export class IdentityEmailWorker implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit() {
     if (
-      (process.env.JOBS_WORKER_ENABLED ?? 'true').trim() === 'false' ||
+      !runsMaintenance() ||
       (process.env.ACCOUNT_EMAIL_DELIVERY_ENABLED ?? 'true').trim() === 'false'
     )
       return;

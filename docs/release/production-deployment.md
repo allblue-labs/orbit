@@ -60,7 +60,7 @@ O staging usa um arquivo de lock por digest; consulte
 
 ```bash
 docker compose run --rm migrate
-docker compose up -d --no-build postgres api frontend
+docker compose up -d --no-build postgres api frontend worker documents
 ```
 
 O migrator cria/reconcilia primeiro somente os atributos seguros do papel,
@@ -151,3 +151,6 @@ O último gate cria projeto, redes, volumes e banco exclusivos; aplica migration
 executa bootstrap explicitamente e verifica login WEB/MOBILE e BFF. Remove apenas
 os recursos descartáveis que criou. Não usa `.env` do desenvolvedor nem envia
 mensagens aos providers. O CI executa o mesmo gate.
+
+Use o [runbook de workers](pr-15-worker-isolation.md) para readiness,
+monitoramento, retomada de dead letters e rollback da topologia da PR-15.

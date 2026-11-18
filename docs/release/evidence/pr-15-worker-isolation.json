@@ -1,0 +1,49 @@
+{
+  "pr": "PR-15",
+  "date": "2026-11-17",
+  "baseCommit": "bfaddcff8516e03b87bd20a3afdf7acf76f31b96",
+  "status": "implemented-local-runtime-verified-image-gate-pending",
+  "scenario": {
+    "runtime": "Compiled Nest in three OS processes with disposable PostgreSQL and the restricted application role",
+    "migrations": 126,
+    "concurrentHttpClients": 4,
+    "renderedPdfsInDocumentJob": 8,
+    "storageFixture": "Real S3 SDK reads an HTTP response whose body stalls after the headers, with a 2500 ms fixture deadline",
+    "notificationFixture": "Real database queue and worker with a synthetic delivery action",
+    "assertions": [
+      "HTTP PDF download returns PDF bytes",
+      "HTTP readiness remains responsive",
+      "Notification finishes before the object body is cancelled",
+      "Lease expiry exhausts attempts",
+      "Replay preserves row and attempt budget",
+      "Old lease cannot acknowledge or fail the replay"
+    ]
+  },
+  "results": {
+    "result": "PASS",
+    "fencedLeaseAndReplay": true,
+    "readinessSamples": 566,
+    "readinessP95Ms": 13.28,
+    "pushQueueAgeMs": 148,
+    "storageBodyClosedMs": 2363,
+    "peakConnections": 8,
+    "apiEventLoopP95MaxMs": 13.631487,
+    "apiRssPeakBytes": 366043136,
+    "pushRssBytes": 303529984
+  },
+  "otherChecks": {
+    "targetedUnitSuites": 6,
+    "targetedUnitTests": 34,
+    "composePreflightTests": 3,
+    "unsafeComposeMutations": 24,
+    "changedTypeScriptEslint": "PASS",
+    "backendTypeScript": "PASS",
+    "dockerLogMonitorAndSQLite": "PASS",
+    "gitDiffCheck": "PASS"
+  },
+  "limits": [
+    "Local Docker VM filesystem had zero available space, blocking apt signature verification during image build. The CI deployment job checks the new containers when images can build.",
+    "Synthetic push action does not validate Firebase delivery.",
+    "No deployment or production data used."
+  ]
+}

@@ -11,9 +11,8 @@
  *
  * Postgres com `FOR UPDATE SKIP LOCKED` entrega o que a PR exige — exclusão
  * mútua entre réplicas, idempotência, retry, backoff, dead-letter — sem um
- * serviço novo para operar, monitorar e proteger. A mesma transação que grava o
- * resultado do trabalho fecha o job: não existe janela em que um renderizou e o
- * outro acha que ainda não.
+ * serviço novo para operar, monitorar e proteger. O fechamento exige a posse do lease. Cada processador deve
+ * reconciliar seu resultado durável antes de repetir efeitos externos.
  *
  * O limite honesto: isto atende dezenas de jobs por segundo, não milhares. Se o
  * volume exigir, a troca por uma fila dedicada é substituir `BackgroundJobQueue`
@@ -155,6 +154,7 @@ export interface BackgroundJobRecord {
   correlationId: string;
   actorUserId: string | null;
   lastError: string | null;
+  lockedBy?: string | null;
   availableAt: Date;
   createdAt: Date;
 }

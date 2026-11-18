@@ -20,6 +20,21 @@ class DeploymentPreflightTest(unittest.TestCase):
     def test_regressions_are_rejected(self):
         mutations = [
             (
+                "worker",
+                lambda s: s["environment"].update(DATABASE_URL="private-canary"),
+            ),
+            ("documents", lambda s: s["environment"].update(ORBIT_PROCESS_ROLE="api")),
+            (
+                "documents",
+                lambda s: s["environment"].update(JOBS_WORKER_ENABLED="false"),
+            ),
+            ("worker", lambda s: s.update(profiles=["manual"])),
+            (
+                "worker",
+                lambda s: s.update(ports=[{"published": "5001", "target": 5001}]),
+            ),
+            ("documents", lambda s: s.update(healthcheck={})),
+            (
                 "api",
                 lambda s: s["environment"].update(
                     DATABASE_URL="postgresql://fixture_admin:private-canary@postgres/fixture_db"

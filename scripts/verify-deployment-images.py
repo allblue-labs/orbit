@@ -45,6 +45,8 @@ if args.postgres_tmpfs:
     ]
 for name, image in [
     ("api", args.api_image),
+    ("worker", args.api_image),
+    ("documents", args.api_image),
     ("migrate", args.migrator_image),
     ("bootstrap-admin", args.migrator_image),
     ("frontend", args.frontend_image),
@@ -86,6 +88,14 @@ api_env.update(
         "AWS_SES_FEEDBACK_ENABLED": "false",
     }
 )
+for name in ("worker", "documents"):
+    original = services[name]["environment"]
+    services[name]["environment"] = {
+        **api_env,
+        "ORBIT_PROCESS_ROLE": name,
+        "JOBS_WORKER_ENABLED": "true",
+        "DATABASE_POOL_MAX": original["DATABASE_POOL_MAX"],
+    }
 services["frontend"]["environment"]["TRUSTED_PROXY_SECRET"] = api_env[
     "TRUSTED_PROXY_SECRET"
 ]
@@ -227,6 +237,20 @@ with tempfile.TemporaryDirectory(prefix="orbit-deployment-proof-") as directory:
                 "frontend",
             ]
         )
+        command(
+            compose
+            + [
+                "up",
+                "-d",
+                "--no-deps",
+                "--wait",
+                "--wait-timeout",
+                "120",
+                "worker",
+                "documents",
+            ]
+        )
+        checks.append("dedicated-worker-containers-healthy")
         api = "http://127.0.0.1:" + port("api", 5001) + "/api/v1"
         web = "http://127.0.0.1:" + port("frontend", 3000)
         container = command(compose + ["ps", "-q", "api"]).stdout.strip()

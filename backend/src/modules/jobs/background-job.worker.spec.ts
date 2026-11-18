@@ -9,9 +9,16 @@ describe('BackgroundJobWorker lifecycle', () => {
     const blocked = new Promise<void>((resolve) => {
       release = resolve;
     });
+    let claimed!: () => void;
+    const claimStarted = new Promise<void>((resolve) => {
+      claimed = resolve;
+    });
     const queue = {
       requeueStalled: jest.fn().mockResolvedValue(undefined),
-      claim: jest.fn().mockImplementation(() => blocked.then(() => null)),
+      claim: jest.fn().mockImplementation(() => {
+        claimed();
+        return blocked.then(() => null);
+      }),
     };
     const registry = {
       all: jest.fn().mockReturnValue([{ queue: 'test.queue' }]),
@@ -25,7 +32,7 @@ describe('BackgroundJobWorker lifecycle', () => {
     );
 
     const tick = worker.tick();
-    await Promise.resolve();
+    await claimStarted;
     let stopped = false;
     const shutdown = worker.onModuleDestroy().then(() => {
       stopped = true;
