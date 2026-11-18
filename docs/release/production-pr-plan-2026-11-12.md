@@ -290,7 +290,7 @@ memória, conexões e idade da fila com cenário documentado.
 
 ### PR-16 — Custo de analytics
 
-**Implementação e qualificação local concluídas em 17/11/2026.**
+**Implementação e qualificação local concluídas em 17/11/2026, commit `8346bc3`.**
 [Relatório](pr-16-analytics-aggregation.md) e
 [evidências](evidence/pr-16-analytics-aggregation.json).
 Agregações sob RLS e painel compartilhado com autorização comercial preservada.

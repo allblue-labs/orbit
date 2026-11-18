@@ -52,5 +52,6 @@
       "radarKpis": 2,
       "legacyDashboardHealthIntelligence": 0
     }
-  }
+  },
+  "implementationCommit": "8346bc34725d0ed0c2222a0e2ca3e40094b7b7e3"
 }
