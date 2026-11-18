@@ -1,3 +1,4 @@
+import { MobileManagement } from '../../../common/mobile-management';
 import {
   Body,
   Controller,
@@ -36,6 +37,7 @@ export class TeamController {
   ) {}
 
   @Post('members')
+  @MobileManagement('team')
   @RequiresActivePlan()
   @Permissions('organization.members.update')
   @ApiOperation({
@@ -75,6 +77,7 @@ export class TeamController {
    * menor.
    */
   @Patch('members/:userId')
+  @MobileManagement('team')
   @RequiresActivePlan()
   @Permissions('organization.members.update')
   @ApiOperation({
@@ -117,6 +120,7 @@ export class TeamController {
   }
 
   @Delete('members/:userId')
+  @MobileManagement('team')
   @RequiresActivePlan()
   @Permissions('organization.members.update')
   @HttpCode(HttpStatus.NO_CONTENT)

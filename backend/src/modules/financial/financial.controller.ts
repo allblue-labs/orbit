@@ -1,3 +1,4 @@
+import { MobileManagement } from '../../common/mobile-management';
 /**
  * API do Financeiro.
  *
@@ -69,6 +70,7 @@ export class FinancialController {
   /* ---------------------------------------------------------------- */
 
   @Get('entries')
+  @MobileManagement('finance')
   @Capabilities('financial.read')
   @Permissions('financial.read')
   async entries(
@@ -93,6 +95,7 @@ export class FinancialController {
   }
 
   @Post('entries')
+  @MobileManagement('finance')
   @Capabilities('financial.manage')
   @Permissions('financial.manage')
   async createEntry(
@@ -110,6 +113,7 @@ export class FinancialController {
   }
 
   @Patch('entries/:id')
+  @MobileManagement('finance')
   @Capabilities('financial.manage')
   @Permissions('financial.manage')
   async updateEntry(
@@ -128,6 +132,7 @@ export class FinancialController {
   }
 
   @Post('entries/:id/confirm')
+  @MobileManagement('finance')
   @Capabilities('financial.manage')
   @Permissions('financial.manage')
   async confirmEntry(
@@ -153,6 +158,7 @@ export class FinancialController {
    * mentira que alguém acredita na hora de conferir o caixa.
    */
   @Post('entries/:id/cancel')
+  @MobileManagement('finance')
   @Capabilities('financial.manage')
   @Permissions('financial.manage')
   async cancelEntry(
@@ -175,6 +181,7 @@ export class FinancialController {
   /* ---------------------------------------------------------------- */
 
   @Get('categories')
+  @MobileManagement('finance')
   @Capabilities('financial.read')
   @Permissions('financial.read')
   async categories(
@@ -298,6 +305,7 @@ export class FinancialController {
    * na busca do modelo — com "modelo de recibo não encontrado", que é verdade.
    */
   @Post('receipts')
+  @MobileManagement('receipts')
   @Capabilities('financial.manage')
   @Permissions('financial.manage')
   createReceipt(

@@ -23,11 +23,14 @@ import { TeamController } from './team/team.controller';
 import { TeamRepository } from './team/team.repository';
 import { TeamService } from './team/team.service';
 
+import { MobileManagementController } from './team/mobile-management.controller';
+
 @Module({
   imports: [SubscriptionPlansModule, PmocModule, IdentityModule],
   controllers: [
     OrganizationController,
     TeamController,
+    MobileManagementController,
     BusinessUnitController,
     AssetController,
     CustomerController,

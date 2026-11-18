@@ -347,6 +347,9 @@ export class OrganizationRepository {
           usesCustomAccess: data.usesCustomAccess,
           customPermissions: data.customPermissions,
           customAllowedSurfaces: data.customAllowedSurfaces,
+          ...(data.roleId || (data.status && data.status !== 'ACTIVE')
+            ? { mobileDelegations: [] }
+            : {}),
         },
         select: {
           userId: true,

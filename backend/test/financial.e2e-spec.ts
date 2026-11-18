@@ -18,7 +18,7 @@ import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
  */
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -27,6 +27,12 @@ import type { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { configureApiVersioning } from './../src/configure-api';
 import { BackgroundJobWorker } from './../src/modules/jobs/background-job.worker';
+import {
+  STORAGE_PROVIDER,
+  type StorageProvider,
+} from '../src/modules/storage/storage.types';
+import { adminPrisma, disconnectAdminPrisma } from './support/admin-prisma';
+import { imageFixture } from './support/image-fixture';
 
 const CONTENT = Buffer.from('%PDF-1.7 recibo oficial do Orbit — E2E');
 
@@ -65,6 +71,7 @@ interface Tenant {
 
 describe('Financial (e2e)', () => {
   let app: INestApplication<App>;
+  const prisma = adminPrisma();
   let worker: BackgroundJobWorker;
   let http: () => request.Agent;
   let tenant: Tenant;
@@ -293,6 +300,7 @@ describe('Financial (e2e)', () => {
 
   afterAll(async () => {
     await app?.close();
+    await disconnectAdminPrisma();
   });
 
   /** Esvazia a fila: um `tick` reivindica um job por fila por vez. */
@@ -639,5 +647,91 @@ describe('Financial (e2e)', () => {
       ),
       tenant.token,
     ).expect(400);
+  });
+  it('creates a receipt, renders its PDF and limits download to the issuing tenant', async () => {
+    const created = await auth(
+      http().post('/api/v1/financial/receipts'),
+      neighbour.token,
+    )
+      .send({
+        businessUnitId: neighbour.businessUnitId,
+        payer: 'Cliente de teste',
+        amount: '120.50',
+        paidOn: '2026-09-02',
+        referring: 'Manutenção de equipamento',
+        paymentMethod: 'Pix',
+      })
+      .expect(201);
+    const id = (created.body as Envelope<{ id: string }>).data.id;
+    const path = `/api/v1/financial/receipts/${id}`;
+    await auth(http().post(`${path}/render`), tenant.token).expect(404);
+    await auth(http().get(`${path}/download`), neighbour.token).expect(404);
+    await auth(http().post(`${path}/render`), neighbour.token).expect(422);
+
+    const org = await prisma.businessUnit.findUniqueOrThrow({
+      where: { id: neighbour.businessUnitId },
+      select: { organization: { select: { id: true, ownerUserId: true } } },
+    });
+    const ownerId = org.organization.ownerUserId;
+    const png = imageFixture('receipt-issuer');
+    const objectKey = `${org.organization.id}/signatures/receipt-issuer.png`;
+    const signatureHash = createHash('sha256').update(png).digest('hex');
+    await app.get<StorageProvider>(STORAGE_PROVIDER).put({
+      bucket: 'orbit',
+      objectKey,
+      body: png,
+      mimeType: 'image/png',
+    });
+    const file = await prisma.storageFile.create({
+      data: {
+        organizationId: org.organization.id,
+        provider: 'LOCAL',
+        bucket: 'orbit',
+        objectKey,
+        fileName: 'signature.png',
+        mimeType: 'image/png',
+        sizeBytes: BigInt(png.length),
+        sha256: signatureHash,
+        status: 'AVAILABLE',
+        createdById: ownerId,
+      },
+    });
+    await prisma.userSignature.create({
+      data: {
+        organizationId: org.organization.id,
+        userId: ownerId,
+        storageObjectId: file.id,
+        sha256: signatureHash,
+      },
+    });
+
+    await auth(http().post(`${path}/render`), neighbour.token).expect(202);
+    await drain();
+    const receipt = await prisma.artifactExecution.findUniqueOrThrow({
+      where: { id },
+      select: {
+        renderStatus: true,
+        signatures: { select: { signerRole: true, userId: true } },
+      },
+    });
+    expect(receipt).toEqual({
+      renderStatus: 'READY',
+      signatures: [{ signerRole: 'ISSUER', userId: ownerId }],
+    });
+    const receipts = await auth(
+      http().get('/api/v1/financial/receipts'),
+      neighbour.token,
+    ).expect(200);
+    expect((receipts.body as Envelope<{ data: unknown[] }>).data.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id, renderStatus: 'READY' }),
+      ]),
+    );
+    const download = await auth(
+      http().get(`${path}/download`),
+      neighbour.token,
+    ).expect(200);
+    expect((download.body as Envelope<{ url: string }>).data.url).toBeTruthy();
+    await auth(http().get(`${path}/download`), tenant.token).expect(404);
   });
 });

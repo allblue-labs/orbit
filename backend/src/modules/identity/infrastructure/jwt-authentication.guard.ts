@@ -7,7 +7,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
 import type { UUID } from '../../../contracts';
-import { PUBLIC_KEY } from '../../../decorators';
+import { PERMISSIONS_KEY, PUBLIC_KEY } from '../../../decorators';
 import { UnauthorizedException } from '../../../exceptions';
 import {
   classifyInternalError,
@@ -22,7 +22,17 @@ import { toAuthenticatedIdentity } from '../application/authentication.service';
 import { allowsSurface } from '../domain/surface-access';
 import type { VerifiedPlatformAuthority } from '../../../common/verified-platform-authority';
 
+import {
+  MOBILE_MANAGEMENT,
+  isMobileManagementRequest,
+  mobileManagementAreas,
+  type MobileManagementArea,
+} from '../../../common/mobile-management';
+
 export interface IdentityRequest extends Request {
+  sessionClient?: string;
+  mobileManagementAllowed?: boolean;
+  mobileManagementAreas?: readonly MobileManagementArea[];
   actorType?: 'INTERNAL_USER';
   identity?: AuthenticatedIdentity;
   user?: {
@@ -95,6 +105,67 @@ export class JwtAuthenticationGuard implements CanActivate {
       if (!allowsSurface(user, session.client)) {
         await this.repository.revokeSession(session.id);
         throw new UnauthorizedException('Client surface access was revoked');
+      }
+      request.sessionClient = session.client;
+      const membership = user.organizationMemberships.find(
+        (item) => item.organizationId === identity.organizationId,
+      );
+      const role = membership?.role.key;
+      if (session.client === 'MOBILE' && membership) {
+        const tenantPermissions = membership.usesCustomAccess
+          ? membership.customPermissions
+          : membership.role.permissions;
+        const surfaces = membership.usesCustomAccess
+          ? membership.customAllowedSurfaces
+          : membership.role.allowedSurfaces;
+        const tenantMobile =
+          identity.isOrganizationOwner || surfaces.includes('MOBILE');
+        const delegations = tenantMobile
+          ? (membership.mobileDelegations ?? [])
+          : [];
+        request.mobileManagementAreas = tenantMobile
+          ? mobileManagementAreas(
+              identity.isOrganizationOwner,
+              role,
+              tenantPermissions,
+              delegations,
+            )
+          : [];
+
+        const targets = [context.getHandler(), context.getClass()];
+        const areas = this.reflector.getAllAndOverride<MobileManagementArea[]>(
+          MOBILE_MANAGEMENT,
+          targets,
+        );
+        if (
+          areas?.length &&
+          isMobileManagementRequest(this.reflector, targets, request)
+        ) {
+          const required =
+            this.reflector.getAllAndOverride<string[]>(
+              PERMISSIONS_KEY,
+              targets,
+            ) ?? [];
+          const delegated =
+            role === 'FIELD_TECHNICIAN' &&
+            areas.some((area) => area !== 'team' && delegations.includes(area));
+          request.mobileManagementAllowed =
+            identity.isOrganizationOwner ||
+            (role === 'ADMINISTRATOR' &&
+              required.every((permission) =>
+                tenantPermissions.includes(permission),
+              ) &&
+              areas.some((area) =>
+                request.mobileManagementAreas!.includes(area),
+              )) ||
+            delegated;
+          if (delegated) {
+            // These additional permissions live only on this allowlisted request.
+            identity.permissions = [
+              ...new Set([...identity.permissions, ...required]),
+            ];
+          }
+        }
       }
       request.identity = identity;
       request.actorType = 'INTERNAL_USER';

@@ -165,6 +165,7 @@ export class TeamRepository {
           usesCustomAccess: true,
           customPermissions: true,
           customAllowedSurfaces: true,
+          mobileDelegations: true,
           user: {
             select: {
               id: true,
@@ -294,7 +295,7 @@ export class TeamRepository {
       const agora = new Date();
       await transaction.organizationMembership.updateMany({
         where: { organizationId, userId, deletedAt: null },
-        data: { status: 'INACTIVE', deletedAt: agora },
+        data: { status: 'INACTIVE', deletedAt: agora, mobileDelegations: [] },
       });
       await transaction.businessUnitMembership.updateMany({
         where: { organizationId, userId, deletedAt: null },

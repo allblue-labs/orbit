@@ -28,6 +28,7 @@ import '../../features/sync/presentation/sync_triggers.dart';
 import '../../features/pmoc/presentation/pmoc_attendance_screen.dart';
 import '../../features/pmoc/presentation/pmoc_plan_screen.dart';
 import '../../features/pmoc/presentation/pmoc_plans_screen.dart';
+import '../../features/owner/presentation/owner_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import '../../features/profile/presentation/settings_screen.dart';
 import '../../features/scheduling/presentation/agenda_screen.dart';
@@ -76,6 +77,7 @@ abstract final class OrbitRoutes {
   /// Perfil, sincronização e assinatura. É o "mais" do aplicativo, com o nome
   /// do que ele de fato contém.
   static const profile = '/perfil';
+  static const ownerArea = '$profile/area-proprietario';
 
   static String operationDetail(String id) => '$operations/$id';
 
@@ -359,6 +361,11 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: OrbitRoutes.profile,
             builder: (context, state) => const ProfileScreen(),
             routes: [
+              OrbitPageRoute(
+                path: 'area-proprietario',
+                parentNavigatorKey: rootNavigatorKey,
+                builder: (context, state) => const OwnerScreen(),
+              ),
               OrbitPageRoute(
                 path: 'assinatura',
                 parentNavigatorKey: rootNavigatorKey,

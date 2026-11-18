@@ -122,13 +122,17 @@ class OrbitApiClient {
   final Dio _dio;
   int? _boundGeneration;
   bool _closed = false;
+  bool _mobileManagement = false;
 
   /// Feature repositories keep this lease, never a client that can switch accounts.
-  OrbitApiClient scoped() => OrbitApiClient._(
-    dio: _dio,
-    authenticator: authenticator,
-    apiBase: _apiBase,
-  ).._boundGeneration = authenticator.generation;
+  OrbitApiClient scoped({bool mobileManagement = false}) =>
+      OrbitApiClient._(
+          dio: _dio,
+          authenticator: authenticator,
+          apiBase: _apiBase,
+        )
+        .._boundGeneration = authenticator.generation
+        .._mobileManagement = mobileManagement;
 
   void closeScope() => _closed = true;
 
@@ -450,8 +454,12 @@ class OrbitApiClient {
     return name.isEmpty || name == '.' || name == '..' ? null : name;
   }
 
-  Options _options(bool isPublic, {Map<String, String>? headers}) =>
-      Options(extra: _requestExtra(isPublic), headers: headers);
+  Options _options(bool isPublic, {Map<String, String>? headers}) => Options(
+    extra: _requestExtra(isPublic),
+    headers: _mobileManagement && !isPublic
+        ? {...?headers, 'x-orbit-mobile-management': '1'}
+        : headers,
+  );
 
   /// Remove chaves nulas ou vazias — o `ValidationPipe` do backend usa
   /// `forbidNonWhitelisted` e rejeita parâmetros vazios.

@@ -197,6 +197,8 @@ export class TeamService {
   async issuePasswordLink(actor: TeamActor, userId: string) {
     const membro = await this.team.findMember(actor.organizationId, userId);
     if (!membro) throw new EntityNotFoundException('Member', userId);
+    if (!actor.isOrganizationOwner && membro.mobileDelegations?.length)
+      throw new ForbiddenException('O proprietário administra este acesso.');
     await this.assertMemberInActorScope(actor, userId);
 
     const organizacao = await this.organizations.findCurrent(
@@ -266,6 +268,8 @@ export class TeamService {
 
     const membro = await this.team.findMember(actor.organizationId, userId);
     if (!membro) throw new EntityNotFoundException('Member', userId);
+    if (!actor.isOrganizationOwner && membro.mobileDelegations?.length)
+      throw new ForbiddenException('O proprietário administra este acesso.');
     await this.assertMemberInActorScope(actor, userId);
 
     const organizacao = await this.organizations.findCurrent(
@@ -323,6 +327,8 @@ export class TeamService {
     }
     const membro = await this.team.findMember(actor.organizationId, userId);
     if (!membro) throw new EntityNotFoundException('Member', userId);
+    if (!actor.isOrganizationOwner && membro.mobileDelegations?.length)
+      throw new ForbiddenException('O proprietário administra este acesso.');
     await this.assertMemberInActorScope(actor, userId);
 
     await this.team.removeMember(actor.organizationId, userId);

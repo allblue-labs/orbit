@@ -612,6 +612,107 @@ describe('Team members, temporary password and recovery (e2e)', () => {
     }
   });
 
+  it('delegates individual mobile management areas and revokes existing sessions immediately', async () => {
+    const created = await criarMembro();
+    const loginMobile = async (email: string, password: string) => {
+      const response = await http()
+        .post('/api/v1/identity/login')
+        .send({ email, password, client: 'MOBILE' })
+        .expect(200);
+      return (response.body as Envelope<{ accessToken: string }>).data
+        .accessToken;
+    };
+    const technician = await loginMobile(
+      created.data.member.email,
+      created.data.temporaryPassword,
+    );
+    const owner = await prisma.user.findUniqueOrThrow({
+      where: { id: ownerUserId },
+      select: { email: true },
+    });
+    const mobileOwner = await loginMobile(owner.email, PASSWORD);
+    const delegationPath = `/api/v1/mobile/owner/members/${created.data.member.userId}/delegations`;
+    const management = (test: request.Test, token: string) =>
+      auth(test, token).set('x-orbit-mobile-management', '1');
+    const access = (token: string) =>
+      management(http().get('/api/v1/mobile/owner/access'), token);
+
+    const initial = await access(technician).expect(200);
+    expect((initial.body as Envelope<{ areas: string[] }>).data.areas).toEqual(
+      [],
+    );
+    const ownerAccess = await access(mobileOwner).expect(200);
+    expect(
+      (ownerAccess.body as Envelope<{ areas: string[] }>).data.areas,
+    ).toEqual(expect.arrayContaining(['operations', 'team']));
+
+    await management(http().get('/api/v1/customers'), technician).expect(403);
+    await auth(http().get('/api/v1/mobile/owner/customers'), technician).expect(
+      403,
+    );
+    await management(http().patch(delegationPath), technician)
+      .send({ areas: ['customers'] })
+      .expect(403);
+    await management(http().patch(delegationPath), mobileOwner)
+      .send({ areas: ['team'] })
+      .expect(400);
+
+    const neighbour = await prisma.organizationMembership.findFirstOrThrow({
+      where: {
+        organizationId: { not: ownerOrganizationId },
+        role: { key: 'OWNER' },
+      },
+      select: { userId: true },
+    });
+    await management(
+      http().patch(
+        `/api/v1/mobile/owner/members/${neighbour.userId}/delegations`,
+      ),
+      mobileOwner,
+    )
+      .send({ areas: ['customers'] })
+      .expect(404);
+
+    await management(http().patch(delegationPath), mobileOwner)
+      .send({ areas: ['customers'] })
+      .expect(200);
+    const granted = await access(technician).expect(200);
+    expect((granted.body as Envelope<{ areas: string[] }>).data.areas).toEqual([
+      'customers',
+    ]);
+    const record = await management(
+      http().post('/api/v1/customers'),
+      technician,
+    )
+      .send({ type: 'INDIVIDUAL', legalName: 'Cliente criado por delegação' })
+      .expect(201);
+    await management(
+      http().get(
+        `/api/v1/customers/${(record.body as Envelope<{ id: string }>).data.id}`,
+      ),
+      technician,
+    ).expect(200);
+    await management(
+      http().get('/api/v1/financial/entries'),
+      technician,
+    ).expect(403);
+    await management(
+      http().get('/api/v1/organizations/current/members'),
+      technician,
+    ).expect(403);
+    await auth(http().get('/api/v1/customers'), technician).expect(200);
+    await auth(http().get('/api/v1/assets'), technician).expect(403);
+
+    await management(http().patch(delegationPath), mobileOwner)
+      .send({ areas: [] })
+      .expect(200);
+    const revoked = await access(technician).expect(200);
+    expect((revoked.body as Envelope<{ areas: string[] }>).data.areas).toEqual(
+      [],
+    );
+    await management(http().get('/api/v1/customers'), technician).expect(403);
+  });
+
   it('o técnico entra no aplicativo e é recusado no painel web', async () => {
     const criado = await criarMembro();
     const credencial = {

@@ -474,10 +474,10 @@ export class ArtifactExecutionRepository {
     signerRole: string,
     signatureHash: string,
     signatorySnapshot?: {
-      signedAs: string;
+      signedAs?: string;
       signatureAssetId: string;
       signatureAssetHash: string;
-      professionalRole: string;
+      professionalRole?: string;
       credentialType?: string;
       credentialNumber?: string;
       credentialRegion?: string;

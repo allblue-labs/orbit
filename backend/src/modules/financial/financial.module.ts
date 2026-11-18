@@ -14,20 +14,31 @@ import { FinancialRepository } from './financial.repository';
 import { FinancialService } from './financial.service';
 import { ArtifactExecutionModule } from '../artifact-executions/artifact-execution.module';
 import { ReceiptEntryProcessor } from './receipt-entry.processor';
+import { ArtifactRenderingModule } from '../artifact-rendering/artifact-rendering.module';
+import { ArtifactManifestModule } from '../artifact-manifests/artifact-manifest.module';
+import { ReceiptDeliveryController } from './receipt-delivery.controller';
+import { ReceiptDeliveryService } from './receipt-delivery.service';
 import { ReceiptService } from './receipt.service';
 
 @Module({
   /* `ArtifactExecutionModule` porque o recibo **é** uma execução de artefato: a
      emissão reaproveita a criação, a validação de campo contra o snapshot
      congelado e a gravação de resposta, em vez de uma segunda implementação. */
-  imports: [PrismaModule, SubscriptionPlansModule, ArtifactExecutionModule],
-  controllers: [FinancialController],
+  imports: [
+    PrismaModule,
+    SubscriptionPlansModule,
+    ArtifactExecutionModule,
+    ArtifactRenderingModule,
+    ArtifactManifestModule,
+  ],
+  controllers: [FinancialController, ReceiptDeliveryController],
   providers: [
     FinancialRepository,
     FinancialService,
     FinancialMapper,
     ReceiptEntryProcessor,
     ReceiptService,
+    ReceiptDeliveryService,
   ],
   exports: [FinancialService],
 })

@@ -179,6 +179,8 @@ export class OrganizationService {
       userId,
     );
     if (!membership) throw new EntityNotFoundException('Member', userId);
+    if (!actor.isOrganizationOwner && membership.mobileDelegations?.length)
+      throw new ForbiddenException('O proprietário administra este acesso.');
     await this.assertMemberInActorScope(actor, organizationId, userId);
 
     const role = await this.repository.findRole(

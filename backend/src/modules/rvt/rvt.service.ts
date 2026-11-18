@@ -234,14 +234,16 @@ export class RvtService {
     query: RvtConfigurationQueryDto,
   ): Promise<RvtCursorPageReadModel<RvtConfigurationReadModel>> {
     if (query.businessUnitId) this.assertUnit(actor, query.businessUnitId);
-    const values = await this.repository.listConfigurations(
+    const result = await this.repository.listConfigurations(
       actor.organizationId,
-      { ...query, businessUnitIds: actor.businessUnitIds },
+      {
+        ...query,
+        businessUnitIds: actor.businessUnitIds,
+      },
     );
     return {
-      data: values.map((x) => this.mapper.configuration(x)),
-      nextCursor: null,
-      hasNextPage: false,
+      ...result,
+      data: result.data.map((item) => this.mapper.configuration(item)),
     };
   }
   /**
@@ -304,6 +306,20 @@ export class RvtService {
       this.mapError(error);
     }
   }
+  async cancelConfiguration(id: string, actor: RvtActor) {
+    await this.get(id, actor);
+    try {
+      await this.repository.cancelConfiguration(
+        id,
+        actor.organizationId,
+        actor.actorId,
+      );
+    } catch (error) {
+      this.mapError(error);
+    }
+    return this.get(id, actor);
+  }
+
   async get(id: string, actor: RvtActor): Promise<RvtConfigurationReadModel> {
     const value = await this.repository.configuration(id, actor.organizationId);
     if (!value) throw new EntityNotFoundException('RvtConfiguration', id);
@@ -832,6 +848,9 @@ export class RvtService {
     }
     if (error instanceof Error) {
       const messages: Record<string, string> = {
+        RVT_CONFIGURATION_CANCELLED: 'Este RVT está cancelado.',
+        RVT_CONFIGURATION_IN_PROGRESS:
+          'Conclua as visitas em andamento antes de cancelar o RVT.',
         RVT_VISIT_ALREADY_STARTED:
           'A visita já foi iniciada e não pode ser alterada ou excluída.',
         RVT_VISIT_EQUIPMENT_REQUIRED:

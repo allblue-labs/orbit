@@ -1,3 +1,4 @@
+import { MobileManagement } from '../../common/mobile-management';
 import { UploadLimitsInterceptor } from '../storage/upload-limits.interceptor';
 import { TenantRecovery } from '../tenant-operations/tenant-operation.policy';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -79,6 +80,7 @@ export class OrganizationController {
    * `GET /organizations/current`, e por isso segue a mesma autorização.
    */
   @Get('current/members')
+  @MobileManagement('team')
   @RequiresActivePlan()
   async members(
     @Req() request: IdentityRequest,
@@ -131,6 +133,7 @@ export class OrganizationController {
    * administra em `identity/me`. Um gestor não edita a identidade de outro.
    */
   @Patch('current/members/:userId')
+  @MobileManagement('team')
   @RequiresActivePlan()
   @Permissions('organization.members.update')
   async updateMember(
@@ -162,6 +165,7 @@ export class OrganizationController {
    * contrato nenhum.
    */
   @Get('current/roles')
+  @MobileManagement('team')
   @RequiresActivePlan()
   async roles(@Req() request: IdentityRequest) {
     return this.readModels.roles(

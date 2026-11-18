@@ -1,3 +1,4 @@
+import { MobileManagement } from '../../../../common/mobile-management';
 import {
   Body,
   Controller,
@@ -40,6 +41,7 @@ export class AssetController {
   ) {}
 
   @Get()
+  @MobileManagement('equipment')
   @Capabilities('assets.read')
   @Permissions('assets.read')
   list(@Req() request: IdentityRequest, @Query() query: AssetQueryDto) {
@@ -157,6 +159,7 @@ export class AssetController {
   }
 
   @Get(':id')
+  @MobileManagement('equipment')
   @Capabilities('assets.read')
   @Permissions('assets.read')
   get(
@@ -167,6 +170,7 @@ export class AssetController {
   }
 
   @Post()
+  @MobileManagement('equipment')
   @Capabilities('assets.manage')
   @Permissions('assets.create')
   create(@Req() request: IdentityRequest, @Body() input: CreateAssetDto) {
@@ -174,6 +178,7 @@ export class AssetController {
   }
 
   @Patch(':id')
+  @MobileManagement('equipment')
   @Capabilities('assets.manage')
   @Permissions('assets.update')
   update(
@@ -185,6 +190,7 @@ export class AssetController {
   }
 
   @Delete(':id')
+  @MobileManagement('equipment')
   @Capabilities('assets.manage')
   @Permissions('assets.delete')
   @HttpCode(HttpStatus.NO_CONTENT)

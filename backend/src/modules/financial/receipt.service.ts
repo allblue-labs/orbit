@@ -94,10 +94,11 @@ export class ReceiptService {
             { organizationId: null, visibility: 'GLOBAL' },
           ],
         },
-        /* O da organização vence o global: quem publicou o próprio modelo quer
-           emitir no dele. `organizationId` nulo ordena por último em `desc`
-           porque `NULLS LAST` é o padrão do PostgreSQL nessa direção. */
-        orderBy: [{ organizationId: 'desc' }, { createdAt: 'asc' }],
+        // Prefere o modelo ativo da organização ao catálogo global.
+        orderBy: [
+          { organizationId: { sort: 'desc', nulls: 'last' } },
+          { createdAt: 'asc' },
+        ],
         include: { versions: { orderBy: { version: 'desc' }, take: 1 } },
       });
 

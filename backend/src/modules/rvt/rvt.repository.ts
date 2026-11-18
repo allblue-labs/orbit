@@ -269,6 +269,8 @@ export class RvtRepository {
     query: ScopedRvtQuery<RvtConfigurationQueryDto>,
   ) {
     return this.rls.run(async (tx) => {
+      const search = query.search?.trim();
+      const limit = query.limit ?? 50;
       const rows = await tx.rvtConfiguration.findMany({
         where: {
           organizationId,
@@ -278,16 +280,30 @@ export class RvtRepository {
           },
           customerId: query.customerId,
           status: query.status,
+          ...(query.cursor ? { id: { lt: query.cursor } } : {}),
+          ...(search
+            ? {
+                OR: [
+                  { name: { contains: search, mode: 'insensitive' } },
+                  { code: { contains: search, mode: 'insensitive' } },
+                ],
+              }
+            : {}),
         },
-        orderBy: { createdAt: 'desc' },
-        take: query.limit ?? 50,
+        orderBy: { id: 'desc' },
+        take: limit + 1,
         select: { id: true },
       });
-      return readRvtConfigurations(
-        tx,
-        organizationId,
-        rows.map(({ id }) => id),
-      );
+      const page = rows.slice(0, limit);
+      return {
+        data: await readRvtConfigurations(
+          tx,
+          organizationId,
+          page.map(({ id }) => id),
+        ),
+        nextCursor: rows.length > limit ? (page.at(-1)?.id ?? null) : null,
+        hasNextPage: rows.length > limit,
+      };
     });
   }
 
@@ -303,6 +319,8 @@ export class RvtRepository {
       const current = await tx.rvtConfiguration.findFirstOrThrow({
         where: { id, organizationId, deletedAt: null },
       });
+      if (current.status === 'CANCELLED')
+        throw new Error('RVT_CONFIGURATION_CANCELLED');
       if (input.defaultResponsibleFieldTechnicianId)
         await this.assertProfessional(
           tx,
@@ -548,6 +566,56 @@ export class RvtRepository {
     });
   }
 
+  cancelConfiguration(id: string, organizationId: string, actorId: string) {
+    return this.rls.run(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`rvt:configuration:${id}`}))`;
+      const current = await tx.rvtConfiguration.findFirstOrThrow({
+        where: { id, organizationId, deletedAt: null },
+        select: { status: true, businessUnitId: true },
+      });
+      if (current.status === 'CANCELLED') return;
+      const visits = await tx.rvtOccurrence.findMany({
+        where: {
+          organizationId,
+          configurationId: id,
+          deletedAt: null,
+          status: { in: ['SCHEDULED', 'IN_PROGRESS'] },
+        },
+        select: { id: true, status: true, schedulingEventId: true },
+      });
+      if (visits.some((visit) => visit.status === 'IN_PROGRESS'))
+        throw new Error('RVT_CONFIGURATION_IN_PROGRESS');
+      await tx.rvtOccurrence.updateMany({
+        where: { organizationId, id: { in: visits.map((visit) => visit.id) } },
+        data: { status: 'CANCELLED', authorizedAt: null, authorizedById: null },
+      });
+      await tx.schedulingEvent.updateMany({
+        where: {
+          organizationId,
+          id: {
+            in: visits.flatMap((visit) =>
+              visit.schedulingEventId ? [visit.schedulingEventId] : [],
+            ),
+          },
+        },
+        data: { status: 'CANCELLED' },
+      });
+      await tx.rvtConfiguration.update({
+        where: { id },
+        data: { status: 'CANCELLED' },
+      });
+      await this.audit(
+        tx,
+        organizationId,
+        current.businessUnitId,
+        actorId,
+        'RVT_CONFIGURATION_CANCELLED',
+        id,
+        {},
+      );
+    });
+  }
+
   configuration(id: string, organizationId: string) {
     return this.rls.run(
       async (tx) =>
@@ -685,6 +753,8 @@ export class RvtRepository {
       const configuration = await tx.rvtConfiguration.findFirstOrThrow({
         where: { id: configurationId, organizationId, deletedAt: null },
       });
+      if (configuration.status === 'CANCELLED')
+        throw new Error('RVT_CONFIGURATION_CANCELLED');
       const current = occurrenceId
         ? await tx.rvtOccurrence.findFirstOrThrow({
             where: {

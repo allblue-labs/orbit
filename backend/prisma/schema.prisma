@@ -617,6 +617,9 @@ model OrganizationMembership {
   customPermissions     String[] @default([]) @map("custom_permissions") @db.VarChar(160)
   customAllowedSurfaces String[] @default([]) @map("custom_allowed_surfaces") @db.VarChar(10)
 
+  /// Owner-only mobile management grants. Empty for every existing member.
+  mobileDelegations String[] @default([]) @map("mobile_delegations") @db.VarChar(40)
+
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   role         Role         @relation(fields: [roleId], references: [id], onDelete: Restrict)
