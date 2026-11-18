@@ -310,6 +310,13 @@ a história operacional.
 
 ### PR-17 — Contratos e responsabilidade em RVT
 
+**Implementação e validação local concluídas em 18/11/2026, commit `ee49cba`.**
+[Relatório](pr-17-rvt-contracts.md) e [evidências](evidence/pr-17-rvt-contracts.json).
+Os contratos web foram sincronizados e as consultas de configuração, projeção
+de agenda e montagem do relatório têm tipos explícitos. Passaram 35 testes
+unitários do RVT, 10 testes web e 15 testes HTTP em PostgreSQL com RLS.
+Esta alteração usa o esquema atual.
+
 Substituir `any` e suppressions globais nos casos de criação, atribuição, execução
 e relatório RVT por DTOs, read models e payloads Prisma explícitos. Extrair unidades
 de responsabilidade preservando transações. Aplicar o mesmo padrão gradualmente a
@@ -363,4 +370,6 @@ o parecer bloqueado para o recurso correspondente.
 | 10 | Código implementado; gates locais aprovados | `f23cb8d6048c` | [Resultados](pr-10-notification-isolation.md): gateway legado retirado, caixa HTTP por destinatário/tenant, papel excluído sem acesso e leitura mobile permitida com RBAC; backend 2.170 + 51, web 693, mobile 18; migration de defaults e encerramento de processos antigos no rollout; sem push/deploy |
 | 11 | Código implementado; gates locais aprovados | `4cb1c986fae2` | [Resultados](pr-11-outbound-ssrf.md): IA/Web Push com origens de deployment, DNS/IP fixado, TLS e limites; backend 2.271 + 25, audit produção zero; configurar origens existentes antes do rollout; sem migration, push ou deploy |
 | 12 | Código implementado; gates locais aprovados | `60f51a92e09b` | [Resultados](pr-12-relational-integrity.md): 185 FKs novas, guards/199 regras, preservação de identidade e rebind push; backend 2.275 + 657 E2E, upgrade sujo recusado e reparado; preflight/backup/janela exigidos antes da migration; sem push/deploy |
-| 13–19 | Planejadas | — | Executar sequencialmente; critérios acima |
+| 13–16 | Implementadas | Ver checkpoints nas seções acima | Aceites e pendências descritos em cada seção |
+| 17 | Implementada; validação local aprovada | `ee49cba` | [Resultados](pr-17-rvt-contracts.md) |
+| 18–19 | Planejadas | — | Executar sequencialmente; critérios acima |
