@@ -270,7 +270,7 @@ imagens rodam sem root e o ambiente não quebra recursos legítimos do mobile.
 
 ### PR-15 — Workers, storage e observabilidade
 
-**Implementação local em 17/11/2026.**
+**Implementação local em 17/11/2026, commit `f16524d`.**
 [Relatório e runbook](pr-15-worker-isolation.md) e
 [evidências](evidence/pr-15-worker-isolation.json).
 API, worker geral e documentos com pools separados, concorrência limitada,
