@@ -91,10 +91,6 @@ export class RenderInputFactory {
     source: RenderSource,
     correlationId: string,
   ): Promise<RenderInput> {
-    const evidence = await this.evidencia(source);
-    const signatures = await this.assinaturas(source);
-    const fieldAssets = await this.anexosDeCampo(source);
-
     /* O timbre vem do próprio inquilino, como data URI: da unidade emissora,
        ou da empresa quando a unidade não tem marca própria. `readEmbeddedImage`
        recusa URL — que o servidor teria de buscar — e SVG, que é documento e
@@ -132,7 +128,7 @@ export class RenderInputFactory {
           execution: source,
           snapshot: source.snapshot,
           frozen: source.fieldArtifact.snapshot,
-          assets: fieldAssets,
+          assets: await this.anexosDeCampo(source),
           organizationName: source.organization.displayName,
           correlationId,
           documentContext,
@@ -141,8 +137,8 @@ export class RenderInputFactory {
           execution: source,
           snapshot: source.snapshot,
           responses: source.responses,
-          signatures,
-          evidence,
+          signatures: await this.assinaturas(source),
+          evidence: await this.evidencia(source),
           organizationName: source.organization.displayName,
           correlationId,
           documentContext,
@@ -198,7 +194,7 @@ export class RenderInputFactory {
                   bucket: item.storageFile.bucket,
                   objectKey: item.storageFile.objectKey,
                 }),
-                item.mimeType,
+                item.storageFile.mimeType,
               )
             : undefined;
         return {

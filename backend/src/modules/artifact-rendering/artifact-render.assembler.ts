@@ -271,10 +271,10 @@ export class ArtifactRenderAssembler {
           text(item.caption) ||
           this.evidenceLabel(text(item.category, 'GENERAL')),
         fileName: text(item.fileName, asset?.fileName ?? 'evidencia'),
-        mimeType: text(
-          item.mimeType,
-          asset?.mimeType ?? 'application/octet-stream',
-        ),
+        // The snapshot describes the stored original. The MIME type must match
+        // the bytes prepared for embedding, which may have been converted.
+        mimeType:
+          asset?.mimeType ?? text(item.mimeType, 'application/octet-stream'),
         sha256: text(item.sha256) || null,
         bytes: asset?.bytes,
       };
