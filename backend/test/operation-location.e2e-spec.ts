@@ -204,7 +204,7 @@ describe('Service address, sector and operation equipment (e2e)', () => {
         .expect(200);
     const history = () =>
       auth(http().get(`/api/v1/assets/${assetA1}/service-history`)).expect(200);
-    type History = {
+    type History = Envelope<{
       data: Array<{
         id: string;
         completedAt: string;
@@ -213,7 +213,7 @@ describe('Service address, sector and operation equipment (e2e)', () => {
         serviceOrderCode: string;
         observations: string[];
       }>;
-    };
+    }>;
 
     expect((await schedule()).body).toMatchObject({
       data: [
@@ -233,7 +233,7 @@ describe('Service address, sector and operation equipment (e2e)', () => {
     });
     await changeStatus('COMPLETED');
 
-    const previous = ((await history()).body as History).data[0]!;
+    const previous = ((await history()).body as History).data.data[0]!;
     expect(previous).toMatchObject({
       id,
       title: 'Atendimento com retorno',
@@ -248,7 +248,7 @@ describe('Service address, sector and operation equipment (e2e)', () => {
     const mobileHistory = await auth(
       http().get(`/api/v1/assets/qr/${qr.token}/service-history`),
     ).expect(200);
-    expect((mobileHistory.body as History).data).toContainEqual(previous);
+    expect((mobileHistory.body as History).data.data).toContainEqual(previous);
     await auth(http().get(`/api/v1/financial/receipts/sources/${id}`))
       .expect(200)
       .expect(({ body }) => {
@@ -261,7 +261,9 @@ describe('Service address, sector and operation equipment (e2e)', () => {
       .expect(409);
 
     await changeStatus('OPEN');
-    expect(((await history()).body as History).data).toContainEqual(previous);
+    expect(((await history()).body as History).data.data).toContainEqual(
+      previous,
+    );
     await auth(http().patch(`/api/v1/operations/${id}`))
       .send({ scheduledStart: secondStart, title: 'Retorno técnico' })
       .expect(200);
@@ -275,7 +277,7 @@ describe('Service address, sector and operation equipment (e2e)', () => {
     });
     await changeStatus('IN_PROGRESS');
     await changeStatus('COMPLETED');
-    const visits = ((await history()).body as History).data.filter(
+    const visits = ((await history()).body as History).data.data.filter(
       (row) => row.id === id,
     );
     expect(visits).toHaveLength(2);
@@ -287,7 +289,7 @@ describe('Service address, sector and operation equipment (e2e)', () => {
     const other = await auth(
       http().get(`/api/v1/assets/${assetA2}/service-history`),
     ).expect(200);
-    expect((other.body as History).data).not.toContainEqual(
+    expect((other.body as History).data.data).not.toContainEqual(
       expect.objectContaining({ id }),
     );
   });
