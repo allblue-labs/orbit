@@ -36,11 +36,23 @@ o preço e a versão ofertados antes de abrir a sessão de pagamento.
 
 ## Migração e Stripe
 
-O migrador inicializa as quatro ofertas existentes uma vez, com as condições
-anteriores. Nessa inicialização, importa os identificadores legados
-`STRIPE_PRICE_*` se estiverem presentes. Mudanças comerciais posteriores
-são feitas na API administrativa e ficam no banco, inclusive ao reiniciar
-ou atualizar o Compose.
+`prisma migrate deploy` instala as quatro ofertas em um banco novo com estes
+valores por período, em reais. A migração também inclui as capacidades e os
+limites de cada oferta.
+
+| Plano | Mensal | Semestral | Anual | Avaliação |
+| --- | ---: | ---: | ---: | ---: |
+| Essencial | R$ 59,90 | R$ 329,40 | R$ 599,00 | 30 dias |
+| Profissional | R$ 149,90 | R$ 827,40 | R$ 1.499,00 | 0 dias |
+| Profissional + Inteligência | R$ 249,90 | R$ 1.379,40 | R$ 2.499,00 | 0 dias |
+| Empresarial Ilimitado | R$ 699,90 | R$ 3.863,40 | R$ 6.999,00 | 0 dias |
+
+O serviço `migrate` vincula os identificadores `STRIPE_PRICE_*` fornecidos
+antes da primeira inicialização. Preencha-os com os Price IDs da conta e
+do ambiente Stripe em uso. Se a instalação começar sem esses identificadores,
+publique os vínculos pela API administrativa antes de ativar a cobrança.
+O Prisma preenche apenas ofertas ausentes ou legadas, e os próximos deploys
+preservam ofertas publicadas, assinaturas e vínculos de preços no banco.
 
 Quando a cobrança está habilitada, ativar uma oferta exige preços ativos no
 Stripe, com a moeda, a periodicidade, o valor e o ambiente correspondentes.

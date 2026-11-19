@@ -38,7 +38,10 @@ ENV ORBIT_BUILD_TIME=$ORBIT_BUILD_TIME
 # recém-aplicada já receba os GRANTs do papel de runtime — sem passo manual
 # depois do `docker compose up`. É idempotente: rodar de novo reconcilia.
 #
-# O catálogo oficial de artefatos entrou aqui, ao lado do de planos: os sete
+# A migration popula o catálogo comercial. O script de planos só vincula os
+# Price IDs do Stripe disponíveis na primeira inicialização.
+#
+# O catálogo oficial de artefatos entra pelo seed: os sete
 # modelos do Orbit — Ordem de Serviço, PMOC, RVT, Laudo Técnico, Qualidade do
 # Ar, Recibo e Orçamento — são o que a operação usa para emitir documento. Sem
 # eles a tela de Modelos abre vazia numa instalação nova, e o passo que os

@@ -212,7 +212,7 @@ services:
     restart: "no"
     environment:
       NODE_ENV: production
-      # Importação única de preços legados ao inicializar o catálogo do banco.
+      # Vínculo inicial dos Price IDs. A migration instala os valores do catálogo.
       STRIPE_PRICE_ESSENTIAL_MONTHLY: ${STRIPE_PRICE_ESSENTIAL_MONTHLY:-}
       STRIPE_PRICE_ESSENTIAL_SEMIANNUAL: ${STRIPE_PRICE_ESSENTIAL_SEMIANNUAL:-}
       STRIPE_PRICE_ESSENTIAL_ANNUAL: ${STRIPE_PRICE_ESSENTIAL_ANNUAL:-}
