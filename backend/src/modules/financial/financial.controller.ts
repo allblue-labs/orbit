@@ -320,14 +320,7 @@ export class FinancialController {
     );
   }
 
-  /**
-   * O atendimento que pode originar um recibo, com o que ele oferece de pronto.
-   *
-   * Leitura: a tela pergunta antes de abrir o formulário, para já vir com o
-   * pagador e o serviço preenchidos. O valor **não** vem — o sistema não sabe o que
-   * foi cobrado a menos que exista proposta ou lançamento, e adivinhar o número de
-   * um recibo é pior que pedir que alguém o digite.
-   */
+  /** Prefills the payer, service and known amount for completed operations. */
   @Get('receipts/sources/:operationId')
   @Capabilities('financial.read')
   @Permissions('financial.read')

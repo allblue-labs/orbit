@@ -81,6 +81,18 @@ export class AssetController {
     return this.equipmentQr.serviceHistory(token, this.actor(request), query);
   }
 
+  @Get(':id/service-history')
+  @Surfaces('WEB', 'MOBILE', 'API')
+  @Capabilities('assets.read')
+  @Permissions('assets.read', 'operations.history.read')
+  equipmentServiceHistory(
+    @Param('id', ParseUUIDv7Pipe) id: string,
+    @Req() request: IdentityRequest,
+    @Query() query: EquipmentServiceHistoryQueryDto,
+  ) {
+    return this.equipmentQr.serviceHistoryById(id, this.actor(request), query);
+  }
+
   @Get(':id/qr')
   @Capabilities('assets.read')
   @Permissions('assets.read')

@@ -345,6 +345,7 @@ export type QuoteStatus = (typeof QuoteStatus)[keyof typeof QuoteStatus];
 export const InventoryMovementType = literal({
   ENTRY: 'ENTRY',
   CONSUMPTION: 'CONSUMPTION',
+  SALE: 'SALE',
   RETURN: 'RETURN',
   ADJUSTMENT_IN: 'ADJUSTMENT_IN',
   ADJUSTMENT_OUT: 'ADJUSTMENT_OUT',

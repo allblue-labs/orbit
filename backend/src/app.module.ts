@@ -18,6 +18,7 @@ import { CommissionsModule } from './modules/commissions/commissions.module';
 import { FinancialModule } from './modules/financial/financial.module';
 import { QuotesModule } from './modules/quotes/quotes.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
+import { SalesModule } from './modules/sales/sales.module';
 import { AutomationsModule } from './modules/automations/automations.module';
 import { ManagementReportsModule } from './modules/management-reports/management-reports.module';
 import { PmocModule } from './modules/pmoc/pmoc.module';
@@ -69,6 +70,7 @@ import {
     FinancialModule,
     QuotesModule,
     InventoryModule,
+    SalesModule,
     AutomationsModule,
     ManagementReportsModule,
     PmocModule,

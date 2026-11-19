@@ -9,3 +9,7 @@ ORBIT_APNS_ENVIRONMENT = development
 // Copy Push.local.xcconfig.example to Push.local.xcconfig on machines/CI builds
 // signed with a compatible Apple Developer Program team.
 #include? "Push.local.xcconfig"
+
+// A associação de domínio exige um perfil Apple compatível.
+ORBIT_SIGNING_ENTITLEMENTS = $(ORBIT_PUSH_ENTITLEMENTS)
+#include? "AppLinks.local.xcconfig"

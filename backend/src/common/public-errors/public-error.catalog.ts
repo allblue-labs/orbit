@@ -33,6 +33,26 @@ const entries = [
   ],
   ['VALIDATION_ERROR', HttpStatus.BAD_REQUEST, 'Revise os campos informados.'],
   [
+    'SALE_STOCK_INSUFFICIENT',
+    HttpStatus.CONFLICT,
+    'O estoque de um dos produtos mudou. Confira as quantidades disponíveis nesta unidade e tente novamente.',
+  ],
+  [
+    'SALE_PAYMENT_TOTAL_MISMATCH',
+    HttpStatus.BAD_REQUEST,
+    'A soma dos pagamentos deve ser igual ao total da venda.',
+  ],
+  [
+    'SALE_CONFIRMATION_CHANGED',
+    HttpStatus.CONFLICT,
+    'A confirmação já foi usada com outros dados. Feche o formulário e consulte a lista de vendas.',
+  ],
+  [
+    'SALE_RECEIPT_DATE_INVALID',
+    HttpStatus.BAD_REQUEST,
+    'A data do recebimento deve ser hoje ou uma data anterior.',
+  ],
+  [
     'PUBLIC_CONTACT_CONFLICT',
     HttpStatus.CONFLICT,
     'A mensagem foi alterada durante uma tentativa anterior. Recarregue o formulário e envie novamente.',
@@ -179,6 +199,11 @@ const entries = [
     'RESOURCE_VERSION_CONFLICT',
     HttpStatus.CONFLICT,
     'Os dados foram alterados. Atualize e tente novamente.',
+  ],
+  [
+    'OPERATION_COMPLETED_RESCHEDULE',
+    HttpStatus.CONFLICT,
+    'Uma operação concluída não pode ser reagendada. O proprietário pode reabri-la em Alterar status.',
   ],
   [
     'SCHEDULING_CONFLICT',

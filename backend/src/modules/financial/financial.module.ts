@@ -40,6 +40,6 @@ import { ReceiptService } from './receipt.service';
     ReceiptService,
     ReceiptDeliveryService,
   ],
-  exports: [FinancialService],
+  exports: [FinancialService, ReceiptService, ReceiptDeliveryService],
 })
 export class FinancialModule {}

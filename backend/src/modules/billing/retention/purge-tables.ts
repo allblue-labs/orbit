@@ -26,6 +26,7 @@ export const OPERATIONAL_PURGE_TABLES = [
   'artifact_templates',
   'artifact_template_versions',
   'receipt_sequences',
+  'product_sales',
   'artifact_snapshots',
   'artifact_executions',
   'field_artifacts',

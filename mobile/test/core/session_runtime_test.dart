@@ -37,6 +37,7 @@ import 'package:orbit_operator/features/authentication/application/auth_controll
 import 'package:orbit_operator/features/authentication/data/auth_repository.dart';
 import 'package:orbit_operator/features/authentication/domain/session.dart';
 import 'package:orbit_operator/features/documents/application/documents_providers.dart';
+import 'package:orbit_operator/features/equipment/presentation/equipment_scanner_screen.dart';
 import 'package:orbit_operator/features/profile/application/profile_providers.dart';
 import 'package:orbit_operator/features/legal/data/legal_repository.dart';
 
@@ -219,6 +220,102 @@ void main() {
     );
     auth.use(session(user));
   }
+
+  void fakeEquipment(String token, List<String> equipmentRequests) {
+    custom = (request) async {
+      if (request.path == '/assets/qr/$token') {
+        equipmentRequests.add(request.path);
+        return jsonResponse(
+          envelope({
+            'id': 'equipment-1',
+            'name': 'Equipamento da etiqueta',
+            'availability': {'active': true},
+          }),
+        );
+      }
+      return jsonResponse(envelope({}));
+    };
+  }
+
+  testWidgets('guarda a etiqueta da câmera até o login e a consome uma vez', (
+    tester,
+  ) async {
+    final token = 'x' * 43;
+    final requests = <String>[];
+    fakeEquipment(token, requests);
+    auth.out();
+    tester.platformDispatcher.defaultRouteNameTestValue =
+        'https://orbit.allblue-labs.com/q/$token';
+    addTearDown(tester.platformDispatcher.clearDefaultRouteNameTestValue);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: root,
+        child: const OrbitOperatorApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(LoginScreen), findsOneWidget);
+    expect(requests, isEmpty);
+
+    auth.use(
+      session('A').copyWith(
+        user: const OrbitUser(
+          id: 'A',
+          email: 'A@example.test',
+          displayName: 'A',
+          mustChangePassword: true,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(EquipmentDetailsScreen), findsNothing);
+    expect(requests, isEmpty);
+
+    auth.use(session('A'));
+    await tester.pumpAndSettle();
+    expect(find.byType(EquipmentDetailsScreen), findsOneWidget);
+    expect(find.text('Equipamento da etiqueta'), findsOneWidget);
+    expect(find.byType(EquipmentScannerScreen), findsNothing);
+    expect(requests, hasLength(1));
+
+    auth.out();
+    await tester.pumpAndSettle();
+    await tester.runAsync(() => switchAccount('B'));
+    await tester.pumpAndSettle();
+    expect(find.byType(EquipmentDetailsScreen), findsNothing);
+    expect(requests, hasLength(1));
+  });
+
+  testWidgets('abre o equipamento com o app já autenticado', (tester) async {
+    final token = 'y' * 43;
+    final requests = <String>[];
+    fakeEquipment(token, requests);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: root,
+        child: const OrbitOperatorApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(requests, isEmpty);
+
+    final handled = await tester.binding.handlePushRoute(
+      'orbit-operator://equipamento/q/$token',
+    );
+    expect(handled, isTrue);
+    await tester.pumpAndSettle();
+    expect(find.byType(EquipmentDetailsScreen), findsOneWidget);
+    expect(requests, hasLength(1));
+
+    await tester.binding.handlePushRoute(
+      'https://orbit.allblue-labs.com/q/$token',
+    );
+    await tester.pumpAndSettle();
+    expect(requests, hasLength(1));
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.byType(EquipmentDetailsScreen), findsNothing);
+  });
 
   testWidgets(
     'componentes nativos do Flutter usam pt-BR mesmo no aparelho em inglês',

@@ -38,6 +38,7 @@ import {
   localViewRange,
 } from './scheduling-time';
 import { OperationService } from '../operations/operation.service';
+import { requiresAssignmentAuthorization } from '../operations/operation-authorization';
 import { OperationScheduleService } from '../operations/operation-schedule.service';
 import { WorkforceRepository } from '../workforce/workforce.repository';
 
@@ -286,20 +287,135 @@ export class SchedulingService {
   async occurrences(
     organizationId: string,
     query: EventQueryDto,
+    operationAccess?: { viewerId: string; manages: boolean },
   ): Promise<SchedulingOccurrenceReadModel[]> {
     this.validateRange(query.from, query.to);
     const events = await this.repository.candidateEvents(organizationId, query);
-    return events
-      .flatMap((event) => this.expandEvent(event, query.from, query.to))
-      .sort(
-        (left, right) => Date.parse(left.startsAt) - Date.parse(right.startsAt),
-      );
+    const projected =
+      operationAccess && query.remindersOnly !== 'true'
+        ? await this.operationOccurrences(
+            organizationId,
+            query,
+            operationAccess,
+          )
+        : [];
+    const occurrences = events.flatMap((event) =>
+      this.expandEvent(event, query.from, query.to),
+    );
+    const linked = new Set(
+      occurrences
+        .filter(
+          (event) =>
+            event.source.module === 'operations' &&
+            event.source.entityType === 'OPERATION',
+        )
+        .map((event) => event.source.entityId),
+    );
+    return [
+      ...occurrences,
+      ...projected.filter((event) => !linked.has(event.source.entityId)),
+    ].sort(
+      (left, right) => Date.parse(left.startsAt) - Date.parse(right.startsAt),
+    );
+  }
+
+  private async operationOccurrences(
+    organizationId: string,
+    query: EventQueryDto,
+    access: { viewerId: string; manages: boolean },
+  ): Promise<SchedulingOccurrenceReadModel[]> {
+    const { operations, calendars } = await this.repository.scheduledOperations(
+      organizationId,
+      query,
+    );
+    const defaultCalendar = calendars.find(
+      (calendar) => calendar.businessUnitId === null,
+    );
+    const calendarsByUnit = new Map<string, (typeof calendars)[number]>();
+    for (const calendar of calendars) {
+      if (
+        calendar.businessUnitId &&
+        !calendarsByUnit.has(calendar.businessUnitId)
+      )
+        calendarsByUnit.set(calendar.businessUnitId, calendar);
+    }
+    const rows: SchedulingOccurrenceReadModel[] = [];
+    for (const operation of operations) {
+      if (!operation.scheduledStart) continue;
+      const assigned =
+        operation.responsibleFieldTechnicianId === access.viewerId ||
+        operation.auxiliaryTechnicians.some(
+          ({ userId }) => userId === access.viewerId,
+        );
+      if (
+        !access.manages &&
+        (!assigned ||
+          (!operation.authorizedAt &&
+            requiresAssignmentAuthorization(operation.organization.settings)))
+      )
+        continue;
+
+      const start = operation.scheduledStart;
+      const end =
+        operation.scheduledEnd && operation.scheduledEnd > start
+          ? operation.scheduledEnd
+          : new Date(start.getTime() + 30 * 60_000);
+      if (end <= query.from) continue;
+      const calendar =
+        calendarsByUnit.get(operation.businessUnitId) ?? defaultCalendar;
+      if (query.calendarId && calendar?.id !== query.calendarId) continue;
+      const status = operation.status === 'OPEN' ? 'TENTATIVE' : 'CONFIRMED';
+      if (query.status && query.status !== status) continue;
+
+      const id = `operation:${operation.id}`;
+      rows.push({
+        occurrenceId: id,
+        eventId: id,
+        calendarId: calendar?.id ?? null,
+        title: operation.title,
+        description: operation.description,
+        type: 'OPERATION',
+        status,
+        priority: operation.priority,
+        startsAt: start.toISOString(),
+        endsAt: end.toISOString(),
+        allDay: false,
+        timezone:
+          calendar?.timezone ??
+          operation.businessUnit.timezone ??
+          'America/Recife',
+        businessUnitId: operation.businessUnitId,
+        customerId: operation.customerId,
+        assetId: operation.assets[0]?.assetId ?? null,
+        segment: operation.organization.primarySegment,
+        source: {
+          module: 'operations',
+          entityType: 'OPERATION',
+          entityId: operation.id,
+        },
+        location: operation.location,
+        allocations: [],
+        assignmentAuthority: 'OPERATION',
+        responsibleFieldTechnician: operation.responsibleFieldTechnicianId
+          ? {
+              userId: operation.responsibleFieldTechnicianId,
+              role: 'RESPONSIBLE_FIELD_TECHNICIAN',
+            }
+          : null,
+        auxiliaryTechnicians: operation.auxiliaryTechnicians.map(
+          ({ userId }) => ({ userId, role: 'AUXILIARY_TECHNICIAN' }),
+        ),
+        recurring: false,
+      });
+    }
+    return rows;
   }
 
   async agenda(
     organizationId: string,
     query: AgendaQueryDto,
     viewerId?: string,
+    operationAccess?: { viewerId: string; manages: boolean },
   ): Promise<AgendaReadModel> {
     const timezone = await this.repository.agendaTimezone(
       organizationId,
@@ -308,15 +424,19 @@ export class SchedulingService {
     );
     assertIanaTimezone(timezone);
     const range = localViewRange(query.view, query.date, timezone);
-    const events = await this.occurrences(organizationId, {
-      from: range.from,
-      to: range.to,
-      businessUnitId: query.businessUnitId,
-      userId: query.userId,
-      customerId: query.customerId,
-      assetId: query.assetId,
-      segment: query.segment,
-    });
+    const events = await this.occurrences(
+      organizationId,
+      {
+        from: range.from,
+        to: range.to,
+        businessUnitId: query.businessUnitId,
+        userId: query.userId,
+        customerId: query.customerId,
+        assetId: query.assetId,
+        segment: query.segment,
+      },
+      operationAccess,
+    );
     const days = new Map<string, SchedulingOccurrenceReadModel[]>();
     for (const event of events) {
       const date = civilDateKey(new Date(event.startsAt), timezone);

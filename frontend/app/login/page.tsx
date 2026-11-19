@@ -16,6 +16,7 @@ import {
 import { motion } from "motion/react";
 import { toast } from "sonner";
 
+import { OpenEquipmentInApp } from "@/components/equipment-qr/open-equipment-in-app";
 import { ConfirmEmail } from "@/components/auth/confirm-email";
 import { toApiError } from "@/lib/api-error";
 import { loginFailure } from "@/lib/login-failure";
@@ -117,6 +118,8 @@ function LoginView() {
               Entre com suas credenciais para acessar o workspace da sua
               operação.
             </p>
+
+            {destination ? <OpenEquipmentInApp path={destination} /> : null}
 
             {reason ? (
               <Alert className="mt-6">

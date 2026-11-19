@@ -197,7 +197,10 @@ export class SchedulingRepository {
             query.remindersOnly === 'true'
               ? {
                   OR: [
-                    { sourceModule: 'scheduling', sourceEntityType: 'REMINDER' },
+                    {
+                      sourceModule: 'scheduling',
+                      sourceEntityType: 'REMINDER',
+                    },
                     { sourceModule: 'automations', type: 'REMINDER' },
                   ],
                 }
@@ -223,6 +226,98 @@ export class SchedulingRepository {
         orderBy: { startsAt: 'asc' },
       }),
     );
+  }
+
+  scheduledOperations(organizationId: string, query: EventQueryDto) {
+    return this.rls.run(async (tx) => {
+      const assignments = query.userId
+        ? {
+            OR: [
+              { responsibleFieldTechnicianId: query.userId },
+              {
+                auxiliaryTechnicians: {
+                  some: { userId: query.userId, removedAt: null },
+                },
+              },
+            ],
+          }
+        : {};
+      const operations = await tx.operation.findMany({
+        where: {
+          organizationId,
+          deletedAt: null,
+          businessUnitId: query.businessUnitId,
+          customerId: query.customerId,
+          organization: query.segment
+            ? { primarySegment: query.segment }
+            : undefined,
+          assets: query.assetId
+            ? { some: { assetId: query.assetId } }
+            : undefined,
+          scheduledStart: { not: null, lt: query.to },
+          status: { not: 'CANCELLED' },
+          AND: [
+            {
+              OR: [
+                { scheduledEnd: { gt: query.from } },
+                {
+                  scheduledStart: {
+                    gte: new Date(query.from.getTime() - 30 * 60_000),
+                  },
+                },
+              ],
+            },
+            assignments,
+          ],
+        },
+        select: {
+          id: true,
+          code: true,
+          title: true,
+          description: true,
+          status: true,
+          priority: true,
+          scheduledStart: true,
+          scheduledEnd: true,
+          location: true,
+          customerId: true,
+          businessUnitId: true,
+          businessUnit: { select: { timezone: true } },
+          organization: { select: { primarySegment: true, settings: true } },
+          authorizedAt: true,
+          responsibleFieldTechnicianId: true,
+          auxiliaryTechnicians: {
+            where: { removedAt: null },
+            select: { userId: true },
+          },
+          assets: {
+            where: query.assetId ? { assetId: query.assetId } : undefined,
+            take: 1,
+            orderBy: { createdAt: 'asc' },
+            select: { assetId: true },
+          },
+        },
+      });
+      if (operations.length === 0) return { operations, calendars: [] };
+      const calendars = await tx.schedulingCalendar.findMany({
+        where: {
+          organizationId,
+          isActive: true,
+          deletedAt: null,
+          OR: [
+            { businessUnitId: null },
+            {
+              businessUnitId: {
+                in: [...new Set(operations.map((row) => row.businessUnitId))],
+              },
+            },
+          ],
+        },
+        orderBy: [{ isDefault: 'desc' }, { name: 'asc' }, { id: 'asc' }],
+        select: { id: true, businessUnitId: true, timezone: true },
+      });
+      return { operations, calendars };
+    });
   }
 
   createEvent(

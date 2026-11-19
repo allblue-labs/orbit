@@ -95,6 +95,7 @@ describe('Service address, sector and operation equipment (e2e)', () => {
       lastName: 'E2E',
       password: PASSWORD,
       organizationName: `Local ${suffix}`,
+      planKey: 'ESSENTIAL',
       legalName: `Local ${suffix} LTDA`,
       documentType: 'CNPJ',
       documentNumber: cnpj(),
@@ -177,6 +178,119 @@ describe('Service address, sector and operation equipment (e2e)', () => {
       .expect(expected);
     return resposta.body as Envelope<{ id: string }>;
   }
+
+  it('projects a planned operation and preserves each completed equipment visit after reopening', async () => {
+    const firstStart = '2026-12-05T14:00:00.000Z';
+    const secondStart = '2026-12-09T15:00:00.000Z';
+    const {
+      data: { id },
+    } = await criarOrdem({
+      assetIds: [assetA1],
+      title: 'Atendimento com retorno',
+      scheduledStart: firstStart,
+      manualAmount: 199.9,
+    });
+    const schedule = () =>
+      auth(http().get('/api/v1/scheduling/events'))
+        .query({
+          from: '2026-12-01T00:00:00Z',
+          to: '2026-12-12T00:00:00Z',
+          assetId: assetA1,
+        })
+        .expect(200);
+    const changeStatus = (status: string) =>
+      auth(http().patch(`/api/v1/operations/${id}/status`))
+        .send({ status })
+        .expect(200);
+    const history = () =>
+      auth(http().get(`/api/v1/assets/${assetA1}/service-history`)).expect(200);
+    type History = {
+      data: Array<{
+        id: string;
+        completedAt: string;
+        title: string;
+        technicianName: string;
+        serviceOrderCode: string;
+        observations: string[];
+      }>;
+    };
+
+    expect((await schedule()).body).toMatchObject({
+      data: [
+        expect.objectContaining({
+          startsAt: firstStart,
+          source: expect.objectContaining({ entityId: id }),
+        }),
+      ],
+    });
+    await changeStatus('IN_PROGRESS');
+    await prisma.operationHistory.create({
+      data: {
+        operationId: id,
+        action: 'FIELD_NOTE_ADDED',
+        details: { note: 'Filtro substituído.' },
+      },
+    });
+    await changeStatus('COMPLETED');
+
+    const previous = ((await history()).body as History).data[0]!;
+    expect(previous).toMatchObject({
+      id,
+      title: 'Atendimento com retorno',
+      technicianName: expect.any(String),
+      serviceOrderCode: expect.stringMatching(/^OS-\d+$/),
+      observations: ['Filtro substituído.'],
+    });
+    const qr = await prisma.equipmentQrIdentity.findFirstOrThrow({
+      where: { equipmentId: assetA1, status: 'ACTIVE' },
+      select: { token: true },
+    });
+    const mobileHistory = await auth(
+      http().get(`/api/v1/assets/qr/${qr.token}/service-history`),
+    ).expect(200);
+    expect((mobileHistory.body as History).data).toContainEqual(previous);
+    await auth(http().get(`/api/v1/financial/receipts/sources/${id}`))
+      .expect(200)
+      .expect(({ body }) => {
+        expect((body as Envelope<{ amount: string }>).data.amount).toBe(
+          '199.90',
+        );
+      });
+    await auth(http().patch(`/api/v1/operations/${id}`))
+      .send({ scheduledStart: secondStart })
+      .expect(409);
+
+    await changeStatus('OPEN');
+    expect(((await history()).body as History).data).toContainEqual(previous);
+    await auth(http().patch(`/api/v1/operations/${id}`))
+      .send({ scheduledStart: secondStart, title: 'Retorno técnico' })
+      .expect(200);
+    expect((await schedule()).body).toMatchObject({
+      data: [
+        expect.objectContaining({
+          startsAt: secondStart,
+          source: expect.objectContaining({ entityId: id }),
+        }),
+      ],
+    });
+    await changeStatus('IN_PROGRESS');
+    await changeStatus('COMPLETED');
+    const visits = ((await history()).body as History).data.filter(
+      (row) => row.id === id,
+    );
+    expect(visits).toHaveLength(2);
+    expect(visits[0]).toMatchObject({
+      title: 'Retorno técnico',
+      observations: [],
+    });
+    expect(visits[1]).toEqual(previous);
+    const other = await auth(
+      http().get(`/api/v1/assets/${assetA2}/service-history`),
+    ).expect(200);
+    expect((other.body as History).data).not.toContainEqual(
+      expect.objectContaining({ id }),
+    );
+  });
 
   it('a ordem carrega vários equipamentos, o endereço e o setor', async () => {
     const criada = await criarOrdem({

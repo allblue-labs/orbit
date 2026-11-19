@@ -780,10 +780,15 @@ export class OperationRepository {
     data: Prisma.OperationUpdateInput,
     userId: string,
     details: Prisma.InputJsonValue,
+    changesSchedule = false,
   ) {
     return this.rls.run(async (transaction) => {
       const operation = await transaction.operation.update({
-        where: { id },
+        where: {
+          id,
+          deletedAt: null,
+          status: changesSchedule ? { not: 'COMPLETED' } : undefined,
+        },
         data,
         include: operationInclude,
       });

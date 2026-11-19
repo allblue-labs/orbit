@@ -377,6 +377,10 @@ final agendaWorkItemIndexProvider =
           .workQueue(limit: 50);
       return {
         for (final item in page.data)
+          if (item.id.startsWith('SERVICE_OPERATION:'))
+            'operation:${item.id.substring('SERVICE_OPERATION:'.length)}':
+                item.id,
+        for (final item in page.data)
           if (item.schedulingId case final String scheduling)
             scheduling: item.id,
       };

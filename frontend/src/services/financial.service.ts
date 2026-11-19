@@ -74,6 +74,9 @@ export const financialService = {
   createReceipt: (input: CreateReceiptInput): Promise<ArtifactExecution> =>
     apiClient.post<ArtifactExecution>(`${PATH}/receipts`, input),
 
+  renderReceipt: (id: string) =>
+    apiClient.post(`${PATH}/receipts/${encodeURIComponent(id)}/render`, {}),
+
   /** O atendimento de origem, com o que ele oferece preenchido. */
   receiptSource: (
     operationId: string,

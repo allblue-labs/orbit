@@ -503,6 +503,8 @@ model Organization {
 
   identityEmails IdentityEmailDelivery[]
 
+  productSales ProductSale[]
+
   @@index([ownerUserId, status])
   @@index([planId, subscriptionStatus])
   privateCatalogPlans Plan[] @relation("PrivateCatalog")
@@ -596,6 +598,8 @@ model BusinessUnit {
   operationMaterials            OperationMaterial[]
 
   quoteAcceptanceLinks QuoteAcceptanceLink[]
+
+  productSales ProductSale[]
 
   @@unique([organizationId, slug])
   @@index([organizationId, documentType, documentNumber], map: "business_units_org_document_idx")
@@ -1290,6 +1294,8 @@ model Customer {
 
   pmocCodeSequences PmocCodeSequence[]
 
+  productSales ProductSale[]
+
   @@index([organizationId, status, deletedAt])
   @@index([organizationId, documentNumber])
   @@map("customers")
@@ -1623,6 +1629,8 @@ model Asset {
   qrIdentities            EquipmentQrIdentity[]
   customerServiceRequests CustomerServiceRequest[]
 
+  equipmentServiceHistory EquipmentServiceHistory[]
+
   @@unique([organizationId, identifier])
   @@index([organizationId, businessUnitId, status, deletedAt])
   @@index([organizationId, customerId])
@@ -1658,6 +1666,29 @@ model EquipmentQrIdentity {
 // -----------------------------------------------------------------------------
 // OPERATIONS
 // -----------------------------------------------------------------------------
+
+/// Snapshot de um atendimento concluído por equipamento.
+model EquipmentServiceHistory {
+  operationId        String   @map("operation_id") @db.Uuid
+  assetId            String   @map("asset_id") @db.Uuid
+  organizationId    String   @map("organization_id") @db.Uuid
+  businessUnitId    String   @map("business_unit_id") @db.Uuid
+  completedAt       DateTime @map("completed_at") @db.Timestamptz(3)
+  code              String   @db.VarChar(60)
+  serviceOrderNumber Int?    @map("service_order_number")
+  title             String   @db.VarChar(220)
+  kind              String   @db.VarChar(60)
+  technicianName    String?  @map("technician_name") @db.Text
+  description       String?  @db.Text
+  observations      Json     @db.JsonB
+
+  operation Operation @relation(fields: [operationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  asset     Asset     @relation(fields: [assetId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([operationId, assetId, completedAt])
+  @@index([organizationId, businessUnitId, assetId, completedAt(sort: Desc), operationId(sort: Desc)], map: "equipment_service_history_scope_idx")
+  @@map("equipment_service_history")
+}
 
 /// Os equipamentos de um atendimento.
 ///
@@ -1776,6 +1807,8 @@ model Operation {
   commissionCancellations CommissionCancellation[]
   cancellationRequests    OperationCancellationRequest[]
   materials               OperationMaterial[]
+
+  equipmentServiceHistory EquipmentServiceHistory[]
 
   @@index([organizationId, code])
   @@index([organizationId, businessUnitId, status, scheduledStart])
@@ -2166,6 +2199,8 @@ model ArtifactExecution {
   fieldArtifact          FieldArtifact?
   pmocExecution          PmocExecution?
   pmocEquipmentExecution PmocEquipmentExecution?
+
+  productSale ProductSale?
 
   @@unique([organizationId, code])
   @@index([organizationId, businessUnitId, status, createdAt])
@@ -5279,4 +5314,35 @@ model BillingRefundRequest {
 
   subscription OrganizationSubscription @relation(fields: [subscriptionId, organizationId], references: [id, organizationId], onDelete: Cascade)
   @@map("billing_refund_requests")
+}
+
+/// A venda preserva a descrição e o preço dos itens do momento do recebimento.
+model ProductSale {
+  id             String   @id @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  businessUnitId String   @map("business_unit_id") @db.Uuid
+  customerId     String   @map("customer_id") @db.Uuid
+  createdById    String   @map("created_by_id") @db.Uuid
+  requestId      String   @map("request_id") @db.Uuid
+  requestHash    String   @map("request_hash") @db.Char(64)
+  receiptId      String   @unique @map("receipt_id") @db.Uuid
+  customerName   String   @map("customer_name") @db.VarChar(255)
+  paidOn         DateTime @map("paid_on") @db.Date
+  subtotal       Decimal  @db.Decimal(14, 2)
+  discount       Decimal  @db.Decimal(14, 2)
+  total          Decimal  @db.Decimal(14, 2)
+  items          Json     @db.JsonB
+  payments       Json     @db.JsonB
+  notes          String?  @db.VarChar(500)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  businessUnit BusinessUnit      @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
+  customer     Customer          @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  receipt      ArtifactExecution @relation(fields: [receiptId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, createdById, requestId], map: "product_sales_request_key")
+  @@index([organizationId, businessUnitId, createdAt(sort: Desc), id(sort: Desc)], map: "product_sales_unit_history")
+  @@index([customerId], map: "product_sales_customer_idx")
+  @@map("product_sales")
 }

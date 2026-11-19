@@ -198,7 +198,10 @@ function DayColumn({
             style={{
               top,
               /** Altura mínima para o bloco continuar legível. */
-              height: Math.max(rawHeight, 22),
+              height:
+                segment.occurrence.type === "OPERATION"
+                  ? Math.min(Math.max(rawHeight, 22), 34)
+                  : Math.max(rawHeight, 22),
               left,
               width,
               /** Quem começa mais tarde fica por cima, como na leitura. */

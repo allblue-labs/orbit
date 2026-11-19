@@ -205,6 +205,7 @@ export class OperationController {
         request.identity!.id,
         input,
         request.identity!.permissions,
+        request.identity!.isOrganizationOwner,
       ),
       this.actor(request),
     );
@@ -465,6 +466,7 @@ export class OperationController {
   private actor(request: IdentityRequest) {
     return {
       id: request.identity!.id,
+      isOrganizationOwner: request.identity!.isOrganizationOwner,
       permissions: request.identity!.permissions,
     };
   }

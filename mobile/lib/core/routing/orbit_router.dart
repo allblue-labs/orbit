@@ -72,6 +72,8 @@ abstract final class OrbitRoutes {
 
   /// A leitura de etiqueta. Fora do shell: a câmera ocupa a tela inteira.
   static const scanner = '/etiqueta';
+  static String equipmentFromQr(String token) =>
+      '$home/equipamento/${Uri.encodeComponent(token)}';
   static const notifications = '/avisos';
 
   /// Perfil, sincronização e assinatura. É o "mais" do aplicativo, com o nome
@@ -150,6 +152,7 @@ final routerProvider = Provider<GoRouter>((ref) {
 
   final router = GoRouter(
     initialLocation: OrbitRoutes.splash,
+    overridePlatformDefaultLocation: true,
     refreshListenable: notifier,
     redirect: (context, state) {
       final auth = ref.read(authControllerProvider);
@@ -282,6 +285,14 @@ final routerProvider = Provider<GoRouter>((ref) {
             /// actions; they never select a parallel visual application.
             builder: (context, state) => const FieldDashboardScreen(),
             routes: [
+              OrbitPageRoute(
+                path: 'equipamento/:token',
+                parentNavigatorKey: rootNavigatorKey,
+                builder: (context, state) => EquipmentDetailsScreen(
+                  token: state.pathParameters['token']!,
+                  onScanAnother: () => context.replace(OrbitRoutes.scanner),
+                ),
+              ),
               OrbitPageRoute(
                 path: 'area-proprietario',
                 parentNavigatorKey: rootNavigatorKey,

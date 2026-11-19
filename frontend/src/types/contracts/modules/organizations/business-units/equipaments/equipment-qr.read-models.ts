@@ -6,11 +6,11 @@
 
 /** Additive public contracts shared verbatim with Next.js. */
 export type EquipmentFieldAction =
-  | 'VIEW_DETAILS'
-  | 'START_SERVICE_ORDER'
-  | 'EXECUTE_PMOC'
-  | 'ADD_TO_RVT'
-  | 'VIEW_HISTORY';
+  | "VIEW_DETAILS"
+  | "START_SERVICE_ORDER"
+  | "EXECUTE_PMOC"
+  | "ADD_TO_RVT"
+  | "VIEW_HISTORY";
 
 export interface EquipmentQrSummaryReadModel {
   qrAvailable: boolean;
@@ -68,6 +68,7 @@ export interface EquipmentServiceOrderPreparationReadModel {
 export interface EquipmentServiceHistoryReadModel {
   id: string;
   code: string;
+  serviceOrderCode: string | null;
   title: string;
   type: string;
   completedAt: Date | null;

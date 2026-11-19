@@ -24,10 +24,7 @@ import type {
   InventorySummaryReadModel,
   InventoryTransferReadModel,
 } from "./contracts/modules/inventory/inventory.read-models";
-import type {
-  InventoryMovementType,
-  InventoryStockStatus,
-} from "./contracts";
+import type { InventoryMovementType, InventoryStockStatus } from "./contracts";
 
 export type { InventoryMovementType, InventoryStockStatus };
 
@@ -115,8 +112,7 @@ export interface InventoryMovementInput {
   sourceEntityId?: string;
 }
 
-export interface InventoryOperationMovementInput
-  extends InventoryMovementInput {
+export interface InventoryOperationMovementInput extends InventoryMovementInput {
   operationId?: string;
 }
 
@@ -159,6 +155,7 @@ export const INVENTORY_TYPE_LABELS: Readonly<
 > = {
   ENTRY: "Entrada",
   CONSUMPTION: "Consumo",
+  SALE: "Venda",
   RETURN: "Devolução",
   ADJUSTMENT_IN: "Ajuste (sobra)",
   ADJUSTMENT_OUT: "Ajuste (falta)",
@@ -178,6 +175,7 @@ export const INVENTORY_TYPE_DESCRIPTIONS: Readonly<
 > = {
   ENTRY: "Material que chegou à unidade.",
   CONSUMPTION: "Material usado em um trabalho.",
+  SALE: "Produto vendido a um cliente.",
   RETURN: "Material que voltou da visita sem ser usado.",
   ADJUSTMENT_IN: "Sobra encontrada na contagem.",
   ADJUSTMENT_OUT: "Falta encontrada na contagem.",

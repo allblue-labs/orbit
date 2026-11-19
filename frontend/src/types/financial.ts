@@ -28,11 +28,7 @@ import type {
   FinancialEntryType,
 } from "./contracts";
 
-export type {
-  FinancialEntrySource,
-  FinancialEntryStatus,
-  FinancialEntryType,
-};
+export type { FinancialEntrySource, FinancialEntryStatus, FinancialEntryType };
 
 /** Lançamento (`GET /financial/entries`). */
 export type FinancialEntry = FinancialEntryReadModel;
@@ -260,6 +256,7 @@ export interface ReceiptSource {
   title: string;
   status: string;
   completedAt: string | null;
+  amount?: string | null;
   customer: {
     id: string;
     legalName: string;

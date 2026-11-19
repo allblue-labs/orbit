@@ -93,6 +93,7 @@ describe('Equipment QR Identity PR-31 (e2e)', () => {
       lastName: label,
       password: PASSWORD,
       organizationName: `QR ${label} ${suffix}`,
+      planKey: 'ESSENTIAL',
       legalName: `QR ${label} ${suffix} LTDA`,
       documentType: 'CNPJ',
       documentNumber: cnpj(),

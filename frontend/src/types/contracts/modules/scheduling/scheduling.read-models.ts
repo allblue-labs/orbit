@@ -7,7 +7,7 @@
 export type SchedulingOccurrenceReadModel = {
   occurrenceId: string;
   eventId: string;
-  calendarId: string;
+  calendarId: string | null;
   title: string;
   description: string | null;
   type: string;
@@ -36,17 +36,17 @@ export type SchedulingOccurrenceReadModel = {
     role: string | null;
     status: string;
   }>;
-  assignmentAuthority: 'OPERATION' | 'SCHEDULING';
+  assignmentAuthority: "OPERATION" | "SCHEDULING";
   responsibleFieldTechnician: {
     userId: string;
-    role: 'RESPONSIBLE_FIELD_TECHNICIAN';
+    role: "RESPONSIBLE_FIELD_TECHNICIAN";
   } | null;
-  auxiliaryTechnicians: Array<{ userId: string; role: 'AUXILIARY_TECHNICIAN' }>;
+  auxiliaryTechnicians: Array<{ userId: string; role: "AUXILIARY_TECHNICIAN" }>;
   recurring: boolean;
 };
 
 export type AgendaReadModel = {
-  view: 'DAY' | 'WEEK' | 'MONTH';
+  view: "DAY" | "WEEK" | "MONTH";
   range: { from: string; to: string; timezone: string };
   summary: {
     total: number;
@@ -83,12 +83,12 @@ export type SchedulingTimelineReadModel = {
 
 export type SchedulingConflictReadModel = {
   id: string;
-  severity: 'WARNING' | 'CRITICAL';
+  severity: "WARNING" | "CRITICAL";
   type:
-    | 'EVENT_OVERLAP'
-    | 'RESOURCE_OVERLAP'
-    | 'BLOCKED_AVAILABILITY'
-    | 'OUTSIDE_AVAILABILITY';
+    | "EVENT_OVERLAP"
+    | "RESOURCE_OVERLAP"
+    | "BLOCKED_AVAILABILITY"
+    | "OUTSIDE_AVAILABILITY";
   eventId?: string;
   conflictingEventId?: string;
   resourceType?: string;
@@ -100,12 +100,12 @@ export type SchedulingConflictReadModel = {
 
 export type SchedulingIntelligenceReadModel = {
   generatedAt: string;
-  source: 'MOCK';
+  source: "MOCK";
   horizon: { from: string; to: string };
   conflicts: SchedulingConflictReadModel[];
   routeOptimizations: Array<{
     id: string;
-    priority: 'LOW' | 'MEDIUM' | 'HIGH';
+    priority: "LOW" | "MEDIUM" | "HIGH";
     affectedEventIds: string[];
     estimatedDistanceReductionPercent: number;
     estimatedTimeSavedMinutes: number;
@@ -127,7 +127,7 @@ export type SchedulingIntelligenceReadModel = {
   weatherImpact: {
     applicable: boolean;
     segment: string;
-    risk: 'LOW' | 'MEDIUM' | 'HIGH';
+    risk: "LOW" | "MEDIUM" | "HIGH";
     summary: string;
     affectedEventIds: string[];
     recommendations: string[];
@@ -146,6 +146,6 @@ export type DashboardSchedulingReadModel = {
   intelligence: {
     highRiskDelays: number;
     criticalConflicts: number;
-    weatherRisk: 'LOW' | 'MEDIUM' | 'HIGH';
+    weatherRisk: "LOW" | "MEDIUM" | "HIGH";
   };
 };

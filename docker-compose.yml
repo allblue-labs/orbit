@@ -298,6 +298,8 @@ services:
       TRUSTED_PROXY_SECRET: ${TRUSTED_PROXY_SECRET:?TRUSTED_PROXY_SECRET is required}
       # Links públicos do app mobile, configuráveis sem rebuild da imagem.
       ORBIT_MOBILE_PLAY_STORE_URL: ${ORBIT_MOBILE_PLAY_STORE_URL:-https://example.com/orbit/android}
+      ORBIT_ANDROID_APP_LINK_SHA256: ${ORBIT_ANDROID_APP_LINK_SHA256:-}
+      ORBIT_IOS_APP_LINK_IDENTIFIER: ${ORBIT_IOS_APP_LINK_IDENTIFIER:-}
       ORBIT_MOBILE_APP_STORE_URL: ${ORBIT_MOBILE_APP_STORE_URL:-https://example.com/orbit/ios}
       # Origem pública canônica usada pela proteção same-origin do BFF. Não é
       # inferida do host interno do container/reverse proxy.

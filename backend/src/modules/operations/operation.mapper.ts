@@ -137,6 +137,7 @@ interface OperationSource {
 
 interface ActorContext {
   id: string;
+  isOrganizationOwner?: boolean;
   permissions: readonly string[];
 }
 
@@ -167,7 +168,10 @@ export class OperationReadModelMapper {
   ): OperationDetailsReadModel {
     return {
       ...this.base(source, actor),
-      transitions: OperationStateMachine.allowedTransitions(source.status),
+      transitions:
+        source.status === 'COMPLETED' && actor?.isOrganizationOwner
+          ? ['OPEN']
+          : OperationStateMachine.allowedTransitions(source.status),
     };
   }
 
@@ -281,7 +285,11 @@ export class OperationReadModelMapper {
     if (has('operations.read')) actions.push('VIEW');
     if (has('operations.update')) actions.push('EDIT');
     if (manager) actions.push('MANAGE_ASSIGNMENTS');
-    if (has('operations.status.update') && canExecute) {
+    if (
+      has('operations.status.update') &&
+      canExecute &&
+      (source.status !== 'COMPLETED' || actor.isOrganizationOwner)
+    ) {
       actions.push('CHANGE_STATUS');
       if (
         OperationStateMachine.allowedTransitions(source.status).includes(

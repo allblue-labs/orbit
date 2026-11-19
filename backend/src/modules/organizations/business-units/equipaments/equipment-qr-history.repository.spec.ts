@@ -3,11 +3,12 @@ import { EquipmentQrRepository } from './equipment-qr.repository';
 describe('Histórico de atendimentos do equipamento', () => {
   it('consulta apenas concluídos vinculados ao equipamento, tenant e unidade, com paginação', async () => {
     const tx = {
-      operation: {
+      equipmentServiceHistory: {
         count: jest.fn().mockResolvedValue(11),
-        findMany: jest.fn().mockResolvedValue([{ id: 'operation-rvt' }]),
+        findMany: jest
+          .fn()
+          .mockResolvedValue([{ operationId: 'operation-rvt' }]),
       },
-      rvtExecution: { findMany: jest.fn().mockResolvedValue([]) },
     };
     const repository = new EquipmentQrRepository({
       run: (callback: (value: typeof tx) => unknown) => callback(tx),
@@ -22,25 +23,15 @@ describe('Histórico de atendimentos do equipamento', () => {
     const where = {
       organizationId: 'org',
       businessUnitId: 'unit',
-      deletedAt: null,
-      status: 'COMPLETED',
-      assets: { some: { assetId: 'equipment' } },
+      assetId: 'equipment',
     };
-    expect(tx.operation.count).toHaveBeenCalledWith({ where });
-    expect(tx.operation.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where, skip: 10, take: 10 }),
-    );
-    expect(tx.rvtExecution.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: {
-          organizationId: 'org',
-          businessUnitId: 'unit',
-          status: 'COMPLETED',
-          operationId: { in: ['operation-rvt'] },
-          equipment: { some: { assetId: 'equipment' } },
-        },
-      }),
-    );
+    expect(tx.equipmentServiceHistory.count).toHaveBeenCalledWith({ where });
+    expect(tx.equipmentServiceHistory.findMany).toHaveBeenCalledWith({
+      where,
+      skip: 10,
+      take: 10,
+      orderBy: [{ completedAt: 'desc' }, { operationId: 'desc' }],
+    });
     expect(result.total).toBe(11);
   });
 });

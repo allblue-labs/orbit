@@ -18,6 +18,7 @@ import 'core/routing/orbit_router.dart';
 import 'core/theme/orbit_theme.dart';
 import 'core/presentation/orbit_format.dart';
 import 'features/authentication/domain/session.dart';
+import 'features/equipment/application/equipment_qr_link.dart';
 import 'features/notifications/application/push_providers.dart';
 import 'features/notifications/domain/deep_link.dart';
 import 'features/notifications/presentation/foreground_notifications.dart';
@@ -55,6 +56,8 @@ class OrbitOperatorApp extends ConsumerStatefulWidget {
   ConsumerState<OrbitOperatorApp> createState() => _OrbitOperatorAppState();
 }
 
+typedef _EquipmentLinkScope = (String, String, String?, String?);
+
 class _OrbitOperatorAppState extends ConsumerState<OrbitOperatorApp>
     with WidgetsBindingObserver {
   StreamSubscription<String>? _avisosTocados;
@@ -62,11 +65,81 @@ class _OrbitOperatorAppState extends ConsumerState<OrbitOperatorApp>
   Object? _runtimeIdentity;
   bool _refreshingProfile = false;
   PushTap? _pendingPushTap;
+  ({String token, _EquipmentLinkScope? scope})? _pendingEquipmentLink;
+
+  _EquipmentLinkScope _equipmentLinkScope(OrbitSession session) => (
+    session.user.id,
+    session.claims.sessionId,
+    session.organizationId,
+    session.businessUnitId,
+  );
+
+  @override
+  Future<bool> didPushRouteInformation(RouteInformation information) async {
+    final token = equipmentLinkToken(information.uri);
+    if (token == null) return false;
+    final auth = ref.read(authControllerProvider);
+    setState(() {
+      _pendingEquipmentLink = (
+        token: token,
+        scope: auth is AuthAuthenticated
+            ? _equipmentLinkScope(auth.session)
+            : null,
+      );
+    });
+    return true;
+  }
+
+  void _openEquipmentAfterAuth(AuthState auth) {
+    final pending = _pendingEquipmentLink;
+    if (pending == null) return;
+    if (auth is AuthUnauthenticated && pending.scope != null) {
+      _pendingEquipmentLink = null;
+    }
+    if (auth is! AuthAuthenticated) return;
+
+    final scope = _equipmentLinkScope(auth.session);
+    if (pending.scope != null && pending.scope != scope) {
+      _pendingEquipmentLink = null;
+      return;
+    }
+    if (auth.session.user.mustChangePassword) {
+      _pendingEquipmentLink = (token: pending.token, scope: scope);
+      return;
+    }
+
+    _pendingEquipmentLink = null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _pendingEquipmentLink != null) return;
+      final current = ref.read(authControllerProvider);
+      if (current is! AuthAuthenticated ||
+          current.session.user.mustChangePassword ||
+          _equipmentLinkScope(current.session) != scope) {
+        return;
+      }
+      final router = _runtime!.container.read(routerProvider);
+      final destination = OrbitRoutes.equipmentFromQr(pending.token);
+      if (router.routerDelegate.currentConfiguration.isNotEmpty &&
+          router.state.uri.path == destination) {
+        return;
+      }
+      unawaited(router.push<void>(destination));
+    });
+  }
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Android pode entregar o link de abertura na rota inicial. O roteador
+    // vive por sessão, então a raiz lê esse valor uma única vez.
+    final initialRoute = Uri.tryParse(
+      WidgetsBinding.instance.platformDispatcher.defaultRouteName,
+    );
+    final token = initialRoute == null
+        ? null
+        : equipmentLinkToken(initialRoute);
+    if (token != null) _pendingEquipmentLink = (token: token, scope: null);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // Restaura a sessão guardada.
       ref.read(authControllerProvider.notifier).restore();
@@ -174,6 +247,8 @@ class _OrbitOperatorAppState extends ConsumerState<OrbitOperatorApp>
         if (mounted) _navigatePush(tap);
       });
     }
+
+    _openEquipmentAfterAuth(auth);
 
     return KeyedSubtree(
       key: ValueKey(identity),

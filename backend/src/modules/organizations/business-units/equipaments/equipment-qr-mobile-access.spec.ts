@@ -91,26 +91,17 @@ describe('Leitura de equipamentos por QR no aplicativo de campo', () => {
         total: 1,
         rows: [
           {
-            id: 'service-1',
-            code: 'OS-1',
+            operationId: 'service-1',
+            code: 'OP-1',
+            serviceOrderNumber: 1,
             title: 'Limpeza preventiva',
             kind: 'SERVICE_ORDER',
             completedAt: new Date('2026-10-27T12:00:00Z'),
             description: 'Limpeza dos filtros.',
-            responsibleFieldTechnician: { displayName: 'Marina' },
-            pmocEquipmentExecution: { notes: 'Dreno desobstruído.' },
-            history: [
-              {
-                details: {
-                  note: 'Funcionamento conferido.',
-                  payloadHash: 'private-hash',
-                  idempotencyKey: 'private-key',
-                },
-              },
-            ],
+            technicianName: 'Marina',
+            observations: ['Dreno desobstruído.', 'Funcionamento conferido.'],
           },
         ],
-        visits: [],
       }),
     };
     const service = new EquipmentQrService(

@@ -267,6 +267,9 @@ export class MobileFieldArtifactRepository {
             executionType: 'OPERATION',
             executionId: source.id,
             invalidatedAt: null,
+            acknowledgedAt: source.startedAt
+              ? { gte: source.startedAt }
+              : undefined,
           },
           orderBy: { acknowledgedAt: 'desc' },
         });
@@ -424,17 +427,24 @@ export class MobileFieldArtifactRepository {
   async freeze(input: FreezeFieldArtifactInput) {
     return this.rls.run(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`field-artifact:${input.sourceType}:${input.sourceId}:${input.documentType}:1`}))`;
-      const current = await tx.fieldArtifact.findFirst({
+      const latest = await tx.fieldArtifact.findFirst({
         where: {
           organizationId: input.actor.organizationId,
           sourceType: input.sourceType,
           sourceId: input.sourceId,
           documentType: input.documentType,
-          snapshotVersion: 1,
         },
         include: artifactInclude,
+        orderBy: { snapshotVersion: 'desc' },
       });
-      if (current) return current;
+      if (
+        latest &&
+        (input.sourceType !== 'OPERATION' ||
+          latest.artifactExecution.completedAt?.getTime() ===
+            input.completedAt?.getTime())
+      )
+        return latest;
+      const snapshotVersion = (latest?.snapshotVersion ?? 0) + 1;
 
       let executionId = input.existingArtifactExecutionId ?? null;
       if (executionId) {
@@ -490,7 +500,10 @@ export class MobileFieldArtifactRepository {
             snapshotId: snapshot.id,
             responsibleUserId: input.responsibleUserId,
             createdById: input.actor.id,
-            code: input.code,
+            code:
+              snapshotVersion === 1
+                ? input.code
+                : `${input.code.slice(0, 48)}-V${snapshotVersion}`,
             title: input.title,
             status: 'COMPLETED',
             progress: 100,
@@ -541,7 +554,7 @@ export class MobileFieldArtifactRepository {
           sourceType: input.sourceType,
           sourceId: input.sourceId,
           documentType: input.documentType,
-          snapshotVersion: 1,
+          snapshotVersion,
           snapshot: this.json(input.snapshot),
           snapshotHash: input.snapshotHash,
           artifactExecutionId: executionId,

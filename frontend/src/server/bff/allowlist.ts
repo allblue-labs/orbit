@@ -33,6 +33,7 @@ export const ALLOWED_API_ROOTS: readonly string[] = [
   "management-reports",
   "notifications",
   "operations",
+  "sales",
   "pmoc",
   "organizations",
   "plans",

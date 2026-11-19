@@ -85,11 +85,17 @@ export function useCustomersList(query: CustomerQuery) {
 export function useInfiniteCustomers(
   search: string | undefined,
   enabled = true,
+  activeOnly = false,
 ) {
+  const query = {
+    search,
+    limit: CUSTOMER_PICKER_PAGE,
+    ...(activeOnly ? { status: "ACTIVE" as const } : {}),
+  };
   return useInfiniteApiQuery<Customer>(
-    customersService.keys.list({ search, limit: CUSTOMER_PICKER_PAGE }),
+    customersService.keys.list(query),
     "/customers",
-    { search, limit: CUSTOMER_PICKER_PAGE },
+    query,
     { ...CUSTOMERS_REFRESH.list, enabled },
   );
 }

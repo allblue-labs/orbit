@@ -100,6 +100,7 @@ export class MobileManagementController {
     'operations',
     'quotes',
     'receipts',
+    'sales',
     'finance',
     'equipment',
     'pmoc',

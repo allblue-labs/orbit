@@ -11,6 +11,7 @@ const ownerDelegationLabels = {
   'operations': 'Operações e ordens de serviço',
   'quotes': 'Criar orçamentos',
   'receipts': 'Criar recibos',
+  'sales': 'Registrar vendas',
   'finance': 'Entradas e saídas',
   'customers': 'Cadastro de clientes',
   'equipment': 'Cadastro de equipamentos',

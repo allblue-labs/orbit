@@ -37,6 +37,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSectionFromUrl } from "@/hooks/use-section-from-url";
 import { PmocCenter } from "@/components/pmoc/pmoc-center";
 import { RvtCenter } from "@/components/rvt/rvt-center";
+import { SalesTab } from "@/components/sales/sales-tab";
 import { useSession } from "@/providers/session-provider";
 import { TabBoundary } from "@/workspace";
 import { useSchedulingTimeZone } from "@/components/scheduling/use-scheduling-timezone";
@@ -68,6 +69,15 @@ function Sections() {
      depende de fuso — ver `authorization-queue`. */
   const { timeZone } = useSchedulingTimeZone();
   const canRvt = session.hasCapability("rvt.read");
+  const canSell = [
+    "financial.manage",
+    "inventory.manage",
+    "artifact_rendering.render",
+    "artifact_manifests.read",
+  ].every(
+    (permission) =>
+      session.hasPermission(permission) && session.hasCapability(permission),
+  );
 
   /*
    * Só as seções que esta sessão alcança entram na lista.
@@ -80,6 +90,7 @@ function Sections() {
     OPERATIONS_SECTIONS.overview,
     ...(canPmoc ? [OPERATIONS_SECTIONS.pmoc] : []),
     ...(canRvt ? [OPERATIONS_SECTIONS.rvt] : []),
+    ...(canSell ? [OPERATIONS_SECTIONS.sales] : []),
     OPERATIONS_SECTIONS.authorization,
   ];
 
@@ -96,6 +107,9 @@ function Sections() {
         ) : null}
         {canRvt ? (
           <TabsTrigger value={OPERATIONS_SECTIONS.rvt}>RVT</TabsTrigger>
+        ) : null}
+        {canSell ? (
+          <TabsTrigger value={OPERATIONS_SECTIONS.sales}>Vendas</TabsTrigger>
         ) : null}
         {/*
           "Pendências", e não "Autorização": a aba passou a reunir duas filas de
@@ -136,6 +150,16 @@ function Sections() {
           {section.current === OPERATIONS_SECTIONS.rvt ? (
             <TabBoundary id="operations-rvt" label="as visitas técnicas">
               <RvtCenter />
+            </TabBoundary>
+          ) : null}
+        </TabsContent>
+      ) : null}
+
+      {canSell ? (
+        <TabsContent value={OPERATIONS_SECTIONS.sales}>
+          {section.current === OPERATIONS_SECTIONS.sales ? (
+            <TabBoundary id="operations-sales" label="as vendas">
+              <SalesTab />
             </TabBoundary>
           ) : null}
         </TabsContent>

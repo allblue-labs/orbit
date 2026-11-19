@@ -113,6 +113,7 @@ describe('Inventory (e2e)', () => {
       city: 'Recife',
       street: 'Rua da Aurora',
       stateCode: 'PE',
+      planKey: 'ESSENTIAL',
     });
     return {
       token: (registration.body as Envelope<{ accessToken: string }>).data

@@ -12,6 +12,7 @@ import 'owner_finance.dart';
 import 'owner_operations.dart';
 import 'owner_records.dart';
 import 'owner_recurring.dart';
+import 'owner_sales.dart';
 import 'owner_team.dart';
 import 'owner_tools.dart';
 
@@ -115,6 +116,13 @@ class _OwnerMenuState extends State<_OwnerMenu> {
           'Novo orçamento',
           Icons.request_quote_outlined,
           () => ownerQuote(context, tools),
+        ),
+      if (areas.contains('sales') && tools.unitId != null)
+        _section(
+          context,
+          'Vendas',
+          Icons.point_of_sale_outlined,
+          ownerSales(tools, widget.sharing),
         ),
       if (areas.contains('receipts') && tools.unitId != null)
         _section(
