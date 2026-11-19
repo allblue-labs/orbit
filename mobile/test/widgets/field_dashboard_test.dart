@@ -16,6 +16,7 @@ import 'package:orbit_operator/app/providers.dart';
 import 'package:orbit_operator/core/config/environment.dart';
 import 'package:orbit_operator/core/network/orbit_api_client.dart';
 import 'package:orbit_operator/core/observability/orbit_logger.dart';
+import 'package:orbit_operator/core/design/orbit_operational.dart';
 import 'package:orbit_operator/core/design/orbit_primitives.dart';
 import 'package:orbit_operator/core/theme/orbit_theme.dart';
 import 'package:orbit_operator/features/field/presentation/field_dashboard_screen.dart';
@@ -494,6 +495,7 @@ void main() {
       host(
         home(
           overdue: [workItem(id: 'atrasado', dueState: 'OVERDUE')],
+          today: [workItem(id: 'hoje')],
           next: workItem(id: 'proximo', dueState: 'UPCOMING'),
           completed: const [
             {
@@ -511,8 +513,34 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    Finder cardFor(String id) => find.ancestor(
+      of: find.byKey(ValueKey(id)),
+      matching: find.byType(OrbitCard),
+    );
+
+    void expectPaddedCard(String id) {
+      final card = cardFor(id);
+      expect(card, findsOneWidget);
+      final row = tester.widget<OrbitServiceRow>(
+        find.descendant(of: card, matching: find.byType(OrbitServiceRow)),
+      );
+      expect(row.padding.resolve(TextDirection.ltr).left, OrbitSpacing.md);
+      expect(row.padding.resolve(TextDirection.ltr).right, OrbitSpacing.md);
+    }
+
     /// Abre em "Abertos", que é onde está o trabalho por fazer.
     expect(find.text('Frigorífico Boa Carne'), findsNothing);
+    expectPaddedCard('atrasado');
+    expectPaddedCard('hoje');
+    expect(
+      tester.getTopLeft(cardFor('hoje')).dy -
+          tester.getBottomLeft(cardFor('atrasado')).dy,
+      OrbitSpacing.sm,
+    );
+
+    await tester.tap(find.text('Próximos'));
+    await tester.pumpAndSettle();
+    expectPaddedCard('proximo');
 
     await tester.tap(find.text('Concluídos'));
     await tester.pumpAndSettle();
@@ -521,6 +549,7 @@ void main() {
     /// `COMPLETED`. Esta aba prova que a leitura separada chegou à tela.
     expect(find.text('Frigorífico Boa Carne'), findsOneWidget);
     expect(find.text('Concluído'), findsWidgets);
+    expectPaddedCard('op-concluida');
 
     await tester.tap(find.text('Abertos'));
     await tester.pumpAndSettle();

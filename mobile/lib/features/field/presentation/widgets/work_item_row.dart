@@ -23,6 +23,7 @@ import '../../../../core/contracts/mobile_field_contracts.dart';
 import '../../../../core/design/orbit_primitives.dart';
 import '../../../../core/presentation/field_registry.dart';
 import '../../../../core/presentation/orbit_format.dart';
+import '../../../../core/theme/orbit_theme.dart';
 
 /// Tom do selo de prazo.
 ///
@@ -46,10 +47,12 @@ class WorkItemRow extends StatelessWidget {
     required this.onOpen,
     this.currentUserId,
     this.emphasis = false,
+    this.padding = const EdgeInsets.symmetric(vertical: OrbitSpacing.ms),
   });
 
   final MobileWorkItemContract item;
   final VoidCallback onOpen;
+  final EdgeInsetsGeometry padding;
 
   /// Para dizer qual é a função de quem está lendo, quando houver.
   final String? currentUserId;
@@ -65,6 +68,7 @@ class WorkItemRow extends StatelessWidget {
 
     return Semantics(
       button: true,
+      onTap: onOpen,
       label: semanticLabel(item, format: OrbitFormat.of(context)),
 
       /// `excludeSemantics`: o rótulo acima já diz a linha inteira na ordem
@@ -73,6 +77,7 @@ class WorkItemRow extends StatelessWidget {
       excludeSemantics: true,
       child: OrbitListRow(
         leading: scheduleColumn(item, format: OrbitFormat.of(context)),
+        padding: padding,
         title: item.customer?.name ?? item.title,
 
         /// O que é o serviço. Antes esta linha trazia só "Atendimento" — o

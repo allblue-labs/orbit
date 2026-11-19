@@ -720,6 +720,10 @@ class _RecentWork extends StatefulWidget {
 
 class _RecentWorkState extends State<_RecentWork> {
   _RecentTab _aba = _RecentTab.abertos;
+  static const _rowPadding = EdgeInsets.symmetric(
+    horizontal: OrbitSpacing.md,
+    vertical: OrbitSpacing.ms,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -793,27 +797,25 @@ class _RecentWorkState extends State<_RecentWork> {
         ),
         const SizedBox(height: OrbitSpacing.ms),
 
-        OrbitCard(
-          padding: EdgeInsets.zero,
-          child: switch (_aba) {
-            _RecentTab.abertos => _listaDeItens(abertosUnicos, 'aberto'),
-            _RecentTab.proximos => _listaDeItens(proximos, 'programado'),
-            _RecentTab.concluidos => _listaDeConcluidos(concluidos),
-          },
-        ),
+        switch (_aba) {
+          _RecentTab.abertos => _listaDeItens(abertosUnicos, 'aberto'),
+          _RecentTab.proximos => _listaDeItens(proximos, 'programado'),
+          _RecentTab.concluidos => _listaDeConcluidos(concluidos),
+        },
       ],
     );
   }
 
   Widget _listaDeItens(List<MobileWorkItemContract> itens, String vazio) {
     if (itens.isEmpty) return _vazio('Nenhum atendimento $vazio agora.');
-    return _Rows(
+    return _cartoes(
       children: [
         for (final item in itens)
           WorkItemRow(
             key: ValueKey(item.id),
             item: item,
             currentUserId: widget.currentUserId,
+            padding: _rowPadding,
             onOpen: () => context.push(OrbitRoutes.workItemDetail(item.id)),
           ),
       ],
@@ -822,11 +824,12 @@ class _RecentWorkState extends State<_RecentWork> {
 
   Widget _listaDeConcluidos(List<MobileCompletedWorkContract> itens) {
     if (itens.isEmpty) return _vazio('Nenhum atendimento concluído ainda.');
-    return _Rows(
+    return _cartoes(
       children: [
         for (final item in itens)
           OrbitListRow(
             key: ValueKey(item.id),
+            padding: _rowPadding,
             leading: OrbitFormat.of(context).weekdayAndDay(item.completedAt),
             title: item.customerName ?? item.title,
             subtitle: item.customerName == null ? null : item.title,
@@ -844,7 +847,16 @@ class _RecentWorkState extends State<_RecentWork> {
     );
   }
 
-  Widget _vazio(String mensagem) => Padding(
+  Widget _cartoes({required List<Widget> children}) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    spacing: OrbitSpacing.sm,
+    children: [
+      for (final row in children)
+        OrbitCard(padding: const EdgeInsets.all(1), child: row),
+    ],
+  );
+
+  Widget _vazio(String mensagem) => OrbitCard(
     padding: const EdgeInsets.symmetric(
       horizontal: OrbitSpacing.ml,
       vertical: OrbitSpacing.lg,
