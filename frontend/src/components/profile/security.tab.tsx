@@ -49,20 +49,13 @@ import { MfaSection } from "./mfa.section";
 
 export function SecurityTab() {
   const { formatDateTime } = useDateFormatters();
-  const profile = useProfile();
   const sessions = useDeviceSessions();
   const revoke = useRevokeSession();
   const session = useSession();
 
   return (
     <div className="max-w-3xl space-y-6">
-      <PasswordSection />
-
-      {profile.isPending ? (
-        <PanelLoading rows={3} />
-      ) : profile.data ? (
-        <MfaSection enabled={profile.data.mfaEnabled} />
-      ) : null}
+      <AccountAuthenticationControls />
 
       <section className="space-y-3">
         <div className="space-y-1">
@@ -99,17 +92,20 @@ export function SecurityTab() {
                 >
                   <div className="min-w-0 flex-1">
                     <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
-                      {item.client}
+                      {item.client === "WEB"
+                        ? "Web"
+                        : item.client === "MOBILE"
+                          ? "Aplicativo móvel"
+                          : "Integração"}
                       {item.revokedAt ? (
                         <Badge variant="outline">encerrada</Badge>
                       ) : null}
                     </p>
                     <p className="truncate text-xs text-muted-foreground">
-                      {item.userAgent ?? "Origem não informada"}
+                      {sessionAgent(item.client, item.userAgent)}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       Entrou em {formatDateTime(item.createdAt)}
-                      {item.ipAddress ? ` · ${item.ipAddress}` : ""}
                     </p>
                   </div>
 
@@ -142,6 +138,36 @@ export function SecurityTab() {
       ) : null}
     </div>
   );
+}
+
+export function AccountAuthenticationControls() {
+  const profile = useProfile();
+  return (
+    <div className="space-y-6">
+      <PasswordSection />
+      {profile.isPending ? (
+        <PanelLoading rows={3} />
+      ) : profile.data ? (
+        <MfaSection enabled={profile.data.mfaEnabled} />
+      ) : (
+        <Button variant="outline" onClick={() => void profile.refetch()}>
+          Recarregar autenticação em dois fatores
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function sessionAgent(client: string, agent: string | null) {
+  if (client === "MOBILE") return "Orbit Operator";
+  if (client !== "WEB") return "Acesso por integração";
+  if (/Edg(?:A|iOS)?\//i.test(agent ?? "")) return "Microsoft Edge";
+  if (/OPR\/|Opera/i.test(agent ?? "")) return "Opera";
+  if (/SamsungBrowser\//i.test(agent ?? "")) return "Samsung Internet";
+  if (/Firefox\/|FxiOS\//i.test(agent ?? "")) return "Firefox";
+  if (/Chrome\/|CriOS\//i.test(agent ?? "")) return "Google Chrome";
+  if (/Safari\//i.test(agent ?? "")) return "Safari";
+  return "Navegador não identificado";
 }
 
 /**
@@ -212,7 +238,9 @@ function PasswordSection() {
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2 sm:col-span-2">
-          <Label required htmlFor="password-current">Senha atual</Label>
+          <Label required htmlFor="password-current">
+            Senha atual
+          </Label>
           <Input
             id="password-current"
             type="password"
@@ -224,7 +252,9 @@ function PasswordSection() {
         </div>
 
         <div className="space-y-2">
-          <Label required htmlFor="password-new">Nova senha</Label>
+          <Label required htmlFor="password-new">
+            Nova senha
+          </Label>
           <Input
             id="password-new"
             type="password"
@@ -243,7 +273,9 @@ function PasswordSection() {
         </div>
 
         <div className="space-y-2">
-          <Label required htmlFor="password-confirm">Confirmar nova senha</Label>
+          <Label required htmlFor="password-confirm">
+            Confirmar nova senha
+          </Label>
           <Input
             id="password-confirm"
             type="password"

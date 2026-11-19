@@ -105,7 +105,7 @@ async function fixture(
       ...data.subscription!.allowedActions,
       "CANCEL_AT_PERIOD_END",
     ];
-  data.billing.canStartEssentialTrial = options.trialEligible;
+  data.billing.canStartTrial = options.trialEligible;
   if (options.overLimit)
     data.entitlements.limitAdjustment = {
       effectiveAt: period.start,

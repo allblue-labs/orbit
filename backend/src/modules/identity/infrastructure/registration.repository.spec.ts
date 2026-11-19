@@ -19,7 +19,9 @@ it.each([
     const tx = {
       $queryRawUnsafe: jest.fn(),
       plan: {
-        findFirst: jest.fn().mockResolvedValue({ id: 'plan', key: planKey }),
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ id: 'plan', key: planKey, commercial: {} }),
       },
       organization,
       user: { create },

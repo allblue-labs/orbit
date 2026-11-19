@@ -67,6 +67,7 @@ export class BillingController {
       /** A organização vem da sessão. O corpo não tem como dizê-la. */
       organizationId: this.organizationId(request),
       planCode: input.planCode,
+      expectedCatalogVersion: input.expectedCatalogVersion,
       billingInterval: input.billingInterval,
     });
     return {

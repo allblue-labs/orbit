@@ -1,8 +1,7 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsIn } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsIn, Matches, IsInt, IsOptional, Min } from 'class-validator';
 import {
   BillingInterval,
-  PlanCode,
   type BillingInterval as BillingIntervalType,
   type PlanCode as PlanCodeType,
 } from '../subscription-plans/catalog/plan-catalog.types';
@@ -19,9 +18,15 @@ import {
  * Preço, valor, avaliação e organização são resolvidos no servidor.
  */
 export class CreateCheckoutSessionDto {
-  @ApiProperty({ enum: Object.values(PlanCode) })
-  @IsIn(Object.values(PlanCode))
+  @ApiProperty({ example: 'PROFESSIONAL' })
+  @Matches(/^[A-Z][A-Z0-9_]{1,39}$/)
   planCode!: PlanCodeType;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  expectedCatalogVersion?: number;
 
   @ApiProperty({ enum: Object.values(BillingInterval) })
   @IsIn(Object.values(BillingInterval))

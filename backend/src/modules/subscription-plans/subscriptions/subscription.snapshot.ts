@@ -16,13 +16,21 @@ import {
 } from '../catalog/plan-catalog.types';
 
 export interface EntitlementsSnapshot {
+  readonly label?: string;
+  readonly routeCapabilities?: readonly string[];
   readonly capabilities: readonly string[];
   readonly allocation: Readonly<Record<string, number | null>>;
   readonly usage: Readonly<Record<string, number | null>>;
 }
 
-export function snapshotOf(plan: PlanDefinition): EntitlementsSnapshot {
+export function snapshotOf(
+  plan: PlanDefinition & { routeCapabilities?: readonly string[] },
+): EntitlementsSnapshot {
   return {
+    label: plan.label,
+    ...(plan.routeCapabilities
+      ? { routeCapabilities: [...plan.routeCapabilities] }
+      : {}),
     capabilities: [...plan.capabilities],
     allocation: numeros(AllocationResource, plan.allocation),
     usage: numeros(UsageResource, plan.usage),

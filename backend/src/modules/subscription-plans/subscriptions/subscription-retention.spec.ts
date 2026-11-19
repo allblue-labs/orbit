@@ -1,3 +1,4 @@
+import { commercialPlansFixture } from '../../../../test/support/commercial-plans.fixture';
 import { SubscriptionService } from './subscription.service';
 import { snapshotOf } from './subscription.snapshot';
 import { planDefinition } from '../catalog/plan-registry';
@@ -42,7 +43,10 @@ function fixture(overrides: Record<string, unknown> = {}) {
   };
   return {
     repository,
-    service: new SubscriptionService(repository as never),
+    service: new SubscriptionService(
+      repository as never,
+      commercialPlansFixture() as never,
+    ),
     current,
   };
 }

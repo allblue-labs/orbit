@@ -9,6 +9,7 @@
  */
 import { SubscriptionDataRetentionService } from './retention/subscription-data-retention.service';
 import { SubscriptionDataRetentionWorker } from './retention/subscription-data-retention.worker';
+import { CommercialPlanController } from '../subscription-plans/catalog/commercial-plan.controller';
 import { Module } from '@nestjs/common';
 import { SubscriptionPlansModule } from '../subscription-plans/subscription-plans.module';
 import {
@@ -30,7 +31,11 @@ import { SubscriptionBillingController } from './subscription-billing.controller
 
 @Module({
   imports: [SubscriptionPlansModule],
-  controllers: [BillingController, SubscriptionBillingController],
+  controllers: [
+    BillingController,
+    SubscriptionBillingController,
+    CommercialPlanController,
+  ],
   providers: [
     BillingConfig,
     BillingRecoveryService,

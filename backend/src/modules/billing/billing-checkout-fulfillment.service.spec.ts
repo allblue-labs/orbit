@@ -59,6 +59,7 @@ describe('BillingCheckoutFulfillmentService', () => {
     completedAt: null,
     failedAt: null,
     failureCode: null,
+    quotedPriceId: providerPriceId,
     createdAt: new Date(),
     updatedAt: new Date(),
     billingCustomer: {
@@ -102,7 +103,17 @@ describe('BillingCheckoutFulfillmentService', () => {
       linkProvider: jest.fn().mockResolvedValue(undefined),
     };
     const config = {
-      priceId: jest.fn().mockReturnValue(providerPriceId),
+      catalogEntryForPrice: jest.fn((id: string) =>
+        Promise.resolve(
+          id === providerPriceId
+            ? {
+                planCode: PlanCode.PROFESSIONAL,
+                billingInterval: BillingInterval.MONTHLY,
+                amountMinor: 14990,
+              }
+            : null,
+        ),
+      ),
     };
     const service = new BillingCheckoutFulfillmentService(
       provider,

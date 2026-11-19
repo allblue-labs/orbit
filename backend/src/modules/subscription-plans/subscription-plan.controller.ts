@@ -36,13 +36,6 @@ export class SubscriptionPlanController {
     return this.plans.listPlans();
   }
 
-  /**
-   * O catálogo comercial congelado.
-   *
-   * Vem do código, não do banco: é o mesmo catálogo que decide acesso, e
-   * publicar uma segunda cópia editável abriria espaço para as duas
-   * divergirem. Só informação comercial — nada de cobrança (§99).
-   */
   @Public()
   @Get('plans/catalog')
   planCatalog() {

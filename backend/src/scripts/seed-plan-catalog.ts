@@ -1,37 +1,14 @@
-/**
- * Semeadura dos quatro planos comerciais.
- *
- * O catálogo que decide acesso vive em código (`catalog/plan-catalog.ts`) e é
- * ele a autoridade. Estas linhas em `plans` existem por outro motivo: é a elas
- * que `organizations.plan_id` aponta, e é delas que o `CapabilityGuard` lê as
- * **permissões** da organização. Duas coisas diferentes com o mesmo nome
- * histórico — ver `backend/docs/plans-entitlements-usage.md`.
- *
- * ## Por que um script, e não uma migração
- *
- * Preço e rótulo mudam por decisão comercial; migração aplicada não se
- * corrige. O script é idempotente e reconcilia por `key`, que é o código
- * estável do plano — nunca por identificador gerado (§108, §109).
- *
- * ## O que este script não faz
- *
- * Não move ninguém de plano. Nenhuma organização existente é reatribuída,
- * porque decidir que todo mundo passa a ser Essencial mudaria os tetos de
- * inquilinos que nunca tiveram teto (§106). Migrar inquilino é decisão de
- * produto, e terá a sua própria PR.
- *
- * `limits` fica vazio de propósito: o teto é do catálogo em código, e uma
- * segunda cópia editável no banco só serviria para as duas divergirem (§130).
- */
 import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { config } from 'dotenv';
 import { resolve } from 'node:path';
 import { generateUuidV7 } from '../utils';
+import { snapshotOf } from '../modules/subscription-plans/subscriptions/subscription.snapshot';
 import { PLAN_CATALOG } from '../modules/subscription-plans/catalog/plan-registry';
 import {
   BillingInterval,
   PlanCapability,
+  PlanCode,
 } from '../modules/subscription-plans/catalog/plan-catalog.types';
 
 config({ path: resolve(process.cwd(), '.env'), quiet: true });
@@ -135,29 +112,61 @@ async function seed(): Promise<void> {
   const resumo = { criados: 0, atualizados: 0 };
 
   for (const plano of PLAN_CATALOG) {
-    const existente = await prisma.plan.findUnique({
-      where: { key: plano.code },
-      select: { id: true },
+    await prisma.$transaction(async (tx) => {
+      const existing = await tx.plan.findUnique({ where: { key: plano.code } });
+      if (existing?.commercial) return;
+      const prices = Object.fromEntries(
+        Object.values(BillingInterval).map((interval) => {
+          const stripePriceId =
+            process.env[`STRIPE_PRICE_${plano.code}_${interval}`]?.trim();
+          if (stripePriceId && !/^price_[A-Za-z0-9_]+$/.test(stripePriceId))
+            throw new Error(
+              `Invalid legacy Stripe Price for ${plano.code}/${interval}`,
+            );
+          return [
+            interval,
+            {
+              ...plano.prices[interval]!,
+              ...(stripePriceId ? { stripePriceId } : {}),
+            },
+          ];
+        }),
+      );
+      const data = {
+        name: existing?.name ?? plano.label,
+        description: existing?.description ?? plano.description,
+        monthlyPrice: (plano.prices.MONTHLY!.amountMinor / 100).toFixed(2),
+        annualPrice: (plano.prices.ANNUAL!.amountMinor / 100).toFixed(2),
+        currency: 'BRL',
+        capabilities: permissoes(plano.capabilities),
+        isActive: existing?.isActive ?? true,
+        commercial: {
+          trialDays: plano.code === PlanCode.ESSENTIAL ? 30 : 0,
+          prices,
+          entitlements: snapshotOf(plano),
+        } as unknown as Prisma.InputJsonValue,
+      };
+      await tx.plan.upsert({
+        where: { key: plano.code },
+        create: { id: generateUuidV7(), key: plano.code, ...data },
+        update: data,
+      });
+      for (const interval of Object.values(BillingInterval)) {
+        const price = prices[interval]!;
+        if (price.stripePriceId) {
+          await tx.planStripePrice.create({
+            data: {
+              id: price.stripePriceId,
+              planCode: plano.code,
+              billingInterval: interval,
+              amountMinor: price.amountMinor,
+            },
+          });
+        }
+      }
+      if (existing) resumo.atualizados++;
+      else resumo.criados++;
     });
-    const dados = {
-      name: plano.label,
-      description: plano.description,
-      monthlyPrice: (
-        plano.prices[BillingInterval.MONTHLY]!.amountMinor / 100
-      ).toFixed(2),
-      currency: 'BRL',
-      capabilities: permissoes(plano.capabilities),
-      isActive: true,
-    };
-    if (existente) {
-      await prisma.plan.update({ where: { id: existente.id }, data: dados });
-      resumo.atualizados += 1;
-      continue;
-    }
-    await prisma.plan.create({
-      data: { id: generateUuidV7(), key: plano.code, limits: {}, ...dados },
-    });
-    resumo.criados += 1;
   }
 
   console.log(

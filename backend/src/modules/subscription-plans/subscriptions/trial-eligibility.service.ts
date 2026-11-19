@@ -25,23 +25,18 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { PrismaTransactionClient } from '../../../database/prisma.types';
 import { Prisma } from '@prisma/client';
-import {
-  PlanCode,
-  type PlanCode as PlanCodeType,
-} from '../catalog/plan-catalog.types';
+import { type PlanCode as PlanCodeType } from '../catalog/plan-catalog.types';
 import { snapshotOf } from './subscription.snapshot';
-import { planDefinition } from '../catalog/plan-registry';
-import { CATALOG_VERSION } from '../catalog/plan-catalog.types';
+import { CommercialPlanService } from '../catalog/commercial-plan.service';
 import { ConflictException } from '../../../exceptions';
 import { TrialNotEligibleException } from './subscription.errors';
 import { SubscriptionRepository } from './subscription.repository';
 import { TrialFingerprintService } from './trial-fingerprint';
-import { TRIAL_DAYS, TrialRiskDecision } from './subscription.types';
+import { TrialRiskDecision } from './subscription.types';
 
 const DIA_MS = 24 * 60 * 60_000;
 
 /** Só o plano de entrada tem avaliação. Os demais se contratam direto. */
-const PLANOS_COM_AVALIACAO: ReadonlySet<string> = new Set([PlanCode.ESSENTIAL]);
 
 export interface TrialEvaluation {
   readonly eligible: boolean;
@@ -72,11 +67,16 @@ export class TrialEligibilityService {
   constructor(
     private readonly repository: SubscriptionRepository,
     private readonly fingerprints: TrialFingerprintService,
+    private readonly plans: CommercialPlanService,
   ) {}
 
   /** O plano oferece avaliação? Pergunta de catálogo, sem tocar no banco. */
-  offersTrial(planCode: string): boolean {
-    return PLANOS_COM_AVALIACAO.has(planCode);
+  async offersTrial(
+    planCode: string,
+    organizationId: string,
+  ): Promise<boolean> {
+    const plan = await this.plans.selectable(planCode, organizationId);
+    return plan.trialDays > 0;
   }
 
   /**
@@ -89,10 +89,11 @@ export class TrialEligibilityService {
     planCode: string,
     legalDocument: string,
   ): Promise<TrialEvaluation> {
-    if (!this.offersTrial(planCode)) {
+    const plan = await this.plans.find(planCode);
+    if (!plan?.isActive || !plan.trialDays || plan.tenantId !== null) {
       return {
         eligible: false,
-        trialDays: TRIAL_DAYS,
+        trialDays: 0,
         internalReason: 'plan does not offer trial',
       };
     }
@@ -100,7 +101,7 @@ export class TrialEligibilityService {
     const consumida = await this.repository.fingerprintConsumed(impressao);
     return {
       eligible: !consumida,
-      trialDays: TRIAL_DAYS,
+      trialDays: plan.trialDays,
       internalReason: consumida ? 'fingerprint already consumed' : null,
     };
   }
@@ -118,7 +119,11 @@ export class TrialEligibilityService {
     organizationId: string,
     expectedVersion: number,
     billingInterval: string,
+    planCode: string,
   ) {
+    const plan = await this.plans.selectable(planCode, organizationId);
+    if (!plan.trialDays)
+      throw new TrialNotEligibleException('plan does not offer trial');
     const candidate = await this.repository.trialCandidate(organizationId);
     if (!candidate.eligible || !candidate.document)
       throw new TrialNotEligibleException('trial unavailable');
@@ -128,13 +133,12 @@ export class TrialEligibilityService {
         organizationId,
         expectedVersion,
         billingInterval,
+        planCode,
         startsAt,
-        endsAt: new Date(startsAt.getTime() + TRIAL_DAYS * DIA_MS),
+        endsAt: new Date(startsAt.getTime() + plan.trialDays * DIA_MS),
         fingerprint: this.fingerprints.fingerprint(candidate.document),
-        snapshot: snapshotOf(
-          planDefinition(PlanCode.ESSENTIAL),
-        ) as unknown as Prisma.InputJsonValue,
-        catalogVersion: CATALOG_VERSION,
+        snapshot: snapshotOf(plan) as unknown as Prisma.InputJsonValue,
+        catalogVersion: plan.version,
       });
     } catch (error) {
       if (error instanceof Error && error.message === 'TRIAL_NOT_AVAILABLE')
@@ -169,14 +173,18 @@ export class TrialEligibilityService {
     input: GrantTrialInput,
     transaction?: PrismaTransactionClient,
   ): Promise<GrantedTrial> {
-    if (!this.offersTrial(input.planCode)) {
+    const plan = await this.plans.require(input.planCode, transaction);
+    if (
+      !plan.trialDays ||
+      (plan.tenantId !== null && plan.tenantId !== input.organizationId)
+    ) {
       throw new TrialNotEligibleException(
         `plan ${input.planCode} does not offer trial`,
       );
     }
     const impressao = this.fingerprints.fingerprint(input.legalDocument);
     const inicio = input.at ?? new Date();
-    const fim = new Date(inicio.getTime() + TRIAL_DAYS * DIA_MS);
+    const fim = new Date(inicio.getTime() + plan.trialDays * DIA_MS);
 
     /**
      * Por padrão, transação própria, com a organização declarada.

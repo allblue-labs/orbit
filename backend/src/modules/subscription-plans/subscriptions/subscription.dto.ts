@@ -1,8 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsIn, IsInt, IsOptional, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsIn,
+  IsInt,
+  IsOptional,
+  Matches,
+  Min,
+} from 'class-validator';
 import {
   BillingInterval,
-  PlanCode,
   type BillingInterval as BillingIntervalType,
   type PlanCode as PlanCodeType,
 } from '../catalog/plan-catalog.types';
@@ -23,6 +29,12 @@ export class CancelSubscriptionDto extends SubscriptionVersionDto {
 }
 
 export class ChangeSubscriptionPlanDto extends SubscriptionVersionDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  expectedCatalogVersion?: number;
+
   @ApiPropertyOptional({
     description: 'Confirma a perda dos dias de teste ao pagar o novo plano',
   })
@@ -30,8 +42,8 @@ export class ChangeSubscriptionPlanDto extends SubscriptionVersionDto {
   @IsBoolean()
   acknowledgeTrialEnd?: boolean;
 
-  @ApiProperty({ enum: Object.values(PlanCode) })
-  @IsIn(Object.values(PlanCode))
+  @ApiProperty({ example: 'PROFESSIONAL' })
+  @Matches(/^[A-Z][A-Z0-9_]{1,39}$/)
   planCode!: PlanCodeType;
 
   @ApiPropertyOptional({ enum: Object.values(BillingInterval) })

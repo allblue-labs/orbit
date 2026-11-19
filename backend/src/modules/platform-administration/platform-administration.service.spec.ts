@@ -48,6 +48,7 @@ describe('PlatformAdministrationService canonical boundary', () => {
     {} as never,
     {} as never,
     {} as never,
+    {} as never,
     contexts as never,
     {} as never,
   );
@@ -55,6 +56,7 @@ describe('PlatformAdministrationService canonical boundary', () => {
   it('does not accept a tenant role string or structural owner as global authority', async () => {
     const unsafe = new PlatformAdministrationService(
       repository as never,
+      {} as never,
       {} as never,
       {} as never,
       {} as never,

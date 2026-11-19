@@ -1,3 +1,6 @@
+import { CommercialPlanService } from '../subscription-plans/catalog/commercial-plan.service';
+import { snapshotOf } from '../subscription-plans/subscriptions/subscription.snapshot';
+import type { Prisma } from '@prisma/client';
 /**
  * Os comandos de cobrança, do lado do Orbit.
  *
@@ -20,13 +23,11 @@ import { generateUuidV7 } from '../../utils';
 import { TrialEligibilityService } from '../subscription-plans/subscriptions/trial-eligibility.service';
 import { SubscriptionService } from '../subscription-plans/subscriptions/subscription.service';
 import {
-  TRIAL_DAYS,
   allowsPlanChange,
   allowsInitialCheckout,
   SubscriptionStatus,
 } from '../subscription-plans/subscriptions/subscription.types';
 import {
-  PlanCode,
   type BillingInterval as BillingIntervalType,
   type PlanCode as PlanCodeType,
 } from '../subscription-plans/catalog/plan-catalog.types';
@@ -53,6 +54,7 @@ export class BillingService {
     private readonly repository: BillingRepository,
     private readonly subscriptions: SubscriptionService,
     private readonly trials: TrialEligibilityService,
+    private readonly plans: CommercialPlanService,
   ) {}
 
   isEnabled(): boolean {
@@ -102,12 +104,23 @@ export class BillingService {
   async createCheckoutSession(input: {
     organizationId: string;
     planCode: PlanCodeType;
+    expectedCatalogVersion?: number;
     billingInterval: BillingIntervalType;
     /** Somente o comando autenticado de troca autoriza um destino diferente. */
     changePlan?: boolean;
     acknowledgeTrialEnd?: boolean;
   }): Promise<CheckoutSession> {
     this.assertEnabled();
+    const offer = await this.plans.selectable(
+      input.planCode,
+      input.organizationId,
+    );
+    this.assertCatalogVersion(offer.version, input.expectedCatalogVersion);
+    const quotedPriceId = offer.prices[input.billingInterval]?.stripePriceId;
+    if (!quotedPriceId)
+      throw new BillingCheckoutNotAllowedException(
+        'no price published for this offer',
+      );
     const existing = await this.subscriptions.currentOrNull(
       input.organizationId,
     );
@@ -144,7 +157,7 @@ export class BillingService {
 
     const endsTrial =
       assinatura.effectiveStatus === SubscriptionStatus.TRIALING &&
-      (input.planCode !== PlanCode.ESSENTIAL || input.changePlan === true);
+      (input.planCode !== assinatura.planCode || input.changePlan === true);
     if (endsTrial && input.acknowledgeTrialEnd !== true) {
       throw new BillingCommandNotAllowedException(
         'trial termination must be acknowledged before checkout',
@@ -167,6 +180,11 @@ export class BillingService {
         idempotencyKey: this.chave('checkout-attempt', attemptId),
         subscriptionVersion: assinatura.version,
         endsTrial,
+        quotedPriceId,
+        quotedCatalogVersion: offer.version,
+        quotedEntitlements: snapshotOf(
+          offer,
+        ) as unknown as Prisma.InputJsonValue,
       });
 
       // Uma sessão expirada pode ser substituída, inclusive por outro plano.
@@ -196,6 +214,8 @@ export class BillingService {
           (attempt.subscriptionVersion == null ||
             attempt.subscriptionVersion === assinatura.version) &&
           attempt.endsTrial === endsTrial &&
+          (attempt.quotedPriceId === null ||
+            attempt.quotedPriceId === quotedPriceId) &&
           currentSession.url
         ) {
           return {
@@ -231,13 +251,12 @@ export class BillingService {
        */
       const session = await this.provider.createCheckoutSession({
         checkoutAttemptId: attempt.id,
+        priceId: attempt.quotedPriceId ?? quotedPriceId,
         organizationId: input.organizationId,
         providerCustomerId: customer.providerCustomerId,
         planCode: input.planCode,
         billingInterval: input.billingInterval,
-        trialDays: endsTrial
-          ? null
-          : this.diasDeAvaliacao(assinatura, input.planCode),
+        trialDays: endsTrial ? null : this.diasDeAvaliacao(assinatura),
         subscriptionId: assinatura.id,
         idempotencyKey: attempt.idempotencyKey,
       });
@@ -372,6 +391,7 @@ export class BillingService {
     organizationId: string;
     expectedVersion: number;
     planCode: PlanCodeType;
+    expectedCatalogVersion?: number;
     billingInterval?: BillingIntervalType;
     acknowledgeTrialEnd?: boolean;
   }): Promise<
@@ -384,6 +404,11 @@ export class BillingService {
       input.organizationId,
       input.expectedVersion,
     );
+    const offer = await this.plans.selectable(
+      input.planCode,
+      input.organizationId,
+    );
+    this.assertCatalogVersion(offer.version, input.expectedCatalogVersion);
     const targetInterval = input.billingInterval ?? assinatura.billingInterval;
     if (!allowsPlanChange(assinatura.effectiveStatus)) {
       throw new BillingCommandNotAllowedException(
@@ -399,7 +424,7 @@ export class BillingService {
     if (
       assinatura.effectiveStatus === SubscriptionStatus.PENDING_PAYMENT &&
       !assinatura.providerSubscriptionId &&
-      input.planCode === PlanCode.ESSENTIAL &&
+      (await this.trials.offersTrial(input.planCode, input.organizationId)) &&
       (await this.trials.canStartPendingTrial(input.organizationId))
     ) {
       const attempt = await this.repository.activeCheckout(
@@ -429,6 +454,7 @@ export class BillingService {
         input.organizationId,
         input.expectedVersion,
         targetInterval,
+        input.planCode,
       );
       return {
         kind: 'TRIAL_STARTED',
@@ -449,6 +475,11 @@ export class BillingService {
         changePlan: true,
       });
     }
+    const priceId = offer.prices[targetInterval]?.stripePriceId;
+    if (!priceId)
+      throw new BillingCheckoutNotAllowedException(
+        'no price published for this offer',
+      );
     await this.assertProviderTarget(assinatura);
     if (assinatura.effectiveStatus === SubscriptionStatus.ACTIVE) {
       if (assinatura.cancelAtPeriodEnd)
@@ -461,6 +492,7 @@ export class BillingService {
         subscriptionId: assinatura.id,
         planCode: input.planCode,
         billingInterval: targetInterval,
+        priceId,
         timing: 'PERIOD_END',
         idempotencyKey: this.chave(
           'schedule-plan-change',
@@ -478,6 +510,7 @@ export class BillingService {
         input.planCode,
         targetInterval,
         change.effectiveAt,
+        offer,
       );
       return {
         kind: 'SCHEDULED',
@@ -487,6 +520,7 @@ export class BillingService {
     // Apenas abre a confirmação hospedada. O webhook verifica o pagamento
     // antes de aplicar qualquer mudança aos direitos da organização.
     return this.provider.createPlanChangeSession({
+      organizationId: input.organizationId,
       providerCustomerId: assinatura.providerCustomerId!,
       providerSubscriptionId: assinatura.providerSubscriptionId,
       planCode: input.planCode,
@@ -542,14 +576,17 @@ export class BillingService {
    * elegibilidade no momento do checkout: se decidisse aqui, abrir dez sessões
    * seria dez chances de conseguir trinta dias.
    */
-  private diasDeAvaliacao(
-    assinatura: {
-      effectiveStatus: SubscriptionStatus;
-      trialEndsAt: Date | null;
-    },
-    planCode: PlanCodeType,
-  ): number | null {
-    if (planCode !== PlanCode.ESSENTIAL) return null;
+  private assertCatalogVersion(current: number, expected?: number) {
+    if (expected !== undefined && expected !== current)
+      throw new BillingCommandNotAllowedException(
+        'As condições do plano mudaram. Atualize a página e revise a oferta.',
+      );
+  }
+
+  private diasDeAvaliacao(assinatura: {
+    effectiveStatus: SubscriptionStatus;
+    trialEndsAt: Date | null;
+  }): number | null {
     if (assinatura.effectiveStatus !== SubscriptionStatus.TRIALING) {
       return null;
     }
@@ -558,7 +595,7 @@ export class BillingService {
       (assinatura.trialEndsAt.getTime() - Date.now()) / 86_400_000,
     );
     if (restantes <= 0) return null;
-    return Math.min(restantes, TRIAL_DAYS);
+    return restantes;
   }
 
   /** Chave estável: mesmo comando, mesma chave, qualquer que seja a hora. */

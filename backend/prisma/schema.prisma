@@ -505,6 +505,8 @@ model Organization {
 
   @@index([ownerUserId, status])
   @@index([planId, subscriptionStatus])
+  privateCatalogPlans Plan[] @relation("PrivateCatalog")
+
   @@map("organizations")
   adminProvisionings PlatformTenantProvisioning[]
 
@@ -738,10 +740,29 @@ model Plan {
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
+  commercial      Json?   @db.JsonB
+  catalogVersion  Int     @default(1) @map("catalog_version")
+  catalogTenantId String? @map("catalog_tenant_id") @db.Uuid
+
   organizations Organization[]
+  catalogTenant Organization? @relation("PrivateCatalog", fields: [catalogTenantId], references: [id], onDelete: Cascade)
+  stripePrices PlanStripePrice[]
+
+  @@index([catalogTenantId])
 
   @@index([isActive])
   @@map("plans")
+}
+
+model PlanStripePrice {
+  id              String @id @db.VarChar(255)
+  planCode        String @map("plan_code") @db.VarChar(40)
+  billingInterval String @map("billing_interval") @db.VarChar(20)
+  amountMinor     Int    @map("amount_minor")
+  plan            Plan   @relation(fields: [planCode], references: [key], onDelete: Cascade)
+
+  @@index([planCode])
+  @@map("plan_stripe_prices")
 }
 
 model PlanUsage {
@@ -987,6 +1008,9 @@ model BillingCheckoutAttempt {
   billingInterval     String  @map("billing_interval") @db.VarChar(20)
   subscriptionVersion Int?    @map("subscription_version")
   endsTrial           Boolean @default(false) @map("ends_trial")
+  quotedPriceId String? @map("quoted_price_id") @db.VarChar(255)
+  quotedCatalogVersion Int? @map("quoted_catalog_version")
+  quotedEntitlements Json? @map("quoted_entitlements") @db.JsonB
 
   /// `CREATING` · `OPEN` · `COMPLETED` · `EXPIRED` · `FAILED`.
   status String @default("CREATING") @db.VarChar(20)

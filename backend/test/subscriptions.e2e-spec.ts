@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
@@ -272,6 +273,42 @@ describe('Subscription lifecycle, billing periods and trial (e2e)', () => {
       expect(dias).toBe(30);
     });
 
+    it('usa a duração publicada no banco, inclusive quando passa de um mês', async () => {
+      const plan = await prisma.plan.findUniqueOrThrow({
+        where: { key: PlanCode.ESSENTIAL },
+      });
+      const original = plan.commercial as Prisma.InputJsonObject;
+      await prisma.plan.update({
+        where: { id: plan.id },
+        data: { commercial: { ...original, trialDays: 45 } },
+      });
+      try {
+        const organization = await registrar('trial-catalogo');
+        const start = await como(organization.organizationId, () =>
+          subscriptions.requireCurrent(organization.organizationId),
+        );
+        expect(
+          start.trialEndsAt!.getTime() - start.trialStartsAt!.getTime(),
+        ).toBe(45 * 86400000);
+        const duringTrial = new Date(
+          start.trialStartsAt!.getTime() + 38 * 86400000,
+        );
+        const during = await como(organization.organizationId, () =>
+          subscriptions.requireCurrent(
+            organization.organizationId,
+            duringTrial,
+          ),
+        );
+        expect(during.effectiveStatus).toBe(SubscriptionStatus.TRIALING);
+        expect(during.currentPeriodEnd).toEqual(start.trialEndsAt);
+      } finally {
+        await prisma.plan.update({
+          where: { id: plan.id },
+          data: { commercial: original },
+        });
+      }
+    });
+
     it('recusa um novo cadastro com CNPJ já utilizado antes de conceder outra avaliação', async () => {
       await http()
         .post('/api/v1/identity/register')
@@ -318,7 +355,9 @@ describe('Subscription lifecycle, billing periods and trial (e2e)', () => {
       PlanCode.PROFESSIONAL_INTELLIGENCE,
       PlanCode.ENTERPRISE_UNLIMITED,
     ])('%s não oferece avaliação', async (plano) => {
-      expect(trials.offersTrial(plano)).toBe(false);
+      await expect(
+        trials.offersTrial(plano, 'unused-by-public-offers'),
+      ).resolves.toBe(false);
       const inquilino = await registrar('sem-trial', plano, cnpj(), false);
       const assinatura = await como(inquilino.organizationId, () =>
         subscriptions.requireCurrent(inquilino.organizationId),

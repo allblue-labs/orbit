@@ -396,8 +396,11 @@ export class BillingReconciliationService {
         if (
           this.comandoPara(atual, provedor) !== 'NONE' ||
           atual.cancelAtPeriodEnd !== provedor.cancelAtPeriodEnd ||
-          (this.config.catalogEntryForPrice(provedor.providerPriceId ?? '')
-            ?.planCode ?? atual.planCode) !== atual.planCode
+          ((
+            await this.config.catalogEntryForPrice(
+              provedor.providerPriceId ?? '',
+            )
+          )?.planCode ?? atual.planCode) !== atual.planCode
         )
           this.repository.noteDivergence();
         await this.aplicar(atual, provedor, providerEventId, proof);
@@ -560,6 +563,9 @@ export class BillingReconciliationService {
     providerEventId: string | null,
     proof: ProviderInvoice | null,
   ): Promise<void> {
+    const catalogEntry = await this.config.catalogEntryForPrice(
+      provedor.providerPriceId ?? '',
+    );
     const needsPayment =
       provedor.state === ProviderBillingState.ACTIVE &&
       (atual.effectiveStatus !== SubscriptionStatus.ACTIVE ||
@@ -567,10 +573,7 @@ export class BillingReconciliationService {
           provedor.currentPeriodStart?.getTime() ||
         atual.currentPeriodEnd.getTime() !==
           provedor.currentPeriodEnd?.getTime() ||
-        (provedor.providerPriceId &&
-          this.config.catalogEntryForPrice(provedor.providerPriceId) &&
-          this.config.catalogEntryForPrice(provedor.providerPriceId)
-            ?.planCode !== atual.planCode));
+        (catalogEntry && catalogEntry.planCode !== atual.planCode));
     if (
       needsPayment &&
       (!proof ||
@@ -597,9 +600,6 @@ export class BillingReconciliationService {
         provedor.trialEndsAt > atual.trialEndsAt)
     )
       throw new Error('BILLING_TRIAL_NOT_GRANTED');
-    const catalogEntry = provedor.providerPriceId
-      ? this.config.catalogEntryForPrice(provedor.providerPriceId)
-      : null;
     if (this.config.enabled && provedor.providerPriceId && !catalogEntry) {
       /** Preço desconhecido nunca vira direitos por aproximação. */
       throw new Error('BILLING_PRICE_NOT_IN_CATALOG');
@@ -612,7 +612,7 @@ export class BillingReconciliationService {
     ) {
       if (
         provedor.state === ProviderBillingState.TRIALING &&
-        catalogEntry.planCode !== 'ESSENTIAL'
+        catalogEntry.planCode !== atual.planCode
       ) {
         throw new Error('BILLING_TRIAL_PLAN_NOT_ALLOWED');
       }
@@ -669,6 +669,13 @@ export class BillingReconciliationService {
           atual.version,
           {
             planCode: catalogEntry.planCode,
+            terms: provedor.providerPriceId
+              ? await this.repository.completedCheckoutTerms(
+                  atual.id,
+                  provedor.providerSubscriptionId,
+                  provedor.providerPriceId,
+                )
+              : undefined,
             billingInterval: catalogEntry.billingInterval,
             period: {
               start: provedor.currentPeriodStart,

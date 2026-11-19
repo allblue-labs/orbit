@@ -1,3 +1,4 @@
+import { commercialPlansFixture } from '../../../test/support/commercial-plans.fixture';
 import {
   BillingInterval,
   PlanCode,
@@ -96,7 +97,11 @@ describe('BillingService checkout intent', () => {
       provider,
       repository as never,
       subscriptions as never,
-      { canStartPendingTrial: jest.fn().mockResolvedValue(false) } as never,
+      {
+        offersTrial: jest.fn().mockResolvedValue(false),
+        canStartPendingTrial: jest.fn().mockResolvedValue(false),
+      } as never,
+      commercialPlansFixture() as never,
     );
     return {
       service,
@@ -116,6 +121,7 @@ describe('BillingService checkout intent', () => {
       requireCurrent: jest.fn().mockResolvedValue(currentSubscription()),
     };
     const trials = {
+      offersTrial: jest.fn().mockResolvedValue(true),
       canStartPendingTrial: jest.fn().mockResolvedValue(true),
       startPendingTrial: jest
         .fn()
@@ -127,6 +133,7 @@ describe('BillingService checkout intent', () => {
       repository as never,
       subscriptions as never,
       trials as never,
+      commercialPlansFixture() as never,
     );
     await expect(
       service.changeSubscriptionPlan({
@@ -143,6 +150,7 @@ describe('BillingService checkout intent', () => {
       organizationId,
       1,
       BillingInterval.MONTHLY,
+      PlanCode.ESSENTIAL,
     );
   });
 
@@ -154,6 +162,7 @@ describe('BillingService checkout intent', () => {
         .mockResolvedValue({ state: 'COMPLETE' }),
     };
     const trials = {
+      offersTrial: jest.fn().mockResolvedValue(true),
       canStartPendingTrial: jest.fn().mockResolvedValue(true),
       startPendingTrial: jest.fn(),
     };
@@ -168,6 +177,7 @@ describe('BillingService checkout intent', () => {
         requireCurrent: jest.fn().mockResolvedValue(currentSubscription()),
       } as never,
       trials as never,
+      commercialPlansFixture() as never,
     );
     await expect(
       service.changeSubscriptionPlan({
@@ -177,6 +187,20 @@ describe('BillingService checkout intent', () => {
       }),
     ).rejects.toBeInstanceOf(BillingCheckoutNotAllowedException);
     expect(trials.startPendingTrial).not.toHaveBeenCalled();
+  });
+
+  it('recusa as condições desatualizadas antes de abrir um checkout', async () => {
+    const { service, repository, createCheckoutSession } = setup();
+    await expect(
+      service.createCheckoutSession({
+        organizationId,
+        planCode: PlanCode.PROFESSIONAL,
+        billingInterval: BillingInterval.MONTHLY,
+        expectedCatalogVersion: 99,
+      }),
+    ).rejects.toMatchObject({ code: 'BILLING_COMMAND_NOT_ALLOWED' });
+    expect(repository.beginCheckoutAttempt).not.toHaveBeenCalled();
+    expect(createCheckoutSession).not.toHaveBeenCalled();
   });
 
   it('persiste a intenção antes de abrir a sessão no provedor', async () => {
@@ -304,7 +328,11 @@ describe('BillingService checkout intent', () => {
           provider,
           {} as never,
           subscriptions as never,
-          { canStartPendingTrial: jest.fn().mockResolvedValue(false) } as never,
+          {
+            offersTrial: jest.fn().mockResolvedValue(false),
+            canStartPendingTrial: jest.fn().mockResolvedValue(false),
+          } as never,
+          commercialPlansFixture() as never,
         ),
         provider,
         subscriptions,
@@ -404,6 +432,7 @@ describe('BillingService checkout intent', () => {
           planCode,
           BillingInterval.MONTHLY,
           new Date('2026-11-01T00:00:00.000Z'),
+          expect.objectContaining({ code: planCode, version: 1 }),
         );
       },
     );

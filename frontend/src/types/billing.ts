@@ -16,6 +16,7 @@ export type PlanLimit =
 export interface PlanPrice {
   /** Centavos. É esta a autoridade; o texto é vitrine. */
   amountMinor: number;
+  listAmountMinor?: number;
   currency: string;
   formatted: string;
 }
@@ -24,6 +25,10 @@ export interface PlanCatalogEntry {
   code: string;
   label: string;
   description: string;
+  isActive?: boolean;
+  version?: number;
+  trialDays?: number;
+  promotion?: string | null;
   monthlyPrice: string;
   currency: string;
   prices: Readonly<Record<string, PlanPrice>>;
@@ -101,7 +106,7 @@ export interface BillingReadiness {
   configured: boolean;
   mode: string | null;
   canCheckout: boolean;
-  canStartEssentialTrial?: boolean;
+  canStartTrial?: boolean;
   canOpenBillingPortal: boolean;
   allowedActions: readonly string[];
 }
@@ -138,6 +143,7 @@ export interface BillingFinancialAdjustment {
 
 /** Tudo o que a tela precisa, numa leitura. */
 export interface BillingOverview {
+  contractedAmountMinor?: number | null;
   catalog: PlanCatalog;
   /** `null` para organização sem assinatura. Não é erro. */
   subscription: OrganizationSubscription | null;
@@ -168,11 +174,13 @@ export interface BillingPortalResult {
  * que nem se tente.
  */
 export interface CreateCheckoutInput {
+  expectedCatalogVersion?: number;
   planCode: string;
   billingInterval: string;
 }
 
 export interface ChangePlanInput {
+  expectedCatalogVersion?: number;
   expectedVersion: number;
   planCode: string;
   billingInterval?: string;

@@ -242,11 +242,15 @@ async function tolerate<T>(request: Promise<T>): Promise<T | null> {
 }
 
 /** Autentica no backend e devolve o par de tokens (sem gravar cookies). */
-export function login(input: LoginInput): Promise<TokenPair> {
+export function login(
+  input: LoginInput,
+  userAgent?: string | null,
+): Promise<TokenPair> {
   return backendJson<TokenPair>({
     method: "POST",
     path: "/identity/login",
     body: jsonBody({ client: "WEB", ...input }),
+    headers: userAgent ? { "user-agent": userAgent.slice(0, 512) } : undefined,
     retries: 0,
   });
 }

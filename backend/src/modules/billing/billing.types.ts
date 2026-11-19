@@ -163,6 +163,7 @@ export interface ProviderFinancialAdjustment {
 
 export interface CheckoutSessionRequest {
   readonly checkoutAttemptId: string;
+  readonly priceId?: string;
   readonly organizationId: string;
   readonly providerCustomerId: string;
   readonly planCode: PlanCode;
@@ -254,6 +255,7 @@ export interface BillingProvider {
   expireCheckoutSession(providerSessionId: string): Promise<void>;
 
   createPlanChangeSession(input: {
+    organizationId: string;
     providerCustomerId: string;
     providerSubscriptionId: string;
     planCode: PlanCode;
@@ -280,6 +282,7 @@ export interface BillingProvider {
 
   /** Troca o preço da assinatura. O provedor calcula o dinheiro, não o Orbit. */
   changePlan(input: {
+    priceId?: string;
     providerSubscriptionId: string;
     organizationId: string;
     subscriptionId: string;

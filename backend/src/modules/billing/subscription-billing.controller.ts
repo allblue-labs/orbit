@@ -67,6 +67,7 @@ export class SubscriptionBillingController {
       organizationId,
       expectedVersion: input.expectedVersion,
       planCode: input.planCode,
+      expectedCatalogVersion: input.expectedCatalogVersion,
       billingInterval: input.billingInterval,
       acknowledgeTrialEnd: input.acknowledgeTrialEnd,
     });

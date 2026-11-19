@@ -25,11 +25,10 @@ import { InfrastructureException } from '../../../exceptions';
 import {
   BILLING_INTERVAL_MONTHS,
   BillingInterval,
-  PlanCode,
   type BillingInterval as BillingIntervalType,
   type PlanCode as PlanCodeType,
 } from '../../subscription-plans/catalog/plan-catalog.types';
-import { planDefinition } from '../../subscription-plans/catalog/plan-registry';
+import { CommercialPlanService } from '../../subscription-plans/catalog/commercial-plan.service';
 import { BillingConfig, STRIPE_API_VERSION } from '../billing.config';
 import {
   BillingProviderName,
@@ -71,7 +70,10 @@ export class StripeBillingProvider implements BillingProvider {
   private readonly recoveryClient: Stripe | null;
   private accountPortalConfiguration: Promise<string> | null = null;
 
-  constructor(private readonly config: BillingConfig) {
+  constructor(
+    private readonly config: BillingConfig,
+    private readonly plans: CommercialPlanService,
+  ) {
     this.recoveryClient = config.enabled
       ? new Stripe(config.secretKey, {
           apiVersion: STRIPE_API_VERSION,
@@ -127,7 +129,13 @@ export class StripeBillingProvider implements BillingProvider {
     request: CheckoutSessionRequest,
   ): Promise<CheckoutSession> {
     const stripe = this.require();
-    const priceId = this.priceOrFail(request.planCode, request.billingInterval);
+    const priceId =
+      request.priceId ??
+      (await this.priceOrFail(
+        request.planCode,
+        request.billingInterval,
+        request.organizationId,
+      ));
     await this.assertPrice(request.planCode, request.billingInterval, priceId);
 
     const session = await this.chamar('createCheckoutSession', () =>
@@ -292,13 +300,18 @@ export class StripeBillingProvider implements BillingProvider {
   }
 
   async createPlanChangeSession(input: {
+    organizationId: string;
     providerCustomerId: string;
     providerSubscriptionId: string;
     planCode: PlanCodeType;
     billingInterval: BillingIntervalType;
   }): Promise<BillingPortalSession> {
     const stripe = this.require();
-    const priceId = this.priceOrFail(input.planCode, input.billingInterval);
+    const priceId = await this.priceOrFail(
+      input.planCode,
+      input.billingInterval,
+      input.organizationId,
+    );
     await this.assertPrice(input.planCode, input.billingInterval, priceId);
     const subscription = await this.chamar('retrieveSubscription', () =>
       stripe.subscriptions.retrieve(input.providerSubscriptionId),
@@ -531,6 +544,7 @@ export class StripeBillingProvider implements BillingProvider {
   }
 
   async changePlan(input: {
+    priceId?: string;
     providerSubscriptionId: string;
     organizationId: string;
     subscriptionId: string;
@@ -540,7 +554,13 @@ export class StripeBillingProvider implements BillingProvider {
     idempotencyKey: string;
   }): Promise<ProviderPlanChange> {
     const stripe = this.require();
-    const priceId = this.priceOrFail(input.planCode, input.billingInterval);
+    const priceId =
+      input.priceId ??
+      (await this.priceOrFail(
+        input.planCode,
+        input.billingInterval,
+        input.organizationId,
+      ));
     await this.assertPrice(input.planCode, input.billingInterval, priceId);
     const atual = await this.chamar('retrieveSubscription', () =>
       stripe.subscriptions.retrieve(input.providerSubscriptionId),
@@ -825,14 +845,44 @@ export class StripeBillingProvider implements BillingProvider {
    * Não corrige o painel do provedor: se lá diz 699,90 e aqui diz 599,00, quem
    * está errado é uma configuração, e adivinhar qual seria pior do que recusar.
    */
+  async validateOfferPrices(
+    prices: Readonly<
+      Record<string, { amountMinor: number; stripePriceId?: string }>
+    >,
+  ): Promise<void> {
+    const stripe = this.require();
+    for (const interval of Object.values(BillingInterval)) {
+      const offer = prices[interval];
+      if (!offer?.stripePriceId)
+        throw new BillingConfigurationInvalidException(
+          `Configure o preço Stripe para ${interval}.`,
+        );
+      const id = offer.stripePriceId;
+      const price = await this.chamar('retrievePrice', () =>
+        stripe.prices.retrieve(id),
+      );
+      const problem = this.problemaDePreco(
+        price,
+        offer.amountMinor,
+        BILLING_INTERVAL_MONTHS[interval]!,
+      );
+      if (problem)
+        throw new BillingConfigurationInvalidException(
+          `Preço inválido para ${interval}: ${problem}`,
+        );
+    }
+  }
+
   async verifyPriceCatalog(): Promise<readonly PriceVerification[]> {
     const stripe = this.require();
     const resultados: PriceVerification[] = [];
 
-    for (const planCode of Object.values(PlanCode)) {
-      const plano = planDefinition(planCode);
+    for (const plano of (await this.plans.list()).filter(
+      (plan) => plan.isActive,
+    )) {
+      const planCode = plano.code;
       for (const interval of Object.values(BillingInterval)) {
-        const priceId = this.config.priceId(planCode, interval);
+        const priceId = plano.prices[interval]?.stripePriceId;
         if (!priceId) {
           resultados.push({
             planCode,
@@ -913,13 +963,15 @@ export class StripeBillingProvider implements BillingProvider {
     const allowed = new Set(
       updates.products?.flatMap((product) => product.prices) ?? [],
     );
-    for (const plan of Object.values(PlanCode)) {
+    for (const plan of (await this.plans.list()).filter(
+      (entry) => entry.isActive,
+    )) {
       for (const interval of Object.values(BillingInterval)) {
-        const price = this.config.priceId(plan, interval);
+        const price = plan.prices[interval]?.stripePriceId;
         if (!price || !allowed.has(price)) {
           return {
             valid: false,
-            problem: `Publique o preço de ${plan}/${interval} no portal padrão.`,
+            problem: `Publique o preço de ${plan.code}/${interval} no portal padrão.`,
           };
         }
       }
@@ -939,9 +991,18 @@ export class StripeBillingProvider implements BillingProvider {
     const price = await this.chamar('retrievePrice', () =>
       this.require().prices.retrieve(priceId),
     );
+    const mapping = await this.config.catalogEntryForPrice(priceId);
+    if (
+      !mapping ||
+      mapping.planCode !== planCode ||
+      mapping.billingInterval !== interval
+    )
+      throw new BillingConfigurationInvalidException(
+        'Stripe Price is not registered for this offer',
+      );
     const problem = this.problemaDePreco(
       price,
-      planDefinition(planCode).prices[interval]!.amountMinor,
+      mapping.amountMinor,
       BILLING_INTERVAL_MONTHS[interval] ?? 1,
     );
     if (problem)
@@ -1125,11 +1186,13 @@ export class StripeBillingProvider implements BillingProvider {
     return null;
   }
 
-  private priceOrFail(
+  private async priceOrFail(
     planCode: PlanCodeType,
     interval: BillingIntervalType,
-  ): string {
-    const priceId = this.config.priceId(planCode, interval);
+    organizationId: string,
+  ): Promise<string> {
+    const plan = await this.plans.selectable(planCode, organizationId);
+    const priceId = plan.prices[interval]?.stripePriceId;
     if (!priceId) {
       throw new BillingConfigurationInvalidException(
         `no configured price for ${planCode}/${interval}`,

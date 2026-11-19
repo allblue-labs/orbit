@@ -1,3 +1,4 @@
+import { commercialPlansFixture } from '../../../../test/support/commercial-plans.fixture';
 /**
  * A troca de plano, e o que ela faz com a avaliação gratuita.
  *
@@ -64,7 +65,10 @@ function bancada(linha: Record<string, unknown>) {
   };
   return {
     repository,
-    service: new SubscriptionService(repository as never),
+    service: new SubscriptionService(
+      repository as never,
+      commercialPlansFixture() as never,
+    ),
   };
 }
 

@@ -66,7 +66,7 @@ describe('registration preserves the commercial selection', () => {
           .mockResolvedValue(created),
       };
       const subscriptions = {
-        provision: jest.fn().mockResolvedValue(undefined),
+        provisionIn: jest.fn().mockResolvedValue(undefined),
       };
       const hashes = { hash: jest.fn().mockResolvedValue('unit-hash') };
       const verification = {
@@ -93,15 +93,16 @@ describe('registration preserves the commercial selection', () => {
       const callback = repository.register.mock.calls[0]?.[5] as (
         tx: unknown,
         userId: string,
+        organizationId: string,
       ) => Promise<void>;
       expect(callback).toEqual(expect.any(Function));
-      await callback('transaction', created.userId);
+      await callback('transaction', created.userId, created.organizationId);
       expect(verification.queueWelcomeIn).toHaveBeenCalledWith(
         'transaction',
         created.userId,
         input.email,
       );
-      expect(subscriptions.provision).toHaveBeenCalledWith({
+      expect(subscriptions.provisionIn).toHaveBeenCalledWith('transaction', {
         organizationId: created.organizationId,
         planKey: 'PROFESSIONAL',
         legalDocument: '52998224725',

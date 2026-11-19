@@ -13,14 +13,6 @@ export async function carregarCatalogoPublico(): Promise<PlanCatalog> {
   return backendJson<PlanCatalog>({
     path: "/plans/catalog",
 
-    /**
-     * Cacheável porque é igual para todo mundo.
-     *
-     * O catálogo é congelado no código do backend e muda quando alguém publica
-     * uma versão nova — não a cada minuto, e nunca por visitante. Cinco minutos
-     * de reaproveitamento evitam uma ida ao backend por visita à landing, que é
-     * a página mais acessada do produto e a que mais depende de abrir rápido.
-     */
-    revalidateSeconds: 300,
+    revalidateSeconds: 60,
   });
 }

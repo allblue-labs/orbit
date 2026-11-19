@@ -1,4 +1,8 @@
 import 'reflect-metadata';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { PrismaClient } from '@prisma/client';
+import { CommercialPlanService } from '../modules/subscription-plans/catalog/commercial-plan.service';
+import type { PrismaService, RlsTransaction } from '../database';
 import { Logger } from '@nestjs/common';
 import { config as loadEnv } from 'dotenv';
 import { resolve } from 'node:path';
@@ -14,38 +18,58 @@ async function main(): Promise<void> {
   const enabled = process.env.STRIPE_ENABLED?.trim() === 'true';
   console.log(`STRIPE_ENABLED: ${enabled}`);
   // Validate the prepared configuration even while billing is disabled.
-  const config = new BillingConfig({
-    get: (key: string) => process.env[key] ?? '',
-    getOptional: (key: string) =>
-      key === 'STRIPE_ENABLED' ? 'true' : process.env[key],
+  const connectionString =
+    process.env.APP_DATABASE_URL ?? process.env.DATABASE_URL;
+  if (!connectionString)
+    throw new InfrastructureException(
+      'Informe a conexão do banco para conferir o catálogo.',
+    );
+  const database = new PrismaClient({
+    adapter: new PrismaPg(connectionString),
   });
-  console.log(`Configuração local válida. Modo: ${config.mode}. Preços: 12.`);
-  if (!process.argv.includes('--remote')) {
-    console.log(
-      'Para conferir os preços no Stripe, execute novamente com --remote. A conferência remota faz somente leituras.',
-    );
-    return;
-  }
-  const provider = new StripeBillingProvider(config);
-  const results = await provider.verifyPriceCatalog();
-  for (const result of results) {
-    console.log(
-      `${result.planCode}/${result.billingInterval}: ${result.valid ? 'OK' : result.problem}`,
-    );
-  }
-  if (results.some((result) => !result.valid)) process.exitCode = 1;
-  const portal = await provider.verifyPlanChangePortal();
-  console.log(
-    `Portal para troca de planos: ${portal.valid ? 'OK' : portal.problem}`,
+  const plans = new CommercialPlanService(
+    database as PrismaService,
+    undefined as unknown as RlsTransaction,
   );
-  if (!portal.valid) process.exitCode = 1;
-  if (
-    enabled &&
-    process.env.BILLING_EVENTS_WORKER_ENABLED?.trim() === 'false'
-  ) {
-    console.log(
-      'BILLING_EVENTS_WORKER_ENABLED=false: é necessário um worker separado ativo para confirmar pagamentos.',
+  try {
+    const config = new BillingConfig(
+      {
+        get: (key: string) => process.env[key] ?? '',
+        getOptional: (key: string) =>
+          key === 'STRIPE_ENABLED' ? 'true' : process.env[key],
+      },
+      plans,
     );
+    console.log(`Configuração local válida. Modo: ${config.mode}.`);
+    if (!process.argv.includes('--remote')) {
+      console.log(
+        'Para conferir os preços no Stripe, execute novamente com --remote. A conferência remota faz somente leituras.',
+      );
+      return;
+    }
+    const provider = new StripeBillingProvider(config, plans);
+    const results = await provider.verifyPriceCatalog();
+    for (const result of results) {
+      console.log(
+        `${result.planCode}/${result.billingInterval}: ${result.valid ? 'OK' : result.problem}`,
+      );
+    }
+    if (results.some((result) => !result.valid)) process.exitCode = 1;
+    const portal = await provider.verifyPlanChangePortal();
+    console.log(
+      `Portal para troca de planos: ${portal.valid ? 'OK' : portal.problem}`,
+    );
+    if (!portal.valid) process.exitCode = 1;
+    if (
+      enabled &&
+      process.env.BILLING_EVENTS_WORKER_ENABLED?.trim() === 'false'
+    ) {
+      console.log(
+        'BILLING_EVENTS_WORKER_ENABLED=false: é necessário um worker separado ativo para confirmar pagamentos.',
+      );
+    }
+  } finally {
+    await database.$disconnect();
   }
 }
 

@@ -7,7 +7,9 @@ import type { RegisterOrganizationDto } from '../presentation/dto/identity.dto';
 describe('public signup document reservation', () => {
   it('stops before creating a user when the atomic reservation is refused', async () => {
     const tx = {
-      plan: { findFirst: jest.fn().mockResolvedValue({ id: 'plan' }) },
+      plan: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'plan', commercial: {} }),
+      },
       $queryRaw: jest.fn().mockResolvedValue([{ reserved: false }]),
       user: { create: jest.fn() },
     };

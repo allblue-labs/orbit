@@ -37,7 +37,6 @@ import {
   rotuloDoRecurso,
 } from "@/components/billing/billing-format";
 import {
-  TRIAL_DAYS,
   ofereceAvaliacao,
   ordenarPlanos,
 } from "@/components/pricing/pricing-catalog";
@@ -132,24 +131,6 @@ function FieldError({ message, id }: { message?: string; id?: string }) {
   ) : null;
 }
 
-/**
- * Escolha do plano — primeira etapa do onboarding público.
- *
- * ## De onde vêm os planos
- *
- * Do catálogo comercial (`GET /plans/catalog`), lido no servidor e entregue
- * pronto. Antes vinham de `GET /plans`, que é a tabela: as suítes de direitos
- * criam planos ali ("Sem financeiro", "Catálogo sem estoque") e os internos
- * moram no mesmo lugar, então quem abria a conta escolhia entre dez cartões,
- * metade a R$ 0,00.
- *
- * ## "Gratuito" era a palavra errada
- *
- * O `STARTER` custa zero na tabela e o cartão dizia **Gratuito/mês** — que lê
- * como um plano permanentemente grátis. Não é: o que existe é a avaliação de
- * 30 dias do Essencial. O preço mostrado agora é sempre o preço real do plano,
- * e a avaliação aparece como o que é — um período, anunciado à parte.
- */
 function PlanStep({
   catalog,
   selected,
@@ -205,11 +186,6 @@ function PlanStep({
           />
         ))}
       </div>
-      <p className="text-xs text-muted-foreground">
-        O Essencial oferece avaliação para empresas elegíveis. Os demais planos
-        exigem pagamento para liberar o acesso. Você pode trocar de plano pela
-        área de assinatura.
-      </p>
       <FieldError message={error} />
     </div>
   );
@@ -233,9 +209,12 @@ function PlanCard({
     <button
       type="button"
       onClick={onSelect}
+      disabled={plano.isActive === false}
       aria-pressed={ativo}
       className={cn(
         "rounded-xl border border-border p-5 text-left transition-colors",
+        plano.isActive === false &&
+          "cursor-not-allowed bg-muted/50 text-muted-foreground",
         ativo
           ? "border-primary bg-secondary"
           : "hover:border-primary/40 hover:bg-muted/40",
@@ -248,10 +227,19 @@ function PlanCard({
             {plano.description}
           </p>
         </div>
-        {ativo ? <Check className="size-4 shrink-0 text-primary" /> : null}
+        {plano.isActive === false ? (
+          <span className="text-xs text-muted-foreground">Indisponível</span>
+        ) : ativo ? (
+          <Check className="size-4 shrink-0 text-primary" />
+        ) : null}
       </div>
 
       <p className="mt-4 font-display text-2xl font-bold">
+        {preco?.listAmountMinor !== undefined ? (
+          <del className="mr-2 text-sm font-normal text-muted-foreground">
+            {formatCentavos(preco.listAmountMinor)}
+          </del>
+        ) : null}
         {preco ? formatCentavos(preco.amountMinor) : "Sob consulta"}
         <span className="ml-1 text-xs font-normal text-muted-foreground">
           {billingInterval === "MONTHLY"
@@ -262,17 +250,14 @@ function PlanCard({
         </span>
       </p>
 
-      {/*
-        A avaliação é um período, não um preço.
-
-        Dizer "Gratuito" no lugar do valor fazia o plano parecer sempre grátis.
-        O valor fica onde sempre esteve, e a avaliação vira o que é: trinta
-        dias antes da primeira cobrança.
-      */}
       {comAvaliacao ? (
         <p className="mt-2 inline-flex rounded-md bg-success/12 px-2 py-1 text-[11px] font-medium text-success">
-          {TRIAL_DAYS} dias grátis antes da primeira cobrança
+          {plano.trialDays} dias grátis antes da primeira cobrança
         </p>
+      ) : null}
+
+      {plano.promotion ? (
+        <p className="mt-2 text-xs text-muted-foreground">{plano.promotion}</p>
       ) : null}
 
       <dl className="mt-4 space-y-1 border-t border-border/70 pt-3">
@@ -543,17 +528,12 @@ export function SignupContent({
                 transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
               >
                 <div className="mb-8">
-                  {/*
-                    O número vem da mesma constante que o catálogo usa.
-
-                    O crachá dizia "14 dias para explorar" enquanto a avaliação
-                    é de 30 — dois números diferentes na mesma tela, e o menor
-                    deles era o que a pessoa levava para a decisão.
-                  */}
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1 text-xs font-medium text-secondary-foreground">
-                    <Sparkles className="size-3.5 text-primary" />
-                    {TRIAL_DAYS} dias grátis no Essencial
-                  </span>
+                  {plan && ofereceAvaliacao(plan) ? (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1 text-xs font-medium text-secondary-foreground">
+                      <Sparkles className="size-3.5 text-primary" />
+                      {plan.trialDays} dias grátis em {plan.label}
+                    </span>
+                  ) : null}
                   <h2
                     ref={focusStep}
                     tabIndex={-1}

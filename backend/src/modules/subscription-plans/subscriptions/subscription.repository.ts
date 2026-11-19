@@ -398,6 +398,7 @@ export class SubscriptionRepository {
     expectedVersion: number;
     fingerprint: string;
     billingInterval: string;
+    planCode: string;
     startsAt: Date;
     endsAt: Date;
     snapshot: Prisma.InputJsonValue;
@@ -445,7 +446,7 @@ export class SubscriptionRepository {
           {
             id: generateUuidV7(),
             organizationId: input.organizationId,
-            planCode: 'ESSENTIAL',
+            planCode: input.planCode,
             legalDocumentFingerprint: input.fingerprint,
             startsAt: input.startsAt,
             endsAt: input.endsAt,
@@ -462,7 +463,7 @@ export class SubscriptionRepository {
         input.expectedVersion,
         {
           status: 'TRIALING',
-          planCode: 'ESSENTIAL',
+          planCode: input.planCode,
           billingInterval: input.billingInterval,
           catalogVersion: input.catalogVersion,
           entitlementsSnapshot: input.snapshot,

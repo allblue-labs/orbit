@@ -1,3 +1,4 @@
+import { CommercialPlanService } from '../subscription-plans/catalog/commercial-plan.service';
 /**
  * O que a tela precisa saber sobre cobrança.
  *
@@ -35,6 +36,7 @@ export interface BillingOverviewReadModel {
   subscription: OrganizationSubscriptionReadModel | null;
   entitlements: OrganizationEntitlementsReadModel;
   billing: BillingReadinessReadModel;
+  contractedAmountMinor: number | null;
   invoices: readonly BillingInvoiceReadModel[];
   dataPurgedAt?: string | null;
   dataPurgeStartedAt?: string | null;
@@ -77,7 +79,7 @@ export interface BillingReadinessReadModel {
   /** `TEST` ou `LIVE`, e só fora de produção interessa a quem opera. */
   mode: string | null;
   canCheckout: boolean;
-  canStartEssentialTrial?: boolean;
+  canStartTrial?: boolean;
   canOpenBillingPortal: boolean;
   allowedActions: readonly string[];
 }
@@ -91,6 +93,7 @@ export class BillingReadService {
     private readonly entitlements: EntitlementService,
     private readonly subscriptionMapper: SubscriptionMapper,
     private readonly trials: TrialEligibilityService,
+    private readonly plans: CommercialPlanService,
   ) {}
 
   /**
@@ -103,12 +106,16 @@ export class BillingReadService {
   async overview(organizationId: string): Promise<BillingOverviewReadModel> {
     const assinatura = await this.subscriptions.currentOrLast(organizationId);
     const retention = await this.repository.retentionState(organizationId);
+    const price = assinatura?.providerPriceId
+      ? await this.plans.stripePrice(assinatura.providerPriceId)
+      : null;
     return {
       dataRetentionEndsAt:
         retention.subscriptions[0]?.dataRetentionEndsAt?.toISOString() ?? null,
       dataPurgedAt: retention.dataPurgedAt?.toISOString() ?? null,
       dataPurgeStartedAt: retention.dataPurgeStartedAt?.toISOString() ?? null,
-      catalog: this.entitlements.catalog(),
+      catalog: await this.entitlements.catalog(organizationId),
+      contractedAmountMinor: price?.amountMinor ?? null,
       subscription: assinatura
         ? this.subscriptionMapper.details(assinatura)
         : null,
@@ -181,7 +188,7 @@ export class BillingReadService {
       configured: true,
       mode: this.provider.mode,
       canCheckout: podeContratar,
-      canStartEssentialTrial:
+      canStartTrial:
         assinatura?.effectiveStatus === 'PENDING_PAYMENT' &&
         !assinatura.providerSubscriptionId &&
         (await this.trials.canStartPendingTrial(organizationId)),

@@ -18,10 +18,9 @@ import {
   AllocationResource,
   BillingInterval,
   UsageResource,
-  type PlanDefinition,
   type PlanLimit,
 } from '../catalog/plan-catalog.types';
-import { PLAN_CATALOG } from '../catalog/plan-registry';
+import type { CommercialPlan } from '../catalog/commercial-plan.service';
 import type { EffectiveEntitlements } from './effective-entitlements';
 import type { UsageWindow } from './usage-window';
 
@@ -34,8 +33,8 @@ function reais(amountMinor: number): string {
 
 @Injectable()
 export class EntitlementMapper {
-  catalog(): PlanCatalogReadModel {
-    return { plans: PLAN_CATALOG.map((plan) => this.plan(plan)) };
+  catalog(plans: readonly CommercialPlan[]): PlanCatalogReadModel {
+    return { plans: plans.map((plan) => this.plan(plan)) };
   }
 
   entitlements(
@@ -72,11 +71,15 @@ export class EntitlementMapper {
     };
   }
 
-  private plan(plan: PlanDefinition): PlanCatalogEntryReadModel {
+  private plan(plan: CommercialPlan): PlanCatalogEntryReadModel {
     return {
       code: plan.code,
       label: plan.label,
       description: plan.description,
+      isActive: plan.isActive,
+      version: plan.version,
+      trialDays: plan.trialDays,
+      promotion: plan.promotion,
       monthlyPrice: reais(plan.prices[BillingInterval.MONTHLY]!.amountMinor),
       currency: 'BRL',
       prices: Object.fromEntries(
@@ -84,6 +87,7 @@ export class EntitlementMapper {
           intervalo,
           {
             amountMinor: preco.amountMinor,
+            listAmountMinor: preco.listAmountMinor,
             currency: preco.currency,
             formatted: reais(preco.amountMinor),
           },

@@ -174,7 +174,13 @@ export function CurrentSubscriptionCard({
   const plano = catalog.plans.find(
     (item) => item.code === subscription.planCode,
   );
-  const preco = plano?.prices[subscription.billingInterval];
+  const preco =
+    overview.contractedAmountMinor != null
+      ? { amountMinor: overview.contractedAmountMinor }
+      : subscription.status === "TRIALING" ||
+          subscription.status === "PENDING_PAYMENT"
+        ? plano?.prices[subscription.billingInterval]
+        : undefined;
   const equivalente = preco
     ? equivalenteMensal(preco.amountMinor, subscription.billingInterval)
     : null;

@@ -1,26 +1,27 @@
 import { InfrastructureException } from '../../exceptions';
-import { BillingConfig, priceEnvKey } from './billing.config';
-import {
-  BillingInterval,
-  PlanCode,
-} from '../subscription-plans/catalog/plan-catalog.types';
+import { BillingConfig } from './billing.config';
+import { BillingInterval } from '../subscription-plans/catalog/plan-catalog.types';
 
 const ambiente = (valores: Record<string, string>) =>
-  new BillingConfig({
-    get: (chave: string) => valores[chave] ?? '',
-    getOptional: (chave: string) => valores[chave],
-  });
-
-/** Os doze preços, o mínimo para a configuração ser considerada completa. */
-const precos = (): Record<string, string> => {
-  const mapa: Record<string, string> = {};
-  for (const plano of Object.values(PlanCode)) {
-    for (const intervalo of Object.values(BillingInterval)) {
-      mapa[priceEnvKey(plano, intervalo)] = `price_${plano}_${intervalo}`;
-    }
-  }
-  return mapa;
-};
+  new BillingConfig(
+    {
+      get: (chave: string) => valores[chave] ?? '',
+      getOptional: (chave: string) => valores[chave],
+    },
+    {
+      stripePrice: (id: string) =>
+        Promise.resolve(
+          id === 'price_custom'
+            ? {
+                id,
+                planCode: 'CUSTOM',
+                billingInterval: BillingInterval.MONTHLY,
+                amountMinor: 9100,
+              }
+            : null,
+        ),
+    } as never,
+  );
 
 const completa = (
   extra: Record<string, string> = {},
@@ -31,7 +32,6 @@ const completa = (
   BILLING_CHECKOUT_SUCCESS_URL: 'https://app.orbit.local/assinatura/sucesso',
   BILLING_CHECKOUT_CANCEL_URL: 'https://app.orbit.local/assinatura',
   BILLING_PORTAL_RETURN_URL: 'https://app.orbit.local/assinatura',
-  ...precos(),
   ...extra,
 });
 
@@ -40,9 +40,6 @@ describe('configuração de cobrança', () => {
     it('sobe sem exigir nada', () => {
       const config = ambiente({});
       expect(config.enabled).toBe(false);
-      expect(config.priceId(PlanCode.ESSENTIAL, BillingInterval.MONTHLY)).toBe(
-        null,
-      );
     });
 
     it('valor diferente de "true" mantém desligada', () => {
@@ -52,16 +49,19 @@ describe('configuração de cobrança', () => {
   });
 
   describe('ligada', () => {
-    it('aceita configuração completa e mapeia os doze preços', () => {
+    it('lê os preços persistidos sem exigir variáveis de catálogo', async () => {
       const config = ambiente(completa());
       expect(config.enabled).toBe(true);
-      let mapeados = 0;
-      for (const plano of Object.values(PlanCode)) {
-        for (const intervalo of Object.values(BillingInterval)) {
-          if (config.priceId(plano, intervalo)) mapeados += 1;
-        }
-      }
-      expect(mapeados).toBe(12);
+      await expect(
+        config.catalogEntryForPrice('price_custom'),
+      ).resolves.toEqual({
+        planCode: 'CUSTOM',
+        billingInterval: BillingInterval.MONTHLY,
+        amountMinor: 9100,
+      });
+      await expect(
+        config.catalogEntryForPrice('price_unknown'),
+      ).resolves.toBeNull();
     });
 
     it.each([
@@ -74,16 +74,6 @@ describe('configuração de cobrança', () => {
       const valores = completa();
       delete valores[chave];
       expect(() => ambiente(valores)).toThrow(InfrastructureException);
-    });
-
-    it('falha na subida com um preço faltando', () => {
-      const valores = completa();
-      delete valores[
-        priceEnvKey(PlanCode.PROFESSIONAL, BillingInterval.ANNUAL)
-      ];
-      expect(() => ambiente(valores)).toThrow(
-        /STRIPE_PRICE_PROFESSIONAL_ANNUAL/,
-      );
     });
 
     it('a mensagem de falha nomeia as chaves, nunca os valores', () => {
@@ -100,19 +90,6 @@ describe('configuração de cobrança', () => {
       }
     });
 
-    it.each(['prod_nao_e_preco', 'valor_invalido'])(
-      'recusa o formato incorreto de preço %s sem expor seu valor',
-      (value) => {
-        const key = priceEnvKey(PlanCode.ESSENTIAL, BillingInterval.MONTHLY);
-        expect(() => ambiente(completa({ [key]: value }))).toThrow(key);
-        try {
-          ambiente(completa({ [key]: value }));
-        } catch (error) {
-          expect((error as Error).message).not.toContain(value);
-        }
-      },
-    );
-
     it.each([
       'pk_live_nao_e_segredo',
       'valor_invalido',
@@ -127,27 +104,6 @@ describe('configuração de cobrança', () => {
       expect(() =>
         ambiente(completa({ STRIPE_WEBHOOK_SECRET: 'sk_test_nao_e_webhook' })),
       ).toThrow(/STRIPE_WEBHOOK_SECRET/);
-    });
-
-    it('recusa repetir um preço em planos ou periodicidades diferentes', () => {
-      expect(() =>
-        ambiente(
-          completa({
-            STRIPE_PRICE_ESSENTIAL_ANNUAL: 'price_ESSENTIAL_MONTHLY',
-          }),
-        ),
-      ).toThrow(/duplicates another price mapping/);
-    });
-
-    it('não tenta inferir o modo pelo texto do Price ID', () => {
-      expect(
-        ambiente(
-          completa({
-            STRIPE_SECRET_KEY: 'sk_live_exemplo',
-            STRIPE_PRICE_ESSENTIAL_MONTHLY: 'price_test_exemplo',
-          }),
-        ).mode,
-      ).toBe('LIVE');
     });
 
     it.each([

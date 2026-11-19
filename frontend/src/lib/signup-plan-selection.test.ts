@@ -38,6 +38,14 @@ describe("signup plan selection", () => {
       planKey: "PROFESSIONAL",
       billingInterval: "MONTHLY",
     }));
+  it("keeps an inactive offer from being selected by its direct link", () => {
+    const inactive = {
+      plans: catalog.plans.map((plan) => ({ ...plan, isActive: false })),
+    };
+    expect(
+      signupPlanSelection(inactive, "PROFESSIONAL", "ANNUAL").planKey,
+    ).toBe("");
+  });
   it.each([
     [undefined, undefined],
     ["INTERNAL", "MONTHLY"],

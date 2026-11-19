@@ -48,7 +48,11 @@ describe('StripeBillingProvider subscription commands', () => {
         'https://orbit.example.test/configuracoes?secao=assinatura',
       checkoutSuccessUrl:
         'https://orbit.example.test/configuracoes?secao=assinatura&assinatura=sucesso',
-      priceId: jest.fn().mockReturnValue('price_target'),
+      catalogEntryForPrice: jest.fn().mockResolvedValue({
+        planCode: PlanCode.PROFESSIONAL_INTELLIGENCE,
+        billingInterval: BillingInterval.MONTHLY,
+        amountMinor: 24990,
+      }),
     };
     const subscriptions = {
       retrieve: jest.fn().mockResolvedValue(current()),
@@ -135,7 +139,17 @@ describe('StripeBillingProvider subscription commands', () => {
       retrieve: jest.fn(),
       list: jest.fn().mockResolvedValue({ data: [], has_more: false }),
     };
-    const provider = new StripeBillingProvider(config as never);
+    const provider = new StripeBillingProvider(
+      config as never,
+      {
+        selectable: jest.fn().mockResolvedValue({
+          prices: {
+            MONTHLY: { stripePriceId: 'price_target' },
+            ANNUAL: { stripePriceId: 'price_target' },
+          },
+        }),
+      } as never,
+    );
     Object.defineProperty(provider, 'client', {
       value: {
         prices,
@@ -153,10 +167,10 @@ describe('StripeBillingProvider subscription commands', () => {
     });
     return {
       provider,
+      config,
       billingPortal,
       portalConfiguration,
       price,
-      config,
       prices,
       checkout,
       subscriptions,
@@ -205,6 +219,7 @@ describe('StripeBillingProvider subscription commands', () => {
     const { provider, billingPortal, subscriptions, config } = setup();
     await expect(
       provider.createPlanChangeSession({
+        organizationId: 'org_1',
         providerCustomerId: 'cus_test_1',
         providerSubscriptionId: 'sub_test_1',
         planCode: PlanCode.PROFESSIONAL_INTELLIGENCE,
@@ -238,6 +253,7 @@ describe('StripeBillingProvider subscription commands', () => {
       'continue_trial';
     await expect(
       provider.createPlanChangeSession({
+        organizationId: 'org_1',
         providerCustomerId: 'cus_test_1',
         providerSubscriptionId: 'sub_test_1',
         planCode: PlanCode.PROFESSIONAL_INTELLIGENCE,
@@ -254,6 +270,7 @@ describe('StripeBillingProvider subscription commands', () => {
       'none';
     await expect(
       provider.createPlanChangeSession({
+        organizationId: 'org_1',
         providerCustomerId: 'cus_test_1',
         providerSubscriptionId: 'sub_test_1',
         planCode: PlanCode.PROFESSIONAL_INTELLIGENCE,
@@ -398,7 +415,12 @@ describe('StripeBillingProvider subscription commands', () => {
   });
 
   it('preserva o preço atual e agenda downgrade para o fim do período', async () => {
-    const { provider, prices, subscriptionSchedules } = setup();
+    const { provider, prices, subscriptionSchedules, config } = setup();
+    config.catalogEntryForPrice.mockResolvedValue({
+      planCode: PlanCode.ESSENTIAL,
+      billingInterval: BillingInterval.ANNUAL,
+      amountMinor: 59900,
+    });
     prices.retrieve.mockResolvedValue({
       id: 'price_target',
       active: true,

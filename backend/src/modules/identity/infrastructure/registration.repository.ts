@@ -10,7 +10,6 @@ import {
   OWNER_ROLE_KEY,
 } from '../../organizations/team-roles';
 import { RVT_MAINTENANCE_TYPE_SEEDS } from '../../rvt/rvt-maintenance-types.seed';
-import { isKnownPlan } from '../../subscription-plans/catalog/plan-registry';
 import { ConflictException } from '../../../exceptions';
 import { normalizeBrazilianDocument } from '../../../utils';
 
@@ -41,6 +40,7 @@ export class RegistrationRepository {
     queueWelcome?: (
       tx: Prisma.TransactionClient,
       userId: string,
+      organizationId: string,
     ) => Promise<void>,
     existingTransaction?: Prisma.TransactionClient,
   ) {
@@ -53,9 +53,9 @@ export class RegistrationRepository {
 
     const work = async (transaction: Prisma.TransactionClient) => {
       const plan = await transaction.plan.findFirst({
-        where: { key: input.planKey, isActive: true },
+        where: { key: input.planKey, isActive: true, catalogTenantId: null },
       });
-      if (!plan) return null;
+      if (!plan || (options.publicSignup && !plan.commercial)) return null;
 
       if (options.publicSignup) {
         const document = normalizeBrazilianDocument(input.documentNumber);
@@ -108,12 +108,11 @@ export class RegistrationRepository {
           status: options.organizationStatus ?? 'ACTIVE',
           subscriptionStatus:
             options.subscriptionStatus ??
-            (isKnownPlan(plan.key) ? 'PENDING_PAYMENT' : 'TRIALING'),
+            (plan.commercial ? 'PENDING_PAYMENT' : 'TRIALING'),
           subscriptionStartedAt: now,
           currentPeriodStart: now,
           currentPeriodEnd:
-            options.currentPeriodEnd ??
-            (isKnownPlan(plan.key) ? null : trialEndsAt),
+            options.currentPeriodEnd ?? (plan.commercial ? null : trialEndsAt),
           externalCustomerId: options.externalCustomerId,
           externalSubscriptionId: options.externalSubscriptionId,
         },
@@ -226,14 +225,14 @@ export class RegistrationRepository {
               status: options.organizationStatus ?? 'ACTIVE',
               subscriptionStatus:
                 options.subscriptionStatus ??
-                (isKnownPlan(plan.key) ? 'PENDING_PAYMENT' : 'TRIALING'),
+                (plan.commercial ? 'PENDING_PAYMENT' : 'TRIALING'),
             },
           },
         });
       }
       if (options.publicSignup && !options.platformAdmin)
         await transaction.$queryRaw`SELECT app_register_account_email_owner(${userId}::uuid,${organizationId}::uuid)::text`;
-      await queueWelcome?.(transaction, userId);
+      await queueWelcome?.(transaction, userId, organizationId);
       return { userId, organizationId, businessUnitId };
     };
     return existingTransaction

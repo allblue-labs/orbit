@@ -17,7 +17,10 @@ export function signupPlanSelection(
   const selected =
     typeof plan === "string" && validInterval
       ? catalog.plans.find(
-          (entry) => entry.code === plan && entry.prices[billingInterval],
+          (entry) =>
+            entry.code === plan &&
+            entry.isActive !== false &&
+            entry.prices[billingInterval],
         )
       : undefined;
   return {

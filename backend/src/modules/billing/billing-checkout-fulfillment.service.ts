@@ -8,10 +8,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { RequestContext, RequestContextStorage } from '../../context';
-import {
-  BillingInterval,
-  PlanCode,
-} from '../subscription-plans/catalog/plan-catalog.types';
+import { BillingInterval } from '../subscription-plans/catalog/plan-catalog.types';
 import { SubscriptionService } from '../subscription-plans/subscriptions/subscription.service';
 import { SubscriptionStatus } from '../subscription-plans/subscriptions/subscription.types';
 import { BillingConfig } from './billing.config';
@@ -78,14 +75,12 @@ export class BillingCheckoutFulfillmentService {
       attempt.billingCustomer.providerCustomerId === providerCustomerId,
       'CHECKOUT_CUSTOMER_MISMATCH',
     );
-    const planCode = Object.values(PlanCode).find(
-      (value) => value === attempt.planCode,
-    );
+    const planCode = attempt.planCode;
     const billingInterval = Object.values(BillingInterval).find(
       (value) => value === attempt.billingInterval,
     );
     this.assert(
-      planCode !== undefined && billingInterval !== undefined,
+      billingInterval !== undefined,
       'CHECKOUT_CATALOG_VALUE_INVALID',
     );
     this.assert(
@@ -93,9 +88,14 @@ export class BillingCheckoutFulfillmentService {
         attempt.billingCustomer.mode === this.provider.mode,
       'CHECKOUT_MODE_MISMATCH',
     );
-    const expectedPrice = this.config.priceId(planCode, billingInterval);
+    const expectedPrice = await this.config.catalogEntryForPrice(
+      session.providerPriceId ?? '',
+    );
     this.assert(
-      expectedPrice !== null && expectedPrice === session.providerPriceId,
+      expectedPrice?.planCode === planCode &&
+        expectedPrice.billingInterval === billingInterval &&
+        (attempt.quotedPriceId === null ||
+          attempt.quotedPriceId === session.providerPriceId),
       'CHECKOUT_PRICE_MISMATCH',
     );
     this.assert(
@@ -121,7 +121,7 @@ export class BillingCheckoutFulfillmentService {
           !current.providerSubscriptionId &&
           (current.effectiveStatus === SubscriptionStatus.PENDING_PAYMENT ||
             (current.effectiveStatus === SubscriptionStatus.TRIALING &&
-              (attempt.planCode === PlanCode.ESSENTIAL || attempt.endsTrial)));
+              (attempt.planCode === current.planCode || attempt.endsTrial)));
         this.assert(
           current.id === attempt.subscriptionId &&
             (replay || sameSelection || approvedChange),
@@ -139,8 +139,10 @@ export class BillingCheckoutFulfillmentService {
         );
         const acceptablePayment =
           session.paymentStatus === 'paid' ||
+          (expectedPrice.amountMinor === 0 &&
+            session.paymentStatus === 'no_payment_required') ||
           (current.effectiveStatus === SubscriptionStatus.TRIALING &&
-            attempt.planCode === PlanCode.ESSENTIAL &&
+            attempt.planCode === current.planCode &&
             !attempt.endsTrial &&
             session.paymentStatus === 'no_payment_required');
         if (!acceptablePayment) throw new BillingCheckoutAwaitingPaymentError();

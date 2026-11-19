@@ -50,23 +50,17 @@ export class RegistrationService {
         slug,
         { publicSignup: true },
         metadata,
-        (tx, userId) =>
-          this.verification.queueWelcomeIn(tx, userId, normalized.email),
+        async (tx, userId, organizationId) => {
+          await this.subscriptions.provisionIn(tx, {
+            organizationId,
+            planKey: normalized.planKey,
+            billingInterval: normalized.billingInterval,
+            legalDocument: normalized.documentNumber,
+          });
+          await this.verification.queueWelcomeIn(tx, userId, normalized.email);
+        },
       );
       if (!created) throw new ValidationException('Invalid plan');
-      /**
-       * A assinatura nasce junto com a organização.
-       *
-       * Depois do cadastro, e não dentro dele: a transação de registro é longa
-       * o bastante, e uma recusa de avaliação não pode desfazer uma empresa
-       * que acabou de se cadastrar corretamente.
-       */
-      await this.subscriptions.provision({
-        organizationId: created.organizationId,
-        planKey: normalized.planKey,
-        billingInterval: normalized.billingInterval,
-        legalDocument: normalized.documentNumber,
-      });
       return {
         status: 'EMAIL_VERIFICATION_REQUIRED' as const,
         email: normalized.email,

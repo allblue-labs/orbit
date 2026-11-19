@@ -20,8 +20,8 @@ import type { RegisterOrganizationDto } from '../identity/presentation/dto/ident
 import { IdentityRepository } from '../identity/infrastructure/identity.repository';
 import { IdentityTokenService } from '../identity/application/token.service';
 import { EmailVerificationService } from '../identity/application/email-verification.service';
+import { CommercialPlanService } from '../subscription-plans/catalog/commercial-plan.service';
 import { SubscriptionProvisioningService } from '../subscription-plans/subscriptions/subscription-provisioning.service';
-import { isKnownPlan } from '../subscription-plans/catalog/plan-registry';
 import { BillingInterval } from '../subscription-plans/catalog/plan-catalog.types';
 import type {
   CreatePlatformTenantDto,
@@ -41,6 +41,7 @@ export class PlatformAdministrationService {
     @Inject(HASH_PROVIDER) private readonly hashes: IHashProvider,
     private readonly verification: EmailVerificationService,
     private readonly subscriptions: SubscriptionProvisioningService,
+    private readonly commercial: CommercialPlanService,
     private readonly identities: IdentityRepository,
     private readonly tokens: IdentityTokenService,
     private readonly contexts: RequestContextService,
@@ -177,7 +178,8 @@ export class PlatformAdministrationService {
         'Os campos financeiros são definidos pela contratação canônica; a política de suspensão não pode ser alterada neste fluxo.',
       );
     }
-    if (!isKnownPlan(input.planKey)) {
+    const planOffer = await this.commercial.find(input.planKey);
+    if (!planOffer?.isActive || planOffer.tenantId !== null) {
       await this.repository.transaction((tx) =>
         this.audit(
           tx,

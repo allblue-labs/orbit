@@ -1,3 +1,4 @@
+import sharp from 'sharp';
 import {
   Body,
   Controller,
@@ -353,6 +354,99 @@ describe('ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL)',
     if (platformRoleId)
       await admin.role.delete({ where: { id: platformRoleId } });
     await disconnectAdminPrisma();
+  });
+
+  it('publishes offers only for platform admins and scopes a private offer to its organization', async () => {
+    const code = 'CONTRATO_PRIVADO_NX03';
+    const input = {
+      expectedVersion: 0,
+      name: 'Contrato personalizado',
+      description: 'Condições acordadas com a organização.',
+      tenantId: tenant.id,
+      isActive: true,
+      permissions: ['operations.read', 'operations.manage'],
+      offer: {
+        trialDays: 45,
+        promotion: 'Condição especial',
+        prices: {
+          MONTHLY: {
+            amountMinor: 8900,
+            listAmountMinor: 10900,
+            stripePriceId: 'price_custom_nx03_monthly',
+          },
+          SEMIANNUAL: { amountMinor: 47000 },
+          ANNUAL: { amountMinor: 89000 },
+        },
+        entitlements: snapshotOf(planDefinition('PROFESSIONAL')),
+      },
+    };
+    const path = `/api/v1/platform-admin/plans/${code}`;
+    await auth(http().put(path), tenant.pair.accessToken)
+      .send(input)
+      .expect(403);
+    await auth(http().put(path)).send(input).expect(200);
+    await auth(http().put(path)).send(input).expect(409);
+    const publicCatalog = await http().get('/api/v1/plans/catalog').expect(200);
+    expect(JSON.stringify(publicCatalog.body)).not.toContain(code);
+    const own = await auth(
+      http().get('/api/v1/billing/overview'),
+      tenant.pair.accessToken,
+    ).expect(200);
+    expect(JSON.stringify(own.body)).not.toContain('price_custom_nx03_monthly');
+    expect(data<{ catalog: { plans: unknown[] } }>(own).catalog.plans).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code,
+          isActive: true,
+          trialDays: 45,
+          promotion: 'Condição especial',
+          prices: expect.objectContaining({
+            MONTHLY: expect.objectContaining({
+              amountMinor: 8900,
+              listAmountMinor: 10900,
+            }),
+          }),
+        }),
+      ]),
+    );
+    const another = await fixture();
+    const other = await auth(
+      http().get('/api/v1/billing/overview'),
+      another.pair.accessToken,
+    ).expect(200);
+    expect(JSON.stringify(other.body)).not.toContain(code);
+    await auth(http().put(path))
+      .send({ ...input, expectedVersion: 1, isActive: false })
+      .expect(200);
+    const inactive = await auth(
+      http().get('/api/v1/billing/overview'),
+      tenant.pair.accessToken,
+    ).expect(200);
+    expect(
+      data<{ catalog: { plans: unknown[] } }>(inactive).catalog.plans,
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code, isActive: false }),
+      ]),
+    );
+  });
+
+  it('preserves authenticated tenant context through multipart organization logo upload', async () => {
+    const png = await sharp({
+      create: { width: 32, height: 32, channels: 3, background: '#2255aa' },
+    })
+      .png()
+      .toBuffer();
+    const path = '/api/v1/organizations/current/logo';
+    await auth(http().put(path), tenant.pair.accessToken)
+      .attach('file', png, { filename: 'logo.png', contentType: 'image/png' })
+      .expect(200);
+    const result = await auth(http().get(path), tenant.pair.accessToken).expect(
+      200,
+    );
+    expect(data<{ logoUrl: string | null }>(result).logoUrl).toContain(
+      '/storage/objects?',
+    );
   });
 
   it('runs with forced RLS and no SUPERUSER/BYPASSRLS', async () => {

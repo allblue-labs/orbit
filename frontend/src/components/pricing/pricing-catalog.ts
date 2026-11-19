@@ -26,16 +26,6 @@ import type { PlanCatalogEntry } from "@/types/billing";
 export const INTELLIGENCE_CAPABILITY = "ORBIT_INTELLIGENCE";
 
 /**
- * O plano que oferece avaliação gratuita.
- *
- * Espelha `PLANOS_COM_AVALIACAO` do backend. A superfície pública anuncia a
- * regra geral; **quem** tem direito é decidido lá, na contratação, e esta tela
- * nunca avalia elegibilidade individual.
- */
-export const TRIAL_PLAN_CODE = "ESSENTIAL";
-export const TRIAL_DAYS = 30;
-
-/**
  * Ordem comercial: do menor para o maior.
  *
  * Vem do preço mensal publicado, não de uma lista fixa de códigos — um plano
@@ -46,7 +36,8 @@ export function ordenarPlanos(
 ): PlanCatalogEntry[] {
   return [...plans].sort(
     (a, b) =>
-      (a.prices.MONTHLY?.amountMinor ?? 0) - (b.prices.MONTHLY?.amountMinor ?? 0),
+      (a.prices.MONTHLY?.amountMinor ?? 0) -
+      (b.prices.MONTHLY?.amountMinor ?? 0),
   );
 }
 
@@ -55,5 +46,5 @@ export function temInteligencia(plano: PlanCatalogEntry): boolean {
 }
 
 export function ofereceAvaliacao(plano: PlanCatalogEntry): boolean {
-  return plano.code === TRIAL_PLAN_CODE;
+  return plano.isActive !== false && (plano.trialDays ?? 0) > 0;
 }

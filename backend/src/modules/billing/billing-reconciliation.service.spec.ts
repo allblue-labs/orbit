@@ -55,6 +55,7 @@ describe('BillingReconciliationService durable inbox', () => {
       noteDivergence: jest.fn(),
       nextObservation: jest.fn().mockResolvedValue(1n),
       completeObservation: jest.fn().mockResolvedValue(undefined),
+      completedCheckoutTerms: jest.fn().mockResolvedValue(undefined),
       assertBinding: jest.fn().mockResolvedValue(undefined),
       lockContract: jest.fn().mockResolvedValue(undefined),
       claimNextEvent: jest

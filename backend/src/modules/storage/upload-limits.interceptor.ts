@@ -73,81 +73,85 @@ export class UploadLimitsInterceptor implements NestInterceptor {
       const release = await this.contexts.run(context, () =>
         this.budgets.acquire(context.organizationId!, reservation?.id),
       );
-      return new Observable((subscriber) => {
-        let releasePromise: Promise<void> | undefined;
-        const finish = () =>
-          (releasePromise ??= this.contexts.run(context, release).catch(() => {
-            this.logger.warn(
-              'Upload admission release failed; its lease will expire.',
-            );
-          }));
-        let received = 0;
-        let failed = false;
-        let ended = false;
-        const stop = (status: number) => {
-          if (failed) return;
-          failed = true;
-          req.unpipe();
-          req.pause();
-          closeUploadRequest(req, res);
-          subscriber.error(
-            new HttpException(
-              status === 413
-                ? 'O arquivo excede o tamanho permitido.'
-                : 'O envio foi interrompido ou demorou demais. Tente novamente.',
-              status,
-            ),
-          );
-        };
-        const total = setTimeout(() => stop(408), UPLOAD_LIMITS.bodyMs);
-        const idle = () => stop(408);
-        const onData = (chunk: Buffer | string) => {
-          received += Buffer.isBuffer(chunk)
-            ? chunk.length
-            : Buffer.byteLength(chunk);
-          if (received > limit) stop(413);
-        };
-        const onEnd = () => {
-          ended = true;
-          clearTimeout(total);
-          req.setTimeout(0);
-        };
-        const onAbort = () => stop(400);
-        req.setTimeout(UPLOAD_LIMITS.idleMs, idle);
-        req.on('data', onData);
-        req.once('end', onEnd);
-        req.once('aborted', onAbort);
-        req.once('error', onAbort);
-        req.pause();
-        // Subscribe in this same stack: the data listener must not consume bytes
-        // while asynchronous guards/admission are still running ahead of Multer.
-        const subscription = next.handle().subscribe({
-          next: (value: unknown) => subscriber.next(value),
-          error: (error: unknown) => {
-            closeUploadRequest(req, res);
-            void finish().then(() => subscriber.error(error));
-          },
-          complete: () => {
-            void finish().then(() => subscriber.complete());
-          },
-        });
-        if (req.aborted || req.destroyed) stop(400);
-        return () => {
-          subscription.unsubscribe();
-          clearTimeout(total);
-          req.setTimeout(0);
-          req.removeListener('timeout', idle);
-          req.removeListener('data', onData);
-          req.removeListener('end', onEnd);
-          req.removeListener('aborted', onAbort);
-          req.removeListener('error', onAbort);
-          if (!ended && !req.complete) {
+      return new Observable((subscriber) =>
+        this.contexts.run(context, () => {
+          let releasePromise: Promise<void> | undefined;
+          const finish = () =>
+            (releasePromise ??= this.contexts
+              .run(context, release)
+              .catch(() => {
+                this.logger.warn(
+                  'Upload admission release failed; its lease will expire.',
+                );
+              }));
+          let received = 0;
+          let failed = false;
+          let ended = false;
+          const stop = (status: number) => {
+            if (failed) return;
+            failed = true;
             req.unpipe();
             req.pause();
-          }
-          void finish();
-        };
-      });
+            closeUploadRequest(req, res);
+            subscriber.error(
+              new HttpException(
+                status === 413
+                  ? 'O arquivo excede o tamanho permitido.'
+                  : 'O envio foi interrompido ou demorou demais. Tente novamente.',
+                status,
+              ),
+            );
+          };
+          const total = setTimeout(() => stop(408), UPLOAD_LIMITS.bodyMs);
+          const idle = () => stop(408);
+          const onData = (chunk: Buffer | string) => {
+            received += Buffer.isBuffer(chunk)
+              ? chunk.length
+              : Buffer.byteLength(chunk);
+            if (received > limit) stop(413);
+          };
+          const onEnd = () => {
+            ended = true;
+            clearTimeout(total);
+            req.setTimeout(0);
+          };
+          const onAbort = () => stop(400);
+          req.setTimeout(UPLOAD_LIMITS.idleMs, idle);
+          req.on('data', onData);
+          req.once('end', onEnd);
+          req.once('aborted', onAbort);
+          req.once('error', onAbort);
+          req.pause();
+          // Subscribe in this same stack: the data listener must not consume bytes
+          // while asynchronous guards/admission are still running ahead of Multer.
+          const subscription = next.handle().subscribe({
+            next: (value: unknown) => subscriber.next(value),
+            error: (error: unknown) => {
+              closeUploadRequest(req, res);
+              void finish().then(() => subscriber.error(error));
+            },
+            complete: () => {
+              void finish().then(() => subscriber.complete());
+            },
+          });
+          if (req.aborted || req.destroyed) stop(400);
+          return () => {
+            subscription.unsubscribe();
+            clearTimeout(total);
+            req.setTimeout(0);
+            req.removeListener('timeout', idle);
+            req.removeListener('data', onData);
+            req.removeListener('end', onEnd);
+            req.removeListener('aborted', onAbort);
+            req.removeListener('error', onAbort);
+            if (!ended && !req.complete) {
+              req.unpipe();
+              req.pause();
+            }
+            void finish();
+          };
+        }),
+      );
     } catch (error) {
       closeUploadRequest(req, res);
       throw error;

@@ -12,7 +12,6 @@ import {
 } from './subscription-plan.repository';
 import { SubscriptionExpiredException } from './subscription-expired.exception';
 import { project } from './subscriptions/subscription.projection';
-import { isKnownPlan } from './catalog/plan-registry';
 
 export interface OrganizationEntitlements {
   planKey: string;
@@ -102,18 +101,38 @@ export class SubscriptionPlanService {
       const plan =
         planKey === organization.plan.key
           ? organization.plan
-          : await this.repository.findActiveByKey(planKey);
+          : await this.repository.findByKey(planKey);
       if (!plan) throw new EntityNotFoundException('Plan');
+      const snapshot = (
+        projected.pendingApplied
+          ? subscription.pendingEntitlementsSnapshot
+          : subscription.entitlementsSnapshot
+      ) as {
+        routeCapabilities?: unknown;
+        allocation?: Prisma.JsonValue;
+        usage?: Prisma.JsonValue;
+      } | null;
+      const contractedCapabilities = snapshot?.routeCapabilities;
       return {
         planKey,
         subscriptionStatus: projected.status,
-        capabilities: plan.capabilities,
-        limits: this.parseLimits(plan.limits),
+        capabilities:
+          Array.isArray(contractedCapabilities) &&
+          contractedCapabilities.every((value) => typeof value === 'string')
+            ? contractedCapabilities
+            : plan.capabilities,
+        limits:
+          snapshot?.allocation && snapshot.usage
+            ? {
+                ...this.parseLimits(snapshot.allocation),
+                ...this.parseLimits(snapshot.usage),
+              }
+            : this.parseLimits(plan.limits),
         currentPeriodStart: projected.currentPeriodStart,
         currentPeriodEnd: projected.currentPeriodEnd,
       };
     }
-    if (isKnownPlan(organization.plan.key)) {
+    if (organization.plan.commercial) {
       /**
        * Plano comercial sem contrato canônico não herda acesso da coluna
        * legada. Isso também fecha a janela em que o cadastro da organização

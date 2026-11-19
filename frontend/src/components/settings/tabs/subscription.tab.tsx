@@ -63,7 +63,12 @@ const INTERVALO_DE_RECONSULTA_MS = 4000;
 
 type Confirmacao =
   | { tipo: "CANCELAR" }
-  | { tipo: "TROCAR"; planCode: string; intervalo: string };
+  | {
+      tipo: "TROCAR";
+      planCode: string;
+      intervalo: string;
+      catalogVersion?: number;
+    };
 
 export function SubscriptionSettingsTab() {
   const { formatDate } = useDateFormatters();
@@ -162,6 +167,9 @@ export function SubscriptionSettingsTab() {
     void proteger(async () => {
       const sessao = await checkout.mutateAsync({
         planCode,
+        expectedCatalogVersion: dados.catalog.plans.find(
+          (plan) => plan.code === planCode,
+        )?.version,
         billingInterval: intervalo,
       });
       if (assinatura)
@@ -193,18 +201,19 @@ export function SubscriptionSettingsTab() {
         const sessao = await trocar.mutateAsync({
           expectedVersion: assinatura.version,
           planCode: confirmacao.planCode,
+          expectedCatalogVersion: confirmacao.catalogVersion,
           billingInterval: confirmacao.intervalo,
           acknowledgeTrialEnd: assinatura.status === "TRIALING",
         });
         if ("kind" in sessao) {
           setActionMessage(
             sessao.kind === "TRIAL_STARTED"
-              ? `Seu teste gratuito no Essencial começou e vai até ${formatDate(sessao.endsAt)}. Nenhuma cobrança foi realizada.`
+              ? `Seu teste gratuito começou e vai até ${formatDate(sessao.endsAt)}. Nenhuma cobrança foi realizada.`
               : `Troca agendada para ${formatDate(sessao.effectiveAt)}. Seu plano e seus créditos atuais continuam até essa data.`,
           );
           if (sessao.kind === "TRIAL_STARTED")
             notifySuccess(
-              "Seu teste gratuito no Essencial começou",
+              "Seu teste gratuito começou",
               `Você tem acesso gratuito até ${formatDate(sessao.endsAt)}. Nenhuma cobrança foi realizada.`,
             );
           clearBillingTarget();
@@ -326,7 +335,14 @@ export function SubscriptionSettingsTab() {
         onSubscribe={iniciarCheckout}
         onChangePlan={(planCode, intervalo) => {
           setActionError(null);
-          setConfirmacao({ tipo: "TROCAR", planCode, intervalo });
+          setConfirmacao({
+            tipo: "TROCAR",
+            planCode,
+            intervalo,
+            catalogVersion: dados.catalog.plans.find(
+              (plan) => plan.code === planCode,
+            )?.version,
+          });
         }}
         pending={checkout.isPending || comandoPendente}
       />
@@ -489,8 +505,8 @@ function ConfirmacaoDialog({
   const encerraTeste = assinatura.status === "TRIALING";
   const iniciaTeste =
     assinatura.status === "PENDING_PAYMENT" &&
-    confirmacao.planCode === "ESSENTIAL" &&
-    overview.billing.canStartEssentialTrial === true;
+    (destino?.trialDays ?? 0) > 0 &&
+    overview.billing.canStartTrial === true;
   const agendada = assinatura.status === "ACTIVE";
   const diasRestantes = diasAte(
     assinatura.trial?.endsAt ?? assinatura.billingPeriod.end,
@@ -509,9 +525,9 @@ function ConfirmacaoDialog({
           <AlertDialogDescription>
             {iniciaTeste ? (
               <>
-                Você tem direito a 30 dias gratuitos no Essencial. O teste
-                começa agora, sem pagamento e sem perder dias. Ao final, será
-                necessário contratar para continuar.
+                Você tem direito a {destino?.trialDays} dias gratuitos em{" "}
+                {destino?.label}. O teste começa agora, sem pagamento e sem
+                perder dias. Ao final, será necessário contratar para continuar.
               </>
             ) : agendada ? (
               <>
@@ -524,7 +540,6 @@ function ConfirmacaoDialog({
               </>
             ) : encerraTeste ? (
               <>
-                O teste gratuito de 30 dias está disponível apenas no Essencial.
                 Ao concluir o pagamento de {destino?.label ?? "outro plano"},
                 seu teste termina e você perde os {diasRestantes} dias gratuitos
                 restantes, sem transferência para o novo plano. A cobrança

@@ -1,25 +1,5 @@
 "use client";
 
-/**
- * Segurança da plataforma.
- *
- * ## Sessão é pessoal, e o contrato deixa isso claro
- *
- * `GET /identity/me/sessions` lista os dispositivos de **quem consulta**. Não
- * há rota que liste as sessões da organização, e não é um descuido: expor os
- * dispositivos de todo mundo a quem administra a conta é uma decisão de
- * privacidade que o backend não tomou.
- *
- * Esta aba mostra o que **é** da organização — o que o servidor decide sobre
- * autenticação — e leva ao Perfil para o que é pessoal.
- *
- * ## Nada de autenticação aqui
- *
- * Nenhuma política é aplicada nesta tela. Expiração de token, tentativas antes
- * do bloqueio e exigência de MFA são decididas pelo servidor e não publicadas
- * em contrato nenhum — o que está escrito abaixo é descrição do
- * comportamento observado, não configuração.
- */
 import Link from "next/link";
 import {
   ArrowRight,
@@ -30,6 +10,7 @@ import {
   Users,
 } from "lucide-react";
 
+import { AccountAuthenticationControls } from "@/components/profile/security.tab";
 import { PanelFrame } from "@/components/panels";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -48,15 +29,8 @@ export function SecuritySettingsTab() {
       >
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            O contrato de sessões é <strong>pessoal</strong>:
-            <span className="font-mono"> /identity/me/sessions</span> lista os
-            dispositivos de quem consulta. Não há rota que liste as sessões da
-            organização.
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Não é descuido: expor os dispositivos de todo mundo a quem
-            administra a conta seria uma quebra de privacidade. Para tirar
-            alguém de circulação, altere a situação do membro em Equipe.
+            Consulte os dispositivos conectados à sua conta em Minha Conta. Em
+            Equipe, você pode gerenciar o acesso dos membros da organização.
           </p>
 
           <div className="flex flex-wrap gap-2">
@@ -116,17 +90,13 @@ export function SecuritySettingsTab() {
                 aria-hidden
               />
               <span>
-                <strong className="text-foreground">Dois fatores</strong> — está
-                disponível e é <strong>opcional por pessoa</strong>. Não há como
-                exigi-lo para toda a organização.
+                <strong className="text-foreground">Dois fatores</strong> —
+                configure uma segunda etapa para proteger o acesso à sua conta.
               </span>
             </li>
           </ul>
 
-          <p className="text-xs text-muted-foreground">
-            Nenhum destes parâmetros é configurável por organização. Esta lista
-            descreve o comportamento, não o configura.
-          </p>
+          <AccountAuthenticationControls />
         </div>
       </PanelFrame>
 
@@ -201,7 +171,7 @@ export function SecuritySettingsTab() {
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <span className="text-muted-foreground">Plano</span>
             <Badge variant="outline">
-              {session.entitlements?.planKey ?? "—"}
+              {session.organization?.plan?.name ?? "—"}
             </Badge>
           </div>
 

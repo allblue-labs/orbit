@@ -26,8 +26,6 @@
  * `NotificationType` do contrato com os tipos que **já têm** preferência —
  * inventar uma lista fixa criaria eventos que o backend nunca emite.
  */
-import { Bell } from "lucide-react";
-
 import { MutationError } from "@/components/artifact-studio/mutation-error";
 import { PanelError, PanelLoading } from "@/components/panels";
 import { Badge } from "@/components/ui/badge";
@@ -36,7 +34,6 @@ import {
   useNotificationPreferences,
   useSetNotificationPreference,
 } from "@/hooks/profile/use-profile";
-import { NOTIFICATIONS_POLL_MS } from "@/hooks/notifications/use-notifications";
 import { humanizeId } from "@/registry";
 import { NotificationType } from "@/types/contracts";
 import {
@@ -48,7 +45,7 @@ import {
 const CHANNEL_LABELS: Readonly<Record<string, string>> = {
   IN_APP: "Na plataforma",
   EMAIL: "E-mail",
-  PUSH: "Push",
+  PUSH: "No celular",
 };
 
 const TYPE_LABELS: Readonly<Record<string, string>> = {
@@ -105,30 +102,6 @@ export function NotificationsSettingsTab() {
           />
         ))}
       </ul>
-
-      <div className="space-y-2 rounded-xl border border-dashed border-border p-4">
-        <h3 className="flex items-center gap-2 text-sm font-medium">
-          <Bell className="size-4 text-muted-foreground" aria-hidden />O que
-          ainda não é configurável
-        </h3>
-        <p className="text-xs text-muted-foreground">
-          <strong>Horário de silêncio</strong> existe como campo (
-          <span className="font-mono">quietHours</span>), mas é JSON livre sem
-          esquema — nenhum módulo o interpreta hoje, e um formulário aqui
-          gravaria algo que ninguém obedece.
-        </p>
-        <p className="text-xs text-muted-foreground">
-          <strong>SMS</strong> aparece na lista de canais, mas ainda não pode
-          ser escolhido aqui — só <span className="font-mono">IN_APP</span>,{" "}
-          <span className="font-mono">EMAIL</span> e{" "}
-          <span className="font-mono">PUSH</span>.
-        </p>
-        <p className="text-xs text-muted-foreground">
-          A central de notificações atualiza a cada{" "}
-          {Math.round(NOTIFICATIONS_POLL_MS / 1000)}s: novos avisos também são
-          consultados ao retornar à janela.
-        </p>
-      </div>
     </div>
   );
 }

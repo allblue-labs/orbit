@@ -1,3 +1,5 @@
+import type { Prisma } from '@prisma/client';
+import { commercialPlan } from './support/commercial-plans.fixture';
 import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
@@ -469,6 +471,34 @@ describe('Stripe billing integration and webhook reconciliation (e2e)', () => {
 
   beforeAll(async () => {
     process.env.JOBS_WORKER_ENABLED = 'false';
+    for (const code of Object.values(PlanCode)) {
+      const fixture = commercialPlan(code);
+      const plan = await prisma.plan.findUniqueOrThrow({
+        where: { key: code },
+      });
+      const commercial = plan.commercial as Prisma.InputJsonObject;
+      await prisma.plan.update({
+        where: { key: code },
+        data: {
+          commercial: {
+            ...commercial,
+            prices: fixture.prices as unknown as Prisma.InputJsonObject,
+          },
+        },
+      });
+      for (const [billingInterval, price] of Object.entries(fixture.prices)) {
+        await prisma.planStripePrice.upsert({
+          where: { id: price.stripePriceId! },
+          create: {
+            id: price.stripePriceId!,
+            planCode: code,
+            billingInterval,
+            amountMinor: price.amountMinor,
+          },
+          update: {},
+        });
+      }
+    }
     const module = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(BILLING_PROVIDER)
       .useValue(provedor)

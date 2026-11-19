@@ -30,6 +30,7 @@ export interface BillingCustomerRow {
 }
 
 export interface BillingCheckoutAttemptRow {
+  quotedPriceId: string | null;
   id: string;
   organizationId: string;
   subscriptionId: string;
@@ -264,6 +265,9 @@ export class BillingRepository {
     billingInterval: string;
     subscriptionVersion: number;
     endsTrial: boolean;
+    quotedPriceId: string;
+    quotedCatalogVersion: number;
+    quotedEntitlements: Prisma.InputJsonValue;
     idempotencyKey: string;
   }): Promise<{ attempt: BillingCheckoutAttemptRow; created: boolean }> {
     return this.rls.run(async (tx) => {
@@ -365,6 +369,30 @@ export class BillingRepository {
         include: { billingCustomer: true },
       }),
     );
+  }
+
+  async completedCheckoutTerms(
+    subscriptionId: string,
+    providerSubscriptionId: string,
+    priceId: string,
+  ) {
+    return this.rls.run(async (tx) => {
+      const attempt = await tx.billingCheckoutAttempt.findFirst({
+        where: {
+          subscriptionId,
+          providerSubscriptionId,
+          quotedPriceId: priceId,
+          status: 'COMPLETED',
+        },
+        select: { quotedCatalogVersion: true, quotedEntitlements: true },
+      });
+      return attempt?.quotedCatalogVersion && attempt.quotedEntitlements
+        ? {
+            version: attempt.quotedCatalogVersion,
+            snapshot: attempt.quotedEntitlements,
+          }
+        : undefined;
+    });
   }
 
   async completeCheckoutAttempt(input: {
