@@ -855,7 +855,7 @@ model OrganizationSubscription {
   trialStartsAt DateTime? @map("trial_starts_at") @db.Timestamptz(3)
   trialEndsAt   DateTime? @map("trial_ends_at") @db.Timestamptz(3)
 
-  /// Cancelamento é sempre no fim do período já pago. Não há devolução aqui.
+  /// Controle da renovação para cancelamentos com acesso mantido até o vencimento.
   cancelAtPeriodEnd Boolean   @default(false) @map("cancel_at_period_end")
   canceledAt        DateTime? @map("canceled_at") @db.Timestamptz(3)
 
@@ -864,7 +864,7 @@ model OrganizationSubscription {
   graceStartsAt DateTime? @map("grace_starts_at") @db.Timestamptz(3)
   graceEndsAt   DateTime? @map("grace_ends_at") @db.Timestamptz(3)
 
-  /// Toda troca de plano pago vale na renovação, preservando o período atual.
+  /// Troca programada para o próximo vencimento.
   pendingPlanCode             String?   @map("pending_plan_code") @db.VarChar(60)
   pendingBillingInterval      String?   @map("pending_billing_interval") @db.VarChar(20)
   pendingCatalogVersion       Int?      @map("pending_catalog_version")
@@ -904,6 +904,9 @@ model OrganizationSubscription {
   trialGrants      SubscriptionTrialGrant[]
   checkoutAttempts BillingCheckoutAttempt[]
   billingInvoices  BillingInvoice[]
+  billingPlanUpgrades BillingPlanUpgrade[]
+  billingSupportTickets BillingSupportTicket[]
+  billingRefundRequests BillingRefundRequest[]
 
   @@unique([id, organizationId], map: "organization_subscriptions_tenant_identity")
   @@index([organizationId, endedAt])
@@ -5214,4 +5217,66 @@ model PublicContactSubmission {
   @@index([status, availableAt])
   @@index([createdAt])
   @@map("public_contact_submissions")
+}
+
+model BillingPlanUpgrade {
+  id                   String @id @db.Uuid
+  organizationId       String @map("organization_id") @db.Uuid
+  subscriptionId       String @map("subscription_id") @db.Uuid
+  subscriptionVersion  Int @map("subscription_version")
+  requestedBy          String? @map("requested_by") @db.Uuid
+  previousPeriodStart  DateTime @map("previous_period_start") @db.Timestamptz(3)
+  previousPeriodEnd    DateTime @map("previous_period_end") @db.Timestamptz(3)
+  priceId              String @map("price_id") @db.VarChar(255)
+  catalogVersion       Int @map("catalog_version")
+  entitlements         Json @db.JsonB
+  invoiceId            String? @unique(map: "billing_plan_upgrades_invoice_unique") @map("invoice_id") @db.VarChar(255)
+  status               String @default("OPEN") @db.VarChar(20)
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  subscription OrganizationSubscription @relation(fields: [subscriptionId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  @@index([organizationId], map: "billing_plan_upgrades_org")
+  @@map("billing_plan_upgrades")
+}
+
+model BillingSupportTicket {
+  id              String @id @db.Uuid
+  organizationId  String @map("organization_id") @db.Uuid
+  subscriptionId  String @map("subscription_id") @db.Uuid
+  requestedBy     String? @map("requested_by") @db.Uuid
+  kind            String @db.VarChar(30)
+  targetPlanCode  String? @map("target_plan_code") @db.VarChar(60)
+  targetInterval  String? @map("target_interval") @db.VarChar(20)
+  reference       String @default("") @db.VarChar(255)
+  status          String @default("OPEN") @db.VarChar(20)
+  resolvedBy      String? @map("resolved_by") @db.Uuid
+  resolvedAt      DateTime? @map("resolved_at") @db.Timestamptz(3)
+  resolution      String?
+  emailSentAt     DateTime? @map("email_sent_at") @db.Timestamptz(3)
+  emailAttempts   Int @default(0) @map("email_attempts")
+  nextEmailAt     DateTime @default(now()) @map("next_email_at") @db.Timestamptz(3)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  subscription OrganizationSubscription @relation(fields: [subscriptionId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  @@index([organizationId], map: "billing_support_tickets_org")
+  @@index([status, id(sort: Desc)], map: "billing_support_tickets_queue")
+  @@map("billing_support_tickets")
+}
+
+model BillingRefundRequest {
+  id                String @id @db.Uuid
+  organizationId    String @map("organization_id") @db.Uuid
+  subscriptionId    String @unique(map: "billing_refund_requests_subscription") @map("subscription_id") @db.Uuid
+  requestedBy       String? @map("requested_by") @db.Uuid
+  invoiceId         String @unique @map("invoice_id") @db.VarChar(255)
+  paymentIntentId   String @map("payment_intent_id") @db.VarChar(255)
+  amountMinor       Int @map("amount_minor")
+  refundId          String? @map("refund_id") @db.VarChar(255)
+  attempts          Int @default(0)
+  nextAttemptAt     DateTime @default(now()) @map("next_attempt_at") @db.Timestamptz(3)
+  status            String @default("OPEN") @db.VarChar(20)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  subscription OrganizationSubscription @relation(fields: [subscriptionId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  @@map("billing_refund_requests")
 }

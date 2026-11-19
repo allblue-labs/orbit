@@ -32,6 +32,7 @@ import {
 } from '../subscription-plans/subscriptions/subscription.types';
 import { BillingProviderUnavailableException } from './billing.errors';
 import { BillingConfig } from './billing.config';
+import { BillingPolicyService } from './billing-policy.service';
 import {
   BillingCheckoutAwaitingPaymentError,
   BillingCheckoutFulfillmentService,
@@ -55,6 +56,8 @@ const EVENTOS_TRATADOS = new Set([
   'checkout.session.async_payment_succeeded',
   'customer.subscription.created',
   'customer.subscription.updated',
+  'customer.subscription.pending_update_applied',
+  'customer.subscription.pending_update_expired',
   'customer.subscription.deleted',
   'invoice.paid',
   'invoice.payment_succeeded',
@@ -98,6 +101,7 @@ export class BillingReconciliationService {
     private readonly subscriptions: SubscriptionService,
     private readonly config: BillingConfig,
     private readonly contexts: RequestContextStorage,
+    private readonly policies: BillingPolicyService,
   ) {}
 
   /** Processa a caixa de entrada. Repetir não muda o resultado. */
@@ -448,13 +452,20 @@ export class BillingReconciliationService {
         invoice.providerCustomerId,
         this.provider.mode,
       );
-      return this.repository.recordInvoice({
-        organizationId: local.organizationId,
-        subscriptionId: local.id,
-        provider: this.provider.name,
-        mode: this.provider.mode,
-        providerEventId,
-        invoice,
+      await this.repository.atomic(async () => {
+        await this.repository.recordInvoice({
+          organizationId: local.organizationId,
+          subscriptionId: local.id,
+          provider: this.provider.name,
+          mode: this.provider.mode,
+          providerEventId,
+          invoice,
+        });
+        if (invoice.status === ProviderInvoiceStatus.VOID)
+          await this.policies.expireVoidedUpgrade(
+            local.id,
+            invoice.providerInvoiceId,
+          );
       });
     });
     return invoice.providerSubscriptionId;
@@ -512,6 +523,16 @@ export class BillingReconciliationService {
           providerEventId,
           adjustment,
         });
+        if (
+          adjustment.refundRequestId &&
+          ['FAILED', 'CANCELED'].includes(adjustment.status)
+        )
+          await this.policies.reviewFailedRefund(
+            local.id,
+            adjustment.refundRequestId,
+            invoice.providerInvoiceId,
+            adjustment.providerObjectId,
+          );
       }),
     );
     return invoice.providerSubscriptionId;
@@ -566,6 +587,56 @@ export class BillingReconciliationService {
     const catalogEntry = await this.config.catalogEntryForPrice(
       provedor.providerPriceId ?? '',
     );
+    const contractedChange =
+      catalogEntry &&
+      (atual.planCode !== catalogEntry.planCode ||
+        atual.billingInterval !== catalogEntry.billingInterval);
+    const earlyChange =
+      contractedChange &&
+      atual.effectiveStatus === SubscriptionStatus.ACTIVE &&
+      provedor.state === ProviderBillingState.ACTIVE &&
+      provedor.currentPeriodStart &&
+      provedor.currentPeriodStart < atual.currentPeriodEnd;
+    const upgrade =
+      earlyChange ||
+      proof?.status === ProviderInvoiceStatus.VOID ||
+      proof?.status === ProviderInvoiceStatus.UNCOLLECTIBLE
+        ? await this.policies.pendingUpgrade(atual.id)
+        : null;
+    if (
+      upgrade &&
+      upgrade.invoiceId === proof?.providerInvoiceId &&
+      !provedor.hasPendingUpdate &&
+      (proof.status === ProviderInvoiceStatus.VOID ||
+        proof.status === ProviderInvoiceStatus.UNCOLLECTIBLE)
+    )
+      await this.policies.finishUpgrade(upgrade.id, 'EXPIRED');
+    const authorizedUpgrade =
+      earlyChange &&
+      upgrade &&
+      proof &&
+      (upgrade.invoiceId === proof.providerInvoiceId ||
+        (!upgrade.invoiceId && provedor.upgradeRequestId === upgrade.id)) &&
+      proof.billingReason === 'subscription_update' &&
+      proof.providerInvoiceId === provedor.latestInvoiceId &&
+      upgrade.priceId === provedor.providerPriceId &&
+      atual.billingInterval === 'MONTHLY' &&
+      catalogEntry?.billingInterval === 'MONTHLY' &&
+      !provedor.hasPendingUpdate &&
+      atual.currentPeriodStart.getTime() ===
+        upgrade.previousPeriodStart.getTime() &&
+      atual.currentPeriodEnd.getTime() ===
+        upgrade.previousPeriodEnd.getTime() &&
+      proof.amountPaidMinor > 0 &&
+      (proof.paymentEvidence ?? []).reduce(
+        (sum, payment) =>
+          sum + (payment.currency === proof.currency ? payment.amountMinor : 0),
+        0,
+      ) === proof.amountPaidMinor
+        ? upgrade
+        : null;
+    if (earlyChange && !authorizedUpgrade)
+      throw new Error('BILLING_EARLY_PLAN_CHANGE_NOT_AUTHORIZED');
     const needsPayment =
       provedor.state === ProviderBillingState.ACTIVE &&
       (atual.effectiveStatus !== SubscriptionStatus.ACTIVE ||
@@ -669,13 +740,19 @@ export class BillingReconciliationService {
           atual.version,
           {
             planCode: catalogEntry.planCode,
-            terms: provedor.providerPriceId
-              ? await this.repository.completedCheckoutTerms(
-                  atual.id,
-                  provedor.providerSubscriptionId,
-                  provedor.providerPriceId,
-                )
-              : undefined,
+            ...(authorizedUpgrade ? { allowPaidMonthlyUpgrade: true } : {}),
+            terms: authorizedUpgrade
+              ? {
+                  version: authorizedUpgrade.catalogVersion,
+                  snapshot: authorizedUpgrade.entitlements,
+                }
+              : provedor.providerPriceId
+                ? await this.repository.completedCheckoutTerms(
+                    atual.id,
+                    provedor.providerSubscriptionId,
+                    provedor.providerPriceId,
+                  )
+                : undefined,
             billingInterval: catalogEntry.billingInterval,
             period: {
               start: provedor.currentPeriodStart,
@@ -685,6 +762,13 @@ export class BillingReconciliationService {
             cancelAtPeriodEnd: provedor.cancelAtPeriodEnd,
           },
         );
+        if (authorizedUpgrade && proof) {
+          await this.policies.attachUpgradeInvoice(
+            authorizedUpgrade.id,
+            proof.providerInvoiceId,
+          );
+          await this.policies.finishUpgrade(authorizedUpgrade.id, 'APPLIED');
+        }
       }
       await this.subscriptions.syncProviderSnapshot(atual.id, {
         providerStatus: provedor.rawStatus,
@@ -722,6 +806,7 @@ export class BillingReconciliationService {
       await this.subscriptions.reportProviderEnded(
         atual.organizationId,
         atual.version,
+        Boolean(await this.policies.refundRequest(atual.id)),
       );
     } else {
       await this.subscriptions.reportPaymentFailed(

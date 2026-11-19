@@ -19,6 +19,7 @@ import type {
 } from '../subscription-plans/subscription-plan.read-models';
 import { allowsInitialCheckout } from '../subscription-plans/subscriptions/subscription.types';
 import { BillingRepository } from './billing.repository';
+import { BillingPolicyService } from './billing-policy.service';
 import { BILLING_PROVIDER, type BillingProvider } from './billing.types';
 
 /**
@@ -37,6 +38,7 @@ export interface BillingOverviewReadModel {
   entitlements: OrganizationEntitlementsReadModel;
   billing: BillingReadinessReadModel;
   contractedAmountMinor: number | null;
+  refundRequestStatus: string | null;
   invoices: readonly BillingInvoiceReadModel[];
   dataPurgedAt?: string | null;
   dataPurgeStartedAt?: string | null;
@@ -94,6 +96,7 @@ export class BillingReadService {
     private readonly subscriptionMapper: SubscriptionMapper,
     private readonly trials: TrialEligibilityService,
     private readonly plans: CommercialPlanService,
+    private readonly policies: BillingPolicyService,
   ) {}
 
   /**
@@ -116,6 +119,9 @@ export class BillingReadService {
       dataPurgeStartedAt: retention.dataPurgeStartedAt?.toISOString() ?? null,
       catalog: await this.entitlements.catalog(organizationId),
       contractedAmountMinor: price?.amountMinor ?? null,
+      refundRequestStatus: assinatura
+        ? ((await this.policies.refundRequest(assinatura.id))?.status ?? null)
+        : null,
       subscription: assinatura
         ? this.subscriptionMapper.details(assinatura)
         : null,

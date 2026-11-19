@@ -11,6 +11,10 @@ import { SubscriptionDataRetentionService } from './retention/subscription-data-
 import { SubscriptionDataRetentionWorker } from './retention/subscription-data-retention.worker';
 import { CommercialPlanController } from '../subscription-plans/catalog/commercial-plan.controller';
 import { Module } from '@nestjs/common';
+import { EmailModule } from '../email/email.module';
+import { BillingPolicyService } from './billing-policy.service';
+import { BillingPolicyWorker } from './billing-policy.worker';
+import { BillingSupportController } from './billing-support.controller';
 import { SubscriptionPlansModule } from '../subscription-plans/subscription-plans.module';
 import {
   BillingRecoveryService,
@@ -30,11 +34,12 @@ import { StripeBillingProvider } from './stripe/stripe-billing.provider';
 import { SubscriptionBillingController } from './subscription-billing.controller';
 
 @Module({
-  imports: [SubscriptionPlansModule],
+  imports: [SubscriptionPlansModule, EmailModule],
   controllers: [
     BillingController,
     SubscriptionBillingController,
     CommercialPlanController,
+    BillingSupportController,
   ],
   providers: [
     BillingConfig,
@@ -48,6 +53,8 @@ import { SubscriptionBillingController } from './subscription-billing.controller
     StripeBillingProvider,
     { provide: BILLING_PROVIDER, useExisting: StripeBillingProvider },
     BillingService,
+    BillingPolicyService,
+    BillingPolicyWorker,
     BillingWebhookService,
     BillingReconciliationService,
     BillingReadService,

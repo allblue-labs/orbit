@@ -555,6 +555,7 @@ export class SubscriptionService {
       period: { start: Date; end: Date };
       activate: boolean;
       terms?: { version: number; snapshot: Prisma.JsonValue };
+      allowPaidMonthlyUpgrade?: boolean;
       cancelAtPeriodEnd: boolean;
     },
   ) {
@@ -587,7 +588,13 @@ export class SubscriptionService {
       if (
         contractedChanged &&
         atual.effectiveStatus === SubscriptionStatus.ACTIVE &&
-        input.period.start < atual.currentPeriodEnd
+        input.period.start < atual.currentPeriodEnd &&
+        !(
+          input.allowPaidMonthlyUpgrade &&
+          input.activate &&
+          atual.billingInterval === 'MONTHLY' &&
+          input.billingInterval === 'MONTHLY'
+        )
       ) {
         throw new PlanChangeNotAllowedException(
           'paid plan changes take effect only at renewal',
@@ -641,8 +648,12 @@ export class SubscriptionService {
               entitlementsSnapshot:
                 snapshot as unknown as Prisma.InputJsonValue,
               billingInterval: input.billingInterval,
-              billingAnchorAt: input.period.start,
             }
+          : {}),
+        ...(writesTerms ||
+        (input.activate &&
+          atual.effectiveStatus === SubscriptionStatus.TRIALING)
+          ? { billingAnchorAt: input.period.start }
           : {}),
         ...(input.activate
           ? {
@@ -726,7 +737,11 @@ export class SubscriptionService {
   }
 
   /** O provedor encerrou a assinatura. O acesso termina sem renovação local. */
-  async reportProviderEnded(organizationId: string, expectedVersion: number) {
+  async reportProviderEnded(
+    organizationId: string,
+    expectedVersion: number,
+    refunded = false,
+  ) {
     return this.comando(organizationId, expectedVersion, (atual) => {
       this.assertTransicao(atual.effectiveStatus, SubscriptionStatus.CANCELED);
       const agora = new Date();
@@ -735,6 +750,7 @@ export class SubscriptionService {
         cancelAtPeriodEnd: false,
         canceledAt: atual.canceledAt ?? agora,
         endedAt: agora,
+        ...(refunded ? { dataRetentionEndsAt: retentionDeadline(agora) } : {}),
         graceStartsAt: null,
         graceEndsAt: null,
         pendingPlanCode: null,

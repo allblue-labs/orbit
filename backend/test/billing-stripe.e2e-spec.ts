@@ -43,6 +43,9 @@ import {
   type ProviderSubscription,
 } from '../src/modules/billing/billing.types';
 import { BillingRepository } from '../src/modules/billing/billing.repository';
+import { BillingPolicyService } from '../src/modules/billing/billing-policy.service';
+import { BillingPolicyWorker } from '../src/modules/billing/billing-policy.worker';
+import { EmailService } from '../src/modules/email/email.service';
 import { BillingReconciliationService } from '../src/modules/billing/billing-reconciliation.service';
 import {
   BillingProviderUnavailableException,
@@ -527,6 +530,221 @@ describe('Stripe billing integration and webhook reconciliation (e2e)', () => {
   beforeEach(() => {
     provedor.enabled = true;
     provedor.indisponivel = false;
+  });
+
+  describe('política de troca e chamados', () => {
+    it('registra uma única solicitação anual e protege a fila administrativa', async () => {
+      const { organizationId, token } = await registrar('manual-review');
+      await vincular(organizationId);
+      const subscription = await como(organizationId, () =>
+        subscriptions.requireCurrent(organizationId),
+      );
+      const submit = () =>
+        auth(
+          http().post('/api/v1/organizations/current/subscription/change-plan'),
+          token,
+        )
+          .send({
+            expectedVersion: subscription.version,
+            planCode: 'ESSENTIAL',
+            billingInterval: 'ANNUAL',
+          })
+          .expect(201);
+      const [first, second] = await Promise.all([submit(), submit()]);
+      const result = (
+        first.body as Envelope<{ kind: string; ticketId: string }>
+      ).data;
+      expect(result.kind).toBe('SUPPORT_TICKET');
+      expect((second.body as Envelope<typeof result>).data).toEqual(result);
+      const persisted = await prisma.billingSupportTicket.findUniqueOrThrow({
+        where: { id: result.ticketId },
+      });
+      expect(persisted).toMatchObject({
+        organizationId,
+        subscriptionId: subscription.id,
+        kind: 'PLAN_CHANGE',
+        targetPlanCode: 'ESSENTIAL',
+        targetInterval: 'ANNUAL',
+        status: 'OPEN',
+      });
+      const foreign = await registrar('foreign-review');
+      const hidden = await como(foreign.organizationId, () =>
+        app.get(BillingPolicyService).listTickets('OPEN'),
+      );
+      expect(hidden.tickets).toHaveLength(0);
+      await auth(
+        http().get('/api/v1/platform-admin/billing/tickets'),
+        token,
+      ).expect(403);
+      expect(
+        await como(organizationId, () =>
+          subscriptions.requireCurrent(organizationId),
+        ),
+      ).toMatchObject({ version: subscription.version, pendingPlanCode: null });
+    });
+
+    it('processa o estorno uma vez e encerra o acesso com 30 dias de retenção', async () => {
+      const { organizationId, token } = await registrar('refund-window');
+      const providerSubscriptionId = await vincular(organizationId);
+      const subscription = await como(organizationId, () =>
+        subscriptions.requireCurrent(organizationId),
+      );
+      const signed = eventoAssinado({
+        id: `evt_${randomUUID()}`,
+        type: 'invoice.paid',
+        subscriptionId: providerSubscriptionId,
+      });
+      const event = provedor.verifyWebhook(
+        Buffer.from(signed.corpo),
+        signed.assinatura,
+      );
+      const invoiceId = event.objectId!;
+      const invoice = provedor.faturas.get(invoiceId)!;
+      provedor.faturas.set(invoiceId, {
+        ...invoice,
+        billingReason: 'subscription_create',
+        periodStart: subscription.billingAnchorAt,
+        periodEnd: subscription.currentPeriodEnd,
+        paymentEvidence: [
+          {
+            invoicePaymentId: 'inpay_refund_window',
+            paymentIntentId: 'pi_refund_window',
+            amountMinor: invoice.amountPaidMinor,
+            currency: 'brl',
+            confirmedAt: invoice.paidAt!.toISOString(),
+          },
+        ],
+      });
+      await reconciliation.reconcileProviderInvoice(
+        invoiceId,
+        event.providerEventId,
+      );
+
+      const ticket = await como(organizationId, () =>
+        app.get(BillingPolicyService).ticket({
+          organizationId,
+          subscriptionId: subscription.id,
+          kind: 'PLAN_CHANGE',
+          targetPlanCode: 'ESSENTIAL',
+          targetInterval: 'ANNUAL',
+        }),
+      );
+      const provider = provedor as BillingProvider;
+      const refund = jest.fn().mockImplementation(() => {
+        provedor.declara(
+          providerSubscriptionId,
+          ProviderBillingState.ENDED,
+          'canceled',
+        );
+        return Promise.resolve({
+          refundId: 're_refund_window',
+          status: 'succeeded',
+        });
+      });
+      provider.refundAndCancel = refund;
+      const send = jest.spyOn(app.get(EmailService), 'send').mockResolvedValue({
+        status: 'SENT',
+        provider: 'ses',
+        providerMessageId: 'support-email-fake',
+      });
+      try {
+        const cancel = () =>
+          auth(
+            http().post('/api/v1/organizations/current/subscription/cancel'),
+            token,
+          )
+            .send({
+              expectedVersion: subscription.version,
+              acknowledgeDataDeletion: true,
+            })
+            .expect(201);
+        const [first, second] = await Promise.all([cancel(), cancel()]);
+        for (const result of [first, second])
+          expect(
+            (result.body as Envelope<{ cancellation: { kind: string } }>).data
+              .cancellation.kind,
+          ).toBe('REFUND_REQUESTED');
+        expect(refund).not.toHaveBeenCalled();
+
+        const worker = app.get(BillingPolicyWorker);
+        await Promise.all([worker.tick(), worker.tick()]);
+        await worker.tick();
+        expect(refund).toHaveBeenCalledTimes(1);
+        expect(refund).toHaveBeenCalledWith(
+          expect.objectContaining({
+            invoiceId,
+            providerSubscriptionId,
+            amountMinor: invoice.amountPaidMinor,
+          }),
+        );
+        const request = await prisma.billingRefundRequest.findUniqueOrThrow({
+          where: { subscriptionId: subscription.id },
+        });
+        expect(request).toMatchObject({
+          status: 'SUBMITTED',
+          refundId: 're_refund_window',
+        });
+        const ended = await prisma.organizationSubscription.findUniqueOrThrow({
+          where: { id: subscription.id },
+        });
+        expect(ended.status).toBe('CANCELED');
+        expect(
+          ended.dataRetentionEndsAt!.getTime() - ended.endedAt!.getTime(),
+        ).toBe(30 * 86_400_000);
+        const supportEmail = send.mock.calls.find(([message]) =>
+          message.text.includes(ticket.ticketId),
+        );
+        expect(supportEmail?.[0]).toMatchObject({
+          category: 'SUPPORT',
+          to: 'suporte-orbit@allblue-labs.com',
+        });
+      } finally {
+        provider.refundAndCancel = undefined;
+        send.mockRestore();
+      }
+    });
+
+    it('avisa o proprietário uma vez em cada janela, em dias separados', async () => {
+      const { organizationId } = await registrar('downgrade-reminder');
+      await vincular(organizationId);
+      const subscription = await como(organizationId, () =>
+        subscriptions.requireCurrent(organizationId),
+      );
+      const day = 86_400_000;
+      const due = new Date(Date.now() + 8 * day);
+      await prisma.organizationSubscription.update({
+        where: { id: subscription.id },
+        data: {
+          currentPeriodEnd: due,
+          pendingEffectiveAt: due,
+          pendingPlanCode: 'ESSENTIAL',
+          pendingBillingInterval: 'MONTHLY',
+          pendingCatalogVersion: 1,
+          pendingEntitlementsSnapshot: {},
+        },
+      });
+      const worker = app.get(BillingPolicyWorker);
+      const run = (days: number) =>
+        worker.sendReminders(new Date(due.getTime() - days * day));
+      await run(8);
+      await Promise.all([run(7), run(7)]);
+      await run(3);
+      await run(1);
+      await run(0);
+      const notifications = await prisma.notification.findMany({
+        where: { organizationId, type: 'SUBSCRIPTION_DOWNGRADE_REMINDER' },
+        orderBy: { sentAt: 'asc' },
+      });
+      const organization = await prisma.organization.findUniqueOrThrow({
+        where: { id: organizationId },
+      });
+      expect(
+        notifications.map((notification) => notification.recipientUserId),
+      ).toEqual(Array(3).fill(organization.ownerUserId));
+      expect(
+        notifications.map((notification) => notification.sentAt!.getTime()),
+      ).toEqual([7, 3, 1].map((days) => due.getTime() - days * day));
+    });
   });
 
   /* ---------------------------------------------------------------- */

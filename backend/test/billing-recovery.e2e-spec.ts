@@ -283,9 +283,15 @@ describe('ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQ
     jest
       .spyOn(app.get(BillingConfig), 'catalogEntryForPrice')
       .mockImplementation((price) =>
-        price === 'price_nx04'
-          ? { planCode: 'PROFESSIONAL', billingInterval: 'MONTHLY' }
-          : null,
+        Promise.resolve(
+          price === 'price_nx04'
+            ? {
+                planCode: 'PROFESSIONAL',
+                billingInterval: 'MONTHLY',
+                amountMinor: 14990,
+              }
+            : null,
+        ),
       );
   });
   beforeEach(async () => {

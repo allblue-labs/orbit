@@ -50,6 +50,8 @@ export type ProviderBillingState =
 export interface ProviderSubscription {
   readonly mode?: BillingMode;
   readonly latestInvoiceId?: string | null;
+  readonly upgradeRequestId?: string | null;
+  readonly hasPendingUpdate?: boolean;
   readonly providerSubscriptionId: string;
   readonly providerCustomerId: string;
   readonly providerPriceId: string | null;
@@ -149,6 +151,7 @@ export type ProviderFinancialAdjustmentType =
   (typeof ProviderFinancialAdjustmentType)[keyof typeof ProviderFinancialAdjustmentType];
 
 export interface ProviderFinancialAdjustment {
+  readonly refundRequestId?: string;
   readonly observationVersion?: bigint;
   readonly type: ProviderFinancialAdjustmentType;
   readonly providerObjectId: string;
@@ -292,6 +295,29 @@ export interface BillingProvider {
     timing: 'IMMEDIATE' | 'PERIOD_END';
     idempotencyKey: string;
   }): Promise<ProviderPlanChange>;
+
+  beginMonthlyUpgrade?(input: {
+    requestId: string;
+    requestedAt: Date;
+    providerSubscriptionId: string;
+    providerCustomerId: string;
+    currentPriceId: string;
+    currentPeriodStart: Date;
+    currentPeriodEnd: Date;
+    priceId: string;
+    planCode: PlanCode;
+    organizationId: string;
+    subscriptionId: string;
+  }): Promise<{ invoice: ProviderInvoice; subscription: ProviderSubscription }>;
+
+  refundAndCancel?(input: {
+    requestId: string;
+    providerSubscriptionId: string;
+    providerCustomerId: string;
+    invoiceId: string;
+    paymentIntentId: string;
+    amountMinor: number;
+  }): Promise<{ refundId: string; status: string }>;
 
   cancelScheduledPlanChange(input: {
     providerSubscriptionId: string;

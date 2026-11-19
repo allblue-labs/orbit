@@ -102,6 +102,7 @@ describe('BillingService checkout intent', () => {
         canStartPendingTrial: jest.fn().mockResolvedValue(false),
       } as never,
       commercialPlansFixture() as never,
+      {} as never,
     );
     return {
       service,
@@ -134,6 +135,7 @@ describe('BillingService checkout intent', () => {
       subscriptions as never,
       trials as never,
       commercialPlansFixture() as never,
+      {} as never,
     );
     await expect(
       service.changeSubscriptionPlan({
@@ -178,6 +180,7 @@ describe('BillingService checkout intent', () => {
       } as never,
       trials as never,
       commercialPlansFixture() as never,
+      {} as never,
     );
     await expect(
       service.changeSubscriptionPlan({
@@ -276,6 +279,10 @@ describe('BillingService checkout intent', () => {
       effectiveStatus: SubscriptionStatus.ACTIVE,
       providerSubscriptionId: 'sub_test_authority',
       providerCustomerId: 'cus_test_authority',
+      providerPriceId: 'price_test_authority',
+      billingAnchorAt: new Date('2026-10-01T00:00:00.000Z'),
+      currentPeriodStart: new Date('2026-10-01T00:00:00.000Z'),
+      currentPeriodEnd: new Date('2026-11-01T00:00:00.000Z'),
       cancelAtPeriodEnd: false,
       ...overrides,
     });
@@ -323,7 +330,28 @@ describe('BillingService checkout intent', () => {
         applyProviderPlan: jest.fn().mockResolvedValue(undefined),
         scheduleProviderPlanChange: jest.fn().mockResolvedValue(undefined),
       };
+      const policies = {
+        ticket: jest
+          .fn()
+          .mockResolvedValue({ kind: 'SUPPORT_TICKET', ticketId: attemptId }),
+        pendingUpgrade: jest.fn().mockResolvedValue(null),
+        refundRequest: jest.fn().mockResolvedValue(null),
+        purchaseInvoiceId: jest.fn().mockResolvedValue(null),
+        locked: jest.fn(
+          async (_id: string, _version: number, work: () => Promise<unknown>) =>
+            work(),
+        ),
+        reserveRefund: jest.fn(),
+        reserveUpgrade: jest.fn().mockResolvedValue({
+          id: attemptId,
+          createdAt: new Date(),
+          previousPeriodStart: subscription.currentPeriodStart,
+          previousPeriodEnd: subscription.currentPeriodEnd,
+        }),
+        attachUpgradeInvoice: jest.fn(),
+      };
       return {
+        policies,
         service: new BillingService(
           provider,
           {} as never,
@@ -332,7 +360,11 @@ describe('BillingService checkout intent', () => {
             offersTrial: jest.fn().mockResolvedValue(false),
             canStartPendingTrial: jest.fn().mockResolvedValue(false),
           } as never,
-          commercialPlansFixture() as never,
+          {
+            ...commercialPlansFixture(),
+            stripePrice: jest.fn().mockResolvedValue({ amountMinor: 14990 }),
+          } as never,
+          policies as never,
         ),
         provider,
         subscriptions,
@@ -388,7 +420,7 @@ describe('BillingService checkout intent', () => {
       setCancelAtPeriodEnd.mockRejectedValue(new Error('provider unavailable'));
 
       await expect(
-        service.cancelSubscription(organizationId, 7),
+        service.cancelSubscription(organizationId, 7, true),
       ).rejects.toThrow('provider unavailable');
       expect(subscriptions.applyProviderCancellation).not.toHaveBeenCalled();
     });
@@ -400,42 +432,147 @@ describe('BillingService checkout intent', () => {
       );
 
       await expect(
-        service.cancelSubscription(organizationId, 7),
+        service.cancelSubscription(organizationId, 7, true),
       ).rejects.toMatchObject({ code: 'BILLING_COMMAND_NOT_ALLOWED' });
       expect(setCancelAtPeriodEnd).not.toHaveBeenCalled();
     });
 
-    it.each([PlanCode.ESSENTIAL, PlanCode.PROFESSIONAL_INTELLIGENCE])(
-      'agenda %s na renovação, sem cobrança imediata nem antecipação de direitos',
-      async (planCode) => {
-        const { service, subscriptions, createPlanChangeSession, changePlan } =
-          commandSetup();
+    it('agenda a redução mensal sem cobrança imediata', async () => {
+      const planCode = PlanCode.ESSENTIAL;
+      const { service, subscriptions, createPlanChangeSession, changePlan } =
+        commandSetup();
+      await expect(
+        service.changeSubscriptionPlan({
+          organizationId,
+          expectedVersion: 7,
+          planCode,
+          billingInterval: BillingInterval.MONTHLY,
+        }),
+      ).resolves.toEqual({
+        kind: 'SCHEDULED',
+        effectiveAt: '2026-11-01T00:00:00.000Z',
+      });
+      expect(changePlan).toHaveBeenCalledWith(
+        expect.objectContaining({ timing: 'PERIOD_END', planCode }),
+      );
+      expect(createPlanChangeSession).not.toHaveBeenCalled();
+      expect(subscriptions.applyProviderPlan).not.toHaveBeenCalled();
+      expect(subscriptions.scheduleProviderPlanChange).toHaveBeenCalledWith(
+        organizationId,
+        7,
+        planCode,
+        BillingInterval.MONTHLY,
+        new Date('2026-11-01T00:00:00.000Z'),
+        expect.objectContaining({ code: planCode, version: 1 }),
+      );
+    });
+
+    it('exige autorização explícita para o upgrade mensal', async () => {
+      const { service, provider, changePlan } = commandSetup();
+      const beginMonthlyUpgrade = jest.fn();
+      provider.beginMonthlyUpgrade = beginMonthlyUpgrade;
+      await expect(
+        service.changeSubscriptionPlan({
+          organizationId,
+          expectedVersion: 7,
+          planCode: PlanCode.PROFESSIONAL_INTELLIGENCE,
+        }),
+      ).rejects.toMatchObject({ code: 'BILLING_COMMAND_NOT_ALLOWED' });
+      expect(beginMonthlyUpgrade).not.toHaveBeenCalled();
+      expect(changePlan).not.toHaveBeenCalled();
+    });
+
+    it('encaminha a autenticação do upgrade mensal sem conceder direitos', async () => {
+      const { service, provider, subscriptions, policies } = commandSetup();
+      provider.beginMonthlyUpgrade = jest.fn().mockResolvedValue({
+        subscription: providerSubscription(),
+        invoice: {
+          providerInvoiceId: 'in_upgrade',
+          providerSubscriptionId: 'sub_test_authority',
+          providerCustomerId: 'cus_test_authority',
+          billingReason: 'subscription_update',
+          status: 'OPEN',
+          hostedInvoiceUrl: 'https://invoice.stripe.com/i/upgrade',
+        },
+      });
+      await expect(
+        service.changeSubscriptionPlan({
+          organizationId,
+          expectedVersion: 7,
+          planCode: PlanCode.PROFESSIONAL_INTELLIGENCE,
+          acknowledgeImmediateCharge: true,
+        }),
+      ).resolves.toEqual({ url: 'https://invoice.stripe.com/i/upgrade' });
+      expect(policies.attachUpgradeInvoice).toHaveBeenCalledWith(
+        attemptId,
+        'in_upgrade',
+      );
+      expect(subscriptions.applyProviderPlan).not.toHaveBeenCalled();
+    });
+
+    it.each([BillingInterval.SEMIANNUAL, BillingInterval.ANNUAL])(
+      'encaminha a troca para %s sem alterar o Stripe',
+      async (billingInterval) => {
+        const { service, policies, changePlan } = commandSetup();
         await expect(
           service.changeSubscriptionPlan({
             organizationId,
             expectedVersion: 7,
-            planCode,
-            billingInterval: BillingInterval.MONTHLY,
+            planCode: PlanCode.ESSENTIAL,
+            billingInterval,
           }),
-        ).resolves.toEqual({
-          kind: 'SCHEDULED',
-          effectiveAt: '2026-11-01T00:00:00.000Z',
-        });
-        expect(changePlan).toHaveBeenCalledWith(
-          expect.objectContaining({ timing: 'PERIOD_END', planCode }),
+        ).resolves.toEqual({ kind: 'SUPPORT_TICKET', ticketId: attemptId });
+        expect(policies.ticket).toHaveBeenCalledWith(
+          expect.objectContaining({
+            kind: 'PLAN_CHANGE',
+            targetPlanCode: PlanCode.ESSENTIAL,
+            targetInterval: billingInterval,
+          }),
         );
-        expect(createPlanChangeSession).not.toHaveBeenCalled();
-        expect(subscriptions.applyProviderPlan).not.toHaveBeenCalled();
-        expect(subscriptions.scheduleProviderPlanChange).toHaveBeenCalledWith(
-          organizationId,
-          7,
-          planCode,
-          BillingInterval.MONTHLY,
-          new Date('2026-11-01T00:00:00.000Z'),
-          expect.objectContaining({ code: planCode, version: 1 }),
-        );
+        expect(changePlan).not.toHaveBeenCalled();
       },
     );
+
+    it('registra o valor integral comprovado para estorno elegível', async () => {
+      const { service, provider, policies, setCancelAtPeriodEnd } =
+        commandSetup();
+      const paidAt = new Date(Date.now() - 6 * 86_400_000);
+      const refundAndCancel = jest.fn();
+      provider.refundAndCancel = refundAndCancel;
+      provider.retrieveInvoice = jest.fn().mockResolvedValue({
+        providerCustomerId: 'cus_test_authority',
+        providerSubscriptionId: 'sub_test_authority',
+        paidAt,
+        status: 'PAID',
+        amountPaidMinor: 14990,
+        amountRemainingMinor: 0,
+        creditNotesMinor: 0,
+        currency: 'brl',
+        subscriptionLines: [
+          {
+            subscriptionId: 'sub_test_authority',
+            priceId: 'price_test_authority',
+            periodStart: new Date('2026-10-01T00:00:00.000Z'),
+          },
+        ],
+        paymentEvidence: [
+          { paymentIntentId: 'pi_paid', amountMinor: 14990, currency: 'brl' },
+        ],
+      });
+      policies.purchaseInvoiceId.mockResolvedValue('in_paid');
+      await expect(
+        service.cancelSubscription(organizationId, 7, true),
+      ).resolves.toEqual({ kind: 'REFUND_REQUESTED' });
+      expect(policies.reserveRefund).toHaveBeenCalledWith(
+        expect.objectContaining({
+          invoiceId: 'in_paid',
+          amountMinor: 14990,
+          paymentIntentId: 'pi_paid',
+        }),
+      );
+      expect(setCancelAtPeriodEnd).not.toHaveBeenCalled();
+      expect(refundAndCancel).not.toHaveBeenCalled();
+    });
 
     it('recusa troca de teste sem confirmação explícita antes de chamar Stripe', async () => {
       const { service, createPlanChangeSession } = commandSetup(

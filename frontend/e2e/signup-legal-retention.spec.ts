@@ -102,7 +102,7 @@ for (const slug of ["termos", "privacidade"]) {
     const downloadPromise = page.waitForEvent("download");
     await page.getByRole("link", { name: "Baixar PDF", exact: true }).click();
     const download = await downloadPromise;
-    expect(download.suggestedFilename()).toBe(`orbit-${slug}-2026-10-23.1.pdf`);
+    expect(download.suggestedFilename()).toBe(`orbit-${slug}-2026-11-19.1.pdf`);
     const content = await readFile((await download.path())!);
     expect(content.subarray(0, 5).toString()).toBe("%PDF-");
     expect(content.length).toBeGreaterThan(6000);

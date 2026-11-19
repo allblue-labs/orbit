@@ -42,6 +42,13 @@ export class ChangeSubscriptionPlanDto extends SubscriptionVersionDto {
   @IsBoolean()
   acknowledgeTrialEnd?: boolean;
 
+  @ApiPropertyOptional({
+    description: 'Autoriza a cobrança proporcional do upgrade mensal',
+  })
+  @IsOptional()
+  @IsBoolean()
+  acknowledgeImmediateCharge?: boolean;
+
   @ApiProperty({ example: 'PROFESSIONAL' })
   @Matches(/^[A-Z][A-Z0-9_]{1,39}$/)
   planCode!: PlanCodeType;

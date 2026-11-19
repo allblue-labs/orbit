@@ -47,7 +47,9 @@ class RepositorioFalso {
       planName: this.planKey,
       limits: this.limits as PlanRow['limits'],
       commercial: isKnownPlan(this.planKey)
-        ? { entitlements: snapshotOf(planDefinition(this.planKey)) }
+        ? ({
+            entitlements: snapshotOf(planDefinition(this.planKey)),
+          } as unknown as PlanRow['commercial'])
         : null,
       anchor: ANCORA,
     });

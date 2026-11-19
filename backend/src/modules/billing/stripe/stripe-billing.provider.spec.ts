@@ -56,6 +56,7 @@ describe('StripeBillingProvider subscription commands', () => {
     };
     const subscriptions = {
       retrieve: jest.fn().mockResolvedValue(current()),
+      cancel: jest.fn().mockResolvedValue(current({ status: 'canceled' })),
       update: jest.fn().mockResolvedValue(
         current({
           metadata: {
@@ -129,11 +130,11 @@ describe('StripeBillingProvider subscription commands', () => {
           .mockResolvedValue({ url: 'https://billing.stripe.test/confirm' }),
       },
     };
-    const invoices = { retrieve: jest.fn() };
+    const invoices = { retrieve: jest.fn(), createPreview: jest.fn() };
     const events = {
       list: jest.fn().mockResolvedValue({ data: [], has_more: false }),
     };
-    const refunds = { retrieve: jest.fn() };
+    const refunds = { retrieve: jest.fn(), create: jest.fn() };
     const disputes = { retrieve: jest.fn() };
     const invoicePayments = {
       retrieve: jest.fn(),
@@ -191,6 +192,137 @@ describe('StripeBillingProvider subscription commands', () => {
     billingInterval: BillingInterval.MONTHLY,
     idempotencyKey: 'orbit:change-plan:stable',
   } as const;
+
+  it('previews an unused-period credit and submits an atomic upgrade pending payment', async () => {
+    const { provider, subscriptions, invoices } = setup();
+    subscriptions.retrieve.mockResolvedValue(
+      current({
+        latest_invoice: 'in_old',
+        collection_method: 'charge_automatically',
+      }),
+    );
+    subscriptions.update.mockResolvedValue(
+      current({
+        latest_invoice: 'in_upgrade',
+        pending_update: { expires_at: 1_793_000_000 },
+      }),
+    );
+    const periodStart = new Date(1_791_158_400_000);
+    const periodEnd = new Date(1_793_836_800_000);
+    const requestedAt = new Date();
+    const invoice = {
+      providerSubscriptionId: 'sub_test_1',
+      providerCustomerId: 'cus_test_1',
+      creditNotesMinor: 0,
+      amountPaidMinor: 14990,
+      subscriptionLines: [
+        {
+          subscriptionId: 'sub_test_1',
+          priceId: 'price_old',
+          periodStart,
+          periodEnd,
+        },
+      ],
+      paymentEvidence: [{ amountMinor: 14990 }],
+    };
+    jest
+      .spyOn(provider, 'retrieveInvoice')
+      .mockResolvedValueOnce({ ...invoice, status: 'PAID' } as never)
+      .mockResolvedValueOnce({ ...invoice, status: 'OPEN' } as never);
+    invoices.createPreview.mockResolvedValue({
+      amount_due: 20175,
+      lines: {
+        has_more: false,
+        data: [
+          {
+            amount: 24990,
+            pricing: { price_details: { price: 'price_target' } },
+          },
+          {
+            amount: -4815,
+            pricing: { price_details: { price: 'price_old' } },
+            parent: { subscription_item_details: { proration: true } },
+          },
+        ],
+      },
+    });
+    const result = await provider.beginMonthlyUpgrade({
+      requestId: 'up_1',
+      requestedAt,
+      providerSubscriptionId: 'sub_test_1',
+      providerCustomerId: 'cus_test_1',
+      currentPriceId: 'price_old',
+      currentPeriodStart: periodStart,
+      currentPeriodEnd: periodEnd,
+      priceId: 'price_target',
+      planCode: PlanCode.PROFESSIONAL_INTELLIGENCE,
+      organizationId: 'org_1',
+      subscriptionId: 'local_sub_1',
+    });
+    const parameters = {
+      billing_cycle_anchor: 'now',
+      proration_behavior: 'always_invoice',
+      proration_date: Math.floor(requestedAt.getTime() / 1000),
+      items: [{ id: 'si_test_1', price: 'price_target' }],
+    };
+    expect(invoices.createPreview).toHaveBeenCalledWith({
+      subscription: 'sub_test_1',
+      subscription_details: parameters,
+    });
+    expect(subscriptions.update).toHaveBeenCalledWith(
+      'sub_test_1',
+      {
+        ...parameters,
+        payment_behavior: 'pending_if_incomplete',
+        metadata: { orbitMonthlyUpgradeId: 'up_1' },
+      },
+      { idempotencyKey: 'orbit:monthly-upgrade:up_1' },
+    );
+    expect(result).toMatchObject({
+      invoice: { status: 'OPEN' },
+      subscription: { hasPendingUpdate: true, providerPriceId: 'price_old' },
+    });
+  });
+
+  it('refunds the full identified payment and cancels the subscription without a final charge', async () => {
+    const { provider, subscriptions, refunds } = setup();
+    jest.spyOn(provider, 'retrieveInvoice').mockResolvedValue({
+      providerCustomerId: 'cus_test_1',
+      providerSubscriptionId: 'sub_test_1',
+      status: 'PAID',
+      paymentEvidence: [
+        { paymentIntentId: 'pi_unit', amountMinor: 14990, currency: 'brl' },
+      ],
+      currency: 'brl',
+      amountPaidMinor: 14990,
+      creditNotesMinor: 0,
+    } as never);
+    refunds.create.mockResolvedValue({ id: 're_unit', status: 'succeeded' });
+    await expect(
+      provider.refundAndCancel({
+        requestId: 'refund_1',
+        providerSubscriptionId: 'sub_test_1',
+        providerCustomerId: 'cus_test_1',
+        invoiceId: 'in_unit',
+        paymentIntentId: 'pi_unit',
+        amountMinor: 14990,
+      }),
+    ).resolves.toEqual({ refundId: 're_unit', status: 'succeeded' });
+    expect(refunds.create).toHaveBeenCalledWith(
+      {
+        payment_intent: 'pi_unit',
+        amount: 14990,
+        reason: 'requested_by_customer',
+        metadata: { orbitRefundRequestId: 'refund_1' },
+      },
+      { idempotencyKey: 'orbit:refund:refund_1' },
+    );
+    expect(subscriptions.cancel).toHaveBeenCalledWith(
+      'sub_test_1',
+      { invoice_now: false, prorate: false },
+      { idempotencyKey: 'orbit:refund-cancel:refund_1' },
+    );
+  });
 
   it('portal geral não oferece troca imediata e reutiliza configuração restrita', async () => {
     const { provider, billingPortal } = setup();

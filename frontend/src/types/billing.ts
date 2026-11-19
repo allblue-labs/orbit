@@ -143,6 +143,7 @@ export interface BillingFinancialAdjustment {
 
 /** Tudo o que a tela precisa, numa leitura. */
 export interface BillingOverview {
+  refundRequestStatus?: "OPEN" | "SUBMITTED" | "REVIEW" | null;
   contractedAmountMinor?: number | null;
   catalog: PlanCatalog;
   /** `null` para organização sem assinatura. Não é erro. */
@@ -185,6 +186,7 @@ export interface ChangePlanInput {
   planCode: string;
   billingInterval?: string;
   acknowledgeTrialEnd?: boolean;
+  acknowledgeImmediateCharge?: boolean;
 }
 
 export interface SubscriptionVersionInput {
@@ -269,7 +271,16 @@ export const SubscriptionAction = {
 export type ChangePlanResult =
   | BillingPortalResult
   | { kind: "TRIAL_STARTED"; endsAt: string }
-  | { kind: "SCHEDULED"; effectiveAt: string };
+  | { kind: "SCHEDULED"; effectiveAt: string }
+  | { kind: "SUPPORT_TICKET"; ticketId: string }
+  | { kind: "UPGRADE_PROCESSING" };
+
+export type CancellationResult = OrganizationSubscription & {
+  cancellation:
+    | { kind: "SCHEDULED" }
+    | { kind: "REFUND_REQUESTED" }
+    | { kind: "SUPPORT_TICKET"; ticketId: string };
+};
 
 export interface CancelSubscriptionInput extends SubscriptionVersionInput {
   acknowledgeDataDeletion: true;

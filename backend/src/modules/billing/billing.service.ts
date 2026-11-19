@@ -43,9 +43,15 @@ import {
 import {
   BILLING_PROVIDER,
   ProviderCheckoutState,
+  ProviderInvoiceStatus,
   type BillingProvider,
   type CheckoutSession,
 } from './billing.types';
+import {
+  BillingPolicyService,
+  canRefundPurchase,
+} from './billing-policy.service';
+import { BillingInterval } from '../subscription-plans/catalog/plan-catalog.types';
 
 @Injectable()
 export class BillingService {
@@ -55,6 +61,7 @@ export class BillingService {
     private readonly subscriptions: SubscriptionService,
     private readonly trials: TrialEligibilityService,
     private readonly plans: CommercialPlanService,
+    private readonly policies: BillingPolicyService,
   ) {}
 
   isEnabled(): boolean {
@@ -109,6 +116,8 @@ export class BillingService {
     /** Somente o comando autenticado de troca autoriza um destino diferente. */
     changePlan?: boolean;
     acknowledgeTrialEnd?: boolean;
+    acknowledgeImmediateCharge?: boolean;
+    requestedBy?: string;
   }): Promise<CheckoutSession> {
     this.assertEnabled();
     const offer = await this.plans.selectable(
@@ -283,30 +292,118 @@ export class BillingService {
     });
   }
 
-  /** Agenda o fim no provedor antes de refletir qualquer estado local. */
+  /** O estorno elegível é registrado antes que o worker escreva no Stripe. */
   async cancelSubscription(
     organizationId: string,
     expectedVersion: number,
     acknowledgeDataDeletion = false,
-  ): Promise<void> {
+    requestedBy?: string,
+  ) {
+    const requestedAt = new Date();
     const assinatura = await this.requireExpected(
       organizationId,
       expectedVersion,
     );
+    if (!acknowledgeDataDeletion) {
+      throw new BillingCommandNotAllowedException(
+        'Confirme o prazo de retenção antes de cancelar.',
+      );
+    }
     if (!assinatura.providerSubscriptionId) {
       await this.subscriptions.cancelAtPeriodEnd(
         organizationId,
         expectedVersion,
         acknowledgeDataDeletion,
       );
-      return;
+      return { kind: 'SCHEDULED' as const };
     }
-
     this.assertEnabled();
     await this.assertProviderTarget(assinatura);
+    const ticket = {
+      organizationId,
+      subscriptionId: assinatura.id,
+      requestedBy,
+    };
+    if (assinatura.status !== SubscriptionStatus.TRIALING) {
+      const previous = await this.policies.refundRequest(assinatura.id);
+      if (previous && previous.status !== 'REVIEW')
+        return { kind: 'REFUND_REQUESTED' as const };
+      if (previous?.status === 'REVIEW')
+        return this.policies.ticket({
+          ...ticket,
+          kind: 'REFUND_REVIEW',
+          reference: previous.invoiceId,
+        });
+      const invoiceId = await this.policies.purchaseInvoiceId(
+        assinatura.id,
+        assinatura.billingAnchorAt,
+      );
+      if (invoiceId && this.provider.refundAndCancel) {
+        const invoice = await this.provider.retrieveInvoice(invoiceId);
+        const payment = invoice.paymentEvidence?.[0];
+        if (invoice.paidAt && canRefundPurchase(invoice.paidAt, requestedAt)) {
+          if (
+            invoice.providerCustomerId !== assinatura.providerCustomerId ||
+            invoice.providerSubscriptionId !==
+              assinatura.providerSubscriptionId ||
+            invoice.status !== ProviderInvoiceStatus.PAID ||
+            invoice.amountRemainingMinor !== 0 ||
+            invoice.creditNotesMinor !== 0 ||
+            !invoice.subscriptionLines?.some(
+              (line) =>
+                line.subscriptionId === assinatura.providerSubscriptionId &&
+                line.priceId === assinatura.providerPriceId &&
+                line.periodStart.getTime() ===
+                  assinatura.billingAnchorAt.getTime(),
+            ) ||
+            invoice.paymentEvidence?.length !== 1 ||
+            !payment ||
+            payment.amountMinor !== invoice.amountPaidMinor ||
+            payment.currency !== invoice.currency
+          ) {
+            return this.policies.ticket({
+              ...ticket,
+              kind: 'REFUND_REVIEW',
+              reference: invoiceId,
+            });
+          }
+          await this.policies.reserveRefund({
+            ...ticket,
+            subscriptionVersion: expectedVersion,
+            invoiceId,
+            paymentIntentId: payment.paymentIntentId,
+            amountMinor: payment.amountMinor,
+            requestedAt,
+          });
+          return { kind: 'REFUND_REQUESTED' as const };
+        }
+      }
+      // Preserva o acesso comprado, impede a próxima cobrança e registra a análise.
+      return this.policies.locked(assinatura.id, expectedVersion, async () => {
+        const result = await this.policies.ticket({
+          ...ticket,
+          kind: 'CANCELLATION',
+          reference: invoiceId ?? '',
+        });
+        await this.scheduleCancellation(assinatura, acknowledgeDataDeletion);
+        return result;
+      });
+    }
+    await this.policies.locked(assinatura.id, expectedVersion, () =>
+      this.scheduleCancellation(assinatura, acknowledgeDataDeletion),
+    );
+    return { kind: 'SCHEDULED' as const };
+  }
+
+  private async scheduleCancellation(
+    assinatura: Awaited<ReturnType<SubscriptionService['requireCurrent']>>,
+    acknowledgeDataDeletion: boolean,
+  ): Promise<void> {
+    const { organizationId, version: expectedVersion } = assinatura;
+    if (assinatura.cancelAtPeriodEnd) return;
     if (assinatura.pendingPlanCode) {
       const released = await this.provider.cancelScheduledPlanChange({
-        providerSubscriptionId: assinatura.providerSubscriptionId,
+        providerSubscriptionId: assinatura.providerSubscriptionId!,
         organizationId,
         subscriptionId: assinatura.id,
         idempotencyKey: this.chave(
@@ -317,7 +414,7 @@ export class BillingService {
       this.assertProviderOwnership(assinatura, released);
     }
     const provedor = await this.provider.setCancelAtPeriodEnd({
-      providerSubscriptionId: assinatura.providerSubscriptionId,
+      providerSubscriptionId: assinatura.providerSubscriptionId!,
       cancelAtPeriodEnd: true,
       idempotencyKey: this.chave(
         'cancel-subscription',
@@ -358,34 +455,36 @@ export class BillingService {
       return;
     }
 
-    this.assertEnabled();
-    await this.assertProviderTarget(assinatura);
-    const provedor = await this.provider.setCancelAtPeriodEnd({
-      providerSubscriptionId: assinatura.providerSubscriptionId,
-      cancelAtPeriodEnd: false,
-      idempotencyKey: this.chave(
-        'keep-subscription',
-        `${assinatura.id}:${expectedVersion}`,
-      ),
-    });
-    this.assertProviderOwnership(assinatura, provedor);
-    if (provedor.cancelAtPeriodEnd) {
-      throw new BillingCommandNotAllowedException(
-        'provider kept cancellation scheduled',
+    await this.policies.locked(assinatura.id, expectedVersion, async () => {
+      this.assertEnabled();
+      await this.assertProviderTarget(assinatura);
+      const provedor = await this.provider.setCancelAtPeriodEnd({
+        providerSubscriptionId: assinatura.providerSubscriptionId!,
+        cancelAtPeriodEnd: false,
+        idempotencyKey: this.chave(
+          'keep-subscription',
+          `${assinatura.id}:${expectedVersion}`,
+        ),
+      });
+      this.assertProviderOwnership(assinatura, provedor);
+      if (provedor.cancelAtPeriodEnd) {
+        throw new BillingCommandNotAllowedException(
+          'provider kept cancellation scheduled',
+        );
+      }
+      await this.subscriptions.applyProviderCancellation(
+        organizationId,
+        expectedVersion,
+        false,
       );
-    }
-    await this.subscriptions.applyProviderCancellation(
-      organizationId,
-      expectedVersion,
-      false,
-    );
+    });
   }
 
   /**
    * Troca comercial com autoridade financeira externa.
    *
-   * Teste inédito começa localmente; planos pagos são agendados na renovação.
    * A confirmação hospedada é usada para contratar ou encerrar uma avaliação.
+   * Contratos pagos aplicam a política de upgrade, renovação ou análise.
    */
   async changeSubscriptionPlan(input: {
     organizationId: string;
@@ -394,10 +493,14 @@ export class BillingService {
     expectedCatalogVersion?: number;
     billingInterval?: BillingIntervalType;
     acknowledgeTrialEnd?: boolean;
+    acknowledgeImmediateCharge?: boolean;
+    requestedBy?: string;
   }): Promise<
     | { url: string }
     | { kind: 'TRIAL_STARTED'; endsAt: string }
     | { kind: 'SCHEDULED'; effectiveAt: string }
+    | { kind: 'SUPPORT_TICKET'; ticketId: string }
+    | { kind: 'UPGRADE_PROCESSING' }
   > {
     this.assertEnabled();
     const assinatura = await this.requireExpected(
@@ -468,7 +571,26 @@ export class BillingService {
         'trial termination must be acknowledged',
       );
     }
+    const sendToSupport = () =>
+      this.policies.ticket({
+        organizationId: input.organizationId,
+        subscriptionId: assinatura.id,
+        requestedBy: input.requestedBy,
+        kind: 'PLAN_CHANGE',
+        targetPlanCode: input.planCode,
+        targetInterval,
+        reference: `${input.planCode}:${targetInterval}`,
+      });
+    if (
+      assinatura.effectiveStatus === SubscriptionStatus.ACTIVE &&
+      (assinatura.billingInterval !== BillingInterval.MONTHLY ||
+        targetInterval !== BillingInterval.MONTHLY)
+    )
+      return sendToSupport();
+
     if (!assinatura.providerSubscriptionId) {
+      if (assinatura.effectiveStatus === SubscriptionStatus.ACTIVE)
+        return sendToSupport();
       return this.createCheckoutSession({
         ...input,
         billingInterval: targetInterval,
@@ -486,36 +608,132 @@ export class BillingService {
         throw new BillingCommandNotAllowedException(
           'resume renewal before scheduling a change',
         );
-      const change = await this.provider.changePlan({
-        providerSubscriptionId: assinatura.providerSubscriptionId,
-        organizationId: input.organizationId,
-        subscriptionId: assinatura.id,
-        planCode: input.planCode,
-        billingInterval: targetInterval,
-        priceId,
-        timing: 'PERIOD_END',
-        idempotencyKey: this.chave(
-          'schedule-plan-change',
-          `${assinatura.id}:${input.expectedVersion}:${input.planCode}:${targetInterval}`,
-        ),
-      });
-      this.assertProviderOwnership(assinatura, change.subscription);
-      if (!change.scheduled || !change.effectiveAt)
-        throw new BillingCommandNotAllowedException(
-          'provider did not schedule the change',
+      const currentPriceId = assinatura.providerPriceId;
+      const currentPrice = currentPriceId
+        ? await this.plans.stripePrice(currentPriceId)
+        : null;
+      const nextPrice = offer.prices[BillingInterval.MONTHLY];
+      if (!currentPrice || !currentPriceId || !nextPrice)
+        return sendToSupport();
+      if (nextPrice.amountMinor > currentPrice.amountMinor) {
+        if (input.acknowledgeImmediateCharge !== true)
+          throw new BillingCommandNotAllowedException(
+            'Confirme a cobrança proporcional e o início de um novo ciclo.',
+          );
+        if (assinatura.pendingPlanCode)
+          throw new BillingCommandNotAllowedException(
+            'Desfaça a troca agendada antes de confirmar um upgrade.',
+          );
+        if (!this.provider.beginMonthlyUpgrade) return sendToSupport();
+        const existing = await this.policies.pendingUpgrade(assinatura.id);
+        if (existing?.invoiceId) {
+          const invoice = await this.provider.retrieveInvoice(
+            existing.invoiceId,
+          );
+          if (
+            invoice.status === ProviderInvoiceStatus.VOID ||
+            invoice.status === ProviderInvoiceStatus.UNCOLLECTIBLE
+          )
+            await this.policies.finishUpgrade(existing.id, 'EXPIRED');
+          else if (
+            existing.priceId === priceId &&
+            existing.catalogVersion === offer.version
+          ) {
+            if (
+              invoice.status === ProviderInvoiceStatus.OPEN &&
+              invoice.hostedInvoiceUrl
+            )
+              return { url: invoice.hostedInvoiceUrl };
+            return { kind: 'UPGRADE_PROCESSING' };
+          }
+        }
+        const request = await this.policies.reserveUpgrade({
+          organizationId: input.organizationId,
+          subscriptionId: assinatura.id,
+          subscriptionVersion: input.expectedVersion,
+          requestedBy: input.requestedBy,
+          previousPeriodStart: assinatura.currentPeriodStart,
+          previousPeriodEnd: assinatura.currentPeriodEnd,
+          priceId,
+          catalogVersion: offer.version,
+          entitlements: snapshotOf(offer) as unknown as Prisma.InputJsonValue,
+        });
+        const { invoice, subscription } = await this.provider
+          .beginMonthlyUpgrade({
+            requestId: request.id,
+            requestedAt: request.createdAt,
+            providerSubscriptionId: assinatura.providerSubscriptionId,
+            providerCustomerId: assinatura.providerCustomerId!,
+            currentPriceId,
+            currentPeriodStart: request.previousPeriodStart,
+            currentPeriodEnd: request.previousPeriodEnd,
+            priceId,
+            planCode: input.planCode,
+            organizationId: input.organizationId,
+            subscriptionId: assinatura.id,
+          })
+          .catch(async (error: unknown) => {
+            if (error instanceof BillingCommandNotAllowedException)
+              await this.policies.finishUpgrade(request.id, 'EXPIRED');
+            throw error;
+          });
+        this.assertProviderOwnership(assinatura, subscription);
+        if (
+          invoice.providerCustomerId !== assinatura.providerCustomerId ||
+          invoice.providerSubscriptionId !==
+            assinatura.providerSubscriptionId ||
+          invoice.billingReason !== 'subscription_update'
+        )
+          throw new BillingCommandNotAllowedException(
+            'Fatura da troca não reconhecida.',
+          );
+        await this.policies.attachUpgradeInvoice(
+          request.id,
+          invoice.providerInvoiceId,
         );
-      await this.subscriptions.scheduleProviderPlanChange(
-        input.organizationId,
+        if (
+          invoice.status === ProviderInvoiceStatus.OPEN &&
+          invoice.hostedInvoiceUrl
+        )
+          return { url: invoice.hostedInvoiceUrl };
+        return { kind: 'UPGRADE_PROCESSING' };
+      }
+      return this.policies.locked(
+        assinatura.id,
         input.expectedVersion,
-        input.planCode,
-        targetInterval,
-        change.effectiveAt,
-        offer,
+        async () => {
+          const change = await this.provider.changePlan({
+            providerSubscriptionId: assinatura.providerSubscriptionId!,
+            organizationId: input.organizationId,
+            subscriptionId: assinatura.id,
+            planCode: input.planCode,
+            billingInterval: targetInterval,
+            priceId,
+            timing: 'PERIOD_END',
+            idempotencyKey: this.chave(
+              'schedule-plan-change',
+              `${assinatura.id}:${input.expectedVersion}:${input.planCode}:${targetInterval}`,
+            ),
+          });
+          this.assertProviderOwnership(assinatura, change.subscription);
+          if (!change.scheduled || !change.effectiveAt)
+            throw new BillingCommandNotAllowedException(
+              'provider did not schedule the change',
+            );
+          await this.subscriptions.scheduleProviderPlanChange(
+            input.organizationId,
+            input.expectedVersion,
+            input.planCode,
+            targetInterval,
+            change.effectiveAt,
+            offer,
+          );
+          return {
+            kind: 'SCHEDULED' as const,
+            effectiveAt: change.effectiveAt.toISOString(),
+          };
+        },
       );
-      return {
-        kind: 'SCHEDULED',
-        effectiveAt: change.effectiveAt.toISOString(),
-      };
     }
     // Apenas abre a confirmação hospedada. O webhook verifica o pagamento
     // antes de aplicar qualquer mudança aos direitos da organização.
@@ -547,22 +765,24 @@ export class BillingService {
       return;
     }
 
-    this.assertEnabled();
-    await this.assertProviderTarget(assinatura);
-    const provedor = await this.provider.cancelScheduledPlanChange({
-      providerSubscriptionId: assinatura.providerSubscriptionId,
-      organizationId,
-      subscriptionId: assinatura.id,
-      idempotencyKey: this.chave(
-        'cancel-plan-change',
-        `${assinatura.id}:${expectedVersion}`,
-      ),
+    await this.policies.locked(assinatura.id, expectedVersion, async () => {
+      this.assertEnabled();
+      await this.assertProviderTarget(assinatura);
+      const provedor = await this.provider.cancelScheduledPlanChange({
+        providerSubscriptionId: assinatura.providerSubscriptionId!,
+        organizationId,
+        subscriptionId: assinatura.id,
+        idempotencyKey: this.chave(
+          'cancel-plan-change',
+          `${assinatura.id}:${expectedVersion}`,
+        ),
+      });
+      this.assertProviderOwnership(assinatura, provedor);
+      await this.subscriptions.cancelScheduledChange(
+        organizationId,
+        expectedVersion,
+      );
     });
-    this.assertProviderOwnership(assinatura, provedor);
-    await this.subscriptions.cancelScheduledChange(
-      organizationId,
-      expectedVersion,
-    );
   }
 
   /* ---------------------------------------------------------------- */

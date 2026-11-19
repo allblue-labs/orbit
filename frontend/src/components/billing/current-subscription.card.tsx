@@ -310,7 +310,7 @@ export function CurrentSubscriptionCard({
               onClick={onCancelRenewal}
               disabled={commandPending}
             >
-              Cancelar renovação
+              Cancelar assinatura
             </Button>
           ) : null}
 

@@ -37,12 +37,13 @@ export class SubscriptionBillingController {
     @Body() input: CancelSubscriptionDto,
   ) {
     const organizationId = this.organizationId(request);
-    await this.billing.cancelSubscription(
+    const result = await this.billing.cancelSubscription(
       organizationId,
       input.expectedVersion,
       input.acknowledgeDataDeletion === true,
+      request.identity!.id,
     );
-    return this.details(organizationId);
+    return { ...(await this.details(organizationId)), cancellation: result };
   }
 
   @Post('keep')
@@ -70,6 +71,8 @@ export class SubscriptionBillingController {
       expectedCatalogVersion: input.expectedCatalogVersion,
       billingInterval: input.billingInterval,
       acknowledgeTrialEnd: input.acknowledgeTrialEnd,
+      acknowledgeImmediateCharge: input.acknowledgeImmediateCharge,
+      requestedBy: request.identity!.id,
     });
   }
 
