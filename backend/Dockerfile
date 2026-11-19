@@ -18,7 +18,8 @@ COPY src ./src
 COPY assets ./assets
 
 RUN npx prisma generate
-RUN npm run build
+# Type checking the generated Prisma client needs more than Node's default heap in CI.
+RUN NODE_OPTIONS=--max-old-space-size=4096 npm run build
 
 FROM builder AS migrator
 
