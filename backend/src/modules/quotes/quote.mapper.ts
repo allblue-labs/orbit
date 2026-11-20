@@ -103,6 +103,14 @@ export class QuoteMapper {
             title: source.operation.title,
           }
         : null,
+      document: source.issuedDocument
+        ? {
+            executionId: source.issuedDocument.id,
+            code: source.issuedDocument.code,
+            title: source.issuedDocument.title,
+            renderStatus: source.issuedDocument.renderStatus,
+          }
+        : null,
       convertedAt: source.convertedAt?.toISOString() ?? null,
       sentAt: source.sentAt?.toISOString() ?? null,
       sentBy: source.sentBy

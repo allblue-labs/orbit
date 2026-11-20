@@ -133,6 +133,19 @@ interface OperationSource {
     completedAt: DateValue | null;
     updatedAt: DateValue;
   }>;
+  /**
+   * Opcional na fonte: nem toda consulta que passa por este mapper inclui os
+   * documentos (as projeções internas de agenda e comissão não precisam), e
+   * exigir a relação em todas para publicar um campo de lista seria custo sem
+   * resposta. Ausente vira `document: null`.
+   */
+  artifactExecutions?: ReadonlyArray<{
+    id: string;
+    code: string;
+    title: string;
+    renderStatus: string;
+    snapshot: { artifactType: string };
+  }>;
 }
 
 interface ActorContext {
@@ -250,8 +263,25 @@ export class OperationReadModelMapper {
         completedAt: this.nullableDate(checklist.completedAt),
         updatedAt: this.date(checklist.updatedAt),
       })),
+      document: this.document(source),
       allowedActions: this.allowedActions(source, actor),
     };
+  }
+
+  /** O documento emitido mais recente, no recorte que a linha precisa. */
+  private document(source: OperationSource) {
+    const emitido = source.artifactExecutions?.find(
+      (execution) => execution.renderStatus === 'READY',
+    );
+    return emitido
+      ? {
+          executionId: emitido.id,
+          code: emitido.code,
+          title: emitido.title,
+          renderStatus: emitido.renderStatus,
+          artifactType: emitido.snapshot.artifactType,
+        }
+      : null;
   }
 
   private allowedActions(

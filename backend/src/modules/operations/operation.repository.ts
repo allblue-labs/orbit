@@ -98,6 +98,26 @@ const operationInclude = {
     },
     orderBy: { createdAt: 'desc' },
   },
+  /**
+   * O documento emitido mais recente da operação — a OS, o RVT, o PMOC.
+   *
+   * Só o emitido (`READY`): é o que se baixa. Vem na listagem para que cada
+   * linha ofereça "baixar" e "compartilhar" sem uma consulta por operação — a
+   * página da operação busca os documentos por `?operationId=`, e repetir isso
+   * em cada linha de uma lista de vinte faria vinte requisições.
+   */
+  artifactExecutions: {
+    where: { deletedAt: null, renderStatus: 'READY' },
+    orderBy: { updatedAt: 'desc' },
+    take: 1,
+    select: {
+      id: true,
+      code: true,
+      title: true,
+      renderStatus: true,
+      snapshot: { select: { artifactType: true } },
+    },
+  },
 } satisfies Prisma.OperationInclude;
 
 @Injectable()

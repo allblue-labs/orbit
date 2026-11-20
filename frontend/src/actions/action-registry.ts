@@ -1108,9 +1108,20 @@ const DEFINITIONS: readonly ActionDefinition[] = [
     label: "Compartilhar documento",
     icon: Share2,
     category: "document",
-    available: false,
-    unavailableReason:
-      "Compartilhar por link público ou e-mail ainda não está disponível. O acesso ao documento é pessoal e temporário.",
+    /*
+     * Compartilha o **arquivo**, não um link.
+     *
+     * Estava indisponível porque não existe link público: a URL do documento é
+     * assinada, pessoal e curta. Isso continua verdade — e é por isso que o que
+     * sai é o PDF, pela folha de compartilhamento do sistema (WhatsApp, e-mail).
+     * Nenhum link sai do Orbit.
+     *
+     * A autoridade é a mesma de baixar: quem pode baixar o arquivo já pode
+     * enviá-lo a quem quiser, e exigir outra permissão seria fingir um controle
+     * que o download já não tem.
+     */
+    permission: "artifact_manifests.read",
+    capability: "artifact_manifests.read",
   }),
 ];
 

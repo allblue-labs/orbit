@@ -88,6 +88,13 @@ export interface QuoteTransitionsReadModel {
   canConvert: boolean;
 }
 
+export interface QuoteDocumentReadModel {
+  executionId: string;
+  code: string;
+  title: string;
+  renderStatus: string;
+}
+
 export interface QuoteReadModel {
   id: string;
   /** Sequencial da organização; é por ele que o cliente se refere à proposta. */
@@ -137,6 +144,13 @@ export interface QuoteReadModel {
   transitions: QuoteTransitionsReadModel;
   /** Operação gerada pela conversão. `null` enquanto não converteu. */
   operation: { id: string; code: string; title: string } | null;
+  /**
+   * O documento oficial já emitido, para baixar ou compartilhar.
+   *
+   * `null` enquanto não foi emitido — e também nas respostas de comandos, que
+   * não releem o documento; quem precisa dele relê a proposta.
+   */
+  document: QuoteDocumentReadModel | null;
   convertedAt: string | null;
   sentAt: string | null;
   sentBy: QuoteActorReadModel | null;

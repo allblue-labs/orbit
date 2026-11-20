@@ -75,6 +75,7 @@ import { quotesEmptyCopy } from "./quotes-empty-state";
 import { QuoteDetailSheet } from "./quote-detail.sheet";
 import { QuoteWizardDialog } from "./wizard/quote-wizard.dialog";
 import { QuoteRowActions } from "./quote-row-actions";
+import { IssuedDocumentActions } from "@/documents/issued-document-actions";
 
 /**
  * As seis situações, na ordem do ciclo de vida da proposta.
@@ -357,7 +358,19 @@ export function QuotesList({
                       {quote.responsible?.displayName ?? "—"}
                     </TableCell>
                     <TableCell>
-                      <QuoteRowActions quote={quote} />
+                      <div className="flex items-center justify-end gap-1">
+                        {/* A proposta emitida, para baixar ou mandar ao
+                            cliente sem abrir o orçamento. */}
+                        {quote.document ? (
+                          <IssuedDocumentActions
+                            executionId={quote.document.executionId}
+                            renderStatus={quote.document.renderStatus}
+                            code={quote.document.code}
+                            title={quote.title}
+                          />
+                        ) : null}
+                        <QuoteRowActions quote={quote} />
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
