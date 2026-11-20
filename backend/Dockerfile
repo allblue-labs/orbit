@@ -53,8 +53,13 @@ ENV ORBIT_BUILD_TIME=$ORBIT_BUILD_TIME
 # com o papel restrito `orbit_app`, sem BYPASSRLS — por decisão da PR-26.6, que
 # `DATABASE_ENFORCE_RESTRICTED_ROLE` transforma em erro de inicialização. A
 # credencial administrativa existe neste passo, e só nele.
+#
+# Os papéis de sistema de cada organização são acompanhados ao catálogo pelo
+# mesmo motivo: eles são copiados quando a organização nasce, e sem este passo
+# uma permissão nova valia só para quem se cadastrasse depois. Foi o que deixou
+# o técnico de campo das organizações antigas sem `pmoc.execute`. Só acrescenta.
 USER node
-CMD ["sh", "-c", "DATABASE_ROLE_BOOTSTRAP_ONLY=true node dist/src/scripts/provision-database-roles.js && ./node_modules/.bin/prisma migrate deploy && node dist/src/scripts/provision-database-roles.js && node dist/src/scripts/seed-plan-catalog.js && node dist/src/scripts/seed-artifact-templates.js"]
+CMD ["sh", "-c", "DATABASE_ROLE_BOOTSTRAP_ONLY=true node dist/src/scripts/provision-database-roles.js && ./node_modules/.bin/prisma migrate deploy && node dist/src/scripts/provision-database-roles.js && node dist/src/scripts/seed-plan-catalog.js && node dist/src/scripts/seed-artifact-templates.js && node dist/src/scripts/reconcile-team-roles.js"]
 
 FROM builder AS production-dependencies
 

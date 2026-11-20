@@ -37,10 +37,13 @@ const workItemKindLabels = <MobileWorkItemKind, FieldLabel>{
 /// aparelho.
 const dueStateLabels = <MobileDueState, FieldLabel>{
   MobileDueState.inProgress: FieldLabel('Em andamento'),
-  MobileDueState.overdue: FieldLabel('Atrasado'),
+  /* "Não atendido", e não "Atrasado": é como quem está em campo chama o que
+     passou da data sem ser feito — e é o nome do filtro da fila. */
+  MobileDueState.overdue: FieldLabel('Não atendido'),
   MobileDueState.dueToday: FieldLabel('Hoje'),
   MobileDueState.upcoming: FieldLabel('Programado'),
   MobileDueState.unscheduled: FieldLabel('Sem data'),
+  MobileDueState.completed: FieldLabel('Concluído'),
 };
 
 /// As ações que o servidor pode publicar.

@@ -21,7 +21,7 @@ import '../../../core/storage/read_cache.dart';
 import '../../operations/data/operations_repository.dart' show CachedResult;
 
 /// Recortes que a fila aceita — os mesmos do `MobileWorkQueueQueryDto`.
-enum WorkQueueView { all, today, overdue, inProgress, upcoming }
+enum WorkQueueView { all, today, overdue, inProgress, upcoming, completed }
 
 const _viewCodes = <WorkQueueView, String>{
   WorkQueueView.all: 'ALL',
@@ -29,6 +29,7 @@ const _viewCodes = <WorkQueueView, String>{
   WorkQueueView.overdue: 'OVERDUE',
   WorkQueueView.inProgress: 'IN_PROGRESS',
   WorkQueueView.upcoming: 'UPCOMING',
+  WorkQueueView.completed: 'COMPLETED',
 };
 
 const _kindCodes = <MobileWorkItemKind, String>{

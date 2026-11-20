@@ -53,6 +53,7 @@ import '../../notifications/domain/deep_link.dart';
 import '../../owner/data/owner_repository.dart';
 import '../../profile/presentation/my_avatar.dart';
 import '../application/field_providers.dart';
+import '../../pmoc/presentation/pmoc_entry.dart';
 import 'widgets/work_item_row.dart';
 
 class FieldDashboardScreen extends ConsumerStatefulWidget {
@@ -822,26 +823,53 @@ class _RecentWorkState extends State<_RecentWork> {
     );
   }
 
+  /// Os concluídos, no mesmo desenho dos abertos.
+  ///
+  /// ## O que estava quebrado
+  ///
+  /// A coluna da esquerda tem 48 pixels e foi feita para "09:30". Esta aba
+  /// mandava para ela "quinta-feira, 20 de novembro" — a data quebrava em quatro
+  /// linhas, empurrava o título, e cada cartão saía com uma altura diferente.
+  ///
+  /// Agora a coluna recebe o dia curto ("20/11"), que cabe onde cabe um
+  /// horário, e a hora vai para a linha de contexto, junto com o código.
+  ///
+  /// ## PMOC volta para a tela de PMOC
+  ///
+  /// O PMOC concluído aparece aqui como a operação atrás da execução, e o toque
+  /// o abria na tela genérica de operação — sem o roteiro do plano e sem o
+  /// relatório do equipamento. Com o endereço do PMOC na resposta, ele volta
+  /// para onde foi atendido.
   Widget _listaDeConcluidos(List<MobileCompletedWorkContract> itens) {
     if (itens.isEmpty) return _vazio('Nenhum atendimento concluído ainda.');
+    final formato = OrbitFormat.of(context);
     return _cartoes(
       children: [
         for (final item in itens)
           OrbitListRow(
             key: ValueKey(item.id),
             padding: _rowPadding,
-            leading: OrbitFormat.of(context).weekdayAndDay(item.completedAt),
+            leading: formato.dayShortOf(item.completedAt),
+            tone: OrbitTone.success,
             title: item.customerName ?? item.title,
             subtitle: item.customerName == null ? null : item.title,
             detail: [
               item.code,
               if (item.equipmentName != null) item.equipmentName!,
+              'concluído às ${formato.hourOf(item.completedAt)}',
             ].join(' · '),
             trailing: const OrbitStatusBadge(
               label: 'Concluído',
               tone: OrbitTone.success,
             ),
-            onTap: () => context.push(OrbitRoutes.operationExecution(item.id)),
+            onTap: () {
+              if (item.pmoc case final PmocAddressContract endereco
+                  when endereco.isComplete) {
+                enterPmocAttendance(context, endereco, start: false);
+                return;
+              }
+              context.push(OrbitRoutes.operationExecution(item.id));
+            },
           ),
       ],
     );

@@ -217,6 +217,24 @@ export const cycleStatus = (value: string | null | undefined) =>
   lookup(CYCLE_STATUS, value);
 export const equipmentExecutionStatus = (value: string | null | undefined) =>
   lookup(EQUIPMENT_EXECUTION_STATUS, value);
+
+/**
+ * A situação de um equipamento **no ciclo** — inclusive antes de existir execução.
+ *
+ * A linha do ciclo começa em `NOT_STARTED`, que não é estado de execução (não há
+ * execução ainda). Por isso o mapa acima não o conhecia, e a tela o desenhava à
+ * parte, como texto cinza solto, enquanto os outros três estados viravam selo.
+ * Quem olhava a lista lia três selos e uma frase, e a frase parecia nota de
+ * rodapé — justamente no equipamento que ainda falta atender.
+ */
+export const CYCLE_EQUIPMENT_STATUS: Readonly<Record<string, PmocPresentation>> =
+  {
+    NOT_STARTED: { label: "A executar", tone: "warning" },
+    ...EQUIPMENT_EXECUTION_STATUS,
+  };
+
+export const cycleEquipmentStatus = (value: string | null | undefined) =>
+  lookup(CYCLE_EQUIPMENT_STATUS, value);
 export const documentStatus = (value: string | null | undefined) =>
   lookup(DOCUMENT_STATUS, value);
 

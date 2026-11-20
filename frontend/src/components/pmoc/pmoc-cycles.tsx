@@ -30,7 +30,7 @@ import { CalendarClock, Package, Play, UserRoundCheck } from "lucide-react";
 import {
   CycleStatusBadge,
   DocumentStatusBadge,
-  ExecutionStatusBadge,
+  CycleEquipmentStatusBadge,
 } from "@/components/pmoc/pmoc-presentation";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -278,11 +278,7 @@ function EquipmentRow({
               row.equipment.category}
           </p>
         </div>
-        {row.status === "NOT_STARTED" ? (
-          <span className="text-xs text-muted-foreground">Não iniciada</span>
-        ) : (
-          <ExecutionStatusBadge status={row.status} />
-        )}
+        <CycleEquipmentStatusBadge status={row.status} />
       </div>
 
       {row.schedule ? (
@@ -332,7 +328,7 @@ function EquipmentRow({
             {row.execution.auxiliaryTechnicians.length > 0 ? (
               <p className="min-w-0 truncate">
                 <span className="text-muted-foreground">
-                  auxiliares técnico:{" "}
+                  Auxiliares técnicos:{" "}
                 </span>
                 {row.execution.auxiliaryTechnicians
                   .map((person) => person.displayName)

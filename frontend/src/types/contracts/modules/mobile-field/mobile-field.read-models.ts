@@ -5,8 +5,21 @@
  */
 
 export type MobileWorkItemKind = 'SERVICE_OPERATION' | 'PMOC' | 'RVT';
+/**
+ * Onde o atendimento está, para quem o lista.
+ *
+ * `COMPLETED` não existia. O cálculo olhava só a data, e um atendimento já
+ * concluído com data passada saía como `OVERDUE` — "não atendido" —, com data de
+ * hoje como `DUE_TODAY`, e com data futura como `UPCOMING`. O mesmo PMOC aparecia
+ * como pendente, depois como próximo, e só na home como feito.
+ */
 export type MobileDueState =
-  'IN_PROGRESS' | 'OVERDUE' | 'DUE_TODAY' | 'UPCOMING' | 'UNSCHEDULED';
+  | 'IN_PROGRESS'
+  | 'OVERDUE'
+  | 'DUE_TODAY'
+  | 'UPCOMING'
+  | 'UNSCHEDULED'
+  | 'COMPLETED';
 export type MobileFieldAction =
   | 'VIEW'
   | 'OPEN_ROUTE'
@@ -141,6 +154,14 @@ export interface MobileWorkItemReadModel {
   timezone: string;
   dueState: MobileDueState;
   operationalStatus: string;
+  /**
+   * Quando foi concluído. `null` enquanto não foi.
+   *
+   * Na lista de concluídos é a data que importa — a agendada diz quando
+   * deveria ter sido, e quem procura um atendimento feito lembra de quando o
+   * fez.
+   */
+  completedAt: string | null;
   priority: string | null;
   responsibleFieldTechnician: MobilePartySummaryReadModel | null;
   auxiliaryTechnicians: readonly MobilePartySummaryReadModel[];
@@ -229,6 +250,15 @@ export interface MobileCompletedWorkReadModel {
   customerName: string | null;
   equipmentName: string | null;
   completedAt: string;
+  /**
+   * Onde reabrir um PMOC concluído. `null` para os outros atendimentos.
+   *
+   * O PMOC concluído aparece aqui como a operação que mora atrás da execução, e o
+   * aplicativo o abria na tela genérica de operação — sem o roteiro do plano e
+   * sem o relatório do equipamento. A tela de PMOC é endereçada por plano, ciclo
+   * e equipamento, e eles não estavam na resposta.
+   */
+  pmoc: { planId: string; cycleId: string; assetId: string } | null;
 }
 
 export interface MobileFieldHomeReadModel {

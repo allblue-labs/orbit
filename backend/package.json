@@ -48,7 +48,9 @@
     "integrity:check": "node dist/src/scripts/check-relational-integrity.js",
     "integrity:generate": "ts-node scripts/generate-relational-integrity.ts",
     "storage:retention:check": "node dist/src/scripts/check-storage-retention.js",
-    "email:preview": "node dist/src/scripts/send-email-preview.js"
+    "email:preview": "node dist/src/scripts/send-email-preview.js",
+    "reconcile:team-roles": "node dist/src/scripts/reconcile-team-roles.js",
+    "reconcile:team-roles:dev": "ts-node src/scripts/reconcile-team-roles.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1167.0",

@@ -152,6 +152,13 @@ export class MobileFieldService {
           operacao.customer?.tradeName ?? operacao.customer?.legalName ?? null,
         equipmentName: operacao.assets[0]?.asset.name ?? null,
         completedAt: operacao.completedAt!.toISOString(),
+        pmoc: operacao.pmocEquipmentExecution
+          ? {
+              planId: operacao.pmocEquipmentExecution.planId,
+              cycleId: operacao.pmocEquipmentExecution.cycleId,
+              assetId: operacao.pmocEquipmentExecution.assetId,
+            }
+          : null,
       })),
       recentDocuments: documentos.map((documento) =>
         this.toDocument(documento),
@@ -517,6 +524,13 @@ export class MobileFieldService {
       customerId: query.customerId,
       from: query.from ? new Date(`${query.from}T00:00:00.000Z`) : undefined,
       to: query.to ? new Date(`${query.to}T23:59:59.999Z`) : undefined,
+      /*
+       * "Tudo" passa a incluir o que foi concluído — no fim da lista — e
+       * "Concluídos" é só isso. Os outros recortes não pedem: um atrasado
+       * nunca é concluído, e trazer concluídos para descartá-los seria custo
+       * sem resposta.
+       */
+      includeCompleted: view === 'ALL' || view === 'COMPLETED',
     };
 
     /**
@@ -717,6 +731,7 @@ export class MobileFieldService {
           unit.timezone,
         ),
         operationalStatus: operation.status,
+        completedAt: operation.completedAt?.toISOString() ?? null,
         priority: operation.priority,
         responsibleFieldTechnician: operation.responsibleFieldTechnician
           ? this.party(operation.responsibleFieldTechnician)
@@ -788,7 +803,15 @@ export class MobileFieldService {
           sourceId: cycle.id,
           schedulingId: cycle.schedulingEventId,
           title: `${cycle.plan.name} — ${coverage.asset.name}`,
-          description: `Ciclo PMOC ${cycle.plan.code}`,
+          /*
+           * O período do ciclo, por extenso.
+           *
+           * O título é plano e equipamento — o mesmo em todo ciclo. Quando um
+           * ciclo fecha, o seguinte abre para o mesmo aparelho, e o técnico via
+           * dois itens com o mesmo nome, um concluído e outro "próximo", sem
+           * nada dizendo qual era de qual mês.
+           */
+          description: `Manutenção de ${periodoDoCiclo(cycle.dueOn)} · ${cycle.plan.code}`,
           businessUnit: this.party(unit),
           customer: this.customer(customers.get(cycle.plan.customerId)),
           location:
@@ -813,6 +836,7 @@ export class MobileFieldService {
             true,
           ),
           operationalStatus: execution?.status ?? cycle.status,
+          completedAt: execution?.completedAt?.toISOString() ?? null,
           priority: null,
           responsibleFieldTechnician: execution?.responsibleFieldTechnician
             ? this.party(execution.responsibleFieldTechnician)
@@ -823,9 +847,13 @@ export class MobileFieldService {
             execution?.operation?.auxiliaryTechnicians ?? []
           ).map((value: any) => this.party(value.user)),
           equipmentSummary: [this.equipment(coverage.asset)],
-          artifacts: cycle.artifactExecution
-            ? [this.artifact(cycle.artifactExecution)]
-            : [],
+          /* O documento do **equipamento**: o PMOC é emitido por aparelho, e
+             o do ciclo quase nunca existe. */
+          artifacts: execution?.artifactExecution
+            ? [this.artifact(execution.artifactExecution)]
+            : cycle.artifactExecution
+              ? [this.artifact(cycle.artifactExecution)]
+              : [],
           allowedActions: actions,
           primaryAction: this.primary(actions),
           navigationContext: {
@@ -888,6 +916,7 @@ export class MobileFieldService {
           configuration.timezone || unit.timezone,
         ),
         operationalStatus: occurrence.execution?.status ?? occurrence.status,
+        completedAt: occurrence.execution?.completedAt?.toISOString() ?? null,
         priority: null,
         responsibleFieldTechnician: occurrence.responsibleFieldTechnicianId
           ? {
@@ -987,7 +1016,10 @@ export class MobileFieldService {
       actions.push('RESUME', 'ADD_EVIDENCE', 'COMPLETE');
     if (!execution && cycle.plan.technicalResponsibleUserId && assigned)
       actions.push('EXECUTE_PMOC');
-    if (cycle.artifactExecution && this.has(actor, 'artifact_executions.read'))
+    if (
+      (execution?.artifactExecution || cycle.artifactExecution) &&
+      this.has(actor, 'artifact_executions.read')
+    )
       actions.push('VIEW_DOCUMENT', 'DOWNLOAD_DOCUMENT');
     if (this.has(actor, 'assets.read')) actions.push('SCAN_EQUIPMENT');
     return actions;
@@ -1027,6 +1059,15 @@ export class MobileFieldService {
     timezone: string,
     dateOnly = false,
   ): MobileDueState {
+    /*
+     * Concluído é concluído, qualquer que seja a data.
+     *
+     * Esta linha não existia: o cálculo seguia para a data, e um PMOC já
+     * atendido saía como "atrasado" (data passada), "hoje" ou "próximo" (data
+     * futura). Era a confusão que o técnico via — o mesmo atendimento mudando
+     * de lista sem ter mudado de estado.
+     */
+    if (status === 'COMPLETED') return 'COMPLETED';
     if (['IN_PROGRESS', 'STARTED', 'PAUSED'].includes(status))
       return 'IN_PROGRESS';
     if (!at) return 'UNSCHEDULED';
@@ -1054,20 +1095,30 @@ export class MobileFieldService {
       (view === 'TODAY' && state === 'DUE_TODAY') ||
       (view === 'OVERDUE' && state === 'OVERDUE') ||
       (view === 'IN_PROGRESS' && state === 'IN_PROGRESS') ||
-      (view === 'UPCOMING' && state === 'UPCOMING')
+      (view === 'UPCOMING' && state === 'UPCOMING') ||
+      (view === 'COMPLETED' && state === 'COMPLETED')
     );
   }
   private compare(
     a: MobileWorkItemReadModel,
     b: MobileWorkItemReadModel,
   ): number {
-    const rank = {
+    const rank: Record<MobileDueState, number> = {
       IN_PROGRESS: 0,
       OVERDUE: 1,
       DUE_TODAY: 2,
       UPCOMING: 3,
       UNSCHEDULED: 4,
+      /* Por último: o que falta pesa mais do que o que já foi feito. */
+      COMPLETED: 5,
     };
+    /* Entre concluídos, o mais recente primeiro — é como se procura o que se
+       acabou de fazer. A agenda ordena o que falta, não o que passou. */
+    if (a.dueState === 'COMPLETED' && b.dueState === 'COMPLETED')
+      return (
+        (b.completedAt ?? '').localeCompare(a.completedAt ?? '') ||
+        a.id.localeCompare(b.id)
+      );
     return (
       rank[a.dueState] - rank[b.dueState] ||
       (a.scheduledFor ?? '9999').localeCompare(b.scheduledFor ?? '9999') ||
@@ -1221,4 +1272,31 @@ export class MobileFieldService {
       }),
     );
   }
+}
+
+const MESES = [
+  'janeiro',
+  'fevereiro',
+  'março',
+  'abril',
+  'maio',
+  'junho',
+  'julho',
+  'agosto',
+  'setembro',
+  'outubro',
+  'novembro',
+  'dezembro',
+];
+
+/**
+ * `2026-11-30` → `novembro de 2026`.
+ *
+ * Lê a data **civil** (`dueOn` é `@db.Date`): converter para o fuso de quem lê
+ * levaria o dia 1º para o mês anterior em qualquer fuso a oeste de Greenwich.
+ */
+export function periodoDoCiclo(dueOn: Date): string {
+  const iso = dueOn.toISOString().slice(0, 10);
+  const [ano, mes] = iso.split('-').map(Number);
+  return `${MESES[(mes ?? 1) - 1]} de ${ano}`;
 }

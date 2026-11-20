@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../core/time/orbit_timezone.dart';
-import '../../../core/routing/orbit_router.dart';
 import '../data/owner_repository.dart';
 import 'owner_controls.dart';
 import 'owner_records.dart';
 import 'owner_tools.dart';
+import '../../../core/contracts/mobile_field_contracts.dart';
+import '../../pmoc/presentation/pmoc_entry.dart';
 
 OwnerRecords ownerPmoc(OwnerTools tools) => OwnerRecords(
   title: 'Planos de PMOC',
@@ -386,22 +386,26 @@ OwnerRecords _pmocExecutions(OwnerTools tools, String planId, String cycleId) {
         context,
         ownerText(equipment),
         [
+          /* "Iniciar", e não "Abrir": abrir é a ação do atendimento avulso. E
+             inicia de fato — pela mesma porta da fila —, em vez de levar a uma
+             tela que pedia para abrir de novo. */
           if (tools.session.isOwner &&
               ownerRow(row['eligibility'])['ready'] == true &&
               const ['NOT_STARTED', 'IN_PROGRESS'].contains(row['status']))
             OwnerAction(
-              'Abrir atendimento',
+              row['status'] == 'IN_PROGRESS'
+                  ? 'Continuar atendimento'
+                  : 'Iniciar atendimento',
               Icons.play_circle_outline,
-              () async {
-                await context.push(
-                  OrbitRoutes.pmocAttendance(
-                    planId: planId,
-                    cycleId: cycleId,
-                    assetId: ownerId(equipment),
-                  ),
-                );
-                return true;
-              },
+              () => enterPmocAttendance(
+                context,
+                PmocAddressContract(
+                  planId: planId,
+                  cycleId: cycleId,
+                  assetId: ownerId(equipment),
+                ),
+                start: true,
+              ),
             ),
           if (actions.contains('EDIT') && version is String)
             OwnerAction(

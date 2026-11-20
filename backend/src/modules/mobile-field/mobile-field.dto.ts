@@ -21,6 +21,9 @@ export const MOBILE_QUEUE_VIEWS = [
   'OVERDUE',
   'IN_PROGRESS',
   'UPCOMING',
+  /* Os concluídos. A fila só listava o que falta; o histórico do técnico
+     ficava escondido na home, em cinco linhas. */
+  'COMPLETED',
 ] as const;
 export const MOBILE_WORK_ITEM_KINDS = [
   'SERVICE_OPERATION',

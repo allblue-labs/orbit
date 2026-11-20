@@ -420,7 +420,15 @@ export class MobileSignatureService {
       operation.completedByUserId ??
       operation.responsibleFieldTechnicianId ??
       operation.startedByUserId;
-    if (actual !== actor.id)
+    /*
+     * O dono também colhe o aceite.
+     *
+     * Era o último passo do atendimento de PMOC — o dono abria, percorria o
+     * roteiro, registrava o serviço e, na hora de o cliente confirmar, recebia
+     * "somente o técnico atribuído". A regra do produto é que o dono atende
+     * quando o escalado não pode, e esta porta não sabia disso.
+     */
+    if (actual !== actor.id && actor.isOrganizationOwner !== true)
       throw new ForbiddenException(
         'Somente o técnico atribuído pode confirmar este atendimento com o cliente.',
         'ATTENDANCE_NOT_ASSIGNED',

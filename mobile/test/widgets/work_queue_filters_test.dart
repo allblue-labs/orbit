@@ -78,8 +78,14 @@ void main() {
         );
         expect(tester.state<ScrollableState>(scrollable), same(initial));
         expect(last.hitTestable(), findsOneWidget);
-        await tester.drag(strip, const Offset(800, 0));
-        await tester.pumpAndSettle();
+        /* A volta espelha a ida: dois arrastos. Com "Não atendidos" e
+           "Concluídos" a faixa ficou mais longa, e um arrasto só não chegava ao
+           início em 1.5× — o teste afirmava o comprimento da faixa, não o que
+           ele quer provar, que é voltar ao começo e achar "Tudo". */
+        for (var swipe = 0; swipe < 2; swipe++) {
+          await tester.drag(strip, const Offset(800, 0));
+          await tester.pumpAndSettle();
+        }
         expect(find.text('Tudo').hitTestable(), findsOneWidget);
         expect(tester.takeException(), isNull);
       },

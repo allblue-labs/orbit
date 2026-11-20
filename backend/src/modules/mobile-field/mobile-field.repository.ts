@@ -76,7 +76,22 @@ export interface MobileFieldProjectionFilters {
   readonly customerId?: string;
   readonly from?: Date;
   readonly to?: Date;
+  /**
+   * Trazer também o que já foi concluído.
+   *
+   * Só sob demanda: a home e os contadores leem a mesma origem e querem só o
+   * que falta. Concluídos são recentes (`COMPLETED_WINDOW_DAYS`) — o histórico
+   * inteiro de um técnico não cabe numa lista de celular, e a lista de
+   * documentos existe para o resto.
+   */
+  readonly includeCompleted?: boolean;
 }
+
+/** Até onde a lista de concluídos olha para trás. */
+export const COMPLETED_WINDOW_DAYS = 60;
+
+/** Quantos concluídos de cada classe entram na lista. */
+const COMPLETED_PER_CLASS = 60;
 
 /**
  * Limite por classe operacional, não por tabela inteira.
@@ -173,6 +188,10 @@ export class MobileFieldRepository {
             orderBy: { createdAt: 'asc' as const },
             take: 1,
             select: { asset: { select: { name: true } } },
+          },
+          /* O endereço da tela de PMOC, quando a operação é de um. */
+          pmocEquipmentExecution: {
+            select: { planId: true, cycleId: true, assetId: true },
           },
         },
       }),
@@ -692,7 +711,9 @@ export class MobileFieldRepository {
             where: {
               ...operationWhere,
               id: target.sourceId,
-              status: { notIn: ['COMPLETED', 'CANCELLED'] },
+              /* Concluído é encontrável: a lista de concluídos leva ao detalhe
+                 dele, e excluí-lo aqui daria "não encontrado" no toque. */
+              status: { notIn: ['CANCELLED'] },
             },
             take: 1,
             select: operationSelect,
@@ -770,6 +791,32 @@ export class MobileFieldRepository {
               })),
             );
           }
+
+          /**
+           * Os concluídos recentes, quando pedidos.
+           *
+           * Um bucket à parte, e não um quinto na lista acima: os outros são
+           * ordenados pela **agenda**, e concluídos se procuram pela data em
+           * que foram feitos — o mais recente primeiro. `operationWhere` já
+           * traz atribuição, cliente, autorização e a janela de datas.
+           */
+          if (filters?.includeCompleted) {
+            const desde = new Date(
+              Date.now() - COMPLETED_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+            );
+            operations.push(
+              ...(await tx.operation.findMany({
+                where: {
+                  ...operationWhere,
+                  status: 'COMPLETED',
+                  completedAt: { gte: desde },
+                },
+                take: COMPLETED_PER_CLASS,
+                orderBy: [{ completedAt: 'desc' }, { id: 'asc' }],
+                select: operationSelect,
+              })),
+            );
+          }
         }
       }
 
@@ -781,7 +828,32 @@ export class MobileFieldRepository {
                 organizationId,
                 ...recorteDeAutorizacao,
                 ...(target?.kind === 'PMOC' ? { id: target.sourceId } : {}),
-                status: { notIn: ['COMPLETED', 'CANCELLED'] },
+                /*
+                 * Ciclo concluído entra em dois casos: quando alguém procura um
+                 * ciclo específico (o detalhe de um PMOC da lista de concluídos),
+                 * e quando a lista pede concluídos — e aí só os recentes. Antes
+                 * ele sumia inteiro no instante em que o último equipamento
+                 * fechava, e o técnico via o PMOC que acabou de atender
+                 * desaparecer da fila.
+                 */
+                ...(target?.kind === 'PMOC'
+                  ? { status: { not: 'CANCELLED' } }
+                  : filters?.includeCompleted
+                    ? {
+                        OR: [
+                          { status: { notIn: ['COMPLETED', 'CANCELLED'] } },
+                          {
+                            status: 'COMPLETED',
+                            updatedAt: {
+                              gte: new Date(
+                                Date.now() -
+                                  COMPLETED_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+                              ),
+                            },
+                          },
+                        ],
+                      }
+                    : { status: { notIn: ['COMPLETED', 'CANCELLED'] } }),
 
                 /// O ciclo tem `dueOn`, não `scheduledStart`: a janela de
                 /// datas precisa ser traduzida, não copiada.
@@ -916,6 +988,18 @@ export class MobileFieldRepository {
                     id: true,
                     coverageId: true,
                     status: true,
+                    completedAt: true,
+                    /* O PMOC é emitido **por equipamento**. O item publicava o
+                       documento do ciclo, que quase nunca existe — e o técnico
+                       não achava o relatório que acabou de emitir. */
+                    artifactExecution: {
+                      select: {
+                        id: true,
+                        status: true,
+                        renderStatus: true,
+                        snapshot: { select: { artifactType: true } },
+                      },
+                    },
                     responsibleFieldTechnician: {
                       select: { id: true, displayName: true },
                     },
@@ -1004,6 +1088,7 @@ export class MobileFieldRepository {
                   select: {
                     id: true,
                     status: true,
+                    completedAt: true,
                     artifactExecutionId: true,
                     responsibleFieldTechnicianId: true,
                   },

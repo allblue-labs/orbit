@@ -173,24 +173,32 @@ class _Body extends ConsumerWidget {
             if (!preparation.eligibility.ready &&
                 preparation.eligibility.blockedReasons.isNotEmpty)
               _Blockers(reasons: preparation.eligibility.blockedReasons),
-            if (podeAbrir)
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: OrbitSpacing.gutter,
-                  vertical: OrbitSpacing.md,
-                ),
-                child: FilledButton(
-                  onPressed: state.isBusy ? null : controller.start,
-                  style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
-                  child: Text(
-                    state.pending == PmocAttendanceCommand.start
-                        ? 'Abrindo…'
-                        : 'Abrir atendimento',
-                  ),
-                ),
-              ),
           ],
         ),
+
+        /// O início, quando ainda falta — no lugar do "Avançar".
+        ///
+        /// Havia aqui um botão "Abrir atendimento" solto, abaixo do contexto,
+        /// e ele era o **terceiro** verbo de começo que o técnico via: a folha
+        /// dizia "Abrir atendimento", o detalhe dizia "Iniciar o Atendimento",
+        /// e só este de fato abria. Agora quem chega pela fila já entra com o
+        /// atendimento aberto (`enterPmocAttendance`), e esta etapa abre
+        /// cumprida.
+        ///
+        /// O controle fica para quem chega por outro caminho sem ter iniciado:
+        /// é o avanço da etapa — um só botão, "Iniciar atendimento" —, e ao
+        /// dar certo segue para o roteiro.
+        forward: podeAbrir
+            ? OrbitWizardForward(
+                label: state.pending == PmocAttendanceCommand.start
+                    ? 'Iniciando…'
+                    : 'Iniciar atendimento',
+                enabled: !state.isBusy,
+                pending: state.pending == PmocAttendanceCommand.start,
+                advanceOnSuccess: true,
+                onPressed: controller.startOrThrow,
+              )
+            : null,
       ),
 
       OrbitWizardStep(

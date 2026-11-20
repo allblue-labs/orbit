@@ -18,7 +18,20 @@ MobileWorkItemKind? mobileWorkItemKindFrom(String? value) => switch (value) {
   _ => null,
 };
 
-enum MobileDueState { inProgress, overdue, dueToday, upcoming, unscheduled }
+/// Onde o atendimento está.
+///
+/// `completed` não existia: o servidor classificava só pela data, e um
+/// atendimento já concluído chegava aqui como `overdue`, `dueToday` ou
+/// `upcoming` — o mesmo PMOC aparecia como "não atendido", depois como
+/// "próximo", e só na home como feito.
+enum MobileDueState {
+  inProgress,
+  overdue,
+  dueToday,
+  upcoming,
+  unscheduled,
+  completed,
+}
 
 /// A classificação de prazo **vem pronta**. O app não compara datas para
 /// chegar a "atrasado": quem sabe que horas são na unidade é o servidor.
@@ -28,6 +41,7 @@ MobileDueState? mobileDueStateFrom(String? value) => switch (value) {
   'DUE_TODAY' => MobileDueState.dueToday,
   'UPCOMING' => MobileDueState.upcoming,
   'UNSCHEDULED' => MobileDueState.unscheduled,
+  'COMPLETED' => MobileDueState.completed,
   _ => null,
 };
 
@@ -341,6 +355,7 @@ class MobileWorkItemContract {
     required this.timezone,
     required this.dueState,
     required this.operationalStatus,
+    this.completedAt,
     required this.responsibleFieldTechnician,
     required this.auxiliaryTechnicians,
     required this.equipmentSummary,
@@ -381,6 +396,10 @@ class MobileWorkItemContract {
   final String timezone;
   final MobileDueState dueState;
   final String operationalStatus;
+
+  /// Quando foi concluído. Na lista de concluídos é a data que importa: a
+  /// agendada diz quando deveria ter sido.
+  final DateTime? completedAt;
   final String? priority;
   final MobilePartySummaryContract? responsibleFieldTechnician;
   final List<MobilePartySummaryContract> auxiliaryTechnicians;
@@ -440,6 +459,7 @@ class MobileWorkItemContract {
       timezone: json['timezone'] as String? ?? '',
       dueState: dueState,
       operationalStatus: json['operationalStatus'] as String? ?? '',
+      completedAt: DateTime.tryParse(json['completedAt'] as String? ?? ''),
       priority: json['priority'] as String?,
       responsibleFieldTechnician: json['responsibleFieldTechnician'] == null
           ? null
@@ -789,20 +809,30 @@ class MobileCompletedWorkContract {
     required this.completedAt,
     this.customerName,
     this.equipmentName,
+    this.pmoc,
   });
 
-  factory MobileCompletedWorkContract.fromJson(Map<String, dynamic> json) =>
-      MobileCompletedWorkContract(
-        id: json['id'] as String? ?? '',
-        code: json['code'] as String? ?? '',
-        title: json['title'] as String? ?? '',
-        kind: json['kind'] as String? ?? '',
-        customerName: json['customerName'] as String?,
-        equipmentName: json['equipmentName'] as String?,
-        completedAt:
-            DateTime.tryParse(json['completedAt'] as String? ?? '') ??
-            DateTime.fromMillisecondsSinceEpoch(0),
-      );
+  factory MobileCompletedWorkContract.fromJson(Map<String, dynamic> json) {
+    final pmoc = json['pmoc'] as Map<String, dynamic>?;
+    return MobileCompletedWorkContract(
+      id: json['id'] as String? ?? '',
+      code: json['code'] as String? ?? '',
+      title: json['title'] as String? ?? '',
+      kind: json['kind'] as String? ?? '',
+      customerName: json['customerName'] as String?,
+      equipmentName: json['equipmentName'] as String?,
+      completedAt:
+          DateTime.tryParse(json['completedAt'] as String? ?? '') ??
+          DateTime.fromMillisecondsSinceEpoch(0),
+      pmoc: pmoc == null
+          ? null
+          : PmocAddressContract(
+              planId: pmoc['planId'] as String? ?? '',
+              cycleId: pmoc['cycleId'] as String? ?? '',
+              assetId: pmoc['assetId'] as String? ?? '',
+            ),
+    );
+  }
 
   final String id;
   final String code;
@@ -811,6 +841,28 @@ class MobileCompletedWorkContract {
   final String? customerName;
   final String? equipmentName;
   final DateTime completedAt;
+
+  /// Onde reabrir, quando é PMOC. Sem isto o concluído de PMOC abria na tela
+  /// genérica de operação, sem o roteiro do plano e sem o relatório.
+  final PmocAddressContract? pmoc;
+}
+
+/// Plano, ciclo e equipamento: o endereço da tela de atendimento de PMOC.
+class PmocAddressContract {
+  const PmocAddressContract({
+    required this.planId,
+    required this.cycleId,
+    required this.assetId,
+  });
+
+  final String planId;
+  final String cycleId;
+  final String assetId;
+
+  /// Os três, ou não é endereço: a rota é escopada pelos três, e montá-la com
+  /// um vazio levaria a uma tela que só sabe dizer "não encontrado".
+  bool get isComplete =>
+      planId.isNotEmpty && cycleId.isNotEmpty && assetId.isNotEmpty;
 }
 
 class MobileFieldHomeContract {
