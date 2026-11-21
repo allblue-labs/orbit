@@ -57,5 +57,11 @@ describe("acesso do cliente", () => {
     expect(mensagem).toContain("clinica.sol@clima-norte.com");
     expect(mensagem).toContain("ABCD-EFGH-JKLM");
     expect(mensagem).toContain("Sou cliente");
+    expect(
+      accessShareMessage(
+        { identity: identity({}), temporaryPassword: "X" },
+        "https://orbit.allblue-labs.com/portal",
+      ),
+    ).toContain("https://orbit.allblue-labs.com/portal");
   });
 });

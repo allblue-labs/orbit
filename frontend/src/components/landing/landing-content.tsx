@@ -34,6 +34,7 @@
 import Link from "next/link";
 import { ContactSection } from "./contact-section";
 import {
+  UsersRound,
   ArrowRight,
   CalendarClock,
   ClipboardCheck,
@@ -191,6 +192,15 @@ function Header() {
           </Link>
         </nav>
         <div className="flex items-center gap-2">
+          {/* O cliente de quem usa o Orbit também chega por aqui: acompanha
+              equipamentos, atendimentos e documentos, e abre chamados. */}
+          <Button asChild variant="outline" size="sm">
+            <Link href="/portal/entrar">
+              <UsersRound className="size-4" />
+              <span className="hidden sm:inline">Portal do cliente</span>
+              <span className="sm:hidden">Cliente</span>
+            </Link>
+          </Button>
           <Button asChild variant="ghost" size="sm">
             <Link href="/login">Entrar</Link>
           </Button>
@@ -313,6 +323,7 @@ const COLUNAS: {
     titulo: "Conta",
     itens: [
       { rotulo: "Entrar", href: "/login" },
+      { rotulo: "Portal do cliente", href: "/portal/entrar" },
       { rotulo: "Criar organização", href: "/cadastro" },
       { rotulo: "Recuperar senha", href: "/recuperar-senha" },
     ],

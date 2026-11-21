@@ -167,4 +167,22 @@ describe("inspectPath", () => {
       status: 403,
     });
   });
+
+  it("objeto assinado se lê sem sessão; enviar continua exigindo", () => {
+    expect(inspectPath("/storage/objects", "GET")).toEqual({
+      allowed: true,
+      requiresSession: false,
+    });
+    expect(inspectPath("/storage/objects", "PUT")).toEqual({
+      allowed: true,
+      requiresSession: true,
+    });
+  });
+
+  it("os chamados de clientes passam pelo BFF da equipe", () => {
+    expect(inspectPath("/customer-service-requests", "GET")).toEqual({
+      allowed: true,
+      requiresSession: true,
+    });
+  });
 });

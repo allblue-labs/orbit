@@ -211,7 +211,9 @@ function CredentialsCard({
 }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
-    await navigator.clipboard.writeText(accessShareMessage(credentials));
+    await navigator.clipboard.writeText(
+      accessShareMessage(credentials, `${window.location.origin}/portal`),
+    );
     setCopied(true);
   };
   return (

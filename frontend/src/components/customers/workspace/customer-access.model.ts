@@ -39,12 +39,17 @@ export function accessStatusText(
  * Diz o que fazer, na ordem: baixar, escolher "Sou cliente", entrar, criar a
  * própria senha. Sem isso a pessoa recebe um e-mail e uma senha soltos.
  */
-export function accessShareMessage(credentials: CustomerAccessCredentials) {
+export function accessShareMessage(
+  credentials: CustomerAccessCredentials,
+  portalUrl?: string,
+) {
   return [
-    "Seu acesso ao app Orbit:",
+    "Seu acesso ao portal do cliente Orbit:",
     `E-mail: ${credentials.identity.email}`,
     `Senha temporária: ${credentials.temporaryPassword}`,
     "",
-    'Baixe o app, escolha "Sou cliente" e entre. No primeiro acesso você cria a sua senha.',
+    portalUrl
+      ? `Entre pelo site ${portalUrl} ou pelo app Orbit (escolha "Sou cliente"). No primeiro acesso você cria a sua senha.`
+      : 'Entre pelo app Orbit (escolha "Sou cliente") ou pelo portal do cliente no site. No primeiro acesso você cria a sua senha.',
   ].join("\n");
 }

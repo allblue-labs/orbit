@@ -23,6 +23,7 @@ export const ALLOWED_API_ROOTS: readonly string[] = [
   "checklist-executions",
   "checklist-templates",
   "commissions",
+  "customer-service-requests",
   "customers",
   "dashboard",
   "financial",
@@ -112,6 +113,10 @@ const PUBLIC_ENDPOINT_PATTERNS: readonly {
   method: HttpMethod;
   path: RegExp;
 }[] = [
+  /* Leitura de objeto por URL assinada: a assinatura é a credencial, e o
+     backend confere. Sem sessão da equipe, a área do cliente baixa
+     documentos e vê a própria foto pelo armazenamento local. */
+  { method: "GET", path: /^\/storage\/objects$/ },
   {
     method: "GET",
     path: /^\/public\/pmoc\/contracts\/[A-Za-z0-9_-]{32,128}$/,
