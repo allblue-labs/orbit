@@ -23,6 +23,8 @@
  * termina. **Sem barra de progresso**: o backend publica quatro estados, não
  * porcentagem, e uma barra subindo seria um número inventado.
  */
+import { previewSandbox } from "@/documents/preview-frame";
+import { browserUrlFor } from "@/lib/backend-url";
 import { useState } from "react";
 import {
   Clock,
@@ -380,7 +382,7 @@ function FilePanel({ report }: { report: ManagementReport }) {
                 decide entre abrir e salvar é o cabeçalho que o backend assinou.
               */}
               <a
-                href={signed.data.url}
+                href={browserUrlFor(signed.data.url)}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => setOperation("download")}
@@ -394,7 +396,7 @@ function FilePanel({ report }: { report: ManagementReport }) {
           {signed.data ? (
             <Button variant="ghost" size="sm" asChild>
               <a
-                href={signed.data.url}
+                href={browserUrlFor(signed.data.url)}
                 target="_blank"
                 rel="noopener noreferrer"
               >
@@ -412,14 +414,15 @@ function FilePanel({ report }: { report: ManagementReport }) {
         ) : signed.data ? (
           <div className="space-y-2">
             {/*
-              `sandbox` sem `allow-scripts`: o conteúdo é do tenant e não roda
-              na origem da aplicação — a mesma barreira do Document Center.
+              A mesma regra do Document Center: PDF sem `sandbox` (o Chrome
+              bloqueia o leitor de PDF em iframe isolado), o resto isolado e
+              sem scripts. Ver `previewSandbox`.
             */}
             <iframe
-              src={signed.data.url}
+              src={browserUrlFor(signed.data.url)}
               title={`Relatório ${report.name}`}
               className="h-[70vh] w-full rounded-lg border border-border bg-surface"
-              sandbox=""
+              sandbox={previewSandbox(report.format)}
             />
             <p className="text-xs text-muted-foreground">
               Acesso temporário, renovado automaticamente enquanto esta tela

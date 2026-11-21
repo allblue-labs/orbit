@@ -25,6 +25,7 @@ import type { UUID } from '../../contracts';
 import { RequestContext, RequestContextStorage } from '../../context';
 import { FileObjectService } from './file-object.service';
 import { verifyUploadGrant } from './upload-grant';
+import { previewContentType } from './preview-content-type';
 import { ValidationException } from '../../exceptions';
 import { ApiExcludeController } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
@@ -87,7 +88,14 @@ export class StorageObjectController {
       objectKey: query.key,
     });
 
-    response.setHeader('Content-Type', 'application/octet-stream');
+    /* Download continua binário; a pré-visualização declara PDF ou imagem
+       pelos bytes, para o navegador conseguir exibir. Ver `previewContentType`. */
+    response.setHeader(
+      'Content-Type',
+      query.operation === 'preview'
+        ? previewContentType(body)
+        : 'application/octet-stream',
+    );
     response.setHeader('Content-Length', String(body.length));
     response.setHeader('X-Content-Type-Options', 'nosniff');
     response.setHeader('Cache-Control', 'private, max-age=0, no-store');

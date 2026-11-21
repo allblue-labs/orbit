@@ -1,3 +1,5 @@
+import { adminPrisma } from './support/admin-prisma';
+import { paidSubscriptionFixture } from './support/paid-subscription-fixture';
 import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
@@ -102,7 +104,9 @@ describe('Artifact Manifest (e2e)', () => {
       city: 'Recife',
       street: 'Rua da Aurora',
       stateCode: 'PE',
+      planKey: 'ENTERPRISE_UNLIMITED',
     });
+    await paidSubscriptionFixture(app, adminPrisma(), email);
 
     token = (registration.body as { data: { accessToken: string } }).data
       .accessToken;
@@ -286,6 +290,38 @@ describe('Artifact Manifest (e2e)', () => {
       .expect(200);
     expect(Buffer.from(download.body as Buffer).toString()).toBe(
       CONTENT.toString(),
+    );
+  });
+
+  it('a pré-visualização chega como PDF, e o download continua binário', async () => {
+    /* Sem isto o navegador recusava exibir o PDF no visualizador
+       (`octet-stream` com `nosniff`) e a tela mostrava uma página quebrada. */
+    const preview = await auth(
+      http().get(
+        `/api/v1/artifact-manifests/${manifestId}/download?operation=preview`,
+      ),
+    ).expect(200);
+    const previewUrl = new URL(
+      (preview.body as { data: { url: string } }).data.url,
+    );
+    const inline = await http()
+      .get(`${previewUrl.pathname}${previewUrl.search}`)
+      .expect(200);
+    expect(inline.headers['content-type']).toContain('application/pdf');
+    expect(inline.headers['content-disposition']).toBe('inline');
+    expect(inline.headers['x-content-type-options']).toBe('nosniff');
+
+    const download = await auth(
+      http().get(`/api/v1/artifact-manifests/${manifestId}/download`),
+    ).expect(200);
+    const downloadUrl = new URL(
+      (download.body as { data: { url: string } }).data.url,
+    );
+    const binario = await http()
+      .get(`${downloadUrl.pathname}${downloadUrl.search}`)
+      .expect(200);
+    expect(binario.headers['content-type']).toContain(
+      'application/octet-stream',
     );
   });
 
