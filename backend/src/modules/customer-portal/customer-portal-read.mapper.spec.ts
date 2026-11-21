@@ -31,7 +31,7 @@ describe('CustomerPortalReadMapper', () => {
       businessUnit: unit,
       assets: [{ asset: { id: 'asset-id', name: 'Ar-condicionado' } }],
       responsibleFieldTechnician: { displayName: 'Técnico Orbit' },
-      _count: { artifactExecutions: 1 },
+      artifactExecutions: [{ manifests: [{ id: 'manifest-id' }] }],
     } satisfies CustomerPortalOperationRecord;
 
     const result = mapper.operation(value);
@@ -41,6 +41,10 @@ describe('CustomerPortalReadMapper', () => {
     });
     expect(result.type).toBe('Ordem de serviço');
     expect(result.documentAvailable).toBe(true);
+    expect(result.documentId).toBe('manifest-id');
+    expect(
+      mapper.operation({ ...value, artifactExecutions: [] }).documentId,
+    ).toBeNull();
     expect(result.location).toBe('Rua Azul, Recife');
     expect(JSON.stringify(result)).not.toMatch(
       /organizationId|customerId|internalNote|cost|margin|capabilit|role/i,

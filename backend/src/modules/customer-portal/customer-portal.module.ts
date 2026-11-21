@@ -18,7 +18,8 @@ import { CustomerPortalReadController } from './customer-portal-read.controller'
 import { CustomerPortalReadMapper } from './customer-portal-read.mapper';
 import { CustomerPortalReadRepository } from './customer-portal-read.repository';
 import { CustomerPortalReadService } from './customer-portal-read.service';
-import { InfrastructureException } from '../../exceptions';
+import { CustomerPortalProfileController } from './customer-portal-profile.controller';
+import { CustomerPortalProfileService } from './customer-portal-profile.service';
 
 /**
  * O backend do Portal está preservado e coberto por testes, mas a V1 não tem
@@ -26,28 +27,30 @@ import { InfrastructureException } from '../../exceptions';
  * ausente do roteamento e do OpenAPI. Tentar habilitá-lo antes de substituir o
  * adapter Noop falha na subida, em vez de expor um fluxo incompleto.
  */
+const PORTAL_CONTROLLERS = [
+  CustomerPortalAuthController,
+  CustomerPortalController,
+  CustomerPortalReadController,
+  CustomerPortalProfileController,
+  CustomerPortalManagementController,
+];
+
+/**
+ * O portal só existe quando a instalação o liga.
+ *
+ * Desligado (o padrão), nenhuma rota é registrada: nem login, nem leitura, nem
+ * a gestão do acesso. Ligado, tudo — inclusive convite e recuperação por
+ * e-mail, que respondem "indisponível" enquanto não houver entrega de e-mail
+ * real (`CustomerPortalTokenDelivery.connected`). O acesso que o owner cria
+ * não depende de e-mail: a senha temporária é entregue por ele.
+ */
 export function customerPortalControllers(
   environment: NodeJS.ProcessEnv,
-): Array<
-  | typeof CustomerPortalAuthController
-  | typeof CustomerPortalController
-  | typeof CustomerPortalReadController
-  | typeof CustomerPortalManagementController
-> {
-  if (environment.NODE_ENV === 'test') {
-    return [
-      CustomerPortalAuthController,
-      CustomerPortalController,
-      CustomerPortalReadController,
-      CustomerPortalManagementController,
-    ];
-  }
-  if ((environment.CUSTOMER_PORTAL_ENABLED ?? 'false') === 'true') {
-    throw new InfrastructureException(
-      'CUSTOMER_PORTAL_ENABLED cannot be enabled before UI and email delivery are release-qualified',
-    );
-  }
-  return [];
+): typeof PORTAL_CONTROLLERS {
+  if (environment.NODE_ENV === 'test') return PORTAL_CONTROLLERS;
+  return (environment.CUSTOMER_PORTAL_ENABLED ?? 'false') === 'true'
+    ? PORTAL_CONTROLLERS
+    : [];
 }
 
 @Module({
@@ -64,6 +67,7 @@ export function customerPortalControllers(
     CustomerPortalReadMapper,
     CustomerPortalReadRepository,
     CustomerPortalReadService,
+    CustomerPortalProfileService,
     NoopCustomerPortalTokenDelivery,
     {
       provide: CUSTOMER_PORTAL_TOKEN_DELIVERY,

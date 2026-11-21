@@ -6,13 +6,17 @@ import type {
 import { InfrastructureException } from '../../exceptions';
 import type { PortalSessionRecord } from './customer-portal.types';
 import type {
+  CustomerPortalAccessIdentityReadModel,
   CustomerPortalInvitationReadModel,
   CustomerPortalMeReadModel,
 } from './customer-portal.read-models';
 
 @Injectable()
 export class CustomerPortalMapper {
-  me(record: PortalSessionRecord): CustomerPortalMeReadModel {
+  me(
+    record: PortalSessionRecord,
+    mustChangePassword = false,
+  ): CustomerPortalMeReadModel {
     return {
       actorType: 'CUSTOMER_PORTAL',
       identity: {
@@ -32,6 +36,21 @@ export class CustomerPortalMapper {
         displayName: record.customerName,
       },
       sessionId: record.sessionId,
+      mustChangePassword,
+    };
+  }
+
+  access(
+    identity: CustomerPortalIdentity,
+  ): CustomerPortalAccessIdentityReadModel {
+    return {
+      id: identity.id,
+      email: identity.email,
+      displayName: identity.displayName,
+      status: this.status(identity.status),
+      mustChangePassword: identity.mustChangePassword,
+      lastLoginAt: identity.lastLoginAt?.toISOString() ?? null,
+      createdAt: identity.createdAt.toISOString(),
     };
   }
 

@@ -23,6 +23,46 @@ export interface CustomerPortalMeReadModel {
   organization: CustomerPortalOrganizationReadModel;
   customer: CustomerPortalCustomerReadModel;
   sessionId: string;
+  /** Senha temporária ainda não trocada: o app só libera a troca. */
+  mustChangePassword: boolean;
+}
+
+/** O acesso do cliente como o owner o vê. Nunca carrega senha. */
+export interface CustomerPortalAccessIdentityReadModel {
+  id: string;
+  email: string;
+  displayName: string;
+  status: 'invited' | 'active' | 'disabled';
+  mustChangePassword: boolean;
+  lastLoginAt: string | null;
+  createdAt: string;
+}
+
+export interface CustomerPortalAccessReadModel {
+  /** O domínio que o endereço vai ter — o mesmo da equipe. */
+  domain: string | null;
+  /** Parte local sugerida a partir do nome do cliente. */
+  suggestedLocalPart: string;
+  /** O acesso atual: o ativo, ou o último desativado. `null` se nunca houve. */
+  identity: CustomerPortalAccessIdentityReadModel | null;
+}
+
+/** Resposta de criar acesso ou gerar nova senha: a senha aparece **uma vez**. */
+export interface CustomerPortalAccessCredentialsReadModel {
+  identity: CustomerPortalAccessIdentityReadModel;
+  temporaryPassword: string;
+}
+
+export interface CustomerPortalMediaReadModel {
+  available: boolean;
+  url: string | null;
+  expiresAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface CustomerPortalProfileReadModel {
+  avatar: CustomerPortalMediaReadModel;
+  signature: CustomerPortalMediaReadModel;
 }
 
 export interface CustomerPortalSessionReadModel {
@@ -94,6 +134,8 @@ export interface CustomerPortalOperationListItemReadModel {
   responsibleTechnician: { displayName: string } | null;
   location: string | null;
   documentAvailable: boolean;
+  /** O documento mais recente do atendimento — o id que `documents/:id/access` aceita. */
+  documentId: string | null;
 }
 
 export interface CustomerPortalOperationTimelineItemReadModel {
@@ -192,6 +234,13 @@ export interface CustomerPortalRvtDetailsReadModel extends CustomerPortalRvtList
 export interface CustomerPortalDocumentReadModel {
   id: string;
   fileName: string;
+  /** O título do documento como foi emitido — "Orçamento ORC-0042 — Preventiva". */
+  title: string;
+  code: string;
+  category: 'service' | 'pmoc' | 'quote' | 'receipt';
+  categoryLabel: string;
+  /** O atendimento de origem, quando há. */
+  operationId: string | null;
   type: string;
   source: string;
   issuedAt: string;

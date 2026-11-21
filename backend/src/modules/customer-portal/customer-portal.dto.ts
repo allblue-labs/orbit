@@ -14,11 +14,17 @@ const normalizedEmail = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? CustomerPortalEmail.normalize(value) : value;
 
 export class PortalLoginDto {
-  @ApiProperty({ example: 'acme' })
+  /**
+   * Opcional: o acesso criado pelo owner tem o domínio da organização no
+   * próprio e-mail, e o login sem slug encontra a organização por ele — desde
+   * que o endereço seja único na instalação. Ambíguo, ninguém entra sem slug.
+   */
+  @ApiPropertyOptional({ example: 'acme' })
+  @IsOptional()
   @IsString()
   @MinLength(2)
   @MaxLength(100)
-  organizationSlug!: string;
+  organizationSlug?: string;
 
   @ApiProperty()
   @Transform(normalizedEmail)
@@ -107,4 +113,24 @@ export class InviteCustomerPortalIdentityDto {
   @IsOptional()
   @IsUUIDv7()
   contactId?: string;
+}
+
+/**
+ * O acesso que o owner cria para o cliente.
+ *
+ * Só a parte antes do `@`: o domínio é o da organização, montado no servidor.
+ */
+export class CreateCustomerPortalAccessDto {
+  @ApiProperty({ example: 'clinica.sol' })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(64)
+  localPart!: string;
+
+  @ApiPropertyOptional({ description: 'Nome exibido no app do cliente' })
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(180)
+  displayName?: string;
 }

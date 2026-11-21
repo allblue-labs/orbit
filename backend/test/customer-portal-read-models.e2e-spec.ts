@@ -1,3 +1,4 @@
+import { paidSubscriptionFixture } from './support/paid-subscription-fixture';
 import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument */
@@ -227,6 +228,74 @@ describe('Customer Portal operational Read Models (e2e)', () => {
     );
   });
 
+  it('filtra o histórico do equipamento e liga o atendimento ao documento', async () => {
+    const doEquipamento = await portal(
+      api().get(`/api/v1/portal/me/operations?assetId=${assetIdA}`),
+    ).expect(200);
+    const itens = (
+      doEquipamento.body as Envelope<{
+        data: Array<{ id: string; documentId: string | null }>;
+      }>
+    ).data.data;
+    expect(itens.map((item) => item.id)).toEqual([operationIdA]);
+    /* O id que a linha carrega é o mesmo que `documents/:id/access` aceita. */
+    expect(itens[0]?.documentId).toBe(documentIdA);
+
+    /* O id de equipamento alheio não abre nada — nem o do outro cliente. */
+    for (const alheio of [assetIdB, assetIdC]) {
+      const response = await portal(
+        api().get(`/api/v1/portal/me/operations?assetId=${alheio}`),
+      ).expect(200);
+      expect((response.body as Envelope<any>).data.data).toEqual([]);
+    }
+  });
+
+  it('filtra documentos por atendimento, equipamento e categoria, sem atravessar clientes', async () => {
+    const doAtendimento = await portal(
+      api().get(`/api/v1/portal/me/documents?operationId=${operationIdA}`),
+    ).expect(200);
+    const documentos = (
+      doAtendimento.body as Envelope<{
+        data: Array<{ id: string; title: string }>;
+      }>
+    ).data.data;
+    expect(documentos.map((item) => item.id)).toEqual([documentIdA]);
+    expect(documentos[0]).toMatchObject({
+      category: 'service',
+      categoryLabel: 'Relatório de atendimento',
+      operationId: operationIdA,
+    });
+    expect(documentos[0]?.title).toContain('Documento OS');
+
+    const doEquipamento = await portal(
+      api().get(`/api/v1/portal/me/documents?assetId=${assetIdA}`),
+    ).expect(200);
+    expect(
+      (
+        doEquipamento.body as Envelope<{ data: Array<{ id: string }> }>
+      ).data.data.map((item) => item.id),
+    ).toEqual(expect.arrayContaining([documentIdA]));
+
+    const recibos = await portal(
+      api().get('/api/v1/portal/me/documents?category=receipt'),
+    ).expect(200);
+    expect((recibos.body as Envelope<any>).data.data).toEqual([]);
+
+    for (const query of [
+      `operationId=${operationIdB}`,
+      `operationId=${operationIdC}`,
+      `assetId=${assetIdB}`,
+    ]) {
+      const response = await portal(
+        api().get(`/api/v1/portal/me/documents?${query}`),
+      ).expect(200);
+      expect((response.body as Envelope<any>).data.data).toEqual([]);
+    }
+    await portal(
+      api().get('/api/v1/portal/me/documents?category=interno'),
+    ).expect(400);
+  });
+
   it('returns hidden absence for cross-customer and cross-tenant operation IDs', async () => {
     await portal(
       api().get(`/api/v1/portal/me/operations/${operationIdB}`),
@@ -411,7 +480,9 @@ describe('Customer Portal operational Read Models (e2e)', () => {
       city: 'Recife',
       street: 'Rua dos Read Models',
       stateCode: 'PE',
+      planKey: 'ENTERPRISE_UNLIMITED',
     });
+    await paidSubscriptionFixture(app, prisma, email);
     const token = (registration.body as Envelope<any>).data.accessToken;
     const organization = await internal(
       api().get('/api/v1/organizations/current'),

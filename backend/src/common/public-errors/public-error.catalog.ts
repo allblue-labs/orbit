@@ -306,6 +306,26 @@ const entries = [
     'O link de recuperação não é válido ou expirou.',
   ],
   [
+    'PORTAL_ACCESS_EXISTS',
+    HttpStatus.CONFLICT,
+    'Este cliente já tem um acesso. Gere uma nova senha ou desative o acesso atual.',
+  ],
+  [
+    'PORTAL_EMAIL_TAKEN',
+    HttpStatus.CONFLICT,
+    'Este endereço já está em uso por outro cliente ou por alguém da equipe. Escolha outro nome de acesso.',
+  ],
+  [
+    'PORTAL_ACCESS_LOCAL_PART_INVALID',
+    HttpStatus.BAD_REQUEST,
+    'Informe um nome de acesso com letras ou números.',
+  ],
+  [
+    'PORTAL_EMAIL_DELIVERY_UNAVAILABLE',
+    HttpStatus.CONFLICT,
+    'O envio de e-mail do portal não está disponível. O acesso do cliente é criado pelo responsável, com senha temporária.',
+  ],
+  [
     'ARTIFACT_EXECUTION_INCOMPLETE',
     HttpStatus.UNPROCESSABLE_ENTITY,
     'Conclua os campos e as assinaturas obrigatórias antes de continuar.',
