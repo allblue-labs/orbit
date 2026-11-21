@@ -352,6 +352,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         onPressed: _submitting ? null : _pedirRecuperacao,
                         child: const Text('Esqueci minha senha'),
                       ),
+                      const SizedBox(height: OrbitSpacing.sm),
+                      const Text(
+                        'Ao entrar, você concorda com os Termos de Uso e a '
+                        'Política de Privacidade do Orbit.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: OrbitColors.textSecondary,
+                        ),
+                      ),
                       const LegalLinks(),
                     ],
                   ),

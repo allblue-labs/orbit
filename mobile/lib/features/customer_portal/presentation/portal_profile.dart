@@ -11,6 +11,7 @@ import '../../../core/errors/orbit_exception.dart';
 import '../../../core/media/media_type.dart';
 import '../../../core/theme/orbit_theme.dart';
 import '../../../core/widgets/section_states.dart';
+import '../../legal/presentation/legal_document_screen.dart';
 import '../../profile/presentation/avatar_crop_sheet.dart';
 import '../../profile/presentation/edit_profile_sheet.dart'
     show avatarImagePickerProvider;
@@ -311,6 +312,8 @@ class _ProfileSheetState extends ConsumerState<_ProfileSheet> {
                 ),
             ],
           ),
+          const SizedBox(height: OrbitSpacing.lg),
+          const LegalDocumentsGroup(),
           const PortalBlockTitle('Conta'),
           ListTile(
             contentPadding: EdgeInsets.zero,

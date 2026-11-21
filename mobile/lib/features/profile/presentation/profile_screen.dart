@@ -31,6 +31,7 @@ import '../../../core/routing/orbit_router.dart';
 import '../../../core/theme/orbit_theme.dart';
 import '../../authentication/domain/session.dart';
 import '../../authentication/presentation/logout_confirmation.dart';
+import '../../legal/presentation/legal_document_screen.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../signature/application/signature_providers.dart';
 import '../../sync/application/sync_controller.dart';
@@ -171,6 +172,8 @@ class ProfileScreen extends ConsumerWidget {
               ),
             ],
           ),
+          const SizedBox(height: OrbitSpacing.lg),
+          const LegalDocumentsGroup(),
           const SizedBox(height: OrbitSpacing.lg),
 
           OrbitSettingsGroup(
