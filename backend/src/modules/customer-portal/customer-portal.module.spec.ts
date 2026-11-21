@@ -20,11 +20,11 @@ describe('CustomerPortalModule release exposure', () => {
         NODE_ENV: 'production',
         CUSTOMER_PORTAL_ENABLED: 'true',
       }),
-    ).toHaveLength(5);
+    ).toHaveLength(7);
   });
 
   it('keeps the complete backend contract available to its isolated tests', () => {
-    expect(customerPortalControllers({ NODE_ENV: 'test' })).toHaveLength(5);
+    expect(customerPortalControllers({ NODE_ENV: 'test' })).toHaveLength(7);
     expect(CustomerPortalModule).toBeDefined();
   });
 });

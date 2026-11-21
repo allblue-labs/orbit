@@ -265,6 +265,22 @@ export class IdentityRepository {
     });
   }
 
+  /** Abre a sessão de um login sem senha e marca a última autenticação. */
+  async openSession(data: Prisma.SessionUncheckedCreateInput): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.updateMany({
+        where: { id: data.userId, status: 'ACTIVE', deletedAt: null },
+        data: { lastAuthenticatedAt: new Date() },
+      });
+      if (user.count !== 1)
+        throw new UnauthorizedException(
+          'Invalid credentials',
+          'INVALID_CREDENTIALS',
+        );
+      await tx.session.create({ data });
+    });
+  }
+
   createSession(data: Prisma.SessionUncheckedCreateInput) {
     return this.prisma.session.create({ data });
   }
@@ -559,6 +575,12 @@ export class IdentityRepository {
           },
         });
         await transaction.session.updateMany({
+          where: { userId, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+        /* Recuperar a senha é o "perdi o controle da conta": a biometria
+           cadastrada cai junto com as sessões. */
+        await transaction.identityBiometricCredential.updateMany({
           where: { userId, revokedAt: null },
           data: { revokedAt: new Date() },
         });

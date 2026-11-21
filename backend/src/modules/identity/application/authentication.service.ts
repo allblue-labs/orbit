@@ -183,6 +183,59 @@ export class AuthenticationService {
     };
   }
 
+  /**
+   * Sessão para quem já provou quem é por outro meio — a biometria.
+   *
+   * As mesmas portas do login com senha, menos a senha: conta ativa,
+   * superfície permitida, e-mail confirmado. Bloqueio por tentativas de senha
+   * também vale — a biometria não é atalho para fugir dele — e senha
+   * temporária pendente recusa: quem recebeu uma senha nova entra com ela.
+   */
+  async openVerifiedSession(
+    userId: string,
+    metadata: SessionMetadata,
+  ): Promise<TokenPair> {
+    const user = await this.repository.findById(userId);
+    if (
+      !user?.credential ||
+      user.deletedAt ||
+      user.status !== 'ACTIVE' ||
+      user.credential.mustChangePassword
+    )
+      throw new UnauthorizedException(
+        'Invalid credentials',
+        'INVALID_CREDENTIALS',
+      );
+    if (
+      user.credential.lockedUntil &&
+      user.credential.lockedUntil.getTime() > Date.now()
+    )
+      throw new UnauthorizedException(
+        'Account temporarily locked',
+        'ACCOUNT_LOCKED',
+      );
+    if (!allowsSurface(user, metadata.client))
+      throw new SurfaceNotAllowedException(normalizeSurface(metadata.client));
+    if (user.requiresEmailVerification)
+      throw new UnauthorizedException(
+        'Confirme seu e-mail antes de entrar.',
+        'EMAIL_VERIFICATION_REQUIRED',
+      );
+    const sessionId = this.uuids.generate();
+    const identity = toAuthenticatedIdentity(user, sessionId);
+    const pair = await this.tokens.issue(identity);
+    await this.repository.openSession({
+      id: sessionId,
+      userId: user.id,
+      organizationId: identity.organizationId,
+      businessUnitId: identity.businessUnitId,
+      refreshTokenHash: pair.refreshTokenHash,
+      expiresAt: pair.expiresAt,
+      ...metadata,
+    });
+    return { ...this.publicPair(pair), mustChangePassword: false };
+  }
+
   async refresh(refreshToken: string): Promise<TokenPair> {
     const hash = this.tokens.hashOpaqueToken(refreshToken);
     // One CAS winner. A competing replica rereads the canonical encrypted pair,

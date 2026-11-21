@@ -4,7 +4,7 @@ import { AuthRateLimitService } from './auth-rate-limit.service';
 import { requestClientIp } from './trusted-client-origin';
 
 const SENSITIVE_PATH =
-  /^(?:identity\/(?:login|register|refresh|email\/(?:verify|resend)|password\/(?:forgot|reset(?:\/validate)?)|me\/mfa\/(?:enrollment|enable))|portal\/auth\/(?:login|refresh|activate|password\/reset-(?:request|confirm))|public\/contact|billing\/(?:checkout-session|portal-session))$/;
+  /^(?:identity\/(?:login|register|refresh|biometrics\/(?:webauthn\/authentication(?:\/options)?|devices\/login)|email\/(?:verify|resend)|password\/(?:forgot|reset(?:\/validate)?)|me\/mfa\/(?:enrollment|enable))|portal\/auth\/(?:login|refresh|biometrics\/(?:webauthn\/authentication(?:\/options)?|devices\/login)|activate|password\/reset-(?:request|confirm))|public\/contact|billing\/(?:checkout-session|portal-session))$/;
 
 /** Shared database budgets. No test-runtime bypass or per-process fallback. */
 @Injectable()

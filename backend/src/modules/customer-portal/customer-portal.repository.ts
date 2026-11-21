@@ -59,6 +59,109 @@ export class CustomerPortalRepository {
     return rows[0] ?? null;
   }
 
+  /** A linha de login de uma identidade, para a biometria. */
+  async findLoginIdentityById(
+    identityId: string,
+  ): Promise<PortalIdentityRecord | null> {
+    const rows = await this.prisma.$queryRaw<PortalIdentityRecord[]>`
+      SELECT * FROM app_customer_portal_login_by_identity(${identityId}::uuid)`;
+    return rows[0] ?? null;
+  }
+
+  async registerBiometric(input: {
+    identityId: string;
+    sessionId: string;
+    id: string;
+    kind: 'DEVICE' | 'WEBAUTHN';
+    label: string;
+    deviceId?: string;
+    secretHash?: string;
+    webauthnId?: string;
+    publicKey?: Uint8Array;
+    signCount?: number;
+    transports?: string[];
+  }): Promise<boolean> {
+    const rows = await this.prisma.$queryRaw<{ ok: boolean }[]>`
+      SELECT app_customer_portal_biometric_register(
+        ${input.identityId}::uuid, ${input.sessionId}::uuid, ${input.id}::uuid,
+        ${input.kind}, ${input.label}, ${input.deviceId ?? null},
+        ${input.secretHash ?? null}, ${input.webauthnId ?? null},
+        ${input.publicKey ? Buffer.from(input.publicKey) : null}::bytea,
+        ${BigInt(input.signCount ?? 0)}::bigint,
+        ${input.transports ?? []}::text[]
+      ) AS ok`;
+    return rows[0]?.ok === true;
+  }
+
+  listBiometrics(identityId: string, sessionId: string) {
+    return this.prisma.$queryRaw<
+      {
+        id: string;
+        kind: string;
+        label: string;
+        createdAt: Date;
+        lastUsedAt: Date | null;
+      }[]
+    >`SELECT * FROM app_customer_portal_biometric_list(${identityId}::uuid, ${sessionId}::uuid)`;
+  }
+
+  async revokeBiometric(
+    identityId: string,
+    sessionId: string,
+    credentialId: string,
+  ): Promise<boolean> {
+    const rows = await this.prisma.$queryRaw<{ ok: boolean }[]>`
+      SELECT app_customer_portal_biometric_revoke(
+        ${identityId}::uuid, ${sessionId}::uuid, ${credentialId}::uuid) AS ok`;
+    return rows[0]?.ok === true;
+  }
+
+  async findBiometric(where: {
+    credentialId?: string;
+    webauthnId?: string;
+  }): Promise<{
+    id: string;
+    identityId: string;
+    kind: string;
+    secretHash: string | null;
+    publicKey: Uint8Array | null;
+    signCount: bigint;
+    transports: string[];
+    webauthnId: string | null;
+  } | null> {
+    const rows = await this.prisma.$queryRaw<
+      {
+        id: string;
+        identityId: string;
+        kind: string;
+        secretHash: string | null;
+        publicKey: Uint8Array | null;
+        signCount: bigint;
+        transports: string[];
+        webauthnId: string | null;
+      }[]
+    >`SELECT * FROM app_customer_portal_biometric_lookup(
+        ${where.credentialId ?? null}::uuid, ${where.webauthnId ?? null})`;
+    return rows[0] ?? null;
+  }
+
+  async useBiometric(
+    credentialId: string,
+    change: {
+      expectedSecretHash?: string;
+      newSecretHash?: string;
+      signCount?: number;
+    },
+  ): Promise<boolean> {
+    const rows = await this.prisma.$queryRaw<{ ok: boolean }[]>`
+      SELECT app_customer_portal_biometric_use(
+        ${credentialId}::uuid, ${change.expectedSecretHash ?? null},
+        ${change.newSecretHash ?? null},
+        ${change.signCount === undefined ? null : BigInt(change.signCount)}::bigint
+      ) AS ok`;
+    return rows[0]?.ok === true;
+  }
+
   /** Estado do perfil, só para sessão válida da própria identidade. */
   async profileState(
     identityId: string,

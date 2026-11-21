@@ -100,6 +100,29 @@ export class CustomerPortalService {
     return response;
   }
 
+  /**
+   * Sessão para quem a biometria já identificou: as mesmas recusas do login
+   * com senha — cliente, organização e acesso ativos, sem bloqueio.
+   */
+  async openVerifiedSession(
+    identityId: string,
+    metadata: PortalRequestMetadata,
+  ): Promise<CustomerPortalSessionReadModel> {
+    const identity = await this.repository.findLoginIdentityById(identityId);
+    if (
+      !identity ||
+      !this.isEligible(identity) ||
+      (identity.lockedUntil && identity.lockedUntil.getTime() > Date.now())
+    ) {
+      this.metrics.increment('login.failure');
+      throw this.invalidCredentials();
+    }
+    const response = await this.openSession(identity, metadata);
+    this.metrics.increment('login.success');
+    this.metrics.increment('session.active');
+    return response;
+  }
+
   async refresh(refreshToken: string): Promise<CustomerPortalSessionReadModel> {
     const currentHash = this.tokens.hashOpaqueToken(refreshToken);
     const session = await this.repository.findSessionByRefreshHash(currentHash);

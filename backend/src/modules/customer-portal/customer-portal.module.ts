@@ -20,6 +20,12 @@ import { CustomerPortalReadRepository } from './customer-portal-read.repository'
 import { CustomerPortalReadService } from './customer-portal-read.service';
 import { CustomerPortalProfileController } from './customer-portal-profile.controller';
 import { CustomerPortalProfileService } from './customer-portal-profile.service';
+import { AuthChallengeStore } from '../../common/biometrics';
+import {
+  CustomerPortalBiometricController,
+  CustomerPortalBiometricLoginController,
+} from './customer-portal-biometric.controller';
+import { CustomerPortalBiometricService } from './customer-portal-biometric.service';
 
 /**
  * O backend do Portal está preservado e coberto por testes, mas a V1 não tem
@@ -32,6 +38,8 @@ const PORTAL_CONTROLLERS = [
   CustomerPortalController,
   CustomerPortalReadController,
   CustomerPortalProfileController,
+  CustomerPortalBiometricLoginController,
+  CustomerPortalBiometricController,
   CustomerPortalManagementController,
 ];
 
@@ -68,6 +76,8 @@ export function customerPortalControllers(
     CustomerPortalReadRepository,
     CustomerPortalReadService,
     CustomerPortalProfileService,
+    AuthChallengeStore,
+    CustomerPortalBiometricService,
     NoopCustomerPortalTokenDelivery,
     {
       provide: CUSTOMER_PORTAL_TOKEN_DELIVERY,

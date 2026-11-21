@@ -38,6 +38,7 @@ model User {
   avatarFile                         StorageFile?                   @relation("UserAvatarFile", fields: [avatarStorageFileId], references: [id], onDelete: SetNull)
   credential                         Credential?
   sessions                           Session[]
+  biometricCredentials               IdentityBiometricCredential[]
   ownedOrganizations                 Organization[]                 @relation("OrganizationOwner")
   organizationMemberships            OrganizationMembership[]
   platformRoleAssignments            PlatformRoleAssignment[]
@@ -1389,14 +1390,15 @@ model CustomerPortalIdentity {
   createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  organization         Organization                  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  customer             Customer                      @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  contact              Contact?                      @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  organization         Organization                        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  customer             Customer                            @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  contact              Contact?                            @relation(fields: [contactId], references: [id], onDelete: SetNull)
   sessions             CustomerPortalSession[]
   invitations          CustomerPortalInvitation[]
   passwordResets       CustomerPortalPasswordReset[]
   serviceRequests      CustomerServiceRequest[]
   serviceRequestEvents CustomerServiceRequestEvent[]
+  biometricCredentials CustomerPortalBiometricCredential[]
 
   @@unique([organizationId, normalizedEmail])
   @@index([organizationId, customerId, status])
@@ -5362,4 +5364,65 @@ model ProductSale {
   @@index([organizationId, businessUnitId, createdAt(sort: Desc), id(sort: Desc)], map: "product_sales_unit_history")
   @@index([customerId], map: "product_sales_customer_idx")
   @@map("product_sales")
+}
+
+/// Entrar com a biometria do aparelho — equipe. WEBAUTHN (web: só a chave
+/// pública) ou DEVICE (app: SHA-256 de um segredo trocado a cada uso).
+model IdentityBiometricCredential {
+  id                   String    @id @default(uuid(7)) @db.Uuid
+  userId               String    @map("user_id") @db.Uuid
+  kind                 String    @db.VarChar(20)
+  label                String    @db.VarChar(120)
+  deviceId             String?   @map("device_id") @db.VarChar(120)
+  secretHash           String?   @map("secret_hash") @db.Char(64)
+  webauthnCredentialId String?   @map("webauthn_credential_id") @db.VarChar(1024)
+  publicKey            Bytes?    @map("public_key")
+  signCount            BigInt    @default(0) @map("sign_count")
+  transports           String[]  @default([])
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastUsedAt           DateTime? @map("last_used_at") @db.Timestamptz(3)
+  revokedAt            DateTime? @map("revoked_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt], map: "identity_biometric_user_idx")
+  @@map("identity_biometric_credentials")
+}
+
+/// Entrar com a biometria do aparelho — cliente. RLS forçado, sem policy:
+/// acesso só pelas funções `app_customer_portal_biometric_*`.
+model CustomerPortalBiometricCredential {
+  id                   String    @id @default(uuid(7)) @db.Uuid
+  organizationId       String    @map("organization_id") @db.Uuid
+  customerId           String    @map("customer_id") @db.Uuid
+  portalIdentityId     String    @map("portal_identity_id") @db.Uuid
+  kind                 String    @db.VarChar(20)
+  label                String    @db.VarChar(120)
+  deviceId             String?   @map("device_id") @db.VarChar(120)
+  secretHash           String?   @map("secret_hash") @db.Char(64)
+  webauthnCredentialId String?   @map("webauthn_credential_id") @db.VarChar(1024)
+  publicKey            Bytes?    @map("public_key")
+  signCount            BigInt    @default(0) @map("sign_count")
+  transports           String[]  @default([])
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastUsedAt           DateTime? @map("last_used_at") @db.Timestamptz(3)
+  revokedAt            DateTime? @map("revoked_at") @db.Timestamptz(3)
+
+  identity CustomerPortalIdentity @relation(fields: [portalIdentityId], references: [id], onDelete: Cascade)
+
+  @@map("customer_portal_biometric_credentials")
+}
+
+/// Desafio WebAuthn: um uso, poucos minutos.
+model AuthChallenge {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  purpose    String    @db.VarChar(40)
+  challenge  String    @db.VarChar(200)
+  subjectId  String?   @map("subject_id") @db.Uuid
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(3)
+  consumedAt DateTime? @map("consumed_at") @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([expiresAt], map: "auth_challenges_expiry_idx")
+  @@map("auth_challenges")
 }

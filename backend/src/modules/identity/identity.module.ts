@@ -23,6 +23,13 @@ import { AvatarService } from './application/avatar.service';
 import { AvatarRepository } from './infrastructure/avatar.repository';
 import { EmailVerificationService } from './application/email-verification.service';
 import { EmailVerificationController } from './presentation/email-verification.controller';
+import { AuthChallengeStore } from '../../common/biometrics';
+import { BiometricLoginService } from './application/biometric-login.service';
+import { BiometricCredentialRepository } from './infrastructure/biometric-credential.repository';
+import {
+  BiometricLoginController,
+  BiometricProfileController,
+} from './presentation/biometric.controller';
 
 @Module({
   imports: [
@@ -51,6 +58,8 @@ import { EmailVerificationController } from './presentation/email-verification.c
     ProfileController,
     InvitationController,
     EmailVerificationController,
+    BiometricLoginController,
+    BiometricProfileController,
   ],
   providers: [
     IdentityRepository,
@@ -68,6 +77,9 @@ import { EmailVerificationController } from './presentation/email-verification.c
     RegistrationService,
     EmailVerificationService,
     IdentityReadModelMapper,
+    AuthChallengeStore,
+    BiometricCredentialRepository,
+    BiometricLoginService,
     TransactionalIdentityTokenDelivery,
     {
       provide: IDENTITY_TOKEN_DELIVERY,

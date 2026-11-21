@@ -1,0 +1,147 @@
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Header,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiTags,
+  ApiUnauthorizedResponse,
+} from '@nestjs/swagger';
+import {
+  DeviceBiometricLoginDto,
+  EnrollDeviceBiometricDto,
+  WebAuthnAuthenticationDto,
+  WebAuthnRegistrationDto,
+} from '../../common/biometrics';
+import { ApiPublicErrors } from '../../common/public-errors';
+import { requestClientIp } from '../../common/trusted-client-origin';
+import { Public } from '../../decorators';
+import { UnauthorizedException } from '../../exceptions';
+import { ParseUUIDv7Pipe } from '../../pipes';
+import { CustomerPortalBiometricService } from './customer-portal-biometric.service';
+import {
+  CustomerPortalGuard,
+  type CustomerPortalRequest,
+} from './customer-portal.guard';
+
+const metadata = (request: CustomerPortalRequest) => ({
+  ipAddress: requestClientIp(request),
+  userAgent: request.header('user-agent'),
+});
+
+/** O cliente entra com a biometria. Público: a prova é a credencial. */
+@Public()
+@ApiPublicErrors()
+@ApiTags('Customer Portal Authentication')
+@Controller({ path: 'portal/auth/biometrics', version: '1' })
+export class CustomerPortalBiometricLoginController {
+  constructor(private readonly biometrics: CustomerPortalBiometricService) {}
+
+  @Post('webauthn/authentication/options')
+  @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', 'no-store')
+  @ApiOperation({ summary: 'Desafio para entrar com a biometria na web' })
+  authenticationOptions() {
+    return this.biometrics.authenticationOptions();
+  }
+
+  @Post('webauthn/authentication')
+  @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', 'no-store')
+  @ApiOperation({ summary: 'Entra com a biometria na web' })
+  authenticate(
+    @Body() input: WebAuthnAuthenticationDto,
+    @Req() request: CustomerPortalRequest,
+  ) {
+    return this.biometrics.authenticate(input, metadata(request));
+  }
+
+  @Post('devices/login')
+  @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', 'no-store')
+  @ApiOperation({ summary: 'Entra com a biometria do app' })
+  deviceLogin(
+    @Body() input: DeviceBiometricLoginDto,
+    @Req() request: CustomerPortalRequest,
+  ) {
+    return this.biometrics.deviceLogin(input, metadata(request));
+  }
+}
+
+/** As biometrias do próprio cliente. */
+@Public()
+@ApiPublicErrors()
+@UseGuards(CustomerPortalGuard)
+@ApiBearerAuth('customer-portal')
+@ApiTags('Customer Portal Profile')
+@ApiUnauthorizedResponse({ description: 'Sessão Portal inválida ou expirada' })
+@Controller({ path: 'portal/me/biometrics', version: '1' })
+export class CustomerPortalBiometricController {
+  constructor(private readonly biometrics: CustomerPortalBiometricService) {}
+
+  @Get()
+  @ApiOperation({ summary: 'Biometrias cadastradas pelo cliente' })
+  list(@Req() request: CustomerPortalRequest) {
+    return this.biometrics.list(actor(request));
+  }
+
+  @Post('webauthn/registration/options')
+  @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', 'no-store')
+  @ApiOperation({ summary: 'Desafio para cadastrar a biometria na web' })
+  registrationOptions(@Req() request: CustomerPortalRequest) {
+    return this.biometrics.registrationOptions(actor(request));
+  }
+
+  @Post('webauthn/registration')
+  @ApiOperation({ summary: 'Cadastra a biometria deste navegador' })
+  register(
+    @Req() request: CustomerPortalRequest,
+    @Body() input: WebAuthnRegistrationDto,
+  ) {
+    return this.biometrics.register(
+      actor(request),
+      input,
+      request.header('user-agent'),
+    );
+  }
+
+  @Post('devices')
+  @Header('Cache-Control', 'no-store')
+  @ApiOperation({ summary: 'Cadastra a biometria deste aparelho (app)' })
+  enrollDevice(
+    @Req() request: CustomerPortalRequest,
+    @Body() input: EnrollDeviceBiometricDto,
+  ) {
+    return this.biometrics.enrollDevice(
+      actor(request),
+      input,
+      request.header('user-agent'),
+    );
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Remove uma biometria' })
+  revoke(
+    @Req() request: CustomerPortalRequest,
+    @Param('id', ParseUUIDv7Pipe) id: string,
+  ) {
+    return this.biometrics.revoke(actor(request), id);
+  }
+}
+
+function actor(request: CustomerPortalRequest) {
+  if (!request.portalActor) throw new UnauthorizedException();
+  return request.portalActor;
+}
