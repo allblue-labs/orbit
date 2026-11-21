@@ -6,6 +6,8 @@
 /// interna.
 library;
 
+import '../../authentication/application/biometric_login.dart';
+import '../../authentication/presentation/biometric_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -31,66 +33,70 @@ class _PortalShellScreenState extends ConsumerState<PortalShellScreen> {
   Widget build(BuildContext context) {
     final palette = context.orbit;
     final me = ref.watch(portalMeProvider);
-    return Scaffold(
-      backgroundColor: palette.background,
-      appBar: AppBar(
-        titleSpacing: OrbitSpacing.gutter,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(_titulos[_pagina], style: OrbitType.sectionTitle),
-            if (me != null)
-              Text(
-                me.customerName,
-                style: OrbitType.caption.copyWith(color: palette.inkMuted),
+    return BiometricOfferGate(
+      audience: BiometricAudience.customer,
+      settingsHint: 'Perfil → Conta',
+      child: Scaffold(
+        backgroundColor: palette.background,
+        appBar: AppBar(
+          titleSpacing: OrbitSpacing.gutter,
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(_titulos[_pagina], style: OrbitType.sectionTitle),
+              if (me != null)
+                Text(
+                  me.customerName,
+                  style: OrbitType.caption.copyWith(color: palette.inkMuted),
+                ),
+            ],
+          ),
+          actions: [
+            Padding(
+              padding: const EdgeInsets.only(right: OrbitSpacing.sm),
+              child: IconButton(
+                tooltip: 'Seu perfil',
+                onPressed: () => showPortalProfileSheet(context),
+                icon: const PortalAvatar(),
               ),
+            ),
           ],
         ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: OrbitSpacing.sm),
-            child: IconButton(
-              tooltip: 'Seu perfil',
-              onPressed: () => showPortalProfileSheet(context),
-              icon: const PortalAvatar(),
+        body: IndexedStack(
+          index: _pagina,
+          children: [
+            PortalHomePage(onOpenTab: (tab) => setState(() => _pagina = tab)),
+            const PortalServiceRequestsPage(),
+            const PortalEquipmentPage(),
+            const PortalDocumentsPage(),
+          ],
+        ),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: _pagina,
+          onDestinationSelected: (indice) => setState(() => _pagina = indice),
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.home_outlined),
+              selectedIcon: Icon(Icons.home),
+              label: 'Início',
             ),
-          ),
-        ],
-      ),
-      body: IndexedStack(
-        index: _pagina,
-        children: [
-          PortalHomePage(onOpenTab: (tab) => setState(() => _pagina = tab)),
-          const PortalServiceRequestsPage(),
-          const PortalEquipmentPage(),
-          const PortalDocumentsPage(),
-        ],
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _pagina,
-        onDestinationSelected: (indice) => setState(() => _pagina = indice),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
-            label: 'Início',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.support_agent_outlined),
-            selectedIcon: Icon(Icons.support_agent),
-            label: 'Chamados',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.ac_unit_outlined),
-            selectedIcon: Icon(Icons.ac_unit),
-            label: 'Equipamentos',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.description_outlined),
-            selectedIcon: Icon(Icons.description),
-            label: 'Documentos',
-          ),
-        ],
+            NavigationDestination(
+              icon: Icon(Icons.support_agent_outlined),
+              selectedIcon: Icon(Icons.support_agent),
+              label: 'Chamados',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.ac_unit_outlined),
+              selectedIcon: Icon(Icons.ac_unit),
+              label: 'Equipamentos',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.description_outlined),
+              selectedIcon: Icon(Icons.description),
+              label: 'Documentos',
+            ),
+          ],
+        ),
       ),
     );
   }

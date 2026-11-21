@@ -895,10 +895,17 @@ void registerCaptures() {
     final interruptores = tester
         .widgetList<Switch>(find.byType(Switch))
         .toList();
-    expect(interruptores.length, 3);
+    /* A lista é preguiçosa: em tela pequena com letra grande, a linha da
+       biometria ainda não foi construída. */
+    expect(interruptores.length, inInclusiveRange(3, 4));
     expect(interruptores[0].value, isTrue);
     expect(interruptores[1].value, isTrue, reason: 'ausente = ligado');
     expect(interruptores[2].value, isFalse);
+    /* Biometria: sem biometria no aparelho de teste, desligada e travada. */
+    if (interruptores.length == 4) {
+      expect(interruptores[3].value, isFalse);
+      expect(interruptores[3].onChanged, isNull);
+    }
 
     await _capture(
       tester,

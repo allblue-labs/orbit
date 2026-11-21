@@ -1,6 +1,8 @@
 /// Perfil do cliente: foto, assinatura, senha e saída.
 library;
 
+import '../../authentication/application/biometric_login.dart';
+import '../../authentication/presentation/biometric_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -325,6 +327,7 @@ class _ProfileSheetState extends ConsumerState<_ProfileSheet> {
           OrbitSettingsGroup(
             title: 'Conta',
             children: [
+              const BiometricSettingsRow(audience: BiometricAudience.customer),
               OrbitSettingsRow(
                 icon: Icons.lock_outline,
                 label: 'Trocar senha',

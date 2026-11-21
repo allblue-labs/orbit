@@ -12,6 +12,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/providers.dart';
+import '../../features/authentication/application/biometric_login.dart';
+import '../../features/authentication/presentation/biometric_widgets.dart';
 import '../../features/authentication/domain/session.dart';
 import '../../features/authentication/presentation/change_password_screen.dart';
 import '../../features/authentication/presentation/login_screen.dart';
@@ -338,7 +340,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         /// Os gatilhos vivem no shell: existem enquanto houver sessão, e não
         /// por tela.
         builder: (context, state, child) => SyncTriggers(
-          child: AppShell(location: state.matchedLocation, child: child),
+          child: BiometricOfferGate(
+            audience: BiometricAudience.team,
+            settingsHint: 'Perfil → Configurações',
+            child: AppShell(location: state.matchedLocation, child: child),
+          ),
         ),
         routes: [
           OrbitPageRoute(

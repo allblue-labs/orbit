@@ -14,6 +14,7 @@ import '../../../core/errors/orbit_exception.dart';
 import '../../../core/theme/orbit_theme.dart';
 import '../../../core/widgets/orbit_brand.dart';
 import '../../customer_portal/application/portal_session.dart';
+import '../application/biometric_login.dart';
 import '../domain/session.dart';
 
 /// Quem está entrando. A equipe e o cliente usam a mesma tela e o mesmo
@@ -57,6 +58,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   bool get _customer => _audience == LoginAudience.customer;
 
+  BiometricAudience get _biometricAudience =>
+      _customer ? BiometricAudience.customer : BiometricAudience.team;
+
+  /// Entra com a biometria guardada para o público escolhido.
+  Future<void> _entrarComBiometria() async {
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      await ref.read(biometricLoginProvider).signIn(_biometricAudience);
+      // Cancelou: fica onde está. Entrou: a navegação reage à sessão.
+    } on OrbitException catch (error) {
+      if (mounted) setState(() => _error = error.publicMessage);
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
   void _setAudience(LoginAudience audience) {
     setState(() {
       _audience = audience;
@@ -86,6 +106,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _submitting = true;
       _error = null;
     });
+    final biometric = ref.read(biometricLoginProvider);
+    // Marcado antes: depois do login esta tela já não existe. O shell lê a
+    // marca e convida a ativar a biometria.
+    await biometric.markPasswordLogin(_biometricAudience);
 
     try {
       if (_customer) {
@@ -103,6 +127,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           );
       // A navegação reage à mudança de sessão; nada a fazer aqui.
     } on OrbitException catch (error) {
+      await biometric.clearPasswordLogin();
       final needsMfa = !_customer && error.code == 'MFA_REQUIRED';
       if (!mounted) return;
       if (_customer && error.isUnauthorized) {
@@ -339,6 +364,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               )
                             : const Text('Entrar'),
                       ),
+                      if (ref
+                                  .watch(
+                                    biometricEnabledProvider(
+                                      _biometricAudience,
+                                    ),
+                                  )
+                                  .valueOrNull ==
+                              true &&
+                          ref.watch(biometricAvailableProvider).valueOrNull ==
+                              true) ...[
+                        const SizedBox(height: OrbitSpacing.sm),
+                        OutlinedButton.icon(
+                          key: const Key('login.biometric'),
+                          onPressed: _submitting ? null : _entrarComBiometria,
+                          icon: const Icon(Icons.fingerprint_rounded),
+                          label: const Text('Entrar com biometria'),
+                        ),
+                      ],
                       const SizedBox(height: OrbitSpacing.sm),
 
                       /// Recuperação por e-mail.

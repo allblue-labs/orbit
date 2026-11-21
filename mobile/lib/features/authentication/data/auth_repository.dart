@@ -62,6 +62,57 @@ class AuthRepository {
     return tokens;
   }
 
+  /// Entra com a credencial biométrica deste aparelho.
+  ///
+  /// O servidor confere o segredo, abre a sessão e devolve o **próximo**
+  /// segredo — o usado deixa de valer. Quem chama guarda o novo no cofre.
+  Future<({TokenPair tokens, String nextSecret})> loginWithDeviceCredential({
+    required String credentialId,
+    required String secret,
+  }) async {
+    final clearing = _client.authenticator.clearSession();
+    final generation = _client.authenticator.generation;
+    await clearing;
+    if (generation != _client.authenticator.generation) {
+      throw SessionAuthenticator.changed;
+    }
+    final deviceId = _deviceInstanceId;
+    final data = await _client.post<Map<String, dynamic>>(
+      '/identity/biometrics/devices/login',
+      isPublic: true,
+      body: {
+        'credentialId': credentialId,
+        'secret': secret,
+        'client': 'MOBILE',
+        if (deviceId != null) 'deviceId': await deviceId(),
+      },
+    );
+    final tokens = TokenPair.fromJson(data);
+    await _client.authenticator.storeTokens(tokens, generation: generation);
+    return (tokens: tokens, nextSecret: data['deviceSecret'] as String);
+  }
+
+  /// Pede uma credencial biométrica para este aparelho (sessão ativa).
+  Future<({String credentialId, String secret})> enrollDeviceCredential({
+    required String deviceId,
+    required String label,
+  }) async {
+    final data = await _client.post<Map<String, dynamic>>(
+      '/identity/me/biometrics/devices',
+      body: {'deviceId': deviceId, 'label': label},
+    );
+    return (
+      credentialId: data['credentialId'] as String,
+      secret: data['secret'] as String,
+    );
+  }
+
+  /// Remove a credencial no servidor — desativar a biometria no aparelho.
+  Future<void> revokeDeviceCredential(String credentialId) =>
+      _client.delete<dynamic>(
+        '/identity/me/biometrics/${Uri.encodeComponent(credentialId)}',
+      );
+
   /// Revoga a sessão no backend e limpa o armazenamento.
   ///
   /// A falha na revogação não impede o logout local: o usuário pediu para sair.

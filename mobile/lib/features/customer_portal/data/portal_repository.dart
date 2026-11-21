@@ -59,6 +59,54 @@ class PortalRepository {
     );
   }
 
+  /// Entra com a credencial biométrica deste aparelho; devolve a sessão e o
+  /// próximo segredo — o usado deixa de valer.
+  Future<({PortalSession session, String nextSecret})>
+  loginWithDeviceCredential({
+    required String credentialId,
+    required String secret,
+  }) async {
+    final clearing = authenticator.clearSession();
+    final generation = authenticator.generation;
+    await clearing;
+    if (generation != authenticator.generation) {
+      throw SessionAuthenticator.changed;
+    }
+    final data = await _client.post<Map<String, dynamic>>(
+      '/portal/auth/biometrics/devices/login',
+      isPublic: true,
+      body: {'credentialId': credentialId, 'secret': secret},
+    );
+    final tokens = TokenPair.fromJson(data);
+    await authenticator.storeTokens(tokens, generation: generation);
+    return (
+      session: PortalSession(
+        tokens: tokens,
+        me: PortalMe.fromJson(data['me'] as Map<String, dynamic>),
+      ),
+      nextSecret: data['deviceSecret'] as String,
+    );
+  }
+
+  Future<({String credentialId, String secret})> enrollDeviceCredential({
+    required String deviceId,
+    required String label,
+  }) async {
+    final data = await _client.post<Map<String, dynamic>>(
+      '/portal/me/biometrics/devices',
+      body: {'deviceId': deviceId, 'label': label},
+    );
+    return (
+      credentialId: data['credentialId'] as String,
+      secret: data['secret'] as String,
+    );
+  }
+
+  Future<void> revokeDeviceCredential(String credentialId) =>
+      _client.delete<dynamic>(
+        '/portal/me/biometrics/${Uri.encodeComponent(credentialId)}',
+      );
+
   Future<PortalMe> me() async =>
       PortalMe.fromJson(await _client.get<Map<String, dynamic>>('/portal/me'));
 

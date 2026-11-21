@@ -121,6 +121,26 @@ class PortalSessionController extends StateNotifier<PortalAuthState> {
     if (_current(operation)) state = PortalSignedIn(session.me);
   }
 
+  /// Entra com a biometria; devolve o próximo segredo para o cofre.
+  Future<String> loginWithDeviceCredential({
+    required String credentialId,
+    required String secret,
+  }) async {
+    if (_parent case final parent?) {
+      return parent.loginWithDeviceCredential(
+        credentialId: credentialId,
+        secret: secret,
+      );
+    }
+    final operation = ++_operation;
+    final result = await _repository.loginWithDeviceCredential(
+      credentialId: credentialId,
+      secret: secret,
+    );
+    if (_current(operation)) state = PortalSignedIn(result.session.me);
+    return result.nextSecret;
+  }
+
   Future<void> logout() async {
     if (_parent case final parent?) return parent.logout();
     _operation++;

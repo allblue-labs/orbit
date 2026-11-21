@@ -2,6 +2,7 @@
     <!-- Notificações e captura de evidências nas operações. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <!-- O seletor do sistema concede acesso somente aos arquivos escolhidos.
          Remove também declarações que possam vir de dependências. -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" tools:node="remove" />
