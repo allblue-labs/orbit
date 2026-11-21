@@ -14,6 +14,7 @@ import '../../artifact/data/document_file.dart';
 import '../../artifact/data/document_name.dart';
 import '../application/portal_session.dart';
 import '../data/portal_contracts.dart';
+import 'portal_widgets.dart';
 
 /// O tom de um status de atendimento, pelo código que o servidor publica.
 ///
@@ -37,6 +38,13 @@ String portalDay(DateTime? when) {
   if (when == null) return '—';
   String dois(int n) => n.toString().padLeft(2, '0');
   return '${dois(when.day)}/${dois(when.month)}';
+}
+
+/// `dd/MM/aaaa`.
+String portalDate(DateTime? when) {
+  if (when == null) return '—';
+  String dois(int n) => n.toString().padLeft(2, '0');
+  return '${dois(when.day)}/${dois(when.month)}/${when.year}';
 }
 
 /// `dd/MM/aaaa às HH:mm`.
@@ -121,73 +129,23 @@ Rect? _origem(BuildContext context) {
   return caixa.localToGlobal(Offset.zero) & caixa.size;
 }
 
-/// Uma linha de documento: data, título, categoria, e o botão de enviar.
+/// Um documento, pronto para abrir ou compartilhar.
 class PortalDocumentRow extends ConsumerWidget {
   const PortalDocumentRow({super.key, required this.document});
 
   final PortalDocument document;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final palette = context.orbit;
-    void abrir() => openPortalDocument(
+  Widget build(BuildContext context, WidgetRef ref) => PortalDocumentCard(
+    document: document,
+    onOpen: () => openPortalDocument(
       context,
       ref,
       documentId: document.id,
       fileName: portalDocumentFileName(document),
       subject: document.title,
-    );
-    return OrbitListRow(
-      leading: portalDay(document.issuedAt),
-      title: document.title.isEmpty ? document.categoryLabel : document.title,
-      subtitle: [
-        document.categoryLabel,
-        if (document.code.isNotEmpty) document.code,
-      ].join(' · '),
-      trailing: IconButton(
-        tooltip: 'Abrir ou compartilhar',
-        icon: Icon(Icons.ios_share, color: palette.accent),
-        onPressed: abrir,
-      ),
-      onTap: abrir,
-    );
-  }
-}
-
-/// Um par rótulo/valor das fichas de detalhe. Sem valor, não aparece.
-class PortalFact extends StatelessWidget {
-  const PortalFact({super.key, required this.label, required this.value});
-
-  final String label;
-  final String? value;
-
-  @override
-  Widget build(BuildContext context) {
-    final texto = value;
-    if (texto == null || texto.trim().isEmpty) return const SizedBox.shrink();
-    final palette = context.orbit;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: OrbitSpacing.xs),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 120,
-            child: Text(
-              label,
-              style: OrbitType.caption.copyWith(color: palette.inkMuted),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              texto,
-              style: OrbitType.body.copyWith(color: palette.ink),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+    ),
+  );
 }
 
 /// Título de bloco dentro das fichas.

@@ -64,3 +64,4 @@ test/screenshots/failures/
 # Manual visual review output (not automatically accepted golden baselines).
 /tool/out/
 /tool/failures/
+/test/screenshots/out_portal/

@@ -6,11 +6,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../core/design/orbit_settings_list.dart';
 import '../../../core/design/orbit_signature_pad.dart';
 import '../../../core/errors/orbit_exception.dart';
 import '../../../core/media/media_type.dart';
 import '../../../core/theme/orbit_theme.dart';
-import '../../../core/widgets/section_states.dart';
 import '../../legal/presentation/legal_document_screen.dart';
 import '../../profile/presentation/avatar_crop_sheet.dart';
 import '../../profile/presentation/edit_profile_sheet.dart'
@@ -19,6 +19,7 @@ import '../application/portal_providers.dart';
 import '../application/portal_session.dart';
 import '../data/portal_contracts.dart';
 import 'portal_common.dart';
+import 'portal_widgets.dart';
 
 /// A foto do cliente, ou as iniciais quando não há.
 class PortalAvatar extends ConsumerWidget {
@@ -55,7 +56,7 @@ Future<void> showPortalProfileSheet(BuildContext context) =>
       isScrollControlled: true,
       showDragHandle: true,
       useSafeArea: true,
-      backgroundColor: context.orbit.surface,
+      backgroundColor: context.orbit.background,
       builder: (_) => const _ProfileSheet(),
     );
 
@@ -209,133 +210,203 @@ class _ProfileSheetState extends ConsumerState<_ProfileSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              const PortalAvatar(radius: 32),
-              const SizedBox(width: OrbitSpacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          PortalCard(
+            child: Column(
+              children: [
+                Stack(
+                  clipBehavior: Clip.none,
                   children: [
-                    Text(
-                      me?.displayName ?? '',
-                      style: OrbitType.sectionTitle.copyWith(
-                        color: palette.ink,
-                      ),
-                    ),
-                    Text(
-                      me?.email ?? '',
-                      style: OrbitType.caption.copyWith(
-                        color: palette.inkMuted,
-                      ),
-                    ),
-                    Text(
-                      'Cliente de ${me?.organizationName ?? ''}',
-                      style: OrbitType.caption.copyWith(
-                        color: palette.inkMuted,
+                    const PortalAvatar(radius: 40),
+                    Positioned(
+                      right: -6,
+                      bottom: -2,
+                      child: Tooltip(
+                        message: dados.avatar.available
+                            ? 'Trocar foto'
+                            : 'Adicionar foto',
+                        child: Material(
+                          color: palette.accent,
+                          shape: CircleBorder(
+                            side: BorderSide(color: palette.surface, width: 2),
+                          ),
+                          child: InkWell(
+                            customBorder: const CircleBorder(),
+                            onTap: _ocupado ? null : _escolherOrigemDaFoto,
+                            child: const SizedBox(
+                              width: 30,
+                              height: 30,
+                              child: Icon(
+                                Icons.photo_camera_outlined,
+                                color: Colors.white,
+                                size: 16,
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ],
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: OrbitSpacing.sm),
-          Wrap(
-            spacing: OrbitSpacing.sm,
-            children: [
-              OutlinedButton.icon(
-                onPressed: _ocupado ? null : _escolherOrigemDaFoto,
-                icon: const Icon(Icons.photo_camera_outlined),
-                label: Text(
-                  dados.avatar.available ? 'Trocar foto' : 'Adicionar foto',
+                const SizedBox(height: OrbitSpacing.ms),
+                Text(
+                  me?.displayName ?? '',
+                  textAlign: TextAlign.center,
+                  style: OrbitType.sectionTitle.copyWith(color: palette.ink),
                 ),
-              ),
-              if (dados.avatar.available)
-                TextButton(
-                  onPressed: _ocupado
-                      ? null
-                      : () => _executar(
-                          ref.read(portalRepositoryProvider).removeAvatar,
-                          'Não foi possível remover a foto.',
-                        ),
-                  child: const Text('Remover foto'),
+                const SizedBox(height: 2),
+                Text(
+                  me?.email ?? '',
+                  textAlign: TextAlign.center,
+                  style: OrbitType.caption.copyWith(color: palette.inkMuted),
                 ),
-            ],
+                Text(
+                  'Cliente de ${me?.organizationName ?? ''}',
+                  textAlign: TextAlign.center,
+                  style: OrbitType.caption.copyWith(color: palette.inkMuted),
+                ),
+                if (dados.avatar.available)
+                  TextButton(
+                    onPressed: _ocupado
+                        ? null
+                        : () => _executar(
+                            ref.read(portalRepositoryProvider).removeAvatar,
+                            'Não foi possível remover a foto.',
+                          ),
+                    child: const Text('Remover foto'),
+                  ),
+              ],
+            ),
           ),
           const PortalBlockTitle('Assinatura digital'),
-          if (perfil.isLoading && perfil.valueOrNull == null)
-            const SectionLoading(lines: 2)
-          else if (dados.signature.url case final String url)
-            Container(
-              height: 120,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: OrbitRadius.card,
-                border: Border.all(color: palette.border),
-              ),
-              padding: const EdgeInsets.all(OrbitSpacing.sm),
-              child: Image.network(url, fit: BoxFit.contain),
-            )
-          else
-            Text(
-              'Nenhuma assinatura cadastrada.',
-              style: OrbitType.body.copyWith(color: palette.inkMuted),
-            ),
-          const SizedBox(height: OrbitSpacing.xs),
-          Text(
-            'Fica guardada na sua conta. Em breve você poderá usá-la para assinar documentos pelo app.',
-            style: OrbitType.caption.copyWith(color: palette.inkMuted),
-          ),
-          const SizedBox(height: OrbitSpacing.sm),
-          Wrap(
-            spacing: OrbitSpacing.sm,
-            children: [
-              OutlinedButton.icon(
-                onPressed: _ocupado ? null : _cadastrarAssinatura,
-                icon: const Icon(Icons.draw_outlined),
-                label: Text(
+          PortalCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _QuadroDaAssinatura(
+                  carregando: perfil.isLoading && perfil.valueOrNull == null,
+                  assinatura: dados.signature,
+                ),
+                const SizedBox(height: OrbitSpacing.ms),
+                Text(
                   dados.signature.available
-                      ? 'Refazer assinatura'
-                      : 'Cadastrar assinatura',
+                      ? 'Esta é a assinatura guardada na sua conta. Em breve você poderá usá-la para assinar documentos pelo app.'
+                      : 'Cadastre sua assinatura para tê-la guardada na conta. Em breve você poderá usá-la para assinar documentos pelo app.',
+                  style: OrbitType.caption.copyWith(color: palette.inkMuted),
                 ),
-              ),
-              if (dados.signature.available)
-                TextButton(
-                  onPressed: _ocupado
-                      ? null
-                      : () => _executar(
-                          ref.read(portalRepositoryProvider).removeSignature,
-                          'Não foi possível remover a assinatura.',
-                        ),
-                  child: const Text('Remover'),
+                const SizedBox(height: OrbitSpacing.md),
+                OutlinedButton.icon(
+                  onPressed: _ocupado ? null : _cadastrarAssinatura,
+                  icon: const Icon(Icons.draw_outlined),
+                  label: Text(
+                    dados.signature.available
+                        ? 'Refazer assinatura'
+                        : 'Cadastrar assinatura',
+                  ),
                 ),
-            ],
+                if (dados.signature.available)
+                  TextButton(
+                    onPressed: _ocupado
+                        ? null
+                        : () => _executar(
+                            ref.read(portalRepositoryProvider).removeSignature,
+                            'Não foi possível remover a assinatura.',
+                          ),
+                    child: Text(
+                      'Remover assinatura',
+                      style: TextStyle(color: palette.danger),
+                    ),
+                  ),
+              ],
+            ),
           ),
           const SizedBox(height: OrbitSpacing.lg),
           const LegalDocumentsGroup(),
-          const PortalBlockTitle('Conta'),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.lock_outline),
-            title: const Text('Trocar senha'),
-            onTap: _ocupado
-                ? null
-                : () => Navigator.of(context).push<void>(
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          const PortalChangePasswordScreen(required: false),
-                    ),
-                  ),
+          const SizedBox(height: OrbitSpacing.lg),
+          OrbitSettingsGroup(
+            title: 'Conta',
+            children: [
+              OrbitSettingsRow(
+                icon: Icons.lock_outline,
+                label: 'Trocar senha',
+                onTap: _ocupado
+                    ? null
+                    : () => Navigator.of(context).push<void>(
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              const PortalChangePasswordScreen(required: false),
+                        ),
+                      ),
+              ),
+              OrbitSettingsRow(
+                icon: Icons.logout_rounded,
+                label: 'Sair da conta',
+                tone: palette.danger,
+                onTap: _ocupado ? null : _sair,
+              ),
+            ],
           ),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: Icon(Icons.logout, color: palette.danger),
-            title: Text('Sair', style: TextStyle(color: palette.danger)),
-            onTap: _ocupado ? null : _sair,
-          ),
+          if (_ocupado) ...[
+            const SizedBox(height: OrbitSpacing.md),
+            const LinearProgressIndicator(),
+          ],
         ],
       ),
+    );
+  }
+}
+
+/// A assinatura cadastrada, como vai aparecer num documento: traço escuro
+/// sobre fundo branco. Sem assinatura, o espaço vazio diz isso.
+class _QuadroDaAssinatura extends StatelessWidget {
+  const _QuadroDaAssinatura({
+    required this.carregando,
+    required this.assinatura,
+  });
+
+  final bool carregando;
+  final PortalMedia assinatura;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.orbit;
+    final url = assinatura.url;
+    return Container(
+      height: 128,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: OrbitRadius.field,
+        border: Border.all(color: palette.border),
+      ),
+      padding: const EdgeInsets.all(OrbitSpacing.sm),
+      alignment: Alignment.center,
+      child: carregando
+          ? const SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : url != null
+          ? Image.network(
+              url,
+              fit: BoxFit.contain,
+              errorBuilder: (_, _, _) => Text(
+                'Não foi possível mostrar a assinatura agora.',
+                style: OrbitType.caption.copyWith(color: palette.inkMuted),
+              ),
+            )
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.draw_outlined, color: palette.inkSubtle),
+                const SizedBox(height: OrbitSpacing.xs),
+                Text(
+                  assinatura.available
+                      ? 'Assinatura cadastrada'
+                      : 'Nenhuma assinatura cadastrada',
+                  style: OrbitType.caption.copyWith(color: palette.inkMuted),
+                ),
+              ],
+            ),
     );
   }
 }
@@ -391,26 +462,48 @@ class _PortalSignatureCaptureScreenState
               ),
               const SizedBox(height: OrbitSpacing.md),
               Expanded(
-                child: OrbitSignaturePad(
-                  controller: _controle,
-                  hint: 'Assine neste espaço',
+                child: LayoutBuilder(
+                  builder: (context, limites) => Align(
+                    alignment: Alignment.topCenter,
+                    child: OrbitSignaturePad(
+                      controller: _controle,
+                      hint: 'Assine neste espaço',
+                      height: limites.maxHeight.clamp(180.0, 440.0),
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: OrbitSpacing.md),
+              /* Um embaixo do outro, em largura total: os botões do tema têm
+                 largura mínima infinita, e numa `Row` sem `Expanded` a linha
+                 inteira não era desenhada — era assim que o "Salvar" sumia. */
               ListenableBuilder(
                 listenable: _controle,
-                builder: (context, _) => Row(
+                builder: (context, _) => Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    TextButton(
-                      onPressed: _controle.temTraco ? _controle.limpar : null,
-                      child: const Text('Limpar'),
-                    ),
-                    const Spacer(),
-                    FilledButton(
+                    FilledButton.icon(
+                      key: const Key('portal.signature.save'),
                       onPressed: _controle.temTraco && !_exportando
                           ? _salvar
                           : null,
-                      child: const Text('Salvar assinatura'),
+                      icon: _exportando
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.check),
+                      label: const Text('Salvar assinatura'),
+                    ),
+                    const SizedBox(height: OrbitSpacing.xs),
+                    TextButton.icon(
+                      key: const Key('portal.signature.clear'),
+                      onPressed: _controle.temTraco && !_exportando
+                          ? _controle.limpar
+                          : null,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Limpar e refazer'),
                     ),
                   ],
                 ),

@@ -13,6 +13,7 @@ import '../../../core/widgets/section_states.dart';
 import '../application/portal_providers.dart';
 import '../data/portal_contracts.dart';
 import 'portal_common.dart';
+import 'portal_widgets.dart';
 
 Future<void> showPortalOperationSheet(BuildContext context, String id) =>
     _sheet(context, (_) => _OperationSheet(operationId: id));
@@ -20,16 +21,18 @@ Future<void> showPortalOperationSheet(BuildContext context, String id) =>
 Future<void> showPortalAssetSheet(BuildContext context, PortalAsset asset) =>
     _sheet(context, (_) => _AssetSheet(asset: asset));
 
+/// O fundo da ficha é o da tela, e não branco: os blocos dentro dela são
+/// cartões, e cartão branco sobre branco some.
 Future<void> _sheet(BuildContext context, WidgetBuilder builder) =>
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
       useSafeArea: true,
-      backgroundColor: context.orbit.surface,
+      backgroundColor: context.orbit.background,
       builder: (context) => DraggableScrollableSheet(
         expand: false,
-        initialChildSize: 0.85,
+        initialChildSize: 0.88,
         minChildSize: 0.5,
         maxChildSize: 0.95,
         builder: (context, controller) => PrimaryScrollController(
@@ -38,6 +41,13 @@ Future<void> _sheet(BuildContext context, WidgetBuilder builder) =>
         ),
       ),
     );
+
+const _respiro = EdgeInsets.fromLTRB(
+  OrbitSpacing.gutter,
+  0,
+  OrbitSpacing.gutter,
+  OrbitSpacing.xl,
+);
 
 class _OperationSheet extends ConsumerWidget {
   const _OperationSheet({required this.operationId});
@@ -75,61 +85,56 @@ class _OperationBody extends ConsumerWidget {
     final documentos = ref.watch(
       portalOperationDocumentsProvider(operation.id),
     );
+    final tom = operationTone(operation.status.code);
     return ListView(
       controller: PrimaryScrollController.of(context),
-      padding: const EdgeInsets.fromLTRB(
-        OrbitSpacing.gutter,
-        0,
-        OrbitSpacing.gutter,
-        OrbitSpacing.xl,
-      ),
+      padding: _respiro,
       children: [
-        Text(
-          '${operation.type} · ${operation.code}',
-          style: OrbitType.eyebrow.copyWith(color: palette.inkSubtle),
-        ),
-        const SizedBox(height: OrbitSpacing.xs),
-        Text(
-          operation.title,
-          style: OrbitType.screenTitle.copyWith(color: palette.ink),
-        ),
-        const SizedBox(height: OrbitSpacing.sm),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: OrbitStatusBadge(
-            label: operation.status.label,
-            tone: operationTone(operation.status.code),
-          ),
+        PortalSheetHeader(
+          icon: Icons.build_circle_outlined,
+          tone: tom,
+          eyebrow: '${operation.type} · ${operation.code}',
+          title: operation.title,
+          badge: OrbitStatusBadge(label: operation.status.label, tone: tom),
         ),
         const PortalBlockTitle('Atendimento'),
-        PortalFact(
-          label: 'Agendado para',
-          value: operation.scheduledStart == null
-              ? null
-              : portalDateTime(operation.scheduledStart),
-        ),
-        PortalFact(
-          label: 'Iniciado em',
-          value: operation.startedAt == null
-              ? null
-              : portalDateTime(operation.startedAt),
-        ),
-        PortalFact(
-          label: 'Concluído em',
-          value: operation.completedAt == null
-              ? null
-              : portalDateTime(operation.completedAt),
-        ),
-        PortalFact(label: 'Técnico', value: operation.technician),
-        PortalFact(label: 'Unidade', value: operation.unitName),
-        PortalFact(label: 'Local', value: operation.location),
-        PortalFact(
-          label: 'Equipamentos',
-          value: operation.assets.map((asset) => asset.name).join(', '),
+        PortalFactsCard(
+          facts: [
+            (
+              'Agendado para',
+              operation.scheduledStart == null
+                  ? null
+                  : portalDateTime(operation.scheduledStart),
+            ),
+            (
+              'Iniciado em',
+              operation.startedAt == null
+                  ? null
+                  : portalDateTime(operation.startedAt),
+            ),
+            (
+              'Concluído em',
+              operation.completedAt == null
+                  ? null
+                  : portalDateTime(operation.completedAt),
+            ),
+            ('Técnico responsável', operation.technician),
+            ('Unidade', operation.unitName),
+            ('Local', operation.location),
+            (
+              'Equipamentos',
+              operation.assets.map((asset) => asset.name).join('\n'),
+            ),
+          ],
         ),
         if (operation.description case final String descricao) ...[
-          const PortalBlockTitle('Descrição'),
-          Text(descricao, style: OrbitType.body.copyWith(color: palette.ink)),
+          const PortalBlockTitle('O que foi feito'),
+          PortalCard(
+            child: Text(
+              descricao,
+              style: OrbitType.body.copyWith(color: palette.ink),
+            ),
+          ),
         ],
         const PortalBlockTitle('Documentos'),
         documentos.when(
@@ -140,13 +145,13 @@ class _OperationBody extends ConsumerWidget {
                 ref.invalidate(portalOperationDocumentsProvider(operation.id)),
           ),
           data: (page) => page.items.isEmpty
-              ? Text(
-                  operation.status.code == 'completed'
+              ? PortalNote(
+                  icon: Icons.hourglass_empty,
+                  text: operation.status.code == 'completed'
                       ? 'O documento deste atendimento ainda está sendo emitido.'
                       : 'O documento fica disponível quando o atendimento for concluído.',
-                  style: OrbitType.caption.copyWith(color: palette.inkMuted),
                 )
-              : Column(
+              : PortalCardList(
                   children: [
                     for (final documento in page.items)
                       PortalDocumentRow(document: documento),
@@ -155,56 +160,9 @@ class _OperationBody extends ConsumerWidget {
         ),
         if (operation.timeline.isNotEmpty) ...[
           const PortalBlockTitle('Linha do tempo'),
-          for (final evento in operation.timeline)
-            _TimelineEntry(event: evento),
+          PortalTimeline(events: operation.timeline),
         ],
       ],
-    );
-  }
-}
-
-class _TimelineEntry extends StatelessWidget {
-  const _TimelineEntry({required this.event});
-
-  final PortalTimelineEvent event;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.orbit;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: OrbitSpacing.ms),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 6),
-            child: Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                color: palette.accent,
-                shape: BoxShape.circle,
-              ),
-            ),
-          ),
-          const SizedBox(width: OrbitSpacing.ms),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  event.description.isEmpty ? event.event : event.description,
-                  style: OrbitType.body.copyWith(color: palette.ink),
-                ),
-                Text(
-                  portalDateTime(event.occurredAt),
-                  style: OrbitType.caption.copyWith(color: palette.inkMuted),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -217,45 +175,34 @@ class _AssetSheet extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final palette = context.orbit;
     final completo = ref.watch(portalAssetProvider(asset.id)).valueOrNull;
     final atual = completo ?? asset;
     final historico = ref.watch(portalAssetHistoryProvider(asset.id));
     final documentos = ref.watch(portalAssetDocumentsProvider(asset.id));
+    final tom = assetTone(atual.status.code);
 
     return ListView(
       controller: PrimaryScrollController.of(context),
-      padding: const EdgeInsets.fromLTRB(
-        OrbitSpacing.gutter,
-        0,
-        OrbitSpacing.gutter,
-        OrbitSpacing.xl,
-      ),
+      padding: _respiro,
       children: [
-        Text(
-          atual.category.toUpperCase(),
-          style: OrbitType.eyebrow.copyWith(color: palette.inkSubtle),
+        PortalSheetHeader(
+          icon: Icons.ac_unit,
+          tone: OrbitTone.info,
+          eyebrow: atual.category,
+          title: atual.name,
+          badge: OrbitStatusBadge(label: atual.status.label, tone: tom),
         ),
-        const SizedBox(height: OrbitSpacing.xs),
-        Text(
-          atual.name,
-          style: OrbitType.screenTitle.copyWith(color: palette.ink),
+        const PortalBlockTitle('Ficha do equipamento'),
+        PortalFactsCard(
+          facts: [
+            ('Fabricante e modelo', atual.makeAndModel),
+            ('Número de série', atual.serialNumber),
+            ('Identificação', atual.identifier),
+            ('Local', atual.location),
+            ('Instalado em', _dia(atual.installedOn)),
+            ('Garantia até', _dia(atual.warrantyUntil)),
+          ],
         ),
-        const SizedBox(height: OrbitSpacing.sm),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: OrbitStatusBadge(
-            label: atual.status.label,
-            tone: assetTone(atual.status.code),
-          ),
-        ),
-        const PortalBlockTitle('Ficha'),
-        PortalFact(label: 'Fabricante e modelo', value: atual.makeAndModel),
-        PortalFact(label: 'Número de série', value: atual.serialNumber),
-        PortalFact(label: 'Identificação', value: atual.identifier),
-        PortalFact(label: 'Local', value: atual.location),
-        PortalFact(label: 'Instalado em', value: _dia(atual.installedOn)),
-        PortalFact(label: 'Garantia até', value: _dia(atual.warrantyUntil)),
         const PortalBlockTitle('Histórico de atendimentos'),
         historico.when(
           loading: () => const SectionLoading(lines: 2),
@@ -264,21 +211,15 @@ class _AssetSheet extends ConsumerWidget {
             onRetry: () => ref.invalidate(portalAssetHistoryProvider(asset.id)),
           ),
           data: (page) => page.items.isEmpty
-              ? Text(
-                  'Nenhum atendimento registrado para este equipamento.',
-                  style: OrbitType.caption.copyWith(color: palette.inkMuted),
+              ? const PortalNote(
+                  icon: Icons.event_note_outlined,
+                  text: 'Nenhum atendimento registrado para este equipamento.',
                 )
-              : Column(
+              : PortalCardList(
                   children: [
                     for (final operacao in page.items)
-                      OrbitListRow(
-                        leading: portalDay(operacao.when),
-                        title: operacao.title,
-                        subtitle: operacao.type,
-                        trailing: OrbitStatusBadge(
-                          label: operacao.status.label,
-                          tone: operationTone(operacao.status.code),
-                        ),
+                      PortalOperationCard(
+                        operation: operacao,
                         onTap: () =>
                             showPortalOperationSheet(context, operacao.id),
                       ),
@@ -294,11 +235,11 @@ class _AssetSheet extends ConsumerWidget {
                 ref.invalidate(portalAssetDocumentsProvider(asset.id)),
           ),
           data: (page) => page.items.isEmpty
-              ? Text(
-                  'Nenhum documento emitido para este equipamento.',
-                  style: OrbitType.caption.copyWith(color: palette.inkMuted),
+              ? const PortalNote(
+                  icon: Icons.description_outlined,
+                  text: 'Nenhum documento emitido para este equipamento.',
                 )
-              : Column(
+              : PortalCardList(
                   children: [
                     for (final documento in page.items)
                       PortalDocumentRow(document: documento),
