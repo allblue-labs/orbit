@@ -87,6 +87,8 @@ export const ROUTES = {
   organization: "/organizacao",
   /** Customer Workspace — visão 360° do cliente. */
   customers: "/clientes",
+  /** Chamados abertos pelos clientes no portal — recebimento e gestão. */
+  serviceRequests: "/chamados",
   /** Notification Center. */
   notifications: "/notificacoes",
   /** Landing do Platform Administrator (painel será implementado adiante). */
@@ -115,6 +117,7 @@ export const PROTECTED_PREFIXES: readonly string[] = [
   ROUTES.profile,
   ROUTES.organization,
   ROUTES.customers,
+  ROUTES.serviceRequests,
   ROUTES.notifications,
   ROUTES.pmoc,
   ROUTES.rvt,

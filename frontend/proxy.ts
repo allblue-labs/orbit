@@ -189,6 +189,7 @@ export const config = {
     "/perfil/:path*",
     "/organizacao/:path*",
     "/clientes/:path*",
+    "/chamados/:path*",
     "/notificacoes/:path*",
     "/plataforma/:path*",
     "/design-system/:path*",
