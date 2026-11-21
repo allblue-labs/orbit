@@ -1,6 +1,7 @@
 /// Ponto de entrada do Orbit Operator.
 library;
 
+import 'features/customer_portal/application/portal_session.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -141,8 +142,10 @@ class _OrbitOperatorAppState extends ConsumerState<OrbitOperatorApp>
         : equipmentLinkToken(initialRoute);
     if (token != null) _pendingEquipmentLink = (token: token, scope: null);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Restaura a sessão guardada.
+      // Restaura a sessão guardada — a da equipe e a do cliente. Um aparelho
+      // tem no máximo uma das duas; a outra responde "não há" na hora.
       ref.read(authControllerProvider.notifier).restore();
+      ref.read(portalSessionProvider.notifier).restore();
     });
 
     /// Tocar num aviso abre o que ele é sobre.
@@ -214,8 +217,13 @@ class _OrbitOperatorAppState extends ConsumerState<OrbitOperatorApp>
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authControllerProvider);
+    final portal = ref.watch(portalSessionProvider);
     final session = auth is AuthAuthenticated ? auth.session : null;
     final identity = (
+      /* Entrar ou sair como cliente também recria o runtime: o cache de
+         imagens e o roteador de quem saiu não sobrevivem a quem entra. */
+      portal.runtimeType,
+      portal is PortalSignedIn ? portal.me.identityId : null,
       auth.runtimeType,
       session?.user.id,
       session?.claims.sessionId,

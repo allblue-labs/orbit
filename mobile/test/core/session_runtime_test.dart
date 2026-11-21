@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:orbit_operator/features/customer_portal/application/portal_session.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -175,6 +176,9 @@ void main() {
       overrides: [
         apiClientProvider.overrideWithValue(client),
         tokenStorageProvider.overrideWithValue(storage),
+        /* A sessão do cliente tem armazenamento próprio; no teste, em memória,
+           como o da equipe. */
+        portalTokenStorageProvider.overrideWithValue(InMemoryTokenStorage()),
         sharedPreferencesProvider.overrideWithValue(preferences),
         connectivityProvider.overrideWithValue(OfflineConnectivity()),
         authControllerProvider.overrideWith((_) => auth),

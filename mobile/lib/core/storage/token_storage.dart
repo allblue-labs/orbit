@@ -57,19 +57,28 @@ class SerializedTokenStorage implements TokenStorage {
 }
 
 class SecureTokenStorage implements TokenStorage {
-  SecureTokenStorage({FlutterSecureStorage? storage})
-    : _storage =
-          storage ??
-          const FlutterSecureStorage(
-            aOptions: AndroidOptions(encryptedSharedPreferences: true),
-            iOptions: IOSOptions(
-              accessibility: KeychainAccessibility.first_unlock_this_device,
-            ),
-          );
+  /// [namespace] separa sessões que não podem se misturar: a da equipe usa
+  /// `orbit`, a do cliente usa `orbit.portal`. Mesmas chaves, nunca o mesmo
+  /// lugar — sair de uma não apaga a outra, e um token nunca vai parar no
+  /// cliente HTTP errado.
+  SecureTokenStorage({
+    FlutterSecureStorage? storage,
+    String namespace = 'orbit',
+  }) : _accessKey = '$namespace.access_token',
+       _refreshKey = '$namespace.refresh_token',
+       _expiresKey = '$namespace.expires_in',
+       _storage =
+           storage ??
+           const FlutterSecureStorage(
+             aOptions: AndroidOptions(encryptedSharedPreferences: true),
+             iOptions: IOSOptions(
+               accessibility: KeychainAccessibility.first_unlock_this_device,
+             ),
+           );
 
-  static const _accessKey = 'orbit.access_token';
-  static const _refreshKey = 'orbit.refresh_token';
-  static const _expiresKey = 'orbit.expires_in';
+  final String _accessKey;
+  final String _refreshKey;
+  final String _expiresKey;
 
   final FlutterSecureStorage _storage;
 

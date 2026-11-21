@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../features/customer_portal/application/portal_session.dart';
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
@@ -94,6 +95,22 @@ class SessionRuntime {
         authControllerProvider.overrideWith(
           (ref) =>
               AuthController.mirror(root.read(authControllerProvider.notifier)),
+        ),
+        /* A sessão do cliente vive na raiz, como a da equipe: o runtime só a
+           observa, e usa o mesmo cliente HTTP — o do cliente, não o da equipe. */
+        portalTokenStorageProvider.overrideWithValue(
+          root.read(portalTokenStorageProvider),
+        ),
+        portalApiClientProvider.overrideWithValue(
+          root.read(portalApiClientProvider),
+        ),
+        portalRepositoryProvider.overrideWithValue(
+          root.read(portalRepositoryProvider),
+        ),
+        portalSessionProvider.overrideWith(
+          (ref) => PortalSessionController.mirror(
+            root.read(portalSessionProvider.notifier),
+          ),
         ),
         documentFileStoreProvider.overrideWithValue(files),
         pushTokenSourceProvider.overrideWithValue(

@@ -45,6 +45,10 @@ class OrbitApiClient {
     String Function()? timezoneProvider,
     Dio? dio,
     Dio? retryDio,
+
+    /// Onde a sessão se renova. A equipe renova em `/identity/refresh`; o
+    /// cliente, em `/portal/auth/refresh` — cada um com o seu armazenamento.
+    String refreshPath = '/identity/refresh',
   }) {
     BaseOptions options() => BaseOptions(
       baseUrl: environment.apiBaseUrl,
@@ -80,7 +84,7 @@ class OrbitApiClient {
       refreshCall: (refreshToken) async {
         try {
           final response = await plain.post<dynamic>(
-            '/identity/refresh',
+            refreshPath,
             data: {'refreshToken': refreshToken},
           );
           final data = _unwrap(response.data);
@@ -248,6 +252,28 @@ class OrbitApiClient {
       path,
       cancelToken: cancelToken,
       options: _options(isPublic, headers: headers),
+    ),
+  );
+
+  /// Substitui um recurso por um arquivo em memória (`PUT` multipart, campo
+  /// `file`) — a foto e a assinatura do cliente, que nascem na tela e nunca
+  /// viram arquivo no disco.
+  Future<T> putFile<T>(
+    String path, {
+    required List<int> bytes,
+    required String fileName,
+    required String mimeType,
+  }) => _send<T>(
+    () => _dio.put<dynamic>(
+      path,
+      data: FormData.fromMap({
+        'file': MultipartFile.fromBytes(
+          bytes,
+          filename: fileName,
+          contentType: DioMediaType.parse(mimeType),
+        ),
+      }),
+      options: _options(false),
     ),
   );
 
