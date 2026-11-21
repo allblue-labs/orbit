@@ -19,7 +19,11 @@ nunca imprima a configuração interpolada: ela contém segredos.
    `AWS_SES_FROM_EMAIL` e `IDENTITY_PUBLIC_WEB_URL` também são obrigatórios:
    e-mails transacionais usam exclusivamente Amazon SES. Consulte
    `backend/docs/amazon-ses.md` para configurar a identidade e o acesso de produção.
-5. Mantenha `CUSTOMER_PORTAL_ENABLED=false`. O portal é dormant nesta release.
+5. `CUSTOMER_PORTAL_ENABLED` liga a área do cliente no app (padrão `true` no
+   compose). Com `false`, nenhuma rota `/portal/*` nem a gestão do acesso em
+   `/customers/:id/portal/*` é registrada. Ligado, o acesso do cliente é criado
+   pelo owner com senha temporária; convite e recuperação por e-mail respondem
+   `PORTAL_EMAIL_DELIVERY_UNAVAILABLE` enquanto a entrega do portal for no-op.
 6. Para produção pública, use TLS no edge, `FRONTEND_ORIGIN` exata e
    `AUTH_COOKIE_SECURE=true`. `ALLOW_INSECURE_LOCAL_COOKIES` é somente para um
    smoke local isolado. O mesmo `FRONTEND_ORIGIN` é injetado no frontend: ele é

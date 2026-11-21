@@ -87,7 +87,10 @@ services:
       STORAGE_SIGNED_URL_TTL_SECONDS: ${STORAGE_SIGNED_URL_TTL_SECONDS:-300}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
       IDENTITY_PUBLIC_WEB_URL: ${IDENTITY_PUBLIC_WEB_URL:-}
-      CUSTOMER_PORTAL_ENABLED: "false"
+      # Área do cliente no app (login de cliente, leituras, foto e assinatura,
+      # e a gestão do acesso pelo owner). Convite e recuperação por e-mail
+      # continuam respondendo "indisponível" até existir entrega de e-mail.
+      CUSTOMER_PORTAL_ENABLED: ${CUSTOMER_PORTAL_ENABLED:-true}
       # Billing is an explicit optional subsystem. Disabled mode does not need
       # provider credentials; enabled mode validates every value at startup.
       STRIPE_ENABLED: ${STRIPE_ENABLED:-false}
