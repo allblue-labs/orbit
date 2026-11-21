@@ -3,7 +3,10 @@ import {
   Controller,
   Get,
   Headers,
+  HttpCode,
+  HttpStatus,
   Param,
+  Patch,
   Post,
   Query,
   Req,
@@ -40,7 +43,9 @@ import {
   CustomerServiceRequestPortalQueryDto,
   ConvertCustomerServiceRequestDto,
   ExpectedVersionDto,
+  ReplyCustomerServiceRequestDto,
   TriageCustomerServiceRequestDto,
+  UpdateCustomerServiceRequestDto,
 } from './customer-service-request.dto';
 import { CustomerServiceRequestService } from './customer-service-request.service';
 import type {
@@ -102,6 +107,29 @@ export class CustomerServiceRequestPortalController {
     @Param('id', ParseUUIDv7Pipe) id: string,
   ): Promise<CustomerServiceRequestDetailsReadModel> {
     return this.requests.portalGet(this.actor(request), id);
+  }
+
+  @Patch(':id')
+  @ApiOkResponse({ type: CustomerServiceRequestDetailsSchema })
+  @ApiOperation({ summary: 'Edita o chamado antes da triagem' })
+  update(
+    @Req() request: CustomerPortalRequest,
+    @Param('id', ParseUUIDv7Pipe) id: string,
+    @Body() input: UpdateCustomerServiceRequestDto,
+  ): Promise<CustomerServiceRequestDetailsReadModel> {
+    return this.requests.portalUpdate(this.actor(request), id, input);
+  }
+
+  @Post(':id/messages')
+  @HttpCode(HttpStatus.OK)
+  @ApiOkResponse({ type: CustomerServiceRequestDetailsSchema })
+  @ApiOperation({ summary: 'Mensagem do cliente na conversa do chamado' })
+  reply(
+    @Req() request: CustomerPortalRequest,
+    @Param('id', ParseUUIDv7Pipe) id: string,
+    @Body() input: ReplyCustomerServiceRequestDto,
+  ): Promise<CustomerServiceRequestDetailsReadModel> {
+    return this.requests.portalReply(this.actor(request), id, input);
   }
 
   @Post(':id/cancel')

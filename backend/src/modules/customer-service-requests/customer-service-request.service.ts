@@ -10,7 +10,10 @@ import type {
   CustomerServiceRequestMessageDto,
   CustomerServiceRequestPortalQueryDto,
   ConvertCustomerServiceRequestDto,
+  CustomerServiceRequestDetailsDto,
   ExpectedVersionDto,
+  ReplyCustomerServiceRequestDto,
+  UpdateCustomerServiceRequestDto,
   TriageCustomerServiceRequestDto,
 } from './customer-service-request.dto';
 import { CustomerServiceRequestMapper } from './customer-service-request.mapper';
@@ -49,16 +52,52 @@ export class CustomerServiceRequestService {
     const idempotencyKey = this.idempotencyKey(key);
     const request = await this.repository.createPortal(
       actor,
-      input,
+      { ...input, details: this.detailsInput(input.details) },
       idempotencyKey,
       this.hash({
         category: input.category,
         subject: input.subject,
         description: input.description,
         assetId: input.assetId ?? null,
+        urgency: input.urgency ?? 'NORMAL',
+        details: this.detailsInput(input.details),
       }),
     );
     return this.mapper.details(request, 'PORTAL');
+  }
+
+  async portalUpdate(
+    actor: CustomerPortalActor,
+    id: string,
+    input: UpdateCustomerServiceRequestDto,
+  ) {
+    return this.mapper.details(
+      await this.repository.updatePortal(actor, id, {
+        ...input,
+        details: this.detailsInput(input.details),
+      }),
+      'PORTAL',
+    );
+  }
+
+  async portalReply(
+    actor: CustomerPortalActor,
+    id: string,
+    input: ReplyCustomerServiceRequestDto,
+  ) {
+    return this.mapper.details(
+      await this.repository.replyPortal(actor, id, input),
+      'PORTAL',
+    );
+  }
+
+  /** Só os campos preenchidos: vazio não vira chave com texto em branco. */
+  private detailsInput(details?: CustomerServiceRequestDetailsDto) {
+    return Object.fromEntries(
+      Object.entries(details ?? {}).filter(
+        ([, valor]) => typeof valor === 'string' && valor.trim().length > 0,
+      ),
+    );
   }
 
   async portalCancel(

@@ -1843,6 +1843,11 @@ model CustomerServiceRequest {
   subject                   String    @db.VarChar(180)
   description               String    @db.Text
   status                    String    @default("OPEN") @db.VarChar(30)
+  /// LOW, NORMAL, HIGH ou URGENT — o cliente escolhe; NORMAL quando não diz.
+  urgency                   String    @default("NORMAL") @db.VarChar(20)
+  /// O que o técnico precisa saber antes de sair: condição do equipamento,
+  /// local, melhor horário e contato. Tudo opcional.
+  details                   Json      @default("{}") @db.JsonB
   assignedToUserId          String?   @map("assigned_to_user_id") @db.Uuid
   convertedOperationId      String?   @unique @map("converted_operation_id") @db.Uuid
   version                   Int       @default(1)
@@ -1870,6 +1875,7 @@ model CustomerServiceRequest {
   @@index([organizationId, customerId, status, createdAt])
   @@index([organizationId, businessUnitId, status, createdAt])
   @@index([organizationId, assignedToUserId, status, createdAt])
+  @@index([organizationId, status, urgency, submittedAt], map: "csr_org_status_urgency_idx")
   @@map("customer_service_requests")
 }
 

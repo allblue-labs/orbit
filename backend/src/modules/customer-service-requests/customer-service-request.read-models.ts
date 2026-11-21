@@ -15,7 +15,23 @@ export type CustomerServiceRequestStatusReadModel =
   | 'REJECTED'
   | 'CANCELLED';
 
+export type CustomerServiceRequestUrgencyReadModel =
+  'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
+
+export interface CustomerServiceRequestDetailsInfoReadModel {
+  equipmentCondition: {
+    code: 'STOPPED' | 'MALFUNCTIONING' | 'WORKING';
+    label: string;
+  } | null;
+  siteLocation: string | null;
+  availability: string | null;
+  contactName: string | null;
+  contactPhone: string | null;
+}
+
 export type CustomerServiceRequestActionReadModel =
+  | 'EDIT'
+  | 'REPLY'
   | 'CANCEL'
   | 'TRIAGE'
   | 'ASSIGN'
@@ -57,7 +73,11 @@ export interface CustomerServiceRequestListItemReadModel {
   category: CustomerServiceRequestLabelReadModel<CustomerServiceRequestCategoryReadModel>;
   subject: string;
   status: CustomerServiceRequestLabelReadModel<CustomerServiceRequestStatusReadModel>;
+  urgency: CustomerServiceRequestLabelReadModel<CustomerServiceRequestUrgencyReadModel>;
   asset: CustomerServiceRequestAssetReadModel | null;
+  /** Quem abriu — a lista da equipe mostra; a do cliente é sempre ele mesmo. */
+  customerName: string | null;
+  assignedTo: { id: string; displayName: string } | null;
   submittedAt: string;
   updatedAt: string;
   version: number;
@@ -66,9 +86,11 @@ export interface CustomerServiceRequestListItemReadModel {
 
 export interface CustomerServiceRequestDetailsReadModel extends CustomerServiceRequestListItemReadModel {
   description: string;
+  details: CustomerServiceRequestDetailsInfoReadModel;
+  /** Quem abriu pelo portal. */
+  requester: string | null;
   customer: { id: string; name: string };
   businessUnit: { id: string; name: string } | null;
-  assignedTo: { id: string; displayName: string } | null;
   convertedOperation: { id: string; code: string; status: string } | null;
   timeline: CustomerServiceRequestTimelineItemReadModel[];
   closedAt: string | null;

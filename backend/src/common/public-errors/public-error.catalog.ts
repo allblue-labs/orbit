@@ -306,6 +306,16 @@ const entries = [
     'O link de recuperação não é válido ou expirou.',
   ],
   [
+    'SERVICE_REQUEST_NOT_EDITABLE',
+    HttpStatus.UNPROCESSABLE_ENTITY,
+    'Este chamado já foi analisado pela equipe e não pode mais ser editado. Envie uma mensagem no chamado.',
+  ],
+  [
+    'SERVICE_REQUEST_CLOSED',
+    HttpStatus.UNPROCESSABLE_ENTITY,
+    'Este chamado está encerrado. Abra um novo chamado se precisar.',
+  ],
+  [
     'PORTAL_ACCESS_EXISTS',
     HttpStatus.CONFLICT,
     'Este cliente já tem um acesso. Gere uma nova senha ou desative o acesso atual.',
