@@ -1,4 +1,5 @@
 import { ImageOptimizationService } from '../storage/image-optimization.service';
+import { QuoteAcceptedDocumentService } from '../quotes/quote-accepted-document.service';
 import { BrandImageService } from '../storage/brand-image.service';
 import { pdfImage } from '../storage/pdf-image';
 /**
@@ -375,24 +376,68 @@ export class PmocService {
     };
   }
 
+  /**
+   * O PDF que o link entrega.
+   *
+   * Antes de assinar, o contrato congelado no envio. Depois, **o mesmo PDF com a
+   * página de aceite**: nome e documento de quem assinou, data e a imagem da
+   * assinatura, mais o hash do original. Antes o link servia sempre a versão sem
+   * assinatura, e o contratante só via o próprio aceite se pedisse ao owner.
+   *
+   * O congelado continua intacto — o aceite é acrescentado, não redesenhado —,
+   * então o que se assinou é exatamente o que foi lido.
+   */
   async publicContractDocument(token: string) {
-    const file = await this.repository.publicSignatureDocument(
-      HashHelper.sha256(token),
-    );
+    const tokenHash = HashHelper.sha256(token);
+    const file = await this.repository.publicSignatureDocument(tokenHash);
     if (!file) throw new EntityNotFoundException('Contrato');
-    const bytes = await this.storage.get({
+    const original = await this.storage.get({
       bucket: file.bucket,
       objectKey: file.object_key,
     });
-    if (createHash('sha256').update(bytes).digest('hex') !== file.sha256)
+    if (createHash('sha256').update(original).digest('hex') !== file.sha256)
       throw new ConflictException(
         'Não foi possível conferir o documento do contrato.',
       );
-    return {
-      bytes,
-      fileName: `contrato-${file.plan_code.replace(/[^A-Za-z0-9_-]/g, '_')}.pdf`,
-    };
+    const nome = file.plan_code.replace(/[^A-Za-z0-9_-]/g, '_');
+
+    const aceite = await this.repository.signatureAcceptance(tokenHash);
+    if (!aceite) return { bytes: original, fileName: `contrato-${nome}.pdf` };
+
+    const assinatura = await this.storage.get({
+      bucket: aceite.signature_bucket,
+      objectKey: aceite.signature_object_key,
+    });
+    if (
+      aceite.signature_sha256 &&
+      createHash('sha256').update(assinatura).digest('hex') !==
+        aceite.signature_sha256
+    )
+      throw new ConflictException(
+        'Não foi possível conferir a assinatura do contrato.',
+      );
+    const bytes = await this.acceptedDocuments.render(original, {
+      code: file.plan_code,
+      signerName: aceite.signer_name,
+      signerDocument: aceite.signer_document,
+      signedAt: aceite.signed_at,
+      originalSha256: file.sha256,
+      signature: assinatura,
+      labels: {
+        title: `Assinatura do contrato ${file.plan_code}`,
+        statement:
+          'O contratante conferiu o plano de manutenção, a cobertura e as condições descritas nas páginas anteriores e aceitou o contrato por meio da assinatura abaixo.',
+        roleLabel: 'Contratante · Aceite do contrato de PMOC',
+        integrityTitle: 'Integridade do contrato assinado',
+        integrityLead:
+          'Esta assinatura corresponde ao PDF do contrato enviado ao contratante.',
+      },
+    });
+    return { bytes, fileName: `contrato-${nome}-assinado.pdf` };
   }
+
+  /** A página de aceite sobre o PDF congelado — a mesma do orçamento. */
+  private readonly acceptedDocuments = new QuoteAcceptedDocumentService();
 
   /**
    * Registra a assinatura do contratante.

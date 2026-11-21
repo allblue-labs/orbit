@@ -1,3 +1,5 @@
+import { PDFDocument } from 'pdf-lib';
+import { createHash } from 'node:crypto';
 import sharp from 'sharp';
 import { brandImageStub } from '../../../test/support/brand-image.stub';
 import { PmocService } from './pmoc.service';
@@ -80,6 +82,8 @@ describe('assinatura pública do contrato de PMOC', () => {
         .mockResolvedValue(
           options.assinatura ?? { state: 'VALIDO', signed: true },
         ),
+      publicSignatureDocument: jest.fn(),
+      signatureAcceptance: jest.fn().mockResolvedValue(null),
     };
     const storage = {
       defaultBucket: 'orbit',
@@ -354,6 +358,88 @@ describe('assinatura pública do contrato de PMOC', () => {
       });
 
       await expect(assinar(service)).rejects.toThrow();
+    });
+  });
+
+  describe('o PDF que o link entrega', () => {
+    const pdfOriginal = async () => {
+      const doc = await PDFDocument.create();
+      doc.addPage();
+      return Buffer.from(await doc.save());
+    };
+    const hash = (bytes: Buffer) =>
+      createHash('sha256').update(bytes).digest('hex');
+
+    const preparar = async () => {
+      const original = await pdfOriginal();
+      const assinatura = await sharp({
+        create: {
+          width: 200,
+          height: 80,
+          channels: 4,
+          background: { r: 0, g: 0, b: 0, alpha: 1 },
+        },
+      })
+        .webp()
+        .toBuffer();
+      const montado = montar();
+      montado.repository.publicSignatureDocument.mockResolvedValue({
+        bucket: 'orbit',
+        object_key: 'contrato.pdf',
+        sha256: hash(original),
+        plan_code: 'PMOC-0001',
+      });
+      montado.storage.get.mockImplementation(
+        ({ objectKey }: { objectKey: string }) =>
+          Promise.resolve(objectKey === 'contrato.pdf' ? original : assinatura),
+      );
+      return { ...montado, original, assinatura };
+    };
+
+    it('antes de assinar, entrega o contrato congelado como foi enviado', async () => {
+      const { service, original } = await preparar();
+      const documento = await service.publicContractDocument('token');
+      expect(documento.bytes.equals(original)).toBe(true);
+      expect(documento.fileName).toBe('contrato-PMOC-0001.pdf');
+    });
+
+    /**
+     * O defeito: depois de assinar, o link continuava entregando o PDF sem a
+     * assinatura, e o contratante só a via pedindo ao owner.
+     */
+    it('assinado, entrega o mesmo contrato com a página de aceite', async () => {
+      const { service, repository, original, assinatura } = await preparar();
+      repository.signatureAcceptance.mockResolvedValue({
+        signer_name: 'Marina Duarte',
+        signer_document: '123.456.789-00',
+        signed_at: new Date('2026-11-20T15:00:00.000Z'),
+        signature_bucket: 'orbit',
+        signature_object_key: 'assinatura.webp',
+        signature_sha256: hash(assinatura),
+      });
+
+      const documento = await service.publicContractDocument('token');
+
+      const pdf = await PDFDocument.load(documento.bytes);
+      /* As páginas do original continuam lá, e o aceite vem depois. */
+      expect(pdf.getPageCount()).toBe(2);
+      expect(documento.bytes.equals(original)).toBe(false);
+      expect(documento.fileName).toBe('contrato-PMOC-0001-assinado.pdf');
+    });
+
+    it('assinatura que não confere com o hash gravado é recusada', async () => {
+      const { service, repository } = await preparar();
+      repository.signatureAcceptance.mockResolvedValue({
+        signer_name: 'Marina Duarte',
+        signer_document: null,
+        signed_at: new Date('2026-11-20T15:00:00.000Z'),
+        signature_bucket: 'orbit',
+        signature_object_key: 'assinatura.webp',
+        signature_sha256: 'f'.repeat(64),
+      });
+      await expect(
+        service.publicContractDocument('token'),
+      ).rejects.toBeInstanceOf(ConflictException);
     });
   });
 });

@@ -419,6 +419,24 @@ export class PmocRepository {
     return rows[0] ?? null;
   }
 
+  /**
+   * A assinatura de um link **já assinado**, para o PDF público levar o aceite.
+   * Link pendente, revogado sem assinatura ou token inexistente: `null`.
+   */
+  async signatureAcceptance(tokenHash: string) {
+    const rows = await this.prisma.$queryRaw<
+      {
+        signer_name: string;
+        signer_document: string | null;
+        signed_at: Date;
+        signature_bucket: string;
+        signature_object_key: string;
+        signature_sha256: string | null;
+      }[]
+    >`SELECT * FROM app_pmoc_signature_acceptance(${tokenHash})`;
+    return rows[0] ?? null;
+  }
+
   /** Registra a assinatura do contratante — arquivo e marca, na mesma transação. */
   async signatureUploadScope(tokenHash: string): Promise<string | null> {
     const rows = await this.prisma.$queryRaw<
