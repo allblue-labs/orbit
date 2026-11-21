@@ -9,6 +9,10 @@ describe("BFF do portal do cliente", () => {
   it("só deixa passar o que é do cliente", () => {
     expect(portalPathAllowed("/portal/me/summary", "GET")).toBe(true);
     expect(portalPathAllowed("/portal/me/service-requests", "POST")).toBe(true);
+    expect(portalPathAllowed("/portal/me/biometrics", "GET")).toBe(true);
+    expect(portalPathAllowed("/portal/me/biometrics/devices", "POST")).toBe(
+      false,
+    );
     expect(portalPathAllowed("/portal/auth/password", "PATCH")).toBe(true);
     /* Login, renovação e saída têm rotas próprias, que cuidam dos cookies. */
     expect(portalPathAllowed("/portal/auth/login", "POST")).toBe(false);

@@ -18,11 +18,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError } from "@/lib/api-error";
-import { usePortalLogin } from "@/portal/portal-hooks";
+import { usePortalLogin, usePortalSignedIn } from "@/portal/portal-hooks";
+import { BiometricSignIn } from "@/components/auth/biometric-sign-in";
+import { markPasswordLogin } from "@/lib/biometrics/webauthn";
 
 export function PortalLogin() {
   const router = useRouter();
   const login = usePortalLogin();
+  const signedIn = usePortalSignedIn();
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [esqueci, setEsqueci] = useState(false);
@@ -31,7 +34,12 @@ export function PortalLogin() {
     event.preventDefault();
     login.mutate(
       { email, password: senha },
-      { onSuccess: () => router.replace("/portal") },
+      {
+        onSuccess: () => {
+          markPasswordLogin("portal");
+          router.replace("/portal");
+        },
+      },
     );
   };
 
@@ -97,6 +105,13 @@ export function PortalLogin() {
             )}
             Entrar
           </Button>
+          <BiometricSignIn
+            audience="portal"
+            onSignedIn={(result) => {
+              signedIn(result);
+              router.replace("/portal");
+            }}
+          />
         </form>
         <div className="space-y-2 border-t border-border pt-4 text-sm">
           <button

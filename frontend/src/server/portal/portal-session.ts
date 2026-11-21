@@ -141,6 +141,8 @@ export async function portalLogout(accessToken: string | undefined) {
 export function portalPathAllowed(path: string, method: string): boolean {
   const normalizado = path.toLowerCase();
   if (normalizado.includes("..") || normalizado.includes("//")) return false;
+  /* A credencial de aparelho é do app: na web, segredo nenhum chega à página. */
+  if (normalizado === "/portal/me/biometrics/devices") return false;
   if (normalizado === "/portal/me" || normalizado.startsWith("/portal/me/"))
     return true;
   return method === "PATCH" && normalizado === "/portal/auth/password";

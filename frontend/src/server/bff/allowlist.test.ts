@@ -168,6 +168,23 @@ describe("inspectPath", () => {
     });
   });
 
+  it("biometria: entrada e segredo de aparelho não passam pelo proxy", () => {
+    for (const path of [
+      "/identity/biometrics/webauthn/authentication",
+      "/identity/biometrics/webauthn/authentication/options",
+      "/identity/biometrics/devices/login",
+      "/identity/me/biometrics/devices",
+    ])
+      expect(inspectPath(path, "POST")).toMatchObject({
+        allowed: false,
+        status: 403,
+      });
+    /* Cadastrar a passkey e listar passam, com sessão. */
+    expect(
+      inspectPath("/identity/me/biometrics/webauthn/registration", "POST"),
+    ).toEqual({ allowed: true, requiresSession: true });
+  });
+
   it("objeto assinado se lê sem sessão; enviar continua exigindo", () => {
     expect(inspectPath("/storage/objects", "GET")).toEqual({
       allowed: true,

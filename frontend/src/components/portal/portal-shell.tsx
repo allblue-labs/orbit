@@ -39,6 +39,7 @@ import {
   usePortalSession,
 } from "@/portal/portal-hooks";
 import { PortalChangePassword } from "./portal-change-password";
+import { BiometricOffer } from "@/components/auth/biometric-offer";
 
 export const PORTAL_ROUTES = {
   login: "/portal/entrar",
@@ -170,6 +171,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
       </header>
 
       <main className="mx-auto max-w-5xl px-4 pb-28 pt-6 md:pb-12">{children}</main>
+      <BiometricOffer audience="portal" settingsHint="Perfil" />
 
       {/* No celular, a navegação fica embaixo — como no app. */}
       <nav

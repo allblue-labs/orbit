@@ -81,6 +81,16 @@ export function usePortalLogin() {
   });
 }
 
+/** Depois de entrar por outro caminho (biometria): a mesma limpeza do login. */
+export function usePortalSignedIn() {
+  const client = useQueryClient();
+  return (result: unknown) => {
+    client.removeQueries({ queryKey: K.all });
+    const me = (result as { me?: PortalMe } | null)?.me;
+    if (me) client.setQueryData(K.session, me);
+  };
+}
+
 export function usePortalLogout() {
   const client = useQueryClient();
   return useMutation({

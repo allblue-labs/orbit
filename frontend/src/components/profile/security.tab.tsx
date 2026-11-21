@@ -46,6 +46,7 @@ import { PROFILE_LIMITS } from "@/types/settings";
 import { ListState } from "@/workspace";
 import { PasswordRequirements } from "@/components/auth/password-requirements";
 import { MfaSection } from "./mfa.section";
+import { BiometricSection } from "@/components/auth/biometric-section";
 
 export function SecurityTab() {
   const { formatDateTime } = useDateFormatters();
@@ -56,6 +57,8 @@ export function SecurityTab() {
   return (
     <div className="max-w-3xl space-y-6">
       <AccountAuthenticationControls />
+
+      <BiometricSection audience="team" />
 
       <section className="space-y-3">
         <div className="space-y-1">

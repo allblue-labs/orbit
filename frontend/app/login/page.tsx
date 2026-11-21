@@ -29,6 +29,9 @@ import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { SessionLoading } from "@/guards";
 import { useLogin } from "@/hooks/api";
+import { useAuthenticatedRedirect } from "@/hooks/api/use-auth";
+import { BiometricSignIn } from "@/components/auth/biometric-sign-in";
+import { markPasswordLogin } from "@/lib/biometrics/webauthn";
 import { LOGIN_REASON_PARAM, LoginReason, ROUTES } from "@/lib/routes";
 
 const REASON_MESSAGES: Record<string, { title: string; description: string }> =
@@ -64,6 +67,7 @@ function LoginView() {
   const reason = REASON_MESSAGES[params.get(LOGIN_REASON_PARAM) ?? ""];
   const destination = params.get("destino") ?? undefined;
   const login = useLogin({ redirectTo: destination });
+  const afterBiometric = useAuthenticatedRedirect(destination);
   const loading = login.isPending;
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -76,6 +80,7 @@ function LoginView() {
         mfaCode: String(form.get("mfaCode") ?? "") || undefined,
         client: "WEB",
       });
+      markPasswordLogin("team");
     } catch (error) {
       /* A decisão é pelo código publicado do erro, e vive em `login-failure`
          para poder ser testada sem DOM. Ver o comentário de lá: comparar a
@@ -236,6 +241,10 @@ function LoginView() {
                   </>
                 )}
               </Button>
+              <BiometricSignIn
+                audience="team"
+                onSignedIn={() => afterBiometric()}
+              />
             </form>
 
             <div className="my-6 flex items-center gap-3">

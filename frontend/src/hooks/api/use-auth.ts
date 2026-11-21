@@ -47,7 +47,7 @@ export interface AuthNavigationOptions {
  * `fetchQuery` popula o cache e devolve o estado na mesma chamada, evitando
  * decidir o redirecionamento com a sessão anterior (ainda anônima).
  */
-function useAuthenticatedRedirect(redirectTo?: string) {
+export function useAuthenticatedRedirect(redirectTo?: string) {
   const queryClient = useQueryClient();
   const router = useRouter();
 

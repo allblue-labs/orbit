@@ -3,6 +3,7 @@
 /**
  * O perfil do cliente na web: foto, assinatura, senha, termos e saída.
  */
+import { BiometricSection } from "@/components/auth/biometric-section";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { Camera, Check, Loader2, LogOut, PenLine, Trash2 } from "lucide-react";
@@ -143,6 +144,10 @@ export function PortalProfilePage() {
           </div>
           <MutationError error={comando.error} />
         </div>
+      </section>
+
+      <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
+        <BiometricSection audience="portal" />
       </section>
 
       <section className="space-y-3">
