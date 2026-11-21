@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/design/orbit_primitives.dart';
+
 import '../../../core/contracts/mobile_field_contracts.dart';
 import '../../../core/contracts/mobile_field_artifact_contracts.dart';
 import '../../documents/application/document_sharing.dart';
@@ -8,6 +10,7 @@ import '../../customers/presentation/new_quote_sheet.dart';
 import '../data/owner_repository.dart';
 import 'owner_controls.dart';
 import 'owner_records.dart';
+import 'owner_style.dart';
 import 'owner_tools.dart';
 
 Future<bool> ownerQuote(BuildContext context, OwnerTools tools) async {
@@ -36,22 +39,28 @@ OwnerRecords ownerReceipts(OwnerTools tools, DocumentSharing sharing) =>
         '/financial/receipts',
         query: ownerPageQuery('', page, unitId: tools.unitId),
       ),
-      subtitle: (row) => _receiptCaption(row, tools),
+      icon: Icons.receipt_long_outlined,
+      badge: _receiptBadge,
+      subtitle: (row) => [
+        ownerText(row, ['code']),
+        ownerInstant(tools.zone, ownerString(row, 'createdAt')),
+      ].where((part) => part.isNotEmpty).join(' · '),
       open: (context, row) => _receiptActions(context, tools, sharing, row),
     );
 
-String _receiptCaption(OwnerRow row, OwnerTools tools) {
-  final status = switch (row['renderStatus']) {
-    'READY' => 'PDF disponível',
-    'PENDING' || 'RENDERING' => 'Gerando PDF',
-    'FAILED' => 'Falha ao gerar PDF',
-    _ => ownerStatus(row['status']),
-  };
-  return [
-    status,
-    ownerInstant(tools.zone, ownerString(row, 'createdAt')),
-  ].where((part) => part.isNotEmpty).join(' · ');
+String? _moneyOf(Object? value) {
+  final amount = num.tryParse(value?.toString() ?? '');
+  return amount == null
+      ? null
+      : NumberFormat.currency(locale: 'pt_BR', symbol: r'R$').format(amount);
 }
+
+OwnerBadgeData? _receiptBadge(OwnerRow row) => switch (row['renderStatus']) {
+  'READY' => (label: 'PDF disponível', tone: OrbitTone.success),
+  'PENDING' || 'RENDERING' => (label: 'Gerando PDF', tone: OrbitTone.warning),
+  'FAILED' => (label: 'Falha ao gerar PDF', tone: OrbitTone.danger),
+  _ => ownerBadge(row),
+};
 
 Future<bool> _receiptActions(
   BuildContext context,
@@ -62,49 +71,60 @@ Future<bool> _receiptActions(
   final id = ownerId(row);
   final path = '/financial/receipts/$id';
   final renderStatus = row['renderStatus'];
-  return ownerActions(context, ownerText(row), [
-    if (const ['PENDING', 'RENDERING'].contains(renderStatus))
-      OwnerAction('Consultar PDF', Icons.refresh, () async => true)
-    else if (renderStatus == 'READY' &&
-        tools.can('receipts', 'artifact_manifests.read'))
-      OwnerAction('Compartilhar ou salvar PDF', Icons.ios_share, () async {
-        final box = context.findRenderObject();
-        final origin = box is RenderBox && box.hasSize
-            ? box.localToGlobal(Offset.zero) & box.size
-            : null;
-        await for (final state in sharing.shareWith(
-          access: () async => FieldArtifactAccess.fromJson({
-            ...await tools.repo.read('$path/download'),
-            'artifactId': id,
-            'operation': 'download',
-          }),
-          fileName: 'recibo-${row['code']}.pdf',
-          subject: ownerText(row),
-          origin: origin,
-        )) {
-          if (state.phase == SharePhase.error) {
-            throw state.error ??
-                const OwnerInputError(
-                  'Não foi possível compartilhar o recibo.',
-                );
+  return ownerActions(
+    context,
+    ownerText(row),
+    [
+      if (const ['PENDING', 'RENDERING'].contains(renderStatus))
+        OwnerAction('Consultar PDF', Icons.refresh, () async => true)
+      else if (renderStatus == 'READY' &&
+          tools.can('receipts', 'artifact_manifests.read'))
+        OwnerAction('Compartilhar ou salvar PDF', Icons.ios_share, () async {
+          final box = context.findRenderObject();
+          final origin = box is RenderBox && box.hasSize
+              ? box.localToGlobal(Offset.zero) & box.size
+              : null;
+          await for (final state in sharing.shareWith(
+            access: () async => FieldArtifactAccess.fromJson({
+              ...await tools.repo.read('$path/download'),
+              'artifactId': id,
+              'operation': 'download',
+            }),
+            fileName: 'recibo-${row['code']}.pdf',
+            subject: ownerText(row),
+            origin: origin,
+          )) {
+            if (state.phase == SharePhase.error) {
+              throw state.error ??
+                  const OwnerInputError(
+                    'Não foi possível compartilhar o recibo.',
+                  );
+            }
           }
-        }
-        return false;
-      })
-    else if (tools.can('receipts', 'artifact_rendering.render'))
-      OwnerAction('Gerar PDF', Icons.picture_as_pdf_outlined, () async {
-        if (!await ownerConfirm(
-          context,
-          'Gerar PDF do recibo?',
-          'Confirme que recebeu o pagamento. O Orbit usará sua assinatura do Perfil se o modelo exigir.',
-          label: 'Confirmar e gerar PDF',
-        )) {
           return false;
-        }
-        await tools.repo.post('$path/render');
-        return true;
-      }),
-  ], details: _receiptCaption(row, tools));
+        })
+      else if (tools.can('receipts', 'artifact_rendering.render'))
+        OwnerAction('Gerar PDF', Icons.picture_as_pdf_outlined, () async {
+          if (!await ownerConfirm(
+            context,
+            'Gerar PDF do recibo?',
+            'Confirme que recebeu o pagamento. O Orbit usará sua assinatura do Perfil se o modelo exigir.',
+            label: 'Confirmar e gerar PDF',
+          )) {
+            return false;
+          }
+          await tools.repo.post('$path/render');
+          return true;
+        }),
+    ],
+    icon: Icons.receipt_long_outlined,
+    eyebrow: 'Recibo',
+    badge: _receiptBadge(row),
+    facts: [
+      ('Número', ownerText(row, ['code'])),
+      ('Emitido em', ownerInstant(tools.zone, ownerString(row, 'createdAt'))),
+    ],
+  );
 }
 
 Future<bool> _receiptForm(BuildContext context, OwnerTools tools) async {
@@ -199,23 +219,35 @@ OwnerRecords ownerFinance(OwnerTools tools) => OwnerRecords(
   search: true,
   createLabel: 'Novo lançamento',
   create: tools.can('finance', 'financial.manage') && tools.unitId != null
-      ? (context) => ownerActions(context, 'Novo lançamento', [
-          OwnerAction(
-            'Registrar entrada',
-            Icons.south_west,
-            () => _entryForm(context, tools, 'INCOME'),
-          ),
-          OwnerAction(
-            'Registrar saída',
-            Icons.north_east,
-            () => _entryForm(context, tools, 'EXPENSE'),
-          ),
-        ])
+      ? (context) => ownerActions(
+          context,
+          'Novo lançamento',
+          icon: Icons.account_balance_wallet_outlined,
+          subtitle: 'O que você quer registrar?',
+          [
+            OwnerAction(
+              'Registrar entrada',
+              Icons.south_west,
+              () => _entryForm(context, tools, 'INCOME'),
+            ),
+            OwnerAction(
+              'Registrar saída',
+              Icons.north_east,
+              () => _entryForm(context, tools, 'EXPENSE'),
+            ),
+          ],
+        )
       : null,
   load: (search, page, _) => tools.repo.list(
     '/financial/entries',
     query: ownerPageQuery(search, page, unitId: tools.unitId),
   ),
+  iconOf: (row) => row['type'] == 'INCOME'
+      ? Icons.south_west_rounded
+      : Icons.north_east_rounded,
+  toneOf: (row) =>
+      row['type'] == 'INCOME' ? OrbitTone.success : OrbitTone.warning,
+  amount: (row) => _moneyOf(row['amount']),
   subtitle: (row) => _entryCaption(row),
   open: (context, row) => _entryActions(context, tools, row),
 );
@@ -290,11 +322,19 @@ Future<bool> _entryActions(
         ),
       ],
     ],
-    details: [
-      _entryCaption(row),
-      ownerText(ownerRow(row['category'])),
-      ownerText(row, ['notes']),
-    ].where((part) => part.isNotEmpty).join('\n'),
+    icon: row['type'] == 'INCOME'
+        ? Icons.south_west_rounded
+        : Icons.north_east_rounded,
+    tone: row['type'] == 'INCOME' ? OrbitTone.success : OrbitTone.warning,
+    eyebrow: row['type'] == 'INCOME' ? 'Entrada' : 'Saída',
+    badge: ownerBadge(row),
+    facts: [
+      ('Valor', _moneyOf(row['amount'])),
+      ('Vencimento', ownerDateLabel(ownerString(row, 'dueDate'))),
+      ('Competência', ownerDateLabel(ownerString(row, 'competenceDate'))),
+      ('Categoria', ownerText(ownerRow(row['category']))),
+      ('Observações', ownerText(row, ['notes'])),
+    ],
   );
 }
 

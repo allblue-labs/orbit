@@ -23,6 +23,7 @@ OwnerRecords ownerPmoc(OwnerTools tools) => OwnerRecords(
     '/pmoc/plans',
     query: ownerPageQuery(search, page, unitId: tools.unitId),
   ),
+  icon: Icons.event_repeat_outlined,
   subtitle: (row) => _planCaption(row, 'compliance', 'nextDueOn'),
   open: (context, row) => _pmocActions(context, tools, row),
 );
@@ -224,51 +225,83 @@ Future<bool> _pmocActions(
   if (!context.mounted) return false;
   final transitions = ownerValues(row['allowedTransitions']);
   final manage = tools.can('pmoc', 'pmoc.manage');
-  return ownerActions(context, ownerText(row), [
-    if (manage &&
-        const ['DRAFT', 'ACTIVE', 'SUSPENDED'].contains(row['status']))
-      OwnerAction(
-        'Editar plano',
-        Icons.edit_outlined,
-        () => _pmocForm(context, tools, current: row),
-      ),
-    OwnerAction('Ciclos e execuções', Icons.event_repeat_outlined, () async {
-      await ownerOpenRecords(context, _pmocCycles(tools, ownerId(row)));
-      return false;
-    }),
-    OwnerAction('Equipamentos cobertos', Icons.handyman_outlined, () async {
-      await ownerOpenRecords(context, _pmocEquipment(tools, path, row));
-      return false;
-    }),
-    if (manage) ...[
-      if (transitions.contains('ACTIVE'))
+  return ownerActions(
+    context,
+    ownerText(row),
+    [
+      if (manage &&
+          const ['DRAFT', 'ACTIVE', 'SUSPENDED'].contains(row['status']))
         OwnerAction(
-          'Ativar plano',
-          Icons.play_circle_outline,
-          () =>
-              _pmocTransition(context, tools, path, 'activate', 'Ativar plano'),
+          'Editar plano',
+          Icons.edit_outlined,
+          () => _pmocForm(context, tools, current: row),
         ),
-      if (transitions.contains('SUSPENDED'))
-        OwnerAction(
-          'Suspender plano',
-          Icons.pause_circle_outline,
-          () => _pmocTransition(
-            context,
-            tools,
-            path,
-            'suspend',
-            'Suspender plano',
+      OwnerAction('Ciclos e execuções', Icons.event_repeat_outlined, () async {
+        await ownerOpenRecords(context, _pmocCycles(tools, ownerId(row)));
+        return false;
+      }),
+      OwnerAction('Equipamentos cobertos', Icons.handyman_outlined, () async {
+        await ownerOpenRecords(context, _pmocEquipment(tools, path, row));
+        return false;
+      }),
+      if (manage) ...[
+        if (transitions.contains('ACTIVE'))
+          OwnerAction(
+            'Ativar plano',
+            Icons.play_circle_outline,
+            () => _pmocTransition(
+              context,
+              tools,
+              path,
+              'activate',
+              'Ativar plano',
+            ),
           ),
-        ),
-      if (transitions.contains('CANCELLED'))
-        OwnerAction(
-          'Cancelar plano',
-          Icons.cancel_outlined,
-          () =>
-              _pmocTransition(context, tools, path, 'cancel', 'Cancelar plano'),
-        ),
+        if (transitions.contains('SUSPENDED'))
+          OwnerAction(
+            'Suspender plano',
+            Icons.pause_circle_outline,
+            () => _pmocTransition(
+              context,
+              tools,
+              path,
+              'suspend',
+              'Suspender plano',
+            ),
+          ),
+        if (transitions.contains('CANCELLED'))
+          OwnerAction(
+            'Cancelar plano',
+            Icons.cancel_outlined,
+            () => _pmocTransition(
+              context,
+              tools,
+              path,
+              'cancel',
+              'Cancelar plano',
+            ),
+          ),
+      ],
     ],
-  ], details: _planCaption(row, 'compliance', 'nextDueOn'));
+    icon: Icons.event_repeat_outlined,
+    eyebrow: 'Plano de PMOC',
+    subtitle: ownerText(row, ['code']),
+    badge: ownerBadge(row),
+    facts: [
+      ('Cliente', ownerText(ownerRow(row['customer']))),
+      (
+        'Próximo vencimento',
+        ownerDateLabel(ownerString(ownerRow(row['compliance']), 'nextDueOn')),
+      ),
+      (
+        'Vigência',
+        [
+          ownerDateLabel(ownerString(ownerRow(row['validity']), 'startsOn')),
+          ownerDateLabel(ownerString(ownerRow(row['validity']), 'endsOn')),
+        ].where((part) => part.isNotEmpty).join(' até '),
+      ),
+    ],
+  );
 }
 
 Future<bool> _pmocTransition(
@@ -302,6 +335,7 @@ OwnerRecords _pmocEquipment(OwnerTools tools, String path, OwnerRow plan) {
   return OwnerRecords(
     title: 'Equipamentos cobertos',
     load: (_, _, _) => tools.repo.list('$path/equipment'),
+    icon: Icons.handyman_outlined,
     caption: (row) => ownerText(ownerRow(row['asset'])),
     createLabel: 'Adicionar equipamento',
     create: !manage
@@ -328,25 +362,31 @@ OwnerRecords _pmocEquipment(OwnerTools tools, String path, OwnerRow plan) {
           },
     open: !manage
         ? null
-        : (context, row) =>
-              ownerActions(context, ownerText(ownerRow(row['asset'])), [
-                OwnerAction(
-                  'Retirar do plano',
-                  Icons.remove_circle_outline,
-                  () => tools.remove(
-                    context,
-                    '$path/equipment/${ownerId(row)}',
-                    'cobertura do equipamento',
-                    description: 'O histórico das execuções será preservado.',
-                  ),
+        : (context, row) => ownerActions(
+            context,
+            ownerText(ownerRow(row['asset'])),
+            icon: Icons.handyman_outlined,
+            eyebrow: 'Coberto pelo plano',
+            [
+              OwnerAction(
+                'Retirar do plano',
+                Icons.remove_circle_outline,
+                () => tools.remove(
+                  context,
+                  '$path/equipment/${ownerId(row)}',
+                  'cobertura do equipamento',
+                  description: 'O histórico das execuções será preservado.',
                 ),
-              ]),
+              ),
+            ],
+          ),
   );
 }
 
 OwnerRecords _pmocCycles(OwnerTools tools, String planId) => OwnerRecords(
   title: 'Ciclos de PMOC',
   load: (_, _, _) => tools.repo.list('/pmoc/plans/$planId/executions'),
+  icon: Icons.event_available_outlined,
   caption: (row) => 'Ciclo ${row['sequenceNumber'] ?? ''}',
   subtitle: (row) => [
     ownerDateLabel(ownerString(row, 'dueOn')),
@@ -366,9 +406,9 @@ OwnerRecords _pmocExecutions(OwnerTools tools, String planId, String cycleId) {
   return OwnerRecords(
     title: 'Execuções por equipamento',
     load: (_, _, _) => tools.repo.list('$cycle/equipment-executions'),
+    icon: Icons.handyman_outlined,
     caption: (row) => ownerText(ownerRow(row['equipment'])),
     subtitle: (row) => [
-      ownerStatus(row['status']),
       ownerText(ownerRow(row['plannedFieldTechnician'])),
       ownerInstant(
         tools.zone,
@@ -468,13 +508,28 @@ OwnerRecords _pmocExecutions(OwnerTools tools, String planId, String cycleId) {
               ),
             ),
         ],
-        details: [
-          ownerStatus(row['status']),
-          ownerText(ownerRow(row['plannedFieldTechnician'])),
-          ownerInstant(tools.zone, ownerString(schedule, 'scheduledFor')),
-          ownerText(schedule, ['notes', 'cancellationReason']),
-          ownerText(ownerRow(row['execution']), ['notes']),
-        ].where((part) => part.isNotEmpty).join('\n'),
+        icon: Icons.handyman_outlined,
+        eyebrow: 'Execução de PMOC',
+        badge: ownerBadge(row),
+        facts: [
+          (
+            'Técnico em campo',
+            ownerText(ownerRow(row['plannedFieldTechnician'])),
+          ),
+          (
+            'Agendado para',
+            ownerInstant(tools.zone, ownerString(schedule, 'scheduledFor')),
+          ),
+          ('Observações', ownerText(schedule, ['notes'])),
+          (
+            'Motivo do cancelamento',
+            ownerText(schedule, ['cancellationReason']),
+          ),
+          (
+            'Notas da execução',
+            ownerText(ownerRow(row['execution']), ['notes']),
+          ),
+        ],
       );
     },
   );
@@ -500,6 +555,7 @@ OwnerRecords ownerRvt(OwnerTools tools) => OwnerRecords(
       'search': search,
     },
   ),
+  icon: Icons.event_note_outlined,
   subtitle: (row) => _planCaption(row),
   open: (context, summary) => _rvtActions(context, tools, summary),
 );
@@ -675,31 +731,54 @@ Future<bool> _rvtActions(
   final row = await tools.repo.read(path);
   if (!context.mounted) return false;
   final manage = tools.can('rvt', 'rvt.manage') && row['status'] == 'ACTIVE';
-  return ownerActions(context, ownerText(row), [
-    if (manage)
+  return ownerActions(
+    context,
+    ownerText(row),
+    [
+      if (manage)
+        OwnerAction(
+          'Editar RVT',
+          Icons.edit_outlined,
+          () => _rvtForm(context, tools, current: row),
+        ),
       OwnerAction(
-        'Editar RVT',
-        Icons.edit_outlined,
-        () => _rvtForm(context, tools, current: row),
-      ),
-    OwnerAction('Visitas e atendimentos', Icons.event_note_outlined, () async {
-      await ownerOpenRecords(context, _rvtVisits(tools, path, row));
-      return false;
-    }),
-    if (manage)
-      OwnerAction('Cancelar RVT', Icons.cancel_outlined, () async {
-        if (!await ownerConfirm(
-          context,
-          'Cancelar RVT?',
-          'As visitas previstas serão canceladas e o histórico de atendimentos será preservado.',
-          label: 'Cancelar RVT',
-        )) {
+        'Visitas e atendimentos',
+        Icons.event_note_outlined,
+        () async {
+          await ownerOpenRecords(context, _rvtVisits(tools, path, row));
           return false;
-        }
-        await tools.repo.remove(path);
-        return true;
-      }),
-  ], details: _planCaption(row));
+        },
+      ),
+      if (manage)
+        OwnerAction('Cancelar RVT', Icons.cancel_outlined, () async {
+          if (!await ownerConfirm(
+            context,
+            'Cancelar RVT?',
+            'As visitas previstas serão canceladas e o histórico de atendimentos será preservado.',
+            label: 'Cancelar RVT',
+          )) {
+            return false;
+          }
+          await tools.repo.remove(path);
+          return true;
+        }),
+    ],
+    icon: Icons.event_note_outlined,
+    eyebrow: 'Visita técnica (RVT)',
+    subtitle: ownerText(row, ['code']),
+    badge: ownerBadge(row),
+    facts: [
+      ('Cliente', ownerText(ownerRow(row['customer']))),
+      (
+        'Técnico padrão',
+        ownerText(ownerRow(row['defaultResponsibleFieldTechnician'])),
+      ),
+      (
+        'Equipamentos',
+        ownerRows(row['equipment']).map((item) => ownerText(item)).join(', '),
+      ),
+    ],
+  );
 }
 
 OwnerRecords _rvtVisits(OwnerTools tools, String path, OwnerRow configuration) {
@@ -714,6 +793,7 @@ OwnerRecords _rvtVisits(OwnerTools tools, String path, OwnerRow configuration) {
     title: 'Visitas · ${ownerText(configuration)}',
     load: (_, _, _) async =>
         OwnerPage(ownerRows((await tools.repo.read(path))['occurrences'])),
+    icon: Icons.event_outlined,
     caption: (row) =>
         'Visita ${row['sequence'] ?? row['sequenceNumber'] ?? ''}',
     subtitle: (row) => [
@@ -769,11 +849,16 @@ OwnerRecords _rvtVisits(OwnerTools tools, String path, OwnerRow configuration) {
               () => tools.remove(context, visit, 'visita'),
             ),
         ],
-        details: [
-          ownerStatus(row['status']),
-          ownerInstant(timezone, ownerString(row, 'scheduledFor')),
-          assets.map((asset) => ownerText(asset)).join(', '),
-        ].where((part) => part.isNotEmpty).join('\n'),
+        icon: Icons.event_outlined,
+        eyebrow: ownerText(configuration),
+        badge: ownerBadge(row),
+        facts: [
+          (
+            'Data e hora',
+            ownerInstant(timezone, ownerString(row, 'scheduledFor')),
+          ),
+          ('Equipamentos', assets.map((asset) => ownerText(asset)).join(', ')),
+        ],
       );
     },
   );

@@ -52,16 +52,17 @@ OwnerRecords ownerOperations(OwnerTools tools, {bool today = false}) {
         },
       },
     ),
+    icon: Icons.assignment_outlined,
     subtitle: (row) => _operationCaption(row, tools),
     open: (context, row) => _operationActions(context, tools, row),
   );
 }
 
+/// Quando primeiro: é o que se procura numa lista de OS.
 String _operationCaption(OwnerRow row, OwnerTools tools) => [
-  ownerText(row, ['serviceOrderCode', 'code']),
-  ownerStatus(row['status']),
-  ownerText(ownerRow(row['customer'])),
   ownerInstant(tools.zone, ownerString(row, 'scheduledStart')),
+  ownerText(ownerRow(row['customer'])),
+  ownerText(row, ['serviceOrderCode', 'code']),
   ownerText(ownerRow(row['responsibleFieldTechnician'])),
 ].where((part) => part.isNotEmpty).join(' · ');
 
@@ -306,6 +307,8 @@ Future<bool> _operationActions(
               load: (_, _, _) async => OwnerPage(
                 ownerRows((await tools.repo.read('$path/timeline'))['events']),
               ),
+              icon: Icons.history_rounded,
+              badge: (_) => null,
               caption: (item) => _historyCaption(item),
               subtitle: (item) => [
                 ownerInstant(tools.zone, ownerString(item, 'createdAt')),
@@ -347,11 +350,26 @@ Future<bool> _operationActions(
           () => tools.remove(context, path, 'ordem de serviço'),
         ),
     ],
-    details: [
-      _operationCaption(row, tools),
-      ownerText(row, ['description']),
-      ownerRows(row['assets']).map((item) => ownerText(item)).join(', '),
-    ].where((part) => part.isNotEmpty).join('\n'),
+    icon: Icons.assignment_outlined,
+    eyebrow: 'Ordem de serviço',
+    subtitle: ownerText(row, ['serviceOrderCode', 'code']),
+    badge: ownerBadge(row),
+    facts: [
+      ('Cliente', ownerText(ownerRow(row['customer']))),
+      (
+        'Agendado para',
+        ownerInstant(tools.zone, ownerString(row, 'scheduledStart')),
+      ),
+      (
+        'Técnico responsável',
+        ownerText(ownerRow(row['responsibleFieldTechnician'])),
+      ),
+      (
+        'Equipamentos',
+        ownerRows(row['assets']).map((item) => ownerText(item)).join(', '),
+      ),
+      ('Descrição', ownerText(row, ['description'])),
+    ],
   );
 }
 

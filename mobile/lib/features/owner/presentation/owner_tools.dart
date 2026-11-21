@@ -38,6 +38,8 @@ class OwnerTools {
       heightFactor: .82,
       child: OwnerRecords(
         title: 'Selecionar cliente',
+        icon: Icons.people_outline,
+        badge: (_) => null,
         search: true,
         searchLabel: 'Buscar por nome, CPF ou CNPJ',
         load: (search, page, _) => repo.list(

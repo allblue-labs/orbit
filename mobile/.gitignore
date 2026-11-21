@@ -65,3 +65,4 @@ test/screenshots/failures/
 /tool/out/
 /tool/failures/
 /test/screenshots/out_portal/
+/test/screenshots/out_owner/

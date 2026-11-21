@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/design/orbit_primitives.dart';
+
 import '../data/owner_repository.dart';
 import 'owner_controls.dart';
 import 'owner_records.dart';
@@ -14,12 +16,16 @@ OwnerRecords ownerCustomers(OwnerTools tools) => OwnerRecords(
       : null,
   load: (search, page, _) =>
       tools.repo.list('/customers', query: ownerPageQuery(search, page)),
+  iconOf: _customerIcon,
   subtitle: (row) => [
     ownerText(row, ['documentNumber']),
-    ownerStatus(row['status']),
+    ownerText(row, ['phone', 'email']),
   ].where((text) => text.isNotEmpty).join(' · '),
   open: (context, row) => _customerActions(context, tools, row),
 );
+
+IconData _customerIcon(OwnerRow row) =>
+    row['type'] == 'COMPANY' ? Icons.business_outlined : Icons.person_outline;
 
 Future<bool> _customerActions(
   BuildContext context,
@@ -55,12 +61,21 @@ Future<bool> _customerActions(
           () => tools.remove(context, path, 'cliente'),
         ),
     ],
-    details: [
-      ownerText(row, ['documentNumber']),
-      ownerText(row, ['email']),
-      ownerText(row, ['phone']),
-      ownerText(row, ['notes']),
-    ].where((item) => item.isNotEmpty).join('\n'),
+    icon: _customerIcon(row),
+    eyebrow: row['type'] == 'COMPANY' ? 'Pessoa jurídica' : 'Pessoa física',
+    subtitle: ownerText(row, ['legalName']) == ownerText(row)
+        ? null
+        : ownerText(row, ['legalName']),
+    badge: ownerBadge(row),
+    facts: [
+      (
+        row['type'] == 'COMPANY' ? 'CNPJ' : 'CPF',
+        ownerText(row, ['documentNumber']),
+      ),
+      ('E-mail', ownerText(row, ['email'])),
+      ('Telefone', ownerText(row, ['phone'])),
+      ('Observações', ownerText(row, ['notes'])),
+    ],
   );
 }
 
@@ -161,6 +176,10 @@ OwnerRecords _addresses(OwnerTools tools, OwnerRow customer) {
     createLabel: 'Novo endereço',
     create: canEdit ? (context) => _addressForm(context, tools, path) : null,
     load: (_, _, _) => tools.repo.list(path),
+    icon: Icons.location_on_outlined,
+    badge: (row) => row['isPrimary'] == true
+        ? (label: 'Principal', tone: OrbitTone.info)
+        : null,
     caption: (row) => ownerText(row, ['label']),
     subtitle: (row) => [
       ownerText(row, ['street']),
@@ -169,18 +188,45 @@ OwnerRecords _addresses(OwnerTools tools, OwnerRow customer) {
     ].where((part) => part.isNotEmpty).join(' · '),
     open: !canEdit
         ? null
-        : (context, row) => ownerActions(context, ownerText(row, ['label']), [
-            OwnerAction(
-              'Editar endereço',
-              Icons.edit_outlined,
-              () => _addressForm(context, tools, path, current: row),
-            ),
-            OwnerAction(
-              'Remover endereço',
-              Icons.delete_outline,
-              () => tools.remove(context, '$path/${ownerId(row)}', 'endereço'),
-            ),
-          ]),
+        : (context, row) => ownerActions(
+            context,
+            ownerText(row, ['label']),
+            icon: Icons.location_on_outlined,
+            eyebrow: 'Endereço',
+            facts: [
+              (
+                'Endereço',
+                [
+                  ownerText(row, ['street']),
+                  ownerText(row, ['number']),
+                  ownerText(row, ['complement']),
+                ].where((part) => part.isNotEmpty).join(', '),
+              ),
+              ('Bairro', ownerText(row, ['district'])),
+              (
+                'Cidade',
+                [
+                  ownerText(row, ['city']),
+                  ownerText(row, ['stateCode']),
+                ].where((part) => part.isNotEmpty).join(' - '),
+              ),
+              ('CEP', ownerText(row, ['postalCode'])),
+              ('Ponto de referência', ownerText(row, ['notes'])),
+            ],
+            [
+              OwnerAction(
+                'Editar endereço',
+                Icons.edit_outlined,
+                () => _addressForm(context, tools, path, current: row),
+              ),
+              OwnerAction(
+                'Remover endereço',
+                Icons.delete_outline,
+                () =>
+                    tools.remove(context, '$path/${ownerId(row)}', 'endereço'),
+              ),
+            ],
+          ),
   );
 }
 
@@ -287,10 +333,11 @@ OwnerRecords ownerEquipment(OwnerTools tools, {OwnerRow? customer}) =>
           if (customer != null) 'customerId': ownerId(customer),
         },
       ),
+      icon: Icons.handyman_outlined,
       subtitle: (row) => [
         ownerText(row, ['identifier', 'serialNumber']),
-        ownerText(ownerRow(row['customer'])),
-        ownerStatus(row['status']),
+        if (customer == null) ownerText(ownerRow(row['customer'])),
+        ownerText(row, ['location']),
       ].where((part) => part.isNotEmpty).join(' · '),
       open: (context, summary) async {
         final path = '/assets/${ownerId(summary)}';
@@ -313,12 +360,16 @@ OwnerRecords ownerEquipment(OwnerTools tools, {OwnerRow? customer}) =>
                 () => tools.remove(context, path, 'equipamento'),
               ),
           ],
-          details: [
-            ownerText(row, ['manufacturer']),
-            ownerText(row, ['model']),
-            ownerText(row, ['serialNumber']),
-            ownerText(row, ['location']),
-          ].where((part) => part.isNotEmpty).join(' · '),
+          icon: Icons.handyman_outlined,
+          eyebrow: 'Equipamento',
+          badge: ownerBadge(row),
+          facts: [
+            ('Cliente', ownerText(ownerRow(row['customer']))),
+            ('Fabricante', ownerText(row, ['manufacturer'])),
+            ('Modelo', ownerText(row, ['model'])),
+            ('Número de série', ownerText(row, ['serialNumber'])),
+            ('Setor ou localização', ownerText(row, ['location'])),
+          ],
         );
       },
     );

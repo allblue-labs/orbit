@@ -4,12 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/contracts/mobile_field_artifact_contracts.dart';
+import '../../../core/design/orbit_primitives.dart';
 import '../../../core/network/orbit_interceptors.dart';
 import '../../../core/theme/orbit_theme.dart';
 import '../../documents/application/document_sharing.dart';
 import '../data/owner_repository.dart';
 import 'owner_controls.dart';
 import 'owner_records.dart';
+import 'owner_style.dart';
 import 'owner_tools.dart';
 
 const _methods = {
@@ -58,17 +60,29 @@ String _decimal(BigInt value, [int precision = 2]) {
   return '${digits.substring(0, integerLength)}.${digits.substring(integerLength)}';
 }
 
+OwnerBadgeData? _receiptBadge(OwnerRow receipt) =>
+    switch (receipt['renderStatus']) {
+      'READY' => (label: 'Recibo pronto', tone: OrbitTone.success),
+      'PENDING' ||
+      'RENDERING' => (label: 'Gerando recibo', tone: OrbitTone.warning),
+      'FAILED' => (label: 'Recibo com falha', tone: OrbitTone.danger),
+      _ => null,
+    };
+
 OwnerRecords ownerSales(OwnerTools tools, DocumentSharing sharing) =>
     OwnerRecords(
       title: 'Vendas',
       createLabel: 'Registrar venda',
       load: (_, page, _) =>
           tools.repo.list('/sales', query: {'page': page, 'limit': 20}),
+      icon: Icons.point_of_sale_outlined,
+      toneOf: (_) => OrbitTone.success,
+      badge: (row) => _receiptBadge(ownerRow(row['receipt'])),
+      amount: (row) => _money(row['total']),
       caption: (row) => ownerText(row, ['customerName']),
       subtitle: (row) => [
         ownerText(ownerRow(row['receipt']), ['code']),
         _receivedDate(row['paidOn']),
-        _money(row['total']),
       ].where((part) => part.isNotEmpty).join(' · '),
       create: (context) => _newSale(context, tools, sharing),
       open: (context, row) => _openSale(context, tools, sharing, row),
@@ -233,6 +247,13 @@ class _SaleWizardState extends State<_SaleWizard> {
         heightFactor: .8,
         child: OwnerRecords(
           title: 'Selecionar produto',
+          icon: Icons.inventory_2_outlined,
+          badge: (item) =>
+              (num.tryParse(ownerText(item, ['available'])) ?? 0) > 0
+              ? null
+              : (label: 'Sem estoque', tone: OrbitTone.danger),
+          amount: (item) =>
+              item['salePrice'] == null ? null : _money(item['salePrice']),
           search: true,
           searchLabel: 'Buscar por nome ou SKU',
           load: (search, page, _) => tools.repo.list(
@@ -249,10 +270,7 @@ class _SaleWizardState extends State<_SaleWizard> {
             if (_items.any((selected) => selected.id == ownerId(item)))
               'Já incluído',
             if ((num.tryParse(ownerText(item, ['available'])) ?? 0) > 0)
-              '${_quantity.format(num.parse(ownerText(item, ['available'])))} ${item['unit']} disponíveis'
-            else
-              'Sem estoque',
-            if (item['salePrice'] != null) _money(item['salePrice']),
+              '${_quantity.format(num.parse(ownerText(item, ['available'])))} ${item['unit']} disponíveis',
           ].join(' · '),
           open: (sheet, item) async {
             if (_items.any((selected) => selected.id == ownerId(item))) {
@@ -336,28 +354,36 @@ class _SaleWizardState extends State<_SaleWizard> {
   );
 
   List<Widget> _customerFields() => [
-    OutlinedButton.icon(
-      onPressed: () async {
-        final selected = await widget.tools.customer(context);
-        if (selected != null && mounted) setState(() => _customer = selected);
-      },
-      icon: const Icon(Icons.person_search_outlined),
-      label: Text(
-        _customer == null ? 'Selecionar cliente *' : ownerText(_customer!),
-      ),
-    ),
-    OutlinedButton.icon(
-      onPressed: () async {
-        final selected = await showDatePicker(
-          context: context,
-          initialDate: _date,
-          firstDate: DateTime(2000),
-          lastDate: widget.tools.now,
-        );
-        if (selected != null && mounted) setState(() => _date = selected);
-      },
-      icon: const Icon(Icons.event_outlined),
-      label: Text('Recebimento · ${DateFormat('dd/MM/yyyy').format(_date)}'),
+    OwnerTileGroup(
+      children: [
+        OwnerTile(
+          icon: Icons.person_search_outlined,
+          label: _customer == null
+              ? 'Selecionar cliente *'
+              : ownerText(_customer!),
+          description: _customer == null ? 'Quem comprou' : 'Cliente',
+          onTap: () async {
+            final selected = await widget.tools.customer(context);
+            if (selected != null && mounted) {
+              setState(() => _customer = selected);
+            }
+          },
+        ),
+        OwnerTile(
+          icon: Icons.event_outlined,
+          label: 'Recebimento · ${DateFormat('dd/MM/yyyy').format(_date)}',
+          description: 'Quando o pagamento foi recebido',
+          onTap: () async {
+            final selected = await showDatePicker(
+              context: context,
+              initialDate: _date,
+              firstDate: DateTime(2000),
+              lastDate: widget.tools.now,
+            );
+            if (selected != null && mounted) setState(() => _date = selected);
+          },
+        ),
+      ],
     ),
     _text(
       label: 'Observações',
@@ -376,21 +402,42 @@ class _SaleWizardState extends State<_SaleWizard> {
       label: const Text('Adicionar produto'),
     ),
     if (_items.isEmpty)
-      const Text('Selecione os produtos vendidos nesta unidade.'),
+      const OwnerNote(
+        icon: Icons.inventory_2_outlined,
+        text: 'Selecione os produtos vendidos nesta unidade.',
+      ),
     for (final item in _items)
-      Card(
+      OwnerSurface(
         key: ValueKey(item.id),
         child: Padding(
-          padding: const EdgeInsets.all(OrbitSpacing.md),
+          padding: EdgeInsets.zero,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Row(
                 children: [
+                  const OwnerIconTile(
+                    icon: Icons.inventory_2_outlined,
+                    size: 36,
+                  ),
+                  const SizedBox(width: OrbitSpacing.ms),
                   Expanded(
-                    child: Text(
-                      item.name,
-                      style: Theme.of(context).textTheme.titleSmall,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item.name,
+                          style: OrbitType.itemTitle.copyWith(
+                            color: context.orbit.ink,
+                          ),
+                        ),
+                        Text(
+                          '${_quantity.format(num.tryParse(item.available) ?? 0)} ${item.unit} em estoque',
+                          style: OrbitType.caption.copyWith(
+                            color: context.orbit.inkMuted,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   IconButton(
@@ -399,9 +446,6 @@ class _SaleWizardState extends State<_SaleWizard> {
                     icon: const Icon(Icons.delete_outline),
                   ),
                 ],
-              ),
-              Text(
-                '${_quantity.format(num.tryParse(item.available) ?? 0)} ${item.unit} em estoque',
               ),
               const SizedBox(height: OrbitSpacing.md),
               Row(
@@ -423,12 +467,18 @@ class _SaleWizardState extends State<_SaleWizard> {
                   ),
                 ],
               ),
-              const SizedBox(height: OrbitSpacing.sm),
-              Text(
-                item.subtotal == null
-                    ? 'Confira a quantidade e o valor.'
-                    : _money(_decimal(item.subtotal!)),
-              ),
+              item.subtotal == null
+                  ? Text(
+                      'Confira a quantidade e o valor.',
+                      style: OrbitType.caption.copyWith(
+                        color: context.orbit.danger,
+                      ),
+                    )
+                  : OwnerSummaryLine(
+                      'Subtotal',
+                      _money(_decimal(item.subtotal!)),
+                      strong: true,
+                    ),
             ],
           ),
         ),
@@ -442,15 +492,18 @@ class _SaleWizardState extends State<_SaleWizard> {
       change: (value) => _discount = value,
       hint: '0,00',
     ),
-    _summaryLine(
-      'Total a receber',
-      _total > BigInt.zero ? _money(_decimal(_total)) : '—',
+    OwnerSurface(
+      child: OwnerSummaryLine(
+        'Total a receber',
+        _total > BigInt.zero ? _money(_decimal(_total)) : '—',
+        strong: true,
+      ),
     ),
     for (final payment in _payments)
-      Card(
+      OwnerSurface(
         key: ObjectKey(payment),
         child: Padding(
-          padding: const EdgeInsets.all(OrbitSpacing.md),
+          padding: EdgeInsets.zero,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -516,31 +569,60 @@ class _SaleWizardState extends State<_SaleWizard> {
         label: const Text('Adicionar forma de pagamento'),
       ),
     if (!_paid)
-      const Text(
-        'Confira o desconto e informe pagamentos cuja soma seja igual ao total.',
+      const OwnerNote(
+        icon: Icons.info_outline,
+        tone: OrbitTone.warning,
+        text:
+            'Confira o desconto e informe pagamentos cuja soma seja igual ao total.',
       ),
   ];
 
   List<Widget> _review() => [
-    Text(ownerText(_customer!), style: Theme.of(context).textTheme.titleMedium),
-    Text('Recebido em ${DateFormat('dd/MM/yyyy').format(_date)}'),
-    for (final item in _items)
-      _summaryLine(
-        '${item.quantity} ${item.unit} · ${item.name}',
-        _money(_decimal(item.subtotal!)),
+    OwnerSheetHeader(
+      icon: Icons.person_outline,
+      eyebrow: 'Cliente',
+      title: ownerText(_customer!),
+      subtitle: 'Recebido em ${DateFormat('dd/MM/yyyy').format(_date)}',
+    ),
+    const SizedBox(height: OrbitSpacing.xs),
+    const OwnerGroupLabel('Produtos'),
+    OwnerSurface(
+      child: Column(
+        children: [
+          for (final item in _items)
+            OwnerSummaryLine(
+              '${item.quantity} ${item.unit} · ${item.name}',
+              _money(_decimal(item.subtotal!)),
+            ),
+          const Divider(),
+          if (_rebate! > BigInt.zero)
+            OwnerSummaryLine('Desconto', _money(_decimal(_rebate!))),
+          OwnerSummaryLine(
+            'Total recebido',
+            _money(_decimal(_total)),
+            strong: true,
+          ),
+        ],
       ),
-    const Divider(),
-    if (_rebate! > BigInt.zero)
-      _summaryLine('Desconto', _money(_decimal(_rebate!))),
-    _summaryLine('Total recebido', _money(_decimal(_total))),
-    for (final payment in _payments)
-      _summaryLine(
-        _paymentLabel(payment.method, payment.installments),
-        _money(_decimal(_amount(payment)!)),
+    ),
+    const OwnerGroupLabel('Pagamento'),
+    OwnerSurface(
+      child: Column(
+        children: [
+          for (final payment in _payments)
+            OwnerSummaryLine(
+              _paymentLabel(payment.method, payment.installments),
+              _money(_decimal(_amount(payment)!)),
+            ),
+        ],
       ),
-    if (_notes.trim().isNotEmpty) Text('Observações: ${_notes.trim()}'),
-    const Text(
-      'Confirme somente após receber o pagamento. A venda baixa o estoque da unidade e emite um recibo com a assinatura cadastrada no seu perfil.',
+    ),
+    if (_notes.trim().isNotEmpty)
+      OwnerFactsCard(facts: [('Observações', _notes.trim())]),
+    const OwnerNote(
+      icon: Icons.verified_outlined,
+      text:
+          'Confirme somente após receber o pagamento. A venda baixa o estoque da unidade e emite um recibo com a assinatura cadastrada no seu perfil.',
     ),
   ];
 
@@ -560,24 +642,55 @@ class _SaleWizardState extends State<_SaleWizard> {
         ),
         child: Column(
           children: [
-            ListTile(
-              title: const Text('Registrar venda'),
-              subtitle: Text(
-                [
-                  '${_steps[_step]} · Etapa ${_step + 1} de ${_steps.length}',
-                  ?widget.tools.session.businessUnit?.name,
-                ].join(' · '),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                OrbitSpacing.gutter,
+                OrbitSpacing.md,
+                OrbitSpacing.sm,
+                0,
               ),
-              trailing: IconButton(
-                onPressed: _saving ? null : () => Navigator.pop(context),
-                icon: const Icon(Icons.close),
-                tooltip: 'Fechar',
+              child: Row(
+                children: [
+                  const OwnerIconTile(icon: Icons.point_of_sale_outlined),
+                  const SizedBox(width: OrbitSpacing.ms),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Registrar venda',
+                          style: OrbitType.sectionTitle.copyWith(
+                            color: context.orbit.ink,
+                          ),
+                        ),
+                        Text(
+                          [
+                            '${_steps[_step]} · Etapa ${_step + 1} de ${_steps.length}',
+                            ?widget.tools.session.businessUnit?.name,
+                          ].join(' · '),
+                          style: OrbitType.caption.copyWith(
+                            color: context.orbit.inkMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: _saving ? null : () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                    tooltip: 'Fechar',
+                  ),
+                ],
               ),
             ),
             Padding(
               padding: ownerPadding,
-              child: LinearProgressIndicator(
-                value: (_step + 1) / _steps.length,
+              child: ClipRRect(
+                borderRadius: OrbitRadius.pill,
+                child: LinearProgressIndicator(
+                  minHeight: 6,
+                  value: (_step + 1) / _steps.length,
+                ),
               ),
             ),
             Expanded(
@@ -588,16 +701,17 @@ class _SaleWizardState extends State<_SaleWizard> {
                 padding: ownerPadding,
                 itemBuilder: (_, index) => fields[index],
                 separatorBuilder: (_, _) =>
-                    const SizedBox(height: OrbitSpacing.sm),
+                    const SizedBox(height: OrbitSpacing.ms),
                 itemCount: fields.length,
               ),
             ),
             if (_error case final message?)
               Padding(
                 padding: ownerPadding,
-                child: Text(
-                  message,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                child: OwnerNote(
+                  icon: Icons.error_outline,
+                  tone: OrbitTone.danger,
+                  text: message,
                 ),
               ),
             SafeArea(
@@ -605,34 +719,40 @@ class _SaleWizardState extends State<_SaleWizard> {
               minimum: ownerPadding,
               child: Row(
                 children: [
-                  if (_step > 0)
-                    TextButton(
-                      onPressed: _saving
-                          ? null
-                          : () => setState(() {
-                              _step--;
-                              _error = null;
-                            }),
-                      child: const Text('Voltar'),
+                  if (_step > 0) ...[
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _saving
+                            ? null
+                            : () => setState(() {
+                                _step--;
+                                _error = null;
+                              }),
+                        child: const Text('Voltar'),
+                      ),
                     ),
-                  const Spacer(),
-                  FilledButton(
-                    onPressed: !_canContinue || _saving
-                        ? null
-                        : () {
-                            FocusScope.of(context).unfocus();
-                            if (_step == _steps.length - 1) {
-                              unawaited(_submit());
-                            } else {
-                              setState(() => _step++);
-                            }
-                          },
-                    child: Text(
-                      _saving
-                          ? 'Registrando…'
-                          : _step == _steps.length - 1
-                          ? 'Confirmar venda'
-                          : 'Avançar',
+                    const SizedBox(width: OrbitSpacing.sm),
+                  ],
+                  Expanded(
+                    flex: 2,
+                    child: FilledButton(
+                      onPressed: !_canContinue || _saving
+                          ? null
+                          : () {
+                              FocusScope.of(context).unfocus();
+                              if (_step == _steps.length - 1) {
+                                unawaited(_submit());
+                              } else {
+                                setState(() => _step++);
+                              }
+                            },
+                      child: Text(
+                        _saving
+                            ? 'Registrando…'
+                            : _step == _steps.length - 1
+                            ? 'Confirmar venda'
+                            : 'Avançar',
+                      ),
                     ),
                   ),
                 ],
@@ -644,17 +764,6 @@ class _SaleWizardState extends State<_SaleWizard> {
     );
   }
 }
-
-Widget _summaryLine(String label, String value) => Padding(
-  padding: const EdgeInsets.symmetric(vertical: OrbitSpacing.xs),
-  child: Row(
-    children: [
-      Expanded(child: Text(label)),
-      const SizedBox(width: OrbitSpacing.sm),
-      Text(value),
-    ],
-  ),
-);
 
 class _SaleReceipt extends StatefulWidget {
   const _SaleReceipt({
@@ -764,43 +873,62 @@ class _SaleReceiptState extends State<_SaleReceipt> {
   Widget build(BuildContext context) {
     final code = ownerRow(_sale['receipt'])['code'];
     return ListView(
-      padding: ownerPadding,
+      padding: const EdgeInsets.fromLTRB(
+        OrbitSpacing.gutter,
+        0,
+        OrbitSpacing.gutter,
+        OrbitSpacing.lg,
+      ),
       children: [
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: const Icon(Icons.check_circle_outline),
-          title: Text('Venda registrada · $code'),
-          subtitle: Text(ownerText(_sale, ['customerName'])),
+        OwnerSheetHeader(
+          icon: Icons.check_circle_outline,
+          tone: OrbitTone.success,
+          eyebrow: 'Venda registrada · $code',
+          title: ownerText(_sale, ['customerName']),
+          subtitle: 'Recebido em ${_receivedDate(_sale['paidOn'])}',
+          badge: _receiptBadge(ownerRow(_sale['receipt'])),
         ),
-        Text('Recebido em ${_receivedDate(_sale['paidOn'])}'),
-        const SizedBox(height: OrbitSpacing.md),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(OrbitSpacing.md),
+        const SizedBox(height: OrbitSpacing.lg),
+        const OwnerGroupLabel('Produtos'),
+        OwnerSurface(
+          child: Column(
+            children: [
+              for (final line in ownerRows(_sale['items']))
+                OwnerSummaryLine(
+                  '${_formatQuantity(line['quantity'])} ${line['unit']} · ${line['name']}',
+                  _money(line['total']),
+                ),
+              if ((num.tryParse(_sale['discount']?.toString() ?? '') ?? 0) > 0)
+                OwnerSummaryLine('Desconto', _money(_sale['discount'])),
+              const Divider(),
+              OwnerSummaryLine(
+                'Total recebido',
+                _money(_sale['total']),
+                strong: true,
+              ),
+            ],
+          ),
+        ),
+        if (ownerRows(_sale['payments']).isNotEmpty) ...[
+          const SizedBox(height: OrbitSpacing.md),
+          const OwnerGroupLabel('Pagamento'),
+          OwnerSurface(
             child: Column(
               children: [
-                for (final line in ownerRows(_sale['items']))
-                  _summaryLine(
-                    '${_formatQuantity(line['quantity'])} ${line['unit']} · ${line['name']}',
-                    _money(line['total']),
+                for (final payment in ownerRows(_sale['payments']))
+                  OwnerSummaryLine(
+                    _paymentLabel(payment['method'], payment['installments']),
+                    _money(payment['amount']),
                   ),
-                if ((num.tryParse(_sale['discount']?.toString() ?? '') ?? 0) >
-                    0)
-                  _summaryLine('Desconto', _money(_sale['discount'])),
-                const Divider(),
-                _summaryLine('Total recebido', _money(_sale['total'])),
               ],
             ),
           ),
-        ),
-        for (final payment in ownerRows(_sale['payments']))
-          _summaryLine(
-            _paymentLabel(payment['method'], payment['installments']),
-            _money(payment['amount']),
-          ),
-        if ((_sale['notes'] as String?)?.isNotEmpty ?? false)
-          Text(_sale['notes'] as String),
-        const SizedBox(height: OrbitSpacing.md),
+        ],
+        if ((_sale['notes'] as String?)?.isNotEmpty ?? false) ...[
+          const SizedBox(height: OrbitSpacing.md),
+          OwnerFactsCard(facts: [('Observações', _sale['notes'] as String)]),
+        ],
+        const SizedBox(height: OrbitSpacing.lg),
         if (_status == 'READY')
           FilledButton.icon(
             onPressed: _busy ? null : _share,
@@ -810,9 +938,16 @@ class _SaleReceiptState extends State<_SaleReceipt> {
             ),
           )
         else if (_pending && _error == null) ...[
-          const LinearProgressIndicator(),
+          ClipRRect(
+            borderRadius: OrbitRadius.pill,
+            child: const LinearProgressIndicator(minHeight: 6),
+          ),
           const SizedBox(height: OrbitSpacing.sm),
-          const Text('Gerando o recibo da venda…'),
+          Text(
+            'Gerando o recibo da venda…',
+            textAlign: TextAlign.center,
+            style: OrbitType.caption.copyWith(color: context.orbit.inkMuted),
+          ),
         ] else if (_pending)
           OutlinedButton(
             onPressed: _refresh,
@@ -825,11 +960,14 @@ class _SaleReceiptState extends State<_SaleReceipt> {
               _busy ? 'Solicitando…' : 'Tentar gerar recibo novamente',
             ),
           ),
-        if (_error case final message?)
-          Text(
-            message,
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
+        if (_error case final message?) ...[
+          const SizedBox(height: OrbitSpacing.md),
+          OwnerNote(
+            icon: Icons.error_outline,
+            tone: OrbitTone.danger,
+            text: message,
           ),
+        ],
       ],
     );
   }

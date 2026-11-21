@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../core/design/orbit_primitives.dart';
 import '../../../core/theme/orbit_theme.dart';
 import '../data/owner_repository.dart';
 import 'owner_controls.dart';
@@ -30,9 +31,10 @@ OwnerRecords ownerTeam(OwnerTools tools) => OwnerRecords(
     '/organizations/current/members',
     query: {'page': page, 'limit': 25},
   ),
+  icon: Icons.person_outline,
   subtitle: (row) => [
     ownerText(ownerRow(row['role'])),
-    ownerStatus(row['status']),
+    ownerText(row, ['email']),
   ].where((part) => part.isNotEmpty).join(' · '),
   open: (context, row) => _memberActions(context, tools, row),
 );
@@ -78,28 +80,60 @@ Future<bool> _createMember(BuildContext context, OwnerTools tools) async {
     context: context,
     builder: (dialog) => AlertDialog(
       title: const Text('Senha temporária'),
+      icon: Icon(Icons.key_rounded, color: dialog.orbit.accent),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Text(
             'Compartilhe com o técnico. O app solicitará a troca no primeiro acesso.',
+            textAlign: TextAlign.center,
           ),
           const SizedBox(height: OrbitSpacing.md),
-          SelectableText(temporaryPassword),
+          Container(
+            padding: const EdgeInsets.symmetric(
+              vertical: OrbitSpacing.ms,
+              horizontal: OrbitSpacing.md,
+            ),
+            decoration: BoxDecoration(
+              color: dialog.orbit.surfaceMuted,
+              borderRadius: OrbitRadius.field,
+            ),
+            child: SelectableText(
+              temporaryPassword,
+              textAlign: TextAlign.center,
+              style: OrbitType.sectionTitle.copyWith(
+                fontFamily: 'monospace',
+                letterSpacing: 1.5,
+              ),
+            ),
+          ),
+          const SizedBox(height: OrbitSpacing.xs),
+          Text(
+            'Ela aparece só agora.',
+            textAlign: TextAlign.center,
+            style: OrbitType.caption.copyWith(color: dialog.orbit.inkMuted),
+          ),
         ],
       ),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(dialog),
-          child: const Text('Fechar'),
-        ),
-        FilledButton(
-          onPressed: () async {
-            await Clipboard.setData(ClipboardData(text: temporaryPassword));
-            if (dialog.mounted) Navigator.pop(dialog);
-          },
-          child: const Text('Copiar senha'),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            FilledButton.icon(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: temporaryPassword));
+                if (dialog.mounted) Navigator.pop(dialog);
+              },
+              icon: const Icon(Icons.copy_rounded),
+              label: const Text('Copiar senha'),
+            ),
+            const SizedBox(height: OrbitSpacing.xs),
+            TextButton(
+              onPressed: () => Navigator.pop(dialog),
+              child: const Text('Fechar'),
+            ),
+          ],
         ),
       ],
     ),
@@ -201,12 +235,16 @@ Future<bool> _memberActions(
         ),
       ],
     ],
-    details: [
-      ownerText(role),
-      ownerStatus(row['status']),
-      ownerText(row, ['email']),
-      ownerRows(row['businessUnits']).map((row) => ownerText(row)).join(', '),
-    ].where((part) => part.isNotEmpty).join('\n'),
+    icon: Icons.person_outline,
+    eyebrow: ownerText(role).isEmpty ? 'Equipe' : ownerText(role),
+    badge: ownerBadge(row),
+    facts: [
+      ('E-mail de acesso', ownerText(row, ['email'])),
+      (
+        'Unidades',
+        ownerRows(row['businessUnits']).map((row) => ownerText(row)).join(', '),
+      ),
+    ],
   );
 }
 
@@ -242,23 +280,29 @@ Future<bool> _delegations(
 Future<bool> openOwnerApprovals(
   BuildContext context,
   OwnerTools tools,
-) => ownerActions(context, 'Autorização de demandas', [
-  for (final recurring in [false, true])
-    for (final authorized in [false, true])
-      OwnerAction(
-        '${recurring ? 'PMOC e RVT' : 'Ordens de serviço'} · ${authorized ? 'autorizadas' : 'pendentes'}',
-        authorized
-            ? Icons.check_circle_outline
-            : Icons.pending_actions_outlined,
-        () async {
-          await ownerOpenRecords(
-            context,
-            _approvals(tools, recurring: recurring, authorized: authorized),
-          );
-          return false;
-        },
-      ),
-]);
+) => ownerActions(
+  context,
+  'Autorização de demandas',
+  icon: Icons.fact_check_outlined,
+  subtitle: 'Escolha o que revisar.',
+  [
+    for (final recurring in [false, true])
+      for (final authorized in [false, true])
+        OwnerAction(
+          '${recurring ? 'PMOC e RVT' : 'Ordens de serviço'} · ${authorized ? 'autorizadas' : 'pendentes'}',
+          authorized
+              ? Icons.check_circle_outline
+              : Icons.pending_actions_outlined,
+          () async {
+            await ownerOpenRecords(
+              context,
+              _approvals(tools, recurring: recurring, authorized: authorized),
+            );
+            return false;
+          },
+        ),
+  ],
+);
 
 OwnerRecords _approvals(
   OwnerTools tools, {
@@ -280,6 +324,10 @@ OwnerRecords _approvals(
         'state': authorized ? 'authorized' : 'pending',
       },
     ),
+    icon: recurring ? Icons.event_repeat_outlined : Icons.assignment_outlined,
+    badge: (_) => authorized
+        ? (label: 'Autorizada', tone: OrbitTone.success)
+        : (label: 'Aguardando autorização', tone: OrbitTone.warning),
     subtitle: (row) => [
       ownerText(row, ['code']),
       ownerText(ownerRow(row['responsibleFieldTechnician'])),
