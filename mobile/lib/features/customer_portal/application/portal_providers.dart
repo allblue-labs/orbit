@@ -75,3 +75,19 @@ final portalDocumentsProvider =
 final portalProfileProvider = FutureProvider.autoDispose<PortalProfile>(
   (ref) => ref.watch(portalRepositoryProvider).profile(),
 );
+
+final portalServiceRequestsProvider =
+    FutureProvider.autoDispose<PortalPage<ServiceRequest>>(
+      (ref) => ref.watch(portalRepositoryProvider).serviceRequests(),
+    );
+
+final portalServiceRequestProvider = FutureProvider.autoDispose
+    .family<ServiceRequest, String>(
+      (ref, id) => ref.watch(portalRepositoryProvider).serviceRequest(id),
+    );
+
+/// Todos os equipamentos, para o passo "qual equipamento" do assistente.
+final portalAllAssetsProvider =
+    FutureProvider.autoDispose<PortalPage<PortalAsset>>(
+      (ref) => ref.watch(portalRepositoryProvider).assets(),
+    );

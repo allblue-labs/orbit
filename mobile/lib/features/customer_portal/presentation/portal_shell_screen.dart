@@ -13,6 +13,7 @@ import '../../../core/theme/orbit_theme.dart';
 import '../application/portal_session.dart';
 import 'portal_pages.dart';
 import 'portal_profile.dart';
+import 'service_requests_page.dart';
 
 class PortalShellScreen extends ConsumerStatefulWidget {
   const PortalShellScreen({super.key});
@@ -24,7 +25,7 @@ class PortalShellScreen extends ConsumerStatefulWidget {
 class _PortalShellScreenState extends ConsumerState<PortalShellScreen> {
   int _pagina = 0;
 
-  static const _titulos = ['Início', 'Equipamentos', 'Documentos'];
+  static const _titulos = ['Início', 'Chamados', 'Equipamentos', 'Documentos'];
 
   @override
   Widget build(BuildContext context) {
@@ -60,6 +61,7 @@ class _PortalShellScreenState extends ConsumerState<PortalShellScreen> {
         index: _pagina,
         children: [
           PortalHomePage(onOpenTab: (tab) => setState(() => _pagina = tab)),
+          const PortalServiceRequestsPage(),
           const PortalEquipmentPage(),
           const PortalDocumentsPage(),
         ],
@@ -72,6 +74,11 @@ class _PortalShellScreenState extends ConsumerState<PortalShellScreen> {
             icon: Icon(Icons.home_outlined),
             selectedIcon: Icon(Icons.home),
             label: 'Início',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.support_agent_outlined),
+            selectedIcon: Icon(Icons.support_agent),
+            label: 'Chamados',
           ),
           NavigationDestination(
             icon: Icon(Icons.ac_unit_outlined),

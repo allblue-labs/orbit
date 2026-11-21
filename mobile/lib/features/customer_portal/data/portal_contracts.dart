@@ -444,3 +444,238 @@ class CustomerAccessCredentials {
   final CustomerAccessIdentity identity;
   final String temporaryPassword;
 }
+
+/* ------------------------------------------------------------------ */
+/* Chamados                                                            */
+/* ------------------------------------------------------------------ */
+
+/// As categorias de chamado, na ordem do primeiro passo do assistente.
+enum ServiceRequestCategory {
+  equipmentProblem('EQUIPMENT_PROBLEM', 'Problema em equipamento'),
+  maintenance('MAINTENANCE', 'Manutenção'),
+  serviceRequest('SERVICE_REQUEST', 'Solicitar um serviço'),
+  documentRequest('DOCUMENT_REQUEST', 'Pedir um documento'),
+  question('QUESTION', 'Tirar uma dúvida'),
+  other('OTHER', 'Outro assunto');
+
+  const ServiceRequestCategory(this.code, this.label);
+  final String code;
+  final String label;
+
+  static ServiceRequestCategory of(String code) => values.firstWhere(
+    (value) => value.code == code,
+    orElse: () => ServiceRequestCategory.other,
+  );
+}
+
+enum ServiceRequestUrgency {
+  low('LOW', 'Baixa', 'Pode esperar alguns dias'),
+  normal('NORMAL', 'Normal', 'Na próxima visita possível'),
+  high('HIGH', 'Alta', 'Atrapalha o funcionamento do local'),
+  urgent('URGENT', 'Urgente', 'Precisa de atendimento hoje');
+
+  const ServiceRequestUrgency(this.code, this.label, this.hint);
+  final String code;
+  final String label;
+  final String hint;
+
+  static ServiceRequestUrgency of(String code) => values.firstWhere(
+    (value) => value.code == code,
+    orElse: () => ServiceRequestUrgency.normal,
+  );
+}
+
+enum EquipmentCondition {
+  stopped('STOPPED', 'Parado'),
+  malfunctioning('MALFUNCTIONING', 'Funcionando com problema'),
+  working('WORKING', 'Funcionando normalmente');
+
+  const EquipmentCondition(this.code, this.label);
+  final String code;
+  final String label;
+
+  static EquipmentCondition? of(String? code) =>
+      values.where((value) => value.code == code).firstOrNull;
+}
+
+/// O que o cliente preenche — no assistente de abertura e na edição.
+class ServiceRequestDraft {
+  const ServiceRequestDraft({
+    required this.category,
+    required this.subject,
+    required this.description,
+    this.assetId,
+    this.urgency = ServiceRequestUrgency.normal,
+    this.equipmentCondition,
+    this.siteLocation = '',
+    this.availability = '',
+    this.contactName = '',
+    this.contactPhone = '',
+  });
+
+  final ServiceRequestCategory category;
+  final String subject;
+  final String description;
+  final String? assetId;
+  final ServiceRequestUrgency urgency;
+  final EquipmentCondition? equipmentCondition;
+  final String siteLocation;
+  final String availability;
+  final String contactName;
+  final String contactPhone;
+
+  Map<String, dynamic> toJson() => {
+    'category': category.code,
+    'subject': subject.trim(),
+    'description': description.trim(),
+    'assetId': ?assetId,
+    'urgency': urgency.code,
+    'details': {
+      'equipmentCondition': ?equipmentCondition?.code,
+      if (siteLocation.trim().isNotEmpty) 'siteLocation': siteLocation.trim(),
+      if (availability.trim().isNotEmpty) 'availability': availability.trim(),
+      if (contactName.trim().isNotEmpty) 'contactName': contactName.trim(),
+      if (contactPhone.trim().isNotEmpty) 'contactPhone': contactPhone.trim(),
+    },
+  };
+}
+
+class ServiceRequestEvent {
+  const ServiceRequestEvent({
+    required this.id,
+    required this.type,
+    required this.actorName,
+    required this.fromCustomer,
+    required this.message,
+    required this.toStatus,
+    required this.createdAt,
+  });
+
+  factory ServiceRequestEvent.fromJson(Map<String, dynamic> json) {
+    final actor = _map(json['actor']);
+    final change = _map(json['statusChange']);
+    return ServiceRequestEvent(
+      id: _str(json['id']),
+      type: _str(json['type']),
+      actorName: _str(actor['displayName']),
+      fromCustomer: actor['type'] == 'CUSTOMER_PORTAL',
+      message: _strOrNull(json['message']),
+      toStatus: _strOrNull(change['to']),
+      createdAt: _date(json['createdAt']),
+    );
+  }
+
+  final String id;
+  final String type;
+  final String actorName;
+  final bool fromCustomer;
+  final String? message;
+  final String? toStatus;
+  final DateTime? createdAt;
+}
+
+class ServiceRequest {
+  const ServiceRequest({
+    required this.id,
+    required this.code,
+    required this.category,
+    required this.subject,
+    required this.status,
+    required this.urgency,
+    required this.asset,
+    required this.submittedAt,
+    required this.updatedAt,
+    required this.version,
+    required this.allowedActions,
+    this.description = '',
+    this.equipmentCondition,
+    this.siteLocation,
+    this.availability,
+    this.contactName,
+    this.contactPhone,
+    this.timeline = const [],
+  });
+
+  factory ServiceRequest.fromJson(Map<String, dynamic> json) {
+    final details = _map(json['details']);
+    final asset = json['asset'] is Map<String, dynamic>
+        ? json['asset'] as Map<String, dynamic>
+        : null;
+    return ServiceRequest(
+      id: _str(json['id']),
+      code: _str(json['code']),
+      category: ServiceRequestCategory.of(_str(_map(json['category'])['code'])),
+      subject: _str(json['subject']),
+      status: PortalStatus.fromJson(json['status']),
+      urgency: ServiceRequestUrgency.of(_str(_map(json['urgency'])['code'])),
+      asset: asset == null
+          ? null
+          : PortalNamedRef(id: _str(asset['id']), name: _str(asset['name'])),
+      submittedAt: _date(json['submittedAt']),
+      updatedAt: _date(json['updatedAt']),
+      version: _int(json['version']),
+      allowedActions:
+          (json['allowedActions'] is List
+                  ? json['allowedActions'] as List
+                  : const [])
+              .whereType<String>()
+              .toList(growable: false),
+      description: _str(json['description']),
+      equipmentCondition: EquipmentCondition.of(
+        _map(details['equipmentCondition'])['code'] as String?,
+      ),
+      siteLocation: _strOrNull(details['siteLocation']),
+      availability: _strOrNull(details['availability']),
+      contactName: _strOrNull(details['contactName']),
+      contactPhone: _strOrNull(details['contactPhone']),
+      timeline: _list(
+        json['timeline'],
+      ).map(ServiceRequestEvent.fromJson).toList(growable: false),
+    );
+  }
+
+  final String id;
+  final String code;
+  final ServiceRequestCategory category;
+  final String subject;
+  final PortalStatus status;
+  final ServiceRequestUrgency urgency;
+  final PortalNamedRef? asset;
+  final DateTime? submittedAt;
+  final DateTime? updatedAt;
+  final int version;
+  final List<String> allowedActions;
+  final String description;
+  final EquipmentCondition? equipmentCondition;
+  final String? siteLocation;
+  final String? availability;
+  final String? contactName;
+  final String? contactPhone;
+  final List<ServiceRequestEvent> timeline;
+
+  bool get canEdit => allowedActions.contains('EDIT');
+  bool get canReply => allowedActions.contains('REPLY');
+  bool get canCancel => allowedActions.contains('CANCEL');
+
+  /// Aberto, triado, em atendimento ou esperando o cliente.
+  bool get isActive => const {
+    'OPEN',
+    'IN_TRIAGE',
+    'IN_PROGRESS',
+    'WAITING_CUSTOMER',
+  }.contains(status.code);
+
+  /// O rascunho com o que está gravado — a edição parte daqui.
+  ServiceRequestDraft toDraft() => ServiceRequestDraft(
+    category: category,
+    subject: subject,
+    description: description,
+    assetId: asset?.id,
+    urgency: urgency,
+    equipmentCondition: equipmentCondition,
+    siteLocation: siteLocation ?? '',
+    availability: availability ?? '',
+    contactName: contactName ?? '',
+    contactPhone: contactPhone ?? '',
+  );
+}

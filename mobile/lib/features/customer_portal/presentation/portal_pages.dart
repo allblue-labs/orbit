@@ -12,6 +12,8 @@ import '../application/portal_session.dart';
 import '../data/portal_contracts.dart';
 import 'portal_common.dart';
 import 'portal_detail_sheets.dart';
+import 'portal_widgets.dart';
+import 'service_requests_page.dart';
 
 /* ------------------------------------------------------------------ */
 /* Início                                                              */
@@ -49,14 +51,17 @@ class PortalHomePage extends ConsumerWidget {
           OrbitSpacing.xl,
         ),
         children: [
+          Text('Olá,', style: OrbitType.body.copyWith(color: palette.inkMuted)),
           Text(
-            'Olá, ${me?.displayName ?? ''}',
+            me?.displayName ?? '',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
             style: OrbitType.screenTitle.copyWith(color: palette.ink),
           ),
           const SizedBox(height: OrbitSpacing.xs),
           Text(
-            'Seus equipamentos e atendimentos com ${me?.organizationName ?? 'a sua empresa de climatização'}.',
-            style: OrbitType.body.copyWith(color: palette.inkMuted),
+            'Acompanhe seus equipamentos, atendimentos e documentos com ${me?.organizationName ?? 'a empresa que atende você'}.',
+            style: OrbitType.caption.copyWith(color: palette.inkMuted),
           ),
           const SizedBox(height: OrbitSpacing.lg),
           resumo.when(
@@ -65,28 +70,33 @@ class PortalHomePage extends ConsumerWidget {
               error: error,
               onRetry: () => ref.invalidate(portalSummaryProvider),
             ),
-            data: (dados) => OrbitMetricStrip(
-              metrics: [
-                OrbitMetricData(
-                  value: '${dados.assets}',
-                  label: 'Equipamentos',
-                  onTap: () => onOpenTab(1),
-                ),
-                OrbitMetricData(
-                  value: '${dados.availableDocuments}',
-                  label: 'Documentos',
-                  onTap: () => onOpenTab(2),
-                ),
-                OrbitMetricData(
-                  value: '${dados.upcomingVisits}',
-                  label: 'Visitas previstas',
-                  tone: dados.upcomingVisits > 0
-                      ? OrbitTone.info
-                      : OrbitTone.neutral,
-                ),
-              ],
+            data: (dados) => PortalCard(
+              padding: const EdgeInsets.symmetric(vertical: OrbitSpacing.sm),
+              child: OrbitMetricStrip(
+                metrics: [
+                  OrbitMetricData(
+                    value: '${dados.assets}',
+                    label: 'Equipamentos',
+                    onTap: () => onOpenTab(2),
+                  ),
+                  OrbitMetricData(
+                    value: '${dados.availableDocuments}',
+                    label: 'Documentos',
+                    onTap: () => onOpenTab(3),
+                  ),
+                  OrbitMetricData(
+                    value: '${dados.upcomingVisits}',
+                    label: 'Visitas previstas',
+                    tone: dados.upcomingVisits > 0
+                        ? OrbitTone.info
+                        : OrbitTone.neutral,
+                  ),
+                ],
+              ),
             ),
           ),
+          const SizedBox(height: OrbitSpacing.md),
+          _AjudaCard(onAbrir: () => openNewServiceRequest(context)),
           const SizedBox(height: OrbitSpacing.lg),
           OrbitSection(
             title: 'Atendimentos',
@@ -103,10 +113,14 @@ class PortalHomePage extends ConsumerWidget {
                       message:
                           'Nenhum atendimento ainda. Quando houver, ele aparece aqui com a data e o técnico.',
                     )
-                  : Column(
+                  : PortalCardList(
                       children: [
                         for (final operacao in page.items)
-                          _OperationRow(operation: operacao),
+                          PortalOperationCard(
+                            operation: operacao,
+                            onTap: () =>
+                                showPortalOperationSheet(context, operacao.id),
+                          ),
                       ],
                     ),
             ),
@@ -115,31 +129,6 @@ class PortalHomePage extends ConsumerWidget {
       ),
     );
   }
-}
-
-class _OperationRow extends StatelessWidget {
-  const _OperationRow({required this.operation});
-
-  final PortalOperation operation;
-
-  @override
-  Widget build(BuildContext context) => OrbitListRow(
-    leading: portalDay(operation.when),
-    title: operation.title,
-    subtitle: [
-      operation.type,
-      if (operation.technician case final String tecnico) tecnico,
-    ].join(' · '),
-    detail: operation.assets.isEmpty
-        ? operation.location
-        : operation.assets.map((asset) => asset.name).join(', '),
-    trailing: OrbitStatusBadge(
-      label: operation.status.label,
-      tone: operationTone(operation.status.code),
-    ),
-    tone: operationTone(operation.status.code),
-    onTap: () => showPortalOperationSheet(context, operation.id),
-  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -182,9 +171,23 @@ class _PortalEquipmentPageState extends ConsumerState<PortalEquipmentPage> {
           TextField(
             controller: _busca,
             textInputAction: TextInputAction.search,
-            decoration: const InputDecoration(
-              hintText: 'Buscar por nome, identificação ou série',
-              prefixIcon: Icon(Icons.search),
+            decoration: InputDecoration(
+              hintText: 'Buscar equipamento',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: ListenableBuilder(
+                listenable: _busca,
+                builder: (context, _) => _busca.text.isEmpty
+                    ? const SizedBox.shrink()
+                    : IconButton(
+                        tooltip: 'Limpar busca',
+                        icon: const Icon(Icons.close),
+                        onPressed: () {
+                          _busca.clear();
+                          ref.read(portalAssetSearchProvider.notifier).state =
+                              '';
+                        },
+                      ),
+              ),
             ),
             onSubmitted: (texto) =>
                 ref.read(portalAssetSearchProvider.notifier).state = texto,
@@ -203,21 +206,11 @@ class _PortalEquipmentPageState extends ConsumerState<PortalEquipmentPage> {
                         ? 'Nenhum equipamento cadastrado para você ainda.'
                         : 'Nenhum equipamento encontrado com essa busca.',
                   )
-                : Column(
+                : PortalCardList(
                     children: [
                       for (final equipamento in page.items)
-                        OrbitListRow(
-                          title: equipamento.name,
-                          subtitle:
-                              equipamento.makeAndModel ?? equipamento.category,
-                          detail: [
-                            equipamento.location,
-                            equipamento.identifier,
-                          ].whereType<String>().join(' · '),
-                          trailing: OrbitStatusBadge(
-                            label: equipamento.status.label,
-                            tone: assetTone(equipamento.status.code),
-                          ),
+                        PortalAssetCard(
+                          asset: equipamento,
                           onTap: () =>
                               showPortalAssetSheet(context, equipamento),
                         ),
@@ -295,7 +288,7 @@ class PortalDocumentsPage extends ConsumerWidget {
                         ? 'Nenhum documento emitido ainda. Relatórios, recibos e orçamentos aparecem aqui assim que forem emitidos.'
                         : 'Nenhum documento em ${categoria.label}.',
                   )
-                : Column(
+                : PortalCardList(
                     children: [
                       for (final documento in page.items)
                         PortalDocumentRow(document: documento),
@@ -328,4 +321,41 @@ class _Filtro extends StatelessWidget {
       onSelected: (_) => onTap(),
     ),
   );
+}
+
+/// O convite para abrir um chamado, logo no Início.
+class _AjudaCard extends StatelessWidget {
+  const _AjudaCard({required this.onAbrir});
+
+  final VoidCallback onAbrir;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.orbit;
+    return PortalCard(
+      onTap: onAbrir,
+      child: Row(
+        children: [
+          const PortalIconTile(icon: Icons.support_agent),
+          const SizedBox(width: OrbitSpacing.ms),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Precisa de ajuda?',
+                  style: OrbitType.itemTitle.copyWith(color: palette.ink),
+                ),
+                Text(
+                  'Abra um chamado: manutenção, problema num equipamento ou uma dúvida.',
+                  style: OrbitType.caption.copyWith(color: palette.inkMuted),
+                ),
+              ],
+            ),
+          ),
+          Icon(Icons.chevron_right, color: palette.accent),
+        ],
+      ),
+    );
+  }
 }

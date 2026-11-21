@@ -372,10 +372,10 @@ class _Credenciais extends StatelessWidget {
   final CustomerAccessCredentials credenciais;
 
   String get _mensagem =>
-      'Seu acesso ao app Orbit:\n'
+      'Seu acesso ao portal do cliente Orbit:\n'
       'E-mail: ${credenciais.identity.email}\n'
       'Senha temporária: ${credenciais.temporaryPassword}\n\n'
-      'Baixe o app, escolha "Sou cliente" e entre. No primeiro acesso você cria a sua senha.';
+      'Entre pelo app Orbit (escolha "Sou cliente") ou pelo portal do cliente no site do Orbit. No primeiro acesso você cria a sua senha.';
 
   @override
   Widget build(BuildContext context) {

@@ -230,4 +230,69 @@ class PortalRepository {
       signature: resolve(profile.signature),
     );
   }
+
+  /* ---------------------------------------------------------------- */
+  /* Chamados                                                          */
+  /* ---------------------------------------------------------------- */
+
+  Future<PortalPage<ServiceRequest>> serviceRequests({int page = 1}) async =>
+      PortalPage.fromJson(
+        await _client.get<Map<String, dynamic>>(
+          '/portal/me/service-requests',
+          query: {'page': page, 'limit': 50},
+        ),
+        ServiceRequest.fromJson,
+      );
+
+  Future<ServiceRequest> serviceRequest(String id) async =>
+      ServiceRequest.fromJson(
+        await _client.get<Map<String, dynamic>>(
+          '/portal/me/service-requests/${Uri.encodeComponent(id)}',
+        ),
+      );
+
+  /// Abre o chamado. A chave de idempotência vem de quem chama e é a mesma
+  /// a cada nova tentativa do mesmo envio: rede ruim não vira dois chamados.
+  Future<ServiceRequest> openServiceRequest(
+    ServiceRequestDraft draft, {
+    required String idempotencyKey,
+  }) async => ServiceRequest.fromJson(
+    await _client.post<Map<String, dynamic>>(
+      '/portal/me/service-requests',
+      body: draft.toJson(),
+      headers: {'idempotency-key': idempotencyKey},
+    ),
+  );
+
+  Future<ServiceRequest> updateServiceRequest(
+    String id,
+    ServiceRequestDraft draft, {
+    required int expectedVersion,
+  }) async => ServiceRequest.fromJson(
+    await _client.patch<Map<String, dynamic>>(
+      '/portal/me/service-requests/${Uri.encodeComponent(id)}',
+      body: {...draft.toJson(), 'expectedVersion': expectedVersion},
+    ),
+  );
+
+  Future<ServiceRequest> replyServiceRequest(
+    String id,
+    String message, {
+    required int expectedVersion,
+  }) async => ServiceRequest.fromJson(
+    await _client.post<Map<String, dynamic>>(
+      '/portal/me/service-requests/${Uri.encodeComponent(id)}/messages',
+      body: {'message': message.trim(), 'expectedVersion': expectedVersion},
+    ),
+  );
+
+  Future<ServiceRequest> cancelServiceRequest(
+    String id, {
+    required int expectedVersion,
+  }) async => ServiceRequest.fromJson(
+    await _client.post<Map<String, dynamic>>(
+      '/portal/me/service-requests/${Uri.encodeComponent(id)}/cancel',
+      body: {'expectedVersion': expectedVersion},
+    ),
+  );
 }
