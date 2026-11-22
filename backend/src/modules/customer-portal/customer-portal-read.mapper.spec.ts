@@ -73,6 +73,14 @@ describe('CustomerPortalReadMapper', () => {
 
     const result = mapper.assetDetails(value);
     expect(result.status.label).toBe('Ativo');
+    /* Código desconhecido vira texto legível; os conhecidos, português. */
+    expect(result.category).toBe('Air conditioner');
+    expect(mapper.asset({ ...value, category: 'EQUIPMENT' }).category).toBe(
+      'Equipamento',
+    );
+    expect(mapper.asset({ ...value, category: 'FACILITY' }).category).toBe(
+      'Instalação',
+    );
     expect(result.installedOn).toBe('2026-01-02');
     expect(result.related).toEqual({
       operations: 2,

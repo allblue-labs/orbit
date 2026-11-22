@@ -25,13 +25,6 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
 import { browserUrlFor } from "@/lib/backend-url";
 import { errorCopy } from "@/lib/error-copy";
 import { notifyError } from "@/lib/notify";
@@ -61,6 +54,7 @@ import {
   formatDate,
   formatDateTime,
   IconTile,
+  PortalDrawer,
   ItemCard,
   ListSkeleton,
   Note,
@@ -206,7 +200,11 @@ function OperationCard({
     <ItemCard
       onClick={onOpen}
       leading={
-        <DateBlock iso={operation.completedAt ?? operation.scheduledStart} tone={tom} />
+        operation.completedAt ?? operation.scheduledStart ? (
+          <DateBlock iso={operation.completedAt ?? operation.scheduledStart} tone={tom} />
+        ) : (
+          <IconTile icon={Wrench} tone={tom === "neutral" ? "info" : tom} />
+        )
       }
       title={operation.title}
       subtitle={[operation.type, operation.responsibleTechnician?.displayName]
@@ -391,7 +389,7 @@ export function PortalEquipment() {
               title={asset.displayName}
               subtitle={
                 [asset.manufacturer, asset.model].filter(Boolean).join(" · ") ||
-                asset.category
+                assetCategory(asset.category)
               }
               meta={
                 [asset.location, asset.identifier].filter(Boolean).join(" · ") || null
@@ -410,32 +408,19 @@ export function PortalEquipment() {
 /* Fichas                                                              */
 /* ------------------------------------------------------------------ */
 
-function PortalSheet({
-  open,
-  onClose,
-  children,
-  title,
-  description,
-}: {
-  open: boolean;
-  onClose: () => void;
-  children: React.ReactNode;
-  title: string;
-  description: string;
-}) {
-  return (
-    <Sheet open={open} onOpenChange={(valor) => !valor && onClose()}>
-      <SheetContent className="w-full overflow-y-auto bg-muted/30 sm:max-w-lg">
-        <SheetHeader className="space-y-1 text-left">
-          <SheetDescription className="text-xs font-semibold uppercase tracking-wider">
-            {description}
-          </SheetDescription>
-          <SheetTitle className="text-lg leading-snug">{title}</SheetTitle>
-        </SheetHeader>
-        <div className="space-y-6 px-4 pb-8">{children}</div>
-      </SheetContent>
-    </Sheet>
-  );
+/** A categoria do equipamento como o cliente lê — o servidor publica o código. */
+const CATEGORIAS: Record<string, string> = {
+  equipment: "Equipamento",
+  vehicle: "Veículo",
+  tool: "Ferramenta",
+  facility: "Instalação",
+  other: "Outro",
+};
+
+/** Cobre o código ("EQUIPMENT") e o texto antigo da API ("Equipment"). */
+export function assetCategory(code: string | null | undefined): string {
+  if (!code) return "Equipamento";
+  return CATEGORIAS[code.trim().toLowerCase()] ?? code;
 }
 
 export function OperationSheet({
@@ -449,11 +434,30 @@ export function OperationSheet({
   const documentos = usePortalDocuments({ operationId: id ?? undefined }, Boolean(id));
   const op = detalhe.data;
   return (
-    <PortalSheet
+    <PortalDrawer
       open={Boolean(id)}
       onClose={onClose}
+      /* A data em bloco quando existe; sem agendamento, o ícone do serviço. */
+      leading={
+        op && (op.completedAt ?? op.scheduledStart) ? (
+          <DateBlock
+            iso={op.completedAt ?? op.scheduledStart}
+            tone={operationTone(op.status.code)}
+          />
+        ) : undefined
+      }
+      icon={Wrench}
+      tone={op ? (operationTone(op.status.code) === "neutral" ? "info" : operationTone(op.status.code)) : "info"}
+      eyebrow={op ? `${op.type} · ${op.code}` : "Carregando…"}
       title={op?.title ?? "Atendimento"}
-      description={op ? `${op.type} · ${op.code}` : "Carregando…"}
+      badges={
+        op ? (
+          <>
+            <Pill tone={operationTone(op.status.code)}>{op.status.label}</Pill>
+            {op.documentAvailable ? <Pill tone="info">Documento disponível</Pill> : null}
+          </>
+        ) : null
+      }
     >
       {!op ? (
         detalhe.error ? (
@@ -463,7 +467,6 @@ export function OperationSheet({
         )
       ) : (
         <>
-          <Pill tone={operationTone(op.status.code)}>{op.status.label}</Pill>
           <Facts
             items={[
               ["Agendado para", op.scheduledStart ? formatDateTime(op.scheduledStart) : null],
@@ -478,7 +481,7 @@ export function OperationSheet({
           {op.description ? (
             <section className="space-y-2">
               <SectionTitle>O que foi feito</SectionTitle>
-              <p className="rounded-xl border border-border bg-card p-4 text-sm">
+              <p className="whitespace-pre-line rounded-xl border border-border bg-card p-4 text-sm leading-relaxed shadow-sm">
                 {op.description}
               </p>
             </section>
@@ -498,7 +501,7 @@ export function OperationSheet({
           {op.timeline.length > 0 ? (
             <section className="space-y-2">
               <SectionTitle>Linha do tempo</SectionTitle>
-              <ol className="space-y-3 rounded-xl border border-border bg-card p-4">
+              <ol className="space-y-3 rounded-xl border border-border bg-card p-4 shadow-sm">
                 {op.timeline.map((evento, indice) => (
                   <li key={evento.id} className="flex gap-3">
                     <span
@@ -522,7 +525,7 @@ export function OperationSheet({
           ) : null}
         </>
       )}
-    </PortalSheet>
+    </PortalDrawer>
   );
 }
 
@@ -542,15 +545,33 @@ function AssetSheet({
   );
   const [operacao, setOperacao] = useState<string | null>(null);
   return (
-    <PortalSheet
+    <PortalDrawer
       open={Boolean(asset)}
       onClose={onClose}
+      icon={Snowflake}
+      tone={atual ? assetTone(atual.status.code) : "info"}
+      eyebrow={
+        [atual ? assetCategory(atual.category) : null, atual?.identifier]
+          .filter(Boolean)
+          .join(" · ") || "Equipamento"
+      }
       title={atual?.displayName ?? "Equipamento"}
-      description={atual?.category ?? ""}
+      badges={
+        atual ? <Pill tone={assetTone(atual.status.code)}>{atual.status.label}</Pill> : null
+      }
+      footer={
+        atual ? (
+          <Button asChild className="w-full">
+            <Link href={`${PORTAL_ROUTES.requests}?novo=1&equipamento=${atual.id}`}>
+              <LifeBuoy className="size-4" />
+              Abrir chamado sobre este equipamento
+            </Link>
+          </Button>
+        ) : null
+      }
     >
       {atual ? (
         <>
-          <Pill tone={assetTone(atual.status.code)}>{atual.status.label}</Pill>
           <Facts
             items={[
               [
@@ -586,16 +607,10 @@ function AssetSheet({
               empty="Nenhum documento emitido para este equipamento."
             />
           </section>
-          <Button asChild variant="outline" className="w-full">
-            <Link href={`${PORTAL_ROUTES.requests}?novo=1&equipamento=${atual.id}`}>
-              <LifeBuoy className="size-4" />
-              Abrir chamado sobre este equipamento
-            </Link>
-          </Button>
         </>
       ) : null}
       <OperationSheet id={operacao} onClose={() => setOperacao(null)} />
-    </PortalSheet>
+    </PortalDrawer>
   );
 }
 

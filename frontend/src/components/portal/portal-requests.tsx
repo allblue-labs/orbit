@@ -39,13 +39,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { errorCopy } from "@/lib/error-copy";
 import { cn } from "@/lib/utils";
@@ -84,6 +77,7 @@ import {
   formatDate,
   formatDateTime,
   IconTile,
+  PortalDrawer,
   ItemCard,
   ListSkeleton,
   Note,
@@ -246,152 +240,157 @@ function RequestSheet({
   const [confirmarCancelamento, setConfirmarCancelamento] = useState(false);
   const r = detalhe.data;
 
+  const podeEditar = r?.allowedActions.includes("EDIT") ?? false;
+  const podeCancelar = r?.allowedActions.includes("CANCEL") ?? false;
+
   return (
-    <Sheet open={Boolean(id)} onOpenChange={(v) => !v && onClose()}>
-      <SheetContent className="w-full overflow-y-auto bg-muted/30 sm:max-w-lg">
-        <SheetHeader className="space-y-1 text-left">
-          <SheetDescription className="text-xs font-semibold uppercase tracking-wider">
-            {r ? `${r.category.label} · ${r.code}` : "Carregando…"}
-          </SheetDescription>
-          <SheetTitle className="text-lg leading-snug">
-            {r?.subject ?? "Chamado"}
-          </SheetTitle>
-        </SheetHeader>
-        <div className="space-y-6 px-4 pb-8">
-          {!r ? (
-            detalhe.error ? (
-              <Note icon={AlertCircle}>{errorCopy(detalhe.error)}</Note>
-            ) : (
-              <ListSkeleton rows={3} />
-            )
+    <PortalDrawer
+      open={Boolean(id)}
+      onClose={onClose}
+      icon={(r && ICONES[r.category.code]) || MessageSquare}
+      tone={r ? requestTone(r.status.code) : "info"}
+      eyebrow={r ? `${r.category.label} · ${r.code}` : "Carregando…"}
+      title={r?.subject ?? "Chamado"}
+      badges={
+        r ? (
+          <>
+            <Pill tone={requestTone(r.status.code)}>
+              {r.status.code === "WAITING_CUSTOMER" ? "Aguardando sua resposta" : r.status.label}
+            </Pill>
+            <Pill tone={urgencyTone(r.urgency.code)}>
+              {urgencyBadge(r.urgency.code, r.urgency.label)}
+            </Pill>
+          </>
+        ) : null
+      }
+      meta={r ? `Aberto em ${formatDateTime(r.submittedAt)}` : null}
+      footer={
+        r && (podeEditar || podeCancelar) ? (
+          confirmarCancelamento ? (
+            <div className="space-y-2">
+              <p className="text-sm">
+                Cancelar este chamado? A equipe deixa de atendê-lo; o histórico
+                continua aqui.
+              </p>
+              <MutationError error={cancelar.error} />
+              <div className="grid grid-cols-2 gap-2">
+                <Button variant="ghost" onClick={() => setConfirmarCancelamento(false)}>
+                  Voltar
+                </Button>
+                <Button
+                  variant="destructive"
+                  disabled={cancelar.isPending}
+                  onClick={() =>
+                    cancelar.mutate(
+                      { id: r.id, version: r.version },
+                      { onSuccess: () => setConfirmarCancelamento(false) },
+                    )
+                  }
+                >
+                  {cancelar.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+                  Cancelar chamado
+                </Button>
+              </div>
+            </div>
           ) : (
             <>
-              <div className="flex flex-wrap gap-1.5">
-                <Pill tone={requestTone(r.status.code)}>{r.status.label}</Pill>
-                <Pill tone={urgencyTone(r.urgency.code)}>
-                  {urgencyBadge(r.urgency.code, r.urgency.label)}
-                </Pill>
-              </div>
-              {r.status.code === "WAITING_CUSTOMER" ? (
-                <Note icon={MessageSquare}>
-                  A equipe está esperando sua resposta. Escreva abaixo para o
-                  chamado continuar.
-                </Note>
-              ) : null}
-              <section className="space-y-2">
-                <SectionTitle>O que você pediu</SectionTitle>
-                <p className="whitespace-pre-line rounded-xl border border-border bg-card p-4 text-sm">
-                  {r.description}
-                </p>
-              </section>
-              <Facts
-                items={[
-                  ["Equipamento", r.asset?.name],
-                  ["Situação do equipamento", r.details.equipmentCondition?.label],
-                  ["Onde fica", r.details.siteLocation],
-                  ["Melhor horário", r.details.availability],
-                  ["Contato", r.details.contactName],
-                  ["Telefone", r.details.contactPhone],
-                  ["Aberto em", formatDateTime(r.submittedAt)],
-                ]}
-              />
-              <section className="space-y-3">
-                <SectionTitle>Conversa</SectionTitle>
-                <Conversation request={r} />
-              </section>
-              {r.allowedActions.includes("REPLY") ? (
-                <form
-                  className="space-y-2"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    if (!mensagem.trim()) return;
-                    responder.mutate(
-                      { id: r.id, version: r.version, message: mensagem.trim() },
-                      { onSuccess: () => setMensagem("") },
-                    );
-                  }}
-                >
-                  <Label htmlFor="portal-reply">Mensagem para a equipe</Label>
-                  <Textarea
-                    id="portal-reply"
-                    rows={3}
-                    maxLength={4000}
-                    value={mensagem}
-                    onChange={(e) => setMensagem(e.target.value)}
-                  />
-                  <MutationError error={responder.error} />
-                  <Button type="submit" disabled={responder.isPending || !mensagem.trim()}>
-                    {responder.isPending ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <Send className="size-4" />
-                    )}
-                    Enviar mensagem
+              <div className={cn("grid gap-2", podeEditar && podeCancelar && "grid-cols-2")}>
+                {podeEditar ? (
+                  <Button variant="outline" onClick={() => onEdit(r)}>
+                    <Pencil className="size-4" />
+                    Editar chamado
                   </Button>
-                </form>
-              ) : null}
-              {r.allowedActions.includes("EDIT") || r.allowedActions.includes("CANCEL") ? (
-                <div className="space-y-2 border-t border-border pt-4">
-                  {r.allowedActions.includes("EDIT") ? (
-                    <Button variant="outline" className="w-full" onClick={() => onEdit(r)}>
-                      <Pencil className="size-4" />
-                      Editar chamado
-                    </Button>
-                  ) : null}
-                  {r.allowedActions.includes("CANCEL") ? (
-                    confirmarCancelamento ? (
-                      <div className="space-y-2 rounded-xl border border-destructive/40 bg-destructive/5 p-3">
-                        <p className="text-sm">
-                          Cancelar este chamado? A equipe deixa de atendê-lo; o
-                          histórico continua aqui.
-                        </p>
-                        <MutationError error={cancelar.error} />
-                        <div className="flex gap-2">
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            disabled={cancelar.isPending}
-                            onClick={() =>
-                              cancelar.mutate(
-                                { id: r.id, version: r.version },
-                                { onSuccess: () => setConfirmarCancelamento(false) },
-                              )
-                            }
-                          >
-                            Cancelar chamado
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setConfirmarCancelamento(false)}
-                          >
-                            Voltar
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <Button
-                        variant="ghost"
-                        className="w-full text-destructive hover:text-destructive"
-                        onClick={() => setConfirmarCancelamento(true)}
-                      >
-                        <XCircle className="size-4" />
-                        Cancelar chamado
-                      </Button>
-                    )
-                  ) : null}
-                  {r.allowedActions.includes("EDIT") ? (
-                    <p className="text-center text-xs text-muted-foreground">
-                      Dá para editar até a equipe começar a analisar o chamado.
-                    </p>
-                  ) : null}
-                </div>
+                ) : null}
+                {podeCancelar ? (
+                  <Button
+                    variant="ghost"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => setConfirmarCancelamento(true)}
+                  >
+                    <XCircle className="size-4" />
+                    Cancelar chamado
+                  </Button>
+                ) : null}
+              </div>
+              {podeEditar ? (
+                <p className="text-center text-xs text-muted-foreground">
+                  Dá para editar até a equipe começar a analisar o chamado.
+                </p>
               ) : null}
             </>
-          )}
-        </div>
-      </SheetContent>
-    </Sheet>
+          )
+        ) : null
+      }
+    >
+      {!r ? (
+        detalhe.error ? (
+          <Note icon={AlertCircle}>{errorCopy(detalhe.error)}</Note>
+        ) : (
+          <ListSkeleton rows={3} />
+        )
+      ) : (
+        <>
+          {r.status.code === "WAITING_CUSTOMER" ? (
+            <Note icon={MessageSquare}>
+              A equipe está esperando sua resposta. Escreva abaixo para o
+              chamado continuar.
+            </Note>
+          ) : null}
+          <section className="space-y-2">
+            <SectionTitle>O que você pediu</SectionTitle>
+            <p className="whitespace-pre-line rounded-xl border border-border bg-card p-4 text-sm leading-relaxed shadow-sm">
+              {r.description}
+            </p>
+          </section>
+          <Facts
+            items={[
+              ["Equipamento", r.asset?.name],
+              ["Situação do equipamento", r.details.equipmentCondition?.label],
+              ["Onde fica", r.details.siteLocation],
+              ["Melhor horário", r.details.availability],
+              ["Contato", r.details.contactName],
+              ["Telefone", r.details.contactPhone],
+            ]}
+          />
+          <section className="space-y-3">
+            <SectionTitle>Conversa</SectionTitle>
+            <Conversation request={r} />
+          </section>
+          {r.allowedActions.includes("REPLY") ? (
+            <form
+              className="space-y-3 rounded-xl border border-border bg-card p-4 shadow-sm"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (!mensagem.trim()) return;
+                responder.mutate(
+                  { id: r.id, version: r.version, message: mensagem.trim() },
+                  { onSuccess: () => setMensagem("") },
+                );
+              }}
+            >
+              <Label htmlFor="portal-reply">Mensagem para a equipe</Label>
+              <Textarea
+                id="portal-reply"
+                rows={3}
+                maxLength={4000}
+                value={mensagem}
+                onChange={(e) => setMensagem(e.target.value)}
+                placeholder="Escreva uma resposta ou acrescente uma informação."
+              />
+              <MutationError error={responder.error} />
+              <Button type="submit" disabled={responder.isPending || !mensagem.trim()}>
+                {responder.isPending ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Send className="size-4" />
+                )}
+                Enviar mensagem
+              </Button>
+            </form>
+          ) : null}
+        </>
+      )}
+    </PortalDrawer>
   );
 }
 

@@ -8,6 +8,13 @@ import type { LucideIcon } from "lucide-react";
 import { ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
 
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
@@ -151,7 +158,7 @@ export function Facts({ items }: { items: readonly (readonly [string, string | n
   const linhas = items.filter(([, valor]) => valor && valor.trim().length > 0);
   if (linhas.length === 0) return null;
   return (
-    <dl className="divide-y divide-border rounded-xl border border-border bg-card px-4">
+    <dl className="divide-y divide-border rounded-xl border border-border bg-card px-4 shadow-sm">
       {linhas.map(([rotulo, valor]) => (
         <div key={rotulo} className="py-3">
           <dt className="text-xs text-muted-foreground">{rotulo}</dt>
@@ -208,4 +215,71 @@ export function civilDate(value: string | null | undefined): string | null {
   if (!value || value.length < 10) return null;
   const [ano, mes, dia] = value.slice(0, 10).split("-");
   return dia && mes && ano ? `${dia}/${mes}/${ano}` : null;
+}
+
+/**
+ * A ficha lateral do portal: atendimento, equipamento, chamado.
+ *
+ * O fundo do painel é sólido — a cor suave fica só no corpo. Antes a cor
+ * translúcida ia no próprio painel e substituía o fundo, e a ficha aparecia
+ * transparente por cima da página escurecida.
+ *
+ * Cabeçalho em cartão (o que é, o nome, o estado), corpo rolável e, quando há,
+ * as ações fixas embaixo — à mão em qualquer altura da rolagem.
+ */
+export function PortalDrawer({
+  open,
+  onClose,
+  icon: Icon,
+  tone = "info",
+  leading,
+  eyebrow,
+  title,
+  badges,
+  meta,
+  footer,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  icon?: LucideIcon;
+  tone?: PortalTone;
+  /** No lugar do ícone — a data em bloco, por exemplo. */
+  leading?: ReactNode;
+  eyebrow: string;
+  title: string;
+  badges?: ReactNode;
+  meta?: ReactNode;
+  footer?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <Sheet open={open} onOpenChange={(valor) => !valor && onClose()}>
+      <SheetContent className="flex w-full flex-col gap-0 p-0 sm:max-w-lg">
+        <SheetHeader className="space-y-3 border-b border-border bg-card px-5 pt-6 pb-4 text-left sm:px-6">
+          <div className="flex items-start gap-3 pr-6">
+            {leading ?? (Icon ? <IconTile icon={Icon} tone={tone} /> : null)}
+            <div className="min-w-0 flex-1 space-y-1">
+              <SheetDescription className="truncate text-xs font-semibold tracking-wider uppercase">
+                {eyebrow}
+              </SheetDescription>
+              <SheetTitle className="text-lg leading-snug">{title}</SheetTitle>
+            </div>
+          </div>
+          {badges || meta ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {badges}
+              {meta ? <span className="text-xs text-muted-foreground">{meta}</span> : null}
+            </div>
+          ) : null}
+        </SheetHeader>
+        <div className="flex-1 space-y-6 overflow-y-auto bg-muted/40 px-5 py-5 sm:px-6">
+          {children}
+        </div>
+        {footer ? (
+          <div className="space-y-2 border-t border-border bg-card px-5 py-4 sm:px-6">{footer}</div>
+        ) : null}
+      </SheetContent>
+    </Sheet>
+  );
 }

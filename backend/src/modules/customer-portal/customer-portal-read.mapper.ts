@@ -65,6 +65,15 @@ type RvtDetailsRecord = Omit<RvtSummaryRecord, 'occurrences'> & {
   documentExecutionIds: ReadonlySet<string>;
 };
 
+/** A categoria como o cliente lê; códigos novos caem no texto humanizado. */
+const ASSET_CATEGORY_LABELS: Readonly<Record<string, string>> = {
+  EQUIPMENT: 'Equipamento',
+  VEHICLE: 'Veículo',
+  TOOL: 'Ferramenta',
+  FACILITY: 'Instalação',
+  OTHER: 'Outro',
+};
+
 @Injectable()
 export class CustomerPortalReadMapper {
   page<T, U>(
@@ -126,7 +135,8 @@ export class CustomerPortalReadMapper {
     return {
       id: value.id,
       displayName: value.name,
-      category: this.humanize(value.category),
+      category:
+        ASSET_CATEGORY_LABELS[value.category] ?? this.humanize(value.category),
       manufacturer: value.manufacturer,
       model: value.model,
       serialNumber: value.serialNumber,
