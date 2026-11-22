@@ -86,6 +86,8 @@ export interface FinancialAnalyticsQuery {
   from?: string;
   to?: string;
   businessUnitId?: string;
+  /** Só a série: por dia (7 e 15 dias, mês) ou por mês (12 meses). */
+  granularity?: "DAY" | "MONTH";
 }
 
 /** `GET /financial/categories` (`FinancialCategoryQueryDto`). */

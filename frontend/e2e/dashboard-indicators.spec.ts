@@ -127,7 +127,7 @@ async function setup(page: Page, empty = false, financialZone?: string) {
               : []),
             {
               id: "operations-comparative-radar",
-              title: "Radar comparativo",
+              title: "Este mês × mês anterior",
               size: "MEDIUM",
               order: 5,
             },
@@ -139,7 +139,7 @@ async function setup(page: Page, empty = false, financialZone?: string) {
             },
             {
               id: "health-score",
-              title: "Índice de Saúde",
+              title: "Saúde da operação",
               size: "MEDIUM",
               order: 20,
             },
@@ -152,6 +152,11 @@ async function setup(page: Page, empty = false, financialZone?: string) {
         metrics: [
           ...metrics,
           { ...rate("operations.scheduling_coverage", 4), executive: false },
+          {
+            ...rate("operations.backlog_punctuality", empty ? 0 : 12),
+            basis: { numerator: empty ? 0 : 9, denominator: empty ? 0 : 12 },
+            executive: false,
+          },
         ],
         headline: {},
         series: [],
@@ -240,15 +245,27 @@ for (const zone of ["Asia/Tokyo", "America/Los_Angeles"]) {
         "/api/orbit/financial/analytics/timeline",
     );
     await page.goto("/dashboard");
-    await expect(page.locator('[data-panel="financial-health"]')).toContainText(
-      "Previsto no período",
-    );
+    const painel = page.locator('[data-panel="financial-health"]');
+    await expect(painel).toContainText("A receber");
+    /* "Este mês" é o padrão: o mês inteiro, dia a dia, no fuso da pessoa. */
     const dates = new URL((await summary).url()).searchParams;
-    expect(dates.get("from")).toBe("2026-10-12");
-    expect(dates.get("to")).toBe("2026-11-10");
+    expect(dates.get("from")).toBe("2026-11-01");
+    expect(dates.get("to")).toBe("2026-11-30");
     const history = new URL((await timeline).url()).searchParams;
-    expect(history.get("from")).toBe("2025-12-01");
-    expect(history.get("to")).toBe("2026-11-10");
+    expect(history.get("from")).toBe("2026-11-01");
+    expect(history.get("granularity")).toBe("DAY");
+
+    /* 7 dias terminam hoje. */
+    const semana = page.waitForRequest(
+      (request) =>
+        new URL(request.url()).pathname ===
+          "/api/orbit/financial/analytics/summary" &&
+        new URL(request.url()).searchParams.get("from") === "2026-11-04",
+    );
+    await painel.getByRole("button", { name: "7 dias", exact: true }).click();
+    expect(new URL((await semana).url()).searchParams.get("to")).toBe(
+      "2026-11-10",
+    );
   });
 }
 
@@ -276,17 +293,22 @@ test("mostra oito indicadores acionáveis, bases de cálculo e dimensões reais"
     executive.getByText("Contratos ativos", { exact: true }),
   ).toHaveCount(0);
   const health = page.locator('[data-panel="health-score"]');
-  await expect(health.getByText(/9 de 12 no prazo/)).toBeVisible();
-  const radar = page
-    .locator(".glass-panel")
-    .filter({ has: page.getByText("Radar comparativo", { exact: true }) });
-  for (const axis of ["Prazo", "Agenda", "Equipe", "PMOC", "RVT"])
-    await expect(
-      radar
-        .locator(".recharts-polar-angle-axis")
-        .getByText(axis, { exact: true }),
-    ).toBeVisible();
-  await expect(radar.locator(".recharts-radar-polygon")).toHaveCount(2);
+  await expect(
+    health.getByText("Atendimentos em aberto sem atraso", { exact: true }),
+  ).toBeVisible();
+  await expect(health.getByText("9 de 12", { exact: true })).toBeVisible();
+  await expect(health.getByText("3 atrasados", { exact: true })).toBeVisible();
+  await expect(health.getByText(/pontos de atenção/)).toBeVisible();
+  /* Sem nota abstrata de 0 a 100. */
+  await expect(health.getByText("/ 100")).toHaveCount(0);
+
+  const comparativo = page.locator(
+    '[data-panel="operations-comparative-radar"]',
+  );
+  for (const linha of ["Concluídos no prazo", "PMOC em dia", "Visitas de RVT em dia"])
+    await expect(comparativo.getByText(linha, { exact: true })).toBeVisible();
+  await expect(comparativo.getByText("igual").first()).toBeVisible();
+  await expect(comparativo.locator(".recharts-radar-polygon")).toHaveCount(0);
   expect(analyticsRequests.filter((path) => path === "panel")).toHaveLength(1);
   expect(analyticsRequests.filter((path) => path === "kpis")).toHaveLength(2);
   expect(analyticsRequests).not.toContain("dashboard");
@@ -305,12 +327,11 @@ test("organização nova distingue ausência de base de cálculo de desempenho z
   ).toBeVisible();
   await expect(executive.getByText("0%", { exact: true })).toHaveCount(0);
   const health = page.locator('[data-panel="health-score"]');
-  await expect(health.getByText(/Não há atendimentos em aberto/)).toBeVisible();
-  await expect(health.getByText("Crítico", { exact: true })).toHaveCount(0);
+  await expect(health.getByText(/Ainda não há atendimentos, PMOC ou RVT/)).toBeVisible();
+  await expect(health.getByText("0%", { exact: true })).toHaveCount(0);
   await expect(
     page
-      .locator(".glass-panel")
-      .filter({ has: page.getByText("Radar comparativo", { exact: true }) })
-      .getByText(/Ainda não há três indicadores/),
+      .locator('[data-panel="operations-comparative-radar"]')
+      .getByText(/Ainda não há atendimentos nem manutenções/),
   ).toBeVisible();
 });

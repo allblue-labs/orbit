@@ -27,6 +27,7 @@ import {
 import type {
   AgendaQuery,
   AnalyticsQuery,
+  DashboardFeedQuery,
   DashboardRangeKey,
 } from "@/types/dashboard";
 import { DASHBOARD_RANGE_DAYS } from "@/types/dashboard";
@@ -207,6 +208,34 @@ export function useAgenda() {
   return useApiQuery(
     schedulingService.keys.agenda(query),
     ({ signal }) => schedulingService.agenda(query, { signal }),
+    { ...REFRESH_POLICY.agenda, refetchOnWindowFocus: true },
+  );
+}
+
+/** Atividades recentes da unidade ativa. */
+export function useDashboardActivity() {
+  const { businessUnitId } = useActiveScope();
+  const query = useMemo<DashboardFeedQuery>(
+    () => ({ businessUnitId: businessUnitId ?? undefined, limit: 12 }),
+    [businessUnitId],
+  );
+  return useApiQuery(
+    dashboardService.keys.activity(query),
+    ({ signal }) => dashboardService.activity(query, { signal }),
+    { ...REFRESH_POLICY.agenda, refetchOnWindowFocus: true },
+  );
+}
+
+/** Próximos compromissos dos próximos 14 dias. */
+export function useDashboardUpcoming() {
+  const { businessUnitId } = useActiveScope();
+  const query = useMemo<DashboardFeedQuery>(
+    () => ({ businessUnitId: businessUnitId ?? undefined, days: 14, limit: 12 }),
+    [businessUnitId],
+  );
+  return useApiQuery(
+    dashboardService.keys.upcoming(query),
+    ({ signal }) => dashboardService.upcoming(query, { signal }),
     { ...REFRESH_POLICY.agenda, refetchOnWindowFocus: true },
   );
 }

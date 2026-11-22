@@ -19,6 +19,8 @@ import { apiClient } from "@/api/client";
 import { queryKeys, type QueryKey } from "@/api/query-keys";
 import type { QueryParams, RequestOptions } from "@/types/api";
 import type {
+  DashboardFeed,
+  DashboardFeedQuery,
   AnalyticsDashboardReadModel,
   AnalyticsPanelReadModel,
   AnalyticsHealthReadModel,
@@ -48,10 +50,34 @@ export const dashboardService = {
       query: asParams(query),
     }),
 
+  /** O que aconteceu nos últimos 30 dias. */
+  activity: (
+    query?: DashboardFeedQuery,
+    options?: RequestOptions,
+  ): Promise<DashboardFeed> =>
+    apiClient.get<DashboardFeed>("/dashboard/activity", {
+      ...options,
+      query: asParams(query),
+    }),
+
+  /** Atendimentos, visitas de RVT e vencimentos de PMOC à frente. */
+  upcoming: (
+    query?: DashboardFeedQuery,
+    options?: RequestOptions,
+  ): Promise<DashboardFeed> =>
+    apiClient.get<DashboardFeed>("/dashboard/upcoming", {
+      ...options,
+      query: asParams(query),
+    }),
+
   keys: {
     module: (): QueryKey => queryKeys.module(DASHBOARD_RESOURCE),
     layout: (query?: DashboardQuery): QueryKey =>
       queryKeys.query(DASHBOARD_RESOURCE, "layout", asParams(query)),
+    activity: (query?: DashboardFeedQuery): QueryKey =>
+      queryKeys.query(DASHBOARD_RESOURCE, "activity", asParams(query)),
+    upcoming: (query?: DashboardFeedQuery): QueryKey =>
+      queryKeys.query(DASHBOARD_RESOURCE, "upcoming", asParams(query)),
   },
 } as const;
 

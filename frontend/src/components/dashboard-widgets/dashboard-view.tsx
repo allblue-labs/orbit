@@ -12,6 +12,7 @@
  * frontend não decide o que aparece.
  */
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
 
 import { ContentContainer } from "@/components/layout/page-primitives";
@@ -19,13 +20,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  useAgenda,
   useAnalyticsPanel,
   useAnalyticsQuery,
   useDashboardLayout,
   useEnvironmentalImpact,
   useMonthComparison,
 } from "@/hooks/dashboard/use-dashboard";
+import { dashboardService } from "@/services/dashboard.service";
 import { useSchedulingTimeZone } from "@/components/scheduling/use-scheduling-timezone";
 import { useSession } from "@/providers/session-provider";
 import { useActiveScope } from "@/providers/use-active-scope";
@@ -45,6 +46,7 @@ import { organizarPainel, type Colunas } from "./dashboard-layout";
 export function DashboardView() {
   const { formatDateTime } = useDateFormatters();
   const [range, setRange] = useState<DashboardRangeKey>("30D");
+  const queryClient = useQueryClient();
   const session = useSession();
   const scope = useActiveScope();
   const analyticsQuery = useAnalyticsQuery(range);
@@ -77,9 +79,6 @@ export function DashboardView() {
           : undefined,
       }),
       environmentalImpact: toPanelQuery(useEnvironmentalImpact()),
-    },
-    scheduling: {
-      agenda: toPanelQuery(useAgenda()),
     },
     comparison: {
       current: toPanelQuery(comparison.current),
@@ -167,7 +166,10 @@ export function DashboardView() {
             onClick={() => {
               void layout.refetch();
               void panel.refetch();
-              void sources.scheduling.agenda.refetch();
+              /* Atividades e próximos compromissos vivem nos widgets. */
+              void queryClient.invalidateQueries({
+                queryKey: dashboardService.keys.module(),
+              });
               void sources.comparison.current.refetch();
               void sources.comparison.previous.refetch();
             }}

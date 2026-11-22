@@ -22,7 +22,6 @@ import type { ComponentType } from "react";
 import type { PanelQuery } from "@/components/panels";
 import type { MonthComparison } from "@/lib/analytics/month-comparison";
 import type {
-  AgendaReadModel,
   AnalyticsDashboardReadModel,
   AnalyticsHealthReadModel,
   AnalyticsQuery,
@@ -32,14 +31,15 @@ import type {
   ResolvedDashboardWidget,
 } from "@/types/dashboard";
 import { AttentionCenterWidget } from "./attention-center.widget";
-import { ComparativeRadarWidget } from "./comparative-radar.widget";
 import { EnvironmentalWidget } from "./environmental.widget";
 import { FinancialHealthWidget } from "./financial-health.widget";
 import { ExecutiveKpisWidget } from "./executive-kpis.widget";
 import { HealthScoreWidget } from "./health-score.widget";
+import { MonthComparisonWidget } from "./month-comparison.widget";
 import { createKpiDomainWidget } from "./kpi-domain.widget";
 import { OperationalTrendWidget } from "./operational-trend.widget";
 import { OrbitIntelligenceWidget } from "./orbit-intelligence.widget";
+import { RecentActivityWidget } from "./recent-activity.widget";
 import { UpcomingEventsWidget } from "./upcoming-events.widget";
 import { PanelFrame, PanelWithoutSource } from "@/components/panels";
 import { warnUnknown } from "@/registry";
@@ -59,9 +59,6 @@ export interface WidgetDataSources {
     health: PanelQuery<AnalyticsHealthReadModel>;
     intelligence: PanelQuery<OrbitIntelligenceAnalyticsContext>;
     environmentalImpact: PanelQuery<EnvironmentalImpactReadModel>;
-  };
-  scheduling: {
-    agenda: PanelQuery<AgendaReadModel>;
   };
   /**
    * Comparação mês a mês.
@@ -103,8 +100,6 @@ export const WIDGET_SPAN: Readonly<
 const WITHOUT_SOURCE: Readonly<Record<string, string>> = {
   "team-performance":
     "Produtividade por técnico ainda não é publicada pelo Analytics — apenas a contagem de técnicos alocados, no widget de técnicos.",
-  "recent-activity":
-    "O histórico de atividades existe por atendimento, ainda não consolidado para a organização.",
   "pharmacy-critical-stock":
     "Os indicadores ainda não cobrem estoque. Este quadro fica sem dados.",
   "pharmacy-expiring-products":
@@ -179,11 +174,12 @@ const REGISTRY: Readonly<Record<string, WidgetComponent>> = {
    * capability financeira, que é independente das operacionais.
    */
   "financial-health": FinancialHealthWidget,
-  "operations-comparative-radar": ComparativeRadarWidget,
+  "operations-comparative-radar": MonthComparisonWidget,
   "executive-kpis": ExecutiveKpisWidget,
   "health-score": HealthScoreWidget,
   "operational-trend": OperationalTrendWidget,
   "orbit-intelligence": OrbitIntelligenceWidget,
+  "recent-activity": RecentActivityWidget,
   "upcoming-events": UpcomingEventsWidget,
   "weather-environmental-intelligence": EnvironmentalWidget,
   "hvac-pmoc-status": createKpiDomainWidget({ domain: "PMOC" }),

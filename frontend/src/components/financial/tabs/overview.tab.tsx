@@ -22,23 +22,16 @@
  */
 import { useMemo, useState } from "react";
 import {
-  CartesianGrid,
   Cell,
-  Legend,
-  Line,
-  LineChart,
   Pie,
   PieChart,
   ResponsiveContainer,
   Tooltip,
-  XAxis,
-  YAxis,
 } from "recharts";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  PanelChartFrame,
   PanelFrame,
   PanelState,
   toPanelQuery,
@@ -46,18 +39,25 @@ import {
 import {
   useFinancialBreakdown,
   useFinancialSummary,
-  useFinancialTimeline,
 } from "@/hooks/financial/use-financial";
 import { useActiveScope } from "@/providers/use-active-scope";
 import { FORMATTERS } from "@/metrics";
 import { MetricCard, TabBoundary } from "@/workspace";
 import {
+  FinancialFlowChart,
+  FinancialStatusDonut,
+  FinancialWindowToggle,
+  useFinancialFlow,
+} from "../financial-flow";
+import {
+  FINANCIAL_WINDOWS,
+  type FinancialWindowKey,
+} from "../financial-window";
+import {
   FINANCIAL_TYPE_LABELS,
   type FinancialAnalyticsQuery,
   type FinancialCategoryBreakdown,
-  type FinancialTimelinePoint,
 } from "@/types/financial";
-import { formatMonth } from "../financial-presentation";
 
 /**
  * Primeiro e último dia do mês corrente, em `YYYY-MM-DD`.
@@ -223,9 +223,13 @@ export function FinancialOverviewTab() {
         </div>
       </section>
 
+      <TabBoundary id="financial-timeline" label="a evolução">
+        <FlowPanel businessUnitId={businessUnitId ?? undefined} />
+      </TabBoundary>
+
       <div className="grid gap-5 lg:grid-cols-2">
-        <TabBoundary id="financial-timeline" label="a evolução">
-          <TimelinePanel query={query} />
+        <TabBoundary id="financial-status" label="a situação">
+          <StatusPanel summary={summary} />
         </TabBoundary>
         <TabBoundary id="financial-breakdown" label="a distribuição">
           <BreakdownPanel query={query} />
@@ -236,119 +240,54 @@ export function FinancialOverviewTab() {
 }
 
 /* ------------------------------------------------------------------ */
-/* Evolução mensal                                                     */
+/* Fluxo do período                                                     */
 /* ------------------------------------------------------------------ */
 
-function TimelinePanel({ query }: { query: FinancialAnalyticsQuery }) {
-  const timeline = useFinancialTimeline(query);
-
+/**
+ * Entradas e saídas por dia (7 dias, 15 dias, mês) ou por mês (12 meses).
+ *
+ * Recorte próprio, como no Dashboard: a pergunta "como foi a semana" não
+ * depende do período dos cartões acima, que é para fechar contas.
+ */
+function FlowPanel({ businessUnitId }: { businessUnitId?: string }) {
+  const [janela, setJanela] = useState<FinancialWindowKey>("15D");
+  const { timeline, rows } = useFinancialFlow(janela, businessUnitId);
+  const frase =
+    FINANCIAL_WINDOWS.find((option) => option.key === janela)?.phrase ?? "";
   return (
-    <PanelChartFrame
+    <PanelFrame
       panelId="financial-timeline"
-      title="Evolução"
-      description="Receitas, despesas e saldo por mês de competência"
-      height={300}
+      title="Entradas e saídas"
+      description={`Recebido e pago, com o que falta receber e pagar, ${frase}. A linha é o saldo acumulado.`}
+      actions={<FinancialWindowToggle value={janela} onChange={setJanela} />}
     >
-      <PanelState
-        query={toPanelQuery(timeline)}
-        isEmpty={(points) => points.length === 0}
-        emptyMessage="Nenhum lançamento com competência dentro do recorte selecionado."
-      >
-        {(points) => (
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={toRows(points)}>
-            <CartesianGrid
-              strokeDasharray="3 3"
-              stroke="var(--color-border)"
-              vertical={false}
-            />
-            <XAxis
-              dataKey="month"
-              stroke="var(--color-muted-foreground)"
-              fontSize={12}
-            />
-            <YAxis
-              stroke="var(--color-muted-foreground)"
-              fontSize={12}
-              tickFormatter={(value: number) => FORMATTERS.currency(value)}
-              width={90}
-            />
-            <Tooltip
-              formatter={(value: number) => FORMATTERS.currency(value)}
-              contentStyle={{
-                background: "var(--color-popover)",
-                border: "1px solid var(--color-border)",
-                borderRadius: "0.5rem",
-              }}
-            />
-            <Legend />
-            <Line
-              type="monotone"
-              dataKey="incomeConfirmed"
-              name="Receita realizada"
-              stroke="var(--color-chart-2)"
-              strokeWidth={2}
-              dot={false}
-            />
-            <Line
-              type="monotone"
-              dataKey="expenseConfirmed"
-              name="Despesa realizada"
-              stroke="var(--color-chart-5)"
-              strokeWidth={2}
-              dot={false}
-            />
-            <Line
-              type="monotone"
-              dataKey="netConfirmed"
-              name="Saldo realizado"
-              stroke="var(--color-chart-1)"
-              strokeWidth={2}
-              dot={false}
-            />
-            {/* Tracejado: previsto não é caixa, e o traço diz isso sem cor. */}
-            <Line
-              type="monotone"
-              dataKey="incomePending"
-              name="Receita prevista"
-              stroke="var(--color-chart-2)"
-              strokeDasharray="4 4"
-              strokeWidth={1.5}
-              dot={false}
-            />
-            <Line
-              type="monotone"
-              dataKey="expensePending"
-              name="Despesa prevista"
-              stroke="var(--color-chart-5)"
-              strokeDasharray="4 4"
-              strokeWidth={1.5}
-              dot={false}
-            />
-          </LineChart>
-        </ResponsiveContainer>
-        )}
+      <PanelState query={toPanelQuery(timeline)} loadingRows={4}>
+        {() => <FinancialFlowChart rows={rows} height={300} />}
       </PanelState>
-    </PanelChartFrame>
+    </PanelFrame>
   );
 }
 
 /**
- * Reorganização de forma, não cálculo.
- *
- * Cada ponto já vem com os cinco valores do mês, inclusive `netConfirmed`. O
- * `Number()` existe porque o eixo do gráfico precisa de número — e é a única
- * coisa que acontece com esses valores aqui.
+ * Situação do período: quanto já entrou, quanto falta e quanto venceu.
+ * Mesmo recorte dos cartões acima.
  */
-function toRows(points: readonly FinancialTimelinePoint[]) {
-  return points.map((point) => ({
-    month: formatMonth(point.month),
-    incomeConfirmed: Number(point.incomeConfirmed),
-    expenseConfirmed: Number(point.expenseConfirmed),
-    incomePending: Number(point.incomePending),
-    expensePending: Number(point.expensePending),
-    netConfirmed: Number(point.netConfirmed),
-  }));
+function StatusPanel({
+  summary,
+}: {
+  summary: ReturnType<typeof useFinancialSummary>;
+}) {
+  return (
+    <PanelFrame
+      panelId="financial-status"
+      title="Situação do período"
+      description="Realizado, a receber ou a pagar, e vencido"
+    >
+      <PanelState query={toPanelQuery(summary)} loadingRows={4}>
+        {(data) => <FinancialStatusDonut summary={data} />}
+      </PanelState>
+    </PanelFrame>
+  );
 }
 
 /* ------------------------------------------------------------------ */

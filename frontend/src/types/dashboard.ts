@@ -159,3 +159,41 @@ export interface AgendaQuery {
   date: string;
   businessUnitId?: string;
 }
+
+/* ------------------------------------------------------------------ */
+/* Atividades recentes e próximos compromissos                         */
+/* ------------------------------------------------------------------ */
+
+/** `GET /dashboard/activity` e `/dashboard/upcoming`. */
+export interface DashboardFeedItem {
+  id: string;
+  kind: "OPERATION" | "SERVICE_REQUEST" | "QUOTE" | "PMOC" | "RVT";
+  event:
+    | "CREATED"
+    | "STARTED"
+    | "COMPLETED"
+    | "OPENED"
+    | "APPROVED"
+    | "REJECTED"
+    | "SCHEDULED"
+    | "DUE";
+  entityType: string;
+  entityId: string;
+  code: string | null;
+  title: string;
+  customerName: string | null;
+  personName: string | null;
+  at: string;
+  allDay: boolean;
+}
+
+export interface DashboardFeed {
+  generatedAt: string;
+  items: DashboardFeedItem[];
+}
+
+export interface DashboardFeedQuery {
+  businessUnitId?: string;
+  limit?: number;
+  days?: number;
+}

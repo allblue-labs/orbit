@@ -111,7 +111,7 @@ async function newAccount(
           widgets: [
             {
               id: "health-score",
-              title: "Índice de Saúde",
+              title: "Saúde da operação",
               size: "MEDIUM",
               category: "EXECUTIVE",
               order: 30,
@@ -343,13 +343,14 @@ test("an empty account shows unmeasured health instead of scores or a critical b
   await page.goto("/dashboard");
   const health = page.locator('[data-panel="health-score"]');
   await expect(
-    health.getByRole("heading", { name: "Índice de Saúde" }),
+    health.getByRole("heading", { name: "Saúde da operação" }),
   ).toBeVisible();
+  /* Conta vazia: uma frase, nenhuma barra de 0% nem selo de atenção. */
   await expect(
-    health.getByText("Ainda sem dados para avaliar.", { exact: true }),
-  ).toHaveCount(2);
-  await expect(health.getByText("—", { exact: true })).toHaveCount(3);
-  await expect(health).not.toContainText(/crític/i);
+    health.getByText(/Ainda não há atendimentos, PMOC ou RVT/),
+  ).toBeVisible();
+  await expect(health.getByRole("meter")).toHaveCount(0);
+  await expect(health).not.toContainText(/pontos? de atenção/i);
   expect(errors).toEqual([]);
 });
 
