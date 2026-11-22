@@ -21,6 +21,7 @@ import '../../../core/widgets/section_states.dart';
 import '../application/portal_providers.dart';
 import '../application/portal_session.dart';
 import '../data/portal_contracts.dart';
+import 'portal_common.dart';
 import 'portal_widgets.dart';
 
 /// Abre o assistente. Com [editing], corrige esse chamado; devolve o chamado
@@ -331,6 +332,7 @@ class _ServiceRequestWizardState extends ConsumerState<ServiceRequestWizard> {
                     children: [
                       if (_passo > 0) ...[
                         Expanded(
+                          flex: 2,
                           child: OutlinedButton(
                             onPressed: _enviando
                                 ? null
@@ -338,13 +340,20 @@ class _ServiceRequestWizardState extends ConsumerState<ServiceRequestWizard> {
                                     _erro = null;
                                     _passo -= 1;
                                   }),
-                            child: const Text('Voltar'),
+                            /* Uma linha só: com letra ampliada, "Voltar"
+                               quebrava em "Volta / r". */
+                            child: const Text(
+                              'Voltar',
+                              maxLines: 1,
+                              softWrap: false,
+                              overflow: TextOverflow.fade,
+                            ),
                           ),
                         ),
                         const SizedBox(width: OrbitSpacing.ms),
                       ],
                       Expanded(
-                        flex: 2,
+                        flex: 3,
                         child: FilledButton(
                           key: const Key('wizard.next'),
                           onPressed: _enviando
@@ -542,14 +551,12 @@ class _ServiceRequestWizardState extends ConsumerState<ServiceRequestWizard> {
             hintText: 'Ex.: recepção, 2º andar, sala 204',
           ),
         ),
-        TextField(
-          controller: _horario,
-          maxLength: 300,
-          decoration: const InputDecoration(
-            labelText: 'Melhor dia e horário para a visita',
-            hintText: 'Ex.: dias úteis, das 8h às 12h',
-          ),
+        _CampoVisita(
+          value: _horario.text,
+          onPick: _escolherVisita,
+          onClear: () => setState(() => _horario.clear()),
         ),
+        const SizedBox(height: OrbitSpacing.md),
         TextField(
           controller: _contato,
           maxLength: 120,
@@ -564,6 +571,51 @@ class _ServiceRequestWizardState extends ConsumerState<ServiceRequestWizard> {
         ),
       ],
     );
+  }
+
+  /// Data e hora pelo calendário e pelo relógio do sistema — de hoje até 90
+  /// dias à frente, e nunca um horário que já passou.
+  Future<void> _escolherVisita() async {
+    final agora = DateTime.now();
+    final hoje = DateTime(agora.year, agora.month, agora.day);
+    final dia = await showDatePicker(
+      context: context,
+      initialDate: hoje.add(const Duration(days: 1)),
+      firstDate: hoje,
+      lastDate: hoje.add(const Duration(days: 90)),
+      helpText: 'Melhor dia para a visita',
+      cancelText: 'Cancelar',
+      confirmText: 'Continuar',
+    );
+    if (dia == null || !mounted) return;
+    final hora = await showTimePicker(
+      context: context,
+      initialTime: const TimeOfDay(hour: 9, minute: 0),
+      helpText: 'Melhor horário',
+      cancelText: 'Voltar',
+      confirmText: 'Confirmar',
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+        child: child!,
+      ),
+    );
+    if (hora == null || !mounted) return;
+    final quando = DateTime(
+      dia.year,
+      dia.month,
+      dia.day,
+      hora.hour,
+      hora.minute,
+    );
+    if (quando.isBefore(agora)) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(
+          content: Text('Escolha um horário que ainda não passou.'),
+        ),
+      );
+      return;
+    }
+    setState(() => _horario.text = visitPreferenceLabel(quando));
   }
 
   Widget _passoRevisao(List<PortalAsset> equipamentos) {
@@ -665,6 +717,57 @@ class _Opcao extends StatelessWidget {
                 ],
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// O melhor dia e horário: um campo que abre o calendário e o relógio.
+///
+/// Texto livre ("dias úteis, de manhã") deixava o técnico ligando para
+/// confirmar. Chamados antigos com texto continuam aparecendo aqui, e trocar
+/// é tocar de novo.
+class _CampoVisita extends StatelessWidget {
+  const _CampoVisita({
+    required this.value,
+    required this.onPick,
+    required this.onClear,
+  });
+
+  final String value;
+  final VoidCallback onPick;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.orbit;
+    final vazio = value.trim().isEmpty;
+    return InkWell(
+      key: const Key('visit.preference'),
+      borderRadius: OrbitRadius.field,
+      onTap: onPick,
+      child: InputDecorator(
+        /* Rótulo sempre no alto: dentro da caixa ele cobriria o convite. */
+        isEmpty: false,
+        decoration: InputDecoration(
+          labelText: 'Melhor dia e horário',
+          floatingLabelBehavior: FloatingLabelBehavior.always,
+          prefixIcon: const Icon(Icons.event_outlined),
+          suffixIcon: vazio
+              ? const Icon(Icons.chevron_right_rounded)
+              : IconButton(
+                  key: const Key('visit.preference.clear'),
+                  tooltip: 'Limpar',
+                  icon: const Icon(Icons.close_rounded),
+                  onPressed: onClear,
+                ),
+        ),
+        child: Text(
+          vazio ? 'Escolher data e horário' : value,
+          style: OrbitType.body.copyWith(
+            color: vazio ? palette.inkSubtle : palette.ink,
           ),
         ),
       ),

@@ -55,6 +55,14 @@ String portalDateTime(DateTime? when) {
       '${dois(when.hour)}:${dois(when.minute)}';
 }
 
+const _diasDaSemana = ['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom'];
+
+/// O melhor dia e horário para a visita, como o cliente escolheu e o técnico
+/// lê: "qui, 26/11/2026 às 09:00". É esse texto que vai para o chamado — e
+/// dele para a descrição do atendimento.
+String visitPreferenceLabel(DateTime when) =>
+    '${_diasDaSemana[when.weekday - 1]}, ${portalDateTime(when)}';
+
 /// O nome com que o PDF chega a quem recebe: título e código, sem caminho.
 String portalDocumentFileName(PortalDocument document) => documentFileNameOf([
   if (document.title.isNotEmpty) document.title else document.categoryLabel,

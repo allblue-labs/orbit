@@ -9,6 +9,7 @@ import 'package:orbit_operator/core/theme/orbit_theme.dart';
 import 'package:orbit_operator/features/customer_portal/application/portal_session.dart';
 import 'package:orbit_operator/features/customer_portal/data/portal_contracts.dart';
 import 'package:orbit_operator/features/customer_portal/data/portal_repository.dart';
+import 'package:orbit_operator/features/customer_portal/presentation/portal_common.dart';
 import 'package:orbit_operator/features/customer_portal/presentation/service_request_wizard.dart';
 
 import '../../support/fakes.dart';
@@ -119,6 +120,80 @@ void main() {
     expect(rascunho.subject, 'Tirar uma dúvida');
     expect(rascunho.toJson()['urgency'], 'NORMAL');
     expect(RegExp(r'^[A-Za-z0-9._:-]{8,160}$').hasMatch(chave), isTrue);
+  });
+
+  test('o melhor horário vira um texto que o técnico lê', () {
+    expect(
+      visitPreferenceLabel(DateTime(2026, 11, 26, 9, 0)),
+      'qui, 26/11/2026 às 09:00',
+    );
+    expect(
+      visitPreferenceLabel(DateTime(2026, 11, 29, 14, 30)),
+      'dom, 29/11/2026 às 14:30',
+    );
+  });
+
+  testWidgets('o melhor dia e horário vem do calendário e do relógio', (
+    tester,
+  ) async {
+    when(
+      () => repo.openServiceRequest(
+        any(),
+        idempotencyKey: any(named: 'idempotencyKey'),
+      ),
+    ).thenAnswer((_) async => _gravado());
+    await montar(tester, const ServiceRequestWizard());
+    await tester.tap(find.text('Tirar uma dúvida'));
+    await continuar(tester);
+    await continuar(tester);
+    await tester.enterText(
+      find.byKey(const Key('wizard.description')),
+      'Quero entender a frequência.',
+    );
+    await continuar(tester);
+
+    /* Passo da visita: nada de digitar — um campo que abre o calendário. */
+    expect(find.text('Escolher data e horário'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('visit.preference')));
+    await tester.pumpAndSettle();
+    expect(find.text('Melhor dia para a visita'), findsOneWidget);
+    await tester.tap(find.text('Continuar').last); // amanhã, já marcado
+    await tester.pumpAndSettle();
+    expect(find.text('Melhor horário'), findsOneWidget);
+    await tester.tap(find.text('Confirmar')); // 09:00
+    await tester.pumpAndSettle();
+
+    final agora = DateTime.now();
+    final esperado = visitPreferenceLabel(
+      DateTime(agora.year, agora.month, agora.day + 1, 9),
+    );
+    expect(find.text(esperado), findsOneWidget);
+
+    /* Limpar volta ao campo vazio; escolher de novo preenche. */
+    await tester.tap(find.byKey(const Key('visit.preference.clear')));
+    await tester.pumpAndSettle();
+    expect(find.text('Escolher data e horário'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('visit.preference')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continuar').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Confirmar'));
+    await tester.pumpAndSettle();
+
+    await continuar(tester); // visita
+    expect(find.text(esperado), findsOneWidget, reason: 'aparece na revisão');
+    await continuar(tester); // envia
+
+    final rascunho =
+        verify(
+              () => repo.openServiceRequest(
+                captureAny(),
+                idempotencyKey: any(named: 'idempotencyKey'),
+              ),
+            ).captured.single
+            as ServiceRequestDraft;
+    expect(rascunho.availability, esperado);
+    expect((rascunho.toJson()['details'] as Map)['availability'], esperado);
   });
 
   testWidgets('a nova tentativa depois de uma falha usa a mesma chave', (
