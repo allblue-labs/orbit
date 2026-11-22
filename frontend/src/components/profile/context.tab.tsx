@@ -56,7 +56,9 @@ export function ContextTab() {
           <Entry label="Nome">{session.organization?.displayName ?? "—"}</Entry>
           <Entry label="Plano">
             {session.entitlements ? (
-              <Badge variant="outline">{session.entitlements.planKey}</Badge>
+              <Badge variant="outline">
+                {session.organization?.plan?.name ?? session.entitlements.planKey}
+              </Badge>
             ) : (
               "—"
             )}

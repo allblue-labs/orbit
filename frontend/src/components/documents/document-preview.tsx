@@ -257,7 +257,7 @@ function Metadata({ summary }: { summary: ArtifactManifestSummary }) {
       <Field label="Código de verificação da origem">
         <ContentHash hash={summary.sourceHash} />
       </Field>
-      <Field label="Versão do template">
+      <Field label="Versão do modelo">
         <span className="text-sm">v{summary.templateVersion}</span>
       </Field>
     </dl>

@@ -100,7 +100,7 @@ const errorCodeLabels = <String, String>{
   'NOT_FOUND': 'Este registro não está disponível.',
   'CONFLICT': 'Os dados foram alterados. Atualize e tente novamente.',
   'TOO_MANY_REQUESTS': 'Muitas tentativas. Aguarde um instante.',
-  'INTERNAL_SERVER_ERROR': 'O servidor não conseguiu responder agora.',
+  'INTERNAL_SERVER_ERROR': 'O Orbit não conseguiu responder agora.',
   'NETWORK': 'Sem conexão. Verifique a internet e tente de novo.',
 };
 
@@ -408,7 +408,7 @@ const syncRejectionLabels = <String, String>{
   'AUTHORIZATION_CHANGED':
       'Você não tem mais permissão para esta ação neste atendimento.',
   'RESOURCE_REMOVED': 'Este atendimento não está mais disponível.',
-  'INVALID_COMMAND': 'O servidor não aceitou esta ação.',
+  'INVALID_COMMAND': 'O Orbit não aceitou esta ação.',
   'DEPENDENCY_BLOCKED': 'Uma ação anterior deste atendimento não foi aplicada.',
 };
 
@@ -442,7 +442,7 @@ const evidenceStateLabels = <String, FieldLabel>{
   'uploading': FieldLabel('Enviando', description: 'Transferindo o arquivo.'),
   'finalizing': FieldLabel(
     'Finalizando',
-    description: 'O servidor está conferindo o arquivo.',
+    description: 'O Orbit está conferindo o arquivo.',
   ),
   'confirmed': FieldLabel(
     'Confirmada',
@@ -450,7 +450,7 @@ const evidenceStateLabels = <String, FieldLabel>{
   ),
   'rejected': FieldLabel(
     'Não aceita',
-    description: 'O servidor recusou este arquivo.',
+    description: 'O Orbit recusou este arquivo.',
   ),
   'missing': FieldLabel(
     'Arquivo perdido',
@@ -544,7 +544,7 @@ const documentStatusLabels = <String, FieldLabel>{
   ),
   'unknown': FieldLabel(
     'Situação do documento indisponível',
-    description: 'Não foi possível interpretar a resposta do servidor.',
+    description: 'Não foi possível entender a resposta do Orbit. Tente novamente.',
   ),
 };
 
@@ -564,7 +564,7 @@ const documentBlockedLabels = <String, String>{
   'acknowledgementStale':
       'O atendimento mudou depois da ciência do cliente. Colete novamente.',
   'evidencePending':
-      'Há evidências ainda em processamento no servidor. Aguarde a conclusão.',
+      'Há evidências ainda sendo processadas. Aguarde a conclusão.',
   'templateNotAvailable':
       'Não há modelo de documento disponível para este atendimento.',
   'notAuthorized': 'Você não tem permissão para emitir este documento.',

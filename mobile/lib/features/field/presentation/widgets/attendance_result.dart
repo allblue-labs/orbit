@@ -57,8 +57,8 @@ class AttendanceResult extends StatelessWidget {
                       : finishing
                       ? 'Estamos salvando a conclusão do atendimento…'
                       : error == null
-                      ? 'A conclusão está aguardando sincronização. O relatório ficará disponível após a confirmação do servidor.'
-                      : 'A confirmação do cliente foi salva. Falta concluir o atendimento no servidor.',
+                      ? 'A conclusão está aguardando envio. O relatório fica disponível assim que ela chegar ao Orbit.'
+                      : 'A confirmação do cliente foi salva. Falta enviar a conclusão do atendimento.',
                 ),
               ),
             ],

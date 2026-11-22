@@ -411,8 +411,8 @@ export function SignupContent({
             Sua operação começa com uma base segura.
           </h1>
           <p className="mt-3 text-sm leading-relaxed text-primary-foreground/75">
-            Configure a organização em poucos passos. Você entra como owner e
-            pode convidar o time depois.
+            Configure a organização em poucos passos. Você entra como
+            proprietário e pode convidar a equipe depois.
           </p>
           <ol className="mt-10 space-y-2">
             {steps.map((item, index) => {

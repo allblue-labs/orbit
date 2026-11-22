@@ -413,7 +413,7 @@ void main() {
 
     expect(find.text('Nenhuma ação pendente neste aparelho.'), findsOneWidget);
     expect(
-      find.text('Tudo o que você registrou já chegou ao servidor.'),
+      find.text('Tudo o que você registrou já chegou ao Orbit.'),
       findsOneWidget,
     );
   });
@@ -485,7 +485,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Descartar esta ação?'), findsOneWidget);
-    expect(find.textContaining('não foi aplicada no servidor'), findsOneWidget);
+    expect(find.textContaining('não foi aplicada no Orbit'), findsOneWidget);
 
     await tester.tap(find.text('Manter'));
     await tester.pumpAndSettle();

@@ -196,8 +196,7 @@ function PermissionsInput({
         }
       />
       <p className="text-xs text-muted-foreground">
-        Chaves de permissão que o consumidor do artefato deve exigir. O Studio
-        as guarda; quem as aplica é quem executa o artefato.
+        Permissões que a pessoa precisa ter para preencher este item.
       </p>
     </div>
   );
@@ -430,7 +429,7 @@ function FieldInspector({
       <JsonField
         id="field-validations"
         label="Validações"
-        description="Lista de objetos. Aplicadas por quem executa o artefato, não pelo Studio."
+        description="Regras extras do campo, conferidas no preenchimento."
         value={node.validations}
         disabled={readOnly}
         onChange={(validations) =>

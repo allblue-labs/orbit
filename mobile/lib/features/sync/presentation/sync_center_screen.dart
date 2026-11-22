@@ -473,7 +473,7 @@ class _Queue extends ConsumerWidget {
       return const OrbitEmptyState(
         icon: Icons.cloud_done_outlined,
         title: 'Nada na fila',
-        description: 'Tudo o que você registrou já chegou ao servidor.',
+        description: 'Tudo o que você registrou já chegou ao Orbit.',
       );
     }
 
@@ -596,7 +596,7 @@ class _CommandTile extends ConsumerWidget {
       builder: (context) => AlertDialog(
         title: const Text('Descartar esta ação?'),
         content: const Text(
-          'A ação não foi aplicada no servidor e será removida deste '
+          'A ação não foi aplicada no Orbit e será removida deste '
           'aparelho. Se ainda for necessária, registre-a de novo.',
         ),
         actions: [

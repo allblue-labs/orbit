@@ -111,10 +111,10 @@ export function CreateTemplateDialog() {
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Novo Artifact Template</DialogTitle>
+          <DialogTitle>Novo modelo de documento</DialogTitle>
           <DialogDescription>
-            O template nasce como rascunho, na versão 1, com uma seção inicial.
-            A estrutura é detalhada no Studio.
+            O modelo nasce como rascunho, na versão 1, com uma seção inicial.
+            As seções e os campos são montados no editor.
           </DialogDescription>
         </DialogHeader>
 

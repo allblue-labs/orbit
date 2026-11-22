@@ -326,7 +326,7 @@ class _OfflineNotice extends StatelessWidget {
         const SizedBox(width: OrbitSpacing.sm),
         const Expanded(
           child: Text(
-            'Sem conexão. Esta é a última lista recebida do servidor.',
+            'Sem conexão. Esta é a última lista recebida.',
             style: TextStyle(fontSize: 12, color: OrbitColors.warning),
           ),
         ),

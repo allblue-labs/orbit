@@ -156,7 +156,7 @@ void main() {
         find.textContaining(
           pending == 'recuperação'
               ? 'precisam de recuperação'
-              : 'ainda não chegaram',
+              : 'ainda não foram enviados',
         ),
         findsOneWidget,
       );

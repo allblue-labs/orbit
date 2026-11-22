@@ -452,7 +452,7 @@ export function LandingContent({ catalog }: { catalog: PlanCatalog }) {
                 </Button>
               </div>
               <p className="mt-6 text-sm text-muted-foreground">
-                Implantação guiada · sem custo de setup · suporte em português
+                Implantação guiada · sem custo de implantação · suporte em português
               </p>
             </motion.div>
 

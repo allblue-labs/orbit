@@ -196,7 +196,7 @@ export function PropertiesPanel({
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">
-            Templates globais da plataforma não são criados aqui.
+            Modelos padrão do Orbit não são criados aqui.
           </p>
         </div>
 
@@ -238,8 +238,8 @@ export function PropertiesPanel({
         <Label>Chave</Label>
         <Input value={template.key} disabled className="font-mono text-sm" />
         <p className="text-xs text-muted-foreground">
-          A chave é definida na criação e não pode ser alterada — ela identifica o template em integrações. Para outra
-          chave, duplique o template.
+          A chave é definida na criação e não pode ser alterada — ela identifica o modelo nas automações. Para outra
+          chave, duplique o modelo.
         </p>
       </div>
 

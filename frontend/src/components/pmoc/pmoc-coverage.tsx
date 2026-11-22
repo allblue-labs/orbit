@@ -14,6 +14,7 @@
  * página, e recomeçar. Voltar exigiria guardar os cursores anteriores; a pilha
  * local resolve isso sem inventar contrato.
  */
+import { ASSET_CATEGORY_LABELS } from "@/entities";
 import { useState } from "react";
 import { Package, Plus, Trash2 } from "lucide-react";
 
@@ -142,7 +143,8 @@ export function PmocCoveragePanel({
                         "—"}
                     </TableCell>
                     <TableCell className="text-sm">
-                      {coverage.asset.category}
+                      {ASSET_CATEGORY_LABELS[coverage.asset.category] ??
+                        coverage.asset.category}
                     </TableCell>
                     <TableCell className="text-sm">
                       {coverage.asset.status === "ACTIVE" ? "Ativo" : "Inativo"}

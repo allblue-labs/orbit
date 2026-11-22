@@ -99,7 +99,7 @@ export const WIDGET_SPAN: Readonly<
  */
 const WITHOUT_SOURCE: Readonly<Record<string, string>> = {
   "team-performance":
-    "Produtividade por técnico ainda não é publicada pelo Analytics — apenas a contagem de técnicos alocados, no widget de técnicos.",
+    "A produtividade por técnico ainda não está disponível — por enquanto, só a contagem de técnicos alocados.",
   "pharmacy-critical-stock":
     "Os indicadores ainda não cobrem estoque. Este quadro fica sem dados.",
   "pharmacy-expiring-products":

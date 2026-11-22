@@ -137,7 +137,7 @@ export function GeneralSection({
 
           <JsonField
             id="organization-settings"
-            label="settings"
+            label="Configurações avançadas"
             description="Preferências personalizadas da organização, como cores e informações adicionais. Use o campo acima para alterar o logotipo."
             value={settings}
             disabled={!canManage}

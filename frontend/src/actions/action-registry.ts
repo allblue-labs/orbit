@@ -632,7 +632,7 @@ const DEFINITIONS: readonly ActionDefinition[] = [
     permission: "artifact_templates.delete",
     capability: "artifact_templates.manage",
     confirm: {
-      title: "Arquivar este template?",
+      title: "Arquivar este modelo?",
       body: "Ele deixa de aparecer para novas execuções. As execuções já criadas continuam válidas.",
       confirmLabel: "Arquivar",
     },

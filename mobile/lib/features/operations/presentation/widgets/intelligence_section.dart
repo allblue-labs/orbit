@@ -126,7 +126,7 @@ class _ExecutionBlock extends StatelessWidget {
           if (!execution.hasReadableOutput)
             Text(
               execution.hasError
-                  ? 'A análise registrou uma falha no servidor.'
+                  ? 'A análise não pôde ser concluída.'
                   : 'Saída em formato não reconhecido por esta versão do aplicativo.',
               style: const TextStyle(
                 fontSize: 12,

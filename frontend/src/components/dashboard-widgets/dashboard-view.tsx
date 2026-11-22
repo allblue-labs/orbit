@@ -11,6 +11,7 @@
  * A ordem, o tamanho e a presença de cada widget vêm de `GET /dashboard`. O
  * frontend não decide o que aparece.
  */
+import { segmentLabel } from "@/lib/segment-label";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
@@ -115,10 +116,14 @@ export function DashboardView() {
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <span>{session.organization?.displayName ?? "—"}</span>
             {session.entitlements ? (
-              <Badge variant="outline">{session.entitlements.planKey}</Badge>
+              <Badge variant="outline">
+                {session.organization?.plan?.name ?? session.entitlements.planKey}
+              </Badge>
             ) : null}
             {layout.data ? (
-              <Badge variant="outline">{layout.data.context.segment}</Badge>
+              <Badge variant="outline">
+                {segmentLabel(layout.data.context.segment)}
+              </Badge>
             ) : null}
             {scope.businessUnit ? (
               <Badge variant="secondary">

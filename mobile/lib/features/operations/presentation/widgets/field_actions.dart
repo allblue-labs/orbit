@@ -120,7 +120,7 @@ class _FieldActionsSectionState extends ConsumerState<FieldActionsSection> {
 
     return SectionBlock(
       title: 'Execução',
-      subtitle: 'Cada transição é validada pelo servidor',
+      subtitle: 'Cada mudança de situação é conferida pelo Orbit',
       child: PermissionGate(
         permission: _statusPermission,
         fallback: const SectionEmpty(

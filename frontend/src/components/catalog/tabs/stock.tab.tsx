@@ -99,8 +99,8 @@ function StockContent() {
             · movimentos de {period.from} a {period.to}
           </p>
           <p className="text-xs text-muted-foreground">
-            Saldo é consequência de movimentações. Não existe campo de
-            quantidade editável — nem aqui, nem na API.
+            O saldo vem das movimentações. Para corrigir uma quantidade,
+            registre um ajuste — ele fica no histórico com motivo e autor.
           </p>
         </div>
 

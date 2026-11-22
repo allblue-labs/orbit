@@ -24,6 +24,7 @@
  * qualquer forma; contar o que já está em mãos é honesto e não custa
  * requisição nenhuma.
  */
+import { ASSET_CATEGORY_LABELS } from "@/entities";
 import { useState } from "react";
 import { CalendarClock, Package, Play, UserRoundCheck } from "lucide-react";
 
@@ -275,6 +276,7 @@ function EquipmentRow({
           <p className="truncate text-xs text-muted-foreground">
             {row.equipment.identifier ??
               row.equipment.serialNumber ??
+              ASSET_CATEGORY_LABELS[row.equipment.category] ??
               row.equipment.category}
           </p>
         </div>

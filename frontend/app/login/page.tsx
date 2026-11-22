@@ -120,8 +120,7 @@ function LoginView() {
               Bem-vindo de volta
             </h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              Entre com suas credenciais para acessar o workspace da sua
-              operação.
+              Entre com seu e-mail e senha para acessar a sua operação.
             </p>
 
             {destination ? <OpenEquipmentInApp path={destination} /> : null}

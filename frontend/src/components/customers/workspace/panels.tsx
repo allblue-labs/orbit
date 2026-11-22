@@ -6,6 +6,7 @@
  * Todos recebem o cliente já carregado ou a consulta cruzada pronta — nenhum
  * decide o que é vínculo, o que é indicador ou o que é recomendação.
  */
+import { eventTypeLabel } from "@/components/scheduling/event-badges";
 import { useState } from "react";
 import {
   Lightbulb,
@@ -394,7 +395,7 @@ export function CustomerScheduleSection({
           key: occurrence.occurrenceId,
           entityId: occurrence.eventId,
           title: occurrence.title,
-          subtitle: `${formatDateTime(occurrence.startsAt)} · ${occurrence.type}`,
+          subtitle: `${formatDateTime(occurrence.startsAt)} · ${eventTypeLabel(occurrence.type)}`,
           status: occurrence.status,
         }))
       }

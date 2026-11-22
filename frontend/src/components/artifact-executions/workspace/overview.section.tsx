@@ -12,6 +12,7 @@
  * id é preferível a espelhar à mão mais dois contratos. Ver a seção de
  * limitações em `docs/artifact-execution-workspace.md`.
  */
+import { documentTypeLabel } from "@/documents/document-registry";
 import Link from "next/link";
 import { ExternalLink } from "lucide-react";
 
@@ -48,7 +49,7 @@ export function OverviewSection({
          */}
         <Entry label="Artefato" value={execution.snapshot.templateName} />
         <Entry
-          label="Versão do template"
+          label="Versão do modelo"
           value={
             <span className="flex items-center gap-2">
               <Badge variant="secondary">
@@ -60,7 +61,7 @@ export function OverviewSection({
             </span>
           }
         />
-        <Entry label="Tipo" value={execution.snapshot.artifactType} />
+        <Entry label="Tipo" value={documentTypeLabel(execution.snapshot.artifactType)} />
         <Entry
           label="Agendamento"
           value={

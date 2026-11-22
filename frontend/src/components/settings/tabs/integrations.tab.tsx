@@ -28,7 +28,7 @@ export function IntegrationsSettingsTab() {
       <PanelFrame
         panelId="settings-integrations-future"
         title="O que ainda não existe"
-        description="Superfícies de extensão da plataforma"
+        description="Conexões com outros sistemas que ainda estão a caminho"
       >
         <ul className="space-y-3">
           <li className="flex items-start gap-2">
@@ -37,7 +37,7 @@ export function IntegrationsSettingsTab() {
               aria-hidden
             />
             <span className="text-sm text-muted-foreground">
-              <strong className="text-foreground">Webhooks</strong> — ainda não existem. Avisar sistemas externos quando algo acontece no Orbit é uma extensão prevista, ainda não construída.
+              <strong className="text-foreground">Avisos para outros sistemas</strong> — ainda não disponíveis. Avisar automaticamente um sistema da sua empresa quando algo acontece no Orbit está previsto.
             </span>
           </li>
           <li className="flex items-start gap-2">
@@ -46,7 +46,7 @@ export function IntegrationsSettingsTab() {
               aria-hidden
             />
             <span className="text-sm text-muted-foreground">
-              <strong className="text-foreground">Chaves de integração</strong> — ainda não existem. Hoje todo acesso é feito por uma pessoa com sessão iniciada; uma chave de sistema teria escopo próprio.
+              <strong className="text-foreground">Chaves de integração</strong> — ainda não disponíveis. Hoje todo acesso ao Orbit é feito por uma pessoa com login e senha.
             </span>
           </li>
           <li className="flex items-start gap-2">
@@ -61,9 +61,7 @@ export function IntegrationsSettingsTab() {
         </ul>
 
         <p className="mt-3 text-xs text-muted-foreground">
-          Nada disso é simulado aqui. Quando os contratos existirem, entram como
-          seções desta aba consumindo o mesmo Workspace Core — sem tela nova e
-          sem tipo paralelo.
+          Quando estiverem disponíveis, estes recursos aparecem nesta aba.
         </p>
       </PanelFrame>
     </div>

@@ -78,14 +78,10 @@ export function PmocUnitsSection() {
                       )}
                     </p>
                     {/*
-                      A chave desce para a linha de apoio.
-                      É metadado — identifica a unidade no relatório —, e ao
-                      lado do nome disputava a leitura com ele, ainda mais
-                      quando é derivada e fica longa.
+                      A chave (`UNIDADE_CONDENSADORA`) não aparece: é
+                      identificação interna, e o nome já diz o que a unidade é.
                     */}
                     <p className="text-xs text-muted-foreground">
-                      <span className="font-mono">{unidade.key}</span>
-                      {" · "}
                       {unidade.checklist
                         ? `Roteiro: ${unidade.checklist.name} · ${
                             unidade.checklist.items.length

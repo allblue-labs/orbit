@@ -248,7 +248,7 @@ const entries = [
   [
     'IDEMPOTENCY_MISMATCH',
     HttpStatus.CONFLICT,
-    'Esta chave de idempotência já foi usada com dados diferentes.',
+    'Esta ação já foi enviada com outros dados. Atualize a tela e tente novamente.',
   ],
   [
     'BUSINESS_RULE_VIOLATION',
