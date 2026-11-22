@@ -171,6 +171,14 @@ export class RegistrationRepository {
         })),
       });
 
+      /**
+       * O catálogo de refrigeração e climatização: roteiros de atendimento,
+       * unidades do PMOC e o roteiro das visitas de RVT. Ponto de partida
+       * editável — a mesma função que a migration aplicou às organizações
+       * que já existiam (`app_seed_hvac_catalogs`).
+       */
+      await transaction.$executeRaw`SELECT app_seed_hvac_catalogs(${organizationId}::uuid)`;
+
       await transaction.role.createMany({
         data: ASSIGNABLE_TEAM_ROLES.map((papel) => ({
           organizationId,

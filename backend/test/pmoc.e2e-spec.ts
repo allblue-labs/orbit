@@ -1,3 +1,4 @@
+import { paidSubscriptionFixture } from './support/paid-subscription-fixture';
 import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import { replaceFixtureOwner } from './support/member-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
@@ -185,7 +186,10 @@ describe('PMOC (e2e)', () => {
       city: 'Recife',
       street: 'Rua da Aurora',
       stateCode: 'PE',
+      planKey: 'ENTERPRISE_UNLIMITED',
     });
+    /* O cadastro exige plano, e as rotas de PMOC/RVT, assinatura ativa. */
+    await paidSubscriptionFixture(app, adminPrisma(), email);
     return {
       email,
       token: (registration.body as Envelope<{ accessToken: string }>).data

@@ -1,3 +1,4 @@
+import { paidSubscriptionFixture } from './support/paid-subscription-fixture';
 import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
@@ -101,7 +102,10 @@ describe('RVT PR-30.1 closure (e2e)', () => {
       city: 'Recife',
       street: 'Rua da Agenda',
       stateCode: 'PE',
+      planKey: 'ENTERPRISE_UNLIMITED',
     });
+    /* O cadastro exige plano, e as rotas de PMOC/RVT, assinatura ativa. */
+    await paidSubscriptionFixture(app, adminPrisma(), email);
     return {
       email,
       token: (response.body as Envelope<{ accessToken: string }>).data

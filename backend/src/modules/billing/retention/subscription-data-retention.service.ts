@@ -399,6 +399,8 @@ export class SubscriptionDataRetentionService {
         data: RVT_MAINTENANCE_TYPE_SEEDS.map((t) => ({ organizationId, ...t })),
         skipDuplicates: true,
       });
+      /* Expurgados os cadastros, a organização volta ao catálogo inicial. */
+      await tx.$executeRaw`SELECT app_seed_hvac_catalogs(${organizationId}::uuid)`;
       await tx.organizationSubscription.updateMany({
         where: { organizationId, dataRetentionEndsAt: { lte: at } },
         data: { dataRetentionEndsAt: null },

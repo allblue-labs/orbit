@@ -377,6 +377,9 @@ async function seed(): Promise<void> {
       });
     }
 
+    /* O mesmo catálogo inicial de toda organização nova. */
+    await tx.$executeRaw`SELECT app_seed_hvac_catalogs(${organizationId}::uuid)`;
+
     const organizationMembership = await tx.organizationMembership.findFirst({
       where: { organizationId, userId },
       select: { id: true },

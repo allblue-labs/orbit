@@ -476,6 +476,13 @@ describe.each(profiles)('PR-13: physical retention on %s', (profile) => {
     expect(purge.databasePurgedAt).not.toBeNull();
     expect(purge.completedAt).not.toBeNull();
     expect(await admin.customer.count({ where: { id: f.customer } })).toBe(0);
+    /* Os cadastros se foram; o catálogo inicial de climatização volta. */
+    expect(
+      await admin.checklistTemplate.count({ where: { organizationId: f.org } }),
+    ).toBe(16);
+    expect(
+      await admin.pmocUnit.count({ where: { organizationId: f.org } }),
+    ).toBe(9);
     expect(
       await admin.organizationSubscription.count({
         where: { id: f.subscription },
