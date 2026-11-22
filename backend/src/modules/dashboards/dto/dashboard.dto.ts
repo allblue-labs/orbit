@@ -1,12 +1,16 @@
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
   ArrayMaxSize,
   IsArray,
   IsIn,
+  IsInt,
   IsOptional,
   IsString,
+  Max,
+  Min,
 } from 'class-validator';
+import { IsUUIDv7 } from '../../../validators';
 
 export const DashboardRange = {
   SEVEN_DAYS: '7D',
@@ -40,4 +44,29 @@ export class DashboardQueryDto {
   @ArrayMaxSize(20)
   @IsString({ each: true })
   tags?: string[];
+}
+
+/** Filtros das listas de atividades e próximos compromissos. */
+export class DashboardFeedQueryDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUIDv7()
+  businessUnitId?: string;
+
+  @ApiPropertyOptional({ minimum: 1, maximum: 30, default: 12 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(30)
+  limit?: number;
+
+  /** Só para os próximos compromissos: quantos dias à frente. */
+  @ApiPropertyOptional({ minimum: 1, maximum: 60, default: 14 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(60)
+  days?: number;
 }

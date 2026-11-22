@@ -392,6 +392,15 @@ export class FinancialAnalyticsQueryDto {
   @IsOptional()
   @IsUUIDv7()
   businessUnitId?: string;
+
+  /**
+   * Agrupamento da série: por mês (padrão) ou por dia — os recortes de 7 e 15
+   * dias precisam de barra por dia, e um mês só daria um ponto.
+   */
+  @ApiPropertyOptional({ enum: ['DAY', 'MONTH'], default: 'MONTH' })
+  @IsOptional()
+  @IsIn(['DAY', 'MONTH'])
+  granularity?: 'DAY' | 'MONTH';
 }
 
 /* -------------------------------------------------------------------- */

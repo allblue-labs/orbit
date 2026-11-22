@@ -53,6 +53,7 @@ describe('FinancialService', () => {
     createFromSource: jest.fn(),
     totals: jest.fn(),
     overdue: jest.fn(),
+    timeline: jest.fn(),
     findBusinessUnit: jest.fn(),
     findCustomer: jest.fn(),
     findOperation: jest.fn(),
@@ -262,10 +263,10 @@ describe('FinancialService', () => {
         _count: { _all: 1 },
       },
     ]);
-    repository.overdue.mockResolvedValue({
-      _sum: { amount: '100.00' },
-      _count: { _all: 1 },
-    });
+    repository.overdue.mockResolvedValue([
+      { type: 'INCOME', _sum: { amount: '60.00' }, _count: { _all: 1 } },
+      { type: 'EXPENSE', _sum: { amount: '40.00' }, _count: { _all: 2 } },
+    ]);
 
     const summary = await service.summary('org-id', {});
 
@@ -276,14 +277,70 @@ describe('FinancialService', () => {
     expect(summary.netConfirmed).toBe('750.00');
     expect(summary.netPending).toBe('400.00');
     expect(summary.overdue.pending).toBe('100.00');
+    /* Receita vencida é cobrança; despesa vencida é conta atrasada. */
+    expect(summary.overdueIncome).toMatchObject({ pending: '60.00', count: 1 });
+    expect(summary.overdueExpense).toMatchObject({
+      pending: '40.00',
+      count: 2,
+    });
+  });
+
+  it('a série agrupa por mês ou por dia, conforme pedido', async () => {
+    const rows = [
+      {
+        month: new Date('2026-11-03T00:00:00Z'),
+        type: 'INCOME',
+        status: 'CONFIRMED',
+        total: '300.00',
+      },
+      {
+        month: new Date('2026-11-03T00:00:00Z'),
+        type: 'EXPENSE',
+        status: 'CONFIRMED',
+        total: '120.00',
+      },
+      {
+        month: new Date('2026-11-05T00:00:00Z'),
+        type: 'INCOME',
+        status: 'PENDING',
+        total: '50.00',
+      },
+    ];
+    repository.timeline.mockResolvedValue(rows);
+
+    const daily = await service.timeline('org-id', {
+      from: new Date('2026-11-01'),
+      to: new Date('2026-11-07'),
+      granularity: 'DAY',
+    });
+    expect(repository.timeline).toHaveBeenLastCalledWith(
+      expect.anything(),
+      'DAY',
+    );
+    expect(daily.map((point) => point.period)).toEqual([
+      '2026-11-03',
+      '2026-11-05',
+    ]);
+    expect(daily[0]).toMatchObject({
+      month: '2026-11',
+      incomeConfirmed: '300.00',
+      expenseConfirmed: '120.00',
+      netConfirmed: '180.00',
+    });
+    expect(daily[1]!.incomePending).toBe('50.00');
+
+    const monthly = await service.timeline('org-id', {});
+    expect(repository.timeline).toHaveBeenLastCalledWith(
+      expect.anything(),
+      'MONTH',
+    );
+    expect(monthly).toHaveLength(1);
+    expect(monthly[0]).toMatchObject({ period: '2026-11', month: '2026-11' });
   });
 
   it('devolve zeros, e não ausência, quando o período não tem movimento', async () => {
     repository.totals.mockResolvedValue([]);
-    repository.overdue.mockResolvedValue({
-      _sum: { amount: null },
-      _count: { _all: 0 },
-    });
+    repository.overdue.mockResolvedValue([]);
     const summary = await service.summary('org-id', {});
     expect(summary.income.confirmed).toBe('0.00');
     expect(summary.netConfirmed).toBe('0.00');
