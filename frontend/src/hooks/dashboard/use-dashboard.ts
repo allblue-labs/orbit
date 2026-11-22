@@ -124,7 +124,7 @@ export function useMonthComparison(timeZone: string) {
   const minute = new Date().toISOString().slice(0, 16);
 
   const windows = useMemo(
-    () => buildMonthComparison(new Date(`${minute}:00Z`), timeZone, true),
+    () => buildMonthComparison(new Date(`${minute}:59Z`), timeZone, true),
     [minute, timeZone],
   );
 
@@ -216,7 +216,7 @@ export function useAgenda() {
 export function useDashboardActivity() {
   const { businessUnitId } = useActiveScope();
   const query = useMemo<DashboardFeedQuery>(
-    () => ({ businessUnitId: businessUnitId ?? undefined, limit: 12 }),
+    () => ({ businessUnitId: businessUnitId ?? undefined, limit: 50 }),
     [businessUnitId],
   );
   return useApiQuery(

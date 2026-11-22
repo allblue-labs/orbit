@@ -44,6 +44,17 @@ test("o painel conta o que aconteceu, o que vem e como está o caixa", async ({ 
   });
   expect(agendado.ok(), await agendado.text()).toBe(true);
 
+  /* Mais dez abertos hoje: a lista de atividades passa de uma página. */
+  for (let i = 0; i < 10; i += 1) {
+    const extra = await bff(page, "post", "/api/orbit/operations", {
+      businessUnitId: unidade,
+      code: `PAINEL-${id}-X${i}`.toUpperCase(),
+      kind: "MAINTENANCE",
+      title: `Corretiva ${i} ${id}`,
+    });
+    expect(extra.ok(), await extra.text()).toBe(true);
+  }
+
   /* Caixa: recebido, a receber vencido e pago. */
   const lancamentos = [
     { type: "INCOME", amount: 1850, description: `Manutenção mensal ${id}`, competenceDate: dia(-2), confirm: true },
@@ -74,16 +85,27 @@ test("o painel conta o que aconteceu, o que vem e como está o caixa", async ({ 
   await expect(upcoming.getByText("Atendimento agendado").first()).toBeVisible();
 
   const activity = page.locator('[data-panel="recent-activity"]');
-  await expect(activity.getByText(`Preventiva agendada ${id}`, { exact: false }).first()).toBeVisible();
   await expect(activity.getByText("Atendimento aberto").first()).toBeVisible();
+  /* Dez por página; a preventiva foi aberta antes das corretivas. */
+  await expect(activity.locator("li")).toHaveCount(10);
+  await expect(activity.getByText(/^1–10 de \d+$/)).toBeVisible();
+  await activity.getByRole("button", { name: "Próxima página" }).click();
+  await expect(activity.getByText(/^2 \/ \d+$/)).toBeVisible();
+  await expect(activity.getByText(`Preventiva agendada ${id}`, { exact: false }).first()).toBeVisible();
+  await shot(page, "4b_atividades_pagina2", '[data-panel="recent-activity"]');
+  await activity.getByRole("button", { name: "Página anterior" }).click();
 
   const financeiro = page.locator('[data-panel="financial-health"]');
   await expect(financeiro.getByText("Vencido a cobrar")).toBeVisible();
   await financeiro.getByRole("button", { name: "7 dias", exact: true }).click();
   await expect(financeiro.locator(".recharts-bar-rectangle path").first()).toBeVisible();
 
-  await expect(page.locator('[data-panel="health-score"]')).toBeVisible();
-  await expect(page.locator('[data-panel="operations-comparative-radar"]')).toBeVisible();
+  const saude = page.locator('[data-panel="health-score"]');
+  await expect(saude.getByText("Fila em aberto", { exact: true })).toBeVisible();
+  await expect(saude.getByText("Volume do mês", { exact: true })).toBeVisible();
+  await expect(saude.getByText("Demandas abertas")).toBeVisible();
+  const radar = page.locator('[data-panel="operations-comparative-radar"]');
+  await expect(radar.getByText("Concluídos no prazo").or(radar.getByText("Demandas com técnico")).first()).toBeVisible();
 
   await shot(page, "1_comparativo", '[data-panel="operations-comparative-radar"]');
   await shot(page, "2_financeiro", '[data-panel="financial-health"]');

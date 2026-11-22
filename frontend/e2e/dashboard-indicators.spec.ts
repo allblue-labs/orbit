@@ -127,7 +127,7 @@ async function setup(page: Page, empty = false, financialZone?: string) {
               : []),
             {
               id: "operations-comparative-radar",
-              title: "Este mês × mês anterior",
+              title: "Radar comparativo",
               size: "MEDIUM",
               order: 5,
             },
@@ -308,7 +308,11 @@ test("mostra oito indicadores acionáveis, bases de cálculo e dimensões reais"
   for (const linha of ["Concluídos no prazo", "PMOC em dia", "Visitas de RVT em dia"])
     await expect(comparativo.getByText(linha, { exact: true })).toBeVisible();
   await expect(comparativo.getByText("igual").first()).toBeVisible();
-  await expect(comparativo.locator(".recharts-radar-polygon")).toHaveCount(0);
+  /* Cinco eixos medidos nos dois meses: os dois polígonos e o resumo. */
+  await expect(comparativo.locator(".recharts-radar-polygon")).toHaveCount(2);
+  await expect(
+    comparativo.getByText("Estável nos 5 indicadores comparáveis."),
+  ).toBeVisible();
   expect(analyticsRequests.filter((path) => path === "panel")).toHaveLength(1);
   expect(analyticsRequests.filter((path) => path === "kpis")).toHaveLength(2);
   expect(analyticsRequests).not.toContain("dashboard");

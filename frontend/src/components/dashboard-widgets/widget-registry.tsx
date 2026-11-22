@@ -35,7 +35,7 @@ import { EnvironmentalWidget } from "./environmental.widget";
 import { FinancialHealthWidget } from "./financial-health.widget";
 import { ExecutiveKpisWidget } from "./executive-kpis.widget";
 import { HealthScoreWidget } from "./health-score.widget";
-import { MonthComparisonWidget } from "./month-comparison.widget";
+import { ComparativeRadarWidget } from "./comparative-radar.widget";
 import { createKpiDomainWidget } from "./kpi-domain.widget";
 import { OperationalTrendWidget } from "./operational-trend.widget";
 import { OrbitIntelligenceWidget } from "./orbit-intelligence.widget";
@@ -174,7 +174,7 @@ const REGISTRY: Readonly<Record<string, WidgetComponent>> = {
    * capability financeira, que é independente das operacionais.
    */
   "financial-health": FinancialHealthWidget,
-  "operations-comparative-radar": MonthComparisonWidget,
+  "operations-comparative-radar": ComparativeRadarWidget,
   "executive-kpis": ExecutiveKpisWidget,
   "health-score": HealthScoreWidget,
   "operational-trend": OperationalTrendWidget,

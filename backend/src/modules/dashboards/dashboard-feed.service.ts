@@ -163,7 +163,7 @@ export class DashboardFeedService {
     return this.read(
       parts,
       'DESC',
-      Math.min(Math.max(options.limit ?? 12, 1), 30),
+      Math.min(Math.max(options.limit ?? 12, 1), 50),
     );
   }
 
@@ -228,7 +228,7 @@ export class DashboardFeedService {
     return this.read(
       parts,
       'ASC',
-      Math.min(Math.max(options.limit ?? 12, 1), 30),
+      Math.min(Math.max(options.limit ?? 12, 1), 50),
     );
   }
 

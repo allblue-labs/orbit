@@ -53,12 +53,12 @@ export class DashboardFeedQueryDto {
   @IsUUIDv7()
   businessUnitId?: string;
 
-  @ApiPropertyOptional({ minimum: 1, maximum: 30, default: 12 })
+  @ApiPropertyOptional({ minimum: 1, maximum: 50, default: 12 })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(30)
+  @Max(50)
   limit?: number;
 
   /** Só para os próximos compromissos: quantos dias à frente. */

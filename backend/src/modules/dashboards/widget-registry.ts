@@ -18,9 +18,9 @@ const globalWidgets: DashboardWidgetDefinition[] = [
    */
   {
     id: 'operations-comparative-radar',
-    title: 'Este mês × mês anterior',
+    title: 'Radar comparativo',
     description:
-      'Atendimentos, prazos e manutenções deste mês comparados ao mês anterior.',
+      'Prazo, conclusão, equipe, agenda, PMOC e RVT: este mês contra o mesmo trecho do mês anterior.',
     category: 'OPERATIONS',
     order: 5,
     size: 'MEDIUM',
@@ -133,7 +133,7 @@ const globalWidgets: DashboardWidgetDefinition[] = [
     id: 'health-score',
     title: 'Saúde da operação',
     description:
-      'Fila sem atraso, com técnico e com data marcada; prazos cumpridos; PMOC e RVT em dia.',
+      'Por categoria: a fila em aberto, o volume do mês contra o anterior, prazos e manutenções contratuais.',
     category: 'EXECUTIVE',
     order: 30,
     size: 'MEDIUM',
