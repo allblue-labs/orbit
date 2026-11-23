@@ -1,3 +1,4 @@
+import { PmocDocumentExports } from './pmoc-document-exports';
 import {
   MobileManagement,
   MobileManagementShared,
@@ -75,7 +76,10 @@ import { PmocService, type PmocActor } from './pmoc.service';
 @Controller('pmoc')
 @RequiresActivePlan()
 export class PmocController {
-  constructor(private readonly pmoc: PmocService) {}
+  constructor(
+    private readonly pmoc: PmocService,
+    private readonly documentExports: PmocDocumentExports,
+  ) {}
 
   /* ---------------------------------------------------------------- */
   /* Conformidade — antes de `:id`, senão a rota vira um identificador  */
@@ -233,6 +237,19 @@ export class PmocController {
    * a cobertura de antes da última alteração, e quem arquivasse esse papel
    * arquivaria uma declaração falsa.
    */
+  /** Exportação assíncrona (202); a rota síncrona abaixo continua valendo. */
+  @Post('plans/:id/document/exports')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @Capabilities('pmoc.read')
+  @Permissions('pmoc.read')
+  @ApiOperation({ summary: 'Request the PMOC plan document asynchronously' })
+  exportDocument(
+    @Param('id', ParseUUIDv7Pipe) id: string,
+    @Req() request: IdentityRequest,
+  ) {
+    return this.documentExports.request(id, this.actor(request));
+  }
+
   @Get('plans/:id/document')
   @Capabilities('pmoc.read')
   @Permissions('pmoc.read')

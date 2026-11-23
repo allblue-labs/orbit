@@ -34,6 +34,7 @@ import { PlatformAdministrationModule } from './modules/platform-administration/
 import { ArtifactTemplateModule } from './modules/artifact-templates/artifact-template.module';
 import { ArtifactRenderingModule } from './modules/artifact-rendering/artifact-rendering.module';
 import { JobsModule } from './modules/jobs/jobs.module';
+import { DocumentExportModule } from './modules/document-exports/document-export.module';
 import { ArtifactManifestModule } from './modules/artifact-manifests/artifact-manifest.module';
 import { StorageModule } from './modules/storage/storage.module';
 import { ArtifactExecutionModule } from './modules/artifact-executions/artifact-execution.module';
@@ -90,6 +91,7 @@ import {
     StorageModule,
     ArtifactManifestModule,
     JobsModule,
+    DocumentExportModule,
     TenantOperationsModule,
     ArtifactRenderingModule,
     RvtModule,

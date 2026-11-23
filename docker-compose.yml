@@ -131,6 +131,17 @@ services:
       JOBS_WORKER_ENABLED: ${JOBS_WORKER_ENABLED:-true}
       SUBSCRIPTION_DATA_RETENTION_ENABLED: ${SUBSCRIPTION_DATA_RETENTION_ENABLED:-true}
       JOBS_POLL_INTERVAL_MS: ${JOBS_POLL_INTERVAL_MS:-2000}
+      JOBS_PDF_CONCURRENCY: ${JOBS_PDF_CONCURRENCY:-2}
+      JOBS_PDF_PER_ORG: ${JOBS_PDF_PER_ORG:-2}
+      JOBS_COMMS_CONCURRENCY: ${JOBS_COMMS_CONCURRENCY:-8}
+      JOBS_COMMS_PER_ORG: ${JOBS_COMMS_PER_ORG:-4}
+      JOBS_CORE_CONCURRENCY: ${JOBS_CORE_CONCURRENCY:-2}
+      JOBS_CORE_PER_ORG: ${JOBS_CORE_PER_ORG:-1}
+      JOBS_FISCAL_CONCURRENCY: ${JOBS_FISCAL_CONCURRENCY:-1}
+      JOBS_AI_CONCURRENCY: ${JOBS_AI_CONCURRENCY:-2}
+      JOBS_AI_RATE_ORG: ${JOBS_AI_RATE_ORG:-10}
+      JOBS_AI_RATE_GLOBAL: ${JOBS_AI_RATE_GLOBAL:-60}
+      DOCUMENT_EXPORTS_PENDING_PER_ORG: ${DOCUMENT_EXPORTS_PENDING_PER_ORG:-20}
       OUTBOUND_AI_ORIGINS: ${OUTBOUND_AI_ORIGINS-https://api.openai.com}
       OUTBOUND_WEB_PUSH_ORIGINS: ${OUTBOUND_WEB_PUSH_ORIGINS-https://fcm.googleapis.com,https://updates.push.services.mozilla.com,https://web.push.apple.com}
       OUTBOUND_AI_PRIVATE_ROUTES: ${OUTBOUND_AI_PRIVATE_ROUTES:-[]}
@@ -195,7 +206,8 @@ services:
     ports: []
     mem_limit: 2g
     cpus: 1
-    stop_grace_period: 90s
+    # Um PDF pode levar até 120 s (grupo `pdf`); o encerramento espera terminar.
+    stop_grace_period: 150s
     depends_on:
       api:
         condition: service_healthy

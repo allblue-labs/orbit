@@ -10,6 +10,8 @@ import {
   Req,
   Res,
   StreamableFile,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { Permissions, Public } from '../../decorators';
@@ -21,6 +23,7 @@ import {
   RequiresActivePlan,
 } from '../subscription-plans/plan-access';
 import { QuoteAcceptanceService } from './quote-acceptance.service';
+import { QuoteDocumentExports } from './quote-document-exports';
 import { QuoteAcceptanceResponseDto } from './quote-acceptance.dto';
 
 @Controller('quotes')
@@ -55,7 +58,10 @@ export class QuoteAcceptanceController {
 
 @Controller('public/quotes/proposals')
 export class QuotePublicAcceptanceController {
-  constructor(private readonly acceptance: QuoteAcceptanceService) {}
+  constructor(
+    private readonly acceptance: QuoteAcceptanceService,
+    private readonly documentExports: QuoteDocumentExports,
+  ) {}
   @Get(':token')
   @Public()
   @Header('Cache-Control', 'no-store')
@@ -75,6 +81,31 @@ export class QuotePublicAcceptanceController {
   ) {
     return this.acceptance.respond(token, input, { ip, userAgent });
   }
+  /**
+   * Exportação assíncrona do documento do link (202). O token abre o
+   * contexto do tenant, como na rota síncrona; a consulta abaixo só enxerga
+   * exportações deste mesmo link.
+   */
+  @Post(':token/document/exports')
+  @Public()
+  @HttpCode(HttpStatus.ACCEPTED)
+  @Header('Cache-Control', 'no-store')
+  @Header('Referrer-Policy', 'no-referrer')
+  exportDocument(@Param('token') token: string) {
+    return this.documentExports.requestAccepted(token);
+  }
+
+  @Get(':token/document/exports/:exportId')
+  @Public()
+  @Header('Cache-Control', 'no-store')
+  @Header('Referrer-Policy', 'no-referrer')
+  exportStatus(
+    @Param('token') token: string,
+    @Param('exportId', ParseUUIDv7Pipe) exportId: string,
+  ) {
+    return this.documentExports.acceptedStatus(token, exportId);
+  }
+
   @Get(':token/document')
   @Public()
   async document(

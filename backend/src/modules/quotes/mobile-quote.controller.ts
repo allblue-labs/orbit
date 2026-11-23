@@ -8,6 +8,8 @@ import {
   Req,
   Res,
   StreamableFile,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { CreateAssetDto } from '../organizations/business-units/equipaments/asset.dto';
@@ -21,13 +23,17 @@ import {
 } from '../subscription-plans/plan-access';
 import { CreateMobileQuoteDto, MobileQuoteQueryDto } from './mobile-quote.dto';
 import { MobileQuoteService } from './mobile-quote.service';
+import { QuoteDocumentExports } from './quote-document-exports';
 
 @Controller('mobile/field/quotes')
 @Surfaces('MOBILE')
 @RequiresActivePlan()
 @Capabilities('quotes.manage')
 export class MobileQuoteController {
-  constructor(private readonly service: MobileQuoteService) {}
+  constructor(
+    private readonly service: MobileQuoteService,
+    private readonly documentExports: QuoteDocumentExports,
+  ) {}
 
   @Get('customers/:customerId/options')
   options(
@@ -74,6 +80,17 @@ export class MobileQuoteController {
     @Param('id', ParseUUIDv7Pipe) id: string,
   ) {
     return this.service.link(this.actor(request), id);
+  }
+
+  /** Exportação assíncrona (202); a rota síncrona abaixo continua valendo. */
+  @Post(':id/document/exports')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @Capabilities('quotes.read')
+  exportDocument(
+    @Req() request: IdentityRequest,
+    @Param('id', ParseUUIDv7Pipe) id: string,
+  ) {
+    return this.documentExports.requestFromMobile(this.actor(request), id);
   }
 
   @Get(':id/document')

@@ -33,6 +33,8 @@ export const STORAGE_NAMESPACES = {
   evidence: 'field-evidence',
   avatar: 'avatars',
   logo: 'logos',
+  /** Exportações assíncronas de documento; vencem em 24 h. */
+  documentExport: 'document-exports',
 } as const;
 export type StorageNamespace =
   (typeof STORAGE_NAMESPACES)[keyof typeof STORAGE_NAMESPACES];

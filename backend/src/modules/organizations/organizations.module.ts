@@ -1,3 +1,4 @@
+import { EquipmentQrDocumentExports } from './business-units/equipaments/equipment-qr-document-exports';
 import { Module } from '@nestjs/common';
 import { SubscriptionPlansModule } from '../subscription-plans/subscription-plans.module';
 import { IdentityModule } from '../identity/identity.module';
@@ -48,6 +49,7 @@ import { MobileManagementController } from './team/mobile-management.controller'
     EquipmentQrRepository,
     EquipmentQrRenderer,
     EquipmentQrService,
+    EquipmentQrDocumentExports,
     CustomerRepository,
     CustomerService,
     CustomerReadModelMapper,

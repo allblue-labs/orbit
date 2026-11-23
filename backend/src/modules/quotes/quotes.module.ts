@@ -8,6 +8,7 @@
  * O processador do evento mora aqui pelo mesmo motivo: quem reage conhece quem
  * publica.
  */
+import { QuoteDocumentExports } from './quote-document-exports';
 import { OrganizationsModule } from '../organizations/organizations.module';
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../../database/prisma.module';
@@ -60,6 +61,7 @@ import { MobileQuoteService } from './mobile-quote.service';
     QuoteEmissionService,
     QuoteAcceptanceService,
     QuoteAcceptedDocumentService,
+    QuoteDocumentExports,
   ],
   exports: [QuoteService],
 })

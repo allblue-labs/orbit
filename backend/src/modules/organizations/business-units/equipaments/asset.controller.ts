@@ -1,3 +1,4 @@
+import { EquipmentQrDocumentExports } from './equipment-qr-document-exports';
 import { MobileManagement } from '../../../../common/mobile-management';
 import {
   Body,
@@ -38,6 +39,7 @@ export class AssetController {
   constructor(
     private readonly assets: AssetService,
     private readonly equipmentQr: EquipmentQrService,
+    private readonly qrExports: EquipmentQrDocumentExports,
   ) {}
 
   @Get()
@@ -131,6 +133,22 @@ export class AssetController {
     @Req() request: IdentityRequest,
   ) {
     return this.equipmentQr.revoke(id, this.actor(request));
+  }
+
+  /**
+   * Exportação assíncrona da etiqueta (202), com os mesmos parâmetros da rota
+   * síncrona no corpo. A rota síncrona abaixo continua valendo.
+   */
+  @Post(':id/qr/exports')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @Capabilities('assets.read')
+  @Permissions('assets.read')
+  exportQr(
+    @Param('id', ParseUUIDv7Pipe) id: string,
+    @Req() request: IdentityRequest,
+    @Body() input: EquipmentQrRenderQueryDto,
+  ) {
+    return this.qrExports.request(id, this.actor(request), input);
   }
 
   @Get(':id/qr/render')

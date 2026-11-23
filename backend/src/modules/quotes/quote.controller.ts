@@ -55,6 +55,7 @@ import {
 import { QuoteMapper } from './quote.mapper';
 import { QuoteEmissionService } from './quote-emission.service';
 import { QuoteService } from './quote.service';
+import { QuoteDocumentExports } from './quote-document-exports';
 
 @ApiTags('Quotes')
 @Controller('quotes')
@@ -64,6 +65,7 @@ export class QuoteController {
     private readonly quotes: QuoteService,
     private readonly mapper: QuoteMapper,
     private readonly emission: QuoteEmissionService,
+    private readonly documentExports: QuoteDocumentExports,
   ) {}
 
   @Patch(':id/mobile-access')
@@ -113,6 +115,22 @@ export class QuoteController {
    * mostraria valores que já não valem, e quem enviasse esse arquivo ao
    * cliente estaria propondo um preço que o sistema não pratica mais.
    */
+  /**
+   * Exportação assíncrona do PDF: 202 com o identificador; o arquivo vai ao
+   * armazenamento e a consulta (`GET /document-exports/:id`) devolve a URL
+   * assinada. A rota síncrona abaixo continua valendo.
+   */
+  @Post(':id/document/exports')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @Capabilities('quotes.read')
+  @Permissions('quotes.read')
+  exportDocument(
+    @Param('id', ParseUUIDv7Pipe) id: string,
+    @Req() request: IdentityRequest,
+  ) {
+    return this.documentExports.request(id, this.org(request));
+  }
+
   @Get(':id/document')
   @Capabilities('quotes.read')
   @Permissions('quotes.read')

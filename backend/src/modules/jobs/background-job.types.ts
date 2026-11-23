@@ -78,6 +78,14 @@ export const JOB_QUEUES = {
    * paralelo. O ciclo seguinte agenda os próprios avisos quando nasce.
    */
   pmocDueCheck: 'pmoc.due-check',
+  /**
+   * Exportação assíncrona de documento (orçamento, orçamento aceito, plano
+   * PMOC, etiqueta de equipamento): gera, envia ao R2 e fecha o registro de
+   * `document_exports`. Grupo `pdf`, no container `documents`.
+   */
+  documentExport: 'document.export',
+  /** Remove o arquivo e o registro de uma exportação vencida. */
+  documentExportCleanup: 'document.export.cleanup',
   mobileSyncCleanup: 'mobile.sync.cleanup',
   mobileEvidenceCleanup: 'mobile.evidence.cleanup',
   mobilePushDelivery: 'mobile.push.delivery',
@@ -197,7 +205,20 @@ export function scopeFor(
  */
 export interface JobProcessor {
   readonly queue: JobQueue;
-  process(job: BackgroundJobRecord): Promise<void>;
+  /**
+   * `signal` é abortado quando o job estoura o tempo limite do grupo (ou o
+   * worker está encerrando). Opcional: quem ignora o sinal continua correto —
+   * o lease já foi devolvido, e o `succeed` tardio é recusado.
+   */
+  process(job: BackgroundJobRecord, signal?: AbortSignal): Promise<void>;
+}
+
+/** O job estourou o tempo limite do grupo. Conta como tentativa. */
+export class JobTimeoutError extends Error {
+  constructor(readonly timeoutMs: number) {
+    super(`job excedeu ${timeoutMs} ms`);
+    this.name = 'JobTimeoutError';
+  }
 }
 
 /**

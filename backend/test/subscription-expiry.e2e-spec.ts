@@ -134,6 +134,15 @@ describe('Subscription expiry (e2e)', () => {
         currentPeriodEnd: new Date(Date.now() - dia),
       },
     });
+    /* A assinatura é quem decide o acesso: o período dela anda junto. */
+    await prisma.organizationSubscription.updateMany({
+      where: { organizationId, endedAt: null },
+      data: {
+        currentPeriodStart: new Date(Date.now() - 31 * dia),
+        currentPeriodEnd: new Date(Date.now() - dia),
+        cancelAtPeriodEnd: true,
+      },
+    });
   }
 
   async function renovar(): Promise<void> {
@@ -143,6 +152,14 @@ describe('Subscription expiry (e2e)', () => {
       data: {
         currentPeriodStart: new Date(Date.now() - dia),
         currentPeriodEnd: new Date(Date.now() + 30 * dia),
+      },
+    });
+    await prisma.organizationSubscription.updateMany({
+      where: { organizationId, endedAt: null },
+      data: {
+        currentPeriodStart: new Date(Date.now() - dia),
+        currentPeriodEnd: new Date(Date.now() + 30 * dia),
+        cancelAtPeriodEnd: false,
       },
     });
   }

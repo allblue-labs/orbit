@@ -436,6 +436,7 @@ model Organization {
   storageFiles                  StorageFile[]
   artifactManifests             ArtifactManifest[]
   backgroundJobs                BackgroundJob[]
+  documentExports               DocumentExport[]
   reports                       Report[]
   checklistTemplates            ChecklistTemplate[]
   checklistExecutions           ChecklistExecution[]
@@ -572,6 +573,7 @@ model BusinessUnit {
   storageFiles            StorageFile[]
   artifactManifests       ArtifactManifest[]
   backgroundJobs          BackgroundJob[]
+  documentExports         DocumentExport[]
   pmocEquipmentExecutions PmocEquipmentExecution[]
   pmocEquipmentSchedules  PmocEquipmentSchedule[]
 
@@ -2412,6 +2414,7 @@ model StorageFile {
   quoteAcceptanceDocuments  QuoteAcceptanceLink[]    @relation("QuoteAcceptanceDocument")
   quoteAcceptanceSignatures QuoteAcceptanceLink[]    @relation("QuoteAcceptanceSignature")
   uploadAdmissions          StorageUploadAdmission[]
+  documentExports           DocumentExport[]
 
   @@unique([provider, bucket, objectKey])
   @@unique([id, organizationId])
@@ -3267,12 +3270,48 @@ model BackgroundJob {
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  businessUnit BusinessUnit? @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  businessUnit    BusinessUnit?    @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
+  documentExports DocumentExport[]
 
   @@index([queue, status, availableAt])
   @@index([organizationId, queue, status])
   @@map("background_jobs")
+}
+
+/// Exportação assíncrona de documento (202 + arquivo no R2 + URL assinada).
+/// Os índices parciais e o RLS moram na migration `job_fairness_and_document_exports`.
+model DocumentExport {
+  id               String    @id @db.Uuid
+  organizationId   String    @map("organization_id") @db.Uuid
+  businessUnitId   String?   @map("business_unit_id") @db.Uuid
+  /// `QUOTE`, `QUOTE_ACCEPTED`, `PMOC_PLAN` ou `EQUIPMENT_QR`.
+  kind             String    @db.VarChar(30)
+  entityId         String    @map("entity_id") @db.Uuid
+  params           Json      @default("{}") @db.JsonB
+  /// `PENDING`, `PROCESSING`, `COMPLETED` ou `FAILED`.
+  status           String    @default("PENDING") @db.VarChar(20)
+  jobId            String?   @map("job_id") @db.Uuid
+  storageFileId    String?   @map("storage_file_id") @db.Uuid
+  fileName         String?   @map("file_name") @db.VarChar(200)
+  contentType      String?   @map("content_type") @db.VarChar(80)
+  errorCode        String?   @map("error_code") @db.VarChar(60)
+  requestedBy      String?   @map("requested_by") @db.Uuid
+  acceptanceLinkId String?   @map("acceptance_link_id") @db.Uuid
+  correlationId    String    @map("correlation_id") @db.VarChar(64)
+  expiresAt        DateTime  @map("expires_at") @db.Timestamptz(3)
+  completedAt      DateTime? @map("completed_at") @db.Timestamptz(3)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  businessUnit BusinessUnit?  @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
+  job          BackgroundJob? @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  storageFile  StorageFile?   @relation(fields: [storageFileId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, status, createdAt], map: "document_exports_org_status_idx")
+  @@index([expiresAt], map: "document_exports_expiry_idx")
+  @@map("document_exports")
 }
 
 // -----------------------------------------------------------------------------

@@ -46,16 +46,29 @@ import type {
   EnqueueJobInput,
   JobQueue,
 } from './background-job.types';
+import {
+  backoffDelay,
+  groupOf,
+  type BackoffPolicy,
+  type QueueGroupConfig,
+} from './queue-groups';
 
 /** Backoff exponencial com teto — 5s, 10s, 20s, 40s… até 5 minutos. */
 export const BACKOFF_BASE_MS = 5_000;
 export const BACKOFF_CEILING_MS = 300_000;
 
-export function backoffFor(attempts: number): number {
-  return Math.min(
-    BACKOFF_BASE_MS * 2 ** Math.max(0, attempts - 1),
-    BACKOFF_CEILING_MS,
-  );
+/**
+ * O backoff padrão, também usado pelos outboxes de e-mail. As filas usam a
+ * política do próprio grupo (`queue-groups.ts`).
+ */
+export function backoffFor(
+  attempts: number,
+  policy: BackoffPolicy = {
+    baseMs: BACKOFF_BASE_MS,
+    ceilingMs: BACKOFF_CEILING_MS,
+  },
+): number {
+  return backoffDelay(attempts, policy);
 }
 
 interface JobRow {
@@ -188,7 +201,7 @@ export class BackgroundJobQueue {
         ${JSON.stringify(input.payload)}::jsonb,
         ${input.correlationId},
         ${input.actorUserId ?? null}::uuid,
-        ${input.maxAttempts ?? 3},
+        ${input.maxAttempts ?? groupOf(input.queue).maxAttempts},
         COALESCE(${input.availableAt ?? null}::timestamptz, now()),
         now()
       )
@@ -199,12 +212,20 @@ export class BackgroundJobQueue {
     const row = inserted[0];
     if (row) return this.fromRow(row);
 
+    /*
+     * Idempotência permanente (grupo fiscal): a chave colide também com um job
+     * já concluído, e é ele que volta — a nota emitida não é pedida de novo.
+     */
+    const permanent = groupOf(input.queue).idempotency === 'permanent';
     const existing = await client.backgroundJob.findFirst({
       where: {
         queue: input.queue,
         jobKey: input.jobKey,
-        status: { in: ['PENDING', 'RUNNING'] },
+        ...(permanent
+          ? { organizationId: input.organizationId, status: { not: 'DEAD' } }
+          : { status: { in: ['PENDING', 'RUNNING'] } }),
       },
+      orderBy: { createdAt: 'desc' },
     });
     if (!existing) {
       throw new Error(
@@ -214,29 +235,88 @@ export class BackgroundJobQueue {
     return this.toRecord(existing);
   }
 
-  /** Reivindica um job elegível, ou `null` quando não há trabalho. */
+  /**
+   * Reivindica o próximo job de um grupo, com justiça entre organizações.
+   *
+   * ## A ordem
+   *
+   * Entre os pendentes elegíveis das filas do grupo, vence o da organização
+   * com **menos jobs rodando** no grupo; empatadas, a ordem de chegada. Uma
+   * organização com trezentos relatórios na fila disputa a próxima vaga com a
+   * vizinha que pediu um — e perde enquanto já tiver um rodando.
+   *
+   * ## O teto
+   *
+   * Uma organização com `perOrganizationLimit` jobs rodando no grupo não
+   * reivindica mais nenhum, somando todas as réplicas. Os jobs dela esperam
+   * na fila; os das outras passam.
+   *
+   * ## Por que a trava consultiva
+   *
+   * Sem ela, duas réplicas leem "1 rodando" no mesmo instante e as duas
+   * reivindicam — o teto de 2 vira 3. `pg_advisory_xact_lock` por grupo
+   * serializa só o instante do claim (milissegundos), não a execução, e sai
+   * com o commit.
+   *
+   * ## Limite de taxa (grupo `ai`)
+   *
+   * Conta os jobs que **começaram** na janela, por organização e no total.
+   * Nos grupos com limite de taxa, `started_at` é renovado a cada tentativa:
+   * repetir uma chamada ao provedor também gasta a cota.
+   */
   async claim(
-    queue: JobQueue,
+    group: QueueGroupConfig,
+    queues: readonly JobQueue[],
     worker: string,
   ): Promise<BackgroundJobRecord | null> {
+    if (!queues.length) return null;
+    const rate = group.rateLimit;
     const row = await this.asWorker(async (tx) => {
+      /* `$executeRaw`: a função devolve `void`, que `$queryRaw` não lê. */
+      await tx.$executeRaw`
+        SELECT pg_advisory_xact_lock(hashtextextended(${'orbit:jobs:claim:' + group.name}, 0))
+      `;
+      const rateFilter = rate
+        ? Prisma.sql`
+            AND COALESCE(s.n, 0) < ${rate.perOrganization.max}
+            AND (SELECT COALESCE(sum(n), 0) FROM started) < ${rate.global.max}`
+        : Prisma.empty;
       const rows = await tx.$queryRaw<JobRow[]>`
+        WITH running AS (
+          SELECT organization_id, count(*)::int AS n
+            FROM background_jobs
+           WHERE queue IN (${Prisma.join(queues)}) AND status = 'RUNNING'
+           GROUP BY organization_id
+        ), started AS (
+          SELECT organization_id, count(*)::int AS n
+            FROM background_jobs
+           WHERE queue IN (${Prisma.join(queues)})
+             AND started_at > now() - ${rate?.perOrganization.windowMs ?? 0} * interval '1 millisecond'
+             AND ${rate ? Prisma.sql`true` : Prisma.sql`false`}
+           GROUP BY organization_id
+        ), candidate AS (
+          SELECT j.id
+            FROM background_jobs j
+            LEFT JOIN running r ON r.organization_id = j.organization_id
+            LEFT JOIN started s ON s.organization_id = j.organization_id
+           WHERE j.queue IN (${Prisma.join(queues)})
+             AND j.status = 'PENDING'
+             AND j.available_at <= now()
+             AND COALESCE(r.n, 0) < ${group.perOrganizationLimit}
+             ${rateFilter}
+           ORDER BY COALESCE(r.n, 0) ASC, j.available_at ASC, j.created_at ASC
+           FOR UPDATE OF j SKIP LOCKED
+           LIMIT 1
+        )
         UPDATE background_jobs
            SET status = 'RUNNING',
                attempts = attempts + 1,
                locked_at = now(),
                locked_by = ${worker},
-               started_at = COALESCE(started_at, now()),
+               started_at = CASE WHEN ${rate ? Prisma.sql`true` : Prisma.sql`false`}
+                                 THEN now() ELSE COALESCE(started_at, now()) END,
                updated_at = now()
-         WHERE id = (
-           SELECT id FROM background_jobs
-            WHERE queue = ${queue}
-              AND status = 'PENDING'
-              AND available_at <= now()
-            ORDER BY available_at ASC, created_at ASC
-            FOR UPDATE SKIP LOCKED
-            LIMIT 1
-         )
+         WHERE id = (SELECT id FROM candidate)
          RETURNING ${JOB_COLUMNS}
       `;
       return rows[0] ?? null;
@@ -321,7 +401,7 @@ export class BackgroundJobQueue {
     permanent = false,
   ): Promise<'RETRY' | 'DEAD' | 'LEASE_LOST'> {
     const exhausted = permanent || job.attempts >= job.maxAttempts;
-    const delay = backoffFor(job.attempts);
+    const delay = backoffFor(job.attempts, groupOf(job.queue).backoff);
     const safeFailureCode = /^[A-Z0-9_.:-]{1,160}$/.test(failureCode)
       ? failureCode
       : 'UNCLASSIFIED_FAILURE';

@@ -4,6 +4,14 @@ import type { App } from 'supertest/types';
 import type { ICryptoProvider } from '../../src/contracts';
 import { CRYPTO_PROVIDER } from '../../src/providers';
 import { adminPrisma } from './admin-prisma';
+import { paidSubscriptionFixture } from './paid-subscription-fixture';
+
+/**
+ * O cadastro passou a exigir um plano. Suíte que não escolhe plano recebe o
+ * completo, já pago — o que ela testa é a funcionalidade, não a assinatura.
+ * Quem informa `planKey` controla o próprio cenário de cobrança.
+ */
+const DEFAULT_PLAN_KEY = 'ENTERPRISE_UNLIMITED';
 
 /** Business fixtures explicitly complete the same confirmation flow as a real owner.
  * Privileged token inspection is restricted to the runner's disposable database.
@@ -15,9 +23,10 @@ export async function registerVerifiedOwner<
   if (!process.env.ORBIT_E2E_DATABASE?.startsWith('orbit_e2e_'))
     throw new Error('Disposable database required');
   const http = () => request(app.getHttpServer());
+  const choosesPlan = 'planKey' in input;
   const registration = await http()
     .post('/api/v1/identity/register')
-    .send(input)
+    .send(choosesPlan ? input : { ...input, planKey: DEFAULT_PLAN_KEY })
     .expect(201);
   const pending = (registration.body as { data: Record<string, unknown> }).data;
   if (
@@ -44,6 +53,7 @@ export async function registerVerifiedOwner<
     .post('/api/v1/identity/email/verify')
     .send({ token })
     .expect(204);
+  if (!choosesPlan) await paidSubscriptionFixture(app, admin, user.email);
   return http()
     .post('/api/v1/identity/login')
     .send({

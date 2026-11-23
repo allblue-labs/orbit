@@ -25,6 +25,8 @@ QUEUES = {
     "mobile.evidence.cleanup",
     "mobile.push.delivery",
     "mobile.notification.materialize",
+    "document.export",
+    "document.export.cleanup",
 }
 FAST_QUEUES = {"mobile.push.delivery", "mobile.notification.materialize"}
 PROVIDERS = {"R2", "S3", "MINIO"}

@@ -110,7 +110,7 @@ describe('Leitura de equipamentos por QR no aplicativo de campo', () => {
       {} as never,
       brandImageStub(),
     );
-    const controller = new AssetController({} as never, service);
+    const controller = new AssetController({} as never, service, {} as never);
     return { request, context, repository, controller };
   }
 
