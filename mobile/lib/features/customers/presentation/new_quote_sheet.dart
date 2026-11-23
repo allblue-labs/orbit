@@ -58,6 +58,9 @@ class _QuoteWizardState extends ConsumerState<_QuoteWizard> {
   String? _token;
   String? _error;
   bool _busy = false;
+
+  /// O PDF está sendo gerado no servidor (exportação assíncrona).
+  bool _generating = false;
   bool _reviewed = false;
   bool _signing = false;
   bool _consent = false;
@@ -247,6 +250,7 @@ class _QuoteWizardState extends ConsumerState<_QuoteWizard> {
         : box.localToGlobal(Offset.zero) & box.size;
     setState(() {
       _busy = true;
+      _generating = true;
       _error = null;
     });
     try {
@@ -267,7 +271,12 @@ class _QuoteWizardState extends ConsumerState<_QuoteWizard> {
     } on Object catch (error) {
       _showError(error);
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _generating = false;
+        });
+      }
     }
   }
 
@@ -509,9 +518,16 @@ class _QuoteWizardState extends ConsumerState<_QuoteWizard> {
       const SizedBox(height: OrbitSpacing.md),
       FilledButton.icon(
         onPressed: _busy ? null : _share,
-        icon: const Icon(Icons.ios_share),
+        icon: _generating
+            ? const SizedBox.square(
+                dimension: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.ios_share),
         label: Text(
-          _approved
+          _generating
+              ? 'Gerando documento…'
+              : _approved
               ? 'Compartilhar PDF assinado'
               : 'Compartilhar PDF com o cliente',
         ),

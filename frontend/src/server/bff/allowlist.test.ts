@@ -57,6 +57,11 @@ describe("inspectPath", () => {
     [`/public/quotes/proposals/${quoteToken}/document`, "GET"],
     [`/public/quotes/proposals/${quoteToken}/response`, "POST"],
     [`/public/pmoc/contracts/${quoteToken}/document`, "GET"],
+    [`/public/quotes/proposals/${quoteToken}/document/exports`, "POST"],
+    [
+      `/public/quotes/proposals/${quoteToken}/document/exports/01a20400-cd6f-772e-b3be-1d02b20ee35e`,
+      "GET",
+    ],
   ] as const)("libera somente o comando público %s %s", (path, method) => {
     expect(inspectPath(path, method)).toEqual({
       allowed: true,
@@ -72,6 +77,8 @@ describe("inspectPath", () => {
     ["/identity/email/other", "POST"],
     [`/public/quotes/proposals/${quoteToken}/response`, "GET"],
     [`/public/quotes/proposals/${quoteToken}/document`, "POST"],
+    [`/public/quotes/proposals/${quoteToken}/document/exports`, "GET"],
+    [`/public/quotes/proposals/${quoteToken}/document/exports/x`, "GET"],
     [`/public/quotes/proposals/${quoteToken}/other`, "GET"],
     [`/public/quotes/proposals/${quoteToken.slice(1)}`, "GET"],
     [`/public/quotes/proposals`, "GET"],
@@ -201,5 +208,13 @@ describe("inspectPath", () => {
       allowed: true,
       requiresSession: true,
     });
+  });
+});
+
+describe("exportações de documento", () => {
+  it("a consulta autenticada passa pelo proxy e exige sessão", () => {
+    expect(
+      inspectPath("/document-exports/01a20400-cd6f-772e-b3be-1d02b20ee35e", "GET"),
+    ).toEqual({ allowed: true, requiresSession: true });
   });
 });

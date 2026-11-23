@@ -26,6 +26,8 @@ export const ALLOWED_API_ROOTS: readonly string[] = [
   "customer-service-requests",
   "customers",
   "dashboard",
+  /** Situação das exportações assíncronas de documento (202 + URL assinada). */
+  "document-exports",
   "financial",
   "identity",
   "integrations",
@@ -144,6 +146,15 @@ const PUBLIC_ENDPOINT_PATTERNS: readonly {
   {
     method: "POST",
     path: /^\/public\/quotes\/proposals\/[A-Za-z0-9_-]{64}\/response$/,
+  },
+  /* Exportação assíncrona do documento do link: pedir e acompanhar. */
+  {
+    method: "POST",
+    path: /^\/public\/quotes\/proposals\/[A-Za-z0-9_-]{64}\/document\/exports$/,
+  },
+  {
+    method: "GET",
+    path: /^\/public\/quotes\/proposals\/[A-Za-z0-9_-]{64}\/document\/exports\/[0-9a-f-]{36}$/,
   },
 ];
 

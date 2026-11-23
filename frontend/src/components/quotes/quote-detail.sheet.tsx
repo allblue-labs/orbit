@@ -194,7 +194,7 @@ function Body({ summary }: { summary: QuoteSummary }) {
               ) : (
                 <FileDown className="size-4" />
               )}
-              Baixar PDF
+              {download.isPending ? "Gerando documento…" : "Baixar PDF"}
             </Button>
           )}
         </div>

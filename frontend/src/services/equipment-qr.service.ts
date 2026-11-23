@@ -16,6 +16,7 @@
  * ofereceria uma escolha que não existe.
  */
 import { apiClient } from "@/api/client";
+import { exportAndSave } from "@/services/document-export.service";
 import { queryKeys, type QueryKey } from "@/api/query-keys";
 import type { QueryParams, RequestOptions } from "@/types/api";
 import type {
@@ -43,6 +44,18 @@ function fileNameFrom(header: string | null, fallback: string): string {
 }
 
 export const equipmentQrService = {
+  /**
+   * Baixa a etiqueta pela exportação assíncrona: gerada no servidor de
+   * documentos e baixada direto do armazenamento. A prévia na tela continua
+   * em `label` (rota síncrona, SVG leve).
+   */
+  downloadLabel: (equipmentId: string, query: EquipmentQrRenderQuery) =>
+    exportAndSave({
+      requestPath: `${equipment(equipmentId)}/qr/exports`,
+      body: { ...query },
+      fallbackName: `etiqueta-qr.${query.format ?? "svg"}`,
+    }),
+
   summary: (
     equipmentId: string,
     options?: RequestOptions,

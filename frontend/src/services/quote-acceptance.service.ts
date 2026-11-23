@@ -1,5 +1,5 @@
 import { apiClient } from "@/api/client";
-import { downloadAndSave } from "@/api/transfer";
+import { exportAndSave } from "@/services/document-export.service";
 import type {
   QuoteAcceptanceReadModel,
   QuoteAcceptanceLinkReadModel,
@@ -34,6 +34,13 @@ export const quoteAcceptanceService = {
     apiClient.post<QuoteAcceptanceReadModel>(`${base(token)}/response`, input, {
       retries: 0,
     }),
+  /** Exportação assíncrona pelo próprio link: pedir e acompanhar só com o token. */
   document: (token: string) =>
-    downloadAndSave(`${base(token)}/document`, { retries: 0 }),
+    exportAndSave({
+      requestPath: `${base(token)}/document/exports`,
+      statusPath: (exportId) =>
+        `${base(token)}/document/exports/${encodeURIComponent(exportId)}`,
+      fallbackName: "orcamento.pdf",
+      options: { retries: 0 },
+    }),
 };
