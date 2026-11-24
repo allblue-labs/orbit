@@ -58,6 +58,7 @@ export class RegistrationRepository {
       if (!plan || (options.publicSignup && !plan.commercial)) return null;
 
       if (options.publicSignup) {
+        await this.setLocal(transaction, 'app.organization_id', organizationId);
         const document = normalizeBrazilianDocument(input.documentNumber);
         const [reservation] = await transaction.$queryRaw<
           { reserved: boolean }[]

@@ -111,7 +111,7 @@ export class JwtAuthenticationGuard implements CanActivate {
         fence,
       );
       if (!surfaces.includes(normalizeSurface(client))) {
-        await this.repository.revokeSession(claims.sid);
+        await this.repository.revokeSession(claims.sid, claims.sub);
         throw new UnauthorizedException('Client surface access was revoked');
       }
       if (identity.organizationId) {
@@ -202,7 +202,7 @@ export class JwtAuthenticationGuard implements CanActivate {
   }
 
   private async sessionClient(sessionId: UUID, userId: UUID): Promise<string> {
-    const session = await this.repository.findSessionById(sessionId);
+    const session = await this.repository.findSessionById(sessionId, userId);
     if (
       !session ||
       session.userId !== userId ||
@@ -234,11 +234,11 @@ export class JwtAuthenticationGuard implements CanActivate {
 
     const user = await this.repository.findById(sub);
     if (!user || user.deletedAt || user.status !== 'ACTIVE') {
-      await this.repository.revokeSession(sid);
+      await this.repository.revokeSession(sid, sub);
       throw new UnauthorizedException();
     }
     if (user.requiresEmailVerification) {
-      await this.repository.revokeSession(sid);
+      await this.repository.revokeSession(sid, sub);
       throw new UnauthorizedException(
         'Confirme seu e-mail antes de entrar.',
         'EMAIL_VERIFICATION_REQUIRED',

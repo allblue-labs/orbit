@@ -29,13 +29,15 @@ def isolated_config():
             "POSTGRES_DB": "fixture_db",
             "POSTGRES_PASSWORD": "isolated-admin-password",
             "APP_DATABASE_PASSWORD": "isolated-runtime-password",
+            "WORKER_DATABASE_PASSWORD": "isolated-worker-password",
+            "DOCUMENTS_DATABASE_PASSWORD": "isolated-documents-password",
             "ORBIT_VERSION": "fixture",
             "API_HOST": "127.0.0.1",
             "FRONTEND_ORIGIN": "https://app.example.test",
             "AUTH_COOKIE_SECURE": "true",
         }
     )
-    for key in ["ORBIT_API_IMAGE", "ORBIT_MIGRATOR_IMAGE", "ORBIT_FRONTEND_IMAGE"]:
+    for key in ["ORBIT_API_IMAGE", "ORBIT_MIGRATOR_IMAGE", "ORBIT_FRONTEND_IMAGE", "ORBIT_PGBOUNCER_IMAGE"]:
         env[key] = "example.invalid/fixture@sha256:" + "a" * 64
     with tempfile.TemporaryDirectory(prefix="orbit-compose-fixture-") as directory:
         fixture = Path(directory) / ".env"

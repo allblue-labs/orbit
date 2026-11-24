@@ -25,13 +25,13 @@ for key, value in [('FRONTEND_ORIGIN',origin),('IDENTITY_PUBLIC_WEB_URL',origin)
 if web.get('FRONTEND_ORIGIN') != origin: sys.exit('Use uma única origem HTTPS no frontend.')
 if str(web.get('AUTH_COOKIE_SECURE')).lower() != 'true' or str(web.get('ALLOW_INSECURE_LOCAL_COOKIES')).lower() != 'false':
     sys.exit('Staging exige cookies Secure e proíbe a exceção de HTTP local.')
-if not env.get('APP_DATABASE_URL') or any(env.get(k) for k in ['DATABASE_URL','POSTGRES_PASSWORD','PLATFORM_ADMIN_PASSWORD','OWNER_PASSWORD']):
+if not env.get('DATABASE_URL') or any(env.get(k) for k in ['DIRECT_DATABASE_URL','APP_DATABASE_URL','POSTGRES_PASSWORD','PLATFORM_ADMIN_PASSWORD','OWNER_PASSWORD']):
     sys.exit('O runtime não pode receber credenciais administrativas.')
 release=json.loads(Path('release.json').read_text())
 commit=release.get('commit', '')
 if not re.fullmatch(r'[a-f0-9]{40}', commit) or release.get('tag') != 'staging-'+commit[:12]:
     sys.exit('Revisão de staging inválida em release.json.')
-for service in ('api', 'worker', 'documents', 'migrate', 'frontend'):
+for service in ('api', 'worker', 'documents', 'migrate', 'frontend', 'pgbouncer'):
     image=x['services'][service]['image']
     if image != release.get('images', {}).get(service, {}).get('digest'):
         sys.exit('A imagem do lock difere de release.json: '+service)
@@ -88,7 +88,7 @@ try:
     preview = json.loads(subprocess.check_output(
         ['docker', 'compose', '--env-file', filename, 'config', '--format', 'json']
     ))
-    for service in ('api', 'worker', 'documents', 'migrate', 'frontend'):
+    for service in ('api', 'worker', 'documents', 'migrate', 'frontend', 'pgbouncer'):
         if preview['services'].get(service, {}).get('image') != release['images'][service]['digest']:
             raise SystemExit('O Compose padrão não carrega o lock para '+service)
     os.replace(filename, target)
@@ -103,7 +103,7 @@ fi
 "${compose[@]}" up -d --wait --wait-timeout 180 api frontend worker documents
 "${compose[@]}" ps
 expected_revision=$(python3 -c 'import json; print(json.load(open("release.json"))["commit"])')
-for service in api worker documents migrate frontend; do
+for service in api worker documents migrate frontend pgbouncer; do
     container=$("${compose[@]}" ps --all --quiet "$service")
     revision=$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$container")
     [[ "$revision" == "$expected_revision" ]] || { echo "Revisão em execução incorreta: $service" >&2; exit 1; }

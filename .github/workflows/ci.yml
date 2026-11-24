@@ -123,4 +123,13 @@ jobs:
       - run: docker build --target migrator --tag orbit-pr14-migrator:local backend
       - run: docker build --target runner --tag orbit-pr14-api:local backend
       - run: docker build --target runner --tag orbit-pr14-frontend:local frontend
+      - run: docker build --target runner --tag orbit-pr14-pgbouncer:local deploy/pgbouncer
       - run: python3 scripts/verify-deployment-images.py
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "22.23.5"
+      - run: npm ci
+        working-directory: backend
+      - run: node scripts/verify-pgbouncer.mjs
+        env:
+          ORBIT_TEST_PGBOUNCER_IMAGE: orbit-pr14-pgbouncer:local

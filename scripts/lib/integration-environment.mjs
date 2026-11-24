@@ -104,6 +104,10 @@ export async function withIntegrationEnvironment(work, isolation = {}) {
     AUTH_RATE_LIMIT_MAX: "100000",
     AUTH_RATE_LIMIT_ORIGIN_MAX: "100000",
     AUTH_RATE_LIMIT_WINDOW_MS: "60000",
+    // Business stress suites reuse one synthetic actor for hundreds of calls.
+    // Rate-limit suites set their own smaller budgets.
+    REDIS_HOTPATH_USER_RATE_MAX: "100000",
+    REDIS_HOTPATH_TENANT_RATE_MAX: "100000",
     TRIAL_FINGERPRINT_SECRET: randomBytes(32).toString("hex"),
     STORAGE_PROVIDER: "LOCAL",
     STORAGE_LOCAL_DIR: join(directory, "objects"),
@@ -164,6 +168,14 @@ export async function withIntegrationEnvironment(work, isolation = {}) {
       .split(":")
       .at(-1);
     env.DATABASE_URL = `postgresql://${env.POSTGRES_USER}:${env.POSTGRES_PASSWORD}@127.0.0.1:${port}/${database}?schema=public`;
+    env.DIRECT_DATABASE_URL = env.DATABASE_URL;
+    env.DATABASE_ALLOW_COMBINED_ROLE = isolation.separateWorkers
+      ? "false"
+      : "true";
+    if (isolation.separateWorkers) {
+      env.WORKER_DATABASE_PASSWORD = randomBytes(32).toString("hex");
+      env.DOCUMENTS_DATABASE_PASSWORD = randomBytes(32).toString("hex");
+    }
     env.APP_DATABASE_URL = `postgresql://${env.APP_DATABASE_USER}:${env.APP_DATABASE_PASSWORD}@127.0.0.1:${port}/${database}?schema=public`;
     for (let attempt = 0; ; attempt++) {
       try {

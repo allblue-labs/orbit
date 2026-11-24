@@ -77,19 +77,24 @@ export class MfaService {
     const recoveryHashes = await Promise.all(
       recoveryCodes.map((recoveryCode) => this.hashes.hash(recoveryCode)),
     );
-    await this.repository.enableMfaFactor(factor.id, recoveryHashes);
+    await this.repository.enableMfaFactor(factor.id, recoveryHashes, userId);
     return { recoveryCodes };
   }
 
   async verifyFactor(
-    factor: { id: string; secret: string; recoveryCodes: string[] },
+    factor: {
+      id: string;
+      userId: string;
+      secret: string;
+      recoveryCodes: string[];
+    },
     code: string | undefined,
   ): Promise<void> {
     if (!code) {
       throw new UnauthorizedException('MFA code is required', 'MFA_REQUIRED');
     }
     if (verifyTotp(this.crypto.decrypt(factor.secret), code)) {
-      if (!(await this.repository.touchMfaFactor(factor.id)))
+      if (!(await this.repository.touchMfaFactor(factor.id, factor.userId)))
         throw new UnauthorizedException('Invalid MFA code', 'MFA_INVALID');
       return;
     }
@@ -103,6 +108,7 @@ export class MfaService {
     const consumed = await this.repository.consumeMfaRecoveryCode(
       factor.id,
       factor.recoveryCodes[matchedIndex]!,
+      factor.userId,
     );
     if (!consumed)
       throw new UnauthorizedException('Invalid MFA code', 'MFA_INVALID');

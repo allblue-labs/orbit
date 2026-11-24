@@ -1,3 +1,4 @@
+import { directDatabaseUrl } from './direct-database-url';
 import { Client } from 'pg';
 import {
   scopeRules,
@@ -6,10 +7,8 @@ import {
 
 /** Read-only, all-tenant preflight. Does not load developer dotenv automatically. */
 async function main() {
-  if (!process.env.DATABASE_URL)
-    throw new Error('DATABASE_URL administrative connection required');
   const client = new Client({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: directDatabaseUrl(),
     application_name: 'orbit-relational-preflight',
   });
   await client.connect();

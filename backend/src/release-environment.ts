@@ -17,30 +17,39 @@ export function validateReleaseEnvironment(
   // Only explicit administrative jobs may receive these credentials. Reject
   // even an unused duplicate: an HTTP/worker compromise must not expose it.
   for (const key of [
-    'DATABASE_URL',
+    'DIRECT_DATABASE_URL',
+    'APP_DATABASE_URL',
     'POSTGRES_PASSWORD',
     'PLATFORM_ADMIN_PASSWORD',
     'OWNER_PASSWORD',
   ]) {
     if (environment[key]?.trim()) {
       throw new InfrastructureException(
-        `${key} is reserved for explicit migration/bootstrap jobs; use APP_DATABASE_URL for runtime`,
+        `${key} is reserved outside runtime; use the pooled DATABASE_URL`,
       );
     }
   }
   try {
-    const url = new URL(environment.APP_DATABASE_URL ?? '');
+    const url = new URL(environment.DATABASE_URL ?? '');
+    const expectedUser = {
+      api: 'orbit_app',
+      worker: 'orbit_worker',
+      documents: 'orbit_documents',
+    }[environment.ORBIT_PROCESS_ROLE ?? 'api'];
     if (
       !['postgres:', 'postgresql:'].includes(url.protocol) ||
-      !url.hostname ||
-      !url.username ||
+      url.hostname !== 'pgbouncer' ||
+      url.port !== '6432' ||
+      url.searchParams.get('pgbouncer') !== 'true' ||
+      !expectedUser ||
+      url.username !== expectedUser ||
       !url.password ||
       url.pathname.length < 2
     )
       throw new Error('invalid runtime database URL');
   } catch {
     throw new InfrastructureException(
-      'APP_DATABASE_URL must be an explicit PostgreSQL runtime connection URL',
+      'DATABASE_URL must point to PgBouncer with the expected runtime role',
     );
   }
   if (environment.DATABASE_ENFORCE_RESTRICTED_ROLE?.trim() === 'false') {

@@ -1,3 +1,4 @@
+import { directDatabaseUrl } from './direct-database-url';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
@@ -26,7 +27,7 @@ if (password.length < 12) {
 }
 
 const prisma = new PrismaClient({
-  adapter: new PrismaPg(required('DATABASE_URL')),
+  adapter: new PrismaPg(directDatabaseUrl()),
 });
 
 async function seed() {

@@ -33,20 +33,28 @@ export class SubscriptionPlanRepository {
     });
   }
 
-  findByKey(key: string) {
-    return this.prisma.plan.findFirst({ where: { key } });
+  findByKey(key: string, organizationId: string, access?: PlanTenantAccess) {
+    if (!access)
+      return this.rls.run((tx) => tx.plan.findFirst({ where: { key } }));
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT set_config('app.user_id', ${access.userId}, true),
+        set_config('app.organization_id', ${organizationId}, true)`;
+      return tx.plan.findFirst({ where: { key } });
+    });
   }
 
   createPlan(data: Prisma.PlanCreateInput) {
-    return this.prisma.plan.create({ data });
+    return this.rls.run((tx) => tx.plan.create({ data }));
   }
 
   async updatePlan(id: string, data: Prisma.PlanUpdateInput) {
     try {
-      return await this.prisma.plan.update({
-        where: { id, commercial: { equals: Prisma.DbNull } },
-        data,
-      });
+      return await this.rls.run((tx) =>
+        tx.plan.update({
+          where: { id, commercial: { equals: Prisma.DbNull } },
+          data,
+        }),
+      );
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&

@@ -28,6 +28,7 @@ describe('correção de identidade de um membro', () => {
     } | null,
   ) => {
     const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
       $queryRawUnsafe: jest.fn().mockResolvedValue([]),
       user: {
         /* O tipo é a união das duas consultas que o método faz: a pessoa, pelo
@@ -144,10 +145,7 @@ describe('correção de identidade de um membro', () => {
    */
   it('recusa um e-mail que já tem conta', async () => {
     const { tx, repository } = transacao(pessoa);
-    tx.user.findUnique.mockImplementation(
-      ({ where }: { where: { id?: string; normalizedEmail?: string } }) =>
-        Promise.resolve(where.id ? pessoa : { id: 'outro-user' }),
-    );
+    tx.$queryRaw.mockResolvedValue([{ id: 'outro-user' }]);
 
     const { resultado } = await corrigir(tx, repository, {
       email: 'ocupado@empresa.com',

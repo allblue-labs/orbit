@@ -58,7 +58,7 @@ services:
       retries: 10
       start_period: 10s
     networks:
-      - orbit_private
+      - orbit_database
     logging:
       driver: local
       options:
@@ -66,6 +66,46 @@ services:
         max-file: "3"
     security_opt:
       - no-new-privileges:true
+
+  pgbouncer:
+    image: ${ORBIT_PGBOUNCER_IMAGE:-docker.io/allbluelabs/orbit-api:${ORBIT_VERSION:?ORBIT_VERSION is required}-pgbouncer}
+    user: "1001:1001"
+    read_only: true
+    cap_drop: [ALL]
+    pids_limit: 64
+    mem_limit: 128m
+    cpus: 1
+    init: true
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    ulimits:
+      nofile: {soft: 1024, hard: 1024}
+    tmpfs:
+      - /run/pgbouncer:rw,noexec,nosuid,size=1048576,uid=1001,gid=1001,mode=0700
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      APP_DATABASE_PASSWORD: ${APP_DATABASE_PASSWORD}
+      WORKER_DATABASE_PASSWORD: ${WORKER_DATABASE_PASSWORD:?WORKER_DATABASE_PASSWORD is required}
+      DOCUMENTS_DATABASE_PASSWORD: ${DOCUMENTS_DATABASE_PASSWORD:?DOCUMENTS_DATABASE_PASSWORD is required}
+      PGBOUNCER_MAX_CLIENT_CONN: ${PGBOUNCER_MAX_CLIENT_CONN:-300}
+      PGBOUNCER_DEFAULT_POOL_SIZE: ${PGBOUNCER_DEFAULT_POOL_SIZE:-16}
+      PGBOUNCER_RESERVE_POOL_SIZE: ${PGBOUNCER_RESERVE_POOL_SIZE:-4}
+      PGBOUNCER_MAX_DB_CONNECTIONS: ${PGBOUNCER_MAX_DB_CONNECTIONS:-40}
+      PGBOUNCER_QUERY_WAIT_TIMEOUT: ${PGBOUNCER_QUERY_WAIT_TIMEOUT:-5}
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/orbit-pgbouncer", "healthcheck"]
+      interval: 10s
+      timeout: 4s
+      retries: 6
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks: [orbit_database, orbit_private]
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   api: &backend-runtime
     user: "1001:1001"
@@ -93,13 +133,13 @@ services:
       # O processo HTTP não recebe credenciais administrativas do banco.
       # Papel restrito (PR-26.6): sem SUPERUSER e sem BYPASSRLS. É com ele que
       # as políticas de RLS passam a ser efetivamente avaliadas.
-      APP_DATABASE_URL: postgresql://${APP_DATABASE_USER:-orbit_app}:${APP_DATABASE_PASSWORD:?APP_DATABASE_PASSWORD is required}@postgres:5432/${POSTGRES_DB}?schema=public
+      DATABASE_URL: postgresql://orbit_app:${APP_DATABASE_PASSWORD:?APP_DATABASE_PASSWORD is required}@pgbouncer:6432/${POSTGRES_DB}?pgbouncer=true
       # Subir com um papel que contorna RLS passa a ser erro, não aviso.
       DATABASE_ENFORCE_RESTRICTED_ROLE: "true"
       # Transações e pool (PR-26.6.1). A janela conta tempo de parede desde o
       # BEGIN, e o processo renderiza PDF de forma síncrona — os 5 s padrão do
       # Prisma expiravam por trabalho alheio.
-      DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-20}
+      DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-12}
       DATABASE_TRANSACTION_TIMEOUT_MS: ${DATABASE_TRANSACTION_TIMEOUT_MS:-20000}
       DATABASE_TRANSACTION_MAX_WAIT_MS: ${DATABASE_TRANSACTION_MAX_WAIT_MS:-10000}
       LOG_CLIENT_ERRORS: ${LOG_CLIENT_ERRORS:-false}
@@ -195,8 +235,8 @@ services:
     ports:
       - "127.0.0.1:${API_PORT:-6001}:5001"
     depends_on:
-      migrate:
-        condition: service_completed_successfully
+      pgbouncer:
+        condition: service_healthy
     healthcheck:
       test:
         [
@@ -227,6 +267,7 @@ services:
     environment:
       <<: *backend-environment
       ORBIT_PROCESS_ROLE: worker
+      DATABASE_URL: postgresql://orbit_worker:${WORKER_DATABASE_PASSWORD}@pgbouncer:6432/${POSTGRES_DB}?pgbouncer=true
       REDIS_HOTPATH_ENABLED: "false"
       REDIS_HOTPATH_PASSWORD: ""
       DATABASE_POOL_MAX: ${WORKER_DATABASE_POOL_MAX:-6}
@@ -251,6 +292,7 @@ services:
     environment:
       <<: *backend-environment
       ORBIT_PROCESS_ROLE: documents
+      DATABASE_URL: postgresql://orbit_documents:${DOCUMENTS_DATABASE_PASSWORD}@pgbouncer:6432/${POSTGRES_DB}?pgbouncer=true
       REDIS_HOTPATH_ENABLED: "false"
       REDIS_HOTPATH_PASSWORD: ""
       DATABASE_POOL_MAX: ${DOCUMENTS_DATABASE_POOL_MAX:-4}
@@ -293,14 +335,16 @@ services:
       STRIPE_PRICE_ENTERPRISE_UNLIMITED_ANNUAL: ${STRIPE_PRICE_ENTERPRISE_UNLIMITED_ANNUAL:-}
       # Migrations e provisionamento rodam com a credencial administrativa —
       # é a única que pode criar papel, conceder e alterar schema.
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
-      APP_DATABASE_USER: ${APP_DATABASE_USER:-orbit_app}
+      DIRECT_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      APP_DATABASE_USER: orbit_app
       APP_DATABASE_PASSWORD: ${APP_DATABASE_PASSWORD:?APP_DATABASE_PASSWORD is required}
+      WORKER_DATABASE_PASSWORD: ${WORKER_DATABASE_PASSWORD}
+      DOCUMENTS_DATABASE_PASSWORD: ${DOCUMENTS_DATABASE_PASSWORD}
     depends_on:
       postgres:
         condition: service_healthy
     networks:
-      - orbit_private
+      - orbit_database
     logging:
       driver: local
       options:
@@ -326,7 +370,7 @@ services:
     command: ["node", "dist/src/scripts/seed-platform-admin.js"]
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      DIRECT_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
       PLATFORM_ADMIN_EMAIL: ${PLATFORM_ADMIN_EMAIL:-}
       PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD:-}
       PLATFORM_ADMIN_FIRST_NAME: ${PLATFORM_ADMIN_FIRST_NAME:-Platform}
@@ -334,7 +378,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    networks: [orbit_private]
+    networks: [orbit_database]
     logging:
       driver: local
       options:
@@ -408,6 +452,8 @@ volumes:
   artifact_objects:
 
 networks:
+  orbit_database:
+    internal: true
   orbit_hotpath:
     internal: true
   orbit_private:

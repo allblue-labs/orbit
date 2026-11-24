@@ -354,8 +354,9 @@ describe('PR-04: identidade concorrente entre duas instâncias', () => {
           next.refreshTokenHash,
           next.expiresAt,
           crypto.encrypt(JSON.stringify(next)),
+          user.id,
         ),
-      apps[1]!.get(IdentityRepository).revokeSession(id),
+      apps[1]!.get(IdentityRepository).revokeSession(id, user.id),
     ]);
     const persisted = await admin.session.findUniqueOrThrow({ where: { id } });
     expect(persisted.revokedAt).not.toBeNull();

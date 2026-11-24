@@ -664,7 +664,7 @@ describe('Subscription lifecycle, billing periods and trial (e2e)', () => {
         http().post('/api/v1/organizations/current/subscription/cancel'),
         inquilino.token,
       )
-        .send({ expectedVersion: atual.version })
+        .send({ expectedVersion: atual.version, acknowledgeDataDeletion: true })
         .expect(201);
       const corpo = (
         cancelada.body as Envelope<{

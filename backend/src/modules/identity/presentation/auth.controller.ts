@@ -88,6 +88,7 @@ export class AuthController {
     return this.authentication.logout(
       request.identity?.sessionId,
       input.refreshToken,
+      request.identity?.id,
     );
   }
 

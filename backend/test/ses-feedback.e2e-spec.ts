@@ -165,6 +165,7 @@ describe('PR-08: SES/SNS HTTP, atomic suppression and restricted PostgreSQL', ()
     )
       throw new Error('Disposable runner required');
     process.env.JOBS_WORKER_ENABLED = 'false';
+    process.env.ACCOUNT_EMAIL_DELIVERY_ENABLED = 'false';
     for (let n = 0; n < 2; n++) {
       const module = await Test.createTestingModule({ imports: [AppModule] })
         .overrideProvider(EMAIL_CONFIGURATION)
@@ -306,6 +307,12 @@ describe('PR-08: SES/SNS HTTP, atomic suppression and restricted PostgreSQL', ()
       where: { userId: user.id },
       orderBy: { createdAt: 'desc' },
     });
+    const prioritize = (id: string) =>
+      admin.identityEmailDelivery.update({
+        where: { id },
+        data: { availableAt: new Date(0) },
+      });
+    await prioritize(pending.id);
     await apps[0]!.get(IdentityEmailWorker).tick();
     const outgoing = await admin.emailOutboundMessage.findFirstOrThrow({
       where: { identityDeliveryId: pending.id },
@@ -339,12 +346,17 @@ describe('PR-08: SES/SNS HTTP, atomic suppression and restricted PostgreSQL', ()
       .post('/api/v1/identity/password/forgot')
       .send({ email })
       .expect(202);
-    await apps[1]!.get(IdentityEmailWorker).tick();
     const final = await admin.identityEmailDelivery.findFirstOrThrow({
       where: { userId: user.id },
       orderBy: { createdAt: 'desc' },
     });
-    expect(final).toMatchObject({
+    await prioritize(final.id);
+    await apps[1]!.get(IdentityEmailWorker).tick();
+    expect(
+      await admin.identityEmailDelivery.findUniqueOrThrow({
+        where: { id: final.id },
+      }),
+    ).toMatchObject({
       status: 'FAILED',
       lastErrorCode: 'EMAIL_SUPPRESSED',
       encryptedPayload: null,

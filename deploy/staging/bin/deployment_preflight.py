@@ -9,7 +9,7 @@ local image tags are allowed only by the explicit CI caller via check(..., False
 import json
 import re
 import sys
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 
 class UnsafeDeployment(ValueError):
@@ -31,6 +31,7 @@ def check(config, require_digests=True):
                 "documents",
                 "frontend",
                 "postgres",
+                "pgbouncer",
                 "migrate",
                 "bootstrap-admin",
             ]
@@ -42,14 +43,35 @@ def check(config, require_digests=True):
         for k in ["api", "frontend", "postgres", "migrate", "bootstrap-admin"]
     ]
     runtime = api.get("environment", {})
-    require(bool(runtime.get("APP_DATABASE_URL")), "api: APP_DATABASE_URL obrigatório.")
+    pooler = services["pgbouncer"]
+    pool_env = pooler.get("environment", {})
+    database = pool_env.get("POSTGRES_DB")
+    expected_users = {"api": ("orbit_app", "APP_DATABASE_PASSWORD"),
+                      "worker": ("orbit_worker", "WORKER_DATABASE_PASSWORD"),
+                      "documents": ("orbit_documents", "DOCUMENTS_DATABASE_PASSWORD")}
+    passwords = [pool_env.get(key, "") for _, key in expected_users.values()]
+    require(len(set(passwords)) == 3 and all(re.fullmatch(r"[a-zA-Z0-9_.~-]{12,}", value) for value in passwords),
+            "PgBouncer exige três senhas distintas, compatíveis com a URL e o arquivo SCRAM.")
+    require(set(pool_env).issubset({"POSTGRES_DB", *(key for _, key in expected_users.values()),
+        "PGBOUNCER_MAX_CLIENT_CONN", "PGBOUNCER_DEFAULT_POOL_SIZE", "PGBOUNCER_RESERVE_POOL_SIZE",
+        "PGBOUNCER_MAX_DB_CONNECTIONS", "PGBOUNCER_QUERY_WAIT_TIMEOUT"}),
+        "PgBouncer: variáveis inesperadas.")
     for name in ("api", "worker", "documents"):
         env = services[name].get("environment", {})
         require(env.get("ORBIT_PROCESS_ROLE") == name, "Papel incorreto: " + name)
-        require(
-            env.get("APP_DATABASE_URL") == runtime["APP_DATABASE_URL"],
-            "Use o papel restrito em " + name,
-        )
+        expected_user, expected_password = expected_users[name]
+        try:
+            url = urlsplit(env.get("DATABASE_URL", ""))
+            require(
+                url.scheme in {"postgres", "postgresql"} and url.hostname == "pgbouncer" and url.port == 6432
+                and url.username == expected_user and url.password == pool_env[expected_password]
+                and url.path == "/" + database and parse_qs(url.query).get("pgbouncer") == ["true"],
+                "Conexão PgBouncer ou papel incorreto em " + name,
+            )
+        except (ValueError, TypeError) as error:
+            if isinstance(error, UnsafeDeployment):
+                raise
+            raise UnsafeDeployment("Conexão PgBouncer inválida em " + name) from None
         require(
             env.get("DATABASE_ENFORCE_RESTRICTED_ROLE") == "true",
             "Verificação de papel obrigatória: " + name,
@@ -68,7 +90,8 @@ def check(config, require_digests=True):
                 "Consumo de fila obrigatório: " + name,
             )
         for key in (
-            "DATABASE_URL",
+            "DIRECT_DATABASE_URL",
+            "APP_DATABASE_URL",
             "POSTGRES_PASSWORD",
             "PLATFORM_ADMIN_PASSWORD",
             "OWNER_PASSWORD",
@@ -77,28 +100,20 @@ def check(config, require_digests=True):
                 not env.get(key),
                 "Credencial administrativa proibida em " + name + ": " + key,
             )
-    try:
-        app_url = urlsplit(runtime["APP_DATABASE_URL"])
-        admin_url = urlsplit(migrate.get("environment", {}).get("DATABASE_URL", ""))
-        require(
-            bool(
-                app_url.username
-                and app_url.password
-                and app_url.hostname
-                and app_url.path
-            ),
-            "api: conexão PostgreSQL incompleta.",
-        )
-        require(
-            app_url.scheme in ["postgres", "postgresql"],
-            "api: conexão deve usar PostgreSQL.",
-        )
-        require(
-            bool(admin_url.username) and app_url.username != admin_url.username,
-            "api: o papel deve diferir do migrator.",
-        )
-    except ValueError:
-        raise UnsafeDeployment("api: conexão PostgreSQL inválida.") from None
+    for name in ("migrate", "bootstrap-admin"):
+        env = services[name].get("environment", {})
+        try:
+            url = urlsplit(env.get("DIRECT_DATABASE_URL", ""))
+            require(
+                url.scheme in {"postgres", "postgresql"} and url.hostname == "postgres" and url.port == 5432
+                and url.username and url.username not in {user for user, _ in expected_users.values()}
+                and url.password and url.path == "/" + database and not env.get("DATABASE_URL"),
+                "Conexão direta administrativa obrigatória em " + name,
+            )
+        except (ValueError, TypeError) as error:
+            if isinstance(error, UnsafeDeployment):
+                raise
+            raise UnsafeDeployment("Conexão direta inválida em " + name) from None
     require(
         runtime.get("DATABASE_ENFORCE_RESTRICTED_ROLE") == "true",
         "api: verificação do papel restrito obrigatória.",
@@ -114,14 +129,14 @@ def check(config, require_digests=True):
     for key in web.get("environment", {}):
         require(
             not re.match(
-                r"^(?:AWS_|R2_|REDIS_HOTPATH_|FIREBASE_|DATABASE_|APP_DATABASE_|POSTGRES_|PLATFORM_ADMIN_|OWNER_|STRIPE_SECRET)",
+                r"^(?:AWS_|R2_|REDIS_HOTPATH_|FIREBASE_|DATABASE_|DIRECT_DATABASE_|APP_DATABASE_|POSTGRES_|PLATFORM_ADMIN_|OWNER_|STRIPE_SECRET)",
                 key,
             ),
             "frontend: credencial de backend proibida: " + key,
         )
     require(not pg.get("ports"), "postgres: publicar portas é proibido.")
     require(
-        config.get("networks", {}).get("orbit_private", {}).get("internal") is True,
+        all(config.get("networks", {}).get(net, {}).get("internal") is True for net in ("orbit_private", "orbit_database")),
         "A rede do banco deve ser interna.",
     )
     hotpath_network = config.get("networks", {}).get("orbit_hotpath")
@@ -189,7 +204,7 @@ def check(config, require_digests=True):
         )
         if name == "postgres":
             require(
-                set(service.get("networks", {})) == {"orbit_private"},
+                set(service.get("networks", {})) == {"orbit_database"},
                 "postgres: rede incorreta.",
             )
             continue  # Official PostgreSQL entrypoint drops privileges after volume init.
@@ -216,6 +231,13 @@ def check(config, require_digests=True):
                 and not service.get("ports") and not service.get("volumes")
                 and set(service.get("networks", {})) == {"orbit_hotpath"},
                 "Redis deve ser temporário, privado e ativado pelo profile hotpath.",
+            )
+        elif name == "pgbouncer":
+            require(
+                not service.get("ports") and not service.get("volumes")
+                and set(service.get("networks", {})) == {"orbit_database", "orbit_private"}
+                and service.get("healthcheck", {}).get("test") == ["CMD", "/usr/local/bin/orbit-pgbouncer", "healthcheck"],
+                "PgBouncer deve conectar as duas redes internas sem publicar portas.",
             )
         elif name in ["api", "frontend"]:
             ports = service.get("ports", [])
@@ -249,7 +271,7 @@ def check(config, require_digests=True):
         else:
             require(
                 not service.get("ports")
-                and set(service.get("networks", {})) == {"orbit_private"},
+                and set(service.get("networks", {})) == {"orbit_database"},
                 "Jobs administrativos devem permanecer na rede privada: " + name,
             )
     require(

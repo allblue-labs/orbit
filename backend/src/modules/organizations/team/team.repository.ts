@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService, RlsTransaction } from '../../../database';
+import { resolveIdentityUser } from '../../../database/rls/identity-scope';
+import { generateUuidV7 } from '../../../utils';
 import type { PrismaTransactionClient } from '../../../database/prisma.types';
 
 /**
@@ -60,16 +62,19 @@ export class TeamRepository {
         input.businessUnitIds.join(','),
       );
 
-      const existente = await transaction.user.findUnique({
-        where: { normalizedEmail: input.normalizedEmail },
-        select: { id: true },
-      });
+      const existente = await resolveIdentityUser(
+        transaction,
+        input.normalizedEmail,
+      );
       if (existente) return { conflict: 'EMAIL_TAKEN' as const };
 
       await assertQuota(transaction);
 
+      const userId = generateUuidV7();
+      await this.setLocal(transaction, 'app.user_id', userId);
       const user = await transaction.user.create({
         data: {
+          id: userId,
           email: input.email,
           normalizedEmail: input.normalizedEmail,
           firstName: input.firstName,
@@ -237,16 +242,17 @@ export class TeamRepository {
         input.normalizedEmail &&
         input.normalizedEmail !== atual.normalizedEmail
       ) {
-        const existente = await transaction.user.findUnique({
-          where: { normalizedEmail: input.normalizedEmail },
-          select: { id: true },
-        });
+        const existente = await resolveIdentityUser(
+          transaction,
+          input.normalizedEmail,
+        );
         if (existente) return { conflict: 'EMAIL_TAKEN' as const };
       }
 
       const firstName = input.firstName ?? atual.firstName;
       const lastName = input.lastName ?? atual.lastName;
 
+      await this.setLocal(transaction, 'app.user_id', input.userId);
       await transaction.user.update({
         where: { id: input.userId },
         data: {
@@ -308,6 +314,7 @@ export class TeamRepository {
        * na mão até ele expirar — e o motivo de desligar alguém costuma ser
        * exatamente não querer isso.
        */
+      await this.setLocal(transaction, 'app.user_id', userId);
       await transaction.session.updateMany({
         where: { userId, revokedAt: null },
         data: { revokedAt: agora },

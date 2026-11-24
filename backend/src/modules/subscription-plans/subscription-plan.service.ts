@@ -174,7 +174,7 @@ export class SubscriptionPlanService {
       const plan =
         planKey === organization.plan.key
           ? organization.plan
-          : await this.repository.findByKey(planKey);
+          : await this.repository.findByKey(planKey, organizationId, access);
       if (!plan) throw new EntityNotFoundException('Plan');
       const snapshot = (
         projected.pendingApplied

@@ -7,6 +7,7 @@
  *
  * Só acrescenta. O que sobra é registrado no log; ver `reconcileRole`.
  */
+import { directDatabaseUrl } from './direct-database-url';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import { config } from 'dotenv';
@@ -17,10 +18,7 @@ import { reconcileRole } from '../modules/organizations/team-role-reconciliation
 config({ path: resolve(process.cwd(), '.env'), quiet: true });
 config({ path: resolve(process.cwd(), '../.env'), quiet: true });
 
-const databaseUrl = process.env.DATABASE_URL?.trim();
-if (!databaseUrl) {
-  throw new Error('Required environment variable DATABASE_URL is missing');
-}
+const databaseUrl = directDatabaseUrl();
 
 const prisma = new PrismaClient({ adapter: new PrismaPg(databaseUrl) });
 

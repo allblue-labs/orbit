@@ -7,18 +7,18 @@ import { EnvironmentProvider } from '../src/providers';
 describe('production runtime database role', () => {
   const role = `runtime_probe_${randomBytes(6).toString('hex')}`;
   const password = randomBytes(32).toString('hex');
-  const admin = new Client({ connectionString: process.env.DATABASE_URL });
+  const admin = new Client({ connectionString: process.env.DIRECT_DATABASE_URL });
   let db: PrismaService;
 
   beforeAll(async () => {
     await admin.connect();
     await admin.query(`CREATE ROLE ${role} LOGIN PASSWORD '${password}'`);
-    const url = new URL(process.env.APP_DATABASE_URL!);
+    const url = new URL(process.env.DIRECT_DATABASE_URL!);
     url.username = role;
     url.password = password;
     const values: NodeJS.ProcessEnv = {
       NODE_ENV: 'production',
-      APP_DATABASE_URL: url.href,
+      DATABASE_URL: url.href,
       DATABASE_ENFORCE_RESTRICTED_ROLE: 'false',
     };
     const environment: EnvironmentProvider = {

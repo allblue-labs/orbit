@@ -1,3 +1,4 @@
+import { directDatabaseUrl } from './direct-database-url';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { config } from 'dotenv';
@@ -10,10 +11,7 @@ import {
 config({ path: resolve(process.cwd(), '.env'), quiet: true });
 config({ path: resolve(process.cwd(), '../.env'), quiet: true });
 
-const databaseUrl = process.env.DATABASE_URL?.trim();
-if (!databaseUrl) {
-  throw new Error('Required environment variable DATABASE_URL is missing');
-}
+const databaseUrl = directDatabaseUrl();
 
 const prisma = new PrismaClient({ adapter: new PrismaPg(databaseUrl) });
 const bootstrapFlag = '_bootstrapStripePrices';

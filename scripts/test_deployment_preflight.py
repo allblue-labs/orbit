@@ -19,6 +19,9 @@ class DeploymentPreflightTest(unittest.TestCase):
 
     def test_regressions_are_rejected(self):
         mutations = [
+            ("pgbouncer", lambda s: s.update(ports=[{"published": "6432", "target": 6432}])),
+            ("pgbouncer", lambda s: s["environment"].update(POSTGRES_PASSWORD="private-canary")),
+            ("worker", lambda s: s["environment"].update(DIRECT_DATABASE_URL="private-canary")),
             (
                 "worker",
                 lambda s: s["environment"].update(DATABASE_URL="private-canary"),

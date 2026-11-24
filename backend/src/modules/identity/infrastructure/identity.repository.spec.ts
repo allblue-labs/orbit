@@ -5,7 +5,11 @@ describe('IdentityRepository session bounds', () => {
     const findMany = jest.fn().mockResolvedValue([]);
     const repository = new IdentityRepository(
       {
-        session: { findMany },
+        $transaction: (work: (tx: unknown) => Promise<unknown>) =>
+          work({
+            $queryRaw: jest.fn().mockResolvedValue([]),
+            session: { findMany },
+          }),
       } as never,
       {} as never,
     );

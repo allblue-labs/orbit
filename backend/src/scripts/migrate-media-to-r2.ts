@@ -3,6 +3,7 @@
  * Run with the administrative DATABASE_URL in the migrator container, never HTTP runtime.
  * Originals and existing document hashes are preserved byte for byte; source volumes are read-only.
  */
+import { directDatabaseUrl } from './direct-database-url';
 import { Pool } from 'pg';
 import { readFile } from 'node:fs/promises';
 import { resolve, sep, basename } from 'node:path';
@@ -66,8 +67,25 @@ async function main() {
     config.bucket,
     config.s3,
   );
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 1 });
+  const pool = new Pool({ connectionString: directDatabaseUrl(), max: 1 });
   const client = await pool.connect();
+  // Keep R2 I/O outside transactions and privilege local to each SQL operation.
+  const query: typeof client.query = (async (
+    ...parameters: [string, unknown[]?]
+  ) => {
+    await client.query('BEGIN');
+    try {
+      await client.query(
+        "SELECT set_config('app.is_platform_admin', 'true', true)",
+      );
+      const result = await client.query(...parameters);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    }
+  }) as typeof client.query;
   const images = new ImageOptimizationService();
   let inspected = 0,
     migrated = 0;
@@ -95,13 +113,10 @@ async function main() {
       throw new Error('R2 verification failed; source/reference preserved');
   };
   try {
-    await client.query(
-      "SELECT set_config('app.is_platform_admin', 'true', false)",
-    );
     // Keyset pages keep memory proportional to one file, not the complete tenant database.
     let cursor = '00000000-0000-0000-0000-000000000000';
     for (;;) {
-      const { rows } = await client.query<LegacyFile>(
+      const { rows } = await query<LegacyFile>(
         `SELECT * FROM storage_files WHERE (provider='LOCAL' OR (provider='S3' AND metadata->>'source'='PMOC_CONTRACT_SIGNATURE')) AND status='AVAILABLE' AND deleted_at IS NULL AND id > $1::uuid ORDER BY id LIMIT 100`,
         [cursor],
       );
@@ -123,7 +138,7 @@ async function main() {
           publicImage,
         );
         if (apply) {
-          await client.query(
+          await query(
             "UPDATE storage_files SET provider='R2', bucket=$1 WHERE id=$2 AND provider=$3",
             [bucket, file.id, file.provider],
           );
@@ -140,7 +155,7 @@ async function main() {
           kind === 'attachments'
             ? `SELECT a.id,a.storage_key,a.mime_type,a.checksum AS sha256,o.organization_id FROM operation_attachments a JOIN operations o ON o.id=a.operation_id WHERE a.storage_key NOT LIKE '%/%' AND a.id > $1::uuid ORDER BY a.id LIMIT 100`
             : `SELECT id,storage_key,mime_type,sha256,organization_id FROM generated_documents WHERE storage_key NOT LIKE '%/%' AND id > $1::uuid ORDER BY id LIMIT 100`;
-        const { rows } = await client.query<LegacyAttachment>(sql, [cursor]);
+        const { rows } = await query<LegacyAttachment>(sql, [cursor]);
         for (const file of rows) {
           const body = await readFile(
             sourcePath(
@@ -158,12 +173,12 @@ async function main() {
           );
           if (apply) {
             if (kind === 'documents')
-              await client.query(
+              await query(
                 "UPDATE generated_documents SET storage_bucket=$1,storage_provider='R2' WHERE id=$2",
                 [config.bucket, file.id],
               );
             if (kind === 'attachments')
-              await client.query(
+              await query(
                 "UPDATE operation_attachments SET storage_provider='R2',storage_bucket=$1 WHERE id=$2",
                 [config.bucket, file.id],
               );
@@ -174,7 +189,7 @@ async function main() {
         cursor = rows[rows.length - 1]!.id;
       }
     }
-    const links = await client.query<LegacyLink>(
+    const links = await query<LegacyLink>(
       `SELECT id,document_bucket,document_object_key,document_sha256 FROM pmoc_plan_signature_links
       WHERE document_object_key IS NOT NULL AND document_bucket <> $1`,
       [config.bucket],
@@ -191,7 +206,7 @@ async function main() {
         link.document_sha256,
       );
       if (apply) {
-        await client.query(
+        await query(
           "UPDATE pmoc_plan_signature_links SET document_bucket=$1,document_provider='R2' WHERE id=$2",
           [config.bucket, link.id],
         );
@@ -201,7 +216,7 @@ async function main() {
     for (const table of ['organizations', 'business_units'] as const) {
       let cursor = '00000000-0000-0000-0000-000000000000';
       for (;;) {
-        const { rows } = await client.query<LegacyLogo>(
+        const { rows } = await query<LegacyLogo>(
           `SELECT id,logo_url,${table === 'organizations' ? 'id' : 'organization_id'} AS organization_id FROM ${table} WHERE logo_url LIKE 'data:image/%' AND id > $1::uuid ORDER BY id LIMIT 100`,
           [cursor],
         );
@@ -221,6 +236,9 @@ async function main() {
           if (apply) {
             await client.query('BEGIN');
             try {
+              await client.query(
+                "SELECT set_config('app.is_platform_admin', 'true', true)",
+              );
               await client.query(
                 `INSERT INTO storage_files (id,organization_id,provider,bucket,object_key,file_name,mime_type,size_bytes,sha256,status,metadata)
                 VALUES ($1,$2,'R2',$3,$4,'logo.webp','image/webp',$5,$6,'AVAILABLE',$7::jsonb)

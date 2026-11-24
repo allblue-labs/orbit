@@ -1,3 +1,4 @@
+import { directDatabaseUrl } from './direct-database-url';
 import { createHash } from 'node:crypto';
 import { readdir } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
@@ -15,13 +16,9 @@ async function main() {
       .find((value) => value.startsWith(`--${name}=`))
       ?.slice(name.length + 3);
   const organizationId = arg('organization');
-  if (
-    !organizationId ||
-    !/^[a-f0-9-]{36}$/i.test(organizationId) ||
-    !process.env.DATABASE_URL
-  )
+  if (!organizationId || !/^[a-f0-9-]{36}$/i.test(organizationId))
     throw new Error(
-      'Explicit organization UUID and administrative DATABASE_URL required',
+      'Explicit organization UUID and administrative DIRECT_DATABASE_URL required',
     );
   const attest = process.argv.includes('--attest');
   const config = loadStorageConfig();
@@ -39,7 +36,7 @@ async function main() {
       'Attestation requires the configured provider and an explicitly configured legacy bucket',
     );
   const prisma = new PrismaClient({
-    adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+    adapter: new PrismaPg({ connectionString: directDatabaseUrl() }),
   });
   const storage = createStorageProvider(config);
   try {

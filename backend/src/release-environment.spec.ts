@@ -3,7 +3,8 @@ import { validateReleaseEnvironment } from './release-environment';
 
 const valid = (): NodeJS.ProcessEnv => ({
   NODE_ENV: 'production',
-  APP_DATABASE_URL: 'postgresql://orbit_app:synthetic-password@localhost/orbit',
+  DATABASE_URL:
+    'postgresql://orbit_app:synthetic-password@pgbouncer:6432/orbit?pgbouncer=true',
   JWT_ACCESS_SECRET: 'j'.repeat(48),
   TRIAL_FINGERPRINT_SECRET: 't'.repeat(48),
   AUTH_RATE_LIMIT_SECRET: 'r'.repeat(48),
@@ -37,7 +38,8 @@ describe('release environment', () => {
     ).toThrow(/código da região do SES, como sa-east-1 ou us-east-1/);
   });
   it.each([
-    'DATABASE_URL',
+    'DIRECT_DATABASE_URL',
+    'APP_DATABASE_URL',
     'POSTGRES_PASSWORD',
     'PLATFORM_ADMIN_PASSWORD',
     'OWNER_PASSWORD',
@@ -58,8 +60,8 @@ describe('release environment', () => {
     'postgresql://localhost/db',
   ])('exige conexão explícita do papel restrito: %s', (url) => {
     expect(() =>
-      validateReleaseEnvironment({ ...valid(), APP_DATABASE_URL: url }),
-    ).toThrow('APP_DATABASE_URL');
+      validateReleaseEnvironment({ ...valid(), DATABASE_URL: url }),
+    ).toThrow('DATABASE_URL');
   });
   it('não permite desativar a verificação do papel em produção', () => {
     expect(() =>
@@ -97,7 +99,7 @@ describe('release environment', () => {
   });
 
   it.each([
-    'APP_DATABASE_URL',
+    'DATABASE_URL',
     'JWT_ACCESS_SECRET',
     'TRIAL_FINGERPRINT_SECRET',
     'AUTH_RATE_LIMIT_SECRET',

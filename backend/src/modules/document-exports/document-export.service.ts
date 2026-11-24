@@ -208,6 +208,10 @@ export class DocumentExportService {
     const file =
       status === 'COMPLETED' &&
       row.storageFile?.status === 'AVAILABLE' &&
+      row.storageFile.organizationId === row.organizationId &&
+      row.storageFile.businessUnitId === row.businessUnitId &&
+      (row.storageFile.metadata as { documentExportId?: string } | null)
+        ?.documentExportId === row.id &&
       !row.storageFile.deletedAt
         ? row.storageFile
         : null;

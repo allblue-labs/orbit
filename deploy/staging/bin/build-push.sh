@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Executar no Mac/CI; nunca no servidor. Um repositório privado, três tags.
+# Executar no Mac/CI; nunca no servidor. Um repositório privado, quatro tags.
 set -Eeuo pipefail
 cd "$(dirname "$0")/../../.."
 [[ -z $(git -c core.fsmonitor=false status --porcelain) ]] || { echo 'Faça commit das alterações antes de gerar imagens.' >&2; exit 1; }
@@ -15,11 +15,12 @@ builder=${ORBIT_BUILDX_BUILDER:-orbit-staging}
 if ! docker buildx inspect "$builder" >/dev/null 2>&1; then
     docker buildx create --name "$builder" --driver docker-container >/dev/null
 fi
-for component in api migrator frontend; do
+for component in api migrator frontend pgbouncer; do
     case "$component" in
         api) context=backend; target=runner ;;
         migrator) context=backend; target=migrator ;;
         frontend) context=frontend; target=runner ;;
+        pgbouncer) context=deploy/pgbouncer; target=runner ;;
     esac
     image="$repository:$tag-$component"
     # Digest é obtido do próprio resultado do push, não de uma tag mutável.
@@ -31,7 +32,7 @@ done
 python3 - "$output" "$repository" "$tag" "$sha" "$created" <<'PY'
 import json, pathlib, re, sys
 p=pathlib.Path(sys.argv[1]); repository, tag, sha, created=sys.argv[2:]
-services={'api':'api', 'worker':'api', 'documents':'api', 'migrate':'migrator', 'bootstrap-admin':'migrator', 'storage-migration':'migrator', 'frontend':'frontend'}
+services={'api':'api', 'worker':'api', 'documents':'api', 'migrate':'migrator', 'bootstrap-admin':'migrator', 'storage-migration':'migrator', 'frontend':'frontend', 'pgbouncer':'pgbouncer'}
 lock=['# Referências imutáveis publicadas no Docker Hub privado.', 'services:']
 manifest={'commit': sha, 'created': created, 'tag': tag, 'images': {}}
 for service, component in services.items():

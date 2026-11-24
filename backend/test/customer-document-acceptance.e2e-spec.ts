@@ -171,6 +171,22 @@ describe('aceite público de propostas com RLS real', () => {
         customerId: customer.id,
       });
     }
+    const local = tenants[0]!;
+    const fieldRole = await admin.role.create({
+      data: {
+        key: 'FIELD_QUOTE_TEST',
+        name: 'Campo',
+        organizationId: local.organizationId,
+        permissions: ['operations.walk_in.create'],
+      },
+    });
+    await admin.organizationMembership.createMany({
+      data: [userId, otherUserId].map((memberId) => ({
+        organizationId: local.organizationId,
+        userId: memberId,
+        roleId: fieldRole.id,
+      })),
+    });
     const contextService = new RequestContextService(contexts);
     rls = new RlsTransaction(
       runtime as PrismaService,
@@ -884,22 +900,6 @@ describe('aceite público de propostas com RLS real', () => {
     });
     beforeAll(async () => {
       const tenant = tenants[0]!;
-      const role = await admin.role.create({
-        data: {
-          key: 'FIELD_QUOTE_TEST',
-          name: 'Campo',
-          organizationId: tenant.organizationId,
-          permissions: ['operations.walk_in.create'],
-        },
-      });
-      for (const memberId of [userId, otherUserId])
-        await admin.organizationMembership.create({
-          data: {
-            organizationId: tenant.organizationId,
-            userId: memberId,
-            roleId: role.id,
-          },
-        });
       actor = {
         id: otherUserId as UUID,
         sessionId: otherUserId as UUID,

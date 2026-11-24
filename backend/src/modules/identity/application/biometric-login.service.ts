@@ -160,7 +160,11 @@ export class BiometricLoginService {
       stored,
     );
     if (signCount === null) throw refused();
-    if (!(await this.credentials.markUsed(credential.id, { signCount })))
+    if (
+      !(await this.credentials.markUsed(credential.id, credential.userId, {
+        signCount,
+      }))
+    )
       throw refused();
     return this.authentication.openVerifiedSession(credential.userId, metadata);
   }
@@ -201,7 +205,7 @@ export class BiometricLoginService {
       throw refused();
     const next = newDeviceSecret();
     if (
-      !(await this.credentials.markUsed(credential.id, {
+      !(await this.credentials.markUsed(credential.id, credential.userId, {
         expectedSecretHash: credential.secretHash,
         newSecretHash: next.hash,
       }))

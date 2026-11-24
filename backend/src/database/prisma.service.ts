@@ -1,7 +1,7 @@
 /**
- * Runtime uses APP_DATABASE_URL. Only non-production development may fall back
- * to DATABASE_URL. Production always verifies the connected role before serving
- * requests; migration and bootstrap jobs use their own administrative client.
+ * Production connects through DATABASE_URL and validates the connected role.
+ * APP_DATABASE_URL remains a development and integration-test alias.
+ * Migration and bootstrap jobs use their own administrative client.
  */
 import {
   Injectable,
@@ -40,17 +40,17 @@ export class PrismaService
     super({
       adapter: new PrismaPg({
         connectionString:
-          environment.getOptional('APP_DATABASE_URL')?.trim() ||
-          (environment.getOptional('NODE_ENV') === 'production'
-            ? environment.get('APP_DATABASE_URL')
-            : environment.get('DATABASE_URL')),
+          environment.getOptional('NODE_ENV') === 'production'
+            ? environment.get('DATABASE_URL')
+            : environment.getOptional('APP_DATABASE_URL')?.trim() ||
+              environment.get('DATABASE_URL'),
         /**
          * O padrão do `pg` é 10 conexões — e 10 é pouco quando HTTP e worker
          * dividem o mesmo processo. Uma transação interativa **segura** a
          * conexão do começo ao fim; com o pool no limite, quem chega espera, e
          * o relógio do tempo limite da transação já está correndo.
          */
-        max: number('DATABASE_POOL_MAX', 20),
+        max: number('DATABASE_POOL_MAX', 12),
         application_name: `orbit-${environment.getOptional('ORBIT_PROCESS_ROLE') || 'combined'}`,
         connectionTimeoutMillis: 5_000,
       }),

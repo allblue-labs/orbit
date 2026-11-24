@@ -184,8 +184,31 @@ describe('PR-12 — real PostgreSQL relational boundaries and safe upgrade', () 
     expect(rows.rows.map((r) => r.name).sort()).toEqual(
       [
         ...manifest.baselineForeignKeys.map((r) => r.conname),
-        // Added after the PR-12 inventory by the public contact migration.
+        // Reviewed additions after the PR-12 baseline.
+        'billing_plan_upgrades_subscription_id_organization_id_fkey',
+        'billing_refund_requests_subscription_id_organization_id_fkey',
+        'billing_support_tickets_subscription_id_organization_id_fkey',
+        'customer_portal_biometric_identity_fkey',
+        'document_exports_acceptance_scope_fk',
+        'document_exports_file_scope_fk',
+        'document_exports_job_scope_fk',
+        'document_exports_organization_id_fkey',
+        'document_exports_unit_scope_fk',
         'email_outbound_contact_fk',
+        'equipment_service_history_asset_id_fkey',
+        'equipment_service_history_operation_id_fkey',
+        'http_idempotency_records_actor_id_fkey',
+        'http_idempotency_records_organization_id_fkey',
+        'identity_biometric_credentials_user_fkey',
+        'plan_stripe_prices_plan_code_fkey',
+        'plans_catalog_tenant_id_fkey',
+        'product_sales_business_unit_id_fkey',
+        'product_sales_customer_id_fkey',
+        'product_sales_customer_scope',
+        'product_sales_organization_id_fkey',
+        'product_sales_receipt_id_fkey',
+        'product_sales_receipt_scope',
+        'product_sales_unit_scope',
       ].sort(),
     );
     const contactLink = await db.query<{
@@ -392,8 +415,13 @@ describe('PR-12 — real PostgreSQL relational boundaries and safe upgrade', () 
         await client.query(
           `ALTER TABLE "${row.table}" DROP CONSTRAINT "${row.name}"`,
         );
-      const indexes = await client.query<{ table: string; name: string }>(
-        "SELECT tablename AS table,indexname AS name FROM pg_indexes WHERE schemaname='public' AND indexname LIKE 'pr12_%'",
+      // Later migrations reuse some of these unique keys. The original
+      // migration is idempotent around parent keys, so retain those still used.
+      const indexes = await client.query<{ name: string }>(
+        `SELECT i.relname AS name FROM pg_class i
+         WHERE i.relnamespace='public'::regnamespace AND i.relkind='i'
+           AND i.relname LIKE 'pr12_%'
+           AND NOT EXISTS (SELECT 1 FROM pg_constraint k WHERE k.conindid=i.oid)`,
       );
       for (const index of indexes.rows)
         await client.query(`DROP INDEX public."${index.name}"`);

@@ -80,6 +80,7 @@ describe('rotação e autenticação sem atualização de snapshots', () => {
       'hash:canonical-refresh',
       expect.any(Date),
       JSON.stringify(canonical),
+      'user',
     );
   });
   it('revogação concorrente ao CAS não devolve o candidato emitido', async () => {
@@ -102,7 +103,7 @@ describe('rotação e autenticação sem atualização de snapshots', () => {
     await expect(service.refresh('old')).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
     });
-    expect(repository.revokeSession).toHaveBeenCalledWith('session');
+    expect(repository.revokeSession).toHaveBeenCalledWith('session', 'user');
   });
   it('não usa grace para uma conta desativada', async () => {
     const { service, repository } = setup();
@@ -113,7 +114,7 @@ describe('rotação e autenticação sem atualização de snapshots', () => {
     });
     repository.findById.mockResolvedValue({ ...user, status: 'SUSPENDED' });
     await expect(service.refresh('old')).rejects.toThrow();
-    expect(repository.revokeSession).toHaveBeenCalledWith('session');
+    expect(repository.revokeSession).toHaveBeenCalledWith('session', 'user');
   });
   it.each(['MFA_INVALID', 'MFA_REQUIRED'])(
     'contabiliza segundo fator incorreto, mas não o desafio ausente (%s)',
@@ -129,6 +130,7 @@ describe('rotação e autenticação sem atualização de snapshots', () => {
         expect(repository.updateFailedLogin).toHaveBeenCalledWith(
           'credential',
           'password-hash',
+          'user',
         );
       else expect(repository.updateFailedLogin).not.toHaveBeenCalled();
       expect(repository.completeLogin).not.toHaveBeenCalled();

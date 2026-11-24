@@ -45,6 +45,7 @@ function montar(recoveryCodes: string[] = []) {
     repository,
     factor: {
       id: 'factor-1',
+      userId: 'user-1',
       secret: `cifrado:${SEGREDO}`,
       recoveryCodes,
     },
@@ -88,7 +89,10 @@ describe('verifyFactor', () => {
     await expect(
       service.verifyFactor(factor, generateTotpToken(SEGREDO)),
     ).resolves.toBeUndefined();
-    expect(repository.touchMfaFactor).toHaveBeenCalledWith('factor-1');
+    expect(repository.touchMfaFactor).toHaveBeenCalledWith(
+      'factor-1',
+      'user-1',
+    );
   });
 
   it('aceita código de recuperação e consome só o usado', async () => {
@@ -102,6 +106,7 @@ describe('verifyFactor', () => {
     expect(repository.consumeMfaRecoveryCode).toHaveBeenCalledWith(
       'factor-1',
       'hash:BBB-222',
+      'user-1',
     );
   });
 

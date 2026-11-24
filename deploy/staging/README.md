@@ -199,9 +199,11 @@ cookies inseguros, portas diferentes do Nginx, imagens sem digest e Stripe
 habilitado com uma chave que não seja de teste. Não copie o `.env` de outro
 ambiente: acrescente somente as credenciais das integrações necessárias.
 
-Migrations/grants/catálogos rodam no migrador efêmero, antes da API. A API usa
-apenas papel `NOSUPERUSER NOBYPASSRLS`; a credencial administrativa não entra no
-runtime. Se precisar de administrador global, preencha `PLATFORM_ADMIN_*` e:
+O migrador efêmero usa `DIRECT_DATABASE_URL` para migrations, grants e catálogos.
+API, worker e documentos usam `DATABASE_URL` via PgBouncer, cada um com seu papel
+`NOSUPERUSER NOBYPASSRLS`. Siga o [runbook do PgBouncer](../../docs/release/rls-pgbouncer.md)
+para preparar as credenciais e verificar a release. Se precisar de administrador
+global, preencha `PLATFORM_ADMIN_*` e execute:
 
 ```bash
 cd /opt/stacks/orbit

@@ -245,18 +245,18 @@ export class AuthenticationService {
       if (!session) throw new UnauthorizedException('Invalid refresh token');
       const user = await this.repository.findById(session.userId);
       if (!user || user.deletedAt || user.status !== 'ACTIVE') {
-        await this.repository.revokeSession(session.id);
+        await this.repository.revokeSession(session.id, session.userId);
         throw new UnauthorizedException('Invalid refresh token');
       }
       if (user.requiresEmailVerification) {
-        await this.repository.revokeSession(session.id);
+        await this.repository.revokeSession(session.id, session.userId);
         throw new UnauthorizedException(
           'Confirme seu e-mail antes de entrar.',
           'EMAIL_VERIFICATION_REQUIRED',
         );
       }
       if (!allowsSurface(user, session.client)) {
-        await this.repository.revokeSession(session.id);
+        await this.repository.revokeSession(session.id, session.userId);
         throw new SurfaceNotAllowedException(normalizeSurface(session.client));
       }
       if (session.inGrace && session.rotationResponse) {
@@ -276,13 +276,13 @@ export class AuthenticationService {
             throw new Error('Invalid rotation response');
           return pair;
         } catch {
-          await this.repository.revokeSession(session.id);
+          await this.repository.revokeSession(session.id, session.userId);
           throw new UnauthorizedException('Invalid refresh token');
         }
       }
       if (session.refreshTokenHash !== hash) {
         // Confirmed reuse of the previous generation after the fixed grace.
-        await this.repository.revokeSession(session.id);
+        await this.repository.revokeSession(session.id, session.userId);
         throw new UnauthorizedException('Invalid refresh token');
       }
       const pair = await this.tokens.issue(
@@ -296,6 +296,7 @@ export class AuthenticationService {
           pair.refreshTokenHash,
           pair.expiresAt,
           this.crypto.encrypt(JSON.stringify(publicPair)),
+          session.userId,
         )
       )
         return publicPair;
@@ -303,14 +304,19 @@ export class AuthenticationService {
     throw new UnauthorizedException('Invalid refresh token');
   }
 
-  async logout(sessionId: string | undefined, refreshToken?: string) {
-    if (sessionId) {
-      await this.repository.revokeSession(sessionId);
+  async logout(
+    sessionId: string | undefined,
+    refreshToken?: string,
+    userId?: string,
+  ) {
+    if (sessionId && userId) {
+      await this.repository.revokeSession(sessionId, userId);
     } else if (refreshToken) {
       const session = await this.repository.findSessionByRefreshHash(
         this.tokens.hashOpaqueToken(refreshToken),
       );
-      if (session) await this.repository.revokeSession(session.id);
+      if (session)
+        await this.repository.revokeSession(session.id, session.userId);
     }
   }
 
@@ -319,18 +325,21 @@ export class AuthenticationService {
   }
 
   revokeSession(userId: string, sessionId: string): Promise<void> {
-    return this.repository.findSessionById(sessionId).then(async (session) => {
-      if (!session || session.userId !== userId) {
-        throw new UnauthorizedException();
-      }
-      await this.repository.revokeSession(sessionId);
-    });
+    return this.repository
+      .findSessionById(sessionId, userId)
+      .then(async (session) => {
+        if (!session || session.userId !== userId) {
+          throw new UnauthorizedException();
+        }
+        await this.repository.revokeSession(sessionId, userId);
+      });
   }
 
   private async recordFailedAttempt(user: IdentityUser): Promise<void> {
     await this.repository.updateFailedLogin(
       user.credential!.id,
       user.credential!.passwordHash,
+      user.id,
     );
   }
 

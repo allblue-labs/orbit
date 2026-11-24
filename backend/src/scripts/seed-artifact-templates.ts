@@ -25,6 +25,7 @@
  * template da organização, e este script nunca escreve fora de
  * `organizationId IS NULL`.
  */
+import { directDatabaseUrl } from './direct-database-url';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient, type Prisma } from '@prisma/client';
 import { createHash } from 'node:crypto';
@@ -41,10 +42,7 @@ import {
 config({ path: resolve(process.cwd(), '.env'), quiet: true });
 config({ path: resolve(process.cwd(), '../.env'), quiet: true });
 
-const databaseUrl = process.env.DATABASE_URL?.trim();
-if (!databaseUrl) {
-  throw new Error('Required environment variable DATABASE_URL is missing');
-}
+const databaseUrl = directDatabaseUrl();
 
 const prisma = new PrismaClient({ adapter: new PrismaPg(databaseUrl) });
 

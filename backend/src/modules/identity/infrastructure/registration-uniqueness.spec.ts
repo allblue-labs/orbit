@@ -11,6 +11,7 @@ describe('public signup document reservation', () => {
         findFirst: jest.fn().mockResolvedValue({ id: 'plan', commercial: {} }),
       },
       $queryRaw: jest.fn().mockResolvedValue([{ reserved: false }]),
+      $queryRawUnsafe: jest.fn().mockResolvedValue([]),
       user: { create: jest.fn() },
     };
     const prisma = {

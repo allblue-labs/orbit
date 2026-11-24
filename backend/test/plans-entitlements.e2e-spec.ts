@@ -217,7 +217,7 @@ describe('Plans, entitlements and monthly usage limits (e2e)', () => {
       where: { key: 'ESSENTIAL' },
       select: { capabilities: true },
     });
-    await prisma.plan.create({
+    const planoDeTeste = await prisma.plan.create({
       data: {
         id: generateUuidV7(),
         key: chaveDoPlanoDeTeste,
@@ -229,7 +229,27 @@ describe('Plans, entitlements and monthly usage limits (e2e)', () => {
       },
     });
 
-    const inquilino = await registrar(chaveDoPlanoDeTeste, 'teste');
+    // Public registration accepts published offers. Attach the legacy custom
+    // plan administratively after creating a real identity and membership.
+    const inquilino = await registrar('ESSENTIAL', 'teste');
+    const donoDoPlanoDeTeste = await prisma.user.findUniqueOrThrow({
+      where: { email: inquilino.email },
+      select: { id: true },
+    });
+    const organizacaoDoPlanoDeTeste =
+      await prisma.organization.findFirstOrThrow({
+        where: { ownerUserId: donoDoPlanoDeTeste.id },
+        select: { id: true },
+      });
+    await prisma.$transaction([
+      prisma.organizationSubscription.deleteMany({
+        where: { organizationId: organizacaoDoPlanoDeTeste.id },
+      }),
+      prisma.organization.update({
+        where: { id: organizacaoDoPlanoDeTeste.id },
+        data: { planId: planoDeTeste.id, subscriptionStatus: 'ACTIVE' },
+      }),
+    ]);
     token = inquilino.token;
     const contexto = await auth(
       http().get('/api/v1/organizations/current'),
@@ -349,10 +369,20 @@ describe('Plans, entitlements and monthly usage limits (e2e)', () => {
       }
     });
 
-    it('não publica limite comercial de armazenamento', async () => {
+    it('publica a avaliação sem expor limites de armazenamento ou dados do Stripe', async () => {
       const resposta = await http().get('/api/v1/plans/catalog').expect(200);
       expect(JSON.stringify(resposta.body)).not.toMatch(/storage/i);
-      expect(JSON.stringify(resposta.body)).not.toMatch(/stripe|trial/i);
+      expect(JSON.stringify(resposta.body)).not.toMatch(/stripe/i);
+      expect(resposta.body).toMatchObject({
+        data: {
+          plans: [
+            { code: 'ESSENTIAL', trialDays: 30 },
+            { code: 'PROFESSIONAL', trialDays: 0 },
+            { code: 'PROFESSIONAL_INTELLIGENCE', trialDays: 0 },
+            { code: 'ENTERPRISE_UNLIMITED', trialDays: 0 },
+          ],
+        },
+      });
     });
   });
 

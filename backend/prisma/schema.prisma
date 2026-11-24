@@ -624,6 +624,7 @@ model BusinessUnit {
   @@index([organizationId, status, deletedAt])
   @@index([organizationId, isPrimary])
   @@map("business_units")
+  @@unique([id, organizationId], map: "pr12_business_units_org_key")
 }
 
 model OrganizationMembership {
@@ -3295,6 +3296,7 @@ model BackgroundJob {
   @@index([queue, status, availableAt])
   @@index([organizationId, queue, status])
   @@map("background_jobs")
+  @@unique([id, organizationId], map: "background_jobs_id_org_export_key")
 }
 
 /// Exportação assíncrona de documento (202 + arquivo no R2 + URL assinada).
@@ -3323,11 +3325,14 @@ model DocumentExport {
   updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  businessUnit BusinessUnit?  @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
-  job          BackgroundJob? @relation(fields: [jobId], references: [id], onDelete: SetNull)
-  storageFile  StorageFile?   @relation(fields: [storageFileId], references: [id], onDelete: Cascade)
+  businessUnit BusinessUnit?  @relation(fields: [businessUnitId, organizationId], references: [id, organizationId], onDelete: Cascade, onUpdate: Restrict, map: "document_exports_unit_scope_fk")
+  job          BackgroundJob? @relation(fields: [jobId, organizationId], references: [id, organizationId], onDelete: SetNull, onUpdate: Restrict, map: "document_exports_job_scope_fk")
+  storageFile  StorageFile?   @relation(fields: [storageFileId, organizationId], references: [id, organizationId], onDelete: Cascade, onUpdate: Restrict, map: "document_exports_file_scope_fk")
+
+  acceptanceLink QuoteAcceptanceLink? @relation(fields: [acceptanceLinkId, organizationId, entityId, businessUnitId], references: [id, organizationId, quoteId, businessUnitId], onDelete: Cascade, onUpdate: Restrict, map: "document_exports_acceptance_scope_fk")
 
   @@index([organizationId, status, createdAt], map: "document_exports_org_status_idx")
+  @@index([businessUnitId, organizationId], map: "document_exports_unit_scope_idx")
   @@index([expiresAt], map: "document_exports_expiry_idx")
   @@map("document_exports")
 }
@@ -5212,6 +5217,9 @@ model QuoteAcceptanceLink {
   signatureFile StorageFile? @relation("QuoteAcceptanceSignature", fields: [signatureFileId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   createdBy     User         @relation("QuoteAcceptanceCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
+  documentExports DocumentExport[]
+
+  @@unique([id, organizationId, quoteId, businessUnitId], map: "quote_acceptance_links_export_scope_key")
   @@index([organizationId, quoteId, createdAt])
   @@map("quote_acceptance_links")
 }

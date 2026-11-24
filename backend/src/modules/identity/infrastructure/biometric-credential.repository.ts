@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../database';
+import { withIdentity } from '../../../database/rls/identity-scope';
 
 export interface UserBiometricCredential {
   id: string;
@@ -15,20 +16,17 @@ export interface UserBiometricCredential {
   lastUsedAt: Date | null;
 }
 
-/**
- * Credenciais biométricas da equipe. Sem RLS, como `sessions`: o login não
- * tem organização no contexto, e toda leitura aqui é por id da credencial ou
- * do próprio usuário autenticado.
- */
 @Injectable()
 export class BiometricCredentialRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async listActive(userId: string): Promise<UserBiometricCredential[]> {
-    const rows = await this.prisma.identityBiometricCredential.findMany({
-      where: { userId, revokedAt: null },
-      orderBy: { createdAt: 'desc' },
-    });
+    const rows = await withIdentity(this.prisma, userId, (tx) =>
+      tx.identityBiometricCredential.findMany({
+        where: { userId, revokedAt: null },
+        orderBy: { createdAt: 'desc' },
+      }),
+    );
     return rows.map((row) => this.toModel(row));
   }
 
@@ -36,9 +34,14 @@ export class BiometricCredentialRepository {
     id?: string;
     webauthnCredentialId?: string;
   }): Promise<UserBiometricCredential | null> {
-    const row = await this.prisma.identityBiometricCredential.findFirst({
-      where: { ...where, revokedAt: null },
-    });
+    const [scope] = await this.prisma.$queryRaw<{ userId: string | null }[]>`
+      SELECT public.app_identity_biometric_owner(${where.id ?? null}::uuid, ${where.webauthnCredentialId ?? null}) AS "userId"`;
+    if (!scope?.userId) return null;
+    const row = await withIdentity(this.prisma, scope.userId, (tx) =>
+      tx.identityBiometricCredential.findFirst({
+        where: { ...where, revokedAt: null },
+      }),
+    );
     return row ? this.toModel(row) : null;
   }
 
@@ -51,14 +54,16 @@ export class BiometricCredentialRepository {
     signCount: number;
     transports: string[];
   }): Promise<void> {
-    await this.prisma.identityBiometricCredential.create({
-      data: {
-        ...input,
-        kind: 'WEBAUTHN',
-        publicKey: Buffer.from(input.publicKey),
-        signCount: BigInt(input.signCount),
-      },
-    });
+    await withIdentity(this.prisma, input.userId, (tx) =>
+      tx.identityBiometricCredential.create({
+        data: {
+          ...input,
+          kind: 'WEBAUTHN',
+          publicKey: Buffer.from(input.publicKey),
+          signCount: BigInt(input.signCount),
+        },
+      }),
+    );
   }
 
   /** Um aparelho, uma credencial: cadastrar de novo substitui a anterior. */
@@ -69,7 +74,7 @@ export class BiometricCredentialRepository {
     deviceId: string;
     secretHash: string;
   }): Promise<void> {
-    await this.prisma.$transaction(async (tx) => {
+    await withIdentity(this.prisma, input.userId, async (tx) => {
       await tx.identityBiometricCredential.updateMany({
         where: {
           userId: input.userId,
@@ -91,36 +96,42 @@ export class BiometricCredentialRepository {
    */
   async markUsed(
     id: string,
+    userId: string,
     change: {
       expectedSecretHash?: string;
       newSecretHash?: string;
       signCount?: number;
     },
   ): Promise<boolean> {
-    const result = await this.prisma.identityBiometricCredential.updateMany({
-      where: {
-        id,
-        revokedAt: null,
-        ...(change.expectedSecretHash
-          ? { secretHash: change.expectedSecretHash }
-          : {}),
-      },
-      data: {
-        lastUsedAt: new Date(),
-        ...(change.newSecretHash ? { secretHash: change.newSecretHash } : {}),
-        ...(change.signCount !== undefined
-          ? { signCount: BigInt(change.signCount) }
-          : {}),
-      },
-    });
+    const result = await withIdentity(this.prisma, userId, (tx) =>
+      tx.identityBiometricCredential.updateMany({
+        where: {
+          id,
+          userId,
+          revokedAt: null,
+          ...(change.expectedSecretHash
+            ? { secretHash: change.expectedSecretHash }
+            : {}),
+        },
+        data: {
+          lastUsedAt: new Date(),
+          ...(change.newSecretHash ? { secretHash: change.newSecretHash } : {}),
+          ...(change.signCount !== undefined
+            ? { signCount: BigInt(change.signCount) }
+            : {}),
+        },
+      }),
+    );
     return result.count === 1;
   }
 
   async revoke(userId: string, id: string): Promise<boolean> {
-    const result = await this.prisma.identityBiometricCredential.updateMany({
-      where: { id, userId, revokedAt: null },
-      data: { revokedAt: new Date() },
-    });
+    const result = await withIdentity(this.prisma, userId, (tx) =>
+      tx.identityBiometricCredential.updateMany({
+        where: { id, userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
+    );
     return result.count === 1;
   }
 

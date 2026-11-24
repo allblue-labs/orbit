@@ -1,6 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { Prisma, type Plan } from '@prisma/client';
+import { RequestContextService } from '../../../context';
 import { PrismaService, RlsTransaction } from '../../../database';
+import type { PrismaTransactionClient } from '../../../database/prisma.types';
 import { ConflictException, ValidationException } from '../../../exceptions';
 import {
   AllocationResource,
@@ -45,27 +47,29 @@ export class CommercialPlanService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly rls: RlsTransaction,
+    @Optional() private readonly contexts?: RequestContextService,
   ) {}
 
   async list(tenantId?: string) {
-    const plans = await this.prisma.plan.findMany({
-      where: {
-        commercial: { not: Prisma.DbNull },
-        OR: [
-          { catalogTenantId: null },
-          ...(tenantId ? [{ catalogTenantId: tenantId }] : []),
-        ],
-      },
-      orderBy: [{ monthlyPrice: 'asc' }, { key: 'asc' }],
-    });
+    const plans = await this.read((tx) =>
+      tx.plan.findMany({
+        where: {
+          commercial: { not: Prisma.DbNull },
+          OR: [
+            { catalogTenantId: null },
+            ...(tenantId ? [{ catalogTenantId: tenantId }] : []),
+          ],
+        },
+        orderBy: [{ monthlyPrice: 'asc' }, { key: 'asc' }],
+      }),
+    );
     return plans.map((plan) => this.toDefinition(plan));
   }
 
-  async find(
-    code: string,
-    tx: Pick<Prisma.TransactionClient, 'plan'> = this.prisma,
-  ) {
-    const plan = await tx.plan.findUnique({ where: { key: code } });
+  async find(code: string, tx?: Pick<Prisma.TransactionClient, 'plan'>) {
+    const find = (client: Pick<Prisma.TransactionClient, 'plan'>) =>
+      client.plan.findUnique({ where: { key: code } });
+    const plan = await (tx ? find(tx) : this.read(find));
     return plan?.commercial ? this.toDefinition(plan) : null;
   }
 
@@ -92,24 +96,32 @@ export class CommercialPlanService {
   }
 
   stripePrice(id: string) {
-    return this.prisma.planStripePrice.findUnique({ where: { id } });
+    return this.read((tx) => tx.planStripePrice.findUnique({ where: { id } }));
+  }
+
+  private read<T>(query: (tx: PrismaTransactionClient) => Promise<T>) {
+    return this.contexts?.getOptional()
+      ? this.rls.run(query)
+      : query(this.prisma);
   }
 
   adminList() {
-    return this.prisma.plan.findMany({
-      where: { commercial: { not: Prisma.DbNull } },
-      orderBy: { key: 'asc' },
-      select: {
-        key: true,
-        name: true,
-        description: true,
-        isActive: true,
-        catalogVersion: true,
-        catalogTenantId: true,
-        commercial: true,
-        capabilities: true,
-      },
-    });
+    return this.rls.run((tx) =>
+      tx.plan.findMany({
+        where: { commercial: { not: Prisma.DbNull } },
+        orderBy: { key: 'asc' },
+        select: {
+          key: true,
+          name: true,
+          description: true,
+          isActive: true,
+          catalogVersion: true,
+          catalogTenantId: true,
+          commercial: true,
+          capabilities: true,
+        },
+      }),
+    );
   }
 
   async publish(

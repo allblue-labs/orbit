@@ -8,6 +8,11 @@ import { VerifiedPlatformAuthority } from '../../../common/verified-platform-aut
 import { Injectable } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../database';
+import {
+  resolveIdentityUser,
+  withIdentity,
+} from '../../../database/rls/identity-scope';
+import { generateUuidV7 } from '../../../utils';
 import type { PrismaTransactionClient } from '../../../database/prisma.types';
 import {
   UnauthorizedException,
@@ -61,11 +66,8 @@ export class IdentityRepository {
 
   async findByEmail(email: string): Promise<IdentityUser | null> {
     const normalizedEmail = email.trim().toLowerCase();
-    const user = await this.prisma.user.findUnique({
-      where: { normalizedEmail },
-      select: { id: true },
-    });
-    return user ? this.findIdentity(user.id) : null;
+    const id = await resolveIdentityUser(this.prisma, normalizedEmail);
+    return id ? this.findIdentity(id) : null;
   }
 
   findById(id: string): Promise<IdentityUser | null> {
@@ -170,10 +172,14 @@ export class IdentityRepository {
   async updateFailedLogin(
     credentialId: string,
     expectedPasswordHash: string,
+    userId: string,
   ): Promise<void> {
     // Increment the current row, never the snapshot read before password/MFA
     // verification. A late attempt against an old password cannot re-lock it.
-    await this.prisma.$executeRaw`
+    await withIdentity(
+      this.prisma,
+      userId,
+      (tx) => tx.$executeRaw`
       UPDATE credentials SET
         failed_attempts = CASE WHEN locked_until <= clock_timestamp() THEN 1 ELSE failed_attempts + 1 END,
         locked_until = CASE
@@ -181,11 +187,14 @@ export class IdentityRepository {
           THEN clock_timestamp() + interval '15 minutes' ELSE NULL END,
         updated_at = clock_timestamp()
       WHERE id = ${credentialId}::uuid AND password_hash = ${expectedPasswordHash}
-        AND (locked_until IS NULL OR locked_until <= clock_timestamp())`;
+        AND (locked_until IS NULL OR locked_until <= clock_timestamp())`,
+    );
   }
 
   findCredential(userId: string) {
-    return this.prisma.credential.findUnique({ where: { userId } });
+    return withIdentity(this.prisma, userId, (tx) =>
+      tx.credential.findUnique({ where: { userId } }),
+    );
   }
 
   /**
@@ -237,7 +246,7 @@ export class IdentityRepository {
     credentialId: string,
     expectedPasswordHash: string,
   ): Promise<void> {
-    await this.prisma.$transaction(async (tx) => {
+    await withIdentity(this.prisma, data.userId, async (tx) => {
       const changed = await tx.$executeRaw`
         UPDATE credentials SET failed_attempts = 0, locked_until = NULL, updated_at = clock_timestamp()
         WHERE id = ${credentialId}::uuid AND user_id = ${data.userId}::uuid
@@ -277,7 +286,7 @@ export class IdentityRepository {
 
   /** Abre a sessão de um login sem senha e marca a última autenticação. */
   async openSession(data: Prisma.SessionUncheckedCreateInput): Promise<void> {
-    await this.prisma.$transaction(async (tx) => {
+    await withIdentity(this.prisma, data.userId, async (tx) => {
       const user = await tx.user.updateMany({
         where: { id: data.userId, status: 'ACTIVE', deletedAt: null },
         data: { lastAuthenticatedAt: new Date() },
@@ -292,35 +301,34 @@ export class IdentityRepository {
   }
 
   createSession(data: Prisma.SessionUncheckedCreateInput) {
-    return this.prisma.session.create({ data });
+    return withIdentity(this.prisma, data.userId, (tx) =>
+      tx.session.create({ data }),
+    );
   }
 
-  findSessionByRefreshHash(refreshTokenHash: string) {
-    return this.prisma.session.findUnique({ where: { refreshTokenHash } });
+  findSessionByRefreshHash(hash: string) {
+    return this.findRefreshSession(hash);
   }
 
-  findSessionById(id: string) {
-    return this.prisma.session.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        userId: true,
-        client: true,
-        expiresAt: true,
-        revokedAt: true,
-      },
-    });
+  findSessionById(id: string, userId: string) {
+    return withIdentity(this.prisma, userId, (tx) =>
+      tx.session.findUnique({
+        where: { id, userId },
+        select: {
+          id: true,
+          userId: true,
+          client: true,
+          expiresAt: true,
+          revokedAt: true,
+        },
+      }),
+    );
   }
 
   async findRefreshSession(hash: string): Promise<RefreshSession | null> {
-    const rows = await this.prisma.$queryRaw<RefreshSession[]>`
-      SELECT id, user_id AS "userId", client, refresh_token_hash AS "refreshTokenHash",
-        rotation_response AS "rotationResponse",
-        COALESCE(rotation_grace_until > clock_timestamp(), false) AS "inGrace"
-      FROM sessions
-      WHERE (refresh_token_hash = ${hash} OR previous_refresh_token_hash = ${hash})
-        AND revoked_at IS NULL AND expires_at > clock_timestamp()`;
-    return rows[0] ?? null;
+    const [row] = await this.prisma.$queryRaw<RefreshSession[]>`
+      SELECT * FROM public.app_identity_session_by_refresh(${hash})`;
+    return row ?? null;
   }
 
   async rotateSession(
@@ -329,11 +337,15 @@ export class IdentityRepository {
     refreshTokenHash: string,
     expiresAt: Date,
     encryptedResponse: string,
+    userId: string,
   ): Promise<boolean> {
     // PostgreSQL rechecks this predicate after waiting for a competing update.
     // Current and previous tokens return the same response throughout grace;
     // a fast successor cannot invalidate a response still in flight.
-    const changed = await this.prisma.$executeRaw`
+    const changed = await withIdentity(
+      this.prisma,
+      userId,
+      (tx) => tx.$executeRaw`
       UPDATE sessions SET refresh_token_hash = ${refreshTokenHash},
         previous_refresh_token_hash = ${expectedHash},
         rotation_response = ${encryptedResponse},
@@ -341,26 +353,27 @@ export class IdentityRepository {
         expires_at = ${expiresAt}
       WHERE id = ${id}::uuid AND refresh_token_hash = ${expectedHash}
         AND revoked_at IS NULL AND expires_at > clock_timestamp()
-        AND (rotation_grace_until IS NULL OR rotation_grace_until <= clock_timestamp())`;
+        AND (rotation_grace_until IS NULL OR rotation_grace_until <= clock_timestamp())`,
+    );
     return changed === 1;
   }
 
-  revokeSession(id: string): Promise<void> {
-    return this.prisma.session
-      .updateMany({
-        where: { id, revokedAt: null },
+  async revokeSession(id: string, userId: string): Promise<void> {
+    await withIdentity(this.prisma, userId, (tx) =>
+      tx.session.updateMany({
+        where: { id, userId, revokedAt: null },
         data: { revokedAt: new Date() },
-      })
-      .then(() => undefined);
+      }),
+    );
   }
 
-  revokeUserSessions(userId: string): Promise<void> {
-    return this.prisma.session
-      .updateMany({
+  async revokeUserSessions(userId: string): Promise<void> {
+    await withIdentity(this.prisma, userId, (tx) =>
+      tx.session.updateMany({
         where: { userId, revokedAt: null },
         data: { revokedAt: new Date() },
-      })
-      .then(() => undefined);
+      }),
+    );
   }
 
   findDelegatedRole(
@@ -384,34 +397,38 @@ export class IdentityRepository {
   }
 
   listSessions(userId: string) {
-    return this.prisma.session.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
-      // The profile UI is a security overview, not an audit export. A bounded
-      // latest-first window prevents an account with years of rotated or
-      // revoked sessions from creating an unbounded response.
-      take: 100,
-      select: {
-        id: true,
-        client: true,
-        deviceId: true,
-        userAgent: true,
-        ipAddress: true,
-        organizationId: true,
-        businessUnitId: true,
-        expiresAt: true,
-        revokedAt: true,
-        createdAt: true,
-      },
-    });
+    return withIdentity(this.prisma, userId, (tx) =>
+      tx.session.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        // The profile UI is a security overview, not an audit export. A bounded
+        // latest-first window prevents an account with years of rotated or
+        // revoked sessions from creating an unbounded response.
+        take: 100,
+        select: {
+          id: true,
+          client: true,
+          deviceId: true,
+          userAgent: true,
+          ipAddress: true,
+          organizationId: true,
+          businessUnitId: true,
+          expiresAt: true,
+          revokedAt: true,
+          createdAt: true,
+        },
+      }),
+    );
   }
 
   updateProfile(userId: string, data: Prisma.UserUpdateInput) {
-    return this.prisma.user.update({
-      where: { id: userId },
-      data,
-      omit: { deletedAt: true },
-    });
+    return withIdentity(this.prisma, userId, (tx) =>
+      tx.user.update({
+        where: { id: userId },
+        data,
+        omit: { deletedAt: true },
+      }),
+    );
   }
 
   createEmailVerification(
@@ -487,8 +504,8 @@ export class IdentityRepository {
     existingTransaction?: PrismaTransactionClient,
   ) {
     const work = async (transaction: PrismaTransactionClient) => {
-      await transaction.$executeRaw`SELECT id FROM users WHERE id=${userId}::uuid FOR UPDATE`;
       await this.setLocal(transaction, 'app.user_id', userId);
+      await transaction.$executeRaw`SELECT id FROM users WHERE id=${userId}::uuid FOR UPDATE`;
       let queueEmail = Boolean(emailToken);
       if (emailToken && (await accountEmailOwner(transaction, userId))) {
         const previous = await transaction.passwordResetToken.findFirst({
@@ -537,17 +554,22 @@ export class IdentityRepository {
       : this.prisma.$transaction(work);
   }
 
-  findPasswordReset(tokenHash: string) {
-    return this.prisma.passwordResetToken.findUnique({
-      where: {
-        tokenHash,
-        user: {
-          status: 'ACTIVE',
-          deletedAt: null,
-          credential: { isNot: null },
+  async findPasswordReset(tokenHash: string) {
+    const [scope] = await this.prisma.$queryRaw<{ id: string | null }[]>`
+      SELECT public.app_identity_reset_user(${tokenHash}) AS id`;
+    if (!scope?.id) return null;
+    return withIdentity(this.prisma, scope.id, (tx) =>
+      tx.passwordResetToken.findUnique({
+        where: {
+          tokenHash,
+          user: {
+            status: 'ACTIVE',
+            deletedAt: null,
+            credential: { isNot: null },
+          },
         },
-      },
-    });
+      }),
+    );
   }
 
   consumePasswordReset(
@@ -664,8 +686,14 @@ export class IdentityRepository {
     });
   }
 
-  findInvitation(tokenHash: string) {
-    return this.prisma.identityInvitation.findUnique({ where: { tokenHash } });
+  async findInvitation(tokenHash: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const [scope] = await tx.$queryRaw<{ organizationId: string }[]>`
+        SELECT organization_id AS "organizationId" FROM public.app_identity_invitation_by_hash(${tokenHash})`;
+      if (!scope) return null;
+      await this.setLocal(tx, 'app.organization_id', scope.organizationId);
+      return tx.identityInvitation.findUnique({ where: { tokenHash } });
+    });
   }
 
   /**
@@ -812,26 +840,36 @@ export class IdentityRepository {
           'app.business_unit_ids',
           input.businessUnitId ?? '',
         );
-        let user = await transaction.user.findUnique({
-          where: { normalizedEmail: input.normalizedEmail },
-        });
-        user ??= await transaction.user.create({
-          data: {
-            email: input.email,
-            normalizedEmail: input.normalizedEmail,
-            firstName: input.firstName,
-            lastName: input.lastName,
-            displayName: `${input.firstName} ${input.lastName}`.trim(),
-            status: 'ACTIVE',
-            emailVerifiedAt: new Date(),
-            credential: {
-              create: { passwordHash: input.passwordHash },
+        const [invitation] = await transaction.$queryRaw<{ id: string }[]>`
+          SELECT id FROM public.identity_invitations
+          WHERE id=${invitationId}::uuid AND organization_id=${input.organizationId}::uuid
+            AND normalized_email=${input.normalizedEmail} AND status='PENDING'
+            AND expires_at>clock_timestamp() FOR UPDATE`;
+        if (!invitation) throw new ValidationException('Convite indisponível.');
+        const existingUserId = await resolveIdentityUser(
+          transaction,
+          input.normalizedEmail,
+        );
+        const userId = existingUserId ?? generateUuidV7();
+        await this.setLocal(transaction, 'app.user_id', userId);
+        if (!existingUserId) {
+          await transaction.user.create({
+            data: {
+              id: userId,
+              email: input.email,
+              normalizedEmail: input.normalizedEmail,
+              firstName: input.firstName,
+              lastName: input.lastName,
+              displayName: `${input.firstName} ${input.lastName}`.trim(),
+              status: 'ACTIVE',
+              emailVerifiedAt: new Date(),
+              credential: { create: { passwordHash: input.passwordHash } },
             },
-          },
-        });
+          });
+        }
         await transaction.credential.upsert({
-          where: { userId: user.id },
-          create: { userId: user.id, passwordHash: input.passwordHash },
+          where: { userId },
+          create: { userId, passwordHash: input.passwordHash },
           update: {},
         });
         /**
@@ -841,7 +879,7 @@ export class IdentityRepository {
         const jaAtivo = await transaction.organizationMembership.findFirst({
           where: {
             organizationId: input.organizationId,
-            userId: user.id,
+            userId: userId,
             status: 'ACTIVE',
             deletedAt: null,
           },
@@ -853,12 +891,12 @@ export class IdentityRepository {
           where: {
             organizationId_userId: {
               organizationId: input.organizationId,
-              userId: user.id,
+              userId: userId,
             },
           },
           create: {
             organizationId: input.organizationId,
-            userId: user.id,
+            userId: userId,
             roleId: input.roleId,
           },
           update: { roleId: input.roleId, status: 'ACTIVE', deletedAt: null },
@@ -868,13 +906,13 @@ export class IdentityRepository {
             where: {
               businessUnitId_userId: {
                 businessUnitId: input.businessUnitId,
-                userId: user.id,
+                userId: userId,
               },
             },
             create: {
               organizationId: input.organizationId,
               businessUnitId: input.businessUnitId,
-              userId: user.id,
+              userId: userId,
               roleId: input.roleId,
             },
             update: { roleId: input.roleId, status: 'ACTIVE', deletedAt: null },
@@ -901,53 +939,68 @@ export class IdentityRepository {
   }
 
   createMfaFactor(userId: string, encryptedSecret: string) {
-    return this.prisma.mfaFactor.create({
-      data: { userId, secret: encryptedSecret },
-      select: { id: true },
-    });
+    return withIdentity(this.prisma, userId, (tx) =>
+      tx.mfaFactor.create({
+        data: { userId, secret: encryptedSecret },
+        select: { id: true },
+      }),
+    );
   }
 
   findMfaFactor(id: string, userId: string) {
-    return this.prisma.mfaFactor.findFirst({
-      where: { id, userId, deletedAt: null },
-    });
+    return withIdentity(this.prisma, userId, (tx) =>
+      tx.mfaFactor.findFirst({
+        where: { id, userId, deletedAt: null },
+      }),
+    );
   }
 
-  enableMfaFactor(id: string, recoveryCodes: readonly string[]): Promise<void> {
-    return this.prisma.mfaFactor
-      .update({
-        where: { id },
+  async enableMfaFactor(
+    id: string,
+    recoveryCodes: readonly string[],
+    userId: string,
+  ): Promise<void> {
+    await withIdentity(this.prisma, userId, (tx) =>
+      tx.mfaFactor.update({
+        where: { id, userId },
         data: { verifiedAt: new Date(), recoveryCodes: [...recoveryCodes] },
-      })
-      .then(() => undefined);
+      }),
+    );
   }
 
-  async touchMfaFactor(id: string): Promise<boolean> {
-    const result = await this.prisma.mfaFactor.updateMany({
-      where: { id, verifiedAt: { not: null }, deletedAt: null },
-      data: { lastUsedAt: new Date() },
-    });
+  async touchMfaFactor(id: string, userId: string): Promise<boolean> {
+    const result = await withIdentity(this.prisma, userId, (tx) =>
+      tx.mfaFactor.updateMany({
+        where: { id, userId, verifiedAt: { not: null }, deletedAt: null },
+        data: { lastUsedAt: new Date() },
+      }),
+    );
     return result.count === 1;
   }
 
   async consumeMfaRecoveryCode(
     id: string,
     matchedHash: string,
+    userId: string,
   ): Promise<boolean> {
-    const changed = await this.prisma.$executeRaw`
+    const changed = await withIdentity(
+      this.prisma,
+      userId,
+      (tx) => tx.$executeRaw`
       UPDATE mfa_factors SET recovery_codes = array_remove(recovery_codes, ${matchedHash}),
         last_used_at = clock_timestamp()
       WHERE id = ${id}::uuid AND verified_at IS NOT NULL AND deleted_at IS NULL
-        AND ${matchedHash} = ANY(recovery_codes)`;
+        AND ${matchedHash} = ANY(recovery_codes)`,
+    );
     return changed === 1;
   }
 
-  disableMfa(userId: string): Promise<void> {
-    return this.prisma.mfaFactor
-      .updateMany({
+  async disableMfa(userId: string): Promise<void> {
+    await withIdentity(this.prisma, userId, (tx) =>
+      tx.mfaFactor.updateMany({
         where: { userId, deletedAt: null },
         data: { deletedAt: new Date() },
-      })
-      .then(() => undefined);
+      }),
+    );
   }
 }

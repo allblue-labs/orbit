@@ -29,6 +29,7 @@ parser.add_argument(
 parser.add_argument("--api-image", default="orbit-pr14-api:local")
 parser.add_argument("--migrator-image", default="orbit-pr14-migrator:local")
 parser.add_argument("--frontend-image", default="orbit-pr14-frontend:local")
+parser.add_argument("--pgbouncer-image", default="orbit-pr14-pgbouncer:local")
 args = parser.parse_args()
 config = isolated_config()
 preflight.check(config)
@@ -50,6 +51,7 @@ for name, image in [
     ("migrate", args.migrator_image),
     ("bootstrap-admin", args.migrator_image),
     ("frontend", args.frontend_image),
+    ("pgbouncer", args.pgbouncer_image),
 ]:
     services[name]["image"] = image
 api_env = services["api"]["environment"]
@@ -92,6 +94,7 @@ for name in ("worker", "documents"):
     original = services[name]["environment"]
     services[name]["environment"] = {
         **api_env,
+        "DATABASE_URL": original["DATABASE_URL"],
         "ORBIT_PROCESS_ROLE": name,
         "JOBS_WORKER_ENABLED": "true",
         "DATABASE_POOL_MAX": original["DATABASE_POOL_MAX"],
@@ -111,7 +114,7 @@ fixture["profiles"] = ["fixtures"]
 fixture["command"] = ["node", "dist/src/scripts/seed-owner.js"]
 fixture["environment"] = {
     "NODE_ENV": "production",
-    "DATABASE_URL": services["migrate"]["environment"]["DATABASE_URL"],
+    "DIRECT_DATABASE_URL": services["migrate"]["environment"]["DIRECT_DATABASE_URL"],
     "OWNER_EMAIL": "owner@example.test",
     "OWNER_PASSWORD": password,
     "OWNER_FIRST_NAME": "Owner",
@@ -193,7 +196,8 @@ with tempfile.TemporaryDirectory(prefix="orbit-deployment-proof-") as directory:
             return json.loads(raw) if raw else None
 
     try:
-        for image in [args.api_image, args.frontend_image, args.migrator_image]:
+        for image in [args.api_image, args.frontend_image, args.migrator_image,
+                      args.pgbouncer_image]:
             metadata = json.loads(
                 command(["docker", "image", "inspect", image]).stdout
             )[0]
@@ -233,10 +237,12 @@ with tempfile.TemporaryDirectory(prefix="orbit-deployment-proof-") as directory:
                 "--wait",
                 "--wait-timeout",
                 "120",
+                "pgbouncer",
                 "api",
                 "frontend",
             ]
         )
+        checks.append("private-pgbouncer-transaction-pool-healthy")
         command(
             compose
             + [
@@ -258,7 +264,8 @@ with tempfile.TemporaryDirectory(prefix="orbit-deployment-proof-") as directory:
         runtime_keys = {value.split("=", 1)[0] for value in inspected["Config"]["Env"]}
         assert not runtime_keys.intersection(
             {
-                "DATABASE_URL",
+                "DIRECT_DATABASE_URL",
+                "APP_DATABASE_URL",
                 "POSTGRES_PASSWORD",
                 "PLATFORM_ADMIN_PASSWORD",
                 "OWNER_PASSWORD",

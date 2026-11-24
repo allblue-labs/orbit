@@ -23,6 +23,7 @@
  *
  * Idempotente: rodar de novo não cria segunda assinatura.
  */
+import { directDatabaseUrl } from './direct-database-url';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import { config } from 'dotenv';
@@ -43,10 +44,7 @@ import { snapshotOf } from '../modules/subscription-plans/subscriptions/subscrip
 config({ path: resolve(process.cwd(), '.env'), quiet: true });
 config({ path: resolve(process.cwd(), '../.env'), quiet: true });
 
-const databaseUrl = process.env.DATABASE_URL?.trim();
-if (!databaseUrl) {
-  throw new Error('Required environment variable DATABASE_URL is missing');
-}
+const databaseUrl = directDatabaseUrl();
 
 const prisma = new PrismaClient({ adapter: new PrismaPg(databaseUrl) });
 
