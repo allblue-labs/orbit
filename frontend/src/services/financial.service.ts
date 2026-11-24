@@ -104,7 +104,7 @@ export const financialService = {
     apiClient.get<FinancialEntry>(entry(id), options),
 
   create: (input: CreateFinancialEntryInput): Promise<FinancialEntry> =>
-    apiClient.post<FinancialEntry>(`${PATH}/entries`, input),
+    apiClient.postIdempotent<FinancialEntry>(`${PATH}/entries`, input),
 
   /** Só lançamento manual: o servidor recusa editar origem automática. */
   update: (
@@ -117,7 +117,7 @@ export const financialService = {
     id: string,
     input: ConfirmFinancialEntryInput = {},
   ): Promise<FinancialEntry> =>
-    apiClient.post<FinancialEntry>(`${entry(id)}/confirm`, input),
+    apiClient.postIdempotent<FinancialEntry>(`${entry(id)}/confirm`, input),
 
   /**
    * Cancela — não exclui.

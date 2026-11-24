@@ -50,7 +50,7 @@ const FORWARDED_REQUEST_HEADERS: readonly string[] = [
 const FORWARDED_RESPONSE_HEADERS: readonly string[] = [
   "content-type",
   "content-disposition",
-  "cache-control",
+  "vary",
   "etag",
   "last-modified",
   "location",
@@ -268,6 +268,8 @@ function buildResponse(upstream: Response, requestId: string): NextResponse {
     const value = upstream.headers.get(name);
     if (value) headers.set(name, value);
   }
+  headers.set("Cache-Control", "private, no-store");
+  headers.append("Vary", "Cookie");
   headers.set(
     CONTEXT_HEADERS.requestId,
     upstream.headers.get(CONTEXT_HEADERS.requestId) ?? requestId,

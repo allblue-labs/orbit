@@ -69,7 +69,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
               Number.isFinite(retry) ? Math.max(1, Math.ceil(retry)) : 5,
             ),
             "Content-Type": "text/plain; charset=utf-8",
-            "Cache-Control": "no-store",
+            "Cache-Control": "private, no-store",
           },
         },
       );

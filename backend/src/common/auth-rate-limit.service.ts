@@ -1,5 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { createHmac } from 'node:crypto';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { HotpathRateLimit, opaqueRateKey } from './hotpath/hotpath-rate-limit';
 import { PrismaService } from '../database';
 import {
   InfrastructureException,
@@ -10,7 +10,10 @@ import {
 @Injectable()
 export class AuthRateLimitService {
   private readonly logger = new Logger(AuthRateLimitService.name);
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly hotpath?: HotpathRateLimit,
+  ) {}
 
   async check(action: string, origin: string, account?: string): Promise<void> {
     const secret = process.env.AUTH_RATE_LIMIT_SECRET ?? '';
@@ -18,12 +21,13 @@ export class AuthRateLimitService {
       throw new InfrastructureException(
         'AUTH_RATE_LIMIT_SECRET must be configured',
       );
-    const maximum = this.number('AUTH_RATE_LIMIT_MAX', 20, 100_000);
-    const originMaximum = this.number(
-      'AUTH_RATE_LIMIT_ORIGIN_MAX',
-      120,
-      100_000,
-    );
+    const strict = action.startsWith('public/quotes/');
+    const maximum = strict
+      ? 8
+      : this.number('AUTH_RATE_LIMIT_MAX', 20, 100_000);
+    const originMaximum = strict
+      ? 30
+      : this.number('AUTH_RATE_LIMIT_ORIGIN_MAX', 120, 100_000);
     const windowMs = this.number(
       'AUTH_RATE_LIMIT_WINDOW_MS',
       60_000,
@@ -32,19 +36,19 @@ export class AuthRateLimitService {
     const budgets = [
       { scope: ['origin', origin], maximum: originMaximum },
       ...(account ? [{ scope: ['account', account], maximum }] : []),
-    ];
-    for (const budget of budgets) {
-      // No plaintext IP, email, bearer credential or token in persistence.
-      const hash = createHmac('sha256', secret)
-        .update(JSON.stringify([action, ...budget.scope]))
-        .digest('hex');
+    ].map(({ scope, maximum }) => ({
+      key: opaqueRateKey(secret, [action, ...scope]),
+      maximum,
+    }));
+    if (await this.hotpath?.distributed(budgets, windowMs)) return;
+    for (const { key, maximum } of budgets) {
       let result: { allowed: boolean; retryAfterSeconds: number } | undefined;
       try {
         const rows = await this.prisma.$queryRaw<
           { allowed: boolean; retryAfterSeconds: number }[]
         >`
           SELECT allowed, retry_after_seconds AS "retryAfterSeconds"
-          FROM app_auth_rate_limit_consume(${hash}, ${budget.maximum}, ${windowMs})`;
+          FROM app_auth_rate_limit_consume(${key}, ${maximum}, ${windowMs})`;
         result = rows[0];
       } catch {
         this.logger.error('Auth rate-limit storage unavailable');

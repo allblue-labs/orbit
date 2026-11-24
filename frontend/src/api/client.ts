@@ -25,6 +25,20 @@ export const apiClient = {
     options?: RequestOptions,
   ): Promise<T> => httpJson<T>({ method: "POST", path, body, ...options }),
 
+  /** Same key for each network attempt of a mutation that supports replay. */
+  postIdempotent: <T>(path: string, body: unknown): Promise<T> => {
+    const key = Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join("");
+    return httpJson<T>({
+      method: "POST",
+      path,
+      body,
+      headers: { "idempotency-key": key },
+      retries: 1,
+    });
+  },
+
   put: <T>(
     path: string,
     body?: unknown,

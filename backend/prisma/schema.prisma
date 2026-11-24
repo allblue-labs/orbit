@@ -38,6 +38,7 @@ model User {
   avatarFile                         StorageFile?                   @relation("UserAvatarFile", fields: [avatarStorageFileId], references: [id], onDelete: SetNull)
   credential                         Credential?
   sessions                           Session[]
+  httpIdempotencyRecords             HttpIdempotencyRecord[]
   biometricCredentials               IdentityBiometricCredential[]
   ownedOrganizations                 Organization[]                 @relation("OrganizationOwner")
   organizationMemberships            OrganizationMembership[]
@@ -339,6 +340,22 @@ model AuthRateLimitBucket {
   @@map("auth_rate_limit_buckets")
 }
 
+model HttpIdempotencyRecord {
+  scopeHash          String   @id @map("scope_hash") @db.Char(64)
+  organizationId     String   @map("organization_id") @db.Uuid
+  actorId            String   @map("actor_id") @db.Uuid
+  responseCiphertext String   @map("response_ciphertext")
+  expiresAt          DateTime @map("expires_at") @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "http_idempotency_records_organization_id_fkey")
+  actor        User         @relation(fields: [actorId], references: [id], onDelete: Cascade, map: "http_idempotency_records_actor_id_fkey")
+
+  @@index([expiresAt], map: "http_idempotency_expiry_idx")
+  @@index([organizationId], map: "http_idempotency_organization_idx")
+  @@index([actorId], map: "http_idempotency_actor_idx")
+  @@map("http_idempotency_records")
+}
+
 model Session {
   id                       String    @id @default(uuid(7)) @db.Uuid
   userId                   String    @map("user_id") @db.Uuid
@@ -413,6 +430,7 @@ model Organization {
   billingFinancialAdjustments   BillingFinancialAdjustment[]
   integrations                  Integration[]
   sessions                      Session[]
+  httpIdempotencyRecords        HttpIdempotencyRecord[]
   customers                     Customer[]
   customerAddresses             CustomerAddress[]
   categories                    ProductCategory[]

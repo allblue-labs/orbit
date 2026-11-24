@@ -1,4 +1,5 @@
 import { MobileManagement } from '../../common/mobile-management';
+import { Idempotent } from '../../common/hotpath/idempotent.decorator';
 /**
  * API do Financeiro.
  *
@@ -95,6 +96,7 @@ export class FinancialController {
   }
 
   @Post('entries')
+  @Idempotent('financial.entry.create', 'financial-entry')
   @MobileManagement('finance')
   @Capabilities('financial.manage')
   @Permissions('financial.manage')
@@ -132,6 +134,7 @@ export class FinancialController {
   }
 
   @Post('entries/:id/confirm')
+  @Idempotent('financial.entry.confirm', 'financial-entry')
   @MobileManagement('finance')
   @Capabilities('financial.manage')
   @Permissions('financial.manage')

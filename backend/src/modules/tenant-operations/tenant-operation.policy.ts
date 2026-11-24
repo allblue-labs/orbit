@@ -64,8 +64,11 @@ export class TenantOperationPolicy {
     };
   }
 
-  async assertOperational(): Promise<void> {
-    const state = await this.snapshot();
+  async assertOperational(checked?: {
+    operational: boolean;
+    status: string | null;
+  }): Promise<void> {
+    const state = checked ?? (await this.snapshot());
     if (!state.operational)
       throw new ForbiddenException(
         'A organização está temporariamente impedida de operar. Entre em contato com o responsável.',

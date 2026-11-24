@@ -7,6 +7,7 @@ import {
   type CanActivate,
   type ExecutionContext,
   Injectable,
+  Optional,
 } from '@nestjs/common';
 import type { Request } from 'express';
 import type { UUID } from '../../contracts';
@@ -15,6 +16,7 @@ import { isJwtValidationError } from '../../errors';
 import { CustomerPortalRepository } from './customer-portal.repository';
 import { CustomerPortalTokenService } from './customer-portal-token.service';
 import type { CustomerPortalActor } from './customer-portal.types';
+import { HotpathRateLimit } from '../../common/hotpath/hotpath-rate-limit';
 
 export interface CustomerPortalRequest extends Request {
   portalActor?: CustomerPortalActor;
@@ -31,6 +33,7 @@ export class CustomerPortalGuard implements CanActivate {
     private readonly repository: CustomerPortalRepository,
     private readonly policy: TenantOperationPolicy,
     private readonly reflector: Reflector,
+    @Optional() private readonly limits?: HotpathRateLimit,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -64,6 +67,11 @@ export class CustomerPortalGuard implements CanActivate {
         organizationId: this.tokens.asUuid(session.organizationId),
         customerId: this.tokens.asUuid(session.customerId),
       };
+      await this.limits?.authenticated(
+        actor.organizationId,
+        actor.identityId,
+        'portal',
+      );
       if (
         !this.reflector.getAllAndOverride<string>(TENANT_RECOVERY, [
           context.getHandler(),

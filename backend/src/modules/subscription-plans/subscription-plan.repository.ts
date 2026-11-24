@@ -89,6 +89,7 @@ export class SubscriptionPlanRepository {
               orderBy: [
                 { endedAt: { sort: 'desc', nulls: 'first' } },
                 { startedAt: 'desc' },
+                { id: 'desc' },
               ],
               take: 1,
             },
@@ -142,6 +143,7 @@ export class SubscriptionPlanRepository {
             orderBy: [
               { endedAt: { sort: 'desc', nulls: 'first' } },
               { startedAt: 'desc' },
+              { id: 'desc' },
             ],
             take: 1,
           },

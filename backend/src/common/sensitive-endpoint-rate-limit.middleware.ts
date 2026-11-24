@@ -6,7 +6,10 @@ import { requestClientIp } from './trusted-client-origin';
 const SENSITIVE_PATH =
   /^(?:identity\/(?:login|register|refresh|biometrics\/(?:webauthn\/authentication(?:\/options)?|devices\/login)|email\/(?:verify|resend)|password\/(?:forgot|reset(?:\/validate)?)|me\/mfa\/(?:enrollment|enable))|portal\/auth\/(?:login|refresh|biometrics\/(?:webauthn\/authentication(?:\/options)?|devices\/login)|activate|password\/reset-(?:request|confirm))|public\/contact|billing\/(?:checkout-session|portal-session))$/;
 
-/** Shared database budgets. No test-runtime bypass or per-process fallback. */
+const PUBLIC_QUOTE =
+  /^public\/quotes\/proposals\/([^/]+)\/(response|document\/exports)$/i;
+
+/** Redis budgets with PostgreSQL fallback for credential and capability routes. */
 @Injectable()
 export class SensitiveEndpointRateLimitMiddleware implements NestMiddleware {
   constructor(private readonly limits: AuthRateLimitService) {}
@@ -16,11 +19,28 @@ export class SensitiveEndpointRateLimitMiddleware implements NestMiddleware {
     _response: Response,
     next: NextFunction,
   ): Promise<void> {
-    const path = request.path
-      .toLowerCase()
-      .replace(/^\/(?:api\/v1\/)?/, '')
+    const rawPath = request.path
+      .replace(/^\/(?:api\/v1\/)?/i, '')
       .replace(/\/+$/, '');
-    if (request.method !== 'POST' || !SENSITIVE_PATH.test(path)) return next();
+    if (request.method !== 'POST') return next();
+    const quote = PUBLIC_QUOTE.exec(rawPath);
+    if (quote) {
+      let token: string | undefined;
+      try {
+        const decoded = decodeURIComponent(quote[1]!);
+        if (/^[A-Za-z0-9_-]{64}$/.test(decoded)) token = `token:${decoded}`;
+      } catch {
+        // Even malformed paths consume their IP budget.
+      }
+      await this.limits.check(
+        `public/quotes/${quote[2]!.toLowerCase()}`,
+        requestClientIp(request),
+        token,
+      );
+      return next();
+    }
+    const path = rawPath.toLowerCase();
+    if (!SENSITIVE_PATH.test(path)) return next();
     const body = request.body as Record<string, unknown> | undefined;
     const email =
       typeof body?.email === 'string'

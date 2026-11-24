@@ -39,6 +39,8 @@ export function bffError(init: BffErrorInit): NextResponse<ApiErrorEnvelope> {
   return NextResponse.json(body, {
     status: init.status,
     headers: {
+      "Cache-Control": "private, no-store",
+      Vary: "Cookie",
       [CONTEXT_HEADERS.requestId]: init.requestId,
       ...(init.status === 429 &&
       retry !== null &&
@@ -57,7 +59,14 @@ export function bffJson<T>(
 ): NextResponse {
   return NextResponse.json(
     { success: true, data, requestId, timestamp: new Date().toISOString() },
-    { status, headers: { [CONTEXT_HEADERS.requestId]: requestId } },
+    {
+      status,
+      headers: {
+        "Cache-Control": "private, no-store",
+        Vary: "Cookie",
+        [CONTEXT_HEADERS.requestId]: requestId,
+      },
+    },
   );
 }
 

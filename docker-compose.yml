@@ -1,6 +1,44 @@
 name: orbit
 
 services:
+  redis-hotpath:
+    image: redis:8.4-alpine@sha256:ff72f74e4f471df79ed920aa8bbc35efe72ff8a1f8acdc50aad5dbb9b14a4034
+    profiles: [hotpath]
+    restart: unless-stopped
+    user: "999:999"
+    read_only: true
+    cap_drop: [ALL]
+    pids_limit: 64
+    mem_limit: 256m
+    cpus: 1
+    security_opt: [no-new-privileges:true]
+    environment:
+      REDIS_HOTPATH_PASSWORD: ${REDIS_HOTPATH_PASSWORD:-}
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        case "$$REDIS_HOTPATH_PASSWORD" in
+          *[!a-fA-F0-9]*) exit 1 ;;
+        esac
+        test "$${#REDIS_HOTPATH_PASSWORD}" -ge 32
+        test "$${#REDIS_HOTPATH_PASSWORD}" -le 128
+        printf '%s\n' 'protected-mode yes' 'save ""' 'appendonly no' 'maxmemory 128mb' 'maxmemory-policy allkeys-lru' "requirepass $$REDIS_HOTPATH_PASSWORD" | exec redis-server -
+    # Mask the image's default /data volume. Hotpath is disposable.
+    tmpfs:
+      - /data:rw,noexec,nosuid,size=16777216,uid=999,gid=999
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_HOTPATH_PASSWORD\" redis-cli -e ping"]
+      interval: 15s
+      timeout: 2s
+      retries: 3
+    networks: [orbit_hotpath]
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   postgres:
     mem_limit: 2g
     cpus: 2
@@ -44,6 +82,12 @@ services:
     environment: &backend-environment
       NODE_ENV: production
       ORBIT_PROCESS_ROLE: api
+      REDIS_HOTPATH_ENABLED: ${REDIS_HOTPATH_ENABLED:-false}
+      REDIS_HOTPATH_HOST: redis-hotpath
+      REDIS_HOTPATH_PASSWORD: ${REDIS_HOTPATH_PASSWORD:-}
+      REDIS_HOTPATH_TIMEOUT_MS: ${REDIS_HOTPATH_TIMEOUT_MS:-150}
+      REDIS_HOTPATH_TENANT_RATE_MAX: ${REDIS_HOTPATH_TENANT_RATE_MAX:-1800}
+      REDIS_HOTPATH_USER_RATE_MAX: ${REDIS_HOTPATH_USER_RATE_MAX:-240}
       PORT: 5001
       HOST: 0.0.0.0
       # O processo HTTP não recebe credenciais administrativas do banco.
@@ -168,6 +212,7 @@ services:
     networks:
       - orbit_private
       - orbit_public
+      - orbit_hotpath
     logging:
       driver: local
       options:
@@ -178,9 +223,12 @@ services:
 
   worker:
     <<: *backend-runtime
+    networks: [orbit_private, orbit_public]
     environment:
       <<: *backend-environment
       ORBIT_PROCESS_ROLE: worker
+      REDIS_HOTPATH_ENABLED: "false"
+      REDIS_HOTPATH_PASSWORD: ""
       DATABASE_POOL_MAX: ${WORKER_DATABASE_POOL_MAX:-6}
     ports: []
     mem_limit: 1g
@@ -199,9 +247,12 @@ services:
 
   documents:
     <<: *backend-runtime
+    networks: [orbit_private, orbit_public]
     environment:
       <<: *backend-environment
       ORBIT_PROCESS_ROLE: documents
+      REDIS_HOTPATH_ENABLED: "false"
+      REDIS_HOTPATH_PASSWORD: ""
       DATABASE_POOL_MAX: ${DOCUMENTS_DATABASE_POOL_MAX:-4}
     ports: []
     mem_limit: 2g
@@ -357,6 +408,8 @@ volumes:
   artifact_objects:
 
 networks:
+  orbit_hotpath:
+    internal: true
   orbit_private:
     internal: true
   orbit_public:

@@ -83,7 +83,7 @@ export class IdentityRepository {
           deletedAt: null,
         },
         select: { organizationId: true },
-        orderBy: { joinedAt: 'asc' },
+        orderBy: [{ joinedAt: 'asc' }, { id: 'asc' }],
       });
       await this.setLocal(
         transaction,
@@ -105,7 +105,11 @@ export class IdentityRepository {
               deletedAt: null,
             },
             select: { id: true },
-            orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+            orderBy: [
+              { isPrimary: 'desc' },
+              { createdAt: 'asc' },
+              { id: 'asc' },
+            ],
           })
         : await transaction.businessUnitMembership.findMany({
             where: {
@@ -115,6 +119,7 @@ export class IdentityRepository {
               deletedAt: null,
             },
             select: { businessUnitId: true },
+            orderBy: { id: 'asc' },
           });
       const unitIds = units.map((unit) =>
         'businessUnitId' in unit ? unit.businessUnitId : unit.id,
@@ -137,6 +142,11 @@ export class IdentityRepository {
       return user
         ? {
             ...user,
+            organizationMemberships: user.organizationMemberships.sort(
+              (a, b) =>
+                a.joinedAt.getTime() - b.joinedAt.getTime() ||
+                a.id.localeCompare(b.id),
+            ),
             requiresEmailVerification:
               !user.emailVerifiedAt &&
               Boolean(

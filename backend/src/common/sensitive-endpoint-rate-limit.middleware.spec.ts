@@ -53,6 +53,20 @@ describe('SensitiveEndpointRateLimitMiddleware', () => {
     expect(check).not.toHaveBeenCalled();
     expect(next).toHaveBeenCalledTimes(2);
   });
+  it('keeps one route budget and one canonical token budget for public approvals', async () => {
+    const token = 'A'.repeat(64);
+    const next = jest.fn() as NextFunction;
+    await middleware.use(
+      request(`/API/V1/PUBLIC/QUOTES/PROPOSALS/%41${token.slice(1)}/RESPONSE/`),
+      {} as Response,
+      next,
+    );
+    expect(check).toHaveBeenCalledWith(
+      'public/quotes/response',
+      '192.0.2.10',
+      `token:${token}`,
+    );
+  });
   it('does not execute a handler when the shared store refuses', async () => {
     const next = jest.fn() as NextFunction;
     check.mockRejectedValueOnce(new Error('limited'));

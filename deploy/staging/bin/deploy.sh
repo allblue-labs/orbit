@@ -5,7 +5,13 @@ cd /opt/stacks/orbit
 [[ $(stat -c '%a' .env) == 600 ]] || { echo 'Use chmod 600 .env.' >&2; exit 1; }
 compose=(docker compose --env-file .env -f docker-compose.yml -f docker-compose.lock.yml)
 "${compose[@]}" config --quiet
-"${compose[@]}" --profile admin config --format json | python3 "$(dirname "$(readlink -f "$0")")/deployment_preflight.py"
+preflight_profiles=(--profile admin)
+hotpath_profile=false
+if "${compose[@]}" config --services | grep -Fxq redis-hotpath; then
+    preflight_profiles+=(--profile hotpath)
+    hotpath_profile=true
+fi
+"${compose[@]}" "${preflight_profiles[@]}" config --format json | python3 "$(dirname "$(readlink -f "$0")")/deployment_preflight.py"
 # Valida sem imprimir valores e impede Stripe real neste staging.
 python3 - <<'PY'
 import base64, json, re, subprocess, sys
@@ -90,6 +96,9 @@ finally:
     Path(filename).unlink(missing_ok=True)
 PYENV
 "${compose[@]}" up -d --wait postgres
+if [[ "$hotpath_profile" == true ]]; then
+    "${compose[@]}" up -d redis-hotpath
+fi
 # Migração é um serviço efêmero; up aguarda seu exit 0 antes de iniciar a API.
 "${compose[@]}" up -d --wait --wait-timeout 180 api frontend worker documents
 "${compose[@]}" ps

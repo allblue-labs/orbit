@@ -80,13 +80,17 @@ abstract class PlanMetadataGuard {
       .getRequest<RequestWithEntitlements>();
     const identity = this.identity(context);
 
-    request[ENTITLEMENTS] ??= this.plans.getEntitlements(
-      identity.organizationId,
-      {
-        userId: identity.id,
-        businessUnitIds: identity.businessUnitIds ?? [],
-      },
-    );
+    const access = {
+      userId: identity.id,
+      businessUnitIds: identity.businessUnitIds ?? [],
+    };
+    const version = request.accessFence?.billingVersion;
+    request[ENTITLEMENTS] ??= version
+      ? this.plans.getEntitlements(identity.organizationId, access, {
+          sessionId: identity.sessionId,
+          billingVersion: version,
+        })
+      : this.plans.getEntitlements(identity.organizationId, access);
 
     return request[ENTITLEMENTS];
   }

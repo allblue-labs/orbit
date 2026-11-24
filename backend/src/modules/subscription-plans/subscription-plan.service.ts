@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
+import { HotpathSnapshot } from '../../common/hotpath/hotpath-snapshot';
 import type { Prisma } from '@prisma/client';
 import {
   EntityNotFoundException,
@@ -22,6 +23,15 @@ export interface OrganizationEntitlements {
   currentPeriodEnd: Date | null;
 }
 
+interface CachedEntitlements extends Omit<
+  OrganizationEntitlements,
+  'currentPeriodStart' | 'currentPeriodEnd'
+> {
+  currentPeriodStart: string | null;
+  currentPeriodEnd: string | null;
+  expiresAt: number;
+}
+
 @Injectable()
 export class SubscriptionPlanService {
   private static readonly ALLOWED_STATUSES = new Set([
@@ -31,7 +41,10 @@ export class SubscriptionPlanService {
     'GRACE_PERIOD',
   ]);
 
-  constructor(private readonly repository: SubscriptionPlanRepository) {}
+  constructor(
+    private readonly repository: SubscriptionPlanRepository,
+    @Optional() private readonly hotpath?: HotpathSnapshot,
+  ) {}
 
   listPlans() {
     return this.repository.listActive();
@@ -70,6 +83,55 @@ export class SubscriptionPlanService {
   async getEntitlements(
     organizationId: string,
     access?: PlanTenantAccess,
+    checked?: { sessionId: string; billingVersion: string },
+  ): Promise<OrganizationEntitlements> {
+    const hotpath = this.hotpath;
+    if (!checked || !access || !hotpath?.available)
+      return this.loadEntitlements(organizationId, access);
+
+    const key = `orbit:v1:org:${organizationId}:plan:${checked.billingVersion}`;
+    const cached = await hotpath.read<CachedEntitlements>(key);
+    if (cached && cached.expiresAt > Date.now()) {
+      const { expiresAt: _expiresAt, ...value } = cached;
+      return {
+        ...value,
+        currentPeriodStart: value.currentPeriodStart
+          ? new Date(value.currentPeriodStart)
+          : null,
+        currentPeriodEnd: value.currentPeriodEnd
+          ? new Date(value.currentPeriodEnd)
+          : null,
+      };
+    }
+    let expiresAt = Date.now() + 120_000;
+    const value = await this.loadEntitlements(
+      organizationId,
+      access,
+      (transition) => {
+        expiresAt = Math.min(expiresAt, transition);
+      },
+    );
+    if (hotpath.available && expiresAt - Date.now() >= 1_000) {
+      const current = await hotpath.fence(checked.sessionId, access.userId);
+      if (
+        current?.cacheable &&
+        current.organizationId === organizationId &&
+        current.billingVersion === checked.billingVersion
+      ) {
+        await hotpath.write(
+          key,
+          { ...value, expiresAt },
+          Math.max(1, Math.ceil((expiresAt - Date.now()) / 1_000)),
+        );
+      }
+    }
+    return value;
+  }
+
+  private async loadEntitlements(
+    organizationId: string,
+    access?: PlanTenantAccess,
+    limitCacheUntil?: (timestamp: number) => void,
   ): Promise<OrganizationEntitlements> {
     const organization = await this.repository.getOrganizationEntitlements(
       organizationId,
@@ -78,6 +140,7 @@ export class SubscriptionPlanService {
     if (!organization) throw new EntityNotFoundException('Organization');
     const subscription = organization.subscriptions?.[0];
     if (subscription) {
+      const at = new Date();
       const projected = project(
         {
           status: subscription.status,
@@ -92,8 +155,18 @@ export class SubscriptionPlanService {
           cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
           pendingEffectiveAt: subscription.pendingEffectiveAt,
         },
-        new Date(),
+        at,
       );
+      if (limitCacheUntil) {
+        for (const boundary of [
+          subscription.trialEndsAt,
+          subscription.pendingEffectiveAt,
+          projected.currentPeriodEnd,
+          projected.graceEndsAt,
+        ]) {
+          if (boundary && boundary > at) limitCacheUntil(boundary.getTime());
+        }
+      }
       const planKey =
         projected.pendingApplied && subscription.pendingPlanCode
           ? subscription.pendingPlanCode

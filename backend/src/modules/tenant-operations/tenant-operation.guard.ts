@@ -106,7 +106,15 @@ export class TenantOperationGuard implements CanActivate {
         // These annotations do not bypass the following surface, RBAC or financial guards.
         if (this.reflector.getAllAndOverride<string>(TENANT_RECOVERY, targets))
           return true;
-        if (identity.organizationId) await this.policy.assertOperational();
+        if (identity.organizationId) {
+          const fence = request.accessFence;
+          await this.policy.assertOperational(
+            fence && {
+              operational: fence.operational,
+              status: fence.organizationStatus,
+            },
+          );
+        }
         return true;
       },
     );

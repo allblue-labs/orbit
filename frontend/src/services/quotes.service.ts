@@ -11,7 +11,10 @@
  * remendar o estado local.
  */
 import { apiClient } from "@/api/client";
-import { exportAndSave, type ExportedFile } from "@/services/document-export.service";
+import {
+  exportAndSave,
+  type ExportedFile,
+} from "@/services/document-export.service";
 import { queryKeys, type QueryKey } from "@/api/query-keys";
 import type { PaginatedResult, QueryParams, RequestOptions } from "@/types/api";
 import type { ArtifactExecution } from "@/types/artifact-executions";
@@ -60,7 +63,7 @@ export const quotesService = {
     apiClient.get<Quote>(quote(id), options),
 
   create: (input: CreateQuoteInput): Promise<Quote> =>
-    apiClient.post<Quote>(PATH, input),
+    apiClient.postIdempotent<Quote>(PATH, input),
 
   /**
    * A proposta copiada de um atendimento concluído.
@@ -105,7 +108,7 @@ export const quotesService = {
 
   /** Aprovar gera receita **prevista** no Financeiro, nunca realizada. */
   approve: (id: string): Promise<Quote> =>
-    apiClient.post<Quote>(`${quote(id)}/approve`, {}),
+    apiClient.postIdempotent<Quote>(`${quote(id)}/approve`, {}),
 
   reject: (id: string, input: QuoteReasonInput): Promise<Quote> =>
     apiClient.post<Quote>(`${quote(id)}/reject`, input),

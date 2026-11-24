@@ -33,7 +33,7 @@ const REQUEST_HEADERS = ["accept", "content-type", "idempotency-key"];
 const RESPONSE_HEADERS = [
   "content-type",
   "content-disposition",
-  "cache-control",
+  "vary",
   "etag",
   "x-request-id",
   "retry-after",
@@ -139,6 +139,8 @@ export function proxyToPortal(
         const valor = upstream.headers.get(nome);
         if (valor) headers.set(nome, valor);
       }
+      headers.set("Cache-Control", "private, no-store");
+      headers.append("Vary", "Cookie");
       headers.set(CONTEXT_HEADERS.requestId, requestId);
       const corpo = upstream.status !== 204 && upstream.status !== 304;
       const response = new NextResponse(corpo ? upstream.body : null, {

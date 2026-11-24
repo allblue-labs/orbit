@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { redactSensitivePath } from '../common/redact-sensitive-path';
 import type { Request, Response } from 'express';
-import { defer, type Observable, tap, map } from 'rxjs';
+import { Observable, tap, map } from 'rxjs';
 import type {
   IBaseResponse,
   IAuthenticatedUser,
@@ -81,7 +81,9 @@ export class RequestContextInterceptor implements NestInterceptor {
       locale: request.acceptsLanguages()[0] ?? 'pt-BR',
     });
     request.requestContext = context;
-    return defer(() => this.storage.run(context, () => next.handle()));
+    return new Observable((subscriber) =>
+      this.storage.run(context, () => next.handle().subscribe(subscriber)),
+    );
   }
 }
 

@@ -31,6 +31,7 @@ import {
   StreamableFile,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { Idempotent } from '../../common/hotpath/idempotent.decorator';
 import type { Response } from 'express';
 import { Permissions } from '../../decorators';
 import { ForbiddenException } from '../../exceptions';
@@ -144,7 +145,7 @@ export class QuoteController {
     response.set({
       'Content-Type': documento.mimeType,
       'Content-Disposition': `inline; filename="${documento.fileName}"`,
-      'Cache-Control': 'no-store',
+      'Cache-Control': 'private, no-store',
     });
 
     return new StreamableFile(documento.bytes);
@@ -186,6 +187,7 @@ export class QuoteController {
   /* ---------------------------------------------------------------- */
 
   @Post()
+  @Idempotent('quote.create', 'quote')
   @Capabilities('quotes.manage')
   @Permissions('quotes.manage')
   async create(@Req() request: IdentityRequest, @Body() input: CreateQuoteDto) {
@@ -336,6 +338,7 @@ export class QuoteController {
 
   /** Aprovar cria receita **prevista**, nunca realizada. */
   @Post(':id/approve')
+  @Idempotent('quote.approve', 'quote')
   @Capabilities('quotes.manage')
   @Permissions('quotes.manage')
   async approve(

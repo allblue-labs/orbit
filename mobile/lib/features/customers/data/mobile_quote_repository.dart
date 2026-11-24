@@ -66,7 +66,11 @@ class MobileQuoteRepository {
   );
 
   Future<Map<String, dynamic>> create(Map<String, dynamic> body) =>
-      _client.post('/mobile/field/quotes', body: body);
+      _client.post(
+        '/mobile/field/quotes',
+        body: body,
+        headers: {'Idempotency-Key': body['requestId'] as String},
+      );
   Future<String> acceptanceLink(String id) async {
     final data = await _client.post<Map<String, dynamic>>(
       '/mobile/field/quotes/$id/acceptance-link',

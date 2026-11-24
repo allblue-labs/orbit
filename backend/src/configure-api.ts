@@ -23,6 +23,18 @@ export function configureApiVersioning(app: INestApplication): void {
       'FRONTEND_ORIGIN must contain explicit origins, never wildcard',
     );
   }
+  app.use((_request: Request, response: Response, next: NextFunction) => {
+    response.setHeader('X-Content-Type-Options', 'nosniff');
+    response.setHeader('Referrer-Policy', 'no-referrer');
+    response.setHeader('X-Frame-Options', 'DENY');
+    response.setHeader(
+      'Permissions-Policy',
+      'camera=(), microphone=(), geolocation=()',
+    );
+    response.setHeader('Cache-Control', 'private, no-store');
+    response.vary('Authorization');
+    next();
+  });
   if (origins.length > 0) {
     app.enableCors({
       origin: origins,
@@ -47,16 +59,4 @@ export function configureApiVersioning(app: INestApplication): void {
       maxAge: 600,
     });
   }
-
-  app.use((_request: Request, response: Response, next: NextFunction) => {
-    response.setHeader('X-Content-Type-Options', 'nosniff');
-    response.setHeader('Referrer-Policy', 'no-referrer');
-    response.setHeader('X-Frame-Options', 'DENY');
-    response.setHeader(
-      'Permissions-Policy',
-      'camera=(), microphone=(), geolocation=()',
-    );
-    response.setHeader('Cache-Control', 'no-store');
-    next();
-  });
 }

@@ -21,12 +21,21 @@ import { SensitiveEndpointRateLimitMiddleware } from './sensitive-endpoint-rate-
 import { AuthorizationService } from './authorization.service';
 import { AuthRateLimitService } from './auth-rate-limit.service';
 import { PrismaModule } from '../database';
+import { HotpathRedis } from './hotpath/hotpath-redis';
+import { HotpathRateLimit } from './hotpath/hotpath-rate-limit';
+import { HotpathSnapshot } from './hotpath/hotpath-snapshot';
+import { IdempotencyInterceptor } from './hotpath/idempotency.interceptor';
+import { IdempotencyCleanup } from './hotpath/idempotency-cleanup';
 
 @Global()
 @Module({
   imports: [RequestContextModule, CommonProvidersModule, PrismaModule],
   providers: [
     AuthorizationService,
+    HotpathRedis,
+    HotpathRateLimit,
+    HotpathSnapshot,
+    IdempotencyCleanup,
     AuthRateLimitService,
     IsJsonObjectConstraint,
     RequestIdMiddleware,
@@ -36,8 +45,16 @@ import { PrismaModule } from '../database';
     { provide: APP_INTERCEPTOR, useClass: RequestContextInterceptor },
     { provide: APP_INTERCEPTOR, useClass: LoggingInterceptor },
     { provide: APP_INTERCEPTOR, useClass: ResponseInterceptor },
+    { provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor },
   ],
-  exports: [RequestContextModule, CommonProvidersModule, AuthorizationService],
+  exports: [
+    RequestContextModule,
+    CommonProvidersModule,
+    AuthorizationService,
+    HotpathRedis,
+    HotpathRateLimit,
+    HotpathSnapshot,
+  ],
 })
 export class FoundationModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {

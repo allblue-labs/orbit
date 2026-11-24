@@ -12,6 +12,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import type { Response } from 'express';
+import { Idempotent } from '../../common/hotpath/idempotent.decorator';
 import { CreateAssetDto } from '../organizations/business-units/equipaments/asset.dto';
 import { Surfaces } from '../../decorators';
 import { ForbiddenException } from '../../exceptions';
@@ -70,6 +71,7 @@ export class MobileQuoteController {
   }
 
   @Post()
+  @Idempotent('mobile.quote.create', 'mobile-quote')
   create(@Req() request: IdentityRequest, @Body() input: CreateMobileQuoteDto) {
     return this.service.create(this.actor(request), input);
   }
@@ -104,7 +106,7 @@ export class MobileQuoteController {
     response.set({
       'Content-Type': 'application/pdf',
       'Content-Disposition': `attachment; filename="${document.fileName}"`,
-      'Cache-Control': 'no-store',
+      'Cache-Control': 'private, no-store',
     });
     return new StreamableFile(document.bytes);
   }

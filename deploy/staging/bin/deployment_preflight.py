@@ -114,7 +114,7 @@ def check(config, require_digests=True):
     for key in web.get("environment", {}):
         require(
             not re.match(
-                r"^(?:AWS_|R2_|FIREBASE_|DATABASE_|APP_DATABASE_|POSTGRES_|PLATFORM_ADMIN_|OWNER_|STRIPE_SECRET)",
+                r"^(?:AWS_|R2_|REDIS_HOTPATH_|FIREBASE_|DATABASE_|APP_DATABASE_|POSTGRES_|PLATFORM_ADMIN_|OWNER_|STRIPE_SECRET)",
                 key,
             ),
             "frontend: credencial de backend proibida: " + key,
@@ -124,17 +124,38 @@ def check(config, require_digests=True):
         config.get("networks", {}).get("orbit_private", {}).get("internal") is True,
         "A rede do banco deve ser interna.",
     )
+    hotpath_network = config.get("networks", {}).get("orbit_hotpath")
+    api_networks = {"orbit_private", "orbit_public"}
+    if hotpath_network is not None:
+        require(hotpath_network.get("internal") is True, "A rede do Redis deve ser interna.")
+        api_networks.add("orbit_hotpath")
     require(
-        set(api.get("networks", {})) == {"orbit_private", "orbit_public"},
+        set(api.get("networks", {})) == api_networks,
         "api: redes incorretas.",
     )
+    redis = services.get("redis-hotpath")
+    if runtime.get("REDIS_HOTPATH_ENABLED") == "true":
+        require(bool(redis), "Habilite COMPOSE_PROFILES=hotpath junto do cache Redis.")
+    if redis is not None:
+        password = runtime.get("REDIS_HOTPATH_PASSWORD", "")
+        require(
+            bool(re.fullmatch(r"[a-fA-F0-9]{32,128}", password))
+            and redis.get("environment", {}).get("REDIS_HOTPATH_PASSWORD") == password,
+            "Configure a mesma senha hexadecimal do Redis na API e no serviço.",
+        )
+        require(
+            all(name in {"api", "redis-hotpath"}
+                for name, service in services.items()
+                if "orbit_hotpath" in service.get("networks", {})),
+            "Somente API e Redis podem acessar a rede hotpath.",
+        )
     require(
         set(web.get("networks", {})) == {"orbit_public"},
         "frontend: não deve acessar a rede do banco.",
     )
     for name, service in services.items():
         if service.get("profiles") and not set(service["profiles"]).intersection(
-            {"admin"}
+            {"admin", "hotpath"}
         ):
             continue  # Offline migration profiles are not started by this deploy.
         require("build" not in service, "Build no servidor não permitido: " + name)
@@ -173,7 +194,9 @@ def check(config, require_digests=True):
             )
             continue  # Official PostgreSQL entrypoint drops privileges after volume init.
         require(
-            service.get("user") in ["1000:1000", "1001:1001"],
+            service.get("user") in (
+                ["999:999"] if name == "redis-hotpath" else ["1000:1000", "1001:1001"]
+            ),
             "UID/GID sem root obrigatório: " + name,
         )
         require(
@@ -187,7 +210,14 @@ def check(config, require_digests=True):
             ),
             "tmpfs limitado e protegido obrigatório: " + name,
         )
-        if name in ["api", "frontend"]:
+        if name == "redis-hotpath":
+            require(
+                service.get("profiles") == ["hotpath"]
+                and not service.get("ports") and not service.get("volumes")
+                and set(service.get("networks", {})) == {"orbit_hotpath"},
+                "Redis deve ser temporário, privado e ativado pelo profile hotpath.",
+            )
+        elif name in ["api", "frontend"]:
             ports = service.get("ports", [])
             require(
                 len(ports) == 1 and ports[0].get("host_ip") == "127.0.0.1",
