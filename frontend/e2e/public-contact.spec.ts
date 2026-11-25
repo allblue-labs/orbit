@@ -63,7 +63,11 @@ test("o formulário anônimo atravessa o BFF real e persiste a solicitação", a
   await form
     .getByRole("button", { name: "Enviar mensagem", exact: true })
     .click();
-  expect((await response).status()).toBe(202);
+  const received = await response;
+  expect(received.status()).toBe(202);
+  const correlationId = received.headers()["x-correlation-id"];
+  expect(correlationId).toMatch(/^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i);
+  expect(received.headers()["x-request-id"]).toBe(correlationId);
   await expect(
     page.getByRole("heading", { name: "Mensagem recebida", exact: true }),
   ).toBeVisible();
