@@ -41,6 +41,7 @@ export function bffError(init: BffErrorInit): NextResponse<ApiErrorEnvelope> {
     headers: {
       "Cache-Control": "private, no-store",
       Vary: "Cookie",
+      [CONTEXT_HEADERS.correlationId]: init.requestId,
       [CONTEXT_HEADERS.requestId]: init.requestId,
       ...(init.status === 429 &&
       retry !== null &&
@@ -64,6 +65,7 @@ export function bffJson<T>(
       headers: {
         "Cache-Control": "private, no-store",
         Vary: "Cookie",
+        [CONTEXT_HEADERS.correlationId]: requestId,
         [CONTEXT_HEADERS.requestId]: requestId,
       },
     },

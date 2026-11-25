@@ -14,6 +14,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'app/providers.dart';
 import 'app/session_runtime.dart';
 import 'core/storage/read_cache.dart';
+import 'core/observability/orbit_error_reporting.dart';
 import 'features/artifact/data/document_file.dart';
 import 'core/routing/orbit_router.dart';
 import 'core/theme/orbit_theme.dart';
@@ -24,7 +25,9 @@ import 'features/notifications/application/push_providers.dart';
 import 'features/notifications/domain/deep_link.dart';
 import 'features/notifications/presentation/foreground_notifications.dart';
 
-Future<void> main() async {
+Future<void> main() => withErrorReporting(_startOrbit);
+
+Future<void> _startOrbit() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // O app de campo é usado na vertical, com o aparelho na mão.

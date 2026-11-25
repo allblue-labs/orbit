@@ -18,6 +18,8 @@ export function validateReleaseEnvironment(
   // even an unused duplicate: an HTTP/worker compromise must not expose it.
   for (const key of [
     'DIRECT_DATABASE_URL',
+    'BACKUP_DATABASE_PASSWORD',
+    'PGBOUNCER_STATS_PASSWORD',
     'APP_DATABASE_URL',
     'POSTGRES_PASSWORD',
     'PLATFORM_ADMIN_PASSWORD',

@@ -7,10 +7,15 @@ persistent monitoring logs. Provider/request payloads never enter the output.
 """
 
 import argparse
+import csv
+from datetime import datetime, timezone
 import json
 import sqlite3
 import time
 import sys
+import os
+import tempfile
+from pathlib import Path
 from collections import Counter
 
 QUEUES = {
@@ -41,7 +46,28 @@ PUSH_RESULTS = {
 }
 
 
-def collect(lines):
+GROUPS = ("pdf", "comms", "core", "fiscal", "ai")
+GROUP_BY_QUEUE = {
+    **dict.fromkeys(("artifact.render", "management-report.generate", "document.export"), "pdf"),
+    **dict.fromkeys(("mobile.push.delivery", "mobile.notification.materialize"), "comms"),
+}
+
+
+def load_pool(path):
+    if path is None:
+        return None
+    with open(path, newline="") as stream:
+        rows = [
+            {key: int(row[key]) for key in ("cl_active", "cl_waiting", "sv_active", "sv_idle", "maxwait")}
+            for row in csv.DictReader(stream)
+            if row.get("user") in {"orbit_app", "orbit_worker", "orbit_documents"}
+        ]
+    return {key: sum(row[key] for row in rows) for key in ("cl_active", "cl_waiting", "sv_active", "sv_idle")} | {
+        "maxwait": max((row["maxwait"] for row in rows), default=0),
+    }
+
+
+def collect(lines, pool=None):
     snapshots = {}
     storage = Counter()
     push = Counter()
@@ -54,6 +80,9 @@ def collect(lines):
                 "worker",
                 "documents",
             }:
+                stamp = data.get("timestamp")
+                if stamp and (datetime.now(timezone.utc) - datetime.fromisoformat(stamp.replace("Z", "+00:00"))).total_seconds() > 180:
+                    continue
                 snapshots[data["role"]] = data
             if (
                 data.get("event") == "storage_request"
@@ -73,20 +102,30 @@ def collect(lines):
 
     alerts = []
     queues = []
+    groups = {group: {"pending": 0, "ready": 0, "running": 0, "dead": 0, "oldest_ready_ms": 0, "_weighted_ms": 0} for group in GROUPS}
     for role in ("worker", "documents"):
         snapshot = snapshots.get(role)
         if not snapshot:
             alerts.append({"reason": "worker_snapshot_missing", "role": role})
             continue
-        for queue in snapshot["queues"]:
+        for queue in snapshot.get("queues", []):
             if queue["queue"] not in QUEUES:
                 continue
-            queues.append(
-                {
-                    key: queue[key]
-                    for key in ("queue", "ready", "running", "dead", "oldest_ready_ms")
-                }
-            )
+            group = queue.get("group") or GROUP_BY_QUEUE.get(queue["queue"], "core")
+            if group not in groups:
+                continue
+            pending = queue.get("pending", queue["ready"])
+            average = queue.get("average_ready_ms", 0)
+            queues.append({
+                **{key: queue[key] for key in ("queue", "ready", "running", "dead", "oldest_ready_ms")},
+                "pending": pending, "group": group, "average_ready_ms": average,
+            })
+            target = groups[group]
+            target["pending"] += pending
+            for key in ("ready", "running", "dead"):
+                target[key] += queue[key]
+            target["oldest_ready_ms"] = max(target["oldest_ready_ms"], queue["oldest_ready_ms"])
+            target["_weighted_ms"] += average * queue["ready"]
             if queue["dead"]:
                 alerts.append({"reason": "dead_letters", "queue": queue["queue"]})
             limit = 60_000 if queue["queue"] in FAST_QUEUES else 300_000
@@ -117,8 +156,16 @@ def collect(lines):
                     }
                 )
 
+    for group in groups.values():
+        weighted = group.pop("_weighted_ms")
+        group["average_ready_ms"] = round(weighted / group["ready"], 2) if group["ready"] else 0
+    if pool and pool["cl_waiting"] > 0 and pool["maxwait"] >= 2:
+        alerts.append({"reason": "pgbouncer_queue_wait", "waiting": pool["cl_waiting"]})
     return {
         "event": "orbit_worker_monitor",
+        "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "groups": groups,
+        "pgbouncer": pool,
         "queues": queues,
         "providers": providers,
         "push": [
@@ -131,6 +178,18 @@ def collect(lines):
         },
         "alerts": alerts,
     }
+
+
+def publish_snapshot(path, record):
+    target = Path(path)
+    descriptor, pending = tempfile.mkstemp(dir=target.parent, prefix=".orbit-monitor-")
+    try:
+        with os.fdopen(descriptor, "w") as stream:
+            json.dump(record, stream)
+        os.replace(pending, target)
+    finally:
+        if os.path.exists(pending):
+            os.unlink(pending)
 
 
 def save_snapshot(path, record):
@@ -153,9 +212,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--history", help="SQLite path in a private persistent host directory"
     )
+    parser.add_argument("--output", help="Arquivo privado de métricas atualizado atomicamente")
+    parser.add_argument("--pool-csv", help="Saída CSV de SHOW POOLS coletada pela identidade orbit_stats")
     args = parser.parse_args()
-    record = collect(sys.stdin)
+    record = collect(sys.stdin, load_pool(args.pool_csv))
     if args.history:
         save_snapshot(args.history, record)
+    if args.output:
+        publish_snapshot(args.output, record)
     print(json.dumps(record))
     sys.exit(2 if record["alerts"] else 0)

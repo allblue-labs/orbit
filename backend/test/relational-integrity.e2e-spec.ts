@@ -185,6 +185,7 @@ describe('PR-12 — real PostgreSQL relational boundaries and safe upgrade', () 
       [
         ...manifest.baselineForeignKeys.map((r) => r.conname),
         // Reviewed additions after the PR-12 baseline.
+        'background_job_failures_job_scope_fk',
         'billing_plan_upgrades_subscription_id_organization_id_fkey',
         'billing_refund_requests_subscription_id_organization_id_fkey',
         'billing_support_tickets_subscription_id_organization_id_fkey',

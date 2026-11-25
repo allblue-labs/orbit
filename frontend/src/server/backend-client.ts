@@ -6,7 +6,10 @@
  * alcança o NestJS diretamente.
  */
 import { ApiError, parseErrorEnvelope, toApiError } from "@/lib/api-error";
-import { clientOriginHeaders } from "./trusted-client-origin";
+import {
+  clientOriginHeaders,
+  currentProxyCorrelationId,
+} from "./trusted-client-origin";
 import { DEFAULT_TIMEOUT_MS, assertServer, backendUrl } from "@/lib/env";
 import {
   defaultRetriesFor,
@@ -62,7 +65,10 @@ export async function backendFetch(request: BackendRequest): Promise<Response> {
   const search = request.search ?? serializeQuery(request.query);
   const url = `${backendUrl(normalizePath(request.path))}${search}`;
   const headers = new Headers({
-    ...backendContextHeaders(request),
+    ...backendContextHeaders({
+      ...request,
+      requestId: request.requestId ?? currentProxyCorrelationId(),
+    }),
     ...request.headers,
   });
   for (const name of [
@@ -144,7 +150,10 @@ export function jsonBody(payload: unknown): BodyInit | null {
 
 /** Interpreta a resposta do backend: `data` no sucesso, `ApiError` na falha. */
 export async function unwrapEnvelope<T>(response: Response): Promise<T> {
-  const requestId = response.headers.get("x-request-id") ?? undefined;
+  const requestId =
+    response.headers.get("x-correlation-id") ??
+    response.headers.get("x-request-id") ??
+    undefined;
   if (response.status === 204 || response.status === 205) {
     return undefined as T;
   }

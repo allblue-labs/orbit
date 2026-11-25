@@ -172,6 +172,8 @@ export async function withIntegrationEnvironment(work, isolation = {}) {
     env.DATABASE_ALLOW_COMBINED_ROLE = isolation.separateWorkers
       ? "false"
       : "true";
+    if (isolation.backupProof)
+      env.BACKUP_DATABASE_PASSWORD = randomBytes(32).toString("hex");
     if (isolation.separateWorkers) {
       env.WORKER_DATABASE_PASSWORD = randomBytes(32).toString("hex");
       env.DOCUMENTS_DATABASE_PASSWORD = randomBytes(32).toString("hex");
@@ -185,6 +187,8 @@ export async function withIntegrationEnvironment(work, isolation = {}) {
             "exec",
             container,
             "pg_isready",
+            "-h",
+            "127.0.0.1",
             "-U",
             env.POSTGRES_USER,
             "-d",
@@ -231,6 +235,8 @@ export async function withIntegrationEnvironment(work, isolation = {}) {
       ...options,
       env: { ...env, DATABASE_ROLE_BOOTSTRAP_ONLY: "true" },
     });
+    if (isolation.beforeMigrate)
+      await isolation.beforeMigrate({ env, directory, compiled, options, container });
     await run("npm", ["exec", "--", "prisma", "migrate", "deploy"], options);
     await run(process.execPath, [script("provision-database-roles")], options);
     await run(process.execPath, [script("seed-plan-catalog")], options);

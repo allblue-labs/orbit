@@ -297,6 +297,13 @@ suite('Redis hotpath and PostgreSQL authority', () => {
     try {
       await org(a.token).expect(200);
       expect(apps[0]!.get(HotpathRedis).available).toBe(false);
+      const health = await http().get('/api/v1/health/ready').expect(200);
+      expect(health.body).toMatchObject({
+        data: {
+          status: 'degraded',
+          checks: { postgres: 'ok', jobs: 'ok', redis: 'degraded' },
+        },
+      });
       await create(randomUUID(), 'Durante timeout').expect(201);
     } finally {
       execFileSync('docker', ['unpause', redisContainer!], { stdio: 'ignore' });
@@ -305,6 +312,10 @@ suite('Redis hotpath and PostgreSQL authority', () => {
     await expect(apps[0]!.get(HotpathRedis).command(['PING'])).resolves.toBe(
       'PONG',
     );
+    const health = await http().get('/api/v1/health/ready').expect(200);
+    expect(health.body).toMatchObject({
+      data: { status: 'ok', checks: { redis: 'ok' } },
+    });
   });
 
   it('continues to authenticate and apply the durable policy after Redis stops', async () => {

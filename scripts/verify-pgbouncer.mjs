@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import {
@@ -10,6 +11,7 @@ const image =
   process.env.ORBIT_TEST_PGBOUNCER_IMAGE || "orbit-pgbouncer:rls-test";
 await withIntegrationEnvironment(
   async ({ env, container, options }) => {
+    env.PGBOUNCER_STATS_PASSWORD = randomBytes(32).toString("hex");
     const name = `orbit-pool-e2e-${randomBytes(6).toString("hex")}`;
     const docker = (...args) =>
       execFileSync("docker", args, {
@@ -46,6 +48,8 @@ await withIntegrationEnvironment(
           "--env",
           "DOCUMENTS_DATABASE_PASSWORD",
           "--env",
+          "PGBOUNCER_STATS_PASSWORD",
+          "--env",
           "PGBOUNCER_DEFAULT_POOL_SIZE=4",
           "--env",
           "PGBOUNCER_RESERVE_POOL_SIZE=0",
@@ -66,6 +70,12 @@ await withIntegrationEnvironment(
           await delay(500);
         }
       }
+      const statistics = docker(
+        "exec", name, "sh", "-ec",
+        'PGPASSWORD="$PGBOUNCER_STATS_PASSWORD" exec psql -Xq --csv -h 127.0.0.1 -p 6432 -U orbit_stats -d pgbouncer -c "SHOW POOLS"',
+      );
+      assert.match(statistics, /\bcl_waiting\b/);
+      assert.match(statistics, /\bsv_active\b/);
       const port = docker("port", name, "6432/tcp").trim().split(":").at(-1);
       const url = (user, password) =>
         `postgresql://${user}:${password}@127.0.0.1:${port}/${env.POSTGRES_DB}?pgbouncer=true`;

@@ -30,6 +30,12 @@ write_user() {
   write_user orbit_documents "$DOCUMENTS_DATABASE_PASSWORD"
 } > /run/pgbouncer/users.txt
 
+stats_users=
+if [ -n "${PGBOUNCER_STATS_PASSWORD:-}" ]; then
+  write_user orbit_stats "$PGBOUNCER_STATS_PASSWORD" >> /run/pgbouncer/users.txt
+  stats_users=orbit_stats
+fi
+
 cat > /run/pgbouncer/pgbouncer.ini <<EOF
 [databases]
 $POSTGRES_DB = host=$host port=$port dbname=$POSTGRES_DB
@@ -39,6 +45,7 @@ listen_addr = 0.0.0.0
 listen_port = 6432
 unix_socket_dir =
 auth_type = scram-sha-256
+stats_users = $stats_users
 auth_file = /run/pgbouncer/users.txt
 pool_mode = transaction
 max_client_conn = ${PGBOUNCER_MAX_CLIENT_CONN:-300}

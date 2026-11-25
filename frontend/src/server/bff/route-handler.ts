@@ -1,3 +1,4 @@
+import { logProxy } from "./proxy-telemetry";
 /**
  * Fábrica dos Route Handlers do BFF que não passam pelo proxy genérico
  * (autenticação e sessão).
@@ -26,9 +27,10 @@ export type RouteImplementation = (
 export function createRouteHandler(
   implementation: RouteImplementation,
 ): (request: NextRequest) => Promise<Response> {
-  return (request: NextRequest): Promise<Response> =>
-    withClientOrigin(request, async () => {
-      const { requestId } = readContextFromRequest(request);
+  return async (request: NextRequest): Promise<Response> => {
+    const { requestId } = readContextFromRequest(request);
+    const started = performance.now();
+    const response = await withClientOrigin(request, async () => {
       if (!isSameOriginRequest(request)) {
         return bffError({
           status: 403,
@@ -65,5 +67,8 @@ export function createRouteHandler(
           requestId,
         });
       }
-    });
+    }, requestId);
+    logProxy(request, "auth", requestId, performance.now() - started, response.status);
+    return response;
+  };
 }

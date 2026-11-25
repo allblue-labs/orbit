@@ -241,6 +241,8 @@ model IdentityEmailDelivery {
   leaseId           String?   @map("lease_id") @db.Uuid
   providerMessageId String?   @map("provider_message_id") @db.VarChar(255)
   lastErrorCode     String?   @map("last_error_code") @db.VarChar(80)
+  correlationId String? @map("correlation_id") @db.VarChar(64)
+  adminRequeuedAt   DateTime? @map("admin_requeued_at") @db.Timestamptz(3)
   finishedAt        DateTime? @map("finished_at") @db.Timestamptz(3)
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -3273,6 +3275,7 @@ model BackgroundJob {
   jobKey          String    @map("job_key") @db.VarChar(200)
   payload         Json      @default("{}") @db.JsonB
   status          String    @default("PENDING") @db.VarChar(20)
+  redriveGeneration Int @default(0) @map("redrive_generation")
   attempts        Int       @default(0)
   maxAttempts     Int       @default(3) @map("max_attempts")
   /// Quando o job volta a ser elegível — é o backoff exponencial.
@@ -3292,11 +3295,28 @@ model BackgroundJob {
   organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   businessUnit    BusinessUnit?    @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
   documentExports DocumentExport[]
+  failures BackgroundJobFailure[]
 
   @@index([queue, status, availableAt])
   @@index([organizationId, queue, status])
   @@map("background_jobs")
   @@unique([id, organizationId], map: "background_jobs_id_org_export_key")
+}
+
+model BackgroundJobFailure {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobId           String   @map("job_id") @db.Uuid
+  organizationId  String   @map("organization_id") @db.Uuid
+  attempt         Int
+  generation      Int
+  status          String   @db.VarChar(20)
+  code            String   @db.VarChar(160)
+  recordedAt      DateTime @default(now()) @map("recorded_at") @db.Timestamptz(3)
+
+  job BackgroundJob @relation(fields: [jobId, organizationId], references: [id, organizationId], onDelete: Cascade, onUpdate: NoAction, map: "background_job_failures_job_scope_fk")
+
+  @@index([jobId, recordedAt(sort: Desc)], map: "background_job_failures_job_time_idx")
+  @@map("background_job_failures")
 }
 
 /// Exportação assíncrona de documento (202 + arquivo no R2 + URL assinada).
@@ -5325,6 +5345,9 @@ model PublicContactSubmission {
   lockedAt         DateTime?              @map("locked_at") @db.Timestamptz(3)
   leaseId          String?                @map("lease_id") @db.Uuid
   expiresAt        DateTime               @map("expires_at") @db.Timestamptz(3)
+  correlationId String? @map("correlation_id") @db.VarChar(64)
+  adminRequeuedAt DateTime? @map("admin_requeued_at") @db.Timestamptz(3)
+  lastErrorCode String? @map("last_error_code") @db.VarChar(80)
   acceptedAt       DateTime?              @map("accepted_at") @db.Timestamptz(3)
   createdAt        DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt        DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)

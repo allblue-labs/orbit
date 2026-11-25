@@ -5,14 +5,22 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { configureApiVersioning } from './configure-api';
 import { configureHttpParsers } from './configure-http-parsers';
+import { RequestContextStorage } from './context';
+import { OrbitLogger } from './observability/orbit-logger';
+import { configureErrorReporting } from './observability/sentry';
 import { processRole } from './runtime/process-role';
 import { validateReleaseEnvironment } from './release-environment';
 
 async function bootstrap() {
   validateReleaseEnvironment(process.env);
+  await configureErrorReporting();
+  const logger = new OrbitLogger();
   const role = processRole();
   if (role === 'worker' || role === 'documents') {
-    const worker = await NestFactory.createApplicationContext(AppModule);
+    const worker = await NestFactory.createApplicationContext(AppModule, {
+      logger,
+    });
+    logger.context = () => worker.get(RequestContextStorage).get();
     worker.enableShutdownHooks();
     return;
   }
@@ -50,15 +58,17 @@ async function bootstrap() {
    * recusa com mensagem; este limite é a primeira barreira, não a única.
    */
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    logger,
     rawBody: true,
     bodyParser: false,
   });
+  logger.context = () => app.get(RequestContextStorage).get();
+  configureApiVersioning(app);
   configureHttpParsers(app);
   // Forwarded chains never determine request.ip. Internal ingress identity is
   // validated independently by requestClientIp, using its private credential.
   app.set('trust proxy', false);
 
-  configureApiVersioning(app);
   app.enableShutdownHooks();
   app.useGlobalPipes(
     new ValidationPipe({
@@ -72,4 +82,13 @@ async function bootstrap() {
     process.env.HOST ?? '0.0.0.0',
   );
 }
-void bootstrap();
+void bootstrap().catch((error: unknown) => {
+  new OrbitLogger().error(
+    {
+      event: 'bootstrap_failed',
+      exceptionClass: error instanceof Error ? error.name : 'Error',
+    },
+    'Bootstrap',
+  );
+  process.exitCode = 1;
+});

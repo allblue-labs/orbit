@@ -33,6 +33,10 @@ try {
   }\n`);
   await exec('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
     '-subj', '/CN=orbit.allblue-labs.com', '-keyout', join(directory, 'ssl/orbit-origin.key'), '-out', join(directory, 'ssl/orbit-origin.pem')]);
+  await exec('docker', [
+    'run', '--rm', '--mount', `type=bind,src=${directory},dst=/etc/nginx,readonly`,
+    '--entrypoint', 'nginx', image, '-t',
+  ]);
   await exec('docker', ['run', '--detach', '--rm', '--name', container, '--publish', '127.0.0.1::443',
     '--add-host', 'orbit.allblue-labs.com:127.0.0.1', '--mount', `type=bind,src=${directory},dst=/etc/nginx,readonly`,
     '--entrypoint', 'nginx', image, '-g', 'daemon off;']);
@@ -65,6 +69,16 @@ try {
     assert.equal(body.cf, '');
     assert.equal(body.forwarded, '');
   }
+  const correlation = '609d0ac3-2d5e-44fe-ad64-3ef92c430f22';
+  const traced = await send('/api/v1/release', { 'x-correlation-id': correlation });
+  assert.equal(traced.headers['x-correlation-id'], correlation);
+  assert.equal(traced.headers['x-request-id'], correlation);
+  const fresh = await send('/api/v1/release', { 'x-correlation-id': 'secret-correlation-canary' });
+  assert.match(fresh.headers['x-correlation-id'], /^[a-f0-9]{32}$/);
+  assert.notEqual(fresh.headers['x-correlation-id'], correlation);
+  assert.equal((await send('/api/v1/admin/jobs')).status, 404);
+  assert.equal((await send('/api/v1/AdMiN/jobs')).status, 404);
+  assert.equal((await send('/api/v1/health/ready')).status, 404);
   const trusted = await exec('docker', ['exec', container, 'wget', '-q', '-T', '5', '--no-check-certificate',
     '--header', 'CF-Connecting-IP: 198.51.100.30', '--post-data={}', '-O', '-', 'https://orbit.allblue-labs.com/api/v1/identity/login']);
   assert.equal(JSON.parse(trusted.stdout).ip, '198.51.100.30');
@@ -81,6 +95,7 @@ try {
   const accessLog = await exec('docker', ['exec', container, 'cat', '/var/log/nginx/orbit-access.log']);
   const errorLog = await exec('docker', ['logs', container]);
   assert.ok(!(accessLog.stdout + errorLog.stdout + errorLog.stderr).includes(capabilityCanary));
+  assert.ok(!accessLog.stdout.includes('secret-correlation-canary'));
   process.stdout.write('Nginx ingress: syntax, untrusted spoofing, trusted edge and 429/Retry-After and protocol-error capability redaction passed.\n');
 } finally {
   if (started) await exec('docker', ['stop', '--timeout', '5', container]);

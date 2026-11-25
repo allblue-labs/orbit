@@ -143,32 +143,35 @@ describe('AppController (e2e)', () => {
   });
 
   it('publishes artifact executions on v1 and keeps the guarded legacy alias', async () => {
+    const legacyId = randomUUID();
+    const versionedId = randomUUID();
     const legacy = await request(app.getHttpServer())
       .get('/artifact-executions')
-      .set('x-request-id', 'artifact-executions-legacy');
+      .set('x-request-id', legacyId);
     const versioned = await request(app.getHttpServer())
       .get('/api/v1/artifact-executions')
-      .set('x-request-id', 'artifact-executions-v1');
+      .set('x-request-id', versionedId);
     expect({
       status: legacy.status,
       body: legacy.body as unknown,
     }).toMatchObject({
       status: 401,
-      body: { requestId: 'artifact-executions-legacy' },
+      body: { requestId: legacyId },
     });
     expect({
       status: versioned.status,
       body: versioned.body as unknown,
     }).toMatchObject({
       status: 401,
-      body: { requestId: 'artifact-executions-v1' },
+      body: { requestId: versionedId },
     });
   });
 
   it('runs authentication and authorization guards before payload validation', async () => {
     const scope = await activeScopeFixture();
     const withoutCapabilityUser = randomUUID();
-    let lastUserId = scope.user;
+    const sessionId = randomUUID();
+    const restrictedSessionId = randomUUID();
     const verifyAccessToken = jest.fn((token: string) => {
       if (token === 'invalid') {
         throw Object.assign(new Error('invalid signature'), {
@@ -176,10 +179,9 @@ describe('AppController (e2e)', () => {
         });
       }
       const withoutCapability = token === 'valid-without-capability';
-      lastUserId = withoutCapability ? withoutCapabilityUser : scope.user;
       return Promise.resolve({
-        sub: lastUserId,
-        sid: 'session-id',
+        sub: withoutCapability ? withoutCapabilityUser : scope.user,
+        sid: withoutCapability ? restrictedSessionId : sessionId,
         organizationId: scope.organization,
         roles: [],
         permissions: ['artifact_executions.create'],
@@ -195,17 +197,18 @@ describe('AppController (e2e)', () => {
       .useValue({
         findById: jest
           .fn()
-          .mockImplementation(() =>
+          .mockImplementation((userId: string) =>
             Promise.resolve(
-              identityFixture(lastUserId, scope.organization, scope.unit, [
+              identityFixture(userId, scope.organization, scope.unit, [
                 'artifact_executions.create',
               ]),
             ),
           ),
-        findSessionById: jest.fn().mockImplementation(() =>
+        findSessionById: jest.fn().mockImplementation((id: string) =>
           Promise.resolve({
-            id: 'session-id',
-            userId: lastUserId,
+            id,
+            userId:
+              id === restrictedSessionId ? withoutCapabilityUser : scope.user,
             revokedAt: null,
             expiresAt: new Date(Date.now() + 60_000),
           }),
@@ -330,24 +333,25 @@ describe('AppController (e2e)', () => {
     await faultApp.listen(0, '127.0.0.1');
 
     try {
+      const correlationId = randomUUID();
       const response = await request(faultApp.getHttpServer())
         .get('/api/v1/artifact-executions')
         .set('authorization', 'Bearer syntactically-valid-for-injection')
-        .set('x-request-id', 'fault-auth-connection')
+        .set('x-request-id', correlationId)
         .expect(500)
-        .expect('x-request-id', 'fault-auth-connection');
+        .expect('x-request-id', correlationId);
       const body = response.body as {
         error: { message: string; stack?: unknown };
         requestId: string;
       };
-      expect(body.requestId).toBe('fault-auth-connection');
+      expect(body.requestId).toBe(correlationId);
       expect(body.error.message).toBe(
         'Não foi possível concluir a solicitação.',
       );
       expect(JSON.stringify(body)).not.toContain('connection reset');
       expect(body.error.stack).toBeUndefined();
       expect(JSON.stringify(log.mock.calls)).toContain('CONNECTION_FAILURE');
-      expect(JSON.stringify(log.mock.calls)).toContain(
+      expect(JSON.stringify(log.mock.calls)).not.toContain(
         'simulated connection reset',
       );
     } finally {
@@ -403,22 +407,23 @@ describe('AppController (e2e)', () => {
     await faultApp.listen(0, '127.0.0.1');
 
     try {
+      const correlationId = randomUUID();
       const response = await request(faultApp.getHttpServer())
         .get('/api/v1/artifact-executions')
         .set('authorization', 'Bearer injected')
-        .set('x-request-id', 'fault-entitlements-timeout')
+        .set('x-request-id', correlationId)
         .expect(500);
       const body = response.body as {
         error: { message: string };
         requestId: string;
       };
-      expect(body.requestId).toBe('fault-entitlements-timeout');
+      expect(body.requestId).toBe(correlationId);
       expect(body.error.message).toBe(
         'Não foi possível concluir a solicitação.',
       );
       expect(JSON.stringify(body)).not.toContain('pool acquisition');
       expect(JSON.stringify(log.mock.calls)).toContain('DATABASE_TIMEOUT');
-      expect(JSON.stringify(log.mock.calls)).toContain(
+      expect(JSON.stringify(log.mock.calls)).not.toContain(
         'simulated pool acquisition timeout',
       );
     } finally {

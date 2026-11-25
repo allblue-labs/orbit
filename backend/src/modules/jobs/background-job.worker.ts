@@ -49,7 +49,8 @@ import { withPdfBudget } from '../../runtime/pdf-thread';
 import { performance, monitorEventLoopDelay } from 'node:perf_hooks';
 import type { UUID } from '../../contracts';
 import { RequestContext, RequestContextStorage } from '../../context';
-import { classifyInternalError, internalErrorStack } from '../../errors';
+import { classifyInternalError } from '../../errors';
+import { captureOrbitError } from '../../observability/sentry';
 import { generateUuidV7 } from '../../utils';
 import { BackgroundJobQueue } from './background-job.queue';
 import {
@@ -345,7 +346,10 @@ export class BackgroundJobWorker implements OnModuleInit, OnModuleDestroy {
         JSON.stringify({
           event: 'worker_queue_snapshot',
           role,
-          queues,
+          queues: queues.map((queue) => ({
+            ...queue,
+            group: groupOf(queue.queue).name,
+          })),
           rssBytes: process.memoryUsage.rss(),
           eventLoopP95Ms: this.eventLoop.percentile(95) / 1e6,
         }),
@@ -444,11 +448,16 @@ export class BackgroundJobWorker implements OnModuleInit, OnModuleDestroy {
           exceptionClass: classified.exceptionClass,
           errorCode: classified.code,
         });
-        if (process.env.NODE_ENV === 'production') {
-          this.logger.error(record);
-        } else {
-          this.logger.error(record, internalErrorStack(error));
-        }
+        this.logger.error(record);
+        if (!permanent)
+          captureOrbitError(
+            error,
+            {
+              requestId: job.correlationId,
+              organizationId: job.organizationId,
+            },
+            job.queue,
+          );
         await this.queue.fail(job, failureCode, permanent);
       }
     });

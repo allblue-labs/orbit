@@ -1,6 +1,8 @@
 proxy_http_version 1.1;
 proxy_set_header Connection "";
 proxy_set_header Host $host;
+proxy_set_header X-Correlation-Id $orbit_correlation_id;
+proxy_set_header X-Request-Id $orbit_correlation_id;
 proxy_set_header X-Real-IP $remote_addr;
 # Substitui cabeçalhos fornecidos pelo cliente, em vez de concatená-los.
 proxy_set_header X-Forwarded-For $remote_addr;

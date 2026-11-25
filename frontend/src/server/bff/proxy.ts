@@ -12,6 +12,7 @@ import { readBffBody, BffBodyError } from "./request-body";
  * Nenhum módulo de negócio precisa criar Route Handlers próprios: basta
  * chamar `/api/orbit/<rota-do-backend>` pelo cliente em `@/api`.
  */
+import { logProxy } from "./proxy-telemetry";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
@@ -56,6 +57,7 @@ const FORWARDED_RESPONSE_HEADERS: readonly string[] = [
   "location",
   "x-content-type-options",
   "x-document-sha256",
+  "x-correlation-id",
   "x-request-id",
   "retry-after",
 ];
@@ -70,32 +72,64 @@ export async function proxyToBackend(
   request: NextRequest,
   context: ProxyRouteContext,
 ): Promise<Response> {
-  return withClientOrigin(request, async () => {
-    try {
-      return await proxyWithOrigin(request, context);
-    } catch (error) {
-      const apiError = toApiError(error);
-      return bffError({
-        status:
+  const requestContext = readContextFromRequest(request);
+  const started = performance.now();
+  return withClientOrigin(
+    request,
+    async () => {
+      let status = 503;
+      let identity:
+        { userId: string; organizationId: string | null } | undefined;
+      try {
+        const response = await proxyWithOrigin(
+          request,
+          context,
+          requestContext,
+          (actor) => {
+            identity = actor;
+          },
+        );
+        status = response.status;
+        return response;
+      } catch (error) {
+        const apiError = toApiError(error);
+        status =
           error instanceof BffBodyError
             ? error.status
             : apiError.status === 429
               ? 429
-              : 503,
-        code: apiError.code,
-        message: apiError.message,
-        requestId: readContextFromRequest(request).requestId,
-        details: apiError.details,
-      });
-    }
-  });
+              : 503;
+        return bffError({
+          status,
+          code: apiError.code,
+          message: apiError.message,
+          requestId: requestContext.requestId,
+          details: apiError.details,
+        });
+      } finally {
+        logProxy(
+          request,
+          "orbit",
+          requestContext.requestId,
+          performance.now() - started,
+          status,
+          identity,
+        );
+      }
+    },
+    requestContext.requestId,
+  );
 }
 
 async function proxyWithOrigin(
   request: NextRequest,
   context: ProxyRouteContext,
+  requestContext: ReturnType<typeof readContextFromRequest>,
+  authenticated: (actor: {
+    userId: string;
+    organizationId: string | null;
+  }) => void,
 ): Promise<Response> {
-  const requestContext = readContextFromRequest(request);
   const { requestId } = requestContext;
 
   if (!isSameOriginRequest(request)) {
@@ -129,7 +163,7 @@ async function proxyWithOrigin(
     });
   }
 
-  const access = await resolveAccess({ allowRefresh: true });
+  const access = await resolveAccess({ allowRefresh: true, requestId });
   if (verdict.requiresSession && (!access.accessToken || !access.claims)) {
     const response = bffError({
       status: 401,
@@ -167,7 +201,9 @@ async function proxyWithOrigin(
     /** Endpoints públicos não têm sessão para renovar. */
     if (upstream.status === 401 && verdict.requiresSession) {
       const { refreshToken } = await readStoredTokens();
-      const renewed = refreshToken ? await refreshTokens(refreshToken) : null;
+      const renewed = refreshToken
+        ? await refreshTokens(refreshToken, requestId)
+        : null;
       if (!renewed) {
         await upstream.body?.cancel();
         const response = bffError({
@@ -194,6 +230,12 @@ async function proxyWithOrigin(
       });
     }
 
+    if (verdict.requiresSession && access.claims && upstream.status < 400) {
+      authenticated({
+        userId: access.claims.sub,
+        organizationId: access.claims.organizationId,
+      });
+    }
     const response = buildResponse(upstream, requestId);
     if (rotated) persistSession(response.cookies, rotated);
     return response;
@@ -270,10 +312,8 @@ function buildResponse(upstream: Response, requestId: string): NextResponse {
   }
   headers.set("Cache-Control", "private, no-store");
   headers.append("Vary", "Cookie");
-  headers.set(
-    CONTEXT_HEADERS.requestId,
-    upstream.headers.get(CONTEXT_HEADERS.requestId) ?? requestId,
-  );
+  headers.set(CONTEXT_HEADERS.requestId, requestId);
+  headers.set(CONTEXT_HEADERS.correlationId, requestId);
   const hasBody = upstream.status !== 204 && upstream.status !== 304;
   return new NextResponse(hasBody ? upstream.body : null, {
     status: upstream.status,

@@ -66,7 +66,6 @@ O script preserva configurações anteriores em `/root/orbit-bootstrap-<UTC>`:
   por digest. O socket Docker é equivalente a acesso root: somente admins.
 - Fail2ban e atualizações de segurança automáticas, sem reboot automático.
 - Logs Docker rotacionados no Compose; Nginx não registra query strings.
-- Instala o script/timer de backup; habilite o timer após o primeiro deploy.
 
 Há reversão automática do firewall após **10 minutos**. Antes de executar o
 bootstrap (ou `repair-firewall.sh`), mantenha um terminal neste Mac com:
@@ -229,40 +228,25 @@ eles contêm segredos. Use `config --quiet` e consultas de campos específicos.
 - Webhooks/links de aprovação e download assinados devem ser testados com
   contas sintéticas de staging. Nenhuma alteração de cobrança real.
 
-## Backup e recuperação
+## Qualificação e recuperação
 
-Após deploy validado:
+Staging usa snapshots sanitizados em ambientes descartáveis para qualificar
+migrations e RLS. Os timers de backup e restore em R2 são exclusivos da
+produção. Em um staging que já recebeu a instalação anterior, desative o timer
+legado com `sudo systemctl disable --now orbit-backup.timer`. Os arquivos
+locais existentes ficam disponíveis para o período definido pela operação.
 
-```bash
-sudo /usr/local/sbin/orbit-backup
-sudo systemctl enable --now orbit-backup.timer
-sudo systemctl list-timers orbit-backup.timer
-```
-
-Ou execute a finalização completa, que testa Nginx/firewall, faz o primeiro
-backup, agenda os próximos e reinicia para ativar kernel/microcódigo instalados:
+Depois de validar o deploy, a finalização do host confere Nginx e firewall.
+Quando for necessário aplicar kernel ou microcódigo já instalados, execute:
 
 ```bash
 sudo bash ~/orbit-bootstrap/bin/finalize-host.sh --reboot
 ```
 
-O SSH será desconectado. Depois do boot, confira `uname -r`, saúde dos
-containers, firewall e funcionamento público. O kernel 6.8.0-149 estava
-instalado durante a preparação; o host ainda executava 6.8.0-71 antes do reboot.
-
-O backup diário às 03:15 UTC pausa a API brevemente, faz `pg_dump`, verifica a
-listagem do dump e registra SHA-256. Após a migração R2, as mídias são copiadas
-por um backup independente dos buckets; não ficam mais no disco do servidor. Reinicia a API
-mesmo em falha. Retenção local 14 dias. Arquivos ficam em `/var/backups/orbit`
-0700; `.env` e chaves AES/JWT precisam de cópia **separada em cofre**.
-Esse backup no mesmo disco **não é recuperação de desastre**: falta destino
-externo criptografado e prova de restauração antes de qualquer produção real.
-Teste restore em projeto/volumes novos, nunca com `down -v` no staging.
-
-Atualizações: gere nova release no Mac/CI, faça backup, baixe imagens por
-digest e rode migrations. Rollback de aplicação usa o lock anterior; banco
-exige análise de compatibilidade. Nunca remova volumes para corrigir deploy.
-Revise semanalmente atualizações APT/Docker/Nginx e listas oficiais Cloudflare.
+Após o boot, confira `uname -r`, saúde dos containers, firewall e acesso público.
+Atualizações seguem o lock por digest. Em rollback de aplicação, confira a
+compatibilidade com a migration antes de trocar a imagem. Veja o
+[runbook da Etapa 04](../../docs/release/operacao-etapa-04.md).
 
 ## Roteador — etapa final
 

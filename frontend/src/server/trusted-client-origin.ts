@@ -1,8 +1,12 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { isIP } from "node:net";
 import { timingSafeEqual } from "node:crypto";
+import { readContextFromRequest } from "@/server/request-context";
 
-const origins = new AsyncLocalStorage<string | null>();
+const origins = new AsyncLocalStorage<{
+  ip: string | null;
+  requestId: string;
+}>();
 const secretHeader = "x-orbit-proxy-secret";
 const ipHeader = "x-orbit-client-ip";
 
@@ -29,14 +33,22 @@ export function trustedOrigin(request: Request): string | null {
   return normalizeIp(request.headers.get(ipHeader));
 }
 
-export function withClientOrigin<T>(request: Request, action: () => T): T {
-  return origins.run(trustedOrigin(request), action);
+export function withClientOrigin<T>(
+  request: Request,
+  action: () => T,
+  requestId = readContextFromRequest(request).requestId,
+): T {
+  return origins.run({ ip: trustedOrigin(request), requestId }, action);
+}
+
+export function currentProxyCorrelationId(): string | undefined {
+  return origins.getStore()?.requestId;
 }
 
 /** Generated last, so caller headers cannot replace this authority. Outside an
  * HTTP request (public catalog builds, jobs), no origin is invented. */
 export function clientOriginHeaders(): Record<string, string> {
-  const ip = origins.getStore();
+  const ip = origins.getStore()?.ip;
   const secret = process.env.TRUSTED_PROXY_SECRET;
   return ip && secret ? { [ipHeader]: ip, [secretHeader]: secret } : {};
 }

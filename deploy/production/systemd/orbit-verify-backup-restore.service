@@ -1,0 +1,11 @@
+[Unit]
+Description=Verificação de restore do backup do Orbit em PostgreSQL descartável
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/orbit-verify-backup-restore
+UMask=0077
+TimeoutStartSec=3h
+Nice=15

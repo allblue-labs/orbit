@@ -56,6 +56,11 @@ export class HotpathRedis implements OnModuleInit, OnModuleDestroy {
     if (this.client?.isOpen) this.client.destroy();
   }
 
+  get readiness(): 'disabled' | 'ok' | 'degraded' {
+    if (process.env.REDIS_HOTPATH_ENABLED !== 'true') return 'disabled';
+    return this.client?.isReady && this.retryAt === 0 ? 'ok' : 'degraded';
+  }
+
   get available(): boolean {
     return (
       this.client?.isReady === true &&

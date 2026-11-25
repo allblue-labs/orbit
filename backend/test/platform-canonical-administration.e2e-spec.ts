@@ -206,6 +206,75 @@ describe('ORB-NX-02 canonical platform administration (HTTP / restricted Postgre
     await disconnectAdminPrisma();
   });
 
+  it('limits DLQ reads and requeue to global authority, redacts payload, and fences repeat commands', async () => {
+    const { org } = await create();
+    const job = await admin.backgroundJob.create({
+      data: {
+        organizationId: org.id,
+        scope: 'ORGANIZATION',
+        businessUnitIds: [],
+        queue: 'artifact.render',
+        jobKey: `dlq-fixture-${randomUUID()}`,
+        payload: {
+          token: 'PRIVATE_JOB_TOKEN_CANARY',
+          secret: 'PRIVATE_JOB_SECRET',
+        },
+        correlationId: randomUUID(),
+        status: 'DEAD',
+        attempts: 3,
+        lastError: 'JOB_LEASE_EXPIRED',
+        finishedAt: new Date(),
+      },
+    });
+    const route = '/api/v1/admin/jobs';
+    await http().get(route).expect(401);
+    await auth(http().get(route), 'fake').expect(401);
+    const requestId = randomUUID();
+    const list = await auth(
+      http().get(route).query({ group: 'pdf', organizationId: org.id }),
+    )
+      .set('X-Correlation-Id', requestId)
+      .expect(200);
+    expect(list.headers['x-correlation-id']).toBe(requestId);
+    expect(list.headers['x-request-id']).toBe(requestId);
+    expect(JSON.stringify(list.body)).not.toContain('PRIVATE_JOB_');
+    expect((list.body as { data: { items: unknown[] } }).data.items).toEqual([
+      expect.objectContaining({
+        id: job.id,
+        attempts: 3,
+        redriveGeneration: 0,
+      }),
+    ]);
+    const replay = () =>
+      auth(http().post(`${route}/${job.id}/requeue`))
+        .send({ generation: 0 })
+        .expect(200);
+    const pair = await Promise.all([replay(), replay()]);
+    expect(
+      pair
+        .map(({ body }) => (body as { data: { result: string } }).data.result)
+        .sort(),
+    ).toEqual(['REQUEUED', 'STALE']);
+    expect(
+      await admin.backgroundJob.findUniqueOrThrow({ where: { id: job.id } }),
+    ).toMatchObject({
+      status: 'PENDING',
+      attempts: 0,
+      redriveGeneration: 1,
+      correlationId: job.correlationId,
+      jobKey: job.jobKey,
+    });
+    expect(
+      await admin.auditLog.count({
+        where: {
+          entityId: job.id,
+          userId: actorId,
+          action: 'BACKGROUND_JOB_REQUEUED',
+        },
+      }),
+    ).toBe(1);
+  });
+
   it('paid provisioning creates canonical pending access, owner bindings and setup outbox without an owner password', async () => {
     const { org } = await create();
     expect(org.subscription).toMatchObject({

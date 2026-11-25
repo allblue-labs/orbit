@@ -69,7 +69,7 @@ export async function readStoredTokens(): Promise<StoredTokens> {
  * novo refresh token invalidaria a sessão do usuário.
  */
 export async function resolveAccess(
-  options: { allowRefresh?: boolean } = {},
+  options: { allowRefresh?: boolean; requestId?: string } = {},
 ): Promise<ResolvedAccess> {
   const { accessToken, refreshToken } = await readStoredTokens();
   const claims = accessToken ? decodeAccessToken(accessToken) : null;
@@ -87,7 +87,7 @@ export async function resolveAccess(
     };
   }
 
-  const rotated = await refreshTokens(refreshToken);
+  const rotated = await refreshTokens(refreshToken, options.requestId);
   if (!rotated) {
     return { accessToken: null, claims: null, rotated: null, expired: true };
   }

@@ -9,7 +9,7 @@ import { RequestContext, RequestContextStorage } from '../../context';
 import { RlsTransaction } from '../../database';
 import { PUBLIC_KEY } from '../../decorators';
 import { ForbiddenException } from '../../exceptions';
-import { generateUuidV7 } from '../../utils';
+import { correlationId } from '../../observability/correlation';
 import type { IdentityRequest } from '../identity/infrastructure/jwt-authentication.guard';
 import {
   TENANT_RECOVERY,
@@ -35,8 +35,7 @@ export class TenantOperationGuard implements CanActivate {
       .getRequest<IdentityRequest & { id?: string }>();
     const identity = request.identity;
     if (!identity) return true; // Private requests have already crossed JWT authentication.
-    request.id ??=
-      request.header('x-request-id')?.slice(0, 120) || generateUuidV7();
+    request.id ??= correlationId(request);
     return this.storage.run(
       new RequestContext({
         requestId: request.id,

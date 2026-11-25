@@ -189,7 +189,7 @@ async function provision(): Promise<void> {
           `${passwordKey} must be a distinct password of at least 12 characters`,
         );
       }
-      const worker = quoteIdentifier(workerName!);
+      const worker = quoteIdentifier(workerName);
       const { rowCount } = await admin.query(
         'SELECT 1 FROM pg_roles WHERE rolname=$1',
         [workerName],
@@ -210,6 +210,45 @@ async function provision(): Promise<void> {
         `GRANT EXECUTE ON FUNCTION public.app_purge_expired_tenant_table(uuid,text) TO ${role}`,
       );
     }
+    const backupPassword = process.env.BACKUP_DATABASE_PASSWORD?.trim();
+    if (backupPassword) {
+      if (!/^[a-fA-F0-9]{32,128}$/.test(backupPassword))
+        throw new Error(
+          'BACKUP_DATABASE_PASSWORD must be a hexadecimal secret',
+        );
+      await admin.query(`DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='orbit_backup') THEN
+          CREATE ROLE orbit_backup;
+        END IF;
+      END $$`);
+      const membership = await admin.query(`SELECT 1 FROM pg_auth_members
+        WHERE member='orbit_backup'::regrole OR roleid='orbit_backup'::regrole LIMIT 1`);
+      if (membership.rowCount)
+        throw new Error('orbit_backup must have no role memberships');
+      await admin.query(`ALTER ROLE orbit_backup
+        LOGIN NOSUPERUSER BYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE NOREPLICATION
+        PASSWORD ${quoteLiteral(backupPassword)}`);
+      await admin.query(`ALTER ROLE orbit_backup IN DATABASE ${quoteIdentifier(database)}
+        SET default_transaction_read_only TO on`);
+      await admin.query(
+        `GRANT CONNECT ON DATABASE ${quoteIdentifier(database)} TO orbit_backup`,
+      );
+      await admin.query('REVOKE ALL ON SCHEMA public FROM orbit_backup');
+      await admin.query(
+        'REVOKE ALL ON ALL TABLES IN SCHEMA public FROM orbit_backup',
+      );
+      await admin.query(
+        'REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM orbit_backup',
+      );
+      await admin.query('GRANT USAGE ON SCHEMA public TO orbit_backup');
+      await admin.query(
+        'GRANT SELECT ON ALL TABLES IN SCHEMA public TO orbit_backup',
+      );
+      await admin.query(
+        'GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO orbit_backup',
+      );
+    }
+
     /** Cobre o que a próxima migration criar antes deste script rodar de novo. */
     await admin.query(
       `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE SELECT, INSERT, UPDATE, DELETE ON TABLES FROM ${role}`,

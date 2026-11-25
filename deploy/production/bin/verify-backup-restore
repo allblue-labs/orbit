@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+umask 077
+[[ $EUID -eq 0 ]] || { echo 'Execute com sudo.' >&2; exit 1; }
+cd /opt/stacks/orbit
+[[ $# -le 1 ]] || { echo 'Use somente a chave opcional de um backup completo.' >&2; exit 1; }
+exec 9>/run/lock/orbit-verify-restore.lock
+flock -n 9 || { echo 'Outro ensaio de restore está em execução.' >&2; exit 1; }
+
+backup_image=$(python3 -c 'import json,re; ref=json.load(open("release.json"))["images"]["backup"]["digest"]; assert re.fullmatch(r"docker.io/allbluelabs/orbit-api@sha256:[a-f0-9]{64}",ref); print(ref)')
+postgres_image=postgres:17.11-alpine3.24@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0
+suffix=$(openssl rand -hex 10)
+network=orbit-restore-$suffix
+database=orbit_restore_$suffix
+db_container=orbit-restore-db-$suffix
+created_db=false
+docker network create "$network" >/dev/null
+cleanup() {
+    if [[ $created_db == true ]]; then docker stop -t 5 "$db_container" >/dev/null; fi
+    docker network rm "$network" >/dev/null
+}
+trap cleanup EXIT
+export POSTGRES_DB="$database" POSTGRES_USER=orbit_restore_admin POSTGRES_PASSWORD
+POSTGRES_PASSWORD=$(openssl rand -hex 32)
+docker run -d --rm --name "$db_container" --network "$network" --network-alias orbit-restore-db \
+    --network-alias postgres --tmpfs "/var/lib/postgresql/data:rw,noexec,nosuid,size=${ORBIT_RESTORE_TMPFS_SIZE:-2147483648}" \
+    --env POSTGRES_DB --env POSTGRES_USER --env POSTGRES_PASSWORD "$postgres_image" >/dev/null
+created_db=true
+for count in $(seq 1 60); do
+    if docker exec "$db_container" pg_isready -h 127.0.0.1 -U orbit_restore_admin -d "$database" >/dev/null 2>&1; then break; fi
+    if [[ $count == 60 ]]; then echo 'PostgreSQL descartável indisponível.' >&2; exit 1; fi
+    sleep 1
+done
+export DIRECT_DATABASE_URL="postgresql://orbit_restore_admin:$POSTGRES_PASSWORD@orbit-restore-db:5432/$database"
+docker run --rm --init --network "$network" --read-only --cap-drop ALL --security-opt no-new-privileges \
+    --memory 768m --cpus 1 --tmpfs /var/lib/postgresql/data:rw,noexec,nosuid,size=1048576 --env-file /etc/orbit/backup-restore.env --env DIRECT_DATABASE_URL \
+    --mount 'type=bind,src=/etc/orbit/backup-passphrase,dst=/run/secrets/orbit-backup-passphrase,readonly' \
+    --mount 'type=bind,src=/var/lib/orbit-backup/scratch,dst=/scratch' \
+    --env ORBIT_BACKUP_PASSPHRASE_FILE=/run/secrets/orbit-backup-passphrase --env ORBIT_BACKUP_SCRATCH=/scratch \
+    "$backup_image" verify "$@"

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Executar no Mac/CI; nunca no servidor. Um repositório privado, quatro tags.
+# Executar no Mac/CI; nunca no servidor. Um repositório privado. A imagem de backup é opcional.
 set -Eeuo pipefail
 cd "$(dirname "$0")/../../.."
 [[ -z $(git -c core.fsmonitor=false status --porcelain) ]] || { echo 'Faça commit das alterações antes de gerar imagens.' >&2; exit 1; }
@@ -15,23 +15,30 @@ builder=${ORBIT_BUILDX_BUILDER:-orbit-staging}
 if ! docker buildx inspect "$builder" >/dev/null 2>&1; then
     docker buildx create --name "$builder" --driver docker-container >/dev/null
 fi
-for component in api migrator frontend pgbouncer; do
+components=(api migrator frontend pgbouncer)
+if [[ ${ORBIT_BUILD_BACKUP_IMAGE:-false} == true ]]; then components+=(backup); fi
+for component in "${components[@]}"; do
     case "$component" in
+        backup) context=backend; target=backup ;;
         api) context=backend; target=runner ;;
         migrator) context=backend; target=migrator ;;
         frontend) context=frontend; target=runner ;;
         pgbouncer) context=deploy/pgbouncer; target=runner ;;
     esac
     image="$repository:$tag-$component"
+    optional_args=()
+    if [[ $component == frontend ]]; then
+        optional_args+=(--build-arg NEXT_PUBLIC_SENTRY_DSN --build-arg NEXT_PUBLIC_SENTRY_ENVIRONMENT)
+    fi
     # Digest é obtido do próprio resultado do push, não de uma tag mutável.
-    docker buildx build --builder "$builder" --platform linux/amd64 --pull --provenance=mode=min \
+    docker buildx build "${optional_args[@]}" --builder "$builder" --platform linux/amd64 --pull --provenance=mode=min \
         --target "$target" --build-arg "ORBIT_COMMIT_SHA=$sha" \
         --build-arg "ORBIT_BUILD_TIME=$created" --tag "$image" \
         --metadata-file "$output/$component.json" --push "$context"
 done
-python3 - "$output" "$repository" "$tag" "$sha" "$created" <<'PY'
+python3 - "$output" "$repository" "$tag" "$sha" "$created" "${ORBIT_BUILD_BACKUP_IMAGE:-false}" <<'PY'
 import json, pathlib, re, sys
-p=pathlib.Path(sys.argv[1]); repository, tag, sha, created=sys.argv[2:]
+p=pathlib.Path(sys.argv[1]); repository, tag, sha, created, include_backup=sys.argv[2:]
 services={'api':'api', 'worker':'api', 'documents':'api', 'migrate':'migrator', 'bootstrap-admin':'migrator', 'storage-migration':'migrator', 'frontend':'frontend', 'pgbouncer':'pgbouncer'}
 lock=['# Referências imutáveis publicadas no Docker Hub privado.', 'services:']
 manifest={'commit': sha, 'created': created, 'tag': tag, 'images': {}}
@@ -43,6 +50,10 @@ for service, component in services.items():
     if service == 'storage-migration':
         lock += ['    profiles: [storage-migration]']
     manifest['images'][service]={'tag': repository+':'+tag+'-'+component, 'digest': reference}
+if include_backup == 'true':
+    backup_digest=json.loads((p/'backup.json').read_text())['containerimage.digest']
+    if not re.fullmatch(r'sha256:[a-f0-9]{64}', backup_digest): raise SystemExit('Digest inválido para backup.')
+    manifest['images']['backup']={'tag': repository+':'+tag+'-backup', 'digest': repository+'@'+backup_digest}
 (p/'docker-compose.lock.yml').write_text('\n'.join(lock)+'\n')
 (p/'release.json').write_text(json.dumps(manifest,indent=2)+'\n')
 print('Release publicada:', tag, '\nLock:', p/'docker-compose.lock.yml')

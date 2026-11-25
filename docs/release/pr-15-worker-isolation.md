@@ -92,8 +92,9 @@ Os comandos de leitura exibem estado e códigos, sem payload do cliente.
 ```bash
 docker compose exec -T worker node dist/src/scripts/inspect-job-queue.js snapshot
 docker compose exec -T worker node dist/src/scripts/inspect-job-queue.js dead artifact.render
-docker compose exec -T worker node dist/src/scripts/inspect-job-queue.js replay artifact.render UUID_DO_JOB
 ```
+
+O reprocessamento usa a [API interna de DLQ](operacao-etapa-04.md#dlq-interna).
 
 Após corrigir a causa, o replay permite uma tentativa adicional de artefato
 ou relatório com falha transitória identificada ou lease expirado. Preserva

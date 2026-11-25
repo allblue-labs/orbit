@@ -69,6 +69,7 @@ const _rank = <MobileDueState, int>{
   MobileDueState.dueToday: 2,
   MobileDueState.upcoming: 3,
   MobileDueState.unscheduled: 4,
+  MobileDueState.completed: 5,
 };
 
 void main() {
@@ -134,7 +135,7 @@ void main() {
     final page = MobileWorkQueuePageContract.fromJson(data);
 
     /// A ordem por faixa é monotônica: em andamento, atrasado, hoje,
-    /// próximos, sem data. Isto confere o que **chegou** — não recria a regra.
+    /// próximos, sem data e concluídos. A ordem vem do servidor.
     var previous = -1;
     for (final item in page.data) {
       final rank = _rank[item.dueState]!;

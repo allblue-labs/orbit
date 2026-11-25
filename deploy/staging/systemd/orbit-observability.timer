@@ -1,0 +1,10 @@
+[Unit]
+Description=Amostragem de filas e conexões Orbit
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15s
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

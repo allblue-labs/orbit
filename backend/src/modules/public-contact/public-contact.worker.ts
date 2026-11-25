@@ -89,11 +89,13 @@ export class PublicContactWorker implements OnModuleInit, OnModuleDestroy {
       new Date(
         Date.now() + Math.min(3_600_000, 30_000 * 2 ** (row.attempts - 1)),
       ),
+      result.status === 'FAILED' ? result.code : null,
     );
     this.logger.log(
       JSON.stringify({
         event: 'public_contact_delivery',
         submissionId: row.id,
+        correlationId: row.correlationId,
         status,
         attempt: row.attempts,
       }),

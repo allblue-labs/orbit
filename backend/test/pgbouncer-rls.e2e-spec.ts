@@ -88,6 +88,7 @@ suite('PostgreSQL RLS through PgBouncer transaction pooling', () => {
       connectionString: process.env.APP_DATABASE_URL,
       max: 256,
       connectionTimeoutMillis: 12_000,
+      idleTimeoutMillis: 0,
     });
     for (let index = 0; index < 2; index++) {
       const module = await Test.createTestingModule({

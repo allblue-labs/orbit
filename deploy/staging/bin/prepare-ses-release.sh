@@ -4,7 +4,6 @@ set -Eeuo pipefail
 [[ $EUID -eq 0 ]] || { echo 'Execute com sudo.' >&2; exit 1; }
 source_dir=$(cd "$(dirname "$0")/.." && pwd)
 [[ -f /opt/stacks/orbit/.env && -f "$source_dir/nginx/proxy-common.inc" ]] || { echo 'Arquivos de staging não encontrados.' >&2; exit 1; }
-/usr/local/sbin/orbit-backup
 umask 077
 stamp=$(date -u +%Y%m%dT%H%M%SZ)
 backup=/var/backups/orbit-host/$stamp
@@ -19,5 +18,4 @@ if ! nginx -t; then
     exit 1
 fi
 systemctl reload nginx
-install -m 0750 "$source_dir/bin/backup.sh" /usr/local/sbin/orbit-backup
-echo 'Backup concluído; proxy privado e rotina de backup preparados. Nenhum deploy ou envio de e-mail foi feito.'
+echo 'Cópia da configuração do Nginx preservada e proxy privado preparado.'

@@ -1,3 +1,4 @@
+import { logProxy } from "@/server/bff/proxy-telemetry";
 /**
  * O proxy do cliente: `/api/portal/<caminho>` → `/api/v1/portal/<caminho>`.
  *
@@ -35,6 +36,7 @@ const RESPONSE_HEADERS = [
   "content-disposition",
   "vary",
   "etag",
+  "x-correlation-id",
   "x-request-id",
   "retry-after",
 ];
@@ -43,12 +45,13 @@ export interface PortalRouteContext {
   params: Promise<{ path?: string[] }>;
 }
 
-export function proxyToPortal(
+export async function proxyToPortal(
   request: NextRequest,
   context: PortalRouteContext,
 ): Promise<Response> {
-  return withClientOrigin(request, async () => {
-    const { requestId, locale, timezone } = readContextFromRequest(request);
+  const { requestId, locale, timezone } = readContextFromRequest(request);
+  const started = performance.now();
+  const logged = await withClientOrigin(request, async () => {
     if (!isSameOriginRequest(request)) {
       return bffError({
         status: 403,
@@ -141,6 +144,7 @@ export function proxyToPortal(
       }
       headers.set("Cache-Control", "private, no-store");
       headers.append("Vary", "Cookie");
+      headers.set(CONTEXT_HEADERS.correlationId, requestId);
       headers.set(CONTEXT_HEADERS.requestId, requestId);
       const corpo = upstream.status !== 204 && upstream.status !== 304;
       const response = new NextResponse(corpo ? upstream.body : null, {
@@ -167,5 +171,7 @@ export function proxyToPortal(
     } finally {
       retained.release();
     }
-  });
+  }, requestId);
+  logProxy(request, "portal", requestId, performance.now() - started, logged.status);
+  return logged;
 }

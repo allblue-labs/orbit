@@ -54,8 +54,11 @@ def check(config, require_digests=True):
             "PgBouncer exige três senhas distintas, compatíveis com a URL e o arquivo SCRAM.")
     require(set(pool_env).issubset({"POSTGRES_DB", *(key for _, key in expected_users.values()),
         "PGBOUNCER_MAX_CLIENT_CONN", "PGBOUNCER_DEFAULT_POOL_SIZE", "PGBOUNCER_RESERVE_POOL_SIZE",
-        "PGBOUNCER_MAX_DB_CONNECTIONS", "PGBOUNCER_QUERY_WAIT_TIMEOUT"}),
+        "PGBOUNCER_MAX_DB_CONNECTIONS", "PGBOUNCER_QUERY_WAIT_TIMEOUT", "PGBOUNCER_STATS_PASSWORD"}),
         "PgBouncer: variáveis inesperadas.")
+    stats = pool_env.get("PGBOUNCER_STATS_PASSWORD")
+    require(not stats or (re.fullmatch(r"[a-zA-Z0-9_.~-]{12,}", stats) and stats not in passwords),
+            "PgBouncer: use uma senha própria para leitura de métricas.")
     for name in ("api", "worker", "documents"):
         env = services[name].get("environment", {})
         require(env.get("ORBIT_PROCESS_ROLE") == name, "Papel incorreto: " + name)
@@ -91,6 +94,8 @@ def check(config, require_digests=True):
             )
         for key in (
             "DIRECT_DATABASE_URL",
+            "BACKUP_DATABASE_PASSWORD",
+            "PGBOUNCER_STATS_PASSWORD",
             "APP_DATABASE_URL",
             "POSTGRES_PASSWORD",
             "PLATFORM_ADMIN_PASSWORD",

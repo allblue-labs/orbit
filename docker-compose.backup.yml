@@ -1,0 +1,36 @@
+services:
+  backup:
+    profiles: [backup]
+    image: ${ORBIT_BACKUP_IMAGE:?Use a imagem imutável de backup da release}
+    read_only: true
+    user: "1001:1001"
+    init: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: 768m
+    cpus: 1
+    env_file:
+      - ${ORBIT_BACKUP_ENV_FILE:-/etc/orbit/backup.env}
+    environment:
+      NODE_ENV: production
+      DIRECT_DATABASE_URL: postgresql://orbit_backup:${BACKUP_DATABASE_PASSWORD:?BACKUP_DATABASE_PASSWORD is required}@postgres:5432/${POSTGRES_DB}
+      ORBIT_BACKUP_PASSPHRASE_FILE: /run/secrets/orbit-backup-passphrase
+      ORBIT_BACKUP_SCRATCH: /scratch
+    tmpfs:
+      - /var/lib/postgresql/data:rw,noexec,nosuid,size=1048576
+    volumes:
+      - /var/lib/orbit-backup/scratch:/scratch
+    secrets: [orbit-backup-passphrase]
+    networks: [orbit_database, orbit_backup_egress]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+secrets:
+  orbit-backup-passphrase:
+    file: ${ORBIT_BACKUP_KEY_FILE:-/etc/orbit/backup-passphrase}
+
+networks:
+  orbit_backup_egress:
+    driver: bridge

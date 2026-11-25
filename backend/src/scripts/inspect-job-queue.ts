@@ -6,23 +6,26 @@ import {
   type JobQueue,
 } from '../modules/jobs/background-job.types';
 import { validateReleaseEnvironment } from '../release-environment';
+import { processRole } from '../runtime/process-role';
 
 async function main() {
-  const [action, queue, id] = process.argv.slice(2);
+  const [action, queue] = process.argv.slice(2);
   const queues = Object.values(JOB_QUEUES);
   if (
     action !== 'snapshot' &&
-    (!queues.includes(queue as JobQueue) ||
-      (action !== 'dead' &&
-        !(
-          action === 'replay' &&
-          /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id ?? '')
-        )))
-  ) {
+    (action !== 'dead' || !queues.includes(queue as JobQueue))
+  )
     throw new Error('Invalid queue operation');
-  }
-  // Control-plane command, with the same restricted DSN. Never start consumers.
-  process.env.ORBIT_PROCESS_ROLE = 'api';
+  const role = processRole();
+  if (
+    process.env.NODE_ENV === 'production' &&
+    role !== 'worker' &&
+    role !== 'documents'
+  )
+    throw new Error('Queue inspection requires a consumer role.');
+  // The connection keeps the consumer DB role, while this context only reads.
+  process.env.JOBS_WORKER_ENABLED = 'false';
+  process.env.BILLING_EVENTS_WORKER_ENABLED = 'false';
   validateReleaseEnvironment(process.env);
   const app = await NestFactory.createApplicationContext(AppModule, {
     logger: false,
@@ -30,26 +33,21 @@ async function main() {
   });
   try {
     const jobs = app.get(BackgroundJobQueue);
-    if (action === 'snapshot')
+    if (action === 'snapshot') {
       console.log(JSON.stringify(await jobs.snapshot(queues)));
-    if (action === 'dead') {
+    } else {
       const rows = await jobs.deadLetters(queue as JobQueue);
-      const known =
-        /^(?:(?:DATABASE_UNAVAILABLE|DATABASE_TIMEOUT|TRANSACTION_FAILURE|CONNECTION_FAILURE|INTERNAL_ERROR)(?::[A-Z0-9_]{1,40})?|JOB_SCOPE_INVALID|JOB_LEASE_EXPIRED|PERMANENT_JOB_ERROR|UNCLASSIFIED_FAILURE)$/;
+      const safe =
+        /^(?:(?:DATABASE_UNAVAILABLE|DATABASE_TIMEOUT|TRANSACTION_FAILURE|CONNECTION_FAILURE|INTERNAL_ERROR)(?::[A-Z0-9_]{1,40})?|JOB_SCOPE_INVALID|JOB_LEASE_EXPIRED|JOB_TIMEOUT|PERMANENT_JOB_ERROR|UNCLASSIFIED_FAILURE)$/;
       console.log(
         JSON.stringify(
           rows.map((row) => ({
             ...row,
             lastError:
-              row.lastError && known.test(row.lastError) ? row.lastError : null,
+              row.lastError && safe.test(row.lastError) ? row.lastError : null,
           })),
         ),
       );
-    }
-    if (action === 'replay') {
-      const accepted = await jobs.replayDead(id!, queue as JobQueue);
-      console.log(JSON.stringify({ event: 'job_replay', queue, id, accepted }));
-      if (!accepted) process.exitCode = 1;
     }
   } finally {
     await app.close();
@@ -57,6 +55,8 @@ async function main() {
 }
 
 void main().catch(() => {
-  console.error('Não foi possível executar a operação na fila.');
+  console.error(
+    'Inspeção indisponível. Para reprocessar, use a API administrativa.',
+  );
   process.exitCode = 1;
 });

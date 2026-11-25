@@ -29,6 +29,7 @@
  * Se algum dia o backend passar a ler este cabeçalho, que seja para registrar
  * de onde veio a requisição — nunca para escolher o dia.
  */
+import { safeCorrelationId } from "@/lib/correlation-id";
 import { CONTEXT_HEADERS } from "@/lib/context-headers";
 import { DEFAULT_LOCALE, DEFAULT_TIMEZONE } from "@/lib/env";
 import { generateRequestId } from "@/utils/http";
@@ -44,8 +45,10 @@ export interface BackendContextInput extends Partial<OrbitRequestContext> {
 export function backendContextHeaders(
   input: BackendContextInput = {},
 ): Record<string, string> {
+  const id = safeCorrelationId(input.requestId) ?? generateRequestId();
   const headers: Record<string, string> = {
-    [CONTEXT_HEADERS.requestId]: input.requestId ?? generateRequestId(),
+    [CONTEXT_HEADERS.correlationId]: id,
+    [CONTEXT_HEADERS.requestId]: id,
     [CONTEXT_HEADERS.locale]: input.locale ?? DEFAULT_LOCALE,
     [CONTEXT_HEADERS.timezone]: input.timezone ?? DEFAULT_TIMEZONE,
   };
@@ -68,10 +71,11 @@ export function readContextFromRequest(
   Pick<OrbitRequestContext, "organizationId" | "businessUnitId"> {
   const header = (name: string): string | null =>
     request.headers.get(name)?.trim() || null;
-  const requestId = header(CONTEXT_HEADERS.requestId);
+  const requestId = safeCorrelationId(header(CONTEXT_HEADERS.correlationId))
+    ?? safeCorrelationId(header(CONTEXT_HEADERS.requestId))
+    ?? generateRequestId();
   return {
-    requestId:
-      requestId && requestId.length <= 128 ? requestId : generateRequestId(),
+    requestId,
     locale: header(CONTEXT_HEADERS.locale) ?? DEFAULT_LOCALE,
     timezone: header(CONTEXT_HEADERS.timezone) ?? DEFAULT_TIMEZONE,
     organizationId: header(CONTEXT_HEADERS.organizationId),

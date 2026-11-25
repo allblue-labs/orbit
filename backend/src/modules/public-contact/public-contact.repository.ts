@@ -1,4 +1,7 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { canRedriveRejectedEmail } from '../email/email-redrive-policy';
+import { RequestContextService } from '../../context';
+import { safeCorrelationId } from '../../observability/correlation';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { createHmac } from 'node:crypto';
 import type { PublicContactSubmission } from '@prisma/client';
 import { PrismaService } from '../../database';
@@ -20,6 +23,7 @@ export class PublicContactRepository {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(CRYPTO_PROVIDER) private readonly crypto: ICryptoProvider,
+    @Optional() private readonly context?: RequestContextService,
   ) {}
   private hash(scope: string, value: unknown) {
     const secret = process.env.AUTH_RATE_LIMIT_SECRET ?? '';
@@ -85,6 +89,9 @@ export class PublicContactRepository {
         data: {
           id,
           requestKey,
+          correlationId:
+            safeCorrelationId(this.context?.getOptional()?.requestId) ??
+            generateUuidV7(),
           payloadHash,
           encryptedPayload: this.crypto.encrypt(
             JSON.stringify({ id, ...content }),
@@ -144,6 +151,7 @@ export class PublicContactRepository {
     row: ContactClaim,
     status: 'PENDING' | 'ACCEPTED' | 'FAILED' | 'SKIPPED',
     availableAt = new Date(),
+    lastErrorCode: string | null = null,
   ) {
     return this.asWorker((tx) =>
       tx.publicContactSubmission.updateMany({
@@ -153,20 +161,33 @@ export class PublicContactRepository {
           availableAt,
           leaseId: null,
           lockedAt: null,
-          ...(status === 'PENDING' ? {} : { encryptedPayload: null }),
+          lastErrorCode,
+          ...(status === 'PENDING' ||
+          (status === 'FAILED' &&
+            canRedriveRejectedEmail(lastErrorCode) &&
+            row.expiresAt > new Date() &&
+            !row.adminRequeuedAt)
+            ? {}
+            : { encryptedPayload: null }),
           ...(status === 'ACCEPTED' ? { acceptedAt: new Date() } : {}),
         },
       }),
     );
   }
   prune() {
-    return this.asWorker((tx) =>
-      tx.publicContactSubmission.deleteMany({
+    return this.asWorker(async (tx) => {
+      await tx.$executeRaw`
+        UPDATE public.public_contact_submissions
+        SET encrypted_payload=NULL, updated_at=now()
+        WHERE id IN (SELECT id FROM public.public_contact_submissions
+          WHERE status='FAILED' AND expires_at <= now() AND encrypted_payload IS NOT NULL
+          LIMIT 100 FOR UPDATE SKIP LOCKED)`;
+      return tx.publicContactSubmission.deleteMany({
         where: {
           status: { in: ['ACCEPTED', 'FAILED', 'SKIPPED'] },
           createdAt: { lt: new Date(Date.now() - 30 * 86_400_000) },
         },
-      }),
-    );
+      });
+    });
   }
 }

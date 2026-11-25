@@ -33,7 +33,6 @@ apt-get install -y nginx
 NEEDRESTART_MODE=l apt-get upgrade -y
 
 install -d -m 755 /etc/nginx/ssl
-install -d -m 700 /var/backups/orbit
 install -d -o ninja -g ninja -m 700 /opt/stacks/orbit
 install -m 644 "$source_dir/nginx/00-orbit-common.conf" /etc/nginx/conf.d/00-orbit-common.conf
 install -m 644 "$source_dir/nginx/proxy-common.inc" /etc/nginx/orbit-proxy.inc
@@ -95,9 +94,6 @@ APT::Periodic::Unattended-Upgrade "1";
 Unattended-Upgrade::Automatic-Reboot "false";
 APT
 
-install -m 750 "$source_dir/bin/backup.sh" /usr/local/sbin/orbit-backup
-install -m 644 "$source_dir/systemd/orbit-backup.service" /etc/systemd/system/
-install -m 644 "$source_dir/systemd/orbit-backup.timer" /etc/systemd/system/
 rm -rf "$cidr_dir"
 # Mesmo fluxo validado na recuperação: confirmação por NOVA conexão SSH.
 bash "$source_dir/bin/repair-firewall.sh"

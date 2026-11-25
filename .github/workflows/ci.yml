@@ -133,3 +133,7 @@ jobs:
       - run: node scripts/verify-pgbouncer.mjs
         env:
           ORBIT_TEST_PGBOUNCER_IMAGE: orbit-pr14-pgbouncer:local
+      - run: docker build --target backup --tag orbit-backup:ci backend
+      - run: node scripts/verify-orbit-backup.mjs
+        env:
+          ORBIT_TEST_BACKUP_IMAGE: orbit-backup:ci

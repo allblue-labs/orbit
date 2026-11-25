@@ -478,12 +478,17 @@ export class BackgroundJobQueue {
         {
           queue: string;
           ready: number;
+          pending: number;
+          average_ready_ms: number;
           running: number;
           dead: number;
           oldest_ready_ms: number;
         }[]
       >`
       SELECT queue,
+             count(*) FILTER (WHERE status = 'PENDING')::int AS pending,
+             COALESCE(avg(extract(epoch FROM now() - available_at) * 1000)
+               FILTER (WHERE status='PENDING' AND available_at <= now()), 0)::double precision AS average_ready_ms,
              count(*) FILTER (WHERE status = 'PENDING' AND available_at <= now())::int AS ready,
              count(*) FILTER (WHERE status = 'RUNNING')::int AS running,
              count(*) FILTER (WHERE status = 'DEAD')::int AS dead,

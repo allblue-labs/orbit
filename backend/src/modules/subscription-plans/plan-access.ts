@@ -17,7 +17,7 @@ import { PATH_METADATA } from '@nestjs/common/constants';
 import type { UUID } from '../../contracts';
 import { PUBLIC_KEY } from '../../decorators';
 import { ForbiddenException } from '../../exceptions';
-import { classifyInternalError, internalErrorStack } from '../../errors';
+import { classifyInternalError } from '../../errors';
 import type { IdentityRequest } from '../identity/infrastructure/jwt-authentication.guard';
 import type { AuthenticatedIdentity } from '../identity/domain/identity.types';
 import type { OrganizationEntitlements } from './subscription-plan.service';
@@ -120,11 +120,7 @@ abstract class PlanMetadataGuard {
         exceptionClass: classified.exceptionClass,
         errorCode: classified.code,
       });
-      if (process.env.NODE_ENV === 'production') {
-        this.logger.error(record);
-      } else {
-        this.logger.error(record, internalErrorStack(error));
-      }
+      this.logger.error(record);
       throw error;
     }
   }

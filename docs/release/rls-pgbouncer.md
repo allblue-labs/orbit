@@ -4,7 +4,7 @@
 
 A imagem do PgBouncer é gerada na estação de build ou no CI. O Dockerfile verifica o SHA-256 do tarball upstream 1.26.1. O lock da release registra o digest da imagem publicada junto aos digests da API, dos consumers, do migrador e do frontend.
 
-Antes de aplicar a release, tire o backup de staging e preencha `APP_DATABASE_PASSWORD`, `WORKER_DATABASE_PASSWORD` e `DOCUMENTS_DATABASE_PASSWORD` com três senhas distintas compatíveis com URL. `openssl rand -hex 32` gera valores para as duas novas credenciais. O migrador cria e reconcilia os papéis usando `DIRECT_DATABASE_URL`. API, worker e documentos recebem somente a própria `DATABASE_URL`, com destino `pgbouncer:6432` e `pgbouncer=true`.
+Antes de aplicar a release, qualifique o upgrade com o snapshot sanitizado de staging e preencha `APP_DATABASE_PASSWORD`, `WORKER_DATABASE_PASSWORD` e `DOCUMENTS_DATABASE_PASSWORD` com três senhas distintas compatíveis com URL. `openssl rand -hex 32` gera valores para as duas novas credenciais. O migrador cria e reconcilia os papéis usando `DIRECT_DATABASE_URL`. API, worker e documentos recebem somente a própria `DATABASE_URL`, com destino `pgbouncer:6432` e `pgbouncer=true`.
 
 Atualize os scripts `deploy.sh` e `deployment_preflight.py` com o Compose e o lock da mesma release. Execute `deploy.sh --check` antes de colocar a stack no ar. Para a primeira aplicação destas migrations, reserve uma janela de manutenção e pare `api`, `worker` e `documents` antes de executar o deploy. Essas versões antigas acessam tabelas de identidade que passam a exigir contexto. A API da nova release depende do pooler saudável. O healthcheck usa uma consulta real com o papel restrito via SCRAM. PostgreSQL e PgBouncer ficam em redes internas e o frontend continua atrás da API.
 

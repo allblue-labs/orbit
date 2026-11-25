@@ -17,6 +17,7 @@ function fixture(attempts = 1) {
     attempts,
   } as ClaimedIdentityEmail;
   const outbox = {
+    expireFailedPayloads: jest.fn().mockResolvedValue(0),
     claim: jest.fn().mockResolvedValue(row),
     decrypt: jest.fn().mockReturnValue({
       recipient: 'PRIVATE_RECIPIENT',

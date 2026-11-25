@@ -108,7 +108,10 @@ class SessionAuthenticator {
         rethrow;
       }
       // Falha de renovação encerra a sessão: o refresh token não vale mais.
-      _logger.warning('renovação de sessão falhou', data: {'motivo': '$error'});
+      _logger.warning(
+        'renovação de sessão falhou',
+        data: {'exceptionType': error.runtimeType.toString()},
+      );
       final clearing = clearSession();
       final endedGeneration = _generation;
       await clearing;

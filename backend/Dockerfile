@@ -1,4 +1,4 @@
-FROM node:22.23.5-bookworm-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee AS builder
+FROM node:22.23.5-bookworm-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee AS dependencies
 
 WORKDIR /app
 ENV NODE_ENV=development
@@ -10,6 +10,7 @@ RUN apt-get update \
 COPY package.json package-lock.json ./
 RUN npm ci
 
+FROM dependencies AS builder
 COPY prisma ./prisma
 COPY prisma.config.ts tsconfig.json tsconfig.build.json nest-cli.json ./
 COPY src ./src
@@ -97,3 +98,41 @@ USER orbit
 EXPOSE 5001
 
 CMD ["node", "dist/src/main.js"]
+
+FROM node:22.23.5-bookworm-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee AS backup-build
+WORKDIR /app
+COPY ops/backup-node/package*.json ./
+RUN npm ci --ignore-scripts
+COPY src/scripts/backup/orbit-backup.ts ./
+RUN ./node_modules/.bin/tsc --target ES2022 --module commonjs --skipLibCheck --strict \
+      --outDir /compiled orbit-backup.ts \
+  && npm prune --omit=dev --ignore-scripts --offline
+
+FROM golang:1.27.4-alpine AS backup-crypto
+WORKDIR /src
+COPY ops/backup-crypto/go.mod ops/backup-crypto/go.sum ./
+RUN go mod download
+COPY ops/backup-crypto/main.go ./
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /orbit-backup-crypto .
+
+FROM postgres:17.12-bookworm AS pg-tools
+
+FROM pg-tools AS backup
+ARG ORBIT_COMMIT_SHA=unknown
+ARG ORBIT_BUILD_TIME=unknown
+LABEL org.opencontainers.image.revision=$ORBIT_COMMIT_SHA \
+      org.opencontainers.image.created=$ORBIT_BUILD_TIME
+ENV NODE_ENV=production
+ENV ORBIT_COMMIT_SHA=$ORBIT_COMMIT_SHA
+WORKDIR /app
+RUN mkdir -p /scratch && chown 1001:1001 /scratch
+COPY --from=backup-build /usr/local/bin/node /usr/local/bin/
+COPY --from=backup-build /app/node_modules ./node_modules
+COPY --from=backup-build /compiled/orbit-backup.js ./orbit-backup.js
+COPY --from=backup-crypto /orbit-backup-crypto /usr/local/bin/
+RUN node --version && pg_dump --version && pg_restore --version && psql --version
+USER 1001:1001
+ENTRYPOINT ["node", "orbit-backup.js"]
+CMD ["backup"]
+
+FROM runner AS final

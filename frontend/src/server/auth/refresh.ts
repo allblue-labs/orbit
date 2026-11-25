@@ -18,13 +18,14 @@ const inFlight = new Map<string, Promise<TokenPair | null>>();
  * Chamadas concorrentes com o mesmo token compartilham a mesma promessa, e as
  * demais consultam novamente a API, inclusive após revogação.
  */
-export function refreshTokens(refreshToken: string): Promise<TokenPair | null> {
+export function refreshTokens(refreshToken: string, requestId?: string): Promise<TokenPair | null> {
   const pending = inFlight.get(refreshToken);
   if (pending) return pending;
 
   const request = backendJson<TokenPair>({
     method: "POST",
     path: "/identity/refresh",
+    ...(requestId ? { requestId } : {}),
     body: jsonBody({ refreshToken }),
     retries: 0,
   })

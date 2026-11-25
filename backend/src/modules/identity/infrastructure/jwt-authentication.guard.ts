@@ -11,11 +11,7 @@ import type { Request } from 'express';
 import type { UUID } from '../../../contracts';
 import { PERMISSIONS_KEY, PUBLIC_KEY } from '../../../decorators';
 import { UnauthorizedException } from '../../../exceptions';
-import {
-  classifyInternalError,
-  internalErrorStack,
-  isJwtValidationError,
-} from '../../../errors';
+import { classifyInternalError, isJwtValidationError } from '../../../errors';
 import type { AuthenticatedIdentity } from '../domain/identity.types';
 import { redactSensitivePath } from '../../../common/redact-sensitive-path';
 import { IdentityRepository } from './identity.repository';
@@ -274,11 +270,9 @@ export class JwtAuthenticationGuard implements CanActivate {
         current.organizationId === fence.organizationId &&
         current.accessVersion === fence.accessVersion
       ) {
-        const {
-          sessionId: _session,
-          platformAuthority: _authority,
-          ...tenantIdentity
-        } = identity;
+        const tenantIdentity: Partial<AuthenticatedIdentity> = { ...identity };
+        delete tenantIdentity.sessionId;
+        delete tenantIdentity.platformAuthority;
         await this.hotpath?.write(key, { ...access, identity: tenantIdentity });
       } else {
         fence.cacheable = false;
@@ -302,10 +296,6 @@ export class JwtAuthenticationGuard implements CanActivate {
       exceptionClass: classified.exceptionClass,
       errorCode: classified.code,
     });
-    if (process.env.NODE_ENV === 'production') {
-      this.logger.error(record);
-    } else {
-      this.logger.error(record, internalErrorStack(error));
-    }
+    this.logger.error(record);
   }
 }

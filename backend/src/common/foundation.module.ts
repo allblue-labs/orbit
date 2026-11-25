@@ -8,9 +8,7 @@ import {
 import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { RequestContextModule } from '../context';
 import {
-  LoggingInterceptor,
   RequestContextInterceptor,
-  RequestIdInterceptor,
   ResponseInterceptor,
 } from '../interceptors';
 import { CommonProvidersModule } from '../providers';
@@ -41,9 +39,7 @@ import { IdempotencyCleanup } from './hotpath/idempotency-cleanup';
     RequestIdMiddleware,
     SensitiveEndpointRateLimitMiddleware,
     { provide: APP_FILTER, useClass: FoundationExceptionFilter },
-    { provide: APP_INTERCEPTOR, useClass: RequestIdInterceptor },
     { provide: APP_INTERCEPTOR, useClass: RequestContextInterceptor },
-    { provide: APP_INTERCEPTOR, useClass: LoggingInterceptor },
     { provide: APP_INTERCEPTOR, useClass: ResponseInterceptor },
     { provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor },
   ],

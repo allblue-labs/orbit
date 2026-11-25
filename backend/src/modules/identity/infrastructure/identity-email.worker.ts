@@ -27,6 +27,7 @@ export class IdentityEmailWorker implements OnModuleInit, OnModuleDestroy {
   private timer?: NodeJS.Timeout;
   private running: Promise<boolean> | null = null;
   private stopping = false;
+  private nextExpirySweep = 0;
   constructor(
     private readonly outbox: IdentityEmailOutbox,
     @Inject(IDENTITY_TOKEN_DELIVERY)
@@ -74,6 +75,10 @@ export class IdentityEmailWorker implements OnModuleInit, OnModuleDestroy {
     }
   }
   private async process(): Promise<boolean> {
+    if (Date.now() >= this.nextExpirySweep) {
+      this.nextExpirySweep = Date.now() + 60_000;
+      await this.outbox.expireFailedPayloads();
+    }
     const row = await this.outbox.claim();
     if (!row) return false;
     const log = (status: string, code?: string) =>
@@ -81,6 +86,7 @@ export class IdentityEmailWorker implements OnModuleInit, OnModuleDestroy {
         JSON.stringify({
           event: 'identity_email_delivery',
           deliveryId: row.id,
+          correlationId: row.correlationId,
           purpose: row.purpose,
           attempt: row.attempts,
           status,

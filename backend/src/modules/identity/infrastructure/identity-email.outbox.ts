@@ -1,10 +1,13 @@
+import { canRedriveRejectedEmail } from '../../email/email-redrive-policy';
+import { RequestContextService } from '../../../context';
+import { safeCorrelationId } from '../../../observability/correlation';
 import { PASSWORD_RESET_TTL_MS } from '../domain/password-reset.policy';
 import {
   accountEmailOwner,
   isAccountEmailPurpose,
   type AccountEmailPurpose,
 } from '../../email/account-email-policy';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import type { IdentityEmailDelivery } from '@prisma/client';
 import type { ICryptoProvider } from '../../../contracts';
@@ -34,6 +37,7 @@ export class IdentityEmailOutbox {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(CRYPTO_PROVIDER) private readonly crypto: ICryptoProvider,
+    @Optional() private readonly context?: RequestContextService,
   ) {}
 
   async enqueueIn(tx: PrismaTransactionClient, input: IdentityEmailInput) {
@@ -66,6 +70,9 @@ export class IdentityEmailOutbox {
         userId: input.userId,
         organizationId: input.organizationId,
         tokenHash: HashHelper.sha256(input.token),
+        correlationId:
+          safeCorrelationId(this.context?.getOptional()?.requestId) ??
+          generateUuidV7(),
         encryptedPayload,
         expiresAt: input.expiresAt,
       },
@@ -279,6 +286,17 @@ export class IdentityEmailOutbox {
     });
   }
 
+  expireFailedPayloads() {
+    return this.asWorker(
+      (tx) => tx.$executeRaw`
+      UPDATE public.identity_email_deliveries
+      SET encrypted_payload=NULL, updated_at=now()
+      WHERE id IN (SELECT id FROM public.identity_email_deliveries
+        WHERE status='FAILED' AND expires_at <= now() AND encrypted_payload IS NOT NULL
+        LIMIT 100 FOR UPDATE SKIP LOCKED)`,
+    );
+  }
+
   finish(
     row: ClaimedIdentityEmail,
     status: 'PENDING' | 'ACCEPTED_BY_PROVIDER' | 'SKIPPED' | 'FAILED',
@@ -295,7 +313,14 @@ export class IdentityEmailOutbox {
           lockedAt: null,
           leaseId: null,
           availableAt,
-          encryptedPayload: status === 'PENDING' ? undefined : null,
+          encryptedPayload:
+            status === 'PENDING' ||
+            (status === 'FAILED' &&
+              canRedriveRejectedEmail(code) &&
+              row.expiresAt > new Date() &&
+              !row.adminRequeuedAt)
+              ? undefined
+              : null,
           lastErrorCode: code && /^[A-Z0-9_]{1,80}$/.test(code) ? code : null,
           providerMessageId: messageId?.slice(0, 255),
           finishedAt: status === 'PENDING' ? null : new Date(),
