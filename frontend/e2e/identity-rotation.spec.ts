@@ -80,6 +80,17 @@ test("login aceita os 16 caracteres de um código de recuperação emitido pelo 
     secret: string;
   };
   try {
+    const confirmation = await bff(
+      page,
+      "post",
+      "/api/orbit/identity/me/security-confirmation",
+      {
+        action: "MFA_ENABLE",
+        currentPassword: process.env.ORBIT_OWNER_PASSWORD!,
+      },
+    );
+    expect(confirmation.status(), await confirmation.text()).toBe(200);
+    const proof = (await confirmation.json()).data.confirmation as string;
     const enabled = await bff(
       page,
       "post",
@@ -88,6 +99,7 @@ test("login aceita os 16 caracteres de um código de recuperação emitido pelo 
         factorId: enrollment.factorId,
         code: totp(enrollment.secret),
       },
+      { "x-orbit-security-confirmation": proof },
     );
     expect(enabled.status(), await enabled.text()).toBe(201);
     const code = (await enabled.json()).data.recoveryCodes[0] as string;
@@ -108,10 +120,26 @@ test("login aceita os 16 caracteres de um código de recuperação emitido pelo 
   } finally {
     // Fixture cleanup uses the still-valid pre-enrollment session; it is not
     // logged out when clearing browser cookies and belongs to this test DB.
+    const confirmation = await page.request.post(
+      `${process.env.ORBIT_API_URL}/identity/me/security-confirmation`,
+      {
+        headers: { authorization: `Bearer ${access}` },
+        data: {
+          action: "MFA_DISABLE",
+          currentPassword: process.env.ORBIT_OWNER_PASSWORD!,
+          mfaCode: totp(enrollment.secret),
+        },
+      },
+    );
+    expect(confirmation.status(), await confirmation.text()).toBe(200);
     const cleared = await page.request.delete(
       `${process.env.ORBIT_API_URL}/identity/me/mfa`,
       {
-        headers: { authorization: `Bearer ${access}` },
+        headers: {
+          authorization: `Bearer ${access}`,
+          "x-orbit-security-confirmation": (await confirmation.json()).data
+            .confirmation as string,
+        },
       },
     );
     expect(cleared.status(), await cleared.text()).toBe(204);

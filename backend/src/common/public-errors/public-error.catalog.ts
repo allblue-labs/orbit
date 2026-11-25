@@ -132,6 +132,21 @@ const entries = [
     'Você não tem permissão para realizar esta ação.',
   ],
   [
+    'SECURITY_CONFIRMATION_REQUIRED',
+    HttpStatus.FORBIDDEN,
+    'Confirme sua identidade para concluir esta ação.',
+  ],
+  [
+    'SECURITY_PASSWORD_INVALID',
+    HttpStatus.FORBIDDEN,
+    'Confira a senha atual e tente novamente.',
+  ],
+  [
+    'SECURITY_MFA_INVALID',
+    HttpStatus.FORBIDDEN,
+    'Informe um código válido do aplicativo autenticador.',
+  ],
+  [
     'ATTENDANCE_NOT_ASSIGNED',
     HttpStatus.FORBIDDEN,
     'Esta ação é reservada ao técnico atribuído ao atendimento. Se precisar executá-la, peça ao responsável pela organização para conferir a atribuição.',

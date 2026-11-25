@@ -184,16 +184,25 @@ export function useDismissWelcome() {
 export function useEnableMfa() {
   const invalidate = useProfileInvalidation();
   return useApiMutation(
-    (input: EnableMfaInput) => profileService.enableMfa(input),
+    ({
+      input,
+      headers,
+    }: {
+      input: EnableMfaInput;
+      headers: Record<string, string>;
+    }) => profileService.enableMfa(input, headers),
     { onSuccess: invalidate },
   );
 }
 
 export function useDisableMfa() {
   const invalidate = useProfileInvalidation();
-  return useApiMutation(() => profileService.disableMfa(), {
-    onSuccess: invalidate,
-  });
+  return useApiMutation(
+    (headers: Record<string, string>) => profileService.disableMfa(headers),
+    {
+      onSuccess: invalidate,
+    },
+  );
 }
 
 /* ------------------------------------------------------------------ */

@@ -4,6 +4,7 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Param,
@@ -14,6 +15,12 @@ import {
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ApiPublicErrors } from '../../../common/public-errors';
+import { requestClientIp } from '../../../common/trusted-client-origin';
+import {
+  SECURITY_CONFIRMATION_HEADER,
+  SecurityConfirmation,
+  SecurityConfirmationDto,
+} from '../../../common/biometrics/security-confirmation';
 import { Surfaces } from '../../../decorators';
 import { ForbiddenException } from '../../../exceptions';
 import { ParseUUIDv7Pipe } from '../../../pipes';
@@ -42,6 +49,7 @@ export class ProfileController {
     private readonly mfa: MfaService,
     private readonly avatars: AvatarService,
     private readonly readModels: IdentityReadModelMapper,
+    private readonly confirmation: SecurityConfirmation,
   ) {}
 
   @TenantRecovery('identity')
@@ -173,7 +181,34 @@ export class ProfileController {
   }
 
   @TenantRecovery('identity')
+  @Post('security-confirmation')
+  @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', 'no-store')
+  confirmSecurityChange(
+    @Req() request: IdentityRequest,
+    @Body() input: SecurityConfirmationDto,
+  ) {
+    const identity = request.identity!;
+    return this.confirmation.issue(
+      {
+        audience: 'team',
+        userId: identity.id,
+        sessionId: identity.sessionId,
+        origin: requestClientIp(request),
+      },
+      input,
+      () =>
+        this.authentication.confirmSecurityChange(
+          identity.id,
+          input.currentPassword,
+          input.mfaCode,
+        ),
+    );
+  }
+
+  @TenantRecovery('identity')
   @Post('mfa/enrollment')
+  @Header('Cache-Control', 'no-store')
   beginMfa(@Req() request: IdentityRequest) {
     return this.profiles
       .email(request.identity!.id)
@@ -182,14 +217,30 @@ export class ProfileController {
 
   @TenantRecovery('identity')
   @Post('mfa/enable')
-  enableMfa(@Req() request: IdentityRequest, @Body() input: EnableMfaDto) {
+  @Header('Cache-Control', 'no-store')
+  async enableMfa(
+    @Req() request: IdentityRequest,
+    @Body() input: EnableMfaDto,
+  ) {
+    await this.confirmation.consume(
+      'team',
+      request.identity!.sessionId,
+      'MFA_ENABLE',
+      request.header(SECURITY_CONFIRMATION_HEADER),
+    );
     return this.mfa.enable(request.identity!.id, input.factorId, input.code);
   }
 
   @TenantRecovery('identity')
   @Delete('mfa')
   @HttpCode(HttpStatus.NO_CONTENT)
-  disableMfa(@Req() request: IdentityRequest) {
+  async disableMfa(@Req() request: IdentityRequest) {
+    await this.confirmation.consume(
+      'team',
+      request.identity!.sessionId,
+      'MFA_DISABLE',
+      request.header(SECURITY_CONFIRMATION_HEADER),
+    );
     return this.mfa.disable(request.identity!.id);
   }
 }

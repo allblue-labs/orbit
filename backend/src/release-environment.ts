@@ -59,6 +59,18 @@ export function validateReleaseEnvironment(
       'DATABASE_ENFORCE_RESTRICTED_ROLE cannot be disabled in production',
     );
   }
+  if (
+    (environment.ORBIT_DEPLOYMENT ?? 'production') === 'production' &&
+    environment.SUBSCRIPTION_DATA_RETENTION_ENABLED?.trim() === 'true' &&
+    (!/^[a-f0-9]{32}$/.test(
+      environment.CLOUDFLARE_CACHE_PURGE_ZONE_ID?.trim() ?? '',
+    ) ||
+      !environment.CLOUDFLARE_CACHE_PURGE_TOKEN?.trim())
+  ) {
+    throw new InfrastructureException(
+      'Production retention requires Cloudflare cache purge configuration',
+    );
+  }
   try {
     outboundConfiguration(environment);
   } catch {

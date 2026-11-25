@@ -39,6 +39,7 @@ const FORWARDED_REQUEST_HEADERS: readonly string[] = [
   "accept",
   "content-type",
   "idempotency-key",
+  "x-orbit-security-confirmation",
   "if-none-match",
   "if-modified-since",
 ];

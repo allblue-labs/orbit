@@ -22,6 +22,8 @@ import {
   type BiometricAudience,
 } from "@/lib/biometrics/webauthn";
 import { useDateFormatters } from "@/hooks/use-date-formatters";
+import { securityHeaders } from "@/lib/biometrics/security-confirmation";
+import { SecurityConfirmationDialog } from "./security-confirmation-dialog";
 
 export const biometricKeys = (audience: BiometricAudience) =>
   ["biometrics", audience] as const;
@@ -46,11 +48,11 @@ export function useEnableBiometric(audience: BiometricAudience) {
   const client = useQueryClient();
   const api = biometricApi(audience);
   return useMutation({
-    mutationFn: async () => {
+    mutationFn: async (headers: Record<string, string>) => {
       try {
         await registerBiometric({
           challenge: () => api.registrationChallenge(),
-          register: (input) => api.register(input),
+          register: (input) => api.register(input, headers),
         });
         return true;
       } catch (error) {
@@ -81,8 +83,15 @@ export function BiometricSection({
     queryFn: () => api.list(),
   });
   const enable = useEnableBiometric(audience);
+  const [confirming, setConfirming] = useState<{ id?: string } | null>(null);
   const remove = useMutation({
-    mutationFn: (id: string) => api.remove(id),
+    mutationFn: ({
+      id,
+      headers,
+    }: {
+      id: string;
+      headers: Record<string, string>;
+    }) => api.remove(id, headers),
     onSuccess: () => {
       toast.success("Biometria removida.");
       void client.invalidateQueries({ queryKey: biometricKeys(audience) });
@@ -138,7 +147,7 @@ export function BiometricSection({
                 size="sm"
                 className="text-destructive"
                 disabled={remove.isPending}
-                onClick={() => remove.mutate(item.id)}
+                onClick={() => setConfirming({ id: item.id })}
               >
                 <Trash2 className="size-4" />
                 Remover
@@ -151,21 +160,37 @@ export function BiometricSection({
       {available === false ? (
         <p className="text-xs text-muted-foreground">
           Este navegador não encontrou biometria neste aparelho. Num celular ou
-          computador com digital ou reconhecimento facial, a opção aparece
-          aqui.
+          computador com digital ou reconhecimento facial, a opção aparece aqui.
         </p>
       ) : (
         <Button
           variant="outline"
           size="sm"
           disabled={!available || enable.isPending}
-          onClick={() => enable.mutate()}
+          onClick={() => setConfirming({})}
         >
           <Fingerprint className="size-4" />
           {enable.isPending
             ? "Aguardando o aparelho…"
             : "Ativar neste aparelho"}
         </Button>
+      )}
+      {confirming && (
+        <SecurityConfirmationDialog
+          title={confirming.id ? "Remover biometria" : "Ativar biometria"}
+          askForMfa={audience === "team"}
+          onClose={() => setConfirming(null)}
+          onConfirm={async (credentials) => {
+            const headers = await securityHeaders(
+              audience,
+              confirming.id ? "BIOMETRIC_REVOKE" : "PASSKEY_REGISTER",
+              credentials,
+            );
+            if (!confirming.id) return enable.mutateAsync(headers);
+            await remove.mutateAsync({ id: confirming.id, headers });
+            return true;
+          }}
+        />
       )}
     </section>
   );

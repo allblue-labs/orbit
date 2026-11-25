@@ -10,6 +10,7 @@ import 'dart:typed_data';
 
 import '../../../core/network/orbit_api_client.dart';
 import '../../../core/network/session_authenticator.dart';
+import '../../../core/security/security_confirmation.dart';
 import '../../../core/storage/token_storage.dart';
 import 'portal_contracts.dart';
 
@@ -91,10 +92,18 @@ class PortalRepository {
   Future<({String credentialId, String secret})> enrollDeviceCredential({
     required String deviceId,
     required String label,
+    required SecurityCredentials credentials,
   }) async {
+    final proof = await confirmSecurityChange(
+      _client,
+      '/portal/me/biometrics/confirmation',
+      'DEVICE_REGISTER',
+      credentials,
+    );
     final data = await _client.post<Map<String, dynamic>>(
       '/portal/me/biometrics/devices',
       body: {'deviceId': deviceId, 'label': label},
+      headers: {securityConfirmationHeader: proof},
     );
     return (
       credentialId: data['credentialId'] as String,
@@ -102,10 +111,21 @@ class PortalRepository {
     );
   }
 
-  Future<void> revokeDeviceCredential(String credentialId) =>
-      _client.delete<dynamic>(
-        '/portal/me/biometrics/${Uri.encodeComponent(credentialId)}',
-      );
+  Future<void> revokeDeviceCredential(
+    String credentialId, {
+    required SecurityCredentials credentials,
+  }) async {
+    final proof = await confirmSecurityChange(
+      _client,
+      '/portal/me/biometrics/confirmation',
+      'BIOMETRIC_REVOKE',
+      credentials,
+    );
+    await _client.delete<dynamic>(
+      '/portal/me/biometrics/${Uri.encodeComponent(credentialId)}',
+      headers: {securityConfirmationHeader: proof},
+    );
+  }
 
   Future<PortalMe> me() async =>
       PortalMe.fromJson(await _client.get<Map<String, dynamic>>('/portal/me'));

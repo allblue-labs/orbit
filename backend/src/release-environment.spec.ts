@@ -71,6 +71,22 @@ describe('release environment', () => {
       }),
     ).toThrow('DATABASE_ENFORCE_RESTRICTED_ROLE');
   });
+  it('only starts production retention with an explicit purge configuration', () => {
+    const enabled = { ...valid(), SUBSCRIPTION_DATA_RETENTION_ENABLED: 'true' };
+    expect(() => validateReleaseEnvironment(enabled)).toThrow(
+      'Cloudflare cache purge',
+    );
+    expect(() =>
+      validateReleaseEnvironment({
+        ...enabled,
+        CLOUDFLARE_CACHE_PURGE_ZONE_ID: '1'.repeat(32),
+        CLOUDFLARE_CACHE_PURGE_TOKEN: 'fixture',
+      }),
+    ).not.toThrow();
+    expect(() =>
+      validateReleaseEnvironment({ ...enabled, ORBIT_DEPLOYMENT: 'staging' }),
+    ).not.toThrow();
+  });
   it('SES utiliza somente as credenciais explícitas de ambiente', () => {
     expect(() =>
       validateReleaseEnvironment({ ...valid(), AWS_PROFILE: 'ignored' }),

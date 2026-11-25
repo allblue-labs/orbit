@@ -15,6 +15,10 @@ import { ApiTags } from '@nestjs/swagger';
 import { ApiPublicErrors } from '../../../common/public-errors';
 import { requestClientIp } from '../../../common/trusted-client-origin';
 import {
+  SECURITY_CONFIRMATION_HEADER,
+  SecurityConfirmation,
+} from '../../../common/biometrics/security-confirmation';
+import {
   DeviceBiometricLoginDto,
   EnrollDeviceBiometricDto,
   WebAuthnAuthenticationDto,
@@ -88,7 +92,10 @@ export class BiometricLoginController {
 @Controller('identity/me/biometrics')
 @Surfaces('WEB', 'MOBILE', 'API')
 export class BiometricProfileController {
-  constructor(private readonly biometrics: BiometricLoginService) {}
+  constructor(
+    private readonly biometrics: BiometricLoginService,
+    private readonly confirmation: SecurityConfirmation,
+  ) {}
 
   @TenantRecovery('identity')
   @Get()
@@ -106,10 +113,16 @@ export class BiometricProfileController {
 
   @TenantRecovery('identity')
   @Post('webauthn/registration')
-  register(
+  async register(
     @Req() request: IdentityRequest,
     @Body() input: WebAuthnRegistrationDto,
   ) {
+    await this.confirmation.consume(
+      'team',
+      request.identity!.sessionId,
+      'PASSKEY_REGISTER',
+      request.header(SECURITY_CONFIRMATION_HEADER),
+    );
     return this.biometrics.register(
       request.identity!.id,
       input,
@@ -120,10 +133,16 @@ export class BiometricProfileController {
   @TenantRecovery('identity')
   @Post('devices')
   @Header('Cache-Control', 'no-store')
-  enrollDevice(
+  async enrollDevice(
     @Req() request: IdentityRequest,
     @Body() input: EnrollDeviceBiometricDto,
   ) {
+    await this.confirmation.consume(
+      'team',
+      request.identity!.sessionId,
+      'DEVICE_REGISTER',
+      request.header(SECURITY_CONFIRMATION_HEADER),
+    );
     return this.biometrics.enrollDevice(
       request.identity!.id,
       input,
@@ -134,10 +153,16 @@ export class BiometricProfileController {
   @TenantRecovery('identity')
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  revoke(
+  async revoke(
     @Req() request: IdentityRequest,
     @Param('id', ParseUUIDv7Pipe) id: string,
   ) {
+    await this.confirmation.consume(
+      'team',
+      request.identity!.sessionId,
+      'BIOMETRIC_REVOKE',
+      request.header(SECURITY_CONFIRMATION_HEADER),
+    );
     return this.biometrics.revoke(request.identity!.id, id);
   }
 }

@@ -22,19 +22,21 @@ export class AuthRateLimitService {
         'AUTH_RATE_LIMIT_SECRET must be configured',
       );
     const strict = action.startsWith('public/quotes/');
+    const passkeyChallenge = action === 'passkey-challenge';
     const maximum = strict
       ? 8
       : this.number('AUTH_RATE_LIMIT_MAX', 20, 100_000);
-    const originMaximum = strict
-      ? 30
-      : this.number('AUTH_RATE_LIMIT_ORIGIN_MAX', 120, 100_000);
-    const windowMs = this.number(
-      'AUTH_RATE_LIMIT_WINDOW_MS',
-      60_000,
-      3_600_000,
-    );
+    const originMaximum = passkeyChallenge
+      ? 20
+      : strict
+        ? 30
+        : this.number('AUTH_RATE_LIMIT_ORIGIN_MAX', 120, 100_000);
+    const windowMs = passkeyChallenge
+      ? 60_000
+      : this.number('AUTH_RATE_LIMIT_WINDOW_MS', 60_000, 3_600_000);
     const budgets = [
       { scope: ['origin', origin], maximum: originMaximum },
+      ...(passkeyChallenge ? [{ scope: ['global'], maximum: 300 }] : []),
       ...(account ? [{ scope: ['account', account], maximum }] : []),
     ].map(({ scope, maximum }) => ({
       key: opaqueRateKey(secret, [action, ...scope]),

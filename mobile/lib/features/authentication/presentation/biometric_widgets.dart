@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/design/orbit_settings_list.dart';
 import '../../../core/errors/orbit_exception.dart';
+import '../../../core/security/security_confirmation.dart';
 import '../../../core/theme/orbit_theme.dart';
 import '../application/biometric_login.dart';
 
@@ -19,15 +20,20 @@ Future<void> toggleBiometric(
 }) async {
   final messenger = ScaffoldMessenger.maybeOf(context);
   final service = ref.read(biometricLoginProvider);
+  final credentials = await showDialog<SecurityCredentials>(
+    context: context,
+    builder: (_) => _ConfirmBiometricChange(audience: audience, enable: enable),
+  );
+  if (credentials == null || !context.mounted) return;
   try {
     if (!enable) {
-      await service.disable(audience);
+      await service.disable(audience, credentials);
       messenger?.showSnackBar(
         const SnackBar(content: Text('Biometria desativada neste aparelho.')),
       );
       return;
     }
-    final result = await service.enable(audience);
+    final result = await service.enable(audience, credentials);
     if (result == BiometricEnableResult.enabled) {
       messenger?.showSnackBar(
         const SnackBar(
@@ -41,12 +47,86 @@ Future<void> toggleBiometric(
         content: Text(
           OrbitException.publicCopyForAny(
             error,
-            prefixo: 'Não foi possível ativar a biometria.',
+            prefixo: 'Não foi possível alterar a biometria.',
           ),
         ),
       ),
     );
   }
+}
+
+class _ConfirmBiometricChange extends StatefulWidget {
+  const _ConfirmBiometricChange({required this.audience, required this.enable});
+
+  final BiometricAudience audience;
+  final bool enable;
+
+  @override
+  State<_ConfirmBiometricChange> createState() =>
+      _ConfirmBiometricChangeState();
+}
+
+class _ConfirmBiometricChangeState extends State<_ConfirmBiometricChange> {
+  final _key = GlobalKey<FormState>();
+  final _password = TextEditingController();
+  final _code = TextEditingController();
+
+  @override
+  void dispose() {
+    _password.dispose();
+    _code.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text(widget.enable ? 'Ativar biometria' : 'Desativar biometria'),
+    content: SingleChildScrollView(
+      child: Form(
+        key: _key,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Confirme sua identidade para continuar.'),
+            TextFormField(
+              key: const Key('biometric.confirm.password'),
+              controller: _password,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'Senha atual'),
+              validator: (value) => value == null || value.isEmpty
+                  ? 'Informe a senha atual.'
+                  : null,
+            ),
+            if (widget.audience == BiometricAudience.team)
+              TextFormField(
+                controller: _code,
+                decoration: const InputDecoration(
+                  labelText: 'Código do autenticador, se configurado',
+                ),
+              ),
+          ],
+        ),
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Cancelar'),
+      ),
+      FilledButton(
+        key: const Key('biometric.confirm.submit'),
+        onPressed: () {
+          if (!_key.currentState!.validate()) return;
+          final code = _code.text.trim();
+          Navigator.pop(context, (
+            password: _password.text,
+            mfaCode: code.isEmpty ? null : code,
+          ));
+        },
+        child: const Text('Confirmar'),
+      ),
+    ],
+  );
 }
 
 /// "Entrar com biometria" — a linha de Configurações (equipe) e do perfil

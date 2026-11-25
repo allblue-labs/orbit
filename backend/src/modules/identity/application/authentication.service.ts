@@ -10,7 +10,11 @@ import {
   HASH_PROVIDER,
   UUID_PROVIDER,
 } from '../../../providers';
-import { BaseException, UnauthorizedException } from '../../../exceptions';
+import {
+  BaseException,
+  ForbiddenException,
+  UnauthorizedException,
+} from '../../../exceptions';
 import type {
   AuthenticatedIdentity,
   SessionMetadata,
@@ -97,6 +101,37 @@ export class AuthenticationService {
     @Inject(UUID_PROVIDER) private readonly uuids: IUuidProvider,
     @Inject(CRYPTO_PROVIDER) private readonly crypto: ICryptoProvider,
   ) {}
+
+  async confirmSecurityChange(
+    userId: string,
+    password: string,
+    mfaCode?: string,
+  ): Promise<void> {
+    const user = await this.repository.findById(userId);
+    if (
+      !user?.credential ||
+      user.status !== 'ACTIVE' ||
+      user.deletedAt ||
+      user.requiresEmailVerification ||
+      user.credential.mustChangePassword ||
+      !(await this.hashes.verify(user.credential.passwordHash, password))
+    )
+      throw new ForbiddenException(
+        'A senha atual não pôde ser confirmada.',
+        'SECURITY_PASSWORD_INVALID',
+      );
+    const factor = user.mfaFactors[0];
+    if (!factor) return;
+    try {
+      await this.mfa.verifyFactor(factor, mfaCode);
+    } catch (error) {
+      if (!(error instanceof UnauthorizedException)) throw error;
+      throw new ForbiddenException(
+        'Informe um código válido do aplicativo autenticador.',
+        'SECURITY_MFA_INVALID',
+      );
+    }
+  }
 
   async login(
     email: string,

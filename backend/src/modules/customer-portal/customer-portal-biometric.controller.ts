@@ -25,10 +25,16 @@ import {
 } from '../../common/biometrics';
 import { ApiPublicErrors } from '../../common/public-errors';
 import { requestClientIp } from '../../common/trusted-client-origin';
+import {
+  SECURITY_CONFIRMATION_HEADER,
+  SecurityConfirmation,
+  SecurityConfirmationDto,
+} from '../../common/biometrics/security-confirmation';
 import { Public } from '../../decorators';
 import { UnauthorizedException } from '../../exceptions';
 import { ParseUUIDv7Pipe } from '../../pipes';
 import { CustomerPortalBiometricService } from './customer-portal-biometric.service';
+import { CustomerPortalService } from './customer-portal.service';
 import {
   CustomerPortalGuard,
   type CustomerPortalRequest,
@@ -87,7 +93,31 @@ export class CustomerPortalBiometricLoginController {
 @ApiUnauthorizedResponse({ description: 'Sessão Portal inválida ou expirada' })
 @Controller({ path: 'portal/me/biometrics', version: '1' })
 export class CustomerPortalBiometricController {
-  constructor(private readonly biometrics: CustomerPortalBiometricService) {}
+  constructor(
+    private readonly biometrics: CustomerPortalBiometricService,
+    private readonly portal: CustomerPortalService,
+    private readonly confirmation: SecurityConfirmation,
+  ) {}
+
+  @Post('confirmation')
+  @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', 'no-store')
+  confirmSecurityChange(
+    @Req() request: CustomerPortalRequest,
+    @Body() input: SecurityConfirmationDto,
+  ) {
+    const identity = actor(request);
+    return this.confirmation.issue(
+      {
+        audience: 'portal',
+        userId: identity.identityId,
+        sessionId: identity.sessionId,
+        origin: requestClientIp(request),
+      },
+      input,
+      () => this.portal.confirmSecurityChange(identity, input.currentPassword),
+    );
+  }
 
   @Get()
   @ApiOperation({ summary: 'Biometrias cadastradas pelo cliente' })
@@ -105,10 +135,16 @@ export class CustomerPortalBiometricController {
 
   @Post('webauthn/registration')
   @ApiOperation({ summary: 'Cadastra a biometria deste navegador' })
-  register(
+  async register(
     @Req() request: CustomerPortalRequest,
     @Body() input: WebAuthnRegistrationDto,
   ) {
+    await this.confirmation.consume(
+      'portal',
+      actor(request).sessionId,
+      'PASSKEY_REGISTER',
+      request.header(SECURITY_CONFIRMATION_HEADER),
+    );
     return this.biometrics.register(
       actor(request),
       input,
@@ -119,10 +155,16 @@ export class CustomerPortalBiometricController {
   @Post('devices')
   @Header('Cache-Control', 'no-store')
   @ApiOperation({ summary: 'Cadastra a biometria deste aparelho (app)' })
-  enrollDevice(
+  async enrollDevice(
     @Req() request: CustomerPortalRequest,
     @Body() input: EnrollDeviceBiometricDto,
   ) {
+    await this.confirmation.consume(
+      'portal',
+      actor(request).sessionId,
+      'DEVICE_REGISTER',
+      request.header(SECURITY_CONFIRMATION_HEADER),
+    );
     return this.biometrics.enrollDevice(
       actor(request),
       input,
@@ -133,10 +175,16 @@ export class CustomerPortalBiometricController {
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Remove uma biometria' })
-  revoke(
+  async revoke(
     @Req() request: CustomerPortalRequest,
     @Param('id', ParseUUIDv7Pipe) id: string,
   ) {
+    await this.confirmation.consume(
+      'portal',
+      actor(request).sessionId,
+      'BIOMETRIC_REVOKE',
+      request.header(SECURITY_CONFIRMATION_HEADER),
+    );
     return this.biometrics.revoke(actor(request), id);
   }
 }

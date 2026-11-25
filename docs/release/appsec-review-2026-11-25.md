@@ -182,3 +182,34 @@ comparativo formal p50/p95/p99 da baseline `3a2c5418` com a candidata em
 staging. O evento real do Sentry permanece pendente de acesso à conta e
 configuração de DSNs. As validações do hostname e dos controles Cloudflare de
 produção dependem da origem definitiva.
+
+## Primeira rodada de correções
+
+- A ativação e a desativação de MFA, o cadastro de passkeys e a inclusão ou
+  remoção da credencial biométrica exigem uma confirmação de uso único,
+  válida por cinco minutos e vinculada à sessão, ao público e à ação. A
+  equipe confirma a senha e, quando ativo, o segundo fator existente. O
+  portal do cliente confirma a senha. Web e Flutter coletam as informações
+  somente ao solicitar a ação.
+- A auditoria inicial deixou de contabilizar o limite por IP já aplicado
+  pelo middleware do Nest. A correção acrescenta um teto global compartilhado,
+  reduz o limite por origem para emissão de desafios, retira a limpeza do
+  caminho da requisição e inclui os aliases Web no limite do Nginx.
+- A rotina de retenção exige `SUBSCRIPTION_DATA_RETENTION_ENABLED=true`.
+  Em produção, o runtime recusa esse modo quando a configuração de purge
+  está ausente ou o Zone ID é inválido. A aprovação operacional ainda exige
+  provar a credencial, o expurgo e a restauração reais.
+
+Passaram 18 cenários E2E de identidade e biometria com PostgreSQL
+descartável e 150 migrations, oito testes de navegador e dependências Web
+e 24 testes Flutter. Os casos de API incluem recusa de confirmação para
+outra sessão ou ação, bloqueio de reutilização, exigência de segundo fator
+ativo e recusa de cadastro biométrico com senha temporária. O ensaio local
+do Nginx verificou sintaxe, cadeia de confiança e 429 com `Retry-After`.
+
+No rollout, aplique a migration de confirmação antes de iniciar a API e
+publique Web e backend da mesma revisão. Distribua o app atualizado para
+que usuários possam cadastrar e remover a biometria. As credenciais
+com cadastro concluído continuam válidas para login. A validação de posse
+com chave não exportável, a proteção de dados offline, a CSP e a
+qualificação da cadeia de distribuição permanecem no backlog de segurança.

@@ -54,6 +54,11 @@ http.host eq "orbit.allblue-labs.com" and (
 
 Com filtro de host disponível, inclua `/api/auth/login`, `/api/auth/register` e `/api/portal/auth/login` no conjunto para proteger também os aliases Web. Para começar, use **IP**, **18 requisições em 10 segundos**, ação **Block** e duração de **10 segundos**. Os controles por conta, rota e token seguem ativos na origem. Quando o painel oferecer resposta personalizada, use status 429 e corpo JSON. Mantenha a resposta padrão do limite nos planos sem essa opção. Valide a regra em **Security Events** pelo nome e pelo Ray ID de uma requisição de teste. O status 429, por si só, também pode vir do Nginx ou do NestJS.
 
+Inclua também os aliases `/api/auth/biometric/options` e
+`/api/portal/auth/biometric/options`. A API usa um orçamento único para
+emitir desafios de passkey de equipe e clientes, de 20 por IP e 300 no
+total em 60 segundos, com Redis e fallback PostgreSQL.
+
 ### TLS e origens
 
 Mantenha **SSL/TLS → Overview → Full (strict)** e o DNS do Orbit com proxy ativo. O firewall da origem deve aceitar tráfego HTTPS da Cloudflare pelas faixas oficiais. O Nginx usa essas faixas para autenticar `CF-Connecting-IP`, remove o cabeçalho recebido antes de repassar a requisição e envia a identidade da rede no par interno autenticado. Mantenha Pseudo IPv4 em **Off** ou **Add Header** para preservar os endereços IPv6.

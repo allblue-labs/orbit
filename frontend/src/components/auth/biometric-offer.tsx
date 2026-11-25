@@ -26,6 +26,8 @@ import {
 } from "@/lib/biometrics/webauthn";
 import { biometricApi } from "@/lib/biometrics/biometric-api";
 import { useEnableBiometric } from "./biometric-section";
+import { SecurityConfirmationDialog } from "./security-confirmation-dialog";
+import { securityHeaders } from "@/lib/biometrics/security-confirmation";
 
 export function BiometricOffer({
   audience,
@@ -36,6 +38,7 @@ export function BiometricOffer({
   settingsHint: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const enable = useEnableBiometric(audience);
 
   useEffect(() => {
@@ -55,6 +58,20 @@ export function BiometricOffer({
       alive = false;
     };
   }, [audience]);
+
+  if (confirming)
+    return (
+      <SecurityConfirmationDialog
+        title="Ativar biometria"
+        askForMfa={audience === "team"}
+        onClose={() => setConfirming(false)}
+        onConfirm={async (credentials) =>
+          enable.mutateAsync(
+            await securityHeaders(audience, "PASSKEY_REGISTER", credentials),
+          )
+        }
+      />
+    );
 
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
@@ -78,11 +95,8 @@ export function BiometricOffer({
             disabled={enable.isPending}
             onClick={(event) => {
               event.preventDefault();
-              enable.mutate(undefined, {
-                onSuccess: (enabled) => {
-                  if (enabled) setOpen(false);
-                },
-              });
+              setOpen(false);
+              setConfirming(true);
             }}
           >
             Ativar biometria

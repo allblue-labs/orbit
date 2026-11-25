@@ -7,7 +7,7 @@
  *
  * `POST /identity/me/mfa/enrollment` devolve `factorId`, `secret` e uma URI
  * `otpauth://`; `POST /mfa/enable` confirma com o código; `DELETE /mfa`
- * desativa. Esta PR apenas passou a consumi-los — nenhum contrato foi criado.
+ * desativa. Ativação e desativação exigem confirmação recente da identidade.
  *
  * ## O segredo aparece uma vez
  *
@@ -43,6 +43,8 @@ import {
   useEnableMfa,
 } from "@/hooks/profile/use-profile";
 import type { MfaEnrollment } from "@/types/settings";
+import { SecurityConfirmationDialog } from "@/components/auth/security-confirmation-dialog";
+import { securityHeaders } from "@/lib/biometrics/security-confirmation";
 
 /** O número do passo, num disco — a lista fica legível sem depender da ordem. */
 function Passo({ numero }: { numero: number }) {
@@ -60,6 +62,7 @@ export function MfaSection({ enabled }: { enabled: boolean }) {
 
   const [enrollment, setEnrollment] = useState<MfaEnrollment | null>(null);
   const [code, setCode] = useState("");
+  const [confirming, setConfirming] = useState(false);
 
   if (enabled) {
     return (
@@ -80,10 +83,23 @@ export function MfaSection({ enabled }: { enabled: boolean }) {
           variant="outline"
           size="sm"
           disabled={disable.isPending}
-          onClick={() => disable.mutate()}
+          onClick={() => setConfirming(true)}
         >
           {disable.isPending ? "Desativando…" : "Desativar"}
         </Button>
+        {confirming && (
+          <SecurityConfirmationDialog
+            title="Desativar a autenticação em dois fatores"
+            askForMfa
+            onClose={() => setConfirming(false)}
+            onConfirm={async (credentials) => {
+              await disable.mutateAsync(
+                await securityHeaders("team", "MFA_DISABLE", credentials),
+              );
+              return true;
+            }}
+          />
+        )}
       </section>
     );
   }
@@ -161,15 +177,7 @@ export function MfaSection({ enabled }: { enabled: boolean }) {
           <form
             onSubmit={(event) => {
               event.preventDefault();
-              enable.mutate(
-                { factorId: enrollment.factorId, code: code.trim() },
-                {
-                  onSuccess: () => {
-                    setEnrollment(null);
-                    setCode("");
-                  },
-                },
-              );
+              if (code.trim()) setConfirming(true);
             }}
             className="flex flex-wrap items-end gap-3"
           >
@@ -203,6 +211,27 @@ export function MfaSection({ enabled }: { enabled: boolean }) {
           </form>
 
           <MutationError error={enable.error} />
+          {confirming && (
+            <SecurityConfirmationDialog
+              title="Ativar a autenticação em dois fatores"
+              askForMfa
+              onClose={() => setConfirming(false)}
+              onConfirm={async (credentials) => {
+                const headers = await securityHeaders(
+                  "team",
+                  "MFA_ENABLE",
+                  credentials,
+                );
+                await enable.mutateAsync({
+                  input: { factorId: enrollment.factorId, code: code.trim() },
+                  headers,
+                });
+                setEnrollment(null);
+                setCode("");
+                return true;
+              }}
+            />
+          )}
         </div>
       ) : (
         <>

@@ -1,4 +1,5 @@
 import { AuthRateLimitService } from './auth-rate-limit.service';
+import type { RateBudget } from './hotpath/hotpath-rate-limit';
 
 describe('orçamentos de requisições distribuídos', () => {
   const previous = { ...process.env };
@@ -67,5 +68,23 @@ describe('orçamentos de requisições distribuídos', () => {
         'origin',
       ),
     ).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
+  });
+  it('shares the global challenge cap while keeping per-origin counters', async () => {
+    const distributed = jest
+      .fn<Promise<boolean>, [RateBudget[], number]>()
+      .mockResolvedValue(true);
+    const service = new AuthRateLimitService(
+      {} as never,
+      { distributed } as never,
+    );
+    await service.check('passkey-challenge', '192.0.2.1');
+    await service.check('passkey-challenge', '192.0.2.2');
+    const [first, firstWindow] = distributed.mock.calls[0]!;
+    const [second, secondWindow] = distributed.mock.calls[1]!;
+    expect(firstWindow).toBe(60_000);
+    expect(secondWindow).toBe(firstWindow);
+    expect(first.map((budget) => budget.maximum)).toEqual([20, 300]);
+    expect(first[0]!.key).not.toBe(second[0]!.key);
+    expect(first[1]).toEqual(second[1]);
   });
 });

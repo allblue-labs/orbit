@@ -30,7 +30,12 @@ import {
   type PortalTokens,
 } from "./portal-session";
 
-const REQUEST_HEADERS = ["accept", "content-type", "idempotency-key"];
+const REQUEST_HEADERS = [
+  "accept",
+  "content-type",
+  "idempotency-key",
+  "x-orbit-security-confirmation",
+];
 const RESPONSE_HEADERS = [
   "content-type",
   "content-disposition",

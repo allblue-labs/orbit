@@ -24,6 +24,9 @@ import { HotpathRateLimit } from './hotpath/hotpath-rate-limit';
 import { HotpathSnapshot } from './hotpath/hotpath-snapshot';
 import { IdempotencyInterceptor } from './hotpath/idempotency.interceptor';
 import { IdempotencyCleanup } from './hotpath/idempotency-cleanup';
+import { AuthChallengeCleanup } from './biometrics/auth-challenge-cleanup';
+import { AuthChallengeStore } from './biometrics/auth-challenge.store';
+import { SecurityConfirmation } from './biometrics/security-confirmation';
 
 @Global()
 @Module({
@@ -34,6 +37,9 @@ import { IdempotencyCleanup } from './hotpath/idempotency-cleanup';
     HotpathRateLimit,
     HotpathSnapshot,
     IdempotencyCleanup,
+    AuthChallengeCleanup,
+    AuthChallengeStore,
+    SecurityConfirmation,
     AuthRateLimitService,
     IsJsonObjectConstraint,
     RequestIdMiddleware,
@@ -50,6 +56,7 @@ import { IdempotencyCleanup } from './hotpath/idempotency-cleanup';
     HotpathRedis,
     HotpathRateLimit,
     HotpathSnapshot,
+    SecurityConfirmation,
   ],
 })
 export class FoundationModule implements NestModule {

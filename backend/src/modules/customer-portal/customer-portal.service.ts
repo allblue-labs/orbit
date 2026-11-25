@@ -4,6 +4,7 @@ import type { IHashProvider, IUuidProvider, UUID } from '../../contracts';
 import {
   ConflictException,
   EntityNotFoundException,
+  ForbiddenException,
   RateLimitException,
   UnauthorizedException,
   ValidationException,
@@ -276,6 +277,33 @@ export class CustomerPortalService {
       await this.hashes.hash(input.newPassword),
     );
     if (!changed) throw new UnauthorizedException();
+  }
+
+  async confirmSecurityChange(
+    actor: CustomerPortalActor,
+    password: string,
+  ): Promise<void> {
+    const session = await this.repository.resolveSession(
+      actor.sessionId,
+      actor.identityId,
+    );
+    if (
+      !session?.passwordHash ||
+      !(await this.hashes.verify(session.passwordHash, password))
+    )
+      throw new ForbiddenException(
+        'A senha atual não pôde ser confirmada.',
+        'SECURITY_PASSWORD_INVALID',
+      );
+    const profile = await this.repository.profileState(
+      actor.identityId,
+      actor.sessionId,
+    );
+    if (!profile || profile.mustChangePassword)
+      throw new ForbiddenException(
+        'Confirme sua identidade para concluir esta ação.',
+        'SECURITY_CONFIRMATION_REQUIRED',
+      );
   }
 
   async invite(

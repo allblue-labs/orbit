@@ -18,8 +18,7 @@ export class SubscriptionDataRetentionWorker
   onModuleInit() {
     if (
       !runsMaintenance() ||
-      (process.env.SUBSCRIPTION_DATA_RETENTION_ENABLED ?? 'true').trim() ===
-        'false'
+      process.env.SUBSCRIPTION_DATA_RETENTION_ENABLED?.trim() !== 'true'
     )
       return;
     this.timer = setInterval(() => void this.tick(), 5 * 60_000);

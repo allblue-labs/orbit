@@ -143,22 +143,43 @@ describe('PR-04: identidade concorrente entre duas instâncias', () => {
   it('código de recuperação emitido pelo cadastro passa pela validação HTTP e só entra uma vez', async () => {
     const user = await account();
     const signedIn = await login(user.email);
+    const secondSession = await login(user.email);
     const enrollment = data<{ factorId: string; secret: string }>(
       await http()
         .post('/api/v1/identity/me/mfa/enrollment')
         .set('Authorization', `Bearer ${signedIn.accessToken}`)
         .expect(201),
     );
+    const proof = data<{ confirmation: string }>(
+      await http()
+        .post('/api/v1/identity/me/security-confirmation')
+        .set('Authorization', `Bearer ${signedIn.accessToken}`)
+        .send({ action: 'MFA_ENABLE', currentPassword: PASSWORD })
+        .expect(200),
+    );
+    const input = {
+      factorId: enrollment.factorId,
+      code: generateTotpToken(enrollment.secret),
+    };
+    await http()
+      .post('/api/v1/identity/me/mfa/enable')
+      .set('Authorization', `Bearer ${secondSession.accessToken}`)
+      .set('x-orbit-security-confirmation', proof.confirmation)
+      .send(input)
+      .expect(403);
     const enabled = data<{ recoveryCodes: string[] }>(
       await http()
         .post('/api/v1/identity/me/mfa/enable')
         .set('Authorization', `Bearer ${signedIn.accessToken}`)
-        .send({
-          factorId: enrollment.factorId,
-          code: generateTotpToken(enrollment.secret),
-        })
+        .set('x-orbit-security-confirmation', proof.confirmation)
+        .send(input)
         .expect(201),
     );
+    await http()
+      .post('/api/v1/identity/me/security-confirmation')
+      .set('Authorization', `Bearer ${signedIn.accessToken}`)
+      .send({ action: 'MFA_DISABLE', currentPassword: PASSWORD })
+      .expect(403);
     expect(enabled.recoveryCodes[0]).toHaveLength(16);
     const attempts = await Promise.all(
       apps.map((_, index) =>
@@ -412,6 +433,7 @@ describe('PR-04: identidade concorrente entre duas instâncias', () => {
     await repository.updateFailedLogin(
       stale!.credential!.id,
       stale!.credential!.passwordHash,
+      user.id,
     );
     expect(
       (await admin.credential.findUniqueOrThrow({ where: { userId: user.id } }))

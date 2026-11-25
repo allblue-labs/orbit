@@ -22,6 +22,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/fakes.dart';
 
+const ({String password, String? mfaCode}) _credentials = (
+  password: 'test-password',
+  mfaCode: null,
+);
+
 class _MockPortalRepository extends Mock implements PortalRepository {}
 
 class _FakeBiometrics implements DeviceBiometrics {
@@ -98,12 +103,13 @@ void main() {
         () => portal.enrollDeviceCredential(
           deviceId: any(named: 'deviceId'),
           label: any(named: 'label'),
+          credentials: _credentials,
         ),
       ).thenAnswer((_) async => (credentialId: 'cred-1', secret: 's1'));
 
       final result = await container
           .read(biometricLoginProvider)
-          .enable(BiometricAudience.customer);
+          .enable(BiometricAudience.customer, _credentials);
 
       expect(result, BiometricEnableResult.enabled);
       expect(device.prompts, 1);
@@ -115,82 +121,89 @@ void main() {
       device.approve = false;
       final result = await container
           .read(biometricLoginProvider)
-          .enable(BiometricAudience.customer);
+          .enable(BiometricAudience.customer, _credentials);
       expect(result, BiometricEnableResult.cancelled);
       verifyNever(
         () => portal.enrollDeviceCredential(
           deviceId: any(named: 'deviceId'),
           label: any(named: 'label'),
+          credentials: _credentials,
         ),
       );
     });
 
-    test('entrar troca o segredo do cofre pelo que o servidor devolveu', () async {
-      await vault.write(
-        BiometricAudience.customer,
-        const BiometricCredential(credentialId: 'cred-1', secret: 's1'),
-      );
-      when(
-        () => portal.loginWithDeviceCredential(
-          credentialId: 'cred-1',
-          secret: 's1',
-        ),
-      ).thenAnswer(
-        (_) async => (
-          session: PortalSession(
-            tokens: const TokenPair(
-              accessToken: 'a',
-              refreshToken: 'r',
-              expiresIn: 60,
+    test(
+      'entrar troca o segredo do cofre pelo que o servidor devolveu',
+      () async {
+        await vault.write(
+          BiometricAudience.customer,
+          const BiometricCredential(credentialId: 'cred-1', secret: 's1'),
+        );
+        when(
+          () => portal.loginWithDeviceCredential(
+            credentialId: 'cred-1',
+            secret: 's1',
+          ),
+        ).thenAnswer(
+          (_) async => (
+            session: PortalSession(
+              tokens: const TokenPair(
+                accessToken: 'a',
+                refreshToken: 'r',
+                expiresIn: 60,
+              ),
+              me: _me(),
             ),
-            me: _me(),
+            nextSecret: 's2',
           ),
-          nextSecret: 's2',
-        ),
-      );
+        );
 
-      final entrou = await container
-          .read(biometricLoginProvider)
-          .signIn(BiometricAudience.customer);
-
-      expect(entrou, isTrue);
-      expect((await vault.read(BiometricAudience.customer))?.secret, 's2');
-      expect(container.read(portalSessionProvider), isA<PortalSignedIn>());
-    });
-
-    test('recusa do servidor apaga o cofre e manda entrar com a senha', () async {
-      await vault.write(
-        BiometricAudience.customer,
-        const BiometricCredential(credentialId: 'cred-1', secret: 's1'),
-      );
-      when(
-        () => portal.loginWithDeviceCredential(
-          credentialId: any(named: 'credentialId'),
-          secret: any(named: 'secret'),
-        ),
-      ).thenThrow(
-        const OrbitException(
-          kind: OrbitErrorKind.unauthorized,
-          publicMessage: 'x',
-          code: 'BIOMETRIC_INVALID',
-          status: 401,
-        ),
-      );
-
-      await expectLater(
-        container
+        final entrou = await container
             .read(biometricLoginProvider)
-            .signIn(BiometricAudience.customer),
-        throwsA(
-          isA<OrbitException>().having(
-            (error) => error.publicMessage,
-            'mensagem',
-            contains('Entre com a senha'),
+            .signIn(BiometricAudience.customer);
+
+        expect(entrou, isTrue);
+        expect((await vault.read(BiometricAudience.customer))?.secret, 's2');
+        expect(container.read(portalSessionProvider), isA<PortalSignedIn>());
+      },
+    );
+
+    test(
+      'recusa do servidor apaga o cofre e manda entrar com a senha',
+      () async {
+        await vault.write(
+          BiometricAudience.customer,
+          const BiometricCredential(credentialId: 'cred-1', secret: 's1'),
+        );
+        when(
+          () => portal.loginWithDeviceCredential(
+            credentialId: any(named: 'credentialId'),
+            secret: any(named: 'secret'),
           ),
-        ),
-      );
-      expect(await vault.read(BiometricAudience.customer), isNull);
-    });
+        ).thenThrow(
+          const OrbitException(
+            kind: OrbitErrorKind.unauthorized,
+            publicMessage: 'x',
+            code: 'BIOMETRIC_INVALID',
+            status: 401,
+          ),
+        );
+
+        await expectLater(
+          container
+              .read(biometricLoginProvider)
+              .signIn(BiometricAudience.customer),
+          throwsA(
+            isA<OrbitException>().having(
+              (error) => error.publicMessage,
+              'mensagem',
+              contains('Entre com a senha'),
+            ),
+          ),
+        );
+        expect(await vault.read(BiometricAudience.customer), isNull);
+      },
+    );
 
     test('o convite aparece uma vez por login, e "Agora não" vale', () async {
       final service = container.read(biometricLoginProvider);
@@ -250,6 +263,7 @@ void main() {
         () => portal.enrollDeviceCredential(
           deviceId: any(named: 'deviceId'),
           label: any(named: 'label'),
+          credentials: _credentials,
         ),
       ).thenAnswer((_) async => (credentialId: 'cred-9', secret: 's9'));
       await prefs.setString('orbit.biometric.offer.pending', 'customer');
@@ -269,6 +283,7 @@ void main() {
 
       await tester.tap(find.byKey(const Key('biometric.offer.accept')));
       await tester.pumpAndSettle();
+      await _confirm(tester);
       expect(find.byKey(const Key('biometric.offer')), findsNothing);
       expect((await vault.read(BiometricAudience.customer))?.secret, 's9');
       expect(find.textContaining('Biometria ativada'), findsOneWidget);
@@ -298,11 +313,13 @@ void main() {
         () => portal.enrollDeviceCredential(
           deviceId: any(named: 'deviceId'),
           label: any(named: 'label'),
+          credentials: _credentials,
         ),
       ).thenAnswer((_) async => (credentialId: 'cred-3', secret: 's3'));
-      when(() => portal.revokeDeviceCredential('cred-3')).thenAnswer(
-        (_) async {},
-      );
+      when(
+        () =>
+            portal.revokeDeviceCredential('cred-3', credentials: _credentials),
+      ).thenAnswer((_) async {});
       await tester.pumpWidget(
         app(
           const Scaffold(
@@ -313,13 +330,27 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byType(Switch));
       await tester.pumpAndSettle();
+      await _confirm(tester);
       expect(await vault.read(BiometricAudience.customer), isNotNull);
       expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
 
       await tester.tap(find.byType(Switch));
       await tester.pumpAndSettle();
+      await _confirm(tester);
       expect(await vault.read(BiometricAudience.customer), isNull);
-      verify(() => portal.revokeDeviceCredential('cred-3')).called(1);
+      verify(
+        () =>
+            portal.revokeDeviceCredential('cred-3', credentials: _credentials),
+      ).called(1);
     });
   });
+}
+
+Future<void> _confirm(WidgetTester tester) async {
+  await tester.enterText(
+    find.byKey(const Key('biometric.confirm.password')),
+    _credentials.password,
+  );
+  await tester.tap(find.byKey(const Key('biometric.confirm.submit')));
+  await tester.pumpAndSettle();
 }

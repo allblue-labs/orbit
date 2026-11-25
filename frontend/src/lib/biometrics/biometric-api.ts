@@ -28,11 +28,14 @@ export interface BiometricApi {
   registrationChallenge(): Promise<
     BiometricChallenge<PublicKeyCredentialCreationOptionsJSON>
   >;
-  register(input: {
-    challengeId: string;
-    response: RegistrationResponseJSON;
-  }): Promise<unknown>;
-  remove(id: string): Promise<unknown>;
+  register(
+    input: {
+      challengeId: string;
+      response: RegistrationResponseJSON;
+    },
+    headers: Record<string, string>,
+  ): Promise<unknown>;
+  remove(id: string, headers: Record<string, string>): Promise<unknown>;
   loginChallenge(): Promise<
     BiometricChallenge<PublicKeyCredentialRequestOptionsJSON>
   >;
@@ -46,10 +49,16 @@ const teamApi: BiometricApi = {
   list: () => apiClient.get<BiometricCredential[]>("/identity/me/biometrics"),
   registrationChallenge: () =>
     apiClient.post("/identity/me/biometrics/webauthn/registration/options"),
-  register: (input) =>
-    apiClient.post("/identity/me/biometrics/webauthn/registration", input),
-  remove: (id) =>
-    apiClient.delete(`/identity/me/biometrics/${encodeURIComponent(id)}`),
+  register: (input, headers) =>
+    apiClient.post("/identity/me/biometrics/webauthn/registration", input, {
+      headers,
+      retries: 0,
+    }),
+  remove: (id, headers) =>
+    apiClient.delete(`/identity/me/biometrics/${encodeURIComponent(id)}`, {
+      headers,
+      retries: 0,
+    }),
   loginChallenge: () => authClient.post("/biometric/options"),
   login: (input) => authClient.post("/biometric", input),
 };
@@ -60,14 +69,16 @@ const portalApi: BiometricApi = {
     portalRequest("/me/biometrics/webauthn/registration/options", {
       method: "POST",
     }),
-  register: (input) =>
+  register: (input, headers) =>
     portalRequest("/me/biometrics/webauthn/registration", {
       method: "POST",
       body: input,
+      headers,
     }),
-  remove: (id) =>
+  remove: (id, headers) =>
     portalRequest(`/me/biometrics/${encodeURIComponent(id)}`, {
       method: "DELETE",
+      headers,
     }),
   loginChallenge: () =>
     portalRequest("/auth/biometric/options", { method: "POST" }),

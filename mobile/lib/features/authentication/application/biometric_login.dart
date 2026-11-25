@@ -6,7 +6,7 @@
 ///   credencial para este aparelho; o segredo vai para o cofre seguro;
 /// - **entrar**: a biometria libera o segredo do cofre; o servidor confere,
 ///   abre a sessão e devolve o próximo segredo, que substitui o usado;
-/// - **desativar**: remove no servidor (quando dá) e apaga o cofre.
+/// - **desativar**: confirma a identidade, revoga no servidor e apaga o cofre.
 ///
 /// O convite depois do primeiro login com senha também mora aqui: a tela de
 /// login marca, o shell pergunta uma vez, e "Agora não" não pergunta de novo.
@@ -20,6 +20,7 @@ import '../../../app/providers.dart';
 import '../../../core/errors/orbit_exception.dart';
 import '../../../core/security/biometric_vault.dart';
 import '../../../core/security/device_biometrics.dart';
+import '../../../core/security/security_confirmation.dart';
 import '../../../core/storage/device_identity.dart';
 import '../../customer_portal/application/portal_session.dart';
 
@@ -60,7 +61,10 @@ class BiometricLogin {
   SharedPreferences get _prefs => _ref.read(sharedPreferencesProvider);
 
   /// Ativa neste aparelho. Exige sessão ativa do público pedido.
-  Future<BiometricEnableResult> enable(BiometricAudience audience) async {
+  Future<BiometricEnableResult> enable(
+    BiometricAudience audience,
+    SecurityCredentials credentials,
+  ) async {
     if (!await _device.authenticate(
       'Confirme para entrar com biometria no Orbit',
     )) {
@@ -72,11 +76,19 @@ class BiometricLogin {
       BiometricAudience.team =>
         await _ref
             .read(authRepositoryProvider)
-            .enrollDeviceCredential(deviceId: deviceId, label: label),
+            .enrollDeviceCredential(
+              deviceId: deviceId,
+              label: label,
+              credentials: credentials,
+            ),
       BiometricAudience.customer =>
         await _ref
             .read(portalRepositoryProvider)
-            .enrollDeviceCredential(deviceId: deviceId, label: label),
+            .enrollDeviceCredential(
+              deviceId: deviceId,
+              label: label,
+              credentials: credentials,
+            ),
     };
     await _vault.write(
       audience,
@@ -89,27 +101,30 @@ class BiometricLogin {
     return BiometricEnableResult.enabled;
   }
 
-  /// Desativa: o cofre some sempre; o servidor, quando alcançável.
-  Future<void> disable(BiometricAudience audience) async {
+  Future<void> disable(
+    BiometricAudience audience,
+    SecurityCredentials credentials,
+  ) async {
     final stored = await _vault.read(audience);
+    if (stored == null) return;
+    switch (audience) {
+      case BiometricAudience.team:
+        await _ref
+            .read(authRepositoryProvider)
+            .revokeDeviceCredential(
+              stored.credentialId,
+              credentials: credentials,
+            );
+      case BiometricAudience.customer:
+        await _ref
+            .read(portalRepositoryProvider)
+            .revokeDeviceCredential(
+              stored.credentialId,
+              credentials: credentials,
+            );
+    }
     await _vault.clear(audience);
     _ref.invalidate(biometricEnabledProvider(audience));
-    if (stored == null) return;
-    try {
-      switch (audience) {
-        case BiometricAudience.team:
-          await _ref
-              .read(authRepositoryProvider)
-              .revokeDeviceCredential(stored.credentialId);
-        case BiometricAudience.customer:
-          await _ref
-              .read(portalRepositoryProvider)
-              .revokeDeviceCredential(stored.credentialId);
-      }
-    } on Object {
-      // Sem o segredo no aparelho a credencial já não serve a ninguém; ela
-      // continua listada no perfil para remover depois.
-    }
   }
 
   /// Entra. `false` quando a pessoa cancelou a biometria.

@@ -46,6 +46,23 @@ describe('Entrar com a biometria (e2e)', () => {
     test.set('Authorization', `Bearer ${token}`);
   const data = (response: request.Response) =>
     (response.body as Envelope<any>).data;
+  async function confirmation(
+    action: string,
+    audience: 'team' | 'portal' = 'team',
+  ): Promise<string> {
+    const team = audience === 'team';
+    const path = team
+      ? '/api/v1/identity/me/security-confirmation'
+      : '/api/v1/portal/me/biometrics/confirmation';
+    const response = await bearer(
+      api().post(path),
+      team ? ownerToken : portalToken,
+    )
+      .send({ action, currentPassword: team ? PASSWORD : CUSTOMER_PASSWORD })
+      .expect(200);
+    return (response.body as Envelope<{ confirmation: string }>).data
+      .confirmation;
+  }
 
   beforeAll(async () => {
     process.env.FRONTEND_ORIGIN = ORIGIN;
@@ -105,6 +122,15 @@ describe('Entrar com a biometria (e2e)', () => {
         .expect(200),
     );
     portalToken = login.accessToken;
+    await bearer(
+      api().post('/api/v1/portal/me/biometrics/confirmation'),
+      portalToken,
+    )
+      .send({
+        action: 'DEVICE_REGISTER',
+        currentPassword: access.temporaryPassword,
+      })
+      .expect(403);
     await bearer(api().patch('/api/v1/portal/auth/password'), portalToken)
       .send({
         currentPassword: access.temporaryPassword,
@@ -122,7 +148,7 @@ describe('Entrar com a biometria (e2e)', () => {
   describe('equipe na web (WebAuthn)', () => {
     const authenticator = new SoftAuthenticator(RP_ID, ORIGIN);
 
-    it('cadastra a passkey só com a sessão e guarda só a chave pública', async () => {
+    it('cadastra a passkey com confirmação de uso único e guarda só a chave pública', async () => {
       await api()
         .post('/api/v1/identity/me/biometrics/webauthn/registration/options')
         .expect(401);
@@ -138,19 +164,35 @@ describe('Entrar com a biometria (e2e)', () => {
       expect(options.options.authenticatorSelection.userVerification).toBe(
         'required',
       );
+      const body = {
+        challengeId: options.challengeId,
+        response: authenticator.register(options.options.challenge),
+      };
+      await bearer(
+        api().post('/api/v1/identity/me/biometrics/webauthn/registration'),
+        ownerToken,
+      )
+        .send(body)
+        .expect(403);
+      const proof = await confirmation('PASSKEY_REGISTER');
+      await bearer(
+        api().post('/api/v1/identity/me/biometrics/devices'),
+        ownerToken,
+      )
+        .set('x-orbit-security-confirmation', proof)
+        .send({ deviceId: 'fixture-device' })
+        .expect(403);
       const created = data(
         await bearer(
           api().post('/api/v1/identity/me/biometrics/webauthn/registration'),
           ownerToken,
         )
+          .set('x-orbit-security-confirmation', proof)
           .set(
             'User-Agent',
             'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/120.0 Safari/537.36',
           )
-          .send({
-            challengeId: options.challengeId,
-            response: authenticator.register(options.options.challenge),
-          })
+          .send(body)
           .expect(201),
       );
       expect(created).toMatchObject({
@@ -163,11 +205,9 @@ describe('Entrar com a biometria (e2e)', () => {
         api().post('/api/v1/identity/me/biometrics/webauthn/registration'),
         ownerToken,
       )
-        .send({
-          challengeId: options.challengeId,
-          response: authenticator.register(options.options.challenge),
-        })
-        .expect(401);
+        .set('x-orbit-security-confirmation', proof)
+        .send(body)
+        .expect(403);
 
       const stored = await prisma.identityBiometricCredential.findUniqueOrThrow(
         {
@@ -236,6 +276,10 @@ describe('Entrar com a biometria (e2e)', () => {
         api().post('/api/v1/portal/me/biometrics/webauthn/registration'),
         portalToken,
       )
+        .set(
+          'x-orbit-security-confirmation',
+          await confirmation('PASSKEY_REGISTER', 'portal'),
+        )
         .send({
           challengeId: options.challengeId,
           response: client.register(options.options.challenge),
@@ -291,6 +335,10 @@ describe('Entrar com a biometria (e2e)', () => {
           api().post('/api/v1/identity/me/biometrics/devices'),
           ownerToken,
         )
+          .set(
+            'x-orbit-security-confirmation',
+            await confirmation('DEVICE_REGISTER'),
+          )
           .send({ deviceId: 'device-owner-0001', label: 'iPhone do owner' })
           .expect(201),
       );
@@ -333,6 +381,10 @@ describe('Entrar com a biometria (e2e)', () => {
           api().post('/api/v1/identity/me/biometrics/devices'),
           ownerToken,
         )
+          .set(
+            'x-orbit-security-confirmation',
+            await confirmation('DEVICE_REGISTER'),
+          )
           .send({ deviceId: 'device-owner-0001' })
           .expect(201),
       );
@@ -350,7 +402,12 @@ describe('Entrar com a biometria (e2e)', () => {
       await bearer(
         api().delete(`/api/v1/identity/me/biometrics/${again.credentialId}`),
         ownerToken,
-      ).expect(204);
+      )
+        .set(
+          'x-orbit-security-confirmation',
+          await confirmation('BIOMETRIC_REVOKE'),
+        )
+        .expect(204);
       await api()
         .post('/api/v1/identity/biometrics/devices/login')
         .send({ credentialId: again.credentialId, secret: again.secret })
@@ -363,6 +420,10 @@ describe('Entrar com a biometria (e2e)', () => {
           api().post('/api/v1/portal/me/biometrics/devices'),
           portalToken,
         )
+          .set(
+            'x-orbit-security-confirmation',
+            await confirmation('DEVICE_REGISTER', 'portal'),
+          )
           .send({ deviceId: 'device-client-0001', label: 'Android' })
           .expect(201),
       );

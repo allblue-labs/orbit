@@ -20,6 +20,7 @@ import '../../../core/contracts/session_contracts.dart';
 import '../../../core/errors/orbit_exception.dart';
 import '../../../core/network/orbit_api_client.dart';
 import '../../../core/network/session_authenticator.dart';
+import '../../../core/security/security_confirmation.dart';
 import '../../../core/storage/token_storage.dart';
 
 class AuthRepository {
@@ -96,10 +97,18 @@ class AuthRepository {
   Future<({String credentialId, String secret})> enrollDeviceCredential({
     required String deviceId,
     required String label,
+    required SecurityCredentials credentials,
   }) async {
+    final proof = await confirmSecurityChange(
+      _client,
+      '/identity/me/security-confirmation',
+      'DEVICE_REGISTER',
+      credentials,
+    );
     final data = await _client.post<Map<String, dynamic>>(
       '/identity/me/biometrics/devices',
       body: {'deviceId': deviceId, 'label': label},
+      headers: {securityConfirmationHeader: proof},
     );
     return (
       credentialId: data['credentialId'] as String,
@@ -108,10 +117,21 @@ class AuthRepository {
   }
 
   /// Remove a credencial no servidor — desativar a biometria no aparelho.
-  Future<void> revokeDeviceCredential(String credentialId) =>
-      _client.delete<dynamic>(
-        '/identity/me/biometrics/${Uri.encodeComponent(credentialId)}',
-      );
+  Future<void> revokeDeviceCredential(
+    String credentialId, {
+    required SecurityCredentials credentials,
+  }) async {
+    final proof = await confirmSecurityChange(
+      _client,
+      '/identity/me/security-confirmation',
+      'BIOMETRIC_REVOKE',
+      credentials,
+    );
+    await _client.delete<dynamic>(
+      '/identity/me/biometrics/${Uri.encodeComponent(credentialId)}',
+      headers: {securityConfirmationHeader: proof},
+    );
+  }
 
   /// Revoga a sessão no backend e limpa o armazenamento.
   ///

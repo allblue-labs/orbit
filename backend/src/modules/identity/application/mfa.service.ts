@@ -77,7 +77,14 @@ export class MfaService {
     const recoveryHashes = await Promise.all(
       recoveryCodes.map((recoveryCode) => this.hashes.hash(recoveryCode)),
     );
-    await this.repository.enableMfaFactor(factor.id, recoveryHashes, userId);
+    if (
+      !(await this.repository.enableMfaFactor(
+        factor.id,
+        recoveryHashes,
+        userId,
+      ))
+    )
+      throw new ValidationException('Invalid MFA enrollment');
     return { recoveryCodes };
   }
 

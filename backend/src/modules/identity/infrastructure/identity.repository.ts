@@ -959,13 +959,14 @@ export class IdentityRepository {
     id: string,
     recoveryCodes: readonly string[],
     userId: string,
-  ): Promise<void> {
-    await withIdentity(this.prisma, userId, (tx) =>
-      tx.mfaFactor.update({
-        where: { id, userId },
+  ): Promise<boolean> {
+    const result = await withIdentity(this.prisma, userId, (tx) =>
+      tx.mfaFactor.updateMany({
+        where: { id, userId, verifiedAt: null, deletedAt: null },
         data: { verifiedAt: new Date(), recoveryCodes: [...recoveryCodes] },
       }),
     );
+    return result.count === 1;
   }
 
   async touchMfaFactor(id: string, userId: string): Promise<boolean> {

@@ -3,7 +3,12 @@ import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../../database';
 
 export type ChallengePurpose =
-  'USER_REGISTER' | 'USER_LOGIN' | 'PORTAL_REGISTER' | 'PORTAL_LOGIN';
+  | 'USER_REGISTER'
+  | 'USER_LOGIN'
+  | 'PORTAL_REGISTER'
+  | 'PORTAL_LOGIN'
+  | 'USER_SECURITY_CONFIRMATION'
+  | 'PORTAL_SECURITY_CONFIRMATION';
 
 const TTL_MS = 5 * 60_000;
 
@@ -26,7 +31,6 @@ export class AuthChallengeStore {
   ): Promise<string> {
     const id = randomUUID();
     await this.prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT public.app_identity_cleanup_challenges()`;
       await tx.$queryRaw`SELECT set_config('app.auth_challenge_id', ${id}, true)`;
       await tx.authChallenge.create({
         data: {
@@ -46,6 +50,7 @@ export class AuthChallengeStore {
     id: string,
     purpose: ChallengePurpose,
     subjectId: string | null,
+    expectedChallenge: string | null = null,
   ): Promise<string | null> {
     const rows = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT set_config('app.auth_challenge_id', ${id}, true)`;
@@ -54,6 +59,7 @@ export class AuthChallengeStore {
        WHERE id = ${id}::uuid AND purpose = ${purpose}
          AND subject_id IS NOT DISTINCT FROM ${subjectId}::uuid
          AND consumed_at IS NULL AND expires_at > clock_timestamp()
+         AND (${expectedChallenge}::text IS NULL OR challenge = ${expectedChallenge})
       RETURNING challenge`;
     });
     return rows[0]?.challenge ?? null;

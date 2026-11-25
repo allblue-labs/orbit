@@ -8,6 +8,8 @@ const SENSITIVE_PATH =
 
 const PUBLIC_QUOTE =
   /^public\/quotes\/proposals\/([^/]+)\/(response|document\/exports)$/i;
+const PASSKEY_CHALLENGE =
+  /^(?:identity\/biometrics|portal\/auth\/biometrics)\/webauthn\/authentication\/options$/;
 
 /** Redis budgets with PostgreSQL fallback for credential and capability routes. */
 @Injectable()
@@ -40,6 +42,10 @@ export class SensitiveEndpointRateLimitMiddleware implements NestMiddleware {
       return next();
     }
     const path = rawPath.toLowerCase();
+    if (PASSKEY_CHALLENGE.test(path)) {
+      await this.limits.check('passkey-challenge', requestClientIp(request));
+      return next();
+    }
     if (!SENSITIVE_PATH.test(path)) return next();
     const body = request.body as Record<string, unknown> | undefined;
     const email =
