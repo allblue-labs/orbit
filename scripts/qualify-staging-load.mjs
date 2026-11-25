@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 
@@ -24,6 +24,22 @@ assert.equal(target.pathname.replace(/\/$/, ""), "/api/v1");
 if (target.protocol === "http:") assert.equal(target.hostname, "127.0.0.1");
 else assert.equal(target.hostname, "orbit.allblue-labs.com");
 assert.match(config.expectedCommit ?? "", /^[a-f0-9]{40}$/);
+const legacyRevision = "3a2c541821ec65589fdab68ad4718497091eba16";
+const poolMode = config.poolMode ?? "pgbouncer";
+assert.ok(["legacy-direct", "pgbouncer"].includes(poolMode));
+if (poolMode === "legacy-direct") {
+  assert.equal(config.expectedCommit, legacyRevision);
+  assert.equal(
+    referencePath,
+    undefined,
+    "Somente a baseline usa PostgreSQL direto.",
+  );
+} else {
+  assert.ok(
+    typeof config.poolMetrics === "string" && config.poolMetrics.length,
+  );
+  assert.notEqual(config.expectCorrelation, false);
+}
 
 const idPattern = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 const stages = config.concurrency ?? [5, 10, 20];
@@ -37,6 +53,7 @@ assert.ok(
 );
 const seconds = config.secondsPerStage ?? 60;
 assert.ok(Number.isInteger(seconds) && seconds >= 10 && seconds <= 180);
+const minimumPoolSamples = Math.max(3, Math.floor(seconds / 10));
 assert.ok(
   Array.isArray(config.actors) && config.actors.length >= Math.max(...stages),
 );
@@ -64,6 +81,37 @@ assert.ok(
       .map(({ organizationId }) => organizationId),
   ).size >= 2,
 );
+const datasetFingerprint = createHash("sha256")
+  .update(
+    JSON.stringify(
+      config.actors
+        .slice(0, Math.max(...stages))
+        .map(({ organizationId, quoteId }) => [organizationId, quoteId]),
+    ),
+  )
+  .digest("hex");
+const reference = referencePath
+  ? JSON.parse(await readFile(referencePath, "utf8"))
+  : null;
+if (reference) {
+  assert.equal(reference.event, "orbit_staging_load");
+  assert.equal(reference.verification, "baseline");
+  assert.notEqual(reference.revision, config.expectedCommit);
+  assert.equal(reference.target, target.origin);
+  assert.equal(reference.seconds, seconds);
+  assert.equal(reference.dataset, config.dataset);
+  assert.equal(reference.datasetFingerprint, datasetFingerprint);
+  assert.deepEqual(
+    reference.results.map((stage) => stage.concurrency),
+    stages,
+  );
+  assert.deepEqual(reference.issues, []);
+  assert.ok(
+    reference.poolMode === "pgbouncer" ||
+      (reference.poolMode === "legacy-direct" &&
+        reference.revision === legacyRevision),
+  );
+}
 
 const revision = await fetch(target.origin + "/api/v1/release", {
   signal: AbortSignal.timeout(5_000),
@@ -118,11 +166,20 @@ const percentiles = (samples) => {
 };
 
 async function readPool() {
-  if (!config.poolMetrics) return null;
+  if (poolMode === "legacy-direct") return null;
   try {
     const state = JSON.parse(await readFile(config.poolMetrics, "utf8"));
-    if (Date.now() - Date.parse(state.timestamp) > 20_000) return null;
-    return state.pgbouncer ? { ...state.pgbouncer, sampleTimestamp: state.timestamp } : null;
+    const age = Date.now() - Date.parse(state.timestamp);
+    if (!Number.isFinite(age) || age < 0 || age > 20_000 || !state.pgbouncer)
+      return null;
+    const { cl_waiting, maxwait } = state.pgbouncer;
+    if (
+      ![cl_waiting, maxwait].every(
+        (value) => Number.isInteger(value) && value >= 0,
+      )
+    )
+      return null;
+    return { cl_waiting, maxwait, sampleTimestamp: state.timestamp };
   } catch {
     return null;
   }
@@ -140,7 +197,8 @@ async function loadStage(concurrency) {
   const sampler = (async () => {
     while (sampling) {
       const metrics = await readPool();
-      if (metrics && pool.at(-1)?.sampleTimestamp !== metrics.sampleTimestamp) pool.push(metrics);
+      if (metrics && pool.at(-1)?.sampleTimestamp !== metrics.sampleTimestamp)
+        pool.push(metrics);
       await delay(2_000, undefined, { ref: false });
     }
   })();
@@ -180,6 +238,11 @@ async function loadStage(concurrency) {
             ).value;
             if (state.status === "FAILED") throw new Error("EXPORT_FAILED");
             if (state.status === "COMPLETED") {
+              if (
+                typeof state.download?.url !== "string" ||
+                !state.download.url
+              )
+                throw new Error("EXPORT_DOWNLOAD_MISSING");
               complete = true;
               documents.push(performance.now() - began);
             }
@@ -224,9 +287,6 @@ async function loadStage(concurrency) {
 
 const results = [];
 for (const concurrency of stages) results.push(await loadStage(concurrency));
-const reference = referencePath
-  ? JSON.parse(await readFile(referencePath, "utf8"))
-  : null;
 const issues = [];
 for (const metric of results) {
   if (
@@ -235,16 +295,17 @@ for (const metric of results) {
     metric.pool.saturated
   )
     issues.push(`falha_funcional_ou_saturacao_${metric.concurrency}`);
+  if (poolMode === "pgbouncer" && metric.pool.samples < minimumPoolSamples)
+    issues.push(`amostras_pool_insuficientes_${metric.concurrency}`);
   if (reference) {
     const baseline = reference.results.find(
       (stage) => stage.concurrency === metric.concurrency,
     );
     if (
       !baseline ||
-      reference.seconds !== seconds ||
-      reference.dataset !== config.dataset ||
-      !metric.pool.samples ||
-      !baseline.pool.samples
+      baseline.exports.samples !== metric.concurrency ||
+      (reference.poolMode === "pgbouncer" &&
+        baseline.pool.samples < minimumPoolSamples)
     ) {
       issues.push(`comparacao_incompleta_${metric.concurrency}`);
       continue;
@@ -264,7 +325,11 @@ console.log(
     {
       event: "orbit_staging_load",
       revision: config.expectedCommit,
+      referenceRevision: reference?.revision ?? null,
+      target: target.origin,
       dataset: config.dataset,
+      datasetFingerprint,
+      poolMode,
       seconds,
       verification: reference ? "comparison" : "baseline",
       results,

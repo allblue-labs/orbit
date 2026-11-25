@@ -4,10 +4,16 @@ const PLAN = "plan-completion";
 const CYCLE = "cycle-current";
 const ASSET = "asset-current";
 const STAMP = "2026-10-27T12:00:00Z";
+const EXPORT_ID = "01a20400-cd6f-772e-b3be-1d02b20ee35e";
+const CONTRACT_EXPORT = `/api/orbit/pmoc/plans/${PLAN}/document/exports`;
+const EXPORT_STATUS = `/api/orbit/document-exports/${EXPORT_ID}`;
+const SIGNED_CONTRACT =
+  "https://r2.example.test/orbit/pmoc.pdf?signature=fixture";
 
 async function setup(page: Page, failArtifact = false, canManage = true) {
   const writes: string[] = [];
   const preparations: string[] = [];
+  const contractDownloadSteps: string[] = [];
   let started = false;
   let completed = false;
   let issued = false;
@@ -110,6 +116,17 @@ async function setup(page: Page, failArtifact = false, canManage = true) {
       },
     });
   });
+  await page.route(
+    (url) => url.href === SIGNED_CONTRACT,
+    async (route) => {
+      contractDownloadSteps.push("arquivo");
+      await route.fulfill({
+        contentType: "application/pdf",
+        headers: { "content-disposition": "attachment; filename=pmoc.pdf" },
+        body: "%PDF-1.4 test-contract",
+      });
+    },
+  );
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     const method = route.request().method();
@@ -315,10 +332,33 @@ async function setup(page: Page, failArtifact = false, canManage = true) {
         planCode: "PMOC-001",
         expiresAt: "2099-01-01T00:00:00Z",
       };
-    else if (
-      path === `/api/orbit/pmoc/plans/${PLAN}/document` ||
-      path === "/api/orbit/storage/objects"
-    ) {
+    else if (path === CONTRACT_EXPORT && method === "POST") {
+      contractDownloadSteps.push("aceite");
+      return route.fulfill({
+        status: 202,
+        json: {
+          success: true,
+          data: { exportId: EXPORT_ID, jobId: EXPORT_ID, status: "PENDING" },
+        },
+      });
+    } else if (path === EXPORT_STATUS && method === "GET") {
+      const complete = contractDownloadSteps.includes("processando");
+      contractDownloadSteps.push(complete ? "pronto" : "processando");
+      data = {
+        exportId: EXPORT_ID,
+        kind: "PMOC_PLAN",
+        status: complete ? "COMPLETED" : "PROCESSING",
+        fileName: complete ? "pmoc.pdf" : null,
+        contentType: complete ? "application/pdf" : null,
+        errorCode: null,
+        createdAt: STAMP,
+        completedAt: complete ? STAMP : null,
+        expiresAt: "2099-01-01T00:00:00Z",
+        download: complete
+          ? { url: SIGNED_CONTRACT, expiresAt: "2099-01-01T00:00:00Z" }
+          : null,
+      };
+    } else if (path === "/api/orbit/storage/objects") {
       await route.fulfill({
         contentType: "application/pdf",
         headers: { "content-disposition": "attachment; filename=pmoc.pdf" },
@@ -356,7 +396,7 @@ async function setup(page: Page, failArtifact = false, canManage = true) {
       };
     await route.fulfill({ json: { success: true, data } });
   });
-  return { writes, preparations, changes };
+  return { writes, preparations, changes, contractDownloadSteps };
 }
 
 test("atribui equipe e horário ao equipamento pendente sem iniciar a manutenção", async ({
@@ -626,13 +666,19 @@ test("falha na emissão mantém o modal e repetir não conclui duas vezes", asyn
 test("o cabeçalho integra a assinatura e baixa o contrato por sua rota própria", async ({
   page,
 }) => {
-  const { writes } = await setup(page);
+  const { writes, contractDownloadSteps } = await setup(page);
   await page.goto(`/pmoc/${PLAN}`);
   const download = page.waitForEvent("download");
   await page
     .getByRole("button", { name: "Baixar contrato", exact: true })
     .click();
   expect((await download).suggestedFilename()).toBe("pmoc.pdf");
+  expect(contractDownloadSteps).toEqual([
+    "aceite",
+    "processando",
+    "pronto",
+    "arquivo",
+  ]);
   await page
     .getByRole("button", {
       name: "Gerar link de assinatura (opcional)",
@@ -645,7 +691,10 @@ test("o cabeçalho integra a assinatura e baixa o contrato por sua rota própria
   await expect(dialog.getByTestId("pmoc-signature-link")).toContainText(
     `/contrato/${"A".repeat(64)}`,
   );
-  expect(writes).toEqual([`/api/orbit/pmoc/plans/${PLAN}/signature-link`]);
+  expect(writes).toEqual([
+    CONTRACT_EXPORT,
+    `/api/orbit/pmoc/plans/${PLAN}/signature-link`,
+  ]);
   await dialog
     .getByRole("button", { name: "Fechar", exact: true })
     .first()

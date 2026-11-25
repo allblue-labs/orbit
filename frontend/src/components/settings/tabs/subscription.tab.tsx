@@ -552,9 +552,10 @@ function ConfirmacaoDialog({
     (item) => item.code === confirmacao.planCode,
   );
   const encerraTeste = assinatura.status === "TRIALING";
+  const diasDeTeste = destino?.trialDays ?? 0;
   const iniciaTeste =
     assinatura.status === "PENDING_PAYMENT" &&
-    (destino?.trialDays ?? 0) > 0 &&
+    diasDeTeste > 0 &&
     overview.billing.canStartTrial === true;
   const paidChange = paidPlanChange(overview, confirmacao);
   const diasRestantes = diasAte(
@@ -574,7 +575,7 @@ function ConfirmacaoDialog({
           <AlertDialogDescription>
             {iniciaTeste ? (
               <>
-                Você tem direito a {destino?.trialDays} dias gratuitos em{" "}
+                Você tem direito a {diasDeTeste} dias gratuitos em{" "}
                 {destino?.label}. O teste começa agora, sem pagamento e sem
                 perder dias. Ao final, será necessário contratar para continuar.
               </>
@@ -639,7 +640,7 @@ function ConfirmacaoDialog({
             {pending
               ? "Processando…"
               : iniciaTeste
-                ? "Começar 30 dias grátis"
+                ? `Começar ${diasDeTeste} dias grátis`
                 : paidChange === "SUPPORT"
                   ? "Abrir chamado"
                   : paidChange === "UPGRADE"

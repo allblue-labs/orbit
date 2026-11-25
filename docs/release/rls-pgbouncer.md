@@ -38,3 +38,5 @@ Passaram 2.411 testes unitários e as 64 suítes E2E do backend, executadas em l
 | Primeiro vínculo ativo do usuário | 7,55 ms | 0,06 ms |
 
 Na stack, os valores iniciais são 300 clientes, 16 conexões por banco/papel, quatro de reserva e 40 conexões de servidor por banco. A espera do pooler é de cinco segundos. A próxima qualificação em staging deve registrar filas de espera, duração de transações, uso de conexões e p95 das rotas. Confirme os índices com `EXPLAIN (ANALYZE, BUFFERS)` executado pelo papel restrito com volume representativo.
+
+Use o [gate de staging da Etapa 04](operacao-etapa-04.md#gate-de-release-em-staging) para coletar a referência antes da promoção e exigir amostras do PgBouncer na candidata.

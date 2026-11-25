@@ -192,8 +192,11 @@ test.describe("navegação abaixo do desktop", () => {
 
       /** A mesma lista do menu fixo — não uma segunda navegação escrita à mão. */
       const links = drawer.getByRole("link");
-      /* Marca mais os 11 destinos da navegação consolidada. */
-      await expect(links).toHaveCount(12);
+      /* Marca mais os 12 destinos da navegação consolidada. */
+      await expect(links).toHaveCount(13);
+      await expect(
+        drawer.getByRole("link", { name: "Chamados" }),
+      ).toHaveAttribute("href", "/chamados");
       await expect(
         drawer.getByRole("link", { name: "Execuções de artefato" }),
       ).toHaveCount(0);

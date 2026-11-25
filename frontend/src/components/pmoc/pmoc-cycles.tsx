@@ -431,7 +431,9 @@ function EquipmentRow({
             <ul className="space-y-0.5">
               {eligibility.blockedReasons.map((reason) => (
                 <li key={reason} className="text-amber-400">
-                  {executionBlockedLabel(reason, knownBlockedReason)}
+                  {reason === "TECHNICAL_RESPONSIBLE_MISSING" && !canAttend
+                    ? "O plano não tem Responsável Técnico definido."
+                    : executionBlockedLabel(reason, knownBlockedReason)}
                 </li>
               ))}
             </ul>
