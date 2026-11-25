@@ -26,13 +26,13 @@ for component in "${components[@]}"; do
         pgbouncer) context=deploy/pgbouncer; target=runner ;;
     esac
     image="$repository:$tag-$component"
-    optional_args=()
+    build_args=(--target "$target")
     if [[ $component == frontend ]]; then
-        optional_args+=(--build-arg NEXT_PUBLIC_SENTRY_DSN --build-arg NEXT_PUBLIC_SENTRY_ENVIRONMENT)
+        build_args+=(--build-arg NEXT_PUBLIC_SENTRY_DSN --build-arg NEXT_PUBLIC_SENTRY_ENVIRONMENT)
     fi
     # Digest é obtido do próprio resultado do push, não de uma tag mutável.
-    docker buildx build "${optional_args[@]}" --builder "$builder" --platform linux/amd64 --pull --provenance=mode=min \
-        --target "$target" --build-arg "ORBIT_COMMIT_SHA=$sha" \
+    docker buildx build "${build_args[@]}" --builder "$builder" --platform linux/amd64 --pull --provenance=mode=min \
+        --build-arg "ORBIT_COMMIT_SHA=$sha" \
         --build-arg "ORBIT_BUILD_TIME=$created" --tag "$image" \
         --metadata-file "$output/$component.json" --push "$context"
 done
