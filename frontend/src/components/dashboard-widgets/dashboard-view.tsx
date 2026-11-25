@@ -11,7 +11,9 @@
  * A ordem, o tamanho e a presença de cada widget vêm de `GET /dashboard`. O
  * frontend não decide o que aparece.
  */
+import { segmentLabel } from "@/lib/segment-label";
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
 
 import { ContentContainer } from "@/components/layout/page-primitives";
@@ -19,15 +21,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  useAgenda,
-  useAnalyticsDashboard,
-  useAnalyticsHealth,
+  useAnalyticsPanel,
   useAnalyticsQuery,
   useDashboardLayout,
   useEnvironmentalImpact,
   useMonthComparison,
-  useOrbitIntelligence,
 } from "@/hooks/dashboard/use-dashboard";
+import { dashboardService } from "@/services/dashboard.service";
 import { useSchedulingTimeZone } from "@/components/scheduling/use-scheduling-timezone";
 import { useSession } from "@/providers/session-provider";
 import { useActiveScope } from "@/providers/use-active-scope";
@@ -47,6 +47,7 @@ import { organizarPainel, type Colunas } from "./dashboard-layout";
 export function DashboardView() {
   const { formatDateTime } = useDateFormatters();
   const [range, setRange] = useState<DashboardRangeKey>("30D");
+  const queryClient = useQueryClient();
   const session = useSession();
   const scope = useActiveScope();
   const analyticsQuery = useAnalyticsQuery(range);
@@ -66,26 +67,19 @@ export function DashboardView() {
   const layout = useDashboardLayout(range);
   const comparison = useMonthComparison(timeZone);
 
-  /**
-   * Leituras compartilhadas.
-   *
-   * `/analytics/dashboard` já traz KPIs, séries, projeções e indicadores
-   * ambientais — por isso os widgets de KPI, tendência e domínio consomem
-   * essa única consulta em vez de chamar `/analytics/kpis` e
-   * `/analytics/trends` separadamente.
-   */
+  const panel = useAnalyticsPanel(analyticsQuery);
   const sources: WidgetDataSources = {
     analytics: {
       query: analyticsQuery,
-      dashboard: toPanelQuery(useAnalyticsDashboard(analyticsQuery)),
-      health: toPanelQuery(useAnalyticsHealth(analyticsQuery)),
-      intelligence: toPanelQuery(
-        useOrbitIntelligence(analyticsQuery, canUseIntelligence),
-      ),
+      dashboard: toPanelQuery({ ...panel, data: panel.data?.dashboard }),
+      health: toPanelQuery({ ...panel, data: panel.data?.health }),
+      intelligence: toPanelQuery({
+        ...panel,
+        data: canUseIntelligence
+          ? (panel.data?.intelligence ?? undefined)
+          : undefined,
+      }),
       environmentalImpact: toPanelQuery(useEnvironmentalImpact()),
-    },
-    scheduling: {
-      agenda: toPanelQuery(useAgenda()),
     },
     comparison: {
       current: toPanelQuery(comparison.current),
@@ -122,10 +116,14 @@ export function DashboardView() {
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <span>{session.organization?.displayName ?? "—"}</span>
             {session.entitlements ? (
-              <Badge variant="outline">{session.entitlements.planKey}</Badge>
+              <Badge variant="outline">
+                {session.organization?.plan?.name ?? session.entitlements.planKey}
+              </Badge>
             ) : null}
             {layout.data ? (
-              <Badge variant="outline">{layout.data.context.segment}</Badge>
+              <Badge variant="outline">
+                {segmentLabel(layout.data.context.segment)}
+              </Badge>
             ) : null}
             {scope.businessUnit ? (
               <Badge variant="secondary">
@@ -172,11 +170,11 @@ export function DashboardView() {
             aria-label="Atualizar dashboard"
             onClick={() => {
               void layout.refetch();
-              void sources.analytics.dashboard.refetch();
-              void sources.analytics.health.refetch();
-              if (canUseIntelligence)
-                void sources.analytics.intelligence.refetch();
-              void sources.scheduling.agenda.refetch();
+              void panel.refetch();
+              /* Atividades e próximos compromissos vivem nos widgets. */
+              void queryClient.invalidateQueries({
+                queryKey: dashboardService.keys.module(),
+              });
               void sources.comparison.current.refetch();
               void sources.comparison.previous.refetch();
             }}

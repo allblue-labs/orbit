@@ -44,9 +44,7 @@ export function identityTokenLink(
         : '/redefinir-senha';
   url.search = '';
   url.hash = '';
-  // Verification tokens stay out of proxy/access logs and Referer headers.
-  if (purpose === IdentityTokenPurpose.EMAIL_VERIFICATION)
-    url.hash = `token=${encodeURIComponent(token)}`;
-  else url.searchParams.set('token', token);
+  // Fragments keep verification, recovery and shared invitation secrets out of GET logs/Referer.
+  url.hash = `token=${encodeURIComponent(token)}`;
   return url.toString();
 }

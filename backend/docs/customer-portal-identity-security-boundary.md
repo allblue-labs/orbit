@@ -160,3 +160,37 @@ Estado validado no encerramento:
 - E2E global aprovado, com 24 suites e 245 testes;
 - testes unitários aprovados, com 85 suites e 467 testes;
 - builds, lint, contratos, Next.js e Flutter aprovados.
+
+## Área do cliente no app (2026-11-20)
+
+Migration `20261120120000_customer_portal_app_access`.
+
+- **Acesso criado pelo owner.** `GET/POST /customers/:customerId/portal/access`
+  e `POST .../identities/:identityId/password` (web e app do owner, via
+  `@MobileManagement('customers')`, com `customers.update` + `crm.manage`). O
+  e-mail é `parte-local@<slug-da-organização>.com` — o mesmo domínio da equipe,
+  montado no servidor, que descarta qualquer domínio enviado. A identidade
+  nasce `ACTIVE` com senha temporária (mostrada uma vez) e
+  `must_change_password`; trocar a senha limpa a flag. Nova senha derruba as
+  sessões e desfaz o bloqueio por tentativas.
+- **Um acesso por cliente.** Índice parcial
+  `customer_portal_identities_one_access_per_customer` (status ≠ `DISABLED`).
+  Desativado, o mesmo cliente pode ter o acesso reaberto.
+- **E-mail não colide com a equipe.** A criação recusa endereço que já é login
+  de um `User` (`PORTAL_EMAIL_TAKEN`).
+- **Login sem slug.** `organizationSlug` ficou opcional;
+  `app_customer_portal_find_login_by_email` só responde quando o e-mail é único
+  na instalação e delega a `app_customer_portal_find_login`. Ambíguo, ninguém
+  entra sem slug.
+- **Foto e assinatura.** Objetos em `customer-portal/<org>/<identity>/…`,
+  apontados por colunas da identidade e gravados só por
+  `app_customer_portal_set_media`, que valida a sessão da própria identidade —
+  o ator do portal continua sem policy de escrita e sem acesso a
+  `storage_files`. A assinatura é só cadastrada; assinar documento pelo app é
+  etapa futura, com consentimento por documento.
+- **Leituras.** Atendimentos filtram por `assetId` e publicam `documentId`;
+  documentos filtram por `operationId`, `assetId` e `category`
+  (`service`/`pmoc`/`quote`/`receipt`, decidida no servidor).
+- **Exposição.** `CUSTOMER_PORTAL_ENABLED=true` registra as rotas; convite e
+  recuperação por e-mail recusam com `PORTAL_EMAIL_DELIVERY_UNAVAILABLE`
+  enquanto a entrega for no-op.

@@ -87,36 +87,18 @@ da PR-10.
 
 ---
 
-## 3. Realtime: existe no backend, não alcança este cliente
+## 3. Caixa autenticada e polling
 
-O backend **tem** realtime: `NotificationGateway`, Socket.IO no namespace
-`/notifications`, que autentica pelo access token no handshake e emite para as
-salas `user:{id}` e `organization:{id}`.
+A PR-10 de produção removeu o gateway Socket.IO legado da aplicação. A web
+consulta a caixa via BFF com cookies HttpOnly; cada requisição verifica sessão,
+vínculo, papel e organização atuais. `NEXT_PUBLIC_NOTIFICATIONS_POLL_MS` mantém
+padrão de 60 s e piso de 10 s, com atualização ao focar a janela.
 
-**O frontend web não pode usá-lo.** Desde a PR-02 os tokens vivem apenas em
-cookies `HttpOnly`: o JavaScript da página não os acessa, por decisão de
-segurança, e é o BFF que injeta o `Authorization` a cada requisição. Um
-Socket.IO no browser precisaria do token no handshake — exigiria expor o token
-à página e desfazer justamente a propriedade que o BFF existe para garantir.
-
-Alternativas avaliadas:
-
-| Alternativa                                      | Por que não                                                                                              |
-| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
-| Proxy WebSocket pelo BFF                         | Route Handlers do App Router não fazem upgrade de conexão                                                |
-| Endpoint que devolva token efêmero para o socket | não existe, e criá-lo reintroduziria o token no browser                                                  |
-| Cookie legível pelo socket                       | Socket.IO envia cookies, mas o gateway lê `handshake.auth.token` ou o header `Authorization`, não cookie |
-
-**Decisão: polling**, com intervalo configurável por
-`NEXT_PUBLIC_NOTIFICATIONS_POLL_MS` (padrão 60 s, piso de 10 s). Nada simula
-realtime, e a tela declara o intervalo em uso.
-
-**O aplicativo móvel pode usar o gateway** — ele guarda o token em
-armazenamento seguro. A lacuna é específica do cliente web.
-
-Se o realtime no web virar prioridade, o caminho de menor risco é o gateway
-aceitar **cookie de sessão** além do Bearer, mantendo o token fora do
-JavaScript.
+O mobile consulta a mesma caixa por HTTP (12 s em primeiro plano) e mantém FCM
+para avisos nativos. Nenhum cliente depende de sockets. Réplicas compartilham
+notificações e leitura no PostgreSQL, sem salas ou entrega em memória.
+`REALTIME` é somente alias legado de `IN_APP`; as preferências novas não o oferecem.
+Entregas históricas pendentes desse canal são `SKIPPED`, nunca recibos de socket.
 
 ---
 

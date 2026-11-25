@@ -16,7 +16,7 @@
  * ```
  */
 import { apiClient } from "@/api/client";
-import { downloadAndSave, type DownloadResult } from "@/api/transfer";
+import { exportAndSave, type ExportedFile } from "@/services/document-export.service";
 import { queryKeys, type QueryKey } from "@/api/query-keys";
 import type { PaginatedResult, QueryParams, RequestOptions } from "@/types/api";
 import type {
@@ -188,11 +188,14 @@ export const pmocService = {
    * e o roteiro de cada unidade. Não é o relatório de execução — esse nasce de
    * uma manutenção feita, um por equipamento atendido.
    *
-   * O nome do arquivo vem do `Content-Disposition`: é o servidor que decide como
-   * o documento se chama, e montá-lo aqui duplicaria essa regra.
+   * Gerado no servidor de documentos e baixado do armazenamento quando fica
+   * pronto (exportação assíncrona); o nome é o que o servidor escolheu.
    */
-  document: (id: string): Promise<DownloadResult> =>
-    downloadAndSave(`${plan(id)}/document`),
+  document: (id: string): Promise<ExportedFile> =>
+    exportAndSave({
+      requestPath: `${plan(id)}/document/exports`,
+      fallbackName: "plano-pmoc.pdf",
+    }),
 
   addCoverage: (id: string, assetId: string, notes?: string) =>
     apiClient.post<PmocCoverage>(`${plan(id)}/equipment`, { assetId, notes }),

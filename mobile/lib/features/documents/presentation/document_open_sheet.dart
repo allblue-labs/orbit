@@ -32,7 +32,6 @@ import '../../../core/presentation/field_registry.dart';
 import '../../../core/presentation/orbit_format.dart';
 import '../../../core/theme/orbit_theme.dart';
 import '../../../core/widgets/section_states.dart';
-import '../../artifact/application/artifact_providers.dart';
 import '../../artifact/application/document_downloader.dart';
 import '../../artifact/data/document_name.dart';
 import '../application/document_sharing.dart';
@@ -63,9 +62,12 @@ Future<void> compartilharDocumento(
   final sharing = ref.read(documentSharingProvider);
   final mensageiro = ScaffoldMessenger.maybeOf(context);
 
-  await for (final estado in sharing.share(
-    artifactId: document.artifactId,
-    fileName: documentFileName(document),
+  await for (final estado in sharing.shareDownloaded(
+    download: downloadListedDocument(
+      ref,
+      document,
+      fileName: documentFileName(document),
+    ),
     origin: _origemDaFolha(context),
     subject: [
       document.label,
@@ -123,16 +125,10 @@ class _DocumentOpenSheetState extends ConsumerState<DocumentOpenSheet> {
 
   Future<void> _baixar() async {
     if (_download.isBusy) return;
-    final downloader = DocumentDownloader(
-      repository: ref.read(artifactRepositoryProvider),
-      files: ref.read(documentFileStoreProvider),
-    );
-    final stream = downloader.fetch(
-      artifactId: widget.document.artifactId,
+    final stream = downloadListedDocument(
+      ref,
+      widget.document,
       fileName: documentFileName(widget.document),
-
-      /// Visualização, não download: é o que a lista oferece, e o servidor
-      /// distingue as duas na assinatura da URL.
       preview: true,
     );
     await for (final etapa in stream) {

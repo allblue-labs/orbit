@@ -2,6 +2,8 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
   IsDate,
+  IsDefined,
+  ValidateIf,
   IsEmail,
   IsIn,
   IsInt,
@@ -16,6 +18,7 @@ import {
 } from 'class-validator';
 import { BusinessUnitType } from '../../../contracts';
 import { IsDocument } from '../../../validators';
+import { BillingInterval } from '../../subscription-plans/catalog/plan-catalog.types';
 
 const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
@@ -42,11 +45,16 @@ export class PlatformTenantOwnerDto {
   @MaxLength(120)
   lastName!: string;
 
-  @ApiProperty({ minLength: 12 })
+  @ApiPropertyOptional({
+    minLength: 12,
+    deprecated: true,
+    description: 'Preferir setup de senha por e-mail.',
+  })
+  @IsOptional()
   @IsString()
   @MinLength(12)
   @MaxLength(128)
-  password!: string;
+  password?: string;
 }
 
 export class PlatformPrimaryBusinessUnitDto {
@@ -97,6 +105,7 @@ export class PlatformPrimaryBusinessUnitDto {
 
 export class CreatePlatformTenantDto {
   @ApiProperty({ type: PlatformTenantOwnerDto })
+  @IsDefined()
   @ValidateNested()
   @Type(() => PlatformTenantOwnerDto)
   owner!: PlatformTenantOwnerDto;
@@ -121,7 +130,13 @@ export class CreatePlatformTenantDto {
   @MaxLength(40)
   planKey!: string;
 
+  @ApiPropertyOptional({ enum: Object.values(BillingInterval) })
+  @IsOptional()
+  @IsIn(Object.values(BillingInterval))
+  billingInterval: BillingInterval = BillingInterval.MONTHLY;
+
   @ApiProperty({ type: PlatformPrimaryBusinessUnitDto })
+  @IsDefined()
   @ValidateNested()
   @Type(() => PlatformPrimaryBusinessUnitDto)
   primaryBusinessUnit!: PlatformPrimaryBusinessUnitDto;
@@ -136,25 +151,31 @@ export class CreatePlatformTenantDto {
 
   @ApiPropertyOptional({
     enum: ['TRIALING', 'ACTIVE', 'PAST_DUE', 'PAUSED'],
-    default: 'TRIALING',
+    readOnly: true,
+    deprecated: true,
   })
   @IsOptional()
   @IsIn(['TRIALING', 'ACTIVE', 'PAST_DUE', 'PAUSED'])
-  subscriptionStatus = 'TRIALING';
+  subscriptionStatus?: string;
 
-  @ApiPropertyOptional({ type: String, format: 'date-time' })
+  @ApiPropertyOptional({
+    type: String,
+    format: 'date-time',
+    readOnly: true,
+    deprecated: true,
+  })
   @IsOptional()
   @Type(() => Date)
   @IsDate()
   currentPeriodEnd?: Date;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ readOnly: true, deprecated: true })
   @IsOptional()
   @IsString()
   @MaxLength(160)
   externalCustomerId?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ readOnly: true, deprecated: true })
   @IsOptional()
   @IsString()
   @MaxLength(160)
@@ -192,8 +213,37 @@ export class PlatformListQueryDto {
 }
 
 export class UpdatePlatformOrganizationDto {
+  @ApiPropertyOptional()
+  @ValidateIf((_: unknown, value: unknown) => value !== undefined)
+  @Transform(trim)
+  @IsString()
+  @MinLength(2)
+  @MaxLength(180)
+  displayName?: string;
+
+  @ApiPropertyOptional()
+  @ValidateIf((_: unknown, value: unknown) => value !== undefined)
+  @Transform(trim)
+  @IsString()
+  @MinLength(2)
+  @MaxLength(60)
+  primarySegment?: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    format: 'date-time',
+    description:
+      'Obrigatório para alterações cadastrais; valor de updatedAt da consulta.',
+  })
+  @ValidateIf((_: unknown, value: unknown) => value !== undefined)
+  @Type(() => Date)
+  @IsDate()
+  expectedUpdatedAt?: Date;
+
   @ApiPropertyOptional({
     enum: ['ACTIVE', 'ONBOARDING', 'SUSPENDED', 'CANCELLED'],
+    readOnly: true,
+    deprecated: true,
   })
   @IsOptional()
   @IsIn(['ACTIVE', 'ONBOARDING', 'SUSPENDED', 'CANCELLED'])
@@ -201,19 +251,26 @@ export class UpdatePlatformOrganizationDto {
 
   @ApiPropertyOptional({
     enum: ['TRIALING', 'ACTIVE', 'PAST_DUE', 'PAUSED', 'CANCELLED'],
+    readOnly: true,
+    deprecated: true,
   })
   @IsOptional()
   @IsIn(['TRIALING', 'ACTIVE', 'PAST_DUE', 'PAUSED', 'CANCELLED'])
   subscriptionStatus?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ readOnly: true, deprecated: true })
   @IsOptional()
   @IsString()
   @MinLength(2)
   @MaxLength(40)
   planKey?: string;
 
-  @ApiPropertyOptional({ type: String, format: 'date-time' })
+  @ApiPropertyOptional({
+    type: String,
+    format: 'date-time',
+    readOnly: true,
+    deprecated: true,
+  })
   @IsOptional()
   @Type(() => Date)
   @IsDate()

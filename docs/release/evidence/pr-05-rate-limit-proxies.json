@@ -1,0 +1,114 @@
+{
+  "pr": "PR-05",
+  "baseCommit": "605fa10",
+  "findings": [
+    "F05"
+  ],
+  "qualification": "Local scoped gates passed; no deployment, remote CI, push or native distribution performed. Overall production release requires the remaining PRs.",
+  "migration": "20261113210000_auth_rate_limit",
+  "checks": {
+    "backendUnit": {
+      "suites": 254,
+      "passed": 2025
+    },
+    "backendOriginFinalRegression": {
+      "suites": 2,
+      "passed": 16
+    },
+    "backendIntegration": {
+      "suites": 4,
+      "passed": 46,
+      "migrationsApplied": 113
+    },
+    "webUnit": {
+      "files": 70,
+      "passed": 678
+    },
+    "webBrowserIdentity": {
+      "passed": 2
+    },
+    "webStandaloneSmoke": {
+      "passed": 6
+    },
+    "mobileSessionNetworkSecurity": {
+      "passed": 155
+    },
+    "nginxProductionConfig": {
+      "syntax": "passed",
+      "untrustedForwardingSpoof": "passed",
+      "trustedPeer": "passed",
+      "rateLimitRetryAfter": "passed",
+      "fixture": "Disposable loopback Docker container, synthetic certificate and upstreams"
+    },
+    "proxySecretInstaller": {
+      "passed": 2,
+      "scope": "Temporary files only; generation, invalid input, idempotence and mode 0600"
+    },
+    "lint": [
+      "backend",
+      "web"
+    ],
+    "typecheck": [
+      "backend",
+      "web"
+    ],
+    "contracts": "passed",
+    "publicErrorContract": "passed",
+    "flutterAnalyzer": "no issues (--fatal-infos)",
+    "prismaSchema": "valid",
+    "build": [
+      "backend",
+      "next-standalone"
+    ]
+  },
+  "trustChain": {
+    "edge": "Only configured Cloudflare peers may attest CF-Connecting-IP; Nginx overwrites client forwarding headers",
+    "internal": "Nginx/BFF/API share a private proxy credential; BFF request-local AsyncLocalStorage",
+    "apiFallback": "Raw socket IP; Express trust proxy false; never request.ip or an unauthenticated forwarding header",
+    "networkRequirement": "Keep API/frontend ports loopback/private; possession of proxy secret is an internal authority"
+  },
+  "policy": {
+    "accountMaximum": 20,
+    "originMaximum": 120,
+    "windowMs": 60000,
+    "key": "HMAC-SHA256(action, scope, normalized value)",
+    "accountResolution": "No account existence lookup. Portal includes organization slug; token-only endpoints budget by opaque credential, not stable user across rotation.",
+    "capacity": {
+      "shards": 16,
+      "keysPerShard": 1024,
+      "maximumRows": 16384,
+      "expiredCleanupPerAdmission": 64,
+      "activeEviction": false,
+      "fullShardRetrySeconds": 60
+    },
+    "databaseClock": true,
+    "denialExtendsWindow": false,
+    "storeFailureStatus": 503,
+    "processLocalFallback": false,
+    "testRuntimeBypass": false,
+    "broadSuiteLimits": "Explicit 100000 budgets for synthetic shared origins; security suite overrides to 2",
+    "sqlAccess": "FORCE RLS, no runtime table policies; specific SECURITY DEFINER function with fixed search_path and explicit execute grant",
+    "transientRefresh": "429/503/transport failures preserve tokens and propagate temporary error in web and mobile",
+    "boundedStorageCaveat": "Bounded rows and cleanup batch; not a hard WAL/bloat byte limit or volumetric DDoS protection"
+  },
+  "concurrencyProof": "Two NestJS applications in one test process, independent Prisma clients/pools, shared restricted PostgreSQL runtime role; eight concurrent requests yield exactly two admissions.",
+  "requiredEnvironment": [
+    "TRUSTED_PROXY_SECRET",
+    "AUTH_RATE_LIMIT_SECRET"
+  ],
+  "optionalEnvironment": [
+    "AUTH_RATE_LIMIT_MAX",
+    "AUTH_RATE_LIMIT_ORIGIN_MAX",
+    "AUTH_RATE_LIMIT_WINDOW_MS"
+  ],
+  "scope": {
+    "newDependencies": false,
+    "deployment": false,
+    "push": false,
+    "remoteCI": false,
+    "fullMobileSuiteRepeated": false,
+    "fullIntegrationMatrixRepeated": false,
+    "liveCloudflareOrFirewallTest": false
+  },
+  "nextPR": "PR-06 Firebase Android/iOS end-to-end"
+}

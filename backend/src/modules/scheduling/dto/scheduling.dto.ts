@@ -286,6 +286,11 @@ export class EventQueryDto {
   @IsDate()
   to!: Date;
 
+  @ApiPropertyOptional({ enum: ['true', 'false'] })
+  @IsOptional()
+  @IsIn(['true', 'false'])
+  remindersOnly?: 'true' | 'false';
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsUUIDv7()

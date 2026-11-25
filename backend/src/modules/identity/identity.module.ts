@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
-import { EmailModule } from '../email/email.module';
+import { IdentityEmailWorker } from './infrastructure/identity-email.worker';
+import { AccountEmailModule } from '../email/account-email.module';
 import { JwtModule } from '@nestjs/jwt';
 import { EnvironmentProvider } from '../../providers';
 import { AuthenticationService } from './application/authentication.service';
@@ -22,10 +23,17 @@ import { AvatarService } from './application/avatar.service';
 import { AvatarRepository } from './infrastructure/avatar.repository';
 import { EmailVerificationService } from './application/email-verification.service';
 import { EmailVerificationController } from './presentation/email-verification.controller';
+import { AuthChallengeStore } from '../../common/biometrics';
+import { BiometricLoginService } from './application/biometric-login.service';
+import { BiometricCredentialRepository } from './infrastructure/biometric-credential.repository';
+import {
+  BiometricLoginController,
+  BiometricProfileController,
+} from './presentation/biometric.controller';
 
 @Module({
   imports: [
-    EmailModule,
+    AccountEmailModule,
     JwtModule.registerAsync({
       inject: [EnvironmentProvider],
       useFactory: (environment: EnvironmentProvider) => ({
@@ -50,9 +58,12 @@ import { EmailVerificationController } from './presentation/email-verification.c
     ProfileController,
     InvitationController,
     EmailVerificationController,
+    BiometricLoginController,
+    BiometricProfileController,
   ],
   providers: [
     IdentityRepository,
+    IdentityEmailWorker,
     RegistrationRepository,
     IdentityTokenService,
     AuthenticationService,
@@ -66,6 +77,9 @@ import { EmailVerificationController } from './presentation/email-verification.c
     RegistrationService,
     EmailVerificationService,
     IdentityReadModelMapper,
+    AuthChallengeStore,
+    BiometricCredentialRepository,
+    BiometricLoginService,
     TransactionalIdentityTokenDelivery,
     {
       provide: IDENTITY_TOKEN_DELIVERY,

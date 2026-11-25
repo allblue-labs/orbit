@@ -44,26 +44,10 @@ import {
   type PlanCatalogEntry,
 } from "@/types/billing";
 import {
-  TRIAL_DAYS,
   ofereceAvaliacao,
   ordenarPlanos,
   temInteligencia,
 } from "./pricing-catalog";
-
-/**
- * Para quem cada plano foi desenhado.
- *
- * É posicionamento comercial, e por isso vive na apresentação — não é regra,
- * não decide acesso e o backend não tem opinião sobre isso. O `description` do
- * catálogo já diz o que o plano é; esta linha diz para quem ele serve.
- */
-const PUBLICO: Readonly<Record<string, string>> = {
-  ESSENTIAL: "Para quem está organizando o campo pela primeira vez",
-  PROFESSIONAL: "Para operações com mais de uma unidade e equipe crescendo",
-  PROFESSIONAL_INTELLIGENCE:
-    "Para quem quer a operação assistida pela inteligência do Orbit",
-  ENTERPRISE_UNLIMITED: "Para operações grandes, sem teto de volume",
-};
 
 /** Os limites que cabem num cartão. A tabela abaixo mostra todos. */
 const DESTAQUES = [
@@ -173,7 +157,8 @@ function PublicPlanCard({
     <article
       className={cn(
         "flex flex-col gap-4 rounded-2xl border border-border bg-card p-5",
-        inteligencia && "border-primary/40",
+        inteligencia && plano.isActive !== false && "border-primary/40",
+        plano.isActive === false && "bg-muted/50 text-muted-foreground",
       )}
       aria-label={plano.label}
     >
@@ -190,7 +175,7 @@ function PublicPlanCard({
           ) : null}
         </div>
         <p className="text-xs leading-relaxed text-muted-foreground">
-          {PUBLICO[plano.code] ?? plano.description}
+          {plano.description}
         </p>
       </header>
 
@@ -198,6 +183,11 @@ function PublicPlanCard({
         {preco ? (
           <>
             <p className="font-display text-2xl font-bold tabular-nums text-foreground">
+              {preco.listAmountMinor !== undefined ? (
+                <del className="mr-2 text-sm font-normal text-muted-foreground">
+                  {formatCentavos(preco.listAmountMinor)}
+                </del>
+              ) : null}
               {formatCentavos(preco.amountMinor)}
             </p>
             <p className="text-xs text-muted-foreground">
@@ -215,7 +205,7 @@ function PublicPlanCard({
 
       {ofereceAvaliacao(plano) ? (
         <p className="rounded-md bg-success/10 px-3 py-2 text-xs text-success">
-          {TRIAL_DAYS} dias grátis na primeira contratação elegível
+          {plano.trialDays} dias grátis na primeira contratação elegível
         </p>
       ) : null}
 
@@ -247,13 +237,22 @@ function PublicPlanCard({
         criação da empresa e só então a escolha do plano. Um "assinar" aqui
         prometeria um atalho que o produto não tem.
       */}
-      <Button asChild className="w-full">
-        <Link
-          href={`${ROUTES.register}?plano=${encodeURIComponent(plano.code)}&periodicidade=${encodeURIComponent(intervalo)}`}
-        >
-          {ofereceAvaliacao(plano) ? "Testar grátis" : "Começar agora"}
-        </Link>
-      </Button>
+      {plano.promotion ? (
+        <p className="text-xs text-muted-foreground">{plano.promotion}</p>
+      ) : null}
+      {plano.isActive === false ? (
+        <Button disabled variant="outline" className="w-full">
+          Indisponível
+        </Button>
+      ) : (
+        <Button asChild className="w-full">
+          <Link
+            href={`${ROUTES.register}?plano=${encodeURIComponent(plano.code)}&periodicidade=${encodeURIComponent(intervalo)}`}
+          >
+            {ofereceAvaliacao(plano) ? "Testar grátis" : "Começar agora"}
+          </Link>
+        </Button>
+      )}
     </article>
   );
 }

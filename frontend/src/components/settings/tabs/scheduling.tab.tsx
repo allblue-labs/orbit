@@ -181,7 +181,7 @@ export function SchedulingSettingsTab() {
                 <span className="min-w-0 text-left">
                   <span className="block text-sm font-medium">Lembretes</span>
                   <span className="block text-xs text-muted-foreground">
-                    São eventos da agenda, criados no próprio Workspace
+                    São eventos da agenda, criados na própria Agenda
                   </span>
                 </span>
                 <ArrowRight className="size-4 shrink-0" />

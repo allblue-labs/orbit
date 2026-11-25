@@ -13,26 +13,30 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/orbit_theme.dart';
+import '../../../../core/errors/orbit_exception.dart';
 import '../../data/walk_in_draft.dart';
 import 'walk_in_fields.dart';
 
 /// Devolve o equipamento preenchido, ou `null` se a pessoa desistiu.
-Future<WalkInEquipmentDraft?> showWalkInEquipmentSheet(BuildContext context) =>
-    showModalBottomSheet<WalkInEquipmentDraft>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      backgroundColor: context.orbit.background,
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.viewInsetsOf(context).bottom,
-        ),
-        child: const _Folha(),
-      ),
-    );
+Future<WalkInEquipmentDraft?> showWalkInEquipmentSheet(
+  BuildContext context, {
+  Future<void> Function(WalkInEquipmentDraft)? onSave,
+}) => showModalBottomSheet<WalkInEquipmentDraft>(
+  context: context,
+  isScrollControlled: true,
+  showDragHandle: true,
+  isDismissible: onSave == null,
+  enableDrag: onSave == null,
+  backgroundColor: context.orbit.background,
+  builder: (context) => Padding(
+    padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+    child: _Folha(onSave: onSave),
+  ),
+);
 
 class _Folha extends StatefulWidget {
-  const _Folha();
+  const _Folha({this.onSave});
+  final Future<void> Function(WalkInEquipmentDraft)? onSave;
 
   @override
   State<_Folha> createState() => _FolhaState();
@@ -48,6 +52,8 @@ class _TechnicalField {
 }
 
 class _FolhaState extends State<_Folha> {
+  bool _saving = false;
+  String? _error;
   final _nome = TextEditingController();
   final _marca = TextEditingController();
   final _modelo = TextEditingController();
@@ -111,7 +117,9 @@ class _FolhaState extends State<_Folha> {
     return true;
   }
 
-  bool get _valido => _nome.text.trim().isNotEmpty && _specsValid;
+  bool get _valido =>
+      _nome.text.trim().length >= (widget.onSave == null ? 1 : 2) &&
+      _specsValid;
 
   Future<void> _date(bool installation) async {
     final date = await showDatePicker(
@@ -168,10 +176,47 @@ class _FolhaState extends State<_Folha> {
           ),
   );
 
+  Future<void> _save() async {
+    if (_saving || !_valido) return;
+    final draft = WalkInEquipmentDraft(
+      name: _nome.text,
+      category: _categoria,
+      manufacturer: _marca.text,
+      model: _modelo.text,
+      serialNumber: _serie.text,
+      location: _local.text,
+      identifier: _identificador.text,
+      identifierType: _tipoIdentificador,
+      installationAt: _dataInstalacao,
+      warrantyUntil: _dataGarantia,
+      specifications: {
+        for (final row in _specifications)
+          if (row.name.text.trim().isNotEmpty &&
+              row.value.text.trim().isNotEmpty)
+            row.name.text.trim(): row.value.text.trim(),
+      },
+    );
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await widget.onSave?.call(draft);
+      if (mounted) Navigator.of(context).pop(draft);
+    } on Object catch (error) {
+      if (mounted) {
+        setState(() => _error = OrbitException.publicCopyForAny(error));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final palette = context.orbit;
-    return SingleChildScrollView(
+    final form = SingleChildScrollView(
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: const EdgeInsets.fromLTRB(
         OrbitSpacing.gutter,
@@ -315,35 +360,38 @@ class _FolhaState extends State<_Folha> {
               ),
             ],
           ),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: OrbitSpacing.sm),
+              child: Text(_error!, style: TextStyle(color: palette.danger)),
+            ),
           const SizedBox(height: OrbitSpacing.sm),
           FilledButton(
-            onPressed: _valido
-                ? () => Navigator.of(context).pop(
-                    WalkInEquipmentDraft(
-                      name: _nome.text,
-                      category: _categoria,
-                      manufacturer: _marca.text,
-                      model: _modelo.text,
-                      serialNumber: _serie.text,
-                      location: _local.text,
-                      identifier: _identificador.text,
-                      identifierType: _tipoIdentificador,
-                      installationAt: _dataInstalacao,
-                      warrantyUntil: _dataGarantia,
-                      specifications: {
-                        for (final row in _specifications)
-                          if (row.name.text.trim().isNotEmpty &&
-                              row.value.text.trim().isNotEmpty)
-                            row.name.text.trim(): row.value.text.trim(),
-                      },
-                    ),
-                  )
-                : null,
+            onPressed: _valido && !_saving ? _save : null,
             style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
-            child: const Text('Acrescentar'),
+            child: _saving
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Text(
+                    widget.onSave == null
+                        ? 'Acrescentar'
+                        : 'Cadastrar equipamento',
+                  ),
           ),
+          if (widget.onSave != null)
+            TextButton(
+              onPressed: _saving ? null : () => Navigator.of(context).pop(),
+              child: const Text('Cancelar'),
+            ),
         ],
       ),
+    );
+    return PopScope(
+      canPop: !_saving,
+      child: AbsorbPointer(absorbing: _saving, child: form),
     );
   }
 }

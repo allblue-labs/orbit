@@ -1,5 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
+import { Prisma, type OrganizationSubscription } from '@prisma/client';
+import type { PrismaTransactionClient } from '../../database/prisma.types';
+import { platformSubscription } from './platform-subscription.projection';
+import { isTerminal } from '../subscription-plans/subscriptions/subscription.types';
 import { RlsTransaction } from '../../database';
 import { PaginationHelper } from '../../database/helpers/database.helpers';
 import type {
@@ -9,7 +12,28 @@ import type {
 
 const organizationView = {
   owner: {
-    select: { id: true, email: true, displayName: true, status: true },
+    select: {
+      id: true,
+      email: true,
+      displayName: true,
+      status: true,
+      credential: { select: { passwordUpdatedAt: true } },
+    },
+  },
+  adminProvisionings: {
+    select: {
+      id: true,
+      status: true,
+      correlationId: true,
+      lastErrorCode: true,
+      version: true,
+      ownerPasswordProvided: true,
+      planCode: true,
+      billingInterval: true,
+      completedAt: true,
+      ownerSetupToken: { select: { usedAt: true, expiresAt: true } },
+    },
+    take: 1,
   },
   plan: {
     select: { id: true, key: true, name: true, isActive: true },
@@ -38,28 +62,165 @@ const organizationView = {
 export class PlatformAdministrationRepository {
   constructor(private readonly rls: RlsTransaction) {}
 
+  transaction<T>(work: (tx: PrismaTransactionClient) => Promise<T>) {
+    return this.rls.runAmbient(work, { timeout: 30_000 });
+  }
+
+  async canonical(
+    tx: PrismaTransactionClient,
+    ids: string[],
+  ): Promise<Map<string, OrganizationSubscription>> {
+    if (!ids.length) return new Map();
+    const chosen = await tx.$queryRaw<{ id: string }[]>(Prisma.sql`
+      SELECT chosen.id FROM organizations o CROSS JOIN LATERAL (
+        SELECT id FROM organization_subscriptions s WHERE s.organization_id=o.id
+        ORDER BY (ended_at IS NULL) DESC, started_at DESC, id DESC LIMIT 1
+      ) chosen WHERE o.id IN (${Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`))})`);
+    const rows = await tx.organizationSubscription.findMany({
+      where: { id: { in: chosen.map((row) => row.id) } },
+    });
+    return new Map(rows.map((row) => [row.organizationId, row]));
+  }
+
+  private async projectOrganizations(
+    tx: PrismaTransactionClient,
+    organizations: Prisma.OrganizationGetPayload<{
+      include: typeof organizationView;
+    }>[],
+  ) {
+    const subscriptions = await this.canonical(
+      tx,
+      organizations.map((org) => org.id),
+    );
+    const plans = await tx.plan.findMany({
+      where: {
+        key: {
+          in: [...subscriptions.values()].flatMap((sub) => [
+            sub.planCode,
+            ...(sub.pendingPlanCode ? [sub.pendingPlanCode] : []),
+          ]),
+        },
+      },
+      select: { id: true, key: true, name: true, isActive: true },
+    });
+    const at = new Date();
+    return organizations.map((org) => {
+      const subscription = platformSubscription(subscriptions.get(org.id), at);
+      const plan =
+        plans.find((plan) => plan.key === subscription.planCode) ?? null;
+      const { credential, ...owner } = org.owner;
+      const { adminProvisionings, ...organization } = org;
+      const workflow = adminProvisionings[0];
+      const passwordChanged = !!(
+        workflow?.completedAt &&
+        credential?.passwordUpdatedAt &&
+        credential.passwordUpdatedAt > workflow.completedAt
+      );
+      const ownerSetup = !workflow
+        ? 'UNKNOWN_LEGACY'
+        : workflow.ownerPasswordProvided
+          ? 'DIRECT_PASSWORD_DEPRECATED'
+          : passwordChanged || workflow.ownerSetupToken?.usedAt
+            ? 'PASSWORD_CONFIGURED'
+            : workflow.ownerSetupToken
+              ? workflow.ownerSetupToken.expiresAt <= at
+                ? 'EXPIRED'
+                : 'SETUP_LINK_QUEUED'
+              : 'NOT_QUEUED';
+      return {
+        ...organization,
+        owner,
+        planId: plan?.id ?? null,
+        plan,
+        externalCustomerId:
+          subscriptions.get(org.id)?.providerCustomerId ?? null,
+        externalSubscriptionId:
+          subscriptions.get(org.id)?.providerSubscriptionId ?? null,
+        subscriptionStartedAt: subscriptions.get(org.id)?.startedAt ?? null,
+        subscriptionStatus: subscription.status,
+        currentPeriodStart: subscription.currentPeriodStart,
+        currentPeriodEnd: subscription.currentPeriodEnd,
+        subscription,
+        legacyBilling: {
+          externalCustomerId: org.externalCustomerId,
+          externalSubscriptionId: org.externalSubscriptionId,
+          planId: org.planId,
+          planKey: org.plan.key,
+          subscriptionStatus: org.subscriptionStatus,
+          currentPeriodEnd: org.currentPeriodEnd,
+          inconsistent:
+            subscription.source === 'UNKNOWN_LEGACY' ||
+            org.plan.key !== subscription.planCode ||
+            org.subscriptionStatus !== subscription.status ||
+            org.currentPeriodEnd?.getTime() !==
+              subscription.currentPeriodEnd?.getTime(),
+        },
+        provisioning: workflow
+          ? {
+              id: workflow.id,
+              requestedPlanCode: workflow.planCode,
+              requestedBillingInterval: workflow.billingInterval,
+              status: workflow.status,
+              correlationId: workflow.correlationId,
+              version: workflow.version,
+              lastErrorCode: workflow.lastErrorCode,
+              ownerSetup,
+              deliveryConfirmation: 'NOT_OBSERVED',
+              complete: workflow.status === 'COMPLETED',
+            }
+          : null,
+      };
+    });
+  }
+
   overview() {
     return this.rls.run(async (tx) => {
-      const organizations = await tx.organization.count({
-        where: { deletedAt: null },
-      });
-      const users = await tx.user.count({ where: { deletedAt: null } });
-      const activeSubscriptions = await tx.organization.count({
-        where: { deletedAt: null, subscriptionStatus: 'ACTIVE' },
-      });
-      const suspendedOrganizations = await tx.organization.count({
-        where: { deletedAt: null, status: 'SUSPENDED' },
-      });
-      const plans = await tx.plan.count({ where: { isActive: true } });
-      const modules = await tx.module.count({ where: { isActive: true } });
-      return {
-        organizations,
-        users,
-        activeSubscriptions,
-        suspendedOrganizations,
-        activePlans: plans,
-        activeModules: modules,
+      const totals = {
+        organizations: 0,
+        users: await tx.user.count({ where: { deletedAt: null } }),
+        activeSubscriptions: 0,
+        pendingSubscriptions: 0,
+        validTrials: 0,
+        endedSubscriptions: 0,
+        unknownLegacySubscriptions: 0,
+        scheduledPlanChanges: 0,
+        scheduledCancellations: 0,
+        suspendedOrganizations: 0,
+        activePlans: await tx.plan.count({ where: { isActive: true } }),
+        activeModules: await tx.module.count({ where: { isActive: true } }),
       };
+      let cursor: string | undefined;
+      const at = new Date();
+      for (;;) {
+        const batch = await tx.organization.findMany({
+          where: { deletedAt: null, ...(cursor ? { id: { gt: cursor } } : {}) },
+          select: { id: true, status: true },
+          orderBy: { id: 'asc' },
+          take: 200,
+        });
+        if (!batch.length) break;
+        const canonical = await this.canonical(
+          tx,
+          batch.map((row) => row.id),
+        );
+        for (const org of batch) {
+          totals.organizations++;
+          if (org.status === 'SUSPENDED') totals.suspendedOrganizations++;
+          const sub = platformSubscription(canonical.get(org.id), at);
+          if (sub.source === 'UNKNOWN_LEGACY')
+            totals.unknownLegacySubscriptions++;
+          else if (sub.status === 'ACTIVE') totals.activeSubscriptions++;
+          else if (sub.status === 'TRIALING') totals.validTrials++;
+          else if (sub.status === 'PENDING_PAYMENT')
+            totals.pendingSubscriptions++;
+          else if (isTerminal(sub.status)) totals.endedSubscriptions++;
+          if (sub.pendingChange) totals.scheduledPlanChanges++;
+          if (sub.cancelAtPeriodEnd) totals.scheduledCancellations++;
+        }
+        cursor = batch[batch.length - 1]!.id;
+        if (batch.length < 200) break;
+      }
+      return { ...totals, financialSource: 'CANONICAL', asOf: at };
     });
   }
 
@@ -90,17 +251,22 @@ export class PlatformAdministrationRepository {
         ...PaginationHelper.toPrisma(pagination),
       });
       const total = await tx.organization.count({ where });
-      return PaginationHelper.result(data, total, pagination);
+      return PaginationHelper.result(
+        await this.projectOrganizations(tx, data),
+        total,
+        pagination,
+      );
     });
   }
 
   findOrganization(id: string) {
-    return this.rls.run((tx) =>
-      tx.organization.findFirst({
+    return this.rls.run(async (tx) => {
+      const org = await tx.organization.findFirst({
         where: { id, deletedAt: null },
         include: organizationView,
-      }),
-    );
+      });
+      return org ? (await this.projectOrganizations(tx, [org]))[0] : null;
+    });
   }
 
   listUsers(query: PlatformListQueryDto) {
@@ -165,23 +331,36 @@ export class PlatformAdministrationRepository {
     id: string,
     actorId: string,
     input: UpdatePlatformOrganizationDto,
-    planId?: string,
+    auditMetadata: Prisma.InputJsonObject & { correlationId: string },
   ) {
-    return this.rls.run(async (tx) => {
+    return this.transaction(async (tx) => {
       const before = await tx.organization.findFirst({
         where: { id, deletedAt: null },
       });
       if (!before) return null;
-      const organization = await tx.organization.update({
-        where: { id },
-        data: {
-          status: input.status,
-          subscriptionStatus: input.subscriptionStatus,
-          currentPeriodEnd: input.currentPeriodEnd,
-          planId,
-        },
-        include: organizationView,
-      });
+      if (
+        input.planKey !== undefined ||
+        input.subscriptionStatus !== undefined ||
+        input.currentPeriodEnd !== undefined
+      )
+        throw new Error('ADMIN_FINANCIAL_FIELDS_READ_ONLY');
+      if (input.status !== undefined && input.status !== before.status)
+        throw new Error('ADMIN_OPERATIONAL_STATUS_READ_ONLY');
+      const change =
+        input.displayName !== undefined || input.primarySegment !== undefined;
+      if (change) {
+        if (!input.expectedUpdatedAt)
+          throw new Error('ADMIN_EXPECTED_VERSION_REQUIRED');
+        const updated = await tx.organization.updateMany({
+          where: { id, updatedAt: input.expectedUpdatedAt },
+          data: {
+            displayName: input.displayName,
+            primarySegment: input.primarySegment,
+          },
+        });
+        if (updated.count !== 1) throw new Error('ADMIN_VERSION_CONFLICT');
+      }
+      const after = await tx.organization.findUniqueOrThrow({ where: { id } });
       await tx.auditLog.create({
         data: {
           organizationId: id,
@@ -189,19 +368,24 @@ export class PlatformAdministrationRepository {
           action: 'PLATFORM_ORGANIZATION_UPDATED',
           entityType: 'ORGANIZATION',
           entityId: id,
+          requestId: auditMetadata.correlationId,
           before: {
-            status: before.status,
-            subscriptionStatus: before.subscriptionStatus,
-            planId: before.planId,
+            displayName: before.displayName,
+            primarySegment: before.primarySegment,
+            updatedAt: before.updatedAt.toISOString(),
           },
           after: {
-            status: organization.status,
-            subscriptionStatus: organization.subscriptionStatus,
-            planId: organization.planId,
+            displayName: after.displayName,
+            primarySegment: after.primarySegment,
+            updatedAt: after.updatedAt.toISOString(),
+          },
+          metadata: {
+            ...auditMetadata,
+            result: change ? 'CONFIRMED' : 'NO_CHANGE',
           },
         },
       });
-      return organization;
+      return true;
     });
   }
 

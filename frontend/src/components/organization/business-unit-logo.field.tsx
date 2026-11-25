@@ -60,8 +60,9 @@ export function BusinessUnitLogoField({
       return;
     }
 
-    setPrevia(preparada.dataUrl);
+    setPrevia(arquivo.type === "image/heic" ? null : preparada.dataUrl);
     enviar.mutate(preparada.dataUrl, {
+      onSuccess: (result) => setPrevia(result.logoUrl),
       onError: () => setPrevia(null),
     });
   };
@@ -103,7 +104,7 @@ export function BusinessUnitLogoField({
             <input
               ref={entrada}
               type="file"
-              accept="image/png,image/jpeg,image/webp"
+              accept="image/png,image/jpeg,image/webp,image/heic"
               className="hidden"
               onChange={(evento) => {
                 void escolher(evento.target.files?.[0]);

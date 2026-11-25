@@ -1,8 +1,10 @@
+import { TenantRecovery } from '../../tenant-operations/tenant-operation.policy';
 import {
   Body,
   Controller,
   Delete,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Param,
@@ -13,6 +15,12 @@ import {
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ApiPublicErrors } from '../../../common/public-errors';
+import { requestClientIp } from '../../../common/trusted-client-origin';
+import {
+  SECURITY_CONFIRMATION_HEADER,
+  SecurityConfirmation,
+  SecurityConfirmationDto,
+} from '../../../common/biometrics/security-confirmation';
 import { Surfaces } from '../../../decorators';
 import { ForbiddenException } from '../../../exceptions';
 import { ParseUUIDv7Pipe } from '../../../pipes';
@@ -41,8 +49,10 @@ export class ProfileController {
     private readonly mfa: MfaService,
     private readonly avatars: AvatarService,
     private readonly readModels: IdentityReadModelMapper,
+    private readonly confirmation: SecurityConfirmation,
   ) {}
 
+  @TenantRecovery('identity')
   @Get()
   async get(@Req() request: IdentityRequest) {
     return this.readModels.profile(
@@ -54,6 +64,7 @@ export class ProfileController {
   }
 
   /** Current server-resolved access; no token or credential material. */
+  @TenantRecovery('identity')
   @Get('access')
   access(@Req() request: IdentityRequest) {
     const identity = request.identity!;
@@ -137,6 +148,7 @@ export class ProfileController {
    * com a antiga não deve continuar dentro, mas quem acabou de trocá-la não
    * deve ser expulso da tela.
    */
+  @TenantRecovery('identity')
   @Post('password')
   @HttpCode(HttpStatus.NO_CONTENT)
   changePassword(
@@ -150,6 +162,7 @@ export class ProfileController {
     );
   }
 
+  @TenantRecovery('identity')
   @Get('sessions')
   async sessions(@Req() request: IdentityRequest) {
     return (await this.authentication.listSessions(request.identity!.id)).map(
@@ -157,6 +170,7 @@ export class ProfileController {
     );
   }
 
+  @TenantRecovery('identity')
   @Delete('sessions/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   revokeSession(
@@ -166,21 +180,67 @@ export class ProfileController {
     return this.authentication.revokeSession(request.identity!.id, sessionId);
   }
 
+  @TenantRecovery('identity')
+  @Post('security-confirmation')
+  @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', 'no-store')
+  confirmSecurityChange(
+    @Req() request: IdentityRequest,
+    @Body() input: SecurityConfirmationDto,
+  ) {
+    const identity = request.identity!;
+    return this.confirmation.issue(
+      {
+        audience: 'team',
+        userId: identity.id,
+        sessionId: identity.sessionId,
+        origin: requestClientIp(request),
+      },
+      input,
+      () =>
+        this.authentication.confirmSecurityChange(
+          identity.id,
+          input.currentPassword,
+          input.mfaCode,
+        ),
+    );
+  }
+
+  @TenantRecovery('identity')
   @Post('mfa/enrollment')
+  @Header('Cache-Control', 'no-store')
   beginMfa(@Req() request: IdentityRequest) {
     return this.profiles
       .email(request.identity!.id)
       .then((email) => this.mfa.beginEnrollment(request.identity!.id, email));
   }
 
+  @TenantRecovery('identity')
   @Post('mfa/enable')
-  enableMfa(@Req() request: IdentityRequest, @Body() input: EnableMfaDto) {
+  @Header('Cache-Control', 'no-store')
+  async enableMfa(
+    @Req() request: IdentityRequest,
+    @Body() input: EnableMfaDto,
+  ) {
+    await this.confirmation.consume(
+      'team',
+      request.identity!.sessionId,
+      'MFA_ENABLE',
+      request.header(SECURITY_CONFIRMATION_HEADER),
+    );
     return this.mfa.enable(request.identity!.id, input.factorId, input.code);
   }
 
+  @TenantRecovery('identity')
   @Delete('mfa')
   @HttpCode(HttpStatus.NO_CONTENT)
-  disableMfa(@Req() request: IdentityRequest) {
+  async disableMfa(@Req() request: IdentityRequest) {
+    await this.confirmation.consume(
+      'team',
+      request.identity!.sessionId,
+      'MFA_DISABLE',
+      request.header(SECURITY_CONFIRMATION_HEADER),
+    );
     return this.mfa.disable(request.identity!.id);
   }
 }

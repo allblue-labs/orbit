@@ -78,9 +78,7 @@ export function emptyDraft(
 /**
  * O que o atendimento preenche, e o que ele deliberadamente não preenche.
  *
- * Pagador e referência vêm dele — são fatos do atendimento. **O valor não**: o
- * sistema não sabe o que foi cobrado a menos que exista proposta ou lançamento, e
- * adivinhar o número de um recibo é pior que pedir que alguém o digite.
+ * Prefills the recorded service amount if present. The issuer confirms the amount received.
  */
 export function fromOperation(
   draft: ReceiptDraft,
@@ -97,7 +95,8 @@ export function fromOperation(
     operationId: source.id,
     customerId: cliente?.id ?? null,
     payer: cliente ? (cliente.tradeName ?? cliente.legalName) : draft.payer,
-    payerDocument: cliente?.documentNumber ?? draft.payerDocument,
+    payerDocument: cliente?.documentNumber ?? "",
+    amount: source.amount?.replace(".", ",") ?? "",
     referring: `${numero} — ${source.title}`,
   };
 }

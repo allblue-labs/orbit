@@ -165,6 +165,7 @@ export class ReportRepository {
     sourceHash: string,
     stored: {
       storageBucket: string;
+      storageProvider: string;
       storageKey: string;
       sizeBytes: bigint;
       sha256: string;
@@ -184,6 +185,7 @@ export class ReportRepository {
           version: (latest._max.version ?? 0) + 1,
           format: 'PDF',
           storageBucket: stored.storageBucket,
+          storageProvider: stored.storageProvider,
           storageKey: stored.storageKey,
           mimeType: 'application/pdf',
           sizeBytes: stored.sizeBytes,
@@ -198,7 +200,7 @@ export class ReportRepository {
     return this.rls.run((transaction) =>
       transaction.generatedDocument.findMany({
         where: { reportId },
-        omit: { storageKey: true },
+        omit: { storageKey: true, storageProvider: true },
         orderBy: { version: 'desc' },
       }),
     );

@@ -120,7 +120,9 @@ describe('MobileFieldRepository projection bounds', () => {
         take: 1,
         where: expect.objectContaining({
           id: sourceId,
-          status: { notIn: ['COMPLETED', 'CANCELLED'] },
+          /* Concluído é encontrável: a lista de concluídos leva ao detalhe
+             dele. Cancelado continua fora. */
+          status: { notIn: ['CANCELLED'] },
         }),
       }),
     );

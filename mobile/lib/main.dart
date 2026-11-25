@@ -1,6 +1,7 @@
 /// Ponto de entrada do Orbit Operator.
 library;
 
+import 'features/customer_portal/application/portal_session.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -13,16 +14,20 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'app/providers.dart';
 import 'app/session_runtime.dart';
 import 'core/storage/read_cache.dart';
+import 'core/observability/orbit_error_reporting.dart';
 import 'features/artifact/data/document_file.dart';
 import 'core/routing/orbit_router.dart';
 import 'core/theme/orbit_theme.dart';
 import 'core/presentation/orbit_format.dart';
 import 'features/authentication/domain/session.dart';
+import 'features/equipment/application/equipment_qr_link.dart';
 import 'features/notifications/application/push_providers.dart';
 import 'features/notifications/domain/deep_link.dart';
 import 'features/notifications/presentation/foreground_notifications.dart';
 
-Future<void> main() async {
+Future<void> main() => withErrorReporting(_startOrbit);
+
+Future<void> _startOrbit() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // O app de campo é usado na vertical, com o aparelho na mão.
@@ -55,20 +60,95 @@ class OrbitOperatorApp extends ConsumerStatefulWidget {
   ConsumerState<OrbitOperatorApp> createState() => _OrbitOperatorAppState();
 }
 
+typedef _EquipmentLinkScope = (String, String, String?, String?);
+
 class _OrbitOperatorAppState extends ConsumerState<OrbitOperatorApp>
     with WidgetsBindingObserver {
   StreamSubscription<String>? _avisosTocados;
   SessionRuntime? _runtime;
   Object? _runtimeIdentity;
   bool _refreshingProfile = false;
+  PushTap? _pendingPushTap;
+  ({String token, _EquipmentLinkScope? scope})? _pendingEquipmentLink;
+
+  _EquipmentLinkScope _equipmentLinkScope(OrbitSession session) => (
+    session.user.id,
+    session.claims.sessionId,
+    session.organizationId,
+    session.businessUnitId,
+  );
+
+  @override
+  Future<bool> didPushRouteInformation(RouteInformation information) async {
+    final token = equipmentLinkToken(information.uri);
+    if (token == null) return false;
+    final auth = ref.read(authControllerProvider);
+    setState(() {
+      _pendingEquipmentLink = (
+        token: token,
+        scope: auth is AuthAuthenticated
+            ? _equipmentLinkScope(auth.session)
+            : null,
+      );
+    });
+    return true;
+  }
+
+  void _openEquipmentAfterAuth(AuthState auth) {
+    final pending = _pendingEquipmentLink;
+    if (pending == null) return;
+    if (auth is AuthUnauthenticated && pending.scope != null) {
+      _pendingEquipmentLink = null;
+    }
+    if (auth is! AuthAuthenticated) return;
+
+    final scope = _equipmentLinkScope(auth.session);
+    if (pending.scope != null && pending.scope != scope) {
+      _pendingEquipmentLink = null;
+      return;
+    }
+    if (auth.session.user.mustChangePassword) {
+      _pendingEquipmentLink = (token: pending.token, scope: scope);
+      return;
+    }
+
+    _pendingEquipmentLink = null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _pendingEquipmentLink != null) return;
+      final current = ref.read(authControllerProvider);
+      if (current is! AuthAuthenticated ||
+          current.session.user.mustChangePassword ||
+          _equipmentLinkScope(current.session) != scope) {
+        return;
+      }
+      final router = _runtime!.container.read(routerProvider);
+      final destination = OrbitRoutes.equipmentFromQr(pending.token);
+      if (router.routerDelegate.currentConfiguration.isNotEmpty &&
+          router.state.uri.path == destination) {
+        return;
+      }
+      unawaited(router.push<void>(destination));
+    });
+  }
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Android pode entregar o link de abertura na rota inicial. O roteador
+    // vive por sessão, então a raiz lê esse valor uma única vez.
+    final initialRoute = Uri.tryParse(
+      WidgetsBinding.instance.platformDispatcher.defaultRouteName,
+    );
+    final token = initialRoute == null
+        ? null
+        : equipmentLinkToken(initialRoute);
+    if (token != null) _pendingEquipmentLink = (token: token, scope: null);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Restaura a sessão guardada.
+      // Restaura a sessão guardada — a da equipe e a do cliente. Um aparelho
+      // tem no máximo uma das duas; a outra responde "não há" na hora.
       ref.read(authControllerProvider.notifier).restore();
+      ref.read(portalSessionProvider.notifier).restore();
     });
 
     /// Tocar num aviso abre o que ele é sobre.
@@ -113,21 +193,40 @@ class _OrbitOperatorAppState extends ConsumerState<OrbitOperatorApp>
     }
   }
 
-  void _abrirAviso(String caminho) {
-    final destino = routeForDeepLink(caminho);
+  void _abrirAviso(String event) {
+    final tap = PushTap.parse(event);
+    if (tap == null) return;
+    if (ref.read(authControllerProvider) is AuthRestoring) {
+      _pendingPushTap = tap;
+      return;
+    }
+    _navigatePush(tap);
+  }
 
-    /// Caminho desconhecido leva à caixa de avisos, nunca a um palpite: uma
-    /// tela errada passa por defeito, quando só chegou um tipo novo de aviso.
+  void _navigatePush(PushTap tap) {
+    final auth = ref.read(authControllerProvider);
+    if (auth is! AuthAuthenticated ||
+        !tap.matches(
+          userId: auth.session.user.id,
+          tenantId: auth.session.organizationId,
+        )) {
+      return;
+    }
     _runtime?.container
         .read(routerProvider)
-        .go(destino ?? OrbitRoutes.notifications);
+        .go(routeForDeepLink(tap.deepLink) ?? OrbitRoutes.notifications);
   }
 
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authControllerProvider);
+    final portal = ref.watch(portalSessionProvider);
     final session = auth is AuthAuthenticated ? auth.session : null;
     final identity = (
+      /* Entrar ou sair como cliente também recria o runtime: o cache de
+         imagens e o roteador de quem saiu não sobrevivem a quem entra. */
+      portal.runtimeType,
+      portal is PortalSignedIn ? portal.me.identityId : null,
       auth.runtimeType,
       session?.user.id,
       session?.claims.sessionId,
@@ -152,6 +251,15 @@ class _OrbitOperatorAppState extends ConsumerState<OrbitOperatorApp>
       }
       WidgetsBinding.instance.addPostFrameCallback((_) => previous?.dispose());
     }
+    if (auth is! AuthRestoring && _pendingPushTap != null) {
+      final tap = _pendingPushTap!;
+      _pendingPushTap = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _navigatePush(tap);
+      });
+    }
+
+    _openEquipmentAfterAuth(auth);
 
     return KeyedSubtree(
       key: ValueKey(identity),

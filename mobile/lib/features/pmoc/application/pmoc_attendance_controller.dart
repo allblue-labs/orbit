@@ -171,6 +171,25 @@ class PmocAttendanceController extends StateNotifier<PmocAttendanceState> {
     ),
   );
 
+  /// Inicia, e **lança** se não deu certo.
+  ///
+  /// Para o avanço do roteiro: ele segue para a próxima etapa só quando a ação
+  /// termina sem erro, e `start` guarda a recusa no estado em vez de lançá-la.
+  /// A recusa continua visível na tela — é o estado que a mostra —; lançar aqui
+  /// só impede o roteiro de seguir para uma etapa que ainda não pode abrir.
+  Future<void> startOrThrow() async {
+    await start();
+    if (!mounted) return;
+    if (state.error case final Object error) throw error;
+    if (state.execution == null) {
+      throw const OrbitException(
+        kind: OrbitErrorKind.http,
+        publicMessage: 'Não foi possível iniciar o atendimento. Tente novamente.',
+        code: 'START_NOT_CONFIRMED',
+      );
+    }
+  }
+
   Future<bool> saveWork({
     required Map<String, bool> answers,
     String? notes,

@@ -1,39 +1,15 @@
 /**
- * Cria e reconcilia o papel de **runtime** do Orbit.
- *
- * ## Por que existe
- *
- * O papel que o `docker-compose` cria é o superusuário do contêiner: o
- * `POSTGRES_USER` do `postgres:17-alpine` nasce com `SUPERUSER` e, portanto,
- * com `BYPASSRLS`. Enquanto a aplicação conectar com ele, as 68 tabelas com
- * `FORCE ROW LEVEL SECURITY` são decorativas — nenhuma política é avaliada, e
- * o isolamento que funciona é só o da camada de aplicação.
- *
- * Este script separa os dois papéis:
- *
- * - **administrativo** (`DATABASE_URL`) — dono do schema, roda migrations, DDL
- *   e este próprio provisionamento;
- * - **runtime** (`APP_DATABASE_URL`) — `LOGIN`, `NOSUPERUSER`, `NOBYPASSRLS`,
- *   sem `CREATEDB`/`CREATEROLE`, sem posse de tabela. Só DML, e sujeito a toda
- *   política.
- *
- * ## Idempotente de propósito
- *
- * Roda a cada `docker compose up` logo depois do `prisma migrate deploy`, e
- * pode rodar mil vezes: cria o papel se faltar, reajusta atributos e senha,
- * concede o que ainda não foi concedido. É assim que uma tabela nova, criada
- * pela migration da semana que vem, ganha os `GRANT`s sem passo manual — e o
- * `ALTER DEFAULT PRIVILEGES` cobre o intervalo até a próxima execução.
- *
- * ## O que ele deliberadamente não faz
- *
- * Não transfere posse de tabela para o papel de runtime. Dono de tabela escapa
- * de RLS quando a tabela não tem `FORCE`; deixar a posse com o administrador
- * remove essa dúvida inteira.
+ * O migrador usa DIRECT_DATABASE_URL para reconciliar os papéis de runtime.
+ * A fase bootstrap cria o papel base antes das migrations. A reconciliação
+ * posterior confere tabelas com RLS forçada, catálogos somente leitura e as
+ * assinaturas autorizadas de funções privilegiadas. API e consumidores
+ * entram pelo PgBouncer com a própria DATABASE_URL.
  */
+import { directDatabaseUrl } from './direct-database-url';
 import { config } from 'dotenv';
 import { resolve } from 'node:path';
 import { Client } from 'pg';
+import { runtimeDefinerFunctions } from './database-function-grants';
 
 config({ path: resolve(process.cwd(), '.env'), quiet: true });
 config({ path: resolve(process.cwd(), '../.env'), quiet: true });
@@ -61,7 +37,7 @@ interface RoleAttributes {
 }
 
 async function provision(): Promise<void> {
-  const adminUrl = required('DATABASE_URL');
+  const adminUrl = directDatabaseUrl();
   const appUser = required('APP_DATABASE_USER');
   const appPassword = required('APP_DATABASE_PASSWORD');
 
@@ -142,25 +118,146 @@ async function provision(): Promise<void> {
      * sem `TRIGGER`, sem `CREATE` no schema. O runtime lê e escreve linhas; ele
      * não muda a forma do banco.
      */
-    await admin.query(
-      `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ${role}`,
-    );
+    const tablesForRuntime = await admin.query<{
+      table_name: string;
+      scoped: boolean;
+    }>(`
+      SELECT c.relname AS table_name, c.relrowsecurity AND c.relforcerowsecurity AS scoped
+      FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+      WHERE n.nspname='public' AND c.relkind IN ('r','p','v','m')`);
+    for (const table of tablesForRuntime.rows) {
+      const qualified = `public.${quoteIdentifier(table.table_name)}`;
+      if (table.scoped) {
+        await admin.query(
+          `GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE ${qualified} TO ${role}`,
+        );
+      } else {
+        await admin.query(
+          `REVOKE ALL ON TABLE ${qualified} FROM PUBLIC, ${role}`,
+        );
+        if (['modules', 'pmoc_plan_name_options'].includes(table.table_name)) {
+          await admin.query(`GRANT SELECT ON TABLE ${qualified} TO ${role}`);
+        }
+      }
+    }
     await admin.query(
       `GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ${role}`,
     );
+    // Reconcile privileges by the effective signature, including on upgrades.
+    await admin.query('BEGIN');
+    await admin.query('SET LOCAL search_path = pg_catalog, public');
+    const routines = await admin.query<{
+      signature: string;
+      definer: boolean;
+      trigger: boolean;
+    }>(`
+      SELECT p.oid::regprocedure::text AS signature, p.prosecdef AS definer,
+             p.prorettype IN ('trigger'::regtype,'event_trigger'::regtype) AS trigger
+      FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+      WHERE n.nspname='public' AND p.prokind='f'`);
+    for (const routine of routines.rows) {
+      const scope = `FUNCTION ${routine.signature.startsWith('public.') ? routine.signature : `public.${routine.signature}`}`;
+      if (routine.trigger || routine.definer) {
+        await admin.query(`REVOKE EXECUTE ON ${scope} FROM PUBLIC, ${role}`);
+      }
+      if (
+        !routine.trigger &&
+        (!routine.definer || runtimeDefinerFunctions.has(routine.signature))
+      ) {
+        await admin.query(`GRANT EXECUTE ON ${scope} TO ${role}`);
+      }
+    }
     await admin.query(
-      `GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO ${role}`,
+      `REVOKE TEMPORARY ON DATABASE ${quoteIdentifier(database)} FROM PUBLIC, ${role}`,
     );
+    await admin.query('COMMIT');
+
+    const combined =
+      process.env.NODE_ENV !== 'production' &&
+      process.env.DATABASE_ALLOW_COMBINED_ROLE === 'true';
+    await admin.query(
+      `${combined ? 'GRANT orbit_queue_worker TO' : 'REVOKE orbit_queue_worker FROM'} ${role}`,
+    );
+    for (const [workerName, passwordKey] of [
+      ['orbit_worker', 'WORKER_DATABASE_PASSWORD'],
+      ['orbit_documents', 'DOCUMENTS_DATABASE_PASSWORD'],
+    ] as const) {
+      const password = process.env[passwordKey]?.trim();
+      if (!password && process.env.NODE_ENV !== 'production') continue;
+      if (!password || password.length < 12 || password === appPassword) {
+        throw new Error(
+          `${passwordKey} must be a distinct password of at least 12 characters`,
+        );
+      }
+      const worker = quoteIdentifier(workerName);
+      const { rowCount } = await admin.query(
+        'SELECT 1 FROM pg_roles WHERE rolname=$1',
+        [workerName],
+      );
+      if (!rowCount) await admin.query(`CREATE ROLE ${worker}`);
+      await admin.query(
+        `ALTER ROLE ${worker} LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION INHERIT PASSWORD ${quoteLiteral(password)}`,
+      );
+      await admin.query(`GRANT ${role}, orbit_queue_worker TO ${worker}`);
+    }
+    if (process.env.WORKER_DATABASE_PASSWORD) {
+      await admin.query(
+        'GRANT EXECUTE ON FUNCTION public.app_purge_expired_tenant_table(uuid,text) TO orbit_worker',
+      );
+    }
+    if (combined) {
+      await admin.query(
+        `GRANT EXECUTE ON FUNCTION public.app_purge_expired_tenant_table(uuid,text) TO ${role}`,
+      );
+    }
+    const backupPassword = process.env.BACKUP_DATABASE_PASSWORD?.trim();
+    if (backupPassword) {
+      if (!/^[a-fA-F0-9]{32,128}$/.test(backupPassword))
+        throw new Error(
+          'BACKUP_DATABASE_PASSWORD must be a hexadecimal secret',
+        );
+      await admin.query(`DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='orbit_backup') THEN
+          CREATE ROLE orbit_backup;
+        END IF;
+      END $$`);
+      const membership = await admin.query(`SELECT 1 FROM pg_auth_members
+        WHERE member='orbit_backup'::regrole OR roleid='orbit_backup'::regrole LIMIT 1`);
+      if (membership.rowCount)
+        throw new Error('orbit_backup must have no role memberships');
+      await admin.query(`ALTER ROLE orbit_backup
+        LOGIN NOSUPERUSER BYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE NOREPLICATION
+        PASSWORD ${quoteLiteral(backupPassword)}`);
+      await admin.query(`ALTER ROLE orbit_backup IN DATABASE ${quoteIdentifier(database)}
+        SET default_transaction_read_only TO on`);
+      await admin.query(
+        `GRANT CONNECT ON DATABASE ${quoteIdentifier(database)} TO orbit_backup`,
+      );
+      await admin.query('REVOKE ALL ON SCHEMA public FROM orbit_backup');
+      await admin.query(
+        'REVOKE ALL ON ALL TABLES IN SCHEMA public FROM orbit_backup',
+      );
+      await admin.query(
+        'REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM orbit_backup',
+      );
+      await admin.query('GRANT USAGE ON SCHEMA public TO orbit_backup');
+      await admin.query(
+        'GRANT SELECT ON ALL TABLES IN SCHEMA public TO orbit_backup',
+      );
+      await admin.query(
+        'GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO orbit_backup',
+      );
+    }
 
     /** Cobre o que a próxima migration criar antes deste script rodar de novo. */
     await admin.query(
-      `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ${role}`,
+      `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE SELECT, INSERT, UPDATE, DELETE ON TABLES FROM ${role}`,
     );
     await admin.query(
       `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO ${role}`,
     );
     await admin.query(
-      `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO ${role}`,
+      `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM ${role}`,
     );
 
     /**
@@ -199,6 +296,11 @@ async function provision(): Promise<void> {
        * depois — que é exatamente o que ela existe para impedir.
        */
       'billing_webhook_events',
+      'platform_tenant_provisionings',
+      'email_outbound_messages',
+      'email_provider_messages',
+      'email_feedback_events',
+      'email_suppressions',
     ]) {
       await admin.query(
         `DO $$
@@ -226,6 +328,12 @@ async function provision(): Promise<void> {
     await admin.query(`DO $$ BEGIN
       IF to_regclass('public.account_document_registrations') IS NOT NULL THEN
         EXECUTE 'REVOKE INSERT, UPDATE, DELETE ON TABLE public.account_document_registrations FROM ${role}';
+      END IF;
+    END $$`);
+
+    await admin.query(`DO $$ BEGIN
+      IF to_regclass('public.account_email_owners') IS NOT NULL THEN
+        EXECUTE 'REVOKE INSERT, UPDATE, DELETE ON TABLE public.account_email_owners FROM ${role}';
       END IF;
     END $$`);
 

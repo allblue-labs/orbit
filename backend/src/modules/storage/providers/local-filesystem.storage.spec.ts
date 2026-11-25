@@ -1,4 +1,4 @@
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { LocalFilesystemStorageProvider } from './local-filesystem.storage';
@@ -17,6 +17,8 @@ describe('LocalFilesystemStorageProvider', () => {
     );
   });
 
+  afterEach(async () => rm(root, { recursive: true, force: true }));
+
   const ref = { bucket: 'orbit-artifacts', objectKey: 'org/manifests/a.pdf' };
 
   it('grava, lê e remove preservando o conteúdo', async () => {
@@ -33,6 +35,27 @@ describe('LocalFilesystemStorageProvider', () => {
 
     await provider.remove(ref);
     expect(await provider.head(ref)).toBeNull();
+  });
+
+  it('publishes exactly one winner atomically and refuses subsequent overwrites', async () => {
+    const writes = await Promise.allSettled(
+      [Buffer.from('one'), Buffer.from('two')].map((body) =>
+        provider.put({ ...ref, body, mimeType: 'application/pdf' }),
+      ),
+    );
+    expect(writes.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    const original = await provider.get(ref);
+    await expect(
+      provider.put({
+        ...ref,
+        body: Buffer.from('changed'),
+        mimeType: 'application/pdf',
+      }),
+    ).rejects.toThrow();
+    expect(await provider.get(ref)).toEqual(original);
+    expect(await readdir(join(root, ref.bucket, 'org/manifests'))).toEqual([
+      'a.pdf',
+    ]);
   });
 
   it('remover objeto inexistente não é erro', async () => {
@@ -111,16 +134,12 @@ describe('LocalFilesystemStorageProvider', () => {
       expect(outro.verify(payloadOf(signed.url))).toBe(false);
     });
 
-    it('upload declara o cabeçalho que precisa ser repetido', async () => {
-      const signed = await provider.sign({
-        ...ref,
-        operation: 'upload',
-        expiresInSeconds: 300,
-        mimeType: 'application/pdf',
-      });
-
-      expect(signed.method).toBe('PUT');
-      expect(signed.requiredHeaders['content-type']).toBe('application/pdf');
+    it('does not issue direct upload signatures outside a reservation', async () => {
+      await expect(
+        Promise.resolve().then(() =>
+          provider.sign({ ...ref, operation: 'upload', expiresInSeconds: 300 }),
+        ),
+      ).rejects.toThrow();
     });
   });
 });

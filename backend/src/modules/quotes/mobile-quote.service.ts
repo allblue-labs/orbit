@@ -1,3 +1,5 @@
+import { AssetService } from '../organizations/business-units/equipaments/asset.service';
+import type { CreateAssetDto } from '../organizations/business-units/equipaments/asset.dto';
 import { Injectable } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
@@ -22,6 +24,7 @@ export class MobileQuoteService {
     private readonly quotes: QuoteService,
     private readonly mapper: QuoteMapper,
     private readonly acceptance: QuoteAcceptanceService,
+    private readonly assets: AssetService,
   ) {}
 
   authorize(actor: AuthenticatedIdentity) {
@@ -102,6 +105,7 @@ export class MobileQuoteService {
         },
       });
       return {
+        businessUnitId,
         customer,
         addresses,
         equipment,
@@ -264,6 +268,44 @@ export class MobileQuoteService {
     );
   }
 
+  async createEquipment(
+    actor: AuthenticatedIdentity,
+    customerId: string,
+    input: CreateAssetDto,
+  ) {
+    const organizationId = this.authorize(actor);
+    const businessUnitId = this.unit(actor, input.businessUnitId);
+    if (input.customerId && input.customerId !== customerId)
+      throw new ValidationException(
+        'O equipamento deve pertencer ao cliente selecionado.',
+      );
+    // The route owns the customer relation; payload cannot select another customer.
+    return this.assets.create(organizationId, {
+      ...input,
+      businessUnitId,
+      customerId,
+    });
+  }
+
+  async assertDocumentRead(actor: AuthenticatedIdentity, id: string) {
+    if (!actor.organizationId)
+      throw new ForbiddenException('Selecione uma organização.');
+    const quote = await this.rls.run((tx) =>
+      tx.quote.findFirst({
+        where: {
+          id,
+          organizationId: actor.organizationId!,
+          businessUnitId: { in: [...actor.businessUnitIds] },
+          deletedAt: null,
+          ...(!actor.isOrganizationOwner ? { mobileVisible: true } : {}),
+        },
+        select: { id: true },
+      }),
+    );
+    if (!quote) throw new EntityNotFoundException('Orçamento', id);
+    return actor.organizationId;
+  }
+
   async assertOwn(actor: AuthenticatedIdentity, id: string) {
     const organizationId = this.authorize(actor);
     const quote = await this.rls.run((tx) =>
@@ -288,6 +330,6 @@ export class MobileQuoteService {
   }
 
   async document(actor: AuthenticatedIdentity, id: string) {
-    return this.quotes.document(id, await this.assertOwn(actor, id));
+    return this.quotes.document(id, await this.assertDocumentRead(actor, id));
   }
 }

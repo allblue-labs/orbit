@@ -33,6 +33,7 @@ import {
 } from "@/hooks/quotes/use-quotes";
 import { ROUTES } from "@/lib/routes";
 import { type Quote } from "@/types/quotes";
+import { IssuedDocumentActions } from "@/documents/issued-document-actions";
 import { QuoteConvertDialog } from "./quote-convert.dialog";
 import { QuoteCustomerAcceptance } from "./quote-customer-acceptance";
 
@@ -66,7 +67,8 @@ export function QuoteActions({ quote }: { quote: Quote }) {
    * Só não se emite rascunho, porque ali o preço ainda muda — e essa é a mesma
    * regra que o servidor aplica, não uma segunda cópia dela.
    */
-  const showIssue = issue.allowed && quote.status !== "DRAFT";
+  const showIssue =
+    issue.allowed && quote.status !== "DRAFT" && !quote.document;
 
   const anything =
     showSend ||
@@ -74,7 +76,8 @@ export function QuoteActions({ quote }: { quote: Quote }) {
     showReject ||
     showCancel ||
     showConvert ||
-    showIssue;
+    showIssue ||
+    quote.document !== null;
 
   if (!anything) {
     return (
@@ -135,6 +138,17 @@ export function QuoteActions({ quote }: { quote: Quote }) {
           assina e se emite. Ficar nesta tela deixaria a pessoa achando que
           terminou — com um documento em rascunho que ninguém recebeu.
         */}
+        {/* Já emitida: o documento sai daqui, sem ir até a execução. */}
+        {quote.document ? (
+          <IssuedDocumentActions
+            executionId={quote.document.executionId}
+            renderStatus={quote.document.renderStatus}
+            code={quote.document.code}
+            title={quote.title}
+            variant="full"
+          />
+        ) : null}
+
         {showIssue ? (
           <Button
             size="sm"

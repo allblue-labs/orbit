@@ -1,119 +1,68 @@
 import { describe, expect, it } from "vitest";
+
 import type { AnalyticsKpi } from "@/types/dashboard";
-import { presentMetric } from "@/metrics";
-import { comparativeAxes } from "./comparative-radar.model";
-const metric = (id: string, value: number, sampleSize = 1): AnalyticsKpi => ({
-  id,
-  value,
-  sampleSize,
-  domain: "OPERATIONS",
-  unit: "%",
-  label: id,
-  status: "HEALTHY",
-  direction: "STABLE",
-  changePercent: 0,
-  source: "operations",
-  dataQuality: "DERIVED",
-});
-describe("dashboard measured indicators", () => {
-  it("keeps a real zero and an absent denominator distinct", () => {
-    const rows = comparativeAxes(
-      [metric("operations.sla_compliance", 0, 2)],
-      [metric("operations.sla_compliance", 0, 0)],
+import {
+  radarDeltaText,
+  radarRows,
+  radarShape,
+  radarSummary,
+} from "./comparative-radar.model";
+
+const rate = (id: string, numerator: number, denominator: number): AnalyticsKpi =>
+  ({
+    id,
+    label: id,
+    domain: "OPERATIONS",
+    value: denominator ? Math.round((numerator / denominator) * 100) : 0,
+    unit: "%",
+    sampleSize: denominator,
+    basis: { numerator, denominator },
+    status: "HEALTHY",
+    direction: "STABLE",
+    changePercent: 0,
+    source: "operations",
+    dataQuality: "DERIVED",
+  }) as AnalyticsKpi;
+
+describe("radar comparativo", () => {
+  it("compara em pontos e diz se melhorou", () => {
+    const rows = radarRows(
+      [rate("operations.sla_compliance", 9, 10), rate("pmoc.compliance", 3, 4)],
+      [rate("operations.sla_compliance", 8, 10), rate("pmoc.compliance", 4, 4)],
     );
-    expect(rows).toEqual([
-      {
-        axis: "Prazo",
-        label: "Concluídos no prazo",
-        current: 0,
-        previous: null,
-      },
+    expect(rows.map((row) => [row.axis, row.current, row.delta, row.trend])).toEqual([
+      ["No prazo", 90, 10, "better"],
+      ["PMOC", 75, -25, "worse"],
     ]);
+    expect(rows[0].currentBasis).toBe("9 de 10");
+    expect(radarDeltaText(rows[0])).toBe("+10 pts");
+    expect(radarDeltaText(rows[1])).toBe("−25 pts");
+    expect(radarSummary(rows)).toBe("Melhorou em 1 e piorou em 1 de 2 indicadores.");
   });
-  it("does not create a previous series when no previous metric exists", () => {
-    expect(
-      comparativeAxes([metric("pmoc.compliance", 100)], [])[0].previous,
-    ).toBeNull();
-  });
-  it("excludes unknown axes, counts and unmeasured rates", () => {
-    expect(
-      comparativeAxes(
-        [
-          metric("equipment.availability", 100),
-          { ...metric("operations.total", 5), unit: undefined },
-          metric("rvt.compliance", 0, 0),
-        ],
-        [],
-      ),
-    ).toEqual([]);
-  });
-  it("uses all five short operational axes without resizing the component", () => {
-    expect(
-      comparativeAxes(
-        [
-          "operations.sla_compliance",
-          "operations.scheduling_coverage",
-          "technicians.assignment_coverage",
-          "pmoc.compliance",
-          "rvt.compliance",
-        ].map((id) => metric(id, 80)),
-        [],
-      ).map((row) => row.axis),
-    ).toEqual(["Prazo", "Agenda", "Equipe", "PMOC", "RVT"]);
-  });
-  it("selects shared axes before drawing a comparison with missing samples", () => {
-    const ids = [
-      "operations.sla_compliance",
-      "operations.scheduling_coverage",
-      "technicians.assignment_coverage",
-      "pmoc.compliance",
-      "rvt.compliance",
-    ];
-    const rows = comparativeAxes(
-      ids.map((id) => metric(id, 80)),
-      ids.slice(1).map((id) => metric(id, 70)),
+
+  it("sem base não é zero, e não entra no desenho", () => {
+    const rows = radarRows(
+      [rate("operations.sla_compliance", 0, 2), rate("rvt.compliance", 0, 0)],
+      [rate("operations.sla_compliance", 0, 0)],
     );
-    expect(rows).toHaveLength(4);
-    expect(
-      rows.every((row) => row.current !== null && row.previous !== null),
-    ).toBe(true);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ current: 0, previous: null, delta: null, trend: "none" });
+    expect(radarDeltaText(rows[0])).toBe("sem anterior");
+    expect(radarSummary(rows)).toBeNull();
+    expect(radarShape(rows).axes).toEqual([]);
   });
-  it("uses the measured current axes when there is no complete comparison", () => {
-    const current = [
-      "operations.sla_compliance",
-      "operations.scheduling_coverage",
-      "technicians.assignment_coverage",
-    ].map((id) => metric(id, 80));
-    const rows = comparativeAxes(current, [metric("pmoc.compliance", 100)]);
-    expect(rows).toHaveLength(3);
-    expect(
-      rows.every((row) => row.current !== null && row.previous === null),
-    ).toBe(true);
-  });
-  it("displays missing samples as unknown and hides fabricated growth", () => {
-    const result = presentMetric({
-      ...metric("operations.sla_compliance", 0, 0),
-      comparisonAvailable: false,
-      changePercent: 100,
-    });
-    expect(result.value).toBe("—");
-    expect(result.statusLabel).toBe("Sem base de cálculo");
-    expect(result.change).toBeUndefined();
-  });
-  it("shows percentage points rather than relative growth for rate comparisons", () => {
-    expect(
-      presentMetric({
-        ...metric("operations.sla_compliance", 90),
-        changeUnit: "POINTS",
-        changePercent: 10,
-        comparisonAvailable: true,
-      }).change,
-    ).toBe("+10 p.p.");
-    expect(
-      presentMetric({
-        ...metric("operations.completed", 0, 0),
-        unit: undefined,
-      }).value,
-    ).toBe("0");
+
+  it("desenha o mês anterior só quando ele tem todos os eixos", () => {
+    const now = [
+      rate("operations.sla_compliance", 1, 1),
+      rate("operations.completion_rate", 1, 2),
+      rate("technicians.assignment_coverage", 2, 2),
+    ];
+    const parcial = radarShape(radarRows(now, [rate("operations.sla_compliance", 1, 1)]));
+    expect(parcial.axes).toHaveLength(3);
+    expect(parcial.drawPrevious).toBe(false);
+    const completo = radarShape(radarRows(now, now));
+    expect(completo.drawPrevious).toBe(true);
+    expect(radarSummary(radarRows(now, now))).toBe("Estável nos 3 indicadores comparáveis.");
   });
 });

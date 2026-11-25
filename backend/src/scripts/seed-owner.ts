@@ -40,6 +40,7 @@
  * vínculos. Não duplica organização nem unidade — e, se o usuário já existir
  * em **outra** organização, o script recusa em vez de mover a conta.
  */
+import { directDatabaseUrl } from './direct-database-url';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
@@ -127,7 +128,7 @@ const slugify = (value: string): string =>
  * `RegistrationRepository`, e funciona igual sob papel restrito.
  */
 const prisma = new PrismaClient({
-  adapter: new PrismaPg(required('DATABASE_URL')),
+  adapter: new PrismaPg(directDatabaseUrl()),
 });
 
 type TransactionClient = Parameters<
@@ -376,6 +377,9 @@ async function seed(): Promise<void> {
         select: { id: true },
       });
     }
+
+    /* O mesmo catálogo inicial de toda organização nova. */
+    await tx.$executeRaw`SELECT app_seed_hvac_catalogs(${organizationId}::uuid)`;
 
     const organizationMembership = await tx.organizationMembership.findFirst({
       where: { organizationId, userId },

@@ -1,0 +1,729 @@
+{
+  "openapi": "3.1.1",
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "info": {
+    "title": "Allblue federated protocol — PROPOSED, no runtime endpoints",
+    "version": "1.0.0",
+    "description": "PENDING_NEXUS_DECISION. All servers are synthetic example.invalid. This document neither enables routes nor validates OAuth, signatures or delegation."
+  },
+  "x-approval-status": "PENDING_NEXUS_DECISION",
+  "x-runtime-implemented": false,
+  "servers": [
+    {
+      "url": "https://product.example.invalid/api/v1/corporate",
+      "description": "Product boundary proposed; not the existing platform-admin API"
+    }
+  ],
+  "paths": {
+    "/commands": {
+      "post": {
+        "operationId": "submitCommand",
+        "x-status": "PENDING_NEXUS_DECISION",
+        "description": "202 only after durable receipt. Actual scope is selected by command allowlist, not arbitrary caller choice. Repeated equivalent submission returns original receipt; no reexecution.",
+        "security": [
+          {
+            "federatedOAuth": [
+              "allblue.tenants.provision"
+            ],
+            "httpMessageSignature": []
+          },
+          {
+            "federatedOAuth": [
+              "allblue.tenants.update"
+            ],
+            "httpMessageSignature": []
+          },
+          {
+            "federatedOAuth": [
+              "allblue.subscriptions.request"
+            ],
+            "httpMessageSignature": []
+          },
+          {
+            "federatedOAuth": [
+              "allblue.tenants.access.request"
+            ],
+            "httpMessageSignature": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:-]{16,128}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./schemas/command.schema.json"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Original durable receipt after authorized replay; may already be terminal",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./schemas/receipt.schema.json"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Durable receipt accepted, awaiting approval/execution; not applied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./schemas/receipt.schema.json"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "410": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "422": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "429": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ContractError"
+          }
+        }
+      }
+    },
+    "/receipts/{commandId}": {
+      "get": {
+        "operationId": "readReceipt",
+        "x-status": "PENDING_NEXUS_DECISION",
+        "security": [
+          {
+            "federatedOAuth": [
+              "allblue.receipts.read"
+            ],
+            "httpMessageSignature": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "commandId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Projeção autorizada; consultar asOf/freshness e fonte",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./schemas/receipt.schema.json"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "410": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "422": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "429": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ContractError"
+          }
+        }
+      }
+    },
+    "/tenants": {
+      "get": {
+        "operationId": "readDirectory",
+        "x-status": "PENDING_NEXUS_DECISION",
+        "security": [
+          {
+            "federatedOAuth": [
+              "allblue.tenants.read"
+            ],
+            "httpMessageSignature": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Projeção autorizada; consultar asOf/freshness e fonte",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./schemas/directory.schema.json"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "410": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "422": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "429": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ContractError"
+          }
+        }
+      }
+    },
+    "/tenants/{tenantId}/operational-status": {
+      "get": {
+        "operationId": "readOperationalStatus",
+        "x-status": "PENDING_NEXUS_DECISION",
+        "security": [
+          {
+            "federatedOAuth": [
+              "allblue.tenants.read"
+            ],
+            "httpMessageSignature": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Projeção autorizada; consultar asOf/freshness e fonte",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./schemas/read.schema.json"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "410": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "422": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "429": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ContractError"
+          }
+        }
+      }
+    },
+    "/tenants/{tenantId}/subscription": {
+      "get": {
+        "operationId": "readSubscription",
+        "x-status": "PENDING_NEXUS_DECISION",
+        "security": [
+          {
+            "federatedOAuth": [
+              "allblue.subscriptions.read"
+            ],
+            "httpMessageSignature": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Projeção autorizada; consultar asOf/freshness e fonte",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./schemas/read.schema.json"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "410": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "422": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "429": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ContractError"
+          }
+        }
+      }
+    },
+    "/tenants/{tenantId}/billing": {
+      "get": {
+        "operationId": "readBilling",
+        "x-status": "PENDING_NEXUS_DECISION",
+        "security": [
+          {
+            "federatedOAuth": [
+              "allblue.billing.read"
+            ],
+            "httpMessageSignature": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "invoiceId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Projeção autorizada; consultar asOf/freshness e fonte",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./schemas/read.schema.json"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "410": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "422": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "429": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ContractError"
+          }
+        }
+      }
+    },
+    "/tenants/{tenantId}/usage": {
+      "get": {
+        "operationId": "readUsageFuture",
+        "x-status": "PENDING_NEXUS_DECISION",
+        "security": [
+          {
+            "federatedOAuth": [
+              "allblue.usage.read"
+            ],
+            "httpMessageSignature": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Projeção autorizada; consultar asOf/freshness e fonte",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./schemas/read.schema.json"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "410": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "422": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "429": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ContractError"
+          }
+        },
+        "x-availability": "DEFERRED"
+      }
+    },
+    "/events/catch-up": {
+      "get": {
+        "operationId": "catchUpEvents",
+        "x-status": "PENDING_NEXUS_DECISION",
+        "security": [
+          {
+            "federatedOAuth": [
+              "allblue.events.catch_up"
+            ],
+            "httpMessageSignature": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Projeção autorizada; consultar asOf/freshness e fonte",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./schemas/event-page.schema.json"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "410": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "422": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "429": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ContractError"
+          }
+        }
+      }
+    },
+    "/events": {
+      "post": {
+        "operationId": "receiveEventsAtNexus",
+        "x-status": "PENDING_NEXUS_DECISION",
+        "servers": [
+          {
+            "url": "https://nexus.example.invalid/api/v1/federation",
+            "description": "Nexus durable inbox proposed; not implemented"
+          }
+        ],
+        "security": [
+          {
+            "federatedOAuth": [
+              "allblue.events.publish"
+            ],
+            "httpMessageSignature": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/cloudevents+json": {
+              "schema": {
+                "$ref": "./schemas/event.schema.json"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Persisted event or identical durable duplicate",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./schemas/ack.schema.json"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Persisted durably; projection may remain pending",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./schemas/ack.schema.json"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "410": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "422": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "429": {
+            "$ref": "#/components/responses/ContractError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ContractError"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "federatedOAuth": {
+        "type": "oauth2",
+        "description": "Proposed IdP; asymmetric client authentication and verified human delegation for commands are additional requirements, not implied by this schema.",
+        "flows": {
+          "clientCredentials": {
+            "tokenUrl": "https://idp.example.invalid/oauth/token",
+            "scopes": {
+              "allblue.tenants.read": "Diretório/tenant autorizado e minimizado",
+              "allblue.subscriptions.read": "Assinatura canônica autorizada",
+              "allblue.billing.read": "Fatos financeiros minimizados; purpose obrigatório",
+              "allblue.usage.read": "Uso agregado, futuro e desabilitado",
+              "allblue.tenants.provision": "Solicitar provisionamento aprovado",
+              "allblue.tenants.update": "Alterar metadados não financeiros permitidos",
+              "allblue.subscriptions.request": "Solicitar alteração/cancelamento/keep com consentimento",
+              "allblue.tenants.access.request": "Solicitar suspensão/reativação aprovada",
+              "allblue.receipts.read": "Consultar recibos dentro do grant/cliente/target autorizado",
+              "allblue.events.publish": "Publicar fatos do produto registrado",
+              "allblue.events.catch_up": "Consultar eventos autorizados para reconciliação"
+            }
+          }
+        }
+      },
+      "httpMessageSignature": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Signature",
+        "description": "OpenAPI presence descriptor only: RFC 9421 signature + Signature-Input + Content-Digest and signed context required; not an API key or implementation."
+      }
+    },
+    "responses": {
+      "ContractError": {
+        "description": "Stable sanitized error. Unknown/unauthorized target must not disclose existence.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "./schemas/error.schema.json"
+            }
+          }
+        }
+      }
+    }
+  }
+}

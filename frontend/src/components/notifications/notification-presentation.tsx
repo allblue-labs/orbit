@@ -101,8 +101,8 @@ const FALLBACK: CategoryPresentation = {
  *
  * Tenta o tipo inteiro e depois o prefixo antes de `_`, o que cobre
  * `OPERATION_ASSIGNED` sem exigir uma entrada por evento. Sem correspondência,
- * o rótulo é o **tipo cru** — um tipo novo precisa ser visto, não virar
- * "Outro".
+ * o rótulo é "Aviso": o tipo cru (`ALGUM_EVENTO_NOVO`) não diz nada a quem
+ * lê — o título e o texto da notificação dizem.
  */
 export function notificationCategory(type: string): CategoryPresentation {
   const normalized = type.trim().toUpperCase();
@@ -113,7 +113,7 @@ export function notificationCategory(type: string): CategoryPresentation {
   const byPrefix = prefix ? CATEGORIES[prefix] : undefined;
   if (byPrefix) return byPrefix;
 
-  return { ...FALLBACK, label: type };
+  return { ...FALLBACK, label: "Aviso" };
 }
 
 export function NotificationCategoryIcon({

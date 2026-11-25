@@ -1,45 +1,44 @@
 import { Module } from '@nestjs/common';
-import { SESv2Client } from '@aws-sdk/client-sesv2';
 import {
   EMAIL_CONFIGURATION,
   SES_EMAIL_CLIENT,
   emailConfiguration,
+  createSesEmailClient,
   type EmailConfiguration,
 } from './email.config';
 import { EmailService } from './email.service';
+import { EmailTransportRepository } from './email-transport.repository';
+import {
+  SES_FEEDBACK_CONFIGURATION,
+  SES_SNS_CLIENT,
+  createSesSnsClient,
+  sesFeedbackConfiguration,
+} from './ses-feedback.config';
+import { SesFeedbackController } from './ses-feedback.controller';
+import { SesFeedbackService } from './ses-feedback.service';
+import { SnsMessageVerifier } from './sns-message.verifier';
+import { SnsCertificateFetcher } from './sns-certificate.fetcher';
 
 @Module({
+  controllers: [SesFeedbackController],
   providers: [
+    {
+      provide: SES_FEEDBACK_CONFIGURATION,
+      useFactory: () => sesFeedbackConfiguration(),
+    },
+    { provide: SES_SNS_CLIENT, useFactory: () => createSesSnsClient() },
+    EmailTransportRepository,
+    SesFeedbackService,
+    SnsMessageVerifier,
+    SnsCertificateFetcher,
     { provide: EMAIL_CONFIGURATION, useFactory: () => emailConfiguration() },
     {
       provide: SES_EMAIL_CLIENT,
       inject: [EMAIL_CONFIGURATION],
-      useFactory: (config: EmailConfiguration) =>
-        config.provider === 'ses' &&
-        config.region &&
-        config.accessKeyId &&
-        config.secretAccessKey &&
-        config.from
-          ? new SESv2Client({
-              region: config.region,
-              // Explicit credentials prevent fallback to shared files, profiles or instance metadata.
-              credentials: {
-                accessKeyId: config.accessKeyId,
-                secretAccessKey: config.secretAccessKey,
-                sessionToken: config.sessionToken,
-              },
-              maxAttempts: 3,
-              retryMode: 'standard',
-              requestHandler: {
-                connectionTimeout: 2_000,
-                requestTimeout: 5_000,
-                throwOnRequestTimeout: true,
-              },
-            })
-          : null,
+      useFactory: (config: EmailConfiguration) => createSesEmailClient(config),
     },
     EmailService,
   ],
-  exports: [EmailService],
+  exports: [EmailService, EMAIL_CONFIGURATION],
 })
 export class EmailModule {}

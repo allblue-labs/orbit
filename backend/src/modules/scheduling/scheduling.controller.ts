@@ -110,7 +110,11 @@ export class SchedulingController {
   @Permissions('scheduling.read')
   @ApiOperation({ summary: 'List expanded event occurrences in a time range' })
   events(@Req() request: IdentityRequest, @Query() query: EventQueryDto) {
-    return this.scheduling.occurrences(this.org(request), query);
+    return this.scheduling.occurrences(
+      this.org(request),
+      query,
+      this.operationAccess(request),
+    );
   }
 
   @Post('events')
@@ -219,6 +223,7 @@ export class SchedulingController {
       this.org(request),
       query,
       request.identity!.id,
+      this.operationAccess(request),
     );
   }
 
@@ -279,6 +284,18 @@ export class SchedulingController {
       this.org(request),
       request.identity!.id,
     );
+  }
+
+  private operationAccess(request: IdentityRequest) {
+    const identity = request.identity!;
+    const has = (permission: string) =>
+      identity.permissions.includes('*') ||
+      identity.permissions.includes(permission);
+    if (!has('operations.read')) return undefined;
+    return {
+      viewerId: identity.id,
+      manages: has('operations.update') || has('operations.assign'),
+    };
   }
 
   private org(request: IdentityRequest) {

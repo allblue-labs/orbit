@@ -1,4 +1,8 @@
 import {
+  MobileManagement,
+  MobileManagementShared,
+} from '../../../../common/mobile-management';
+import {
   Body,
   Controller,
   Delete,
@@ -44,6 +48,7 @@ export class CustomerController {
   ) {}
 
   @Get()
+  @MobileManagement('customers')
   @Capabilities('crm.read')
   @Permissions('customers.read')
   async list(
@@ -56,6 +61,7 @@ export class CustomerController {
   }
 
   @Get(':id')
+  @MobileManagement('customers')
   @Capabilities('crm.read')
   @Permissions('customers.read')
   async get(
@@ -68,6 +74,8 @@ export class CustomerController {
   }
 
   @Post()
+  @MobileManagementShared()
+  @MobileManagement('customers')
   @Capabilities('crm.manage')
   @Permissions('customers.create')
   async create(
@@ -80,6 +88,7 @@ export class CustomerController {
   }
 
   @Patch(':id')
+  @MobileManagement('customers')
   @Capabilities('crm.manage')
   @Permissions('customers.update')
   async update(
@@ -93,6 +102,7 @@ export class CustomerController {
   }
 
   @Delete(':id')
+  @MobileManagement('customers')
   @Capabilities('crm.manage')
   @Permissions('customers.delete')
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -108,6 +118,7 @@ export class CustomerController {
   /* ---------------------------------------------------------------- */
 
   @Get(':id/addresses')
+  @MobileManagement('customers')
   @Capabilities('crm.read')
   @Permissions('customers.read')
   @ApiOperation({ summary: 'Endereços para onde o técnico vai' })
@@ -126,6 +137,7 @@ export class CustomerController {
   }
 
   @Post(':id/addresses')
+  @MobileManagement('customers')
   @Capabilities('crm.manage')
   @Permissions('customers.update')
   async createAddress(
@@ -143,6 +155,7 @@ export class CustomerController {
   }
 
   @Patch(':id/addresses/:addressId')
+  @MobileManagement('customers')
   @Capabilities('crm.manage')
   @Permissions('customers.update')
   async updateAddress(
@@ -162,6 +175,7 @@ export class CustomerController {
   }
 
   @Delete(':id/addresses/:addressId')
+  @MobileManagement('customers')
   @Capabilities('crm.manage')
   @Permissions('customers.update')
   @HttpCode(HttpStatus.NO_CONTENT)

@@ -6,6 +6,7 @@
  * browser — sempre sem expor tokens.
  */
 import { cookies } from "next/headers";
+import type { IdentityRegistrationReadModel } from "@/types/contracts/modules/identity/identity.read-models";
 
 import { ApiError } from "@/lib/api-error";
 import { backendJson, jsonBody } from "@/server/backend-client";
@@ -68,7 +69,7 @@ export async function readStoredTokens(): Promise<StoredTokens> {
  * novo refresh token invalidaria a sessão do usuário.
  */
 export async function resolveAccess(
-  options: { allowRefresh?: boolean } = {},
+  options: { allowRefresh?: boolean; requestId?: string } = {},
 ): Promise<ResolvedAccess> {
   const { accessToken, refreshToken } = await readStoredTokens();
   const claims = accessToken ? decodeAccessToken(accessToken) : null;
@@ -86,7 +87,7 @@ export async function resolveAccess(
     };
   }
 
-  const rotated = await refreshTokens(refreshToken);
+  const rotated = await refreshTokens(refreshToken, options.requestId);
   if (!rotated) {
     return { accessToken: null, claims: null, rotated: null, expired: true };
   }
@@ -241,18 +242,24 @@ async function tolerate<T>(request: Promise<T>): Promise<T | null> {
 }
 
 /** Autentica no backend e devolve o par de tokens (sem gravar cookies). */
-export function login(input: LoginInput): Promise<TokenPair> {
+export function login(
+  input: LoginInput,
+  userAgent?: string | null,
+): Promise<TokenPair> {
   return backendJson<TokenPair>({
     method: "POST",
     path: "/identity/login",
     body: jsonBody({ client: "WEB", ...input }),
+    headers: userAgent ? { "user-agent": userAgent.slice(0, 512) } : undefined,
     retries: 0,
   });
 }
 
-/** Cria organização + usuário e devolve o par de tokens. */
-export function register(input: RegisterInput): Promise<TokenPair> {
-  return backendJson<TokenPair>({
+/** Cria o cadastro pendente; confirmação de e-mail precede qualquer sessão. */
+export function register(
+  input: RegisterInput,
+): Promise<IdentityRegistrationReadModel> {
+  return backendJson<IdentityRegistrationReadModel>({
     method: "POST",
     path: "/identity/register",
     body: jsonBody({ client: "WEB", ...input }),

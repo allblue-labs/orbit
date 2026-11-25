@@ -270,7 +270,7 @@ function FieldRow({
             </span>
           ) : null}
           <Badge variant="secondary" className="text-[10px]">
-            {field.type}
+            {renderer.family}
           </Badge>
           {field.hidden ? (
             <span className="flex items-center gap-1 text-[10px] text-muted-foreground">

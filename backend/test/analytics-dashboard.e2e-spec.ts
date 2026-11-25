@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import {
   RequestContext,
   RequestContextService,
@@ -12,6 +12,10 @@ import { RlsContextProvider } from '../src/database/rls/rls-context.provider';
 import { AnalyticsRepository } from '../src/modules/analytics/analytics.repository';
 import type { AnalyticsRange } from '../src/modules/analytics/analytics.types';
 import { analyticsAccess } from '../src/modules/analytics/analytics-authorization';
+import {
+  instantFromCivil,
+  instantFromCivilDate,
+} from '../src/modules/scheduling/scheduling-time';
 import { KpiEngine } from '../src/modules/analytics/engines/kpi.engine';
 import { adminPrisma, disconnectAdminPrisma } from './support/admin-prisma';
 
@@ -32,13 +36,12 @@ describe('dashboard facts with tenant and business-unit isolation', () => {
     unitId: string;
     customerId: string;
   }[] = [];
-  let runtime: PrismaClient;
+  let runtime: PrismaClient<Prisma.PrismaClientOptions, 'query'>;
+  const queries: string[] = [];
   let repository: AnalyticsRepository;
   let rls: RlsTransaction;
   let userId: string;
   let otherUnitId: string;
-  let oldOpenId: string;
-  let oldDeliveredId: string;
   const run = <T>(work: () => Promise<T>) =>
     contexts.run(
       new RequestContext({
@@ -70,7 +73,9 @@ describe('dashboard facts with tenant and business-unit isolation', () => {
       throw new Error('APP_DATABASE_URL restrita é obrigatória.');
     runtime = new PrismaClient({
       adapter: new PrismaPg(process.env.APP_DATABASE_URL),
+      log: [{ emit: 'event', level: 'query' }],
     });
+    runtime.$on('query', ({ query }) => queries.push(query));
     const [role] = await runtime.$queryRaw<
       { rolsuper: boolean; rolbypassrls: boolean }[]
     >`SELECT rolsuper,rolbypassrls FROM pg_roles WHERE rolname=current_user`;
@@ -154,16 +159,12 @@ describe('dashboard facts with tenant and business-unit isolation', () => {
           ...overrides,
         },
       });
-    oldOpenId = (
-      await operation(tenants[0], { scheduledEnd: new Date('2026-10-01') })
-    ).id;
-    oldDeliveredId = (
-      await operation(tenants[0], {
-        status: 'COMPLETED',
-        completedAt: new Date('2026-11-05T13:00:00Z'),
-        scheduledEnd: new Date('2026-11-05T14:00:00Z'),
-      })
-    ).id;
+    await operation(tenants[0], { scheduledEnd: new Date('2026-10-01') });
+    await operation(tenants[0], {
+      status: 'COMPLETED',
+      completedAt: new Date('2026-11-05T13:00:00Z'),
+      scheduledEnd: new Date('2026-11-05T14:00:00Z'),
+    });
     await operation(tenants[0], {
       status: 'CANCELLED',
       createdAt: new Date('2026-11-02'),
@@ -268,8 +269,10 @@ describe('dashboard facts with tenant and business-unit isolation', () => {
 
   it('includes old pending work and old orders delivered now, without mixing units or organizations', async () => {
     const facts = await snapshot();
-    expect(facts.operations.map((op) => op.id)).toContain(oldOpenId);
-    expect(facts.operations.map((op) => op.id)).toContain(oldDeliveredId);
+    expect(facts.trends.completed).toEqual([
+      { timestamp: '2026-11-05T00:00:00.000Z', value: 1 },
+    ]);
+    expect(facts.trends.created).toEqual([]);
     const metrics = new KpiEngine().execute(facts).indicators;
     const value = (id: string) => metrics.find((item) => item.id === id)?.value;
     expect(value('operations.open')).toBe(1);
@@ -283,36 +286,66 @@ describe('dashboard facts with tenant and business-unit isolation', () => {
     const metrics = new KpiEngine().execute(facts).indicators;
     expect(metrics.find((item) => item.id === 'pmoc.overdue')?.value).toBe(1);
     expect(metrics.find((item) => item.id === 'rvt.overdue')?.value).toBe(1);
-    expect(
-      facts.pmocs
-        .find((row) => row.createdAt.toISOString().startsWith('2026-11-10'))
-        ?.deadlineAt?.toISOString(),
-    ).toBe('2026-11-11T02:59:59.999Z');
-    expect(facts.pmocs.some((row) => row.createdAt > range.to)).toBe(false);
-    expect(
-      facts.rvts?.some((row) => row.createdAt >= new Date('2026-11-12')),
-    ).toBe(false);
-    expect(
-      facts.rvts
-        ?.find((row) => row.createdAt.toISOString().startsWith('2026-11-11'))
-        ?.deadlineAt?.toISOString(),
-    ).toBe('2026-11-11T02:59:59.999Z');
+    expect(facts.pmoc.current).toEqual({ total: 1, overdue: 1, onTime: 0 });
+    expect(facts.rvt.current).toEqual({ total: 1, overdue: 1, onTime: 0 });
+    expect(facts.trends.pmoc).toEqual([
+      { timestamp: '2026-11-10T00:00:00.000Z', value: 1 },
+    ]);
+    const endOfDueDay = await run(() =>
+      repository.snapshot(
+        tenants[0]!.organizationId,
+        {
+          ...range,
+          businessUnitId: tenants[0]!.unitId,
+          to: new Date('2026-11-11T02:59:59.999Z'),
+        },
+        analyticsAccess(['*']).domains,
+      ),
+    );
+    expect(endOfDueDay.pmoc.current.total).toBe(2);
+    expect(endOfDueDay.rvt.current.total).toBe(3);
   });
   it('keeps domain-denied maintenance out of database facts', async () => {
+    queries.length = 0;
     const facts = await snapshot(['operations.read']);
-    expect(facts.operations.length).toBeGreaterThan(0);
-    expect(facts.pmocs).toEqual([]);
-    expect(facts.rvts).toEqual([]);
-    expect(facts.assets).toEqual([]);
+    expect(facts.operations.open).toBe(1);
+    expect(facts.pmoc.current.total).toBe(0);
+    expect(facts.rvt.current.total).toBe(0);
+    expect(facts.equipmentRegistered).toBe(0);
+    expect(queries.join(' ')).not.toMatch(
+      /pmoc_executions|rvt_occurrences|FROM "public"."assets"/i,
+    );
   });
-  it('switches business units without retaining the previous queue', async () => {
+  it('switches business units without retaining their backlog or equipment', async () => {
     const facts = await snapshot(['*'], otherUnitId);
-    expect(facts.operations).toHaveLength(1);
-    expect(facts.operations[0]!.id).not.toBe(oldOpenId);
-    expect(facts.operations[0]!.id).not.toBe(oldDeliveredId);
-    expect(facts.pmocs).toHaveLength(2);
-    expect(facts.rvts).toHaveLength(2);
+    expect(facts.operations.open).toBe(1);
+    expect(facts.operations.current.delivered).toBe(0);
+    expect(facts.operations.overdue).toBe(0);
+    expect(facts.equipmentRegistered).toBe(1);
   });
+  it('resolves civil times the same way as scheduling across timezone folds and gaps', async () => {
+    for (const [day, zone, hour] of [
+      ['2018-11-04', 'America/Sao_Paulo', 0],
+      ['2026-03-08', 'America/New_York', 2],
+      ['2026-11-01', 'America/New_York', 1],
+      ['2026-11-10', 'Pacific/Kiritimati', 0],
+      ['2026-11-10', 'Asia/Kathmandu', 0],
+    ] as const) {
+      const [row] = await runtime.$queryRaw<{ instant: Date }[]>`
+        SELECT orbit_analytics_civil_instant(${day}::date + make_interval(hours => ${hour}::int), ${zone}) AS instant
+      `;
+      const [year, month, date] = day.split('-').map(Number);
+      const expected =
+        hour === 0
+          ? instantFromCivilDate(day, zone)
+          : instantFromCivil(
+              { year: year!, month: month!, day: date!, hour },
+              zone,
+            );
+      expect(row?.instant).toEqual(expected);
+    }
+  });
+
   it('enforces organization isolation in the database beyond repository filters', async () => {
     const foreign = tenants[1]!.organizationId;
     await run(async () => {

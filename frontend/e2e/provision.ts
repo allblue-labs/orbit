@@ -176,7 +176,12 @@ export async function provisionOperationWithTeam(
 export async function operationRow(page: Page, code: string) {
   await page.goto("/operacoes");
   await page.getByLabel("Buscar").fill(code);
-  const row = page.getByRole("row").filter({ hasText: code });
+  const row = page.getByRole("row").filter({
+    has: page.getByRole("button", {
+      name: `Ações da operação ${code}`,
+      exact: true,
+    }),
+  });
   await expect(row).toHaveCount(1, { timeout: 20_000 });
   return row;
 }
@@ -212,6 +217,9 @@ export async function provisionPmocPlan(
 ): Promise<ProvisionedPmocPlan> {
   const businessUnitId = await activeBusinessUnit(page);
   const suffix = scenarioId();
+  const actor = await json<{ id: string }>(
+    await bff(page, "get", "/api/orbit/identity/me"),
+  );
 
   const customer = await json<{ id: string }>(
     await bff(page, "post", "/api/orbit/customers", {
@@ -259,6 +267,7 @@ export async function provisionPmocPlan(
     await bff(page, "post", "/api/orbit/pmoc/plans", {
       businessUnitId,
       customerId: customer.id,
+      technicalResponsibleUserId: actor.id,
       code,
       name,
       startsOn: new Date().toISOString().slice(0, 10),

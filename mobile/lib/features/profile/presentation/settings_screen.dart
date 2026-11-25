@@ -17,6 +17,8 @@ import '../../../core/errors/orbit_exception.dart';
 import '../../../core/routing/orbit_router.dart';
 import '../../../core/theme/orbit_theme.dart';
 import '../../../core/widgets/section_states.dart';
+import '../../authentication/application/biometric_login.dart';
+import '../../authentication/presentation/biometric_widgets.dart';
 import '../../sync/application/sync_providers.dart';
 import '../application/notification_settings_providers.dart';
 import '../data/notification_preferences_repository.dart';
@@ -67,6 +69,7 @@ class SettingsScreen extends ConsumerWidget {
           OrbitSettingsGroup(
             title: 'Este aparelho',
             children: [
+              const BiometricSettingsRow(audience: BiometricAudience.team),
               OrbitSettingsRow(
                 icon: Icons.cloud_sync_outlined,
                 label: 'Sincronização',

@@ -211,7 +211,7 @@ function Body({
                 className="text-xs text-muted-foreground"
               >
                 Serve para qualquer tipo de atendimento e vem selecionado nas
-                novas operações. O owner pode removê-lo ou escolher outros
+                novas operações. O proprietário pode removê-lo ou escolher outros
                 modelos.
               </p>
             </div>

@@ -89,6 +89,45 @@ describe('OperationReadModelMapper', () => {
     expect(result.serviceOrderNumber).toBeNull();
     expect(result.serviceOrderCode).toBeNull();
   });
+
+  /**
+   * O documento da operação só aparece quando está emitido.
+   *
+   * É ele que a linha da operação oferece para baixar e compartilhar; uma
+   * execução ainda renderizando não tem arquivo, e oferecer o botão seria
+   * prometer um download que falha.
+   */
+  it('publica o documento emitido, e só ele', () => {
+    const mapper = new OperationReadModelMapper();
+    const execucao = (renderStatus: string) => ({
+      id: `exec-${renderStatus}`,
+      code: 'OS-000087',
+      title: 'Ordem de serviço',
+      renderStatus,
+      snapshot: { artifactType: 'SERVICE_ORDER' },
+    });
+
+    const emitido = mapper.details({
+      ...fonte({ serviceOrderNumber: 87 }),
+      artifactExecutions: [execucao('RENDERING'), execucao('READY')],
+    });
+    const pendente = mapper.details({
+      ...fonte({ serviceOrderNumber: 87 }),
+      artifactExecutions: [execucao('RENDERING')],
+    });
+
+    expect(emitido.document).toEqual({
+      executionId: 'exec-READY',
+      code: 'OS-000087',
+      title: 'Ordem de serviço',
+      renderStatus: 'READY',
+      artifactType: 'SERVICE_ORDER',
+    });
+    expect(pendente.document).toBeNull();
+    expect(
+      mapper.details(fonte({ serviceOrderNumber: 87 })).document,
+    ).toBeNull();
+  });
 });
 
 /** A operação mínima que o mapeador aceita, com o que o teste quer variar. */

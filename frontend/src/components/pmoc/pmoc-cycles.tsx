@@ -24,13 +24,14 @@
  * qualquer forma; contar o que já está em mãos é honesto e não custa
  * requisição nenhuma.
  */
+import { ASSET_CATEGORY_LABELS } from "@/entities";
 import { useState } from "react";
 import { CalendarClock, Package, Play, UserRoundCheck } from "lucide-react";
 
 import {
   CycleStatusBadge,
   DocumentStatusBadge,
-  ExecutionStatusBadge,
+  CycleEquipmentStatusBadge,
 } from "@/components/pmoc/pmoc-presentation";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -275,14 +276,11 @@ function EquipmentRow({
           <p className="truncate text-xs text-muted-foreground">
             {row.equipment.identifier ??
               row.equipment.serialNumber ??
+              ASSET_CATEGORY_LABELS[row.equipment.category] ??
               row.equipment.category}
           </p>
         </div>
-        {row.status === "NOT_STARTED" ? (
-          <span className="text-xs text-muted-foreground">Não iniciada</span>
-        ) : (
-          <ExecutionStatusBadge status={row.status} />
-        )}
+        <CycleEquipmentStatusBadge status={row.status} />
       </div>
 
       {row.schedule ? (
@@ -332,7 +330,7 @@ function EquipmentRow({
             {row.execution.auxiliaryTechnicians.length > 0 ? (
               <p className="min-w-0 truncate">
                 <span className="text-muted-foreground">
-                  auxiliares técnico:{" "}
+                  Auxiliares técnicos:{" "}
                 </span>
                 {row.execution.auxiliaryTechnicians
                   .map((person) => person.displayName)
@@ -433,7 +431,9 @@ function EquipmentRow({
             <ul className="space-y-0.5">
               {eligibility.blockedReasons.map((reason) => (
                 <li key={reason} className="text-amber-400">
-                  {executionBlockedLabel(reason, knownBlockedReason)}
+                  {reason === "TECHNICAL_RESPONSIBLE_MISSING" && !canAttend
+                    ? "O plano não tem Responsável Técnico definido."
+                    : executionBlockedLabel(reason, knownBlockedReason)}
                 </li>
               ))}
             </ul>

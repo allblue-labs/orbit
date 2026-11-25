@@ -1,6 +1,10 @@
 import { PNG } from 'pngjs';
+import sharp from 'sharp';
 import { ArtifactRenderAssembler } from './artifact-render.assembler';
+import { DocumentContextBuilder } from './document-context.builder';
+import { RenderInputFactory } from './render-input.factory';
 import { ArtifactPremiumPdfRenderer } from './renderers/pdf/artifact-premium-pdf.renderer';
+import { brandImageStub } from '../../../test/support/brand-image.stub';
 import { pdfText } from '../../../test/support/pdf-text';
 
 function input(withSignature = true) {
@@ -141,4 +145,89 @@ describe('OS congelada no atendimento mobile', () => {
     expect(signature.signerName).toBe('Cliente Maria');
     expect(signature.signatureImage).toBeUndefined();
   });
+});
+
+describe('Evidências armazenadas como WebP na ordem de serviço', () => {
+  it.each(['mobile', 'web'])(
+    'incorpora a foto no PDF emitido pelo fluxo %s',
+    async (flow) => {
+      const photo = await sharp({
+        create: {
+          width: 117,
+          height: 69,
+          channels: 3,
+          background: '#276384',
+        },
+      })
+        .webp()
+        .toBuffer();
+      const storage = { get: jest.fn().mockResolvedValue(photo) };
+      const factory = new RenderInputFactory(
+        new ArtifactRenderAssembler(),
+        new DocumentContextBuilder(),
+        storage as never,
+        brandImageStub(),
+      );
+      const file = {
+        id: 'photo',
+        bucket: 'orbit-assets-private',
+        objectKey: 'evidence/filter.webp',
+        mimeType: 'image/webp',
+        status: 'AVAILABLE',
+        fileName: 'filter.webp',
+      };
+      const evidence = {
+        id: 'ev-1',
+        storageFileId: file.id,
+        caption: 'Filtro após limpeza',
+        fileName: 'filter.webp',
+        mimeType: 'image/webp',
+        sha256: 'a'.repeat(64),
+        category: 'AFTER',
+      };
+      const { execution, snapshot } = input();
+      const source = {
+        ...execution,
+        snapshot: {
+          ...snapshot,
+          sections: [],
+          signatureSlots: [],
+          metadata: {},
+        },
+        organization: { displayName: 'Orbit' },
+        responses: [],
+        signatures: [],
+        signatureAssets: [],
+        fieldAssets: [file],
+        fieldArtifact:
+          flow === 'mobile' ? { snapshot: { evidence: [evidence] } } : null,
+        operation: {
+          fieldEvidence: [
+            { ...evidence, mimeType: 'image/jpeg', storageFile: file },
+          ],
+        },
+      } as unknown as Parameters<RenderInputFactory['build']>[0];
+
+      const document = await factory.build(source, 'test');
+      expect(document.evidence).toEqual([
+        expect.objectContaining({
+          mimeType: 'image/png',
+          sha256: evidence.sha256,
+        }),
+      ]);
+      expect(storage.get).toHaveBeenCalledTimes(1);
+      expect(storage.get).toHaveBeenCalledWith({
+        bucket: file.bucket,
+        objectKey: file.objectKey,
+      });
+
+      const pdf = await new ArtifactPremiumPdfRenderer().render(document);
+      expect(pdfText(pdf.bytes)).toContain(evidence.caption);
+      const pictures = pdf.bytes
+        .toString('latin1')
+        .match(/\/Subtype \/Image\b[^>]+/g);
+      expect(pictures).toHaveLength(1);
+      expect(pictures?.[0]).toMatch(/\/Width 117\s+\/Height 69/);
+    },
+  );
 });

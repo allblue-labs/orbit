@@ -16,6 +16,9 @@ import {
 import { motion } from "motion/react";
 import { toast } from "sonner";
 
+import { OpenEquipmentInApp } from "@/components/equipment-qr/open-equipment-in-app";
+import { ConfirmEmail } from "@/components/auth/confirm-email";
+import { toApiError } from "@/lib/api-error";
 import { loginFailure } from "@/lib/login-failure";
 import { OrbitLogo } from "@/components/brand/orbit-logo";
 import { Button } from "@/components/ui/button";
@@ -26,6 +29,9 @@ import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { SessionLoading } from "@/guards";
 import { useLogin } from "@/hooks/api";
+import { useAuthenticatedRedirect } from "@/hooks/api/use-auth";
+import { BiometricSignIn } from "@/components/auth/biometric-sign-in";
+import { markPasswordLogin } from "@/lib/biometrics/webauthn";
 import { LOGIN_REASON_PARAM, LoginReason, ROUTES } from "@/lib/routes";
 
 const REASON_MESSAGES: Record<string, { title: string; description: string }> =
@@ -56,10 +62,12 @@ export default function LoginPage() {
 function LoginView() {
   const [showPassword, setShowPassword] = useState(false);
   const [requiresMfa, setRequiresMfa] = useState(false);
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
   const params = useSearchParams();
   const reason = REASON_MESSAGES[params.get(LOGIN_REASON_PARAM) ?? ""];
   const destination = params.get("destino") ?? undefined;
   const login = useLogin({ redirectTo: destination });
+  const afterBiometric = useAuthenticatedRedirect(destination);
   const loading = login.isPending;
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -72,16 +80,22 @@ function LoginView() {
         mfaCode: String(form.get("mfaCode") ?? "") || undefined,
         client: "WEB",
       });
+      markPasswordLogin("team");
     } catch (error) {
       /* A decisão é pelo código publicado do erro, e vive em `login-failure`
          para poder ser testada sem DOM. Ver o comentário de lá: comparar a
          mensagem interna trancava fora quem ativava o segundo fator. */
+      if (toApiError(error).code === "EMAIL_VERIFICATION_REQUIRED") {
+        setPendingEmail(String(form.get("email") ?? ""));
+        return;
+      }
       const acao = loginFailure(error);
       if (acao.revealMfa) setRequiresMfa(true);
       toast.error(acao.title, { description: acao.description });
     }
   }
 
+  if (pendingEmail) return <ConfirmEmail initialEmail={pendingEmail} />;
   return (
     <div className="grid min-h-dvh lg:grid-cols-2">
       {/* Form side */}
@@ -106,9 +120,10 @@ function LoginView() {
               Bem-vindo de volta
             </h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              Entre com suas credenciais para acessar o workspace da sua
-              operação.
+              Entre com seu e-mail e senha para acessar a sua operação.
             </p>
+
+            {destination ? <OpenEquipmentInApp path={destination} /> : null}
 
             {reason ? (
               <Alert className="mt-6">
@@ -195,15 +210,18 @@ function LoginView() {
                     <Input
                       id="mfaCode"
                       name="mfaCode"
-                      inputMode="numeric"
+                      inputMode="text"
                       autoComplete="one-time-code"
                       minLength={6}
-                      maxLength={10}
+                      maxLength={16}
                       required
                       placeholder="000000"
                       className="pl-9 font-mono tracking-[0.25em]"
                     />
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    Use o autenticador ou um dos seus códigos de recuperação.
+                  </p>
                 </motion.div>
               )}
 
@@ -222,6 +240,10 @@ function LoginView() {
                   </>
                 )}
               </Button>
+              <BiometricSignIn
+                audience="team"
+                onSignedIn={() => afterBiometric()}
+              />
             </form>
 
             <div className="my-6 flex items-center gap-3">

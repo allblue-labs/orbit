@@ -127,7 +127,11 @@ export interface RenderStatusDefinition {
 const RENDER_STATUSES: readonly RenderStatusDefinition[] = [
   {
     id: "NOT_RENDERED",
-    label: "Não renderizado",
+    /* "Não emitido", e não "Não renderizado": renderizar é como o motor faz;
+       emitir é o que importa para quem lê. É o mesmo rótulo em toda lista de
+       documento — recibo, orçamento, OS —, e é por isso que a aba de recibos
+       passou a ler daqui em vez de manter um mapa próprio. */
+    label: "Não emitido",
     description: "Nenhum documento foi emitido para esta execução.",
     icon: MinusCircle,
     color: "text-muted-foreground",

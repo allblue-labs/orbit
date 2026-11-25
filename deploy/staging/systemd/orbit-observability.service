@@ -1,0 +1,12 @@
+[Unit]
+Description=Coleta de métricas de filas e do pooler Orbit
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+UMask=0077
+StateDirectory=orbit-monitor
+StateDirectoryMode=0700
+TimeoutStartSec=10s
+ExecStart=/usr/local/lib/orbit/collect-worker-observability.sh --history /var/lib/orbit-monitor/worker.sqlite3 --output /var/lib/orbit-monitor/latest.json

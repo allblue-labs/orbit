@@ -7,6 +7,12 @@ export const CUSTOMER_PORTAL_TOKEN_DELIVERY = Symbol(
 export type CustomerPortalTokenPurpose = 'INVITATION' | 'PASSWORD_RESET';
 
 export interface CustomerPortalTokenDelivery {
+  /**
+   * `false` quando nada sai de verdade. Convite e recuperação por e-mail
+   * recusam em vez de responder "enviado" sem ter enviado. Ausente vale como
+   * conectado — é o caso das entregas reais e das de teste.
+   */
+  readonly connected?: boolean;
   deliver(
     purpose: CustomerPortalTokenPurpose,
     recipient: string,
@@ -61,3 +67,16 @@ export interface PortalSessionRecord extends PortalIdentityRecord {
   sessionRevokedAt: Date | null;
   refreshTokenHash?: string;
 }
+
+/** O que só a sessão válida do próprio cliente lê sobre o perfil. */
+export interface PortalProfileState {
+  mustChangePassword: boolean;
+  avatarBucket: string | null;
+  avatarObjectKey: string | null;
+  avatarUpdatedAt: Date | null;
+  signatureBucket: string | null;
+  signatureObjectKey: string | null;
+  signatureUpdatedAt: Date | null;
+}
+
+export type PortalMediaKind = 'AVATAR' | 'SIGNATURE';

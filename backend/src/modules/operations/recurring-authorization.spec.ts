@@ -100,7 +100,7 @@ describe('autorização das visitas RVT e dos ciclos PMOC', () => {
       new RecurringAuthorizationQueryDto(),
     );
     expect(result.data.map((item) => item.kind)).toEqual(['RVT', 'PMOC']);
-    expect(result.data[1].scheduledStart).toBe('2026-10-30');
+    expect(result.data[1]?.scheduledStart).toBe('2026-10-30');
     expect(result.meta.total).toBe(2);
     expect(tx.rvtOccurrence.findMany).toHaveBeenCalledWith(
       expect.objectContaining({

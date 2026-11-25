@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService, RlsTransaction } from '../../database';
 import type { PrismaTransactionClient } from '../../database/prisma.types';
-import { InfrastructureException } from '../../exceptions';
+import { ConflictException, InfrastructureException } from '../../exceptions';
 
 export interface PlanTenantAccess {
   userId: string;
@@ -27,21 +27,45 @@ export class SubscriptionPlanRepository {
 
   listActive() {
     return this.prisma.plan.findMany({
-      where: { isActive: true },
+      where: { isActive: true, catalogTenantId: null },
       orderBy: [{ monthlyPrice: 'asc' }, { name: 'asc' }],
+      omit: { commercial: true, catalogTenantId: true },
     });
   }
 
-  findActiveByKey(key: string) {
-    return this.prisma.plan.findFirst({ where: { key, isActive: true } });
+  findByKey(key: string, organizationId: string, access?: PlanTenantAccess) {
+    if (!access)
+      return this.rls.run((tx) => tx.plan.findFirst({ where: { key } }));
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT set_config('app.user_id', ${access.userId}, true),
+        set_config('app.organization_id', ${organizationId}, true)`;
+      return tx.plan.findFirst({ where: { key } });
+    });
   }
 
   createPlan(data: Prisma.PlanCreateInput) {
-    return this.prisma.plan.create({ data });
+    return this.rls.run((tx) => tx.plan.create({ data }));
   }
 
-  updatePlan(id: string, data: Prisma.PlanUpdateInput) {
-    return this.prisma.plan.update({ where: { id }, data });
+  async updatePlan(id: string, data: Prisma.PlanUpdateInput) {
+    try {
+      return await this.rls.run((tx) =>
+        tx.plan.update({
+          where: { id, commercial: { equals: Prisma.DbNull } },
+          data,
+        }),
+      );
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2025'
+      )
+        throw new ConflictException(
+          'Use o catálogo comercial para alterar este plano.',
+          'CONFLICT',
+        );
+      throw error;
+    }
   }
 
   getOrganizationEntitlements(
@@ -73,6 +97,7 @@ export class SubscriptionPlanRepository {
               orderBy: [
                 { endedAt: { sort: 'desc', nulls: 'first' } },
                 { startedAt: 'desc' },
+                { id: 'desc' },
               ],
               take: 1,
             },
@@ -126,6 +151,7 @@ export class SubscriptionPlanRepository {
             orderBy: [
               { endedAt: { sort: 'desc', nulls: 'first' } },
               { startedAt: 'desc' },
+              { id: 'desc' },
             ],
             take: 1,
           },

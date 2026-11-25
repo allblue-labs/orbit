@@ -13,8 +13,14 @@ import {
   PushNotificationProvider,
   type DeliveryResult,
 } from './notification-delivery.providers';
-import { NotificationGateway } from './notification.gateway';
 import { NotificationRepository } from './notification.repository';
+
+// Keep old clients compatible without reviving the retired Socket.IO transport.
+const inboxChannels = (channels: readonly string[]) => [
+  ...new Set(
+    channels.map((channel) => (channel === 'REALTIME' ? 'IN_APP' : channel)),
+  ),
+];
 
 @Injectable()
 export class NotificationService {
@@ -22,7 +28,6 @@ export class NotificationService {
     private readonly repository: NotificationRepository,
     private readonly email: EmailNotificationProvider,
     private readonly push: PushNotificationProvider,
-    private readonly gateway: NotificationGateway,
   ) {}
 
   list(organizationId: string, userId: string, query: NotificationQueryDto) {
@@ -54,10 +59,12 @@ export class NotificationService {
       input.recipientUserId,
       input.type,
     );
-    const requested = [...new Set(input.channels)];
+    const requested = inboxChannels(input.channels);
     const channels = preference
       ? preference.enabled
-        ? requested.filter((channel) => preference.channels.includes(channel))
+        ? requested.filter((channel) =>
+            inboxChannels(preference.channels).includes(channel),
+          )
         : []
       : requested;
     if (!channels.includes('IN_APP')) channels.unshift('IN_APP');
@@ -100,7 +107,12 @@ export class NotificationService {
         delivery.status === 'SENT' || delivery.status === 'DELIVERED',
     ).length;
     for (const delivery of notification.deliveries) {
-      if (delivery.status === 'SENT' || delivery.status === 'DELIVERED')
+      if (
+        delivery.status === 'SENT' ||
+        delivery.status === 'DELIVERED' ||
+        (delivery.status === 'SKIPPED' &&
+          delivery.provider === 'realtime-retired')
+      )
         continue;
       try {
         const result = await this.deliver(delivery.channel, notification);
@@ -132,18 +144,23 @@ export class NotificationService {
   async markRead(id: string, organizationId: string, userId: string) {
     await this.get(id, organizationId, userId);
     await this.repository.markRead(id, organizationId, userId);
-    this.gateway.emitToUser(userId, 'notification:read', { id });
     return this.get(id, organizationId, userId);
   }
 
   async markAllRead(organizationId: string, userId: string) {
     const result = await this.repository.markAllRead(organizationId, userId);
-    this.gateway.emitToUser(userId, 'notifications:read-all', {});
     return { updated: result.count };
   }
 
-  preferences(organizationId: string, userId: string) {
-    return this.repository.preferences(organizationId, userId);
+  async preferences(organizationId: string, userId: string) {
+    const preferences = await this.repository.preferences(
+      organizationId,
+      userId,
+    );
+    return preferences.map((preference) => ({
+      ...preference,
+      channels: inboxChannels(preference.channels),
+    }));
   }
 
   preference(
@@ -157,18 +174,19 @@ export class NotificationService {
       input.type.trim().toUpperCase(),
       {
         enabled: input.enabled,
-        channels: [...new Set(input.channels)],
+        channels: inboxChannels(input.channels),
         quietHours: input.quietHours as Prisma.InputJsonValue | undefined,
       },
     );
   }
 
-  registerPush(
+  async registerPush(
     organizationId: string,
     userId: string,
     input: RegisterPushSubscriptionDto,
     userAgent?: string,
   ) {
+    await this.push.validateEndpoint(input.endpoint);
     return this.repository.upsertSubscription({
       organizationId,
       userId,
@@ -201,19 +219,9 @@ export class NotificationService {
     if (channel === 'IN_APP')
       return { status: 'SENT', provider: 'orbit-database' };
     if (channel === 'REALTIME') {
-      this.gateway.emitToUser(
-        notification.recipientUserId,
-        'notification:created',
-        {
-          id: notification.id,
-          type: notification.type,
-          title: notification.title,
-          body: notification.body,
-          payload: notification.payload,
-          createdAt: notification.createdAt,
-        },
-      );
-      return { status: 'SENT', provider: 'socket.io' };
+      // Historical pending deliveries remain auditable; no subscriber receipt
+      // is invented. The persisted notification is already in the HTTP inbox.
+      return { status: 'SKIPPED', provider: 'realtime-retired' };
     }
     if (channel === 'EMAIL')
       return this.email.send({

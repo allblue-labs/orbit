@@ -38,6 +38,8 @@ model User {
   avatarFile                         StorageFile?                   @relation("UserAvatarFile", fields: [avatarStorageFileId], references: [id], onDelete: SetNull)
   credential                         Credential?
   sessions                           Session[]
+  httpIdempotencyRecords             HttpIdempotencyRecord[]
+  biometricCredentials               IdentityBiometricCredential[]
   ownedOrganizations                 Organization[]                 @relation("OrganizationOwner")
   organizationMemberships            OrganizationMembership[]
   platformRoleAssignments            PlatformRoleAssignment[]
@@ -83,7 +85,7 @@ model User {
   pmocEquipmentExecutionsStarted     PmocEquipmentExecution[]       @relation("PmocEquipmentExecutionStartedBy")
   pmocEquipmentExecutionsCompleted   PmocEquipmentExecution[]       @relation("PmocEquipmentExecutionCompletedBy")
   pmocEquipmentExecutionsResponsible PmocEquipmentExecution[]       @relation("PmocEquipmentExecutionResponsible")
-  pmocEquipmentSchedules            PmocEquipmentSchedule[]
+  pmocEquipmentSchedules             PmocEquipmentSchedule[]
   pmocEquipmentEvidenceUploaded      PmocEquipmentEvidence[]        @relation("PmocEquipmentEvidenceUploadedBy")
   schedulingHistory                  SchedulingEventHistory[]
   notificationPreferences            NotificationPreference[]
@@ -127,6 +129,10 @@ model User {
   operationMaterialsCreated          OperationMaterial[]            @relation("OperationMaterialCreatedBy")
 
   createdQuoteAcceptanceLinks QuoteAcceptanceLink[] @relation("QuoteAcceptanceCreatedBy")
+
+  identityEmails               IdentityEmailDelivery[]
+  initiatedTenantProvisionings PlatformTenantProvisioning[] @relation("ProvisioningActor")
+  ownedTenantProvisionings     PlatformTenantProvisioning[] @relation("ProvisioningOwner")
 
   @@index([status, deletedAt])
   @@map("users")
@@ -188,7 +194,8 @@ model PasswordResetToken {
   usedAt    DateTime? @map("used_at") @db.Timestamptz(3)
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenantProvisionings PlatformTenantProvisioning[]
 
   @@index([userId, expiresAt])
   @@map("password_reset_tokens")
@@ -218,19 +225,156 @@ model IdentityInvitation {
   @@map("identity_invitations")
 }
 
+/// Encrypted identity email outbox. No tokens or recipients in job payloads/logs.
+model IdentityEmailDelivery {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  purpose           String    @db.VarChar(30)
+  userId            String?   @map("user_id") @db.Uuid
+  organizationId    String?   @map("organization_id") @db.Uuid
+  tokenHash         String    @map("token_hash") @db.Char(64)
+  encryptedPayload  String?   @map("encrypted_payload") @db.Text
+  expiresAt         DateTime  @map("expires_at") @db.Timestamptz(3)
+  status            String    @default("PENDING") @db.VarChar(30)
+  attempts          Int       @default(0)
+  availableAt       DateTime  @default(now()) @map("available_at") @db.Timestamptz(3)
+  lockedAt          DateTime? @map("locked_at") @db.Timestamptz(3)
+  leaseId           String?   @map("lease_id") @db.Uuid
+  providerMessageId String?   @map("provider_message_id") @db.VarChar(255)
+  lastErrorCode     String?   @map("last_error_code") @db.VarChar(80)
+  correlationId String? @map("correlation_id") @db.VarChar(64)
+  adminRequeuedAt   DateTime? @map("admin_requeued_at") @db.Timestamptz(3)
+  finishedAt        DateTime? @map("finished_at") @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  outboundMessages EmailOutboundMessage[]
+
+  user         User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([purpose, tokenHash])
+  @@index([status, availableAt])
+  @@index([status, lockedAt])
+  @@index([providerMessageId])
+  @@map("identity_email_deliveries")
+}
+
+// Global transactional delivery metadata. No plaintext addresses, tokens or bodies.
+model EmailOutboundMessage {
+  id                  String                   @id @default(uuid(7)) @db.Uuid
+  region              String                   @db.VarChar(30)
+  sourceHash          String                   @map("source_hash") @db.Char(64)
+  recipientHashes     String[]                 @map("recipient_hashes")
+  identityDeliveryId  String?                  @map("identity_delivery_id") @db.Uuid
+  contactSubmissionId String?                  @map("contact_submission_id") @db.Uuid
+  contactSubmission   PublicContactSubmission? @relation(fields: [contactSubmissionId], references: [id], onDelete: SetNull)
+  providerMessageId   String?                  @map("provider_message_id") @db.VarChar(255)
+  status              String                   @default("PREPARED") @db.VarChar(20)
+  feedbackStatus      String                   @default("UNOBSERVED") @map("feedback_status") @db.VarChar(20)
+  acceptedAt          DateTime?                @map("accepted_at") @db.Timestamptz(3)
+  createdAt           DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
+  identityDelivery    IdentityEmailDelivery?   @relation(fields: [identityDeliveryId], references: [id], onDelete: SetNull)
+  feedbackEvents      EmailFeedbackEvent[]
+  providerMessages    EmailProviderMessage[]
+
+  @@unique([id, region])
+  @@unique([region, providerMessageId])
+  @@index([identityDeliveryId])
+  @@index([contactSubmissionId])
+  @@map("email_outbound_messages")
+}
+
+// An SDK/network retry can accept more than one SES ID for one logical attempt.
+model EmailProviderMessage {
+  region            String               @db.VarChar(30)
+  providerMessageId String               @map("provider_message_id") @db.VarChar(255)
+  outboundId        String               @map("outbound_id") @db.Uuid
+  createdAt         DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  outbound          EmailOutboundMessage @relation(fields: [outboundId, region], references: [id, region], onDelete: Restrict)
+
+  @@id([region, providerMessageId])
+  @@index([outboundId])
+  @@map("email_provider_messages")
+}
+
+model EmailFeedbackEvent {
+  id              String                @id @default(uuid(7)) @db.Uuid
+  topicArn        String                @map("topic_arn") @db.VarChar(300)
+  snsMessageId    String                @map("sns_message_id") @db.Uuid
+  payloadHash     String                @map("payload_hash") @db.Char(64)
+  kind            String                @db.VarChar(30)
+  outboundId      String?               @map("outbound_id") @db.Uuid
+  recipientHashes String[]              @map("recipient_hashes")
+  status          String                @default("PROCESSED") @db.VarChar(20)
+  leaseId         String?               @map("lease_id") @db.Uuid
+  leaseExpiresAt  DateTime?             @map("lease_expires_at") @db.Timestamptz(3)
+  subscriptionArn String?               @map("subscription_arn") @db.VarChar(400)
+  occurredAt      DateTime?             @map("occurred_at") @db.Timestamptz(3)
+  createdAt       DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+  outbound        EmailOutboundMessage? @relation(fields: [outboundId], references: [id], onDelete: Restrict)
+  suppressions    EmailSuppression[]
+
+  @@unique([topicArn, snsMessageId])
+  @@index([outboundId])
+  @@map("email_feedback_events")
+}
+
+model EmailSuppression {
+  recipientHash     String             @id @map("recipient_hash") @db.Char(64)
+  reason            String             @db.VarChar(20)
+  feedbackEventId   String             @map("feedback_event_id") @db.Uuid
+  firstSuppressedAt DateTime           @default(now()) @map("first_suppressed_at") @db.Timestamptz(3)
+  lastObservedAt    DateTime           @default(now()) @map("last_observed_at") @db.Timestamptz(3)
+  feedbackEvent     EmailFeedbackEvent @relation(fields: [feedbackEventId], references: [id], onDelete: Restrict)
+
+  @@map("email_suppressions")
+}
+
+model AuthRateLimitBucket {
+  scopeHash String   @id @map("scope_hash") @db.Char(64)
+  shard     Int      @db.SmallInt
+  attempts  Int
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+
+  @@index([shard, expiresAt])
+  @@map("auth_rate_limit_buckets")
+}
+
+model HttpIdempotencyRecord {
+  scopeHash          String   @id @map("scope_hash") @db.Char(64)
+  organizationId     String   @map("organization_id") @db.Uuid
+  actorId            String   @map("actor_id") @db.Uuid
+  responseCiphertext String   @map("response_ciphertext")
+  expiresAt          DateTime @map("expires_at") @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "http_idempotency_records_organization_id_fkey")
+  actor        User         @relation(fields: [actorId], references: [id], onDelete: Cascade, map: "http_idempotency_records_actor_id_fkey")
+
+  @@index([expiresAt], map: "http_idempotency_expiry_idx")
+  @@index([organizationId], map: "http_idempotency_organization_idx")
+  @@index([actorId], map: "http_idempotency_actor_idx")
+  @@map("http_idempotency_records")
+}
+
 model Session {
-  id               String    @id @default(uuid(7)) @db.Uuid
-  userId           String    @map("user_id") @db.Uuid
-  organizationId   String?   @map("organization_id") @db.Uuid
-  businessUnitId   String?   @map("business_unit_id") @db.Uuid
-  refreshTokenHash String    @unique @map("refresh_token_hash") @db.VarChar(255)
-  client           String    @db.VarChar(30)
-  deviceId         String?   @map("device_id") @db.VarChar(160)
-  userAgent        String?   @map("user_agent") @db.Text
-  ipAddress        String?   @map("ip_address") @db.Inet
-  expiresAt        DateTime  @map("expires_at") @db.Timestamptz(3)
-  revokedAt        DateTime? @map("revoked_at") @db.Timestamptz(3)
-  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  id                       String    @id @default(uuid(7)) @db.Uuid
+  userId                   String    @map("user_id") @db.Uuid
+  organizationId           String?   @map("organization_id") @db.Uuid
+  businessUnitId           String?   @map("business_unit_id") @db.Uuid
+  refreshTokenHash         String    @unique @map("refresh_token_hash") @db.VarChar(255)
+  previousRefreshTokenHash String?   @unique @map("previous_refresh_token_hash") @db.VarChar(255)
+  /// AES-GCM encrypted canonical response, readable only during the bounded grace.
+  rotationResponse         String?   @map("rotation_response") @db.Text
+  rotationGraceUntil       DateTime? @map("rotation_grace_until") @db.Timestamptz(3)
+  client                   String    @db.VarChar(30)
+  deviceId                 String?   @map("device_id") @db.VarChar(160)
+  userAgent                String?   @map("user_agent") @db.Text
+  ipAddress                String?   @map("ip_address") @db.Inet
+  expiresAt                DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt                DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
 
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -288,6 +432,7 @@ model Organization {
   billingFinancialAdjustments   BillingFinancialAdjustment[]
   integrations                  Integration[]
   sessions                      Session[]
+  httpIdempotencyRecords        HttpIdempotencyRecord[]
   customers                     Customer[]
   customerAddresses             CustomerAddress[]
   categories                    ProductCategory[]
@@ -311,6 +456,7 @@ model Organization {
   storageFiles                  StorageFile[]
   artifactManifests             ArtifactManifest[]
   backgroundJobs                BackgroundJob[]
+  documentExports               DocumentExport[]
   reports                       Report[]
   checklistTemplates            ChecklistTemplate[]
   checklistExecutions           ChecklistExecution[]
@@ -376,6 +522,14 @@ model Organization {
 
   quoteAcceptanceLinks QuoteAcceptanceLink[]
 
+  identityEmails IdentityEmailDelivery[]
+
+  productSales        ProductSale[]
+  privateCatalogPlans Plan[]                       @relation("PrivateCatalog")
+  adminProvisionings  PlatformTenantProvisioning[]
+
+  uploadAdmissions StorageUploadAdmission[]
+
   @@index([ownerUserId, status])
   @@index([planId, subscriptionStatus])
   @@map("organizations")
@@ -439,6 +593,7 @@ model BusinessUnit {
   storageFiles            StorageFile[]
   artifactManifests       ArtifactManifest[]
   backgroundJobs          BackgroundJob[]
+  documentExports         DocumentExport[]
   pmocEquipmentExecutions PmocEquipmentExecution[]
   pmocEquipmentSchedules  PmocEquipmentSchedule[]
 
@@ -464,11 +619,14 @@ model BusinessUnit {
 
   quoteAcceptanceLinks QuoteAcceptanceLink[]
 
+  productSales ProductSale[]
+
   @@unique([organizationId, slug])
   @@index([organizationId, documentType, documentNumber], map: "business_units_org_document_idx")
   @@index([organizationId, status, deletedAt])
   @@index([organizationId, isPrimary])
   @@map("business_units")
+  @@unique([id, organizationId], map: "pr12_business_units_org_key")
 }
 
 model OrganizationMembership {
@@ -485,6 +643,9 @@ model OrganizationMembership {
   usesCustomAccess      Boolean  @default(false) @map("uses_custom_access")
   customPermissions     String[] @default([]) @map("custom_permissions") @db.VarChar(160)
   customAllowedSurfaces String[] @default([]) @map("custom_allowed_surfaces") @db.VarChar(10)
+
+  /// Owner-only mobile management grants. Empty for every existing member.
+  mobileDelegations String[] @default([]) @map("mobile_delegations") @db.VarChar(40)
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -553,7 +714,8 @@ model Role {
 
 /// Global roles are assigned independently from tenant memberships. A
 /// PLATFORM_ADMIN can therefore authenticate without belonging to a customer
-/// organization and receives RLS bypass only through its signed identity.
+/// organization. Runtime platform authority is reloaded from active persisted
+/// global assignments on each request, never inferred from JWT role names.
 model PlatformRoleAssignment {
   id        String    @id @default(uuid(7)) @db.Uuid
   userId    String    @map("user_id") @db.Uuid
@@ -603,10 +765,28 @@ model Plan {
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  organizations Organization[]
+  commercial      Json?   @db.JsonB
+  catalogVersion  Int     @default(1) @map("catalog_version")
+  catalogTenantId String? @map("catalog_tenant_id") @db.Uuid
 
+  organizations Organization[]
+  catalogTenant Organization?     @relation("PrivateCatalog", fields: [catalogTenantId], references: [id], onDelete: Cascade)
+  stripePrices  PlanStripePrice[]
+
+  @@index([catalogTenantId])
   @@index([isActive])
   @@map("plans")
+}
+
+model PlanStripePrice {
+  id              String @id @db.VarChar(255)
+  planCode        String @map("plan_code") @db.VarChar(40)
+  billingInterval String @map("billing_interval") @db.VarChar(20)
+  amountMinor     Int    @map("amount_minor")
+  plan            Plan   @relation(fields: [planCode], references: [key], onDelete: Cascade)
+
+  @@index([planCode])
+  @@map("plan_stripe_prices")
 }
 
 model PlanUsage {
@@ -699,7 +879,7 @@ model OrganizationSubscription {
   trialStartsAt DateTime? @map("trial_starts_at") @db.Timestamptz(3)
   trialEndsAt   DateTime? @map("trial_ends_at") @db.Timestamptz(3)
 
-  /// Cancelamento é sempre no fim do período já pago. Não há devolução aqui.
+  /// Controle da renovação para cancelamentos com acesso mantido até o vencimento.
   cancelAtPeriodEnd Boolean   @default(false) @map("cancel_at_period_end")
   canceledAt        DateTime? @map("canceled_at") @db.Timestamptz(3)
 
@@ -708,7 +888,7 @@ model OrganizationSubscription {
   graceStartsAt DateTime? @map("grace_starts_at") @db.Timestamptz(3)
   graceEndsAt   DateTime? @map("grace_ends_at") @db.Timestamptz(3)
 
-  /// Toda troca de plano pago vale na renovação, preservando o período atual.
+  /// Troca programada para o próximo vencimento.
   pendingPlanCode             String?   @map("pending_plan_code") @db.VarChar(60)
   pendingBillingInterval      String?   @map("pending_billing_interval") @db.VarChar(20)
   pendingCatalogVersion       Int?      @map("pending_catalog_version")
@@ -729,24 +909,28 @@ model OrganizationSubscription {
   /// nenhum — é assim que a avaliação gratuita e os inquilinos anteriores à
   /// integração continuam funcionando. `providerStatus` é diagnóstico; quem
   /// decide acesso é `status`.
-  provider               String?   @db.VarChar(20)
-  providerSubscriptionId String?   @unique @map("provider_subscription_id") @db.VarChar(255)
-  providerCustomerId     String?   @map("provider_customer_id") @db.VarChar(255)
-  providerPriceId        String?   @map("provider_price_id") @db.VarChar(255)
-  providerStatus         String?   @map("provider_status") @db.VarChar(40)
+  provider                   String?   @db.VarChar(20)
+  providerSubscriptionId     String?   @unique @map("provider_subscription_id") @db.VarChar(255)
+  providerCustomerId         String?   @map("provider_customer_id") @db.VarChar(255)
+  providerPriceId            String?   @map("provider_price_id") @db.VarChar(255)
+  providerStatus             String?   @map("provider_status") @db.VarChar(40)
   /// O último evento do provedor já aplicado a esta linha.
-  providerLastEventId    String?   @map("provider_last_event_id") @db.VarChar(255)
-  providerUpdatedAt      DateTime? @map("provider_updated_at") @db.Timestamptz(3)
+  providerLastEventId        String?   @map("provider_last_event_id") @db.VarChar(255)
+  providerUpdatedAt          DateTime? @map("provider_updated_at") @db.Timestamptz(3)
+  providerObservationVersion BigInt    @default(0) @map("provider_observation_version")
 
   /// Controle otimista: dois comandos concorrentes não produzem estado torto.
   version   Int      @default(1)
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  organization     Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  trialGrants      SubscriptionTrialGrant[]
-  checkoutAttempts BillingCheckoutAttempt[]
-  billingInvoices  BillingInvoice[]
+  organization          Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  trialGrants           SubscriptionTrialGrant[]
+  checkoutAttempts      BillingCheckoutAttempt[]
+  billingInvoices       BillingInvoice[]
+  billingPlanUpgrades   BillingPlanUpgrade[]
+  billingSupportTickets BillingSupportTicket[]
+  billingRefundRequests BillingRefundRequest[]
 
   @@unique([id, organizationId], map: "organization_subscriptions_tenant_identity")
   @@index([organizationId, endedAt])
@@ -847,10 +1031,13 @@ model BillingCheckoutAttempt {
   provider String @db.VarChar(20)
   mode     String @db.VarChar(10)
 
-  planCode            String  @map("plan_code") @db.VarChar(60)
-  billingInterval     String  @map("billing_interval") @db.VarChar(20)
-  subscriptionVersion Int?    @map("subscription_version")
-  endsTrial           Boolean @default(false) @map("ends_trial")
+  planCode             String  @map("plan_code") @db.VarChar(60)
+  billingInterval      String  @map("billing_interval") @db.VarChar(20)
+  subscriptionVersion  Int?    @map("subscription_version")
+  endsTrial            Boolean @default(false) @map("ends_trial")
+  quotedPriceId        String? @map("quoted_price_id") @db.VarChar(255)
+  quotedCatalogVersion Int?    @map("quoted_catalog_version")
+  quotedEntitlements   Json?   @map("quoted_entitlements") @db.JsonB
 
   /// `CREATING` · `OPEN` · `COMPLETED` · `EXPIRED` · `FAILED`.
   status String @default("CREATING") @db.VarChar(20)
@@ -922,7 +1109,9 @@ model BillingInvoice {
   markedUncollectibleAt DateTime? @map("marked_uncollectible_at") @db.Timestamptz(3)
   providerCreatedAt     DateTime  @map("provider_created_at") @db.Timestamptz(3)
   providerObservedAt    DateTime  @map("provider_observed_at") @db.Timestamptz(3)
+  observationVersion    BigInt    @default(0) @map("observation_version")
   lastProviderEventId   String?   @map("last_provider_event_id") @db.VarChar(255)
+  paymentEvidence       Json      @default("[]") @map("payment_evidence") @db.JsonB
 
   version   Int      @default(1)
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -942,18 +1131,21 @@ model BillingInvoice {
 
 /// Razão append-only das observações que formaram a projeção da fatura.
 model BillingInvoiceTransition {
-  id                   String   @id @default(uuid(7)) @db.Uuid
-  organizationId       String   @map("organization_id") @db.Uuid
-  billingInvoiceId     String   @map("billing_invoice_id") @db.Uuid
-  provider             String   @db.VarChar(20)
-  providerEventId      String   @map("provider_event_id") @db.VarChar(255)
-  status               String   @db.VarChar(30)
-  totalMinor           Int      @map("total_minor")
-  amountPaidMinor      Int      @map("amount_paid_minor")
-  amountRemainingMinor Int      @map("amount_remaining_minor")
-  attemptCount         Int      @map("attempt_count")
-  observedAt           DateTime @map("observed_at") @db.Timestamptz(3)
-  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  id                   String    @id @default(uuid(7)) @db.Uuid
+  organizationId       String    @map("organization_id") @db.Uuid
+  billingInvoiceId     String    @map("billing_invoice_id") @db.Uuid
+  provider             String    @db.VarChar(20)
+  providerEventId      String    @map("provider_event_id") @db.VarChar(255)
+  status               String    @db.VarChar(30)
+  totalMinor           Int       @map("total_minor")
+  amountPaidMinor      Int       @map("amount_paid_minor")
+  amountRemainingMinor Int       @map("amount_remaining_minor")
+  attemptCount         Int       @map("attempt_count")
+  sourceEventType      String?   @map("source_event_type") @db.VarChar(120)
+  sourceOccurredAt     DateTime? @map("source_occurred_at") @db.Timestamptz(3)
+  adjustmentFact       Json?     @map("adjustment_fact") @db.JsonB
+  observedAt           DateTime  @map("observed_at") @db.Timestamptz(3)
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
 
   organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   invoice      BillingInvoice @relation(fields: [billingInvoiceId, organizationId], references: [id, organizationId], onDelete: Restrict)
@@ -978,6 +1170,7 @@ model BillingFinancialAdjustment {
   reason              String?  @db.VarChar(80)
   occurredAt          DateTime @map("occurred_at") @db.Timestamptz(3)
   providerObservedAt  DateTime @map("provider_observed_at") @db.Timestamptz(3)
+  observationVersion  BigInt   @default(0) @map("observation_version")
   lastProviderEventId String   @map("last_provider_event_id") @db.VarChar(255)
   version             Int      @default(1)
   createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -1017,6 +1210,9 @@ model BillingFinancialAdjustment {
 model BillingWebhookEvent {
   id String @id @default(uuid(7)) @db.Uuid
 
+  mode                   String? @db.VarChar(10)
+  source                 String  @default("WEBHOOK") @db.VarChar(20)
+  reconciliationOutcome  String? @map("reconciliation_outcome") @db.VarChar(30)
   provider               String  @db.VarChar(20)
   providerEventId        String  @map("provider_event_id") @db.VarChar(255)
   eventType              String  @map("event_type") @db.VarChar(120)
@@ -1046,6 +1242,7 @@ model BillingWebhookEvent {
   @@index([processingStatus, receivedAt])
   @@index([processingStatus, nextAttemptAt, leaseExpiresAt], map: "billing_webhook_events_claim_idx")
   @@index([providerSubscriptionId])
+  @@index([mode, processingStatus, receivedAt], map: "billing_events_mode_backlog")
   @@map("billing_webhook_events")
 }
 
@@ -1116,6 +1313,8 @@ model Customer {
   pmocPlans PmocPlan[]
 
   pmocCodeSequences PmocCodeSequence[]
+
+  productSales ProductSale[]
 
   @@index([organizationId, status, deletedAt])
   @@index([organizationId, documentNumber])
@@ -1188,32 +1387,41 @@ model Contact {
 // -----------------------------------------------------------------------------
 
 model CustomerPortalIdentity {
-  id                String    @id @default(uuid(7)) @db.Uuid
-  organizationId    String    @map("organization_id") @db.Uuid
-  customerId        String    @map("customer_id") @db.Uuid
-  contactId         String?   @map("contact_id") @db.Uuid
-  email             String    @db.VarChar(320)
-  normalizedEmail   String    @map("normalized_email") @db.VarChar(320)
-  displayName       String    @map("display_name") @db.VarChar(180)
-  passwordHash      String?   @map("password_hash") @db.VarChar(255)
-  status            String    @default("INVITED") @db.VarChar(30)
-  failedAttempts    Int       @default(0) @map("failed_attempts")
-  lockedUntil       DateTime? @map("locked_until") @db.Timestamptz(3)
-  emailVerifiedAt   DateTime? @map("email_verified_at") @db.Timestamptz(3)
-  passwordUpdatedAt DateTime? @map("password_updated_at") @db.Timestamptz(3)
-  lastLoginAt       DateTime? @map("last_login_at") @db.Timestamptz(3)
-  disabledAt        DateTime? @map("disabled_at") @db.Timestamptz(3)
-  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id                 String    @id @default(uuid(7)) @db.Uuid
+  organizationId     String    @map("organization_id") @db.Uuid
+  customerId         String    @map("customer_id") @db.Uuid
+  contactId          String?   @map("contact_id") @db.Uuid
+  email              String    @db.VarChar(320)
+  normalizedEmail    String    @map("normalized_email") @db.VarChar(320)
+  displayName        String    @map("display_name") @db.VarChar(180)
+  passwordHash       String?   @map("password_hash") @db.VarChar(255)
+  status             String    @default("INVITED") @db.VarChar(30)
+  failedAttempts     Int       @default(0) @map("failed_attempts")
+  lockedUntil        DateTime? @map("locked_until") @db.Timestamptz(3)
+  emailVerifiedAt    DateTime? @map("email_verified_at") @db.Timestamptz(3)
+  passwordUpdatedAt  DateTime? @map("password_updated_at") @db.Timestamptz(3)
+  lastLoginAt        DateTime? @map("last_login_at") @db.Timestamptz(3)
+  disabledAt         DateTime? @map("disabled_at") @db.Timestamptz(3)
+  /// Senha temporária dada pelo owner: a primeira coisa que o cliente faz é trocá-la.
+  mustChangePassword Boolean   @default(false) @map("must_change_password")
+  avatarBucket       String?   @map("avatar_bucket") @db.VarChar(120)
+  avatarObjectKey    String?   @map("avatar_object_key") @db.VarChar(512)
+  avatarUpdatedAt    DateTime? @map("avatar_updated_at") @db.Timestamptz(3)
+  signatureBucket    String?   @map("signature_bucket") @db.VarChar(120)
+  signatureObjectKey String?   @map("signature_object_key") @db.VarChar(512)
+  signatureUpdatedAt DateTime? @map("signature_updated_at") @db.Timestamptz(3)
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  organization         Organization                  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  customer             Customer                      @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  contact              Contact?                      @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  organization         Organization                        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  customer             Customer                            @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  contact              Contact?                            @relation(fields: [contactId], references: [id], onDelete: SetNull)
   sessions             CustomerPortalSession[]
   invitations          CustomerPortalInvitation[]
   passwordResets       CustomerPortalPasswordReset[]
   serviceRequests      CustomerServiceRequest[]
   serviceRequestEvents CustomerServiceRequestEvent[]
+  biometricCredentials CustomerPortalBiometricCredential[]
 
   @@unique([organizationId, normalizedEmail])
   @@index([organizationId, customerId, status])
@@ -1450,6 +1658,8 @@ model Asset {
   qrIdentities            EquipmentQrIdentity[]
   customerServiceRequests CustomerServiceRequest[]
 
+  equipmentServiceHistory EquipmentServiceHistory[]
+
   @@unique([organizationId, identifier])
   @@index([organizationId, businessUnitId, status, deletedAt])
   @@index([organizationId, customerId])
@@ -1485,6 +1695,29 @@ model EquipmentQrIdentity {
 // -----------------------------------------------------------------------------
 // OPERATIONS
 // -----------------------------------------------------------------------------
+
+/// Snapshot de um atendimento concluído por equipamento.
+model EquipmentServiceHistory {
+  operationId        String   @map("operation_id") @db.Uuid
+  assetId            String   @map("asset_id") @db.Uuid
+  organizationId     String   @map("organization_id") @db.Uuid
+  businessUnitId     String   @map("business_unit_id") @db.Uuid
+  completedAt        DateTime @map("completed_at") @db.Timestamptz(3)
+  code               String   @db.VarChar(60)
+  serviceOrderNumber Int?     @map("service_order_number")
+  title              String   @db.VarChar(220)
+  kind               String   @db.VarChar(60)
+  technicianName     String?  @map("technician_name") @db.Text
+  description        String?  @db.Text
+  observations       Json     @db.JsonB
+
+  operation Operation @relation(fields: [operationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  asset     Asset     @relation(fields: [assetId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([operationId, assetId, completedAt])
+  @@index([organizationId, businessUnitId, assetId, completedAt(sort: Desc), operationId(sort: Desc)], map: "equipment_service_history_scope_idx")
+  @@map("equipment_service_history")
+}
 
 /// Os equipamentos de um atendimento.
 ///
@@ -1604,6 +1837,8 @@ model Operation {
   cancellationRequests    OperationCancellationRequest[]
   materials               OperationMaterial[]
 
+  equipmentServiceHistory EquipmentServiceHistory[]
+
   @@index([organizationId, code])
   @@index([organizationId, businessUnitId, status, scheduledStart])
   @@index([organizationId, customerId, createdAt])
@@ -1633,6 +1868,11 @@ model CustomerServiceRequest {
   subject                   String    @db.VarChar(180)
   description               String    @db.Text
   status                    String    @default("OPEN") @db.VarChar(30)
+  /// LOW, NORMAL, HIGH ou URGENT — o cliente escolhe; NORMAL quando não diz.
+  urgency                   String    @default("NORMAL") @db.VarChar(20)
+  /// O que o técnico precisa saber antes de sair: condição do equipamento,
+  /// local, melhor horário e contato. Tudo opcional.
+  details                   Json      @default("{}") @db.JsonB
   assignedToUserId          String?   @map("assigned_to_user_id") @db.Uuid
   convertedOperationId      String?   @unique @map("converted_operation_id") @db.Uuid
   version                   Int       @default(1)
@@ -1660,6 +1900,7 @@ model CustomerServiceRequest {
   @@index([organizationId, customerId, status, createdAt])
   @@index([organizationId, businessUnitId, status, createdAt])
   @@index([organizationId, assignedToUserId, status, createdAt])
+  @@index([organizationId, status, urgency, submittedAt], map: "csr_org_status_urgency_idx")
   @@map("customer_service_requests")
 }
 
@@ -1763,16 +2004,18 @@ model OperationHistory {
 }
 
 model OperationAttachment {
-  id           String    @id @default(uuid(7)) @db.Uuid
-  operationId  String    @map("operation_id") @db.Uuid
-  uploadedById String    @map("uploaded_by_id") @db.Uuid
-  fileName     String    @map("file_name") @db.VarChar(255)
-  mimeType     String    @map("mime_type") @db.VarChar(160)
-  size         Int
-  storageKey   String    @unique @map("storage_key") @db.VarChar(255)
-  checksum     String    @db.Char(64)
-  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz(3)
+  storageProvider String?   @map("storage_provider") @db.VarChar(40)
+  storageBucket   String?   @map("storage_bucket") @db.VarChar(160)
+  id              String    @id @default(uuid(7)) @db.Uuid
+  operationId     String    @map("operation_id") @db.Uuid
+  uploadedById    String    @map("uploaded_by_id") @db.Uuid
+  fileName        String    @map("file_name") @db.VarChar(255)
+  mimeType        String    @map("mime_type") @db.VarChar(160)
+  size            Int
+  storageKey      String    @unique @map("storage_key") @db.VarChar(255)
+  checksum        String    @db.Char(64)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz(3)
 
   operation  Operation @relation(fields: [operationId], references: [id], onDelete: Cascade)
   uploadedBy User      @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
@@ -1992,6 +2235,8 @@ model ArtifactExecution {
   pmocExecution          PmocExecution?
   pmocEquipmentExecution PmocEquipmentExecution?
 
+  productSale ProductSale?
+
   @@unique([organizationId, code])
   @@index([organizationId, businessUnitId, status, createdAt])
   @@index([operationId])
@@ -2065,28 +2310,30 @@ model ArtifactExecutionResponse {
 }
 
 model ArtifactExecutionAttachment {
-  id             String                     @id @default(uuid(7)) @db.Uuid
-  organizationId String                     @map("organization_id") @db.Uuid
-  executionId    String                     @map("execution_id") @db.Uuid
-  responseId     String?                    @map("response_id") @db.Uuid
-  sectionId      String?                    @map("section_id") @db.VarChar(120)
-  uploadedById   String                     @map("uploaded_by_id") @db.Uuid
-  kind           String                     @db.VarChar(40)
-  fileName       String                     @map("file_name") @db.VarChar(255)
-  mimeType       String                     @map("mime_type") @db.VarChar(160)
-  sizeBytes      BigInt                     @map("size_bytes")
-  storageKey     String                     @unique @map("storage_key") @db.VarChar(500)
+  storageProvider String?                    @map("storage_provider") @db.VarChar(40)
+  storageBucket   String?                    @map("storage_bucket") @db.VarChar(160)
+  id              String                     @id @default(uuid(7)) @db.Uuid
+  organizationId  String                     @map("organization_id") @db.Uuid
+  executionId     String                     @map("execution_id") @db.Uuid
+  responseId      String?                    @map("response_id") @db.Uuid
+  sectionId       String?                    @map("section_id") @db.VarChar(120)
+  uploadedById    String                     @map("uploaded_by_id") @db.Uuid
+  kind            String                     @db.VarChar(40)
+  fileName        String                     @map("file_name") @db.VarChar(255)
+  mimeType        String                     @map("mime_type") @db.VarChar(160)
+  sizeBytes       BigInt                     @map("size_bytes")
+  storageKey      String                     @unique @map("storage_key") @db.VarChar(500)
   /// Objeto no Storage. Nulo nos anexos anteriores à PR-19.
-  fileId         String?                    @map("file_id") @db.Uuid
-  checksum       String?                    @db.Char(64)
-  metadata       Json                       @default("{}") @db.JsonB
-  createdAt      DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
-  deletedAt      DateTime?                  @map("deleted_at") @db.Timestamptz(3)
-  organization   Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  execution      ArtifactExecution          @relation(fields: [executionId], references: [id], onDelete: Cascade)
-  response       ArtifactExecutionResponse? @relation(fields: [responseId], references: [id], onDelete: Cascade)
-  uploadedBy     User                       @relation("ArtifactAttachmentUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
-  file           StorageFile?               @relation(fields: [fileId], references: [id], onDelete: SetNull)
+  fileId          String?                    @map("file_id") @db.Uuid
+  checksum        String?                    @db.Char(64)
+  metadata        Json                       @default("{}") @db.JsonB
+  createdAt       DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+  deletedAt       DateTime?                  @map("deleted_at") @db.Timestamptz(3)
+  organization    Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  execution       ArtifactExecution          @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  response        ArtifactExecutionResponse? @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  uploadedBy      User                       @relation("ArtifactAttachmentUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
+  file            StorageFile?               @relation(fields: [fileId], references: [id], onDelete: SetNull)
 
   @@index([organizationId, executionId, createdAt])
   @@index([fileId])
@@ -2185,10 +2432,13 @@ model StorageFile {
   fieldEvidenceUploads   FieldEvidenceUpload[]
   fieldEvidence          FieldEvidence[]
 
-  quoteAcceptanceDocuments QuoteAcceptanceLink[] @relation("QuoteAcceptanceDocument")
-  quoteAcceptanceSignatures QuoteAcceptanceLink[] @relation("QuoteAcceptanceSignature")
+  quoteAcceptanceDocuments  QuoteAcceptanceLink[]    @relation("QuoteAcceptanceDocument")
+  quoteAcceptanceSignatures QuoteAcceptanceLink[]    @relation("QuoteAcceptanceSignature")
+  uploadAdmissions          StorageUploadAdmission[]
+  documentExports           DocumentExport[]
 
   @@unique([provider, bucket, objectKey])
+  @@unique([id, organizationId])
   @@index([organizationId, status, createdAt])
   @@map("storage_files")
 }
@@ -2527,18 +2777,19 @@ model Report {
 }
 
 model GeneratedDocument {
-  id             String   @id @default(uuid(7)) @db.Uuid
-  organizationId String   @map("organization_id") @db.Uuid
-  reportId       String   @map("report_id") @db.Uuid
-  version        Int
-  format         String   @default("PDF") @db.VarChar(20)
-  storageBucket  String   @map("storage_bucket") @db.VarChar(120)
-  storageKey     String   @map("storage_key") @db.Text
-  mimeType       String   @map("mime_type") @db.VarChar(120)
-  sizeBytes      BigInt   @map("size_bytes")
-  sha256         String   @db.Char(64)
-  sourceHash     String   @map("source_hash") @db.Char(64)
-  renderedAt     DateTime @default(now()) @map("rendered_at") @db.Timestamptz(3)
+  storageProvider String?  @map("storage_provider") @db.VarChar(40)
+  id              String   @id @default(uuid(7)) @db.Uuid
+  organizationId  String   @map("organization_id") @db.Uuid
+  reportId        String   @map("report_id") @db.Uuid
+  version         Int
+  format          String   @default("PDF") @db.VarChar(20)
+  storageBucket   String   @map("storage_bucket") @db.VarChar(120)
+  storageKey      String   @map("storage_key") @db.Text
+  mimeType        String   @map("mime_type") @db.VarChar(120)
+  sizeBytes       BigInt   @map("size_bytes")
+  sha256          String   @db.Char(64)
+  sourceHash      String   @map("source_hash") @db.Char(64)
+  renderedAt      DateTime @default(now()) @map("rendered_at") @db.Timestamptz(3)
 
   report Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
 
@@ -2588,7 +2839,7 @@ model Notification {
   recipientUserId String    @map("recipient_user_id") @db.Uuid
   type            String    @db.VarChar(80)
   dedupeKey       String?   @map("dedupe_key") @db.VarChar(180)
-  channels        String[]  @default(["IN_APP", "REALTIME"]) @db.VarChar(30)
+  channels        String[]  @default(["IN_APP"]) @db.VarChar(30)
   title           String    @db.VarChar(180)
   body            String    @db.Text
   status          String    @default("PENDING") @db.VarChar(40)
@@ -2676,7 +2927,7 @@ model NotificationPreference {
   organizationId String   @map("organization_id") @db.Uuid
   userId         String   @map("user_id") @db.Uuid
   type           String   @db.VarChar(80)
-  channels       String[] @default(["IN_APP", "REALTIME"]) @db.VarChar(30)
+  channels       String[] @default(["IN_APP"]) @db.VarChar(30)
   enabled        Boolean  @default(true)
   quietHours     Json?    @map("quiet_hours") @db.JsonB
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -3024,6 +3275,7 @@ model BackgroundJob {
   jobKey          String    @map("job_key") @db.VarChar(200)
   payload         Json      @default("{}") @db.JsonB
   status          String    @default("PENDING") @db.VarChar(20)
+  redriveGeneration Int @default(0) @map("redrive_generation")
   attempts        Int       @default(0)
   maxAttempts     Int       @default(3) @map("max_attempts")
   /// Quando o job volta a ser elegível — é o backoff exponencial.
@@ -3040,12 +3292,69 @@ model BackgroundJob {
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  businessUnit BusinessUnit? @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  businessUnit    BusinessUnit?    @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
+  documentExports DocumentExport[]
+  failures BackgroundJobFailure[]
 
   @@index([queue, status, availableAt])
   @@index([organizationId, queue, status])
   @@map("background_jobs")
+  @@unique([id, organizationId], map: "background_jobs_id_org_export_key")
+}
+
+model BackgroundJobFailure {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobId           String   @map("job_id") @db.Uuid
+  organizationId  String   @map("organization_id") @db.Uuid
+  attempt         Int
+  generation      Int
+  status          String   @db.VarChar(20)
+  code            String   @db.VarChar(160)
+  recordedAt      DateTime @default(now()) @map("recorded_at") @db.Timestamptz(3)
+
+  job BackgroundJob @relation(fields: [jobId, organizationId], references: [id, organizationId], onDelete: Cascade, onUpdate: NoAction, map: "background_job_failures_job_scope_fk")
+
+  @@index([jobId, recordedAt(sort: Desc)], map: "background_job_failures_job_time_idx")
+  @@map("background_job_failures")
+}
+
+/// Exportação assíncrona de documento (202 + arquivo no R2 + URL assinada).
+/// Os índices parciais e o RLS moram na migration `job_fairness_and_document_exports`.
+model DocumentExport {
+  id               String    @id @db.Uuid
+  organizationId   String    @map("organization_id") @db.Uuid
+  businessUnitId   String?   @map("business_unit_id") @db.Uuid
+  /// `QUOTE`, `QUOTE_ACCEPTED`, `PMOC_PLAN` ou `EQUIPMENT_QR`.
+  kind             String    @db.VarChar(30)
+  entityId         String    @map("entity_id") @db.Uuid
+  params           Json      @default("{}") @db.JsonB
+  /// `PENDING`, `PROCESSING`, `COMPLETED` ou `FAILED`.
+  status           String    @default("PENDING") @db.VarChar(20)
+  jobId            String?   @map("job_id") @db.Uuid
+  storageFileId    String?   @map("storage_file_id") @db.Uuid
+  fileName         String?   @map("file_name") @db.VarChar(200)
+  contentType      String?   @map("content_type") @db.VarChar(80)
+  errorCode        String?   @map("error_code") @db.VarChar(60)
+  requestedBy      String?   @map("requested_by") @db.Uuid
+  acceptanceLinkId String?   @map("acceptance_link_id") @db.Uuid
+  correlationId    String    @map("correlation_id") @db.VarChar(64)
+  expiresAt        DateTime  @map("expires_at") @db.Timestamptz(3)
+  completedAt      DateTime? @map("completed_at") @db.Timestamptz(3)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  businessUnit BusinessUnit?  @relation(fields: [businessUnitId, organizationId], references: [id, organizationId], onDelete: Cascade, onUpdate: Restrict, map: "document_exports_unit_scope_fk")
+  job          BackgroundJob? @relation(fields: [jobId, organizationId], references: [id, organizationId], onDelete: SetNull, onUpdate: Restrict, map: "document_exports_job_scope_fk")
+  storageFile  StorageFile?   @relation(fields: [storageFileId, organizationId], references: [id, organizationId], onDelete: Cascade, onUpdate: Restrict, map: "document_exports_file_scope_fk")
+
+  acceptanceLink QuoteAcceptanceLink? @relation(fields: [acceptanceLinkId, organizationId, entityId, businessUnitId], references: [id, organizationId, quoteId, businessUnitId], onDelete: Cascade, onUpdate: Restrict, map: "document_exports_acceptance_scope_fk")
+
+  @@index([organizationId, status, createdAt], map: "document_exports_org_status_idx")
+  @@index([businessUnitId, organizationId], map: "document_exports_unit_scope_idx")
+  @@index([expiresAt], map: "document_exports_expiry_idx")
+  @@map("document_exports")
 }
 
 // -----------------------------------------------------------------------------
@@ -3705,6 +4014,8 @@ model Quote {
   code              String    @db.VarChar(40)
   /// `DRAFT` · `SENT` · `APPROVED` · `REJECTED` · `EXPIRED` · `CANCELLED`.
   status            String    @default("DRAFT") @db.VarChar(20)
+  /// Owner opt-in for non-owner readers in the mobile document library.
+  mobileVisible     Boolean   @default(false) @map("mobile_visible")
   title             String    @db.VarChar(220)
   notes             String?   @db.Text
   /// O parágrafo de abertura da proposta ("Atendendo à honrosa solicitação…").
@@ -4310,29 +4621,30 @@ model PmocUnit {
 /// Só o SHA-256 dele, como em `customer_portal_invitations`. Vazando o banco, ninguém
 /// assina em nome de ninguém: o segredo existe uma vez, na resposta que o dono copia.
 model PmocPlanSignatureLink {
-  id             String    @id @default(uuid(7)) @db.Uuid
-  organizationId String    @map("organization_id") @db.Uuid
-  planId         String    @map("plan_id") @db.Uuid
-  tokenHash      String    @unique @map("token_hash") @db.Char(64)
-  expiresAt      DateTime  @map("expires_at") @db.Timestamptz(3)
-  createdById    String    @map("created_by_id") @db.Uuid
-  revokedAt      DateTime? @map("revoked_at") @db.Timestamptz(3)
+  documentProvider String?   @map("document_provider") @db.VarChar(40)
+  id               String    @id @default(uuid(7)) @db.Uuid
+  organizationId   String    @map("organization_id") @db.Uuid
+  planId           String    @map("plan_id") @db.Uuid
+  tokenHash        String    @unique @map("token_hash") @db.Char(64)
+  expiresAt        DateTime  @map("expires_at") @db.Timestamptz(3)
+  createdById      String    @map("created_by_id") @db.Uuid
+  revokedAt        DateTime? @map("revoked_at") @db.Timestamptz(3)
 
   /// Resumo e documento congelados no momento de enviar o contrato.
-  publicSummary     Json?   @map("public_summary") @db.JsonB
-  documentBucket    String? @map("document_bucket") @db.VarChar(160)
-  documentObjectKey String? @map("document_object_key") @db.Text
-  documentSha256    String? @map("document_sha256") @db.Char(64)
+  publicSummary     Json?     @map("public_summary") @db.JsonB
+  documentBucket    String?   @map("document_bucket") @db.VarChar(160)
+  documentObjectKey String?   @map("document_object_key") @db.Text
+  documentSha256    String?   @map("document_sha256") @db.Char(64)
   /// Quando o contratante assinou. Nulo enquanto o link está pendente.
-  signedAt        DateTime? @map("signed_at") @db.Timestamptz(3)
+  signedAt          DateTime? @map("signed_at") @db.Timestamptz(3)
   /// Quem declarou assinar — nome e documento são digitados por ele.
-  signerName      String?   @map("signer_name") @db.VarChar(180)
-  signerDocument  String?   @map("signer_document") @db.VarChar(40)
-  signerEmail     String?   @map("signer_email") @db.VarChar(180)
+  signerName        String?   @map("signer_name") @db.VarChar(180)
+  signerDocument    String?   @map("signer_document") @db.VarChar(40)
+  signerEmail       String?   @map("signer_email") @db.VarChar(180)
   /// Evidência de onde veio o aceite. Não identifica ninguém sozinha, e é o que
   /// sobra para contestar uma assinatura meses depois.
-  signedIp        String?   @map("signed_ip") @db.VarChar(64)
-  signedUserAgent String?   @map("signed_user_agent") @db.VarChar(400)
+  signedIp          String?   @map("signed_ip") @db.VarChar(64)
+  signedUserAgent   String?   @map("signed_user_agent") @db.VarChar(400)
 
   /// A imagem da assinatura, no storage — como as assinaturas profissionais.
   signatureFileId String? @map("signature_file_id") @db.Uuid
@@ -4388,15 +4700,15 @@ model PmocPlanNameOption {
 }
 
 model PmocExecution {
-  id             String   @id @default(uuid(7)) @db.Uuid
-  organizationId String   @map("organization_id") @db.Uuid
-  planId         String   @map("plan_id") @db.Uuid
+  id             String    @id @default(uuid(7)) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  planId         String    @map("plan_id") @db.Uuid
   /// Vencimento previsto deste ciclo.
-  dueOn          DateTime @map("due_on") @db.Date
-  status         String   @default("PENDING") @db.VarChar(20)
-  sequenceNumber Int      @default(1) @map("sequence_number")
+  dueOn          DateTime  @map("due_on") @db.Date
+  status         String    @default("PENDING") @db.VarChar(20)
+  sequenceNumber Int       @default(1) @map("sequence_number")
   authorizedAt   DateTime? @map("authorized_at") @db.Timestamptz(3)
-  authorizedById String? @map("authorized_by_id") @db.Uuid
+  authorizedById String?   @map("authorized_by_id") @db.Uuid
 
   /// A ordem de serviço que cumpriu o ciclo. Única: um ciclo, uma ordem.
   operationId         String? @unique @map("operation_id") @db.Uuid
@@ -4634,24 +4946,24 @@ model RvtConfigurationEquipment {
 }
 
 model RvtOccurrence {
-  id                 String    @id @default(uuid(7)) @db.Uuid
-  organizationId     String    @map("organization_id") @db.Uuid
-  businessUnitId     String    @map("business_unit_id") @db.Uuid
-  configurationId    String    @map("configuration_id") @db.Uuid
-  sequenceNumber     Int       @map("sequence_number")
-  scheduledFor       DateTime? @map("scheduled_for") @db.Timestamptz(3)
-  localScheduledDate DateTime? @map("local_scheduled_date") @db.Date
-  originalScheduledDate DateTime? @map("original_scheduled_date") @db.Date
-  status             String    @default("SCHEDULED") @db.VarChar(20)
-  responsibleFieldTechnicianId String? @map("responsible_field_technician_id") @db.Uuid
-  equipmentIds String[] @default([]) @map("equipment_ids") @db.Uuid
-  customized Boolean @default(false)
-  authorizedAt DateTime? @map("authorized_at") @db.Timestamptz(3)
-  authorizedById String? @map("authorized_by_id") @db.Uuid
-  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
-  schedulingEventId  String?   @unique @map("scheduling_event_id") @db.Uuid
-  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id                           String    @id @default(uuid(7)) @db.Uuid
+  organizationId               String    @map("organization_id") @db.Uuid
+  businessUnitId               String    @map("business_unit_id") @db.Uuid
+  configurationId              String    @map("configuration_id") @db.Uuid
+  sequenceNumber               Int       @map("sequence_number")
+  scheduledFor                 DateTime? @map("scheduled_for") @db.Timestamptz(3)
+  localScheduledDate           DateTime? @map("local_scheduled_date") @db.Date
+  originalScheduledDate        DateTime? @map("original_scheduled_date") @db.Date
+  status                       String    @default("SCHEDULED") @db.VarChar(20)
+  responsibleFieldTechnicianId String?   @map("responsible_field_technician_id") @db.Uuid
+  equipmentIds                 String[]  @default([]) @map("equipment_ids") @db.Uuid
+  customized                   Boolean   @default(false)
+  authorizedAt                 DateTime? @map("authorized_at") @db.Timestamptz(3)
+  authorizedById               String?   @map("authorized_by_id") @db.Uuid
+  deletedAt                    DateTime? @map("deleted_at") @db.Timestamptz(3)
+  schedulingEventId            String?   @unique @map("scheduling_event_id") @db.Uuid
+  createdAt                    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   configuration RvtConfiguration @relation(fields: [configurationId], references: [id], onDelete: Cascade)
   execution     RvtExecution?
@@ -4860,14 +5172,22 @@ model OrganizationLegalAcceptance {
 
 /// Outbox: remoção de arquivo é repetida até o storage confirmar a exclusão.
 model StorageDeletionJob {
-  id             String   @id @default(uuid(7)) @db.Uuid
-  organizationId String   @map("organization_id") @db.Uuid
-  provider       String   @db.VarChar(40)
-  bucket         String   @db.VarChar(160)
-  objectKey      String   @map("object_key") @db.VarChar(1024)
-  attempts       Int      @default(0)
-  nextAttemptAt  DateTime @default(now()) @map("next_attempt_at") @db.Timestamptz(3)
-  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  id              String    @id @default(uuid(7)) @db.Uuid
+  organizationId  String    @map("organization_id") @db.Uuid
+  provider        String    @db.VarChar(40)
+  bucket          String    @db.VarChar(160)
+  objectKey       String    @map("object_key") @db.VarChar(1024)
+  attempts        Int       @default(0)
+  nextAttemptAt   DateTime  @default(now()) @map("next_attempt_at") @db.Timestamptz(3)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  status          String    @default("PENDING") @db.VarChar(40)
+  reason          String    @default("CLEANUP") @db.VarChar(40)
+  purgeId         String?   @map("purge_id") @db.Uuid
+  leaseToken      String?   @map("lease_token") @db.Uuid
+  leaseUntil      DateTime? @map("lease_until") @db.Timestamptz(3)
+  completedAt     DateTime? @map("completed_at") @db.Timestamptz(3)
+  originDeletedAt DateTime? @map("origin_deleted_at") @db.Timestamptz(3)
+  lastErrorCode   String?   @map("last_error_code") @db.VarChar(80)
 
   @@unique([provider, bucket, objectKey])
   @@index([nextAttemptAt], map: "storage_deletion_jobs_due_idx")
@@ -4910,13 +5230,287 @@ model QuoteAcceptanceLink {
   createdById       String    @map("created_by_id") @db.Uuid
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  quote Quote @relation(fields: [quoteId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  documentFile StorageFile @relation("QuoteAcceptanceDocument", fields: [documentFileId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  businessUnit  BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  quote         Quote        @relation(fields: [quoteId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  documentFile  StorageFile  @relation("QuoteAcceptanceDocument", fields: [documentFileId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   signatureFile StorageFile? @relation("QuoteAcceptanceSignature", fields: [signatureFileId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  createdBy User @relation("QuoteAcceptanceCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdBy     User         @relation("QuoteAcceptanceCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
+  documentExports DocumentExport[]
+
+  @@unique([id, organizationId, quoteId, businessUnitId], map: "quote_acceptance_links_export_scope_key")
   @@index([organizationId, quoteId, createdAt])
   @@map("quote_acceptance_links")
+}
+
+/// Durable local administration workflow; not a Nexus command inbox.
+model PlatformTenantProvisioning {
+  id                    String              @id @default(uuid(7)) @db.Uuid
+  actorUserId           String              @map("actor_user_id") @db.Uuid
+  idempotencyKey        String              @map("idempotency_key") @db.Char(64)
+  requestHash           String              @map("request_hash") @db.Char(64)
+  correlationId         String              @map("correlation_id") @db.VarChar(128)
+  planCode              String              @map("plan_code") @db.VarChar(60)
+  billingInterval       String              @map("billing_interval") @db.VarChar(20)
+  status                String              @default("RECEIVED") @db.VarChar(32)
+  organizationId        String?             @unique @map("organization_id") @db.Uuid
+  ownerUserId           String?             @map("owner_user_id") @db.Uuid
+  primaryBusinessUnitId String?             @map("primary_business_unit_id") @db.Uuid
+  ownerPasswordProvided Boolean             @default(false) @map("owner_password_provided")
+  ownerSetupTokenId     String?             @map("owner_setup_token_id") @db.Uuid
+  lastErrorCode         String?             @map("last_error_code") @db.VarChar(80)
+  attempts              Int                 @default(0)
+  version               Int                 @default(1)
+  createdAt             DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+  completedAt           DateTime?           @map("completed_at") @db.Timestamptz(3)
+  actor                 User                @relation("ProvisioningActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  owner                 User?               @relation("ProvisioningOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  organization          Organization?       @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  ownerSetupToken       PasswordResetToken? @relation(fields: [ownerSetupTokenId], references: [id], onDelete: SetNull)
+
+  @@unique([actorUserId, idempotencyKey])
+  @@index([status, updatedAt])
+  @@map("platform_tenant_provisionings")
+}
+
+/// Worker-only checkpoints. No tenant or financial payloads.
+model BillingRecoveryCheckpoint {
+  key             String    @id @db.VarChar(80)
+  mode            String    @db.VarChar(10)
+  stream          String    @db.VarChar(20)
+  cursor          Json      @default("{}") @db.JsonB
+  token           String?   @db.Uuid
+  leaseUntil      DateTime? @map("lease_until") @db.Timestamptz(3)
+  nextRunAt       DateTime  @default(now()) @map("next_run_at") @db.Timestamptz(3)
+  attempts        Int       @default(0)
+  status          String    @default("READY") @db.VarChar(20)
+  lastErrorCode   String?   @map("last_error_code") @db.VarChar(80)
+  lastCompletedAt DateTime? @map("last_completed_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @default(now()) @map("updated_at") @db.Timestamptz(3)
+  stats           Json      @default("{}") @db.JsonB
+
+  @@map("billing_recovery_checkpoints")
+}
+
+// Short transport leases; never grant access to the file without its verified capability.
+model StorageUploadAdmission {
+  id             String       @id @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  storageFileId  String?      @unique @map("storage_file_id") @db.Uuid
+  expiresAt      DateTime     @map("expires_at") @db.Timestamptz(3)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  storageFile    StorageFile? @relation(fields: [storageFileId, organizationId], references: [id, organizationId], onDelete: Cascade)
+
+  @@index([organizationId, expiresAt])
+  @@map("storage_upload_admissions")
+}
+
+model TenantDataPurge {
+  id               String    @id @default(uuid(7)) @db.Uuid
+  organizationId   String    @map("organization_id") @db.Uuid
+  subscriptionId   String    @map("subscription_id") @db.Uuid
+  retentionEndsAt  DateTime  @map("retention_ends_at") @db.Timestamptz(3)
+  status           String    @default("PREPARING") @db.VarChar(40)
+  claimedAt        DateTime  @default(now()) @map("claimed_at") @db.Timestamptz(3)
+  databasePurgedAt DateTime? @map("database_purged_at") @db.Timestamptz(3)
+  completedAt      DateTime? @map("completed_at") @db.Timestamptz(3)
+  objectCount      Int       @default(0) @map("object_count")
+  lastErrorCode    String?   @map("last_error_code") @db.VarChar(80)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([id, organizationId])
+  @@unique([organizationId, subscriptionId, retentionEndsAt])
+  @@map("tenant_data_purges")
+}
+
+/// Immutable first-owner registration provenance; roles do not confer email eligibility.
+model AccountEmailOwner {
+  userId                     String   @id @map("user_id") @db.Uuid
+  registrationOrganizationId String   @unique @map("registration_organization_id") @db.Uuid
+  createdAt                  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@map("account_email_owners")
+}
+
+model PublicContactSubmission {
+  id               String                 @id @default(uuid(7)) @db.Uuid
+  requestKey       String                 @unique @map("request_key") @db.Char(64)
+  payloadHash      String                 @map("payload_hash") @db.Char(64)
+  encryptedPayload String?                @map("encrypted_payload")
+  status           String                 @default("PENDING") @db.VarChar(20)
+  attempts         Int                    @default(0)
+  availableAt      DateTime               @default(now()) @map("available_at") @db.Timestamptz(3)
+  lockedAt         DateTime?              @map("locked_at") @db.Timestamptz(3)
+  leaseId          String?                @map("lease_id") @db.Uuid
+  expiresAt        DateTime               @map("expires_at") @db.Timestamptz(3)
+  correlationId String? @map("correlation_id") @db.VarChar(64)
+  adminRequeuedAt DateTime? @map("admin_requeued_at") @db.Timestamptz(3)
+  lastErrorCode String? @map("last_error_code") @db.VarChar(80)
+  acceptedAt       DateTime?              @map("accepted_at") @db.Timestamptz(3)
+  createdAt        DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
+  outboundMessages EmailOutboundMessage[]
+
+  @@index([status, availableAt])
+  @@index([createdAt])
+  @@map("public_contact_submissions")
+}
+
+model BillingPlanUpgrade {
+  id                  String   @id @db.Uuid
+  organizationId      String   @map("organization_id") @db.Uuid
+  subscriptionId      String   @map("subscription_id") @db.Uuid
+  subscriptionVersion Int      @map("subscription_version")
+  requestedBy         String?  @map("requested_by") @db.Uuid
+  previousPeriodStart DateTime @map("previous_period_start") @db.Timestamptz(3)
+  previousPeriodEnd   DateTime @map("previous_period_end") @db.Timestamptz(3)
+  priceId             String   @map("price_id") @db.VarChar(255)
+  catalogVersion      Int      @map("catalog_version")
+  entitlements        Json     @db.JsonB
+  invoiceId           String?  @unique(map: "billing_plan_upgrades_invoice_unique") @map("invoice_id") @db.VarChar(255)
+  status              String   @default("OPEN") @db.VarChar(20)
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  subscription OrganizationSubscription @relation(fields: [subscriptionId, organizationId], references: [id, organizationId], onDelete: Cascade)
+
+  @@index([organizationId], map: "billing_plan_upgrades_org")
+  @@map("billing_plan_upgrades")
+}
+
+model BillingSupportTicket {
+  id             String    @id @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  subscriptionId String    @map("subscription_id") @db.Uuid
+  requestedBy    String?   @map("requested_by") @db.Uuid
+  kind           String    @db.VarChar(30)
+  targetPlanCode String?   @map("target_plan_code") @db.VarChar(60)
+  targetInterval String?   @map("target_interval") @db.VarChar(20)
+  reference      String    @default("") @db.VarChar(255)
+  status         String    @default("OPEN") @db.VarChar(20)
+  resolvedBy     String?   @map("resolved_by") @db.Uuid
+  resolvedAt     DateTime? @map("resolved_at") @db.Timestamptz(3)
+  resolution     String?
+  emailSentAt    DateTime? @map("email_sent_at") @db.Timestamptz(3)
+  emailAttempts  Int       @default(0) @map("email_attempts")
+  nextEmailAt    DateTime  @default(now()) @map("next_email_at") @db.Timestamptz(3)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  subscription OrganizationSubscription @relation(fields: [subscriptionId, organizationId], references: [id, organizationId], onDelete: Cascade)
+
+  @@index([organizationId], map: "billing_support_tickets_org")
+  @@index([status, id(sort: Desc)], map: "billing_support_tickets_queue")
+  @@map("billing_support_tickets")
+}
+
+model BillingRefundRequest {
+  id              String   @id @db.Uuid
+  organizationId  String   @map("organization_id") @db.Uuid
+  subscriptionId  String   @unique(map: "billing_refund_requests_subscription") @map("subscription_id") @db.Uuid
+  requestedBy     String?  @map("requested_by") @db.Uuid
+  invoiceId       String   @unique @map("invoice_id") @db.VarChar(255)
+  paymentIntentId String   @map("payment_intent_id") @db.VarChar(255)
+  amountMinor     Int      @map("amount_minor")
+  refundId        String?  @map("refund_id") @db.VarChar(255)
+  attempts        Int      @default(0)
+  nextAttemptAt   DateTime @default(now()) @map("next_attempt_at") @db.Timestamptz(3)
+  status          String   @default("OPEN") @db.VarChar(20)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  subscription OrganizationSubscription @relation(fields: [subscriptionId, organizationId], references: [id, organizationId], onDelete: Cascade)
+
+  @@map("billing_refund_requests")
+}
+
+/// A venda preserva a descrição e o preço dos itens do momento do recebimento.
+model ProductSale {
+  id             String   @id @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  businessUnitId String   @map("business_unit_id") @db.Uuid
+  customerId     String   @map("customer_id") @db.Uuid
+  createdById    String   @map("created_by_id") @db.Uuid
+  requestId      String   @map("request_id") @db.Uuid
+  requestHash    String   @map("request_hash") @db.Char(64)
+  receiptId      String   @unique @map("receipt_id") @db.Uuid
+  customerName   String   @map("customer_name") @db.VarChar(255)
+  paidOn         DateTime @map("paid_on") @db.Date
+  subtotal       Decimal  @db.Decimal(14, 2)
+  discount       Decimal  @db.Decimal(14, 2)
+  total          Decimal  @db.Decimal(14, 2)
+  items          Json     @db.JsonB
+  payments       Json     @db.JsonB
+  notes          String?  @db.VarChar(500)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  businessUnit BusinessUnit      @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
+  customer     Customer          @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  receipt      ArtifactExecution @relation(fields: [receiptId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, createdById, requestId], map: "product_sales_request_key")
+  @@index([organizationId, businessUnitId, createdAt(sort: Desc), id(sort: Desc)], map: "product_sales_unit_history")
+  @@index([customerId], map: "product_sales_customer_idx")
+  @@map("product_sales")
+}
+
+/// Entrar com a biometria do aparelho — equipe. WEBAUTHN (web: só a chave
+/// pública) ou DEVICE (app: SHA-256 de um segredo trocado a cada uso).
+model IdentityBiometricCredential {
+  id                   String    @id @default(uuid(7)) @db.Uuid
+  userId               String    @map("user_id") @db.Uuid
+  kind                 String    @db.VarChar(20)
+  label                String    @db.VarChar(120)
+  deviceId             String?   @map("device_id") @db.VarChar(120)
+  secretHash           String?   @map("secret_hash") @db.Char(64)
+  webauthnCredentialId String?   @map("webauthn_credential_id") @db.VarChar(1024)
+  publicKey            Bytes?    @map("public_key")
+  signCount            BigInt    @default(0) @map("sign_count")
+  transports           String[]  @default([])
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastUsedAt           DateTime? @map("last_used_at") @db.Timestamptz(3)
+  revokedAt            DateTime? @map("revoked_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt], map: "identity_biometric_user_idx")
+  @@map("identity_biometric_credentials")
+}
+
+/// Entrar com a biometria do aparelho — cliente. RLS forçado, sem policy:
+/// acesso só pelas funções `app_customer_portal_biometric_*`.
+model CustomerPortalBiometricCredential {
+  id                   String    @id @default(uuid(7)) @db.Uuid
+  organizationId       String    @map("organization_id") @db.Uuid
+  customerId           String    @map("customer_id") @db.Uuid
+  portalIdentityId     String    @map("portal_identity_id") @db.Uuid
+  kind                 String    @db.VarChar(20)
+  label                String    @db.VarChar(120)
+  deviceId             String?   @map("device_id") @db.VarChar(120)
+  secretHash           String?   @map("secret_hash") @db.Char(64)
+  webauthnCredentialId String?   @map("webauthn_credential_id") @db.VarChar(1024)
+  publicKey            Bytes?    @map("public_key")
+  signCount            BigInt    @default(0) @map("sign_count")
+  transports           String[]  @default([])
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastUsedAt           DateTime? @map("last_used_at") @db.Timestamptz(3)
+  revokedAt            DateTime? @map("revoked_at") @db.Timestamptz(3)
+
+  identity CustomerPortalIdentity @relation(fields: [portalIdentityId], references: [id], onDelete: Cascade)
+
+  @@map("customer_portal_biometric_credentials")
+}
+
+/// Desafio WebAuthn: um uso, poucos minutos.
+model AuthChallenge {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  purpose    String    @db.VarChar(40)
+  challenge  String    @db.VarChar(200)
+  subjectId  String?   @map("subject_id") @db.Uuid
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(3)
+  consumedAt DateTime? @map("consumed_at") @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([expiresAt], map: "auth_challenges_expiry_idx")
+  @@map("auth_challenges")
 }

@@ -85,15 +85,24 @@ class DocumentDownloader {
   Stream<DownloadState> fetchWith({
     required Future<FieldArtifactAccess> Function() access,
     required String fileName,
+  }) => fetchBytes(
+    load: () async => _repository.download(await access()),
+    fileName: fileName,
+  );
+
+  /// Authenticated API documents use the same verification and isolated storage.
+  Stream<DownloadState> fetchBytes({
+    required Future<({List<int> bytes, String? contentType, String? fileName})>
+    Function()
+    load,
+    required String fileName,
   }) async* {
     checkSession();
     yield const DownloadState(phase: DownloadPhase.requestingUrl);
     try {
       /// A URL é pedida agora e usada agora. Não vira estado.
-      final signed = await access();
-
       yield const DownloadState(phase: DownloadPhase.downloading);
-      final result = await _repository.download(signed);
+      final result = await load();
 
       yield const DownloadState(phase: DownloadPhase.verifying);
       final problem = checkDocumentBytes(result.bytes);

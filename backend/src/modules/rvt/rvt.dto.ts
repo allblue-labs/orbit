@@ -10,6 +10,7 @@ import {
   ArrayMinSize,
   ArrayUnique,
   IsBoolean,
+  IsDate,
   IsEmail,
   IsIn,
   IsObject,
@@ -31,6 +32,8 @@ const trim = ({ value }: { value: unknown }) =>
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 export class RvtConfigurationQueryDto extends CursorDto {
+  @IsOptional() @IsString() @MaxLength(180) search?: string;
+  @IsOptional() @IsUUIDv7() override cursor?: string = undefined;
   @ApiPropertyOptional() @IsOptional() @IsUUIDv7() businessUnitId?: string;
   @ApiPropertyOptional() @IsOptional() @IsUUIDv7() customerId?: string;
   @ApiPropertyOptional({
@@ -244,7 +247,7 @@ export class AddRvtEvidenceDto {
   @ApiPropertyOptional({ default: 'PHOTO' })
   @IsOptional()
   @IsIn(['PHOTO', 'VIDEO', 'DOCUMENT'])
-  kind?: string;
+  kind?: 'PHOTO' | 'VIDEO' | 'DOCUMENT';
   @ApiPropertyOptional()
   @IsOptional()
   @Transform(trim)
@@ -261,11 +264,19 @@ export class CaptureCustomerAcknowledgementDto {
   @MaxLength(180)
   name!: string;
   @ApiProperty() @IsUUIDv7() storageFileId!: string;
-  @ApiPropertyOptional() @IsOptional() @Type(() => Date) signedAt?: Date;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  signedAt?: Date;
 }
 
 export class CompleteRvtExecutionDto {
-  @ApiPropertyOptional() @IsOptional() @Type(() => Date) performedAt?: Date;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  performedAt?: Date;
 }
 
 export class ContextualRvtCustomerDto {

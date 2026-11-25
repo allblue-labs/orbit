@@ -50,8 +50,41 @@ export function eventPriorityLabel(priority: string): string {
   return PRIORITY_LABELS[priority] ?? priority;
 }
 
-/** `VISITA_TECNICA` → `Visita técnica`, sem inventar tipos que não existem. */
+/**
+ * O tipo do evento em palavras.
+ *
+ * Os tipos criados pelo próprio Orbit vêm em inglês (`OPERATION`,
+ * `TECHNICAL_VISIT`) e os sugeridos no formulário em português sem acento
+ * (`VISITA_TECNICA`). Os dois viram a mesma palavra; um tipo que a organização
+ * inventou cai na forma legível do próprio código.
+ */
+const EVENT_TYPE_LABELS: Readonly<Record<string, string>> = {
+  OPERATION: "Atendimento",
+  TECHNICAL_VISIT: "Visita técnica",
+  VISITA_TECNICA: "Visita técnica",
+  MAINTENANCE: "Manutenção",
+  MANUTENCAO: "Manutenção",
+  INSTALLATION: "Instalação",
+  INSTALACAO: "Instalação",
+  INSPECTION: "Inspeção",
+  INSPECAO: "Inspeção",
+  PMOC: "PMOC",
+  RVT: "RVT",
+  REMINDER: "Lembrete",
+  LEMBRETE: "Lembrete",
+  APPOINTMENT: "Compromisso",
+  COMPROMISSO: "Compromisso",
+  MEETING: "Reunião",
+  REUNIAO: "Reunião",
+  BLOCK: "Bloqueio",
+  BLOQUEIO: "Bloqueio",
+  OTHER: "Outro",
+  OUTRO: "Outro",
+};
+
 export function eventTypeLabel(type: string): string {
+  const known = EVENT_TYPE_LABELS[type.trim().toUpperCase()];
+  if (known) return known;
   const normalized = type.replace(/_/g, " ").toLowerCase();
   return normalized.charAt(0).toUpperCase() + normalized.slice(1);
 }

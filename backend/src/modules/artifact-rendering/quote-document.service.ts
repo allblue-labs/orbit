@@ -1,3 +1,4 @@
+import { renderPdfInThread, shouldOffloadPdf } from '../../runtime/pdf-thread';
 /**
  * Emissão do documento de orçamento.
  *
@@ -38,6 +39,7 @@ export interface QuoteDocumentRequest {
 @Injectable()
 export class QuoteDocumentService {
   render(request: QuoteDocumentRequest): Promise<Buffer> {
+    if (shouldOffloadPdf()) return renderPdfInThread('quote', request);
     return new Promise((resolve, reject) => {
       const theme = buildTheme(request.primaryColor);
       const generatedAt = request.generatedAt ?? new Date();

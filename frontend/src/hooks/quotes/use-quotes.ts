@@ -146,12 +146,32 @@ export function useQuoteForecast(quoteId: string | null, enabled = true) {
  * uma segunda cópia esqueceria de invalidar o Financeiro na primeira vez que
  * alguém mexesse numa delas.
  */
+/**
+ * A proposta respondida pelo comando, com o documento emitido que o cache já
+ * conhecia quando a resposta não o traz. Ver `useQuoteWrite`.
+ */
+export function keepIssuedDocument(
+  anterior: Quote | undefined,
+  resposta: Quote,
+): Quote {
+  return {
+    ...resposta,
+    document: resposta.document ?? anterior?.document ?? null,
+  };
+}
+
 export function useQuoteWrite() {
   const queryClient = useQueryClient();
 
   return {
     onSuccess: async (quote: Quote) => {
-      queryClient.setQueryData(quotesService.keys.detail(quote.id), quote);
+      /* A resposta de um comando não relê o documento emitido (vem `null`), e
+         nenhum comando desfaz uma emissão: manter o que o cache já sabia evita
+         que "Baixar" suma da tela depois de aprovar ou converter. */
+      queryClient.setQueryData<Quote>(
+        quotesService.keys.detail(quote.id),
+        (anterior) => keepIssuedDocument(anterior, quote),
+      );
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: quotesService.keys.lists() }),
         queryClient.invalidateQueries({
@@ -178,6 +198,14 @@ export function useUpdateQuote(id: string) {
   const write = useQuoteWrite();
   return useApiMutation(
     (input: UpdateQuoteInput) => quotesService.update(id, input),
+    write,
+  );
+}
+
+export function useQuoteMobileAccess(id: string) {
+  const write = useQuoteWrite();
+  return useApiMutation(
+    (visible: boolean) => quotesService.mobileAccess(id, visible),
     write,
   );
 }

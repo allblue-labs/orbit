@@ -1,3 +1,4 @@
+import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
@@ -85,23 +86,21 @@ describe('Equipment QR Identity PR-31 (e2e)', () => {
 
   async function register(label: string) {
     const suffix = randomUUID().slice(0, 8);
-    const response = await http()
-      .post('/api/v1/identity/register')
-      .send({
-        ...REGISTRATION_LEGAL_ACCEPTANCE,
-        email: `qr.${label}.${suffix}@orbit.local`,
-        firstName: 'QR',
-        lastName: label,
-        password: PASSWORD,
-        organizationName: `QR ${label} ${suffix}`,
-        legalName: `QR ${label} ${suffix} LTDA`,
-        documentType: 'CNPJ',
-        documentNumber: cnpj(),
-        city: 'Recife',
-        street: 'Rua QR',
-        stateCode: 'PE',
-      })
-      .expect(201);
+    const response = await registerVerifiedOwner(app, {
+      ...REGISTRATION_LEGAL_ACCEPTANCE,
+      email: `qr.${label}.${suffix}@orbit.local`,
+      firstName: 'QR',
+      lastName: label,
+      password: PASSWORD,
+      organizationName: `QR ${label} ${suffix}`,
+      planKey: 'ESSENTIAL',
+      legalName: `QR ${label} ${suffix} LTDA`,
+      documentType: 'CNPJ',
+      documentNumber: cnpj(),
+      city: 'Recife',
+      street: 'Rua QR',
+      stateCode: 'PE',
+    });
     return (response.body as Envelope<{ accessToken: string }>).data
       .accessToken;
   }
@@ -407,9 +406,10 @@ describe('Equipment QR Identity PR-31 (e2e)', () => {
     const otherIdentity = await prisma.equipmentQrIdentity.findFirstOrThrow({
       where: { equipmentId: otherEquipment.id, status: 'ACTIVE' },
     });
-    await auth(http().get(`/api/v1/assets/qr/${otherIdentity.token}`)).expect(
-      404,
-    );
+    await auth(
+      http().get(`/api/v1/assets/qr/${otherIdentity.token}`),
+      minimalToken,
+    ).expect(404);
 
     const ownUnit = await prisma.businessUnit.findUniqueOrThrow({
       where: { id: unitId },

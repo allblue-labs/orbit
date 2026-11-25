@@ -1,11 +1,20 @@
 import { Injectable } from '@nestjs/common';
+import { MOBILE_QUOTE_DOCUMENTS_PERMISSION } from './mobile-document-permissions';
+import { VerifiedPlatformAuthority } from './verified-platform-authority';
+import { isPlatformPermission, isReservedRoleKey } from './role-namespace';
 
-interface PermissionActor {
+interface PlatformActor {
+  readonly id?: string;
+  readonly userId?: string | null;
+  readonly platformAuthority?: VerifiedPlatformAuthority;
+}
+
+interface PermissionActor extends PlatformActor {
   readonly permissions: readonly string[];
   readonly isOrganizationOwner: boolean;
 }
 
-interface RoleActor {
+interface RoleActor extends PlatformActor {
   readonly roles: readonly string[];
   readonly isOrganizationOwner: boolean;
 }
@@ -30,6 +39,21 @@ interface UnitActor {
 @Injectable()
 export class AuthorizationService {
   hasPermissions(actor: PermissionActor, required: readonly string[]): boolean {
+    const authority = VerifiedPlatformAuthority.forUser(
+      actor.platformAuthority,
+      actor.id ?? actor.userId,
+    );
+    if (
+      required.some(
+        (permission) =>
+          isPlatformPermission(permission) &&
+          !(
+            authority?.permissions.includes('*') ||
+            authority?.permissions.includes(permission)
+          ),
+      )
+    )
+      return false;
     if (actor.isOrganizationOwner) return true;
     return (
       actor.permissions.includes('*') ||
@@ -39,11 +63,15 @@ export class AuthorizationService {
 
   hasAnyRole(actor: RoleActor, required: readonly string[]): boolean {
     if (required.length === 0) return true;
-    // A tenant owner is not a platform administrator.
-    if (actor.isOrganizationOwner && !required.includes('PLATFORM_ADMIN')) {
-      return true;
-    }
-    return required.some((role) => actor.roles.includes(role));
+    return required.some((role) =>
+      isReservedRoleKey(role)
+        ? VerifiedPlatformAuthority.hasRole(
+            actor.platformAuthority,
+            actor.id ?? actor.userId,
+            role,
+          )
+        : actor.isOrganizationOwner || actor.roles.includes(role),
+    );
   }
 
   canDelegate(
@@ -52,7 +80,11 @@ export class AuthorizationService {
     allowedSurfaces: readonly string[],
   ): boolean {
     if (actor.isOrganizationOwner) return true;
-    if (permissions.includes('*')) return false;
+    if (
+      permissions.includes('*') ||
+      permissions.includes(MOBILE_QUOTE_DOCUMENTS_PERMISSION)
+    )
+      return false;
     return (
       permissions.every((permission) =>
         actor.permissions.includes(permission),

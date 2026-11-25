@@ -10,6 +10,7 @@
  *
  * Nenhum token trafega até o browser em qualquer um dos caminhos.
  */
+import type { IdentityRegistrationReadModel } from "@/types/contracts/modules/identity/identity.read-models";
 import { apiClient, authClient } from "@/api/client";
 import type {
   AcceptInvitationInput,
@@ -25,12 +26,16 @@ export interface AuthResult {
   authenticated: boolean;
 }
 
+export interface RegistrationResult extends IdentityRegistrationReadModel {
+  authenticated: false;
+}
+
 export const authService = {
   login: (input: LoginInput): Promise<AuthResult> =>
     authClient.post<AuthResult>("/login", input),
 
-  register: (input: RegisterInput): Promise<AuthResult> =>
-    authClient.post<AuthResult>("/register", input),
+  register: (input: RegisterInput): Promise<RegistrationResult> =>
+    authClient.post<RegistrationResult>("/register", input),
 
   logout: (): Promise<AuthResult> => authClient.post<AuthResult>("/logout"),
 
@@ -48,6 +53,12 @@ export const authService = {
    */
   forgotPassword: (input: ForgotPasswordInput): Promise<void> =>
     apiClient.post<void>("/identity/password/forgot", input, { retries: 0 }),
+
+  /** Verifica sem consumir o token; não trafega segredo na URL. */
+  validateResetToken: (input: { token: string }): Promise<void> =>
+    apiClient.post<void>("/identity/password/reset/validate", input, {
+      retries: 0,
+    }),
 
   /** Consome o token do e-mail e grava a nova senha (204). */
   resetPassword: (input: ResetPasswordInput): Promise<void> =>

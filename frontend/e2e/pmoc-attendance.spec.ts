@@ -17,12 +17,13 @@
  * Abrir uma execução depende de cinco pré-condições, e qualquer uma bloqueia em
  * silêncio: plano ativo, ciclo pendente, equipamento ativo, responsável técnico
  * **com assinatura**, e um técnico de campo elegível para a unidade. O teste
- * confere isso pela API antes de abrir o navegador e se pula com a razão exata —
- * um cenário incompleto reprovando parece defeito da tela.
+ * cria essas condições pela API real e exige que a preparação libere START.
+ * Uma fixture incompleta deve reprovar, nunca ocultar o cenário.
  */
 import { expect, test, type APIRequestContext } from "@playwright/test";
 
 import { OWNER, login, record, settled } from "./support";
+import { imageFixture } from "./image-fixture";
 
 const API = process.env.ORBIT_API_URL ?? "http://localhost:6001/api/v1";
 
@@ -31,55 +32,58 @@ interface Scenario {
   readonly cycleId: string;
   readonly assetId: string;
   readonly equipmentName: string;
-  /** Vazio quando o cenário está pronto; a razão quando não está. */
-  readonly blocker: string;
 }
 
 async function scenario(request: APIRequestContext): Promise<Scenario> {
   const auth = await request.post(`${API}/identity/login`, {
     data: { email: OWNER.email, password: OWNER.password },
   });
+  expect(auth.ok(), await auth.text()).toBe(true);
   const token = (await auth.json()).data.accessToken as string;
   const headers = { authorization: `Bearer ${token}` };
 
-  const vazio = {
-    planId: "",
-    cycleId: "",
-    assetId: "",
-    equipmentName: "",
-  };
-
-  const planos = await request.get(`${API}/pmoc/plans?status=ACTIVE&limit=1`, {
-    headers,
+  // Assinatura profissional real: reserva, upload e ativação pelo mesmo fluxo do app.
+  const png = await imageFixture();
+  const reservation = await request.post(
+    `${API}/mobile/field/me/signature/uploads`,
+    {
+      headers,
+      data: {
+        fileName: "pmoc-tecnico.png",
+        mimeType: "image/png",
+        sizeBytes: png.length,
+      },
+    },
+  );
+  expect(reservation.ok(), await reservation.text()).toBe(true);
+  const reserved = (await reservation.json()).data;
+  const upload = await request.put(reserved.upload.url, {
+    headers: reserved.upload.requiredHeaders ?? {},
+    data: png,
   });
-  const pagina = (await planos.json()).data;
-  const plano = (Array.isArray(pagina?.data) ? pagina.data : [])[0];
-  if (!plano) return { ...vazio, blocker: "nenhum plano de PMOC ativo" };
-
-  const ciclos = await request.get(`${API}/pmoc/plans/${plano.id}/executions`, {
+  expect(upload.ok(), await upload.text()).toBe(true);
+  const signature = await request.post(`${API}/mobile/field/me/signature`, {
     headers,
+    data: { storageObjectId: reserved.fileId },
   });
-  const ciclo = ((await ciclos.json()).data ?? [])[0];
-  if (!ciclo)
-    return { ...vazio, blocker: "o plano ativo não tem ciclo aberto" };
+  expect(signature.ok(), await signature.text()).toBe(true);
+  const profile = await request.get(`${API}/identity/me`, { headers });
+  expect(profile.ok(), await profile.text()).toBe(true);
+  const ownerId = (await profile.json()).data.id as string;
 
-  /*
-   * O equipamento é **deste** teste.
-   *
-   * Reaproveitar um do plano torna a execução única: aberta uma vez, `START`
-   * desaparece e a rodada seguinte se pula. Foi o que aconteceu na primeira
-   * tentativa — e um teste que só passa na primeira execução não é teste.
-   *
-   * De brinde, exercita o caso que justifica a contagem por equipamento: uma
-   * máquina que entra no contrato com o ciclo já aberto está na sua **primeira**
-   * manutenção dentro de um ciclo que pode ser o sétimo.
-   */
   const marca = `E2E-${Date.now()}`;
   const unidade = await request.get(`${API}/organizations/current`, {
     headers,
   });
   const businessUnitId = (await unidade.json()).data.businessUnits[0]
     .id as string;
+
+  const customer = await request.post(`${API}/customers`, {
+    headers,
+    data: { type: "COMPANY", legalName: `Cliente ${marca}` },
+  });
+  expect(customer.ok(), await customer.text()).toBe(true);
+  const customerId = (await customer.json()).data.id as string;
 
   const criado = await request.post(`${API}/assets`, {
     headers,
@@ -90,16 +94,40 @@ async function scenario(request: APIRequestContext): Promise<Scenario> {
       identifier: marca,
       location: "Sala de teste",
       businessUnitId,
+      customerId,
     },
   });
   expect(criado.ok(), await criado.text()).toBe(true);
   const assetId = (await criado.json()).data.id as string;
 
-  const vinculado = await request.post(
-    `${API}/pmoc/plans/${plano.id}/equipment`,
-    { headers, data: { assetId } },
+  const planResponse = await request.post(`${API}/pmoc/plans`, {
+    headers,
+    data: {
+      businessUnitId,
+      customerId,
+      name: `PMOC ${marca}`,
+      startsOn: new Date().toISOString().slice(0, 10),
+      frequencyAmount: 1,
+      frequencyUnit: "MONTHS",
+      technicalResponsibleUserId: ownerId,
+      technicianUserId: ownerId,
+      assetIds: [assetId],
+      procedure: { Evaporadora: ["Limpar filtros de ar"] },
+    },
+  });
+  expect(planResponse.ok(), await planResponse.text()).toBe(true);
+  const plano = (await planResponse.json()).data;
+  const activation = await request.post(
+    `${API}/pmoc/plans/${plano.id}/activate`,
+    { headers, data: {} },
   );
-  expect(vinculado.ok(), await vinculado.text()).toBe(true);
+  expect(activation.ok(), await activation.text()).toBe(true);
+  const ciclos = await request.get(`${API}/pmoc/plans/${plano.id}/executions`, {
+    headers,
+  });
+  expect(ciclos.ok(), await ciclos.text()).toBe(true);
+  const ciclo = (await ciclos.json()).data[0];
+  expect(ciclo, "ativar o PMOC deve abrir o primeiro ciclo").toBeTruthy();
 
   const cobertura = { asset: { id: assetId, name: `Split ${marca}` } };
 
@@ -108,19 +136,19 @@ async function scenario(request: APIRequestContext): Promise<Scenario> {
     `${API}/pmoc/plans/${plano.id}/cycles/${ciclo.id}/equipment/${cobertura.asset.id}/execution-preparation`,
     { headers },
   );
+  expect(preparacao.ok(), await preparacao.text()).toBe(true);
   const prep = (await preparacao.json()).data;
   const pronto =
     prep?.eligibility?.ready === true &&
     (prep?.allowedActions ?? []).includes("START");
+
+  expect(pronto, JSON.stringify(prep?.eligibility)).toBe(true);
 
   return {
     planId: plano.id,
     cycleId: ciclo.id,
     assetId: cobertura.asset.id,
     equipmentName: cobertura.asset.name,
-    blocker: pronto
-      ? ""
-      : `a execução não está liberada: ${JSON.stringify(prep?.eligibility?.blockedReasons ?? prep?.allowedActions)}`,
   };
 }
 
@@ -129,7 +157,6 @@ test("o atendimento vai de aberto a relatório emitido", async ({
   request,
 }) => {
   const cenario = await scenario(request);
-  test.skip(cenario.blocker.length > 0, cenario.blocker);
 
   const recorder = record(page);
 

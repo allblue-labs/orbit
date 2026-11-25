@@ -1,0 +1,97 @@
+{
+  "reviewDate": "2026-11-12",
+  "sourceCommit": "da493e613da0d117fa9effaf96af0daf07889e84",
+  "decision": "NOT_APPROVED",
+  "scope": "Local inspection and isolated tests; no production access or real cloud delivery",
+  "checks": {
+    "backendUnit": {
+      "directory": "backend",
+      "command": "npm test -- --runInBand --watchman=false",
+      "suitesPassed": 242,
+      "suitesFailed": 4,
+      "testsPassed": 1955,
+      "testsFailed": 15,
+      "note": "Final run allowed local sockets; sandbox port failures from the first run are excluded"
+    },
+    "backendIntegration": {
+      "directory": "backend",
+      "runner": "jest --config test/jest-e2e.json --runInBand --watchman=false",
+      "suitesPassed": 22,
+      "suitesFailed": 16,
+      "testsPassed": 370,
+      "testsFailed": 89,
+      "database": "Disposable PostgreSQL 17 with all migrations and restricted runtime role",
+      "providers": "Test providers; external Stripe, SES and push delivery disabled",
+      "databaseRemoved": true,
+      "note": "Failures require fixture and product triage; counts are not counts of confirmed product defects"
+    },
+    "backendLint": {
+      "directory": "backend",
+      "command": "npx eslint '{src,test}/**/*.ts'",
+      "errors": 23,
+      "filesWithErrors": 5,
+      "automaticallyFixed": false
+    },
+    "backendBuild": { "command": "npm run build", "passed": true },
+    "frontendUnit": {
+      "directory": "frontend",
+      "command": "npm test",
+      "filesPassed": 66,
+      "testsPassed": 656,
+      "testsFailed": 0
+    },
+    "frontendTypecheck": { "command": "npm run typecheck", "passed": true },
+    "frontendBuild": {
+      "command": "npm run build -- --webpack",
+      "passed": true,
+      "defaultBundlerQualified": false
+    },
+    "frontendLint": { "command": "npm run lint", "errors": 1 },
+    "frontendLanguage": { "command": "npm run lint:language", "occurrences": 8 },
+    "mobileAnalyze": { "directory": "mobile", "command": "flutter analyze", "passed": true },
+    "mobileTests": {
+      "directory": "mobile",
+      "command": "flutter test",
+      "testsPassed": 1153,
+      "testsSkipped": 60,
+      "testsFailed": 112,
+      "captureToolFailures": 111,
+      "otherFailures": 1,
+      "note": "Capture harness declares itself an image-generation tool; stale fixtures/goldens are not automatically product regressions"
+    },
+    "productionDependencies": {
+      "command": "npm audit --omit=dev --json",
+      "backend": { "affectedPackages": 15, "critical": 0, "high": 4, "moderate": 11 },
+      "frontend": { "affectedPackages": 4, "critical": 1, "high": 3, "moderate": 0 },
+      "note": "Package counts, not unique CVEs or demonstrated exploitation; advisories must be refreshed before each dependency PR"
+    }
+  },
+  "directedProbes": {
+    "tenantTablesWithOrganizationId": 117,
+    "tenantTablesWithRls": 115,
+    "tenantTablesWithForceRls": 115,
+    "identityPlaneTablesWithoutRls": ["sessions", "identity_invitations"],
+    "sameMfaRecoveryCodeConcurrentSuccesses": 2,
+    "mfaProbeBoundary": "Real persistence, synthetic account, controlled hash verifier to synchronize both readers before either consumes the code",
+    "sameSessionUnconditionalRotationSuccesses": 2,
+    "refreshProbeBoundary": "Repository-level concurrent updates, not two full HTTP refresh requests",
+    "rvtCrossTenantCustomerReferenceAcceptedByDatabase": true,
+    "rvtProbeBoundary": "Direct runtime-role database write under tenant scope; API authorization bypass not demonstrated",
+    "sameUploadSignatureValidAfterFirstWrite": true,
+    "sameStorageObjectCanBeOverwritten": true,
+    "uploadProbeBoundary": "Synthetic object owned by the test; not a modification of another user's document",
+    "aiPrivateHttpsBaseUrlAccepted": true,
+    "webPushPrivateHttpsEndpointAcceptedByUrlValidation": true,
+    "ssrfProbeBoundary": "Validation only; no internal network read or public exploit attempted"
+  },
+  "pendingOperationalEvidence": [
+    "Firebase visible delivery and authenticated navigation on physical Android and iPhone in foreground, background and terminated states",
+    "SES regional production access approval and real recipient delivery",
+    "SNS signed feedback and suppression against actual deployment",
+    "Full browser journeys using real scoped fixtures",
+    "Representative deployment load test",
+    "Combined database and object-store restore and rollback rehearsal",
+    "Final signed store artifacts, container SBOM and provenance",
+    "Production proxy, firewall, TLS, secret rotation and alert configuration"
+  ]
+}

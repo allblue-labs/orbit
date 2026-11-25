@@ -13,6 +13,14 @@ const paginate = (data: unknown[], page = 1, total = data.length) => ({
   },
 });
 
+function reportDownload(page: Page, title: string) {
+  return page
+    .locator('[data-panel="operation-reports"]')
+    .getByRole("listitem")
+    .filter({ has: page.getByRole("link", { name: title, exact: true }) })
+    .getByRole("button", { name: "Baixar", exact: true });
+}
+
 async function setup(
   page: Page,
   options: {
@@ -299,31 +307,22 @@ test("operação concluída oferece a revisão vigente de OS, RVT e outros relat
 }) => {
   const state = await setup(page);
   await page.goto("/operacoes/operation");
-  const panel = page.locator('[data-panel="operation-reports"]');
   for (const title of ["OS", "RVT", "Relatório especial"])
-    await expect(
-      panel.getByRole("link", {
-        name: `Baixar relatório: ${title}`,
-        exact: true,
-      }),
-    ).toHaveAttribute("href", /^\/api\/orbit\/storage\/objects\?/);
-  expect(state.signedQueries).toHaveLength(3);
-  expect(
-    state.signedQueries.every((query) =>
-      query.includes("-active/download?operation=download"),
+    await expect(reportDownload(page, title)).toBeEnabled();
+  expect(state.signedQueries).toEqual([]);
+  const [download, response] = await Promise.all([
+    page.waitForEvent("download"),
+    page.waitForResponse(
+      (resource) =>
+        new URL(resource.url()).pathname === "/api/orbit/storage/objects",
     ),
-  ).toBe(true);
-  const request = page.context().waitForEvent("request", {
-    predicate: (req) =>
-      new URL(req.url()).pathname === "/api/orbit/storage/objects",
-  });
-  await panel
-    .getByRole("link", { name: "Baixar relatório: OS", exact: true })
-    .click();
-  const resource = await request;
-  const response = await resource.response();
-  expect(response?.status()).toBe(200);
-  expect(response?.headers()["content-disposition"]).toContain("relatorio.pdf");
+    reportDownload(page, "OS").click(),
+  ]);
+  expect(download.suggestedFilename()).toBe("DOC-0 - OS.pdf");
+  expect(response.status()).toBe(200);
+  expect(state.signedQueries).toEqual([
+    "/api/orbit/artifact-manifests/report-0-active/download?operation=download",
+  ]);
 });
 
 test("relatórios não emitidos e falhas não permanecem em carregamento", async ({
@@ -347,9 +346,7 @@ test("acompanha emissão pendente até liberar o download", async ({ page }) => 
   const panel = page.locator('[data-panel="operation-reports"]');
   await expect(panel.getByText("Preparando relatório…")).toBeVisible();
   state.finish();
-  await expect(
-    panel.getByRole("link", { name: "Baixar relatório: Em processamento" }),
-  ).toBeVisible();
+  await expect(reportDownload(page, "Em processamento")).toBeEnabled();
 });
 
 test("lista todos os relatórios com paginação", async ({ page }) => {
@@ -358,13 +355,9 @@ test("lista todos os relatórios com paginação", async ({ page }) => {
   });
   await page.goto("/operacoes/operation");
   const panel = page.locator('[data-panel="operation-reports"]');
-  await expect(
-    panel.getByRole("link", { name: "Baixar relatório: OS", exact: true }),
-  ).toBeVisible();
+  await expect(reportDownload(page, "OS")).toBeVisible();
   await panel.getByRole("button", { name: "Próxima", exact: true }).click();
-  await expect(
-    panel.getByRole("link", { name: "Baixar relatório: Sexto", exact: true }),
-  ).toBeVisible();
+  await expect(reportDownload(page, "Sexto")).toBeVisible();
 });
 
 test("conta sem acesso ao documento não solicita URLs de download", async ({
@@ -375,7 +368,7 @@ test("conta sem acesso ao documento não solicita URLs de download", async ({
   const panel = page.locator('[data-panel="operation-reports"]');
   await expect(panel.getByText("OS", { exact: true })).toBeVisible();
   await expect(
-    panel.getByRole("link", { name: /Baixar relatório:/ }),
+    panel.getByRole("button", { name: "Baixar", exact: true }),
   ).toHaveCount(0);
   expect(state.signedQueries).toHaveLength(0);
 });

@@ -29,14 +29,15 @@ A superfície exige acesso mobile, assinatura ativa e a capability
 `quotes.manage`. O serviço autoriza owners, usuários com `quotes.manage` ou com
 permissão de criar atendimentos (`operations.walk_in.create` ou
 `operations.create`). Não concede permissão de gerir todo o financeiro ao
-operador: links e PDFs por essa superfície exigem autoria do orçamento, origem
-mobile, organização e unidade acessíveis. As consultas e transações continuam
+operador: links de aceite exigem autoria e origem mobile. A leitura do PDF usa
+`quotes.read` e a autorização por orçamento descrita abaixo, além de organização
+e unidades acessíveis. As consultas e transações continuam
 sujeitas às políticas RLS do PostgreSQL.
 
 ## Aceite e acompanhamento
 
-Após gerar a proposta, o operador pode compartilhar seu PDF ou coletar a
-assinatura e a autorização expressa do cliente. A confirmação usa
+Após gerar a proposta, o operador pode compartilhar seu PDF quando liberado pelo
+owner, ou coletar a assinatura e a autorização expressa do cliente. A confirmação usa
 `POST /public/quotes/proposals/:token/response`, com decisão `APPROVE`, nome,
 assinatura PNG e consentimento. Esse serviço já conserva a prova, aprova o
 orçamento, gera o PDF assinado e registra a notificação ao owner.
@@ -44,5 +45,36 @@ orçamento, gera o PDF assinado e registra a notificação ao owner.
 O orçamento fica imediatamente disponível na web, em Financeiro → Orçamentos,
 usando as mesmas tabelas, estados, auditoria e eventos do fluxo comercial.
 
-Publicar a API e o aplicativo atualizados. Não há novas variáveis de ambiente
-nem migration específica para este ajuste.
+## Orçamentos em Documentos (Docs)
+
+O owner vê todos os orçamentos da organização/unidades acessíveis, em qualquer
+status, inclusive rascunhos e propostas sem emissão oficial. A aprovação do cliente
+não é requisito para baixar ou compartilhar o PDF.
+
+Para outros usuários, a liberação pertence ao **orçamento**, não ao cadastro do
+operador. Em Financeiro → Orçamentos → abrir a proposta, o owner encontra o painel
+**Acesso no aplicativo** e o controle **Liberar para outros usuários no app**.
+Ele pode liberar/revogar em qualquer status. A API `PATCH /quotes/:id/mobile-access`
+aceita `{ "mobileVisible": true|false }` somente do proprietário e registra auditoria.
+Não altera o conteúdo, o status, o `updatedAt` comercial ou os links de assinatura.
+
+A opção começa desligada, inclusive nos registros existentes. A antiga permissão
+`mobile.quotes.documents.read` não libera mais a biblioteca nem contorna o bloqueio
+do PDF. Também não há exceção de download autenticado por ser o criador da proposta.
+A autorização de envio/aceite público continua sendo um fluxo separado.
+
+A lista e o endpoint de PDF aplicam a mesma regra e preservam RLS/escopo de unidade.
+Revogar bloqueia imediatamente as novas consultas e downloads, sem novo login.
+Em Docs, o status comercial aparece em português e o PDF continua disponível para
+as ações de baixar/compartilhar. A lista é recarregada ao retornar à página ou
+retomar o app, mantendo os filtros da consulta.
+
+Antes de publicar a API, aplicar a migration
+`20261114150000_quote_mobile_visibility`. Publicar API, frontend web e app mobile
+atualizados. Não existem novas variáveis de ambiente. Este ajuste não executa deploy.
+
+Validação: testes de API com PostgreSQL/RLS para todos os seis estados, controle
+exclusivo pelo owner, valor booleano estrito, revogação, isolamento entre tenants,
+preservação da versão e não utilização da permissão geral antiga. Testes mobile
+cobrem o selo de status, as ações do PDF e atualização após retomada. O cenário de
+navegador verifica liberação/revogação e persistência após recarregar a proposta.

@@ -33,6 +33,11 @@ test("a página conta a cadeia de um atendimento, na ordem", async ({
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/");
   await settled(page);
+  await expect(page).toHaveTitle("Orbit | Gestão de serviços e manutenção");
+  await expect(page.locator('meta[property="og:locale"]')).toHaveAttribute(
+    "content",
+    "pt_BR",
+  );
 
   const etapas = page.getByRole("list").filter({ hasText: ETAPAS[0] }).first();
   await expect(etapas.getByRole("listitem")).toHaveCount(ETAPAS.length);
@@ -188,10 +193,8 @@ for (const largura of [375, 768, 1440]) {
       () => document.documentElement.scrollWidth > window.innerWidth + 1,
     );
     expect(vazou).toBe(false);
-    await page
-      .locator("#app-mobile")
-      .screenshot({
-        path: test.info().outputPath(`landing-mobile-app-${largura}.png`),
-      });
+    await page.locator("#app-mobile").screenshot({
+      path: test.info().outputPath(`landing-mobile-app-${largura}.png`),
+    });
   });
 }

@@ -190,13 +190,13 @@ function ScopeNotice() {
           humana no meio.
         </li>
         <li>
-          <strong className="text-foreground">Não roda código.</strong> Sem
-          script, sem fórmula, sem SQL e sem template executável — as condições
-          são comparações declaradas, e só.
+          <strong className="text-foreground">Sem programação.</strong> As
+          condições são comparações simples, escolhidas em listas — nada de
+          fórmula ou código.
         </li>
         <li>
           <strong className="text-foreground">Não chama nada de fora.</strong>{" "}
-          Sem webhook, sem URL e sem requisição HTTP. O que uma regra aciona vem de uma lista fechada de ações do Orbit.
+          Uma regra não avisa sistemas de terceiros: ela só aciona ações do próprio Orbit, escolhidas numa lista.
         </li>
         <li>
           <strong className="text-foreground">

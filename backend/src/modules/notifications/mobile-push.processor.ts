@@ -87,6 +87,7 @@ export class MobilePushProcessor implements JobProcessor, OnModuleInit {
       version: 1,
       notificationId: notification.id,
       organizationId: notification.organizationId,
+      recipientUserId: notification.recipientUserId,
       type: notification.type as MobilePushPayloadReadModel['type'],
       deepLink: typeof deepLink === 'string' ? deepLink : '',
       title: notification.title.slice(0, 120),

@@ -158,7 +158,7 @@ function ProposalContent({
         >
           <Download className="size-4" />
           {download.isPending
-            ? "Baixando…"
+            ? "Gerando documento…"
             : data.response?.decision === "APPROVE"
               ? "Baixar orçamento assinado em PDF"
               : "Baixar orçamento em PDF"}

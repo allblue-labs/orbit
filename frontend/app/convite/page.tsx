@@ -1,8 +1,8 @@
 "use client";
+import { useIdentityLinkToken } from "@/hooks/auth/use-identity-link-token";
 
 import { Suspense, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import {
   ArrowRight,
   Eye,
@@ -42,8 +42,8 @@ export default function InvitationPage() {
  * unidade definidos por quem convidou.
  */
 function InvitationView() {
-  const params = useSearchParams();
-  const token = params.get("token") ?? "";
+  const linkToken = useIdentityLinkToken();
+  const token = linkToken ?? "";
   const [showPassword, setShowPassword] = useState(false);
   const [password, setPassword] = useState("");
   const acceptInvitation = useAcceptInvitation();
@@ -82,6 +82,8 @@ function InvitationView() {
       });
     }
   }
+
+  if (linkToken === null) return <SessionLoading label="Carregando convite…" />;
 
   return (
     <main className="flex min-h-dvh flex-col px-6 py-8 sm:px-10">

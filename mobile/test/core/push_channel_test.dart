@@ -1,9 +1,22 @@
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart'
+    show debugDefaultTargetPlatformOverride;
+import 'package:orbit_operator/core/contracts/mobile_push_device_contracts.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_operator/core/push/push_channel.dart';
 
 void main() {
   final binding = TestWidgetsFlutterBinding.ensureInitialized();
+  test(
+    'iOS e Android registram FCM; um token APNs nunca é anunciado como FCM',
+    () {
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      for (final platform in [TargetPlatform.iOS, TargetPlatform.android]) {
+        debugDefaultTargetPlatformOverride = platform;
+        expect(PushChannel().provider, MobilePushProvider.fcm);
+      }
+    },
+  );
   test(
     'trocar sessão mantém a nova escuta nativa depois de cancelar a anterior',
     () async {

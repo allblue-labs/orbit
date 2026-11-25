@@ -22,7 +22,7 @@ const terms: LegalDocumentReadModel['sections'] = [
   {
     title: '3. Planos, preços e avaliação gratuita',
     paragraphs: [
-      'Os recursos, limites, preços, periodicidade e condições comerciais são apresentados antes da contratação. O Essencial oferece 30 dias de avaliação para clientes elegíveis que ainda não utilizaram o benefício nem pagaram um plano. A criação de outra conta não renova a elegibilidade.',
+      'Os recursos, limites, preços, periodicidade e condições comerciais são apresentados antes da contratação. Quando a oferta incluir avaliação, a duração é indicada na contratação e o benefício vale para clientes elegíveis que ainda não o utilizaram nem pagaram um plano. A criação de outra conta não renova a elegibilidade.',
       'Planos sem avaliação dependem de pagamento confirmado para liberar acesso. Ao sair antecipadamente da avaliação para uma contratação paga, os dias gratuitos restantes terminam após a confirmação do pagamento, conforme aviso apresentado antes da contratação. A abertura ou o retorno da página de pagamento não constitui confirmação financeira.',
     ],
   },
@@ -30,17 +30,20 @@ const terms: LegalDocumentReadModel['sections'] = [
     title: '4. Pagamentos, renovação e alteração de plano',
     paragraphs: [
       'Os pagamentos são processados pelo Stripe. A autorização de pagamento e as condições do meio escolhido são apresentadas no ambiente do processador. O Orbit não armazena o número completo do cartão nem seu código de segurança.',
-      'Assinaturas com renovação habilitada são cobradas conforme a periodicidade contratada. Mudanças de plano já pago, inclusive de periodicidade, são agendadas para o próximo vencimento. O plano, o prazo e as cotas do período atual permanecem válidos até essa data, sem cobrança antecipada pela mudança.',
+      'Assinaturas com renovação habilitada são cobradas conforme a periodicidade contratada. Na mudança para um plano mensal de valor maior, a primeira cobrança corresponde ao novo período mensal descontado do crédito proporcional pelo tempo pago e ainda não utilizado do plano anterior. O Stripe calcula e cobra a diferença. O novo plano é liberado quando o pagamento for confirmado, conforme o novo ciclo indicado na fatura.',
+      'A mudança para um plano mensal de valor menor preserva os recursos do plano atual até o fim do período contratado. O valor do novo plano é cobrado na renovação. O Orbit envia avisos na plataforma nas janelas de 7, 3 e 1 dia antes do vencimento, conforme a antecedência com que a mudança foi solicitada.',
+      'Mudanças que envolvam planos semestrais ou anuais são solicitadas nas configurações e encaminhadas ao suporte para análise. O protocolo é exibido na plataforma e o contrato atual permanece em vigor até que as novas condições sejam acertadas.',
       'Se o novo plano tiver limites inferiores e houver excedentes, a organização será avisada e terá 48 horas a partir da vigência da redução para adequar os recursos. Depois, as ações afetadas ficam bloqueadas até a regularização. Esse bloqueio por limite não exclui dados. Cotas mensais de consumo são renovadas conforme a janela de uso informada na plataforma.',
     ],
   },
   {
     title: '5. Cancelamento e prazo de retorno',
     paragraphs: [
-      'O cancelamento solicitado nas configurações desativa a renovação do próximo vencimento. O período já pago e seus limites continuam disponíveis até o fim contratado. Enquanto esse período estiver vigente, a organização pode desfazer o cancelamento.',
-      'Após o vencimento, o uso operacional fica inativo e a plataforma oferece nova contratação. Os dados operacionais permanecem disponíveis para recuperação por 30 dias contados do término do acesso. A data limite é informada na plataforma. A recontratação com pagamento confirmado antes do início da exclusão preserva esses dados; apenas iniciar um checkout não representa recontratação.',
+      'Em até sete dias corridos da confirmação do primeiro pagamento da contratação de um plano, a organização pode solicitar o cancelamento nas configurações com restituição integral do valor efetivamente pago por essa contratação. O prazo vale para qualquer periodicidade. Uma cobrança de renovação do mesmo plano não reinicia o prazo contratual. O Orbit confirma o pedido na plataforma e encaminha a devolução ao meio de pagamento original, cujo prazo de processamento depende da instituição. O acesso pago termina com o cancelamento com restituição.',
+      'Após o prazo de sete dias, o pedido abre um chamado para análise do suporte e desativa a próxima renovação. O período já pago e seus limites permanecem disponíveis até o vencimento. Para acompanhar um pedido, use o protocolo informado na plataforma ou escreva para suporte-orbit@allblue-labs.com.',
+      'Após o fim do acesso pago, o uso operacional fica inativo e a plataforma oferece nova contratação. Os dados operacionais permanecem disponíveis para recuperação por 30 dias contados do término do acesso. A data limite é informada na plataforma. A recontratação com pagamento confirmado antes do início da exclusão preserva esses dados; apenas iniciar um checkout não representa recontratação.',
       'Passados os 30 dias sem recontratação, o sistema inicia a exclusão automática dos dados operacionais, incluindo clientes, equipamentos, operações, evidências, documentos e arquivos vinculados. A exclusão é definitiva para o ambiente ativo e não representa pausa por limite de plano. Registros mínimos de conta, aceite, prevenção a fraude e cobrança podem ser conservados para finalidades legítimas e obrigações legais, conforme a Política de Privacidade.',
-      'O cancelamento da recorrência não impede o exercício de direitos de arrependimento, restituição ou outros direitos previstos na legislação aplicável. Solicitações de restituição serão analisadas conforme a lei e as circunstâncias da contratação; nenhuma cláusula destes Termos limita direitos obrigatórios do consumidor.',
+      'Os direitos de arrependimento e restituição previstos na legislação aplicável, inclusive no art. 49 do Código de Defesa do Consumidor quando aplicável, permanecem assegurados.',
     ],
   },
   {
@@ -139,7 +142,7 @@ export function legalDocument(slug: LegalDocumentSlug): LegalDocumentReadModel {
         ? 'Termos de Uso do Orbit'
         : 'Política de Privacidade do Orbit',
     version: LEGAL_DOCUMENT_VERSION,
-    effectiveAt: '2026-10-23',
+    effectiveAt: '2026-11-19',
     provider: {
       name: 'Allblue Labs Inova Simples',
       document: '67.312.115/0001-92',

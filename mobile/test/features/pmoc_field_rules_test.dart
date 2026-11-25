@@ -183,10 +183,15 @@ void main() {
       );
     });
 
-    test('código desconhecido aparece como veio', () {
-      /// Um texto genérico apagaria a única pista de quem for investigar — e o
-      /// backend pode publicar um motivo novo antes desta tela conhecê-lo.
-      expect(pmocBlockedReasonLabel('MOTIVO_NOVO'), 'MOTIVO_NOVO');
+    test('um bloqueio novo orienta a atualizar e revisar o plano', () {
+      final label = pmocBlockedReasonLabel('MOTIVO_NOVO');
+      expect(label, contains('Atualize o PMOC'));
+      expect(label, isNot(contains('MOTIVO_NOVO')));
+      expect(
+        pmocEquipmentStatus('SITUACAO_NOVA').label,
+        'Situação indisponível',
+      );
+      expect(pmocCycleStatus('SITUACAO_NOVA').label, 'Situação indisponível');
     });
   });
 

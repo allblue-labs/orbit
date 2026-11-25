@@ -38,8 +38,10 @@ export function EventBlock({
   variant: "grid" | "inline";
 }) {
   const { occurrence } = segment;
+  const isOperation = occurrence.type === "OPERATION";
   const compact =
-    variant === "grid" && segment.endMinute - segment.startMinute < 45;
+    isOperation ||
+    (variant === "grid" && segment.endMinute - segment.startMinute < 45);
   const foreignZone = occurrence.timezone !== timeZone;
 
   return (
@@ -49,6 +51,7 @@ export function EventBlock({
       title={occurrence.title}
       className={cn(
         "flex h-full w-full flex-col overflow-hidden rounded-md border-l-2 px-1.5 py-1 text-left transition-colors",
+        isOperation && "justify-center py-0.5",
         eventStatusAccent(occurrence.status),
         selected
           ? "bg-primary/20 ring-1 ring-primary/60"
@@ -62,6 +65,11 @@ export function EventBlock({
             className="size-3 shrink-0 text-muted-foreground"
             aria-label="Começou no dia anterior"
           />
+        ) : null}
+        {isOperation && !occurrence.allDay ? (
+          <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+            {formatZonedTime(occurrence.startsAt, timeZone)}
+          </span>
         ) : null}
         <span className="truncate text-xs font-medium">{occurrence.title}</span>
         {occurrence.recurring ? (
@@ -87,10 +95,10 @@ export function EventBlock({
       {compact ? null : (
         <span className="flex min-w-0 items-center gap-1 text-[10px] text-muted-foreground">
           {/*
-            * O horário vai num elemento próprio para poder encurtar com
-            * reticências. Solto, era texto anónimo dentro de um flex: não
-            * encolhia, e o `overflow-hidden` do bloco cortava-o em silêncio.
-            */}
+           * O horário vai num elemento próprio para poder encurtar com
+           * reticências. Solto, era texto anónimo dentro de um flex: não
+           * encolhia, e o `overflow-hidden` do bloco cortava-o em silêncio.
+           */}
           <span className="truncate">
             {occurrence.allDay ? (
               "Dia todo"

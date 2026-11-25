@@ -15,7 +15,6 @@ import type {
 import type { SubscriptionRow } from './subscription.repository';
 import {
   SubscriptionStatus,
-  TRIAL_DAYS,
   allowsPlanChange,
   isTerminal,
 } from './subscription.types';
@@ -41,9 +40,11 @@ export class SubscriptionMapper {
     return {
       id: linha.id,
       planCode: linha.planCode,
-      planLabel: isKnownPlan(linha.planCode)
-        ? planDefinition(linha.planCode).label
-        : linha.planCode,
+      planLabel:
+        (linha.entitlementsSnapshot as { label?: string })?.label ??
+        (isKnownPlan(linha.planCode)
+          ? planDefinition(linha.planCode).label
+          : linha.planCode),
       billingInterval: linha.billingInterval,
       status: linha.effectiveStatus,
       version: linha.version,
@@ -75,7 +76,10 @@ export class SubscriptionMapper {
     if (!linha.trialStartsAt || !linha.trialEndsAt) return null;
     return {
       eligible: false,
-      trialDays: TRIAL_DAYS,
+      trialDays: Math.ceil(
+        (linha.trialEndsAt.getTime() - linha.trialStartsAt.getTime()) /
+          86_400_000,
+      ),
       startsAt: linha.trialStartsAt.toISOString(),
       endsAt: linha.trialEndsAt.toISOString(),
     };

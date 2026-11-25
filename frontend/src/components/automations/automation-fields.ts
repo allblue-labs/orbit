@@ -113,7 +113,7 @@ export const FREE_FIELD_HINTS: Readonly<Record<string, string>> = {
   operationId: "Identificador da ordem de serviço.",
   executionId: "Identificador da execução de artefato.",
   catalogItemId: "Identificador do item de catálogo.",
-  artifactType: "Tipo do documento, como está no template — ex.: PMOC.",
+  artifactType: "Tipo do documento, como está no modelo — ex.: PMOC.",
   templateKey: "Chave do modelo, como aparece em Modelos de documento.",
   total: "Comparação exata de texto — ex.: 1500.00.",
   currency: "Código da moeda — ex.: BRL.",

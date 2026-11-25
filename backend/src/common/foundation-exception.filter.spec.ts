@@ -26,7 +26,7 @@ describe('FoundationExceptionFilter production logging', () => {
           method: 'GET',
           originalUrl:
             '/api/v1/documents?token=SENSITIVE_LOG_SECRET_MUST_NOT_LEAK',
-          path: '/api/v1/documents',
+          route: { path: '/api/v1/documents' },
           id: 'request-id',
         }),
       }),

@@ -2,6 +2,7 @@ import java.util.Properties
 
 plugins {
     id("com.android.application")
+    id("org.jetbrains.kotlin.android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
@@ -87,6 +88,18 @@ flutter {
     source = "../.."
 }
 
+// The same validator is invoked by Xcode. No credentials are printed.
+val validatePush = tasks.register<Exec>("validateOrbitPush") {
+    commandLine("python3", "../../tool/check_push_config.py", "--platform", "android")
+    environment("CONFIGURATION", "Release")
+    environment("DART_DEFINES", project.findProperty("dart-defines")?.toString() ?: "")
+}
+tasks.configureEach {
+    if (name == "preReleaseBuild" || name == "processReleaseGoogleServices") {
+        dependsOn(validatePush)
+    }
+}
+
 // The Firebase client configuration is supplied by each deployment.
 if (file("google-services.json").exists()) {
     apply(plugin = "com.google.gms.google-services")
@@ -95,4 +108,6 @@ if (file("google-services.json").exists()) {
 dependencies {
     implementation(platform("com.google.firebase:firebase-bom:35.1.0"))
     implementation("com.google.firebase:firebase-messaging")
+    // Tema AppCompat: o diálogo de digital do Android 8/9 (local_auth) exige.
+    implementation("androidx.appcompat:appcompat:1.7.0")
 }

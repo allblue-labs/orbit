@@ -205,27 +205,25 @@ function LabelPreview({
 
 function DownloadRow({ equipmentId }: { equipmentId: string }) {
   const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
 
   /**
    * O download é o arquivo do servidor, com o nome que ele escolheu.
    *
-   * Nada é convertido para base64 nem remontado aqui: os bytes vão do BFF para
-   * um object URL e daí para o disco.
+   * Exportação assíncrona: o pedido volta na hora, a etiqueta é gerada no
+   * servidor de documentos e o navegador baixa direto do armazenamento.
    */
   const download = async (format: "svg" | "png" | "pdf") => {
     setBusy(format);
+    setError(null);
     try {
-      const label = await equipmentQrService.label(equipmentId, {
+      await equipmentQrService.downloadLabel(equipmentId, {
         format,
         preset: "STANDARD",
         branding: "ORGANIZATION",
       });
-      const url = URL.createObjectURL(label.blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = label.fileName;
-      anchor.click();
-      URL.revokeObjectURL(url);
+    } catch (failure) {
+      setError(failure);
     } finally {
       setBusy(null);
     }
@@ -246,10 +244,11 @@ function DownloadRow({ equipmentId }: { equipmentId: string }) {
             onClick={() => void download(entry.format)}
           >
             <Download className="size-3.5" />
-            {busy === entry.format ? "Gerando…" : entry.label}
+            {busy === entry.format ? "Gerando documento…" : entry.label}
           </Button>
         ))}
       </div>
+      <MutationError error={error} />
     </div>
   );
 }

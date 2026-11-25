@@ -23,6 +23,7 @@ import '../../../../core/contracts/mobile_field_contracts.dart';
 import '../../../../core/design/orbit_primitives.dart';
 import '../../../../core/presentation/field_registry.dart';
 import '../../../../core/presentation/orbit_format.dart';
+import '../../../../core/theme/orbit_theme.dart';
 
 /// Tom do selo de prazo.
 ///
@@ -34,6 +35,7 @@ const _dueTone = <MobileDueState, OrbitTone>{
   MobileDueState.dueToday: OrbitTone.warning,
   MobileDueState.upcoming: OrbitTone.neutral,
   MobileDueState.unscheduled: OrbitTone.neutral,
+  MobileDueState.completed: OrbitTone.success,
 };
 
 OrbitTone dueToneOf(MobileDueState state) =>
@@ -46,10 +48,12 @@ class WorkItemRow extends StatelessWidget {
     required this.onOpen,
     this.currentUserId,
     this.emphasis = false,
+    this.padding = const EdgeInsets.symmetric(vertical: OrbitSpacing.ms),
   });
 
   final MobileWorkItemContract item;
   final VoidCallback onOpen;
+  final EdgeInsetsGeometry padding;
 
   /// Para dizer qual é a função de quem está lendo, quando houver.
   final String? currentUserId;
@@ -65,6 +69,7 @@ class WorkItemRow extends StatelessWidget {
 
     return Semantics(
       button: true,
+      onTap: onOpen,
       label: semanticLabel(item, format: OrbitFormat.of(context)),
 
       /// `excludeSemantics`: o rótulo acima já diz a linha inteira na ordem
@@ -73,6 +78,7 @@ class WorkItemRow extends StatelessWidget {
       excludeSemantics: true,
       child: OrbitListRow(
         leading: scheduleColumn(item, format: OrbitFormat.of(context)),
+        padding: padding,
         title: item.customer?.name ?? item.title,
 
         /// O que é o serviço. Antes esta linha trazia só "Atendimento" — o
@@ -147,13 +153,19 @@ String scheduleText(
 /// coluna de texto onde deveria haver uma coluna de números. O travessão diz a
 /// mesma coisa visualmente; quem usa leitor de tela ouve `scheduleText`, que
 /// continua dizendo a frase inteira.
+///
+/// Concluído mostra o **dia em que foi feito**: quem procura um atendimento
+/// passado lembra da data, não da hora agendada.
 String scheduleColumn(
   MobileWorkItemContract item, {
   OrbitDateTimeFormat? format,
-}) => item.scheduledFor == null
-    ? '—'
-    : (format?.hourOf(item.scheduledFor) ??
-          OrbitFormat.hourOf(item.scheduledFor));
+}) {
+  final formato = format ?? OrbitFormat.standard;
+  if (item.dueState == MobileDueState.completed) {
+    return formato.dayShortOf(item.completedAt ?? item.scheduledFor);
+  }
+  return item.scheduledFor == null ? '—' : formato.hourOf(item.scheduledFor);
+}
 
 /// A função de quem está lendo, derivada dos campos publicados.
 FieldAssignment assignmentOf(

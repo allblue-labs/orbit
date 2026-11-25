@@ -6,11 +6,12 @@ import android.content.pm.PackageManager
 import android.os.Build
 import com.google.firebase.FirebaseApp
 import com.google.firebase.messaging.FirebaseMessaging
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
-class MainActivity : FlutterActivity() {
+// FlutterFragmentActivity: a biometria do sistema (local_auth) abre num fragmento.
+class MainActivity : FlutterFragmentActivity() {
     private var permissionResult: MethodChannel.Result? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {

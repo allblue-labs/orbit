@@ -1,0 +1,187 @@
+{
+  "pr": "PR-08",
+  "date": "2026-11-16",
+  "baseCommit": "0dcc7ea81245e64796364039c12d485610cb3833",
+  "implementationCommit": "82fe62346e92e4a9fe310075c6697432fe9d7611",
+  "finding": "F11",
+  "qualification": "Implemented and locally tested; real SES/SNS delivery, subscription and AWS production access remain externally pending.",
+  "migration": "20261116120000_ses_feedback_suppression",
+  "runtime": {
+    "node": "25.1.0",
+    "newOfficialSdk": {
+      "package": "@aws-sdk/client-sns",
+      "version": "3.1169.0"
+    },
+    "newNode22LinuxQualification": false
+  },
+  "checks": {
+    "backendFullUnit": {
+      "command": "npm test -- --runInBand --watchman=false",
+      "suites": 265,
+      "passed": 2151,
+      "failed": 0,
+      "seconds": 84.496,
+      "note": "Full run after updating two pre-existing NX-03 fixtures; subsequent type/lint-only edits rechecked with focused suite."
+    },
+    "finalFocusedUnit": {
+      "command": "npm test -- --runInBand --watchman=false --testPathPatterns='sns-message.verifier|sns-certificate.fetcher|simulate-ses-feedback|email.service|release-environment'",
+      "suites": 5,
+      "passed": 88,
+      "failed": 0,
+      "seconds": 4.34
+    },
+    "integration": {
+      "command": "node scripts/verify-integrations.mjs backend --testPathPatterns='ses-feedback|identity-email-outbox|authentication-concurrency|billing-stripe.e2e|rls.e2e|platform-canonical-administration'",
+      "matchedSuites": [
+        "ses-feedback.e2e",
+        "identity-email-outbox.e2e",
+        "billing-stripe.e2e",
+        "rls.e2e",
+        "platform-canonical-administration.e2e"
+      ],
+      "suites": 5,
+      "passed": 94,
+      "failed": 0,
+      "seconds": 121.091,
+      "newFeedbackCases": 15,
+      "migrationsApplied": 120,
+      "tablesGranted": 148,
+      "database": "Disposable PostgreSQL, restricted orbit_app role, FORCE RLS and real HTTP with two Nest replicas",
+      "awsBoundary": "Mocked SDK and remote certificate boundary; independently constructed, real RSA-SHA256 signatures",
+      "note": "authentication-concurrency pattern did not match an additional E2E suite; no new identity-concurrency qualification claimed. Subsequent edits only remove type assertions/equivalently express the already-validated envelope type and update mocks."
+    },
+    "typecheck": {
+      "command": "npm run typecheck",
+      "exitCode": 0
+    },
+    "build": {
+      "command": "npm run build",
+      "exitCode": 0
+    },
+    "eslint": {
+      "scope": "Every modified/added existing backend TypeScript file, including tests, fixtures and scripts",
+      "exitCode": 0
+    },
+    "prismaSchema": {
+      "command": "npx prisma validate",
+      "exitCode": 0
+    },
+    "contractBoundaries": {
+      "command": "npm run contracts:guard",
+      "exitCode": 0
+    },
+    "publicErrors": {
+      "command": "npm run lint:public-errors",
+      "exitCode": 0,
+      "publicCodes": 75
+    },
+    "nexusContracts": {
+      "command": "npm run contracts:nexus",
+      "passed": 220,
+      "failed": 0
+    },
+    "deploymentHelpers": {
+      "checks": [
+        "bash -n deploy/staging/bin/deploy.sh",
+        "Python AST: init-environment.py and embedded deploy preflight"
+      ],
+      "exitCode": 0,
+      "executedAgainstServer": false
+    },
+    "audit": {
+      "command": "npm run security:audit",
+      "exitCode": 0,
+      "production": {
+        "low": 0,
+        "moderate": 0,
+        "high": 0,
+        "critical": 0,
+        "total": 0
+      },
+      "full": {
+        "low": 5,
+        "moderate": 23,
+        "high": 0,
+        "critical": 0,
+        "total": 28
+      },
+      "existingDevelopmentExceptionsExpireOn": "2026-11-26"
+    },
+    "diffWhitespace": {
+      "command": "git -c core.fsmonitor=false diff --check",
+      "exitCode": 0
+    }
+  },
+  "security": {
+    "snsSignature": "Version 2 only, real RSA-SHA256 over fixed canonical field ordering",
+    "certificateTrust": "Exact regional SNS HTTPS distribution, pinned public DNS IP, TLS CA and hostname validation, no redirects, bounded PEM with X509 dates and RSA strength. No independent PKIX chain validation of the signing PEM claimed.",
+    "confirmation": "Configured SNS SDK, signed token, AuthenticateOnUnsubscribe=true, durable receipt and fenced lease; no URL fetch or automatic resubscribe",
+    "association": "Precommitted opaque tag, region/provider-ID unique bindings; multiple SDK retry IDs retained; unknown delivery returns 503",
+    "durability": "Feedback identity unique per topic/SNS ID, payload hash collision check, receipt/binding/suppression atomic commit before 200",
+    "recipients": "All affected known destinations, maximum 50. Hard bounce and complaint block new admissions; soft bounce does not. No account deactivation/deletion or public unsuppression endpoint.",
+    "storage": "Dedicated transport context only, FORCE RLS on four new tables, runtime DELETE revoked; HMAC fingerprints, no plaintext addresses/payloads/tokens stored in these tables",
+    "sender": "Checks suppression even if feedback disabled; database failure prevents sending; in-flight messages cannot be recalled",
+    "newMandatorySecret": "EMAIL_SUPPRESSION_HASH_KEY: dedicated stable 32-byte base64 secret; required for production sender even when feedback disabled; never rotate independently of persisted fingerprints"
+  },
+  "baselineFixtureRepairs": [
+    "storage-upload.http.spec.ts: inject the existing tenant policy and verify its organization scope",
+    "notification.service.spec.ts: expect the organization argument already supplied by the existing realtime runtime"
+  ],
+  "sourceSha256": {
+    ".env.example": "53525f1171cad50fd9d8b594461e723070ae54dd9341a2877c9212b05126c70b",
+    "backend/docs/amazon-ses-feedback.md": "138bafb461daf74bb29b5726e905f54a618a8d0be424414ee8e88e9f7c4237e5",
+    "backend/docs/amazon-ses.md": "09050c1be9bd48560a83f9ed8458dde57908b8ae5deb8e7385a9b98cedf124f5",
+    "backend/package-lock.json": "8f386f7d90cc438837c5982df9c892e9fde9740dde64b724405d4699a6ee996d",
+    "backend/package.json": "283f78a7af796ecd1c984f18fa8e5549d38ad1a80e1c9987741f8186ab3c3124",
+    "backend/prisma/migrations/20261116120000_ses_feedback_suppression/migration.sql": "4c5b01651ff646cb95e37fae30ebd3da954f81a711a12a302d8fd83ac7b67991",
+    "backend/prisma/schema.prisma": "195f0a0d6c40660a939cec60f51c1b0e5d1835d5d3c4cf419fc46b582292416d",
+    "backend/src/configure-http-parsers.ts": "43e7cf8a027e462f098cf908dc80a4fc2b70d5481513ee6b6c947cf3744f6003",
+    "backend/src/modules/email/email-transport.repository.ts": "16d24d0b141bb75dff397b1cbf6dbb37d6c28cfab7a6dca8fa52eaec69d2a47b",
+    "backend/src/modules/email/email.config.ts": "bb55363502f5ecdd84b7da8143877e89f8eedff2d6cf867f2655fd5065d1e8a9",
+    "backend/src/modules/email/email.module.ts": "c31aa068f1e7a77e1cb275066d52a6dc22d724a056c5bd114fa1a9256844ed7c",
+    "backend/src/modules/email/email.service.spec.ts": "f7de4b8771ee5c15607d2408dfb94a92243d2fa20cdffa0e6331901107c099fa",
+    "backend/src/modules/email/email.service.ts": "30c1136085ee181364522c8ecd7360a2218a7ade995c92069e15c81b5592fb2c",
+    "backend/src/modules/email/email.types.ts": "5336b1f075f72cc9efefc80421ff268c7b2dddd9c20b04f54adc7b6b798d8d57",
+    "backend/src/modules/email/ses-feedback.config.ts": "3f47459e0f3187723e49fb3191a35a282e8cd3691e59586833957f622e7217fc",
+    "backend/src/modules/email/ses-feedback.controller.ts": "cf190c6dc306352475ff7015171e4864aad4791ce99ac19c2d94c6b816d48aa8",
+    "backend/src/modules/email/ses-feedback.parser.ts": "7dfbea53fe022c4be663ac04b4ee9416dba09b45a045a98caf6ca6eb174f0d05",
+    "backend/src/modules/email/ses-feedback.service.ts": "36494bf2ba89b27475d8988869b9e2bd5017fae08aab2e1f9c1bb462db57f02a",
+    "backend/src/modules/email/ses-feedback.types.ts": "e8b2a3a6f02a94c5c8edd3d54d579afdcb2f843be5436b26f653dbc47c12a3bb",
+    "backend/src/modules/email/sns-certificate.fetcher.spec.ts": "fce0755b76cb8c5f28cd15337f3e034371976736cc12566dc99c617090be5cf2",
+    "backend/src/modules/email/sns-certificate.fetcher.ts": "49ee0437093b3849c7b706fd542a11ce9cd682f9989b8abb4b0f3744a740d864",
+    "backend/src/modules/email/sns-message.verifier.spec.ts": "24da3bb095f0622ce790ea6bf6624f8d73eef33343c1c590ba7065772cd2a0b8",
+    "backend/src/modules/email/sns-message.verifier.ts": "e6d8291feba15fa46d4eb809ace6f10e794c418385cb74f7b7d44f973d001cac",
+    "backend/src/modules/identity/domain/identity.types.ts": "ad46101fe02997026aa388f8da1ca760f79fbe5fb1e1971ec60b36c93bd22c55",
+    "backend/src/modules/identity/infrastructure/identity-email.worker.ts": "49f35f2a1dec80d581ec3a1a6350984dcd0581f80b80915273c61f7fc0c36c2d",
+    "backend/src/modules/identity/infrastructure/identity-token.delivery.ts": "87069f577657f878c2ddb0af8c24fc343196f69b815db2e40ac5778cc067cb80",
+    "backend/src/modules/notifications/notification-delivery.providers.ts": "d71eb1feaf27b7e97e4b9ebbdcb7d0a816b43e02f3ee29eee5a40b4fb7d8a9d9",
+    "backend/src/modules/notifications/notification.service.spec.ts": "b21df88f6b6bf896b236d53b88e2b726249c2d9a9bd46c9b744cfbd9d5a47bd4",
+    "backend/src/modules/storage/storage-upload.http.spec.ts": "203506f352666e9a898af4afb57e73700c69a06ddcd745d23daa795467486993",
+    "backend/src/release-environment.spec.ts": "6b11535ff560db40b419da2b824f2d06adff509e9ee428858d8f700be1c2c773",
+    "backend/src/release-environment.ts": "5df5acd6054582cb5f0a062f4400511cb70831102973a31dd978823762d3aa32",
+    "backend/src/scripts/check-ses-config.ts": "650cb23099537590b7fa6a42f9b2300efabfab0acea7083601d72ae53217531b",
+    "backend/src/scripts/provision-database-roles.ts": "8b407a50cf68b10fd6993999c7293564f96d7f0ade83d4cca268b9408519caa2",
+    "backend/src/scripts/simulate-ses-feedback.spec.ts": "a4ee8a40cd97cebfa7d43ba0339fe772e50bc877900d663343379d1497674b30",
+    "backend/src/scripts/simulate-ses-feedback.ts": "e8bae7f273adea0be7707c1dde6e6209c0930bb2f123ad99179b304efdac9069",
+    "backend/test/helpers/sns-fixture.ts": "d231f096f3b251141fa1b3af13da0a0d57491a0e64e7b2b2bdba656f5636edc7",
+    "backend/test/identity-email-outbox.e2e-spec.ts": "b2560d356646c5327bfa6f66216b7658a4eeb0136360ca796427d4839d1a90da",
+    "backend/test/ses-feedback.e2e-spec.ts": "109be4b08537dd8da6b3a9bd952275d6b8ca3466c0548cb19b614c87859bf4f0",
+    "deploy/staging/README.md": "1de9be1bee8552acbf2c1d91aec95ac26437e48ac9a607cf25709bd6dde19006",
+    "deploy/staging/bin/deploy.sh": "717ba1f5f28f34d2bac40914ac3671118e4dbb6960a74a0ce38c08849b14e497",
+    "deploy/staging/bin/init-environment.py": "5deb88d7df2d6321af1e4400713880abc1514948c904cbcbf13eefd3dce35b2c",
+    "docker-compose.yml": "9059cbd31dd9febd8f00c58547d91a012f5c7551da6fbd81c232c2fadba0b685"
+  },
+  "externalPending": [
+    "Configure regional SES configuration set and SNS Standard topic with SignatureVersion=2 and restricted SES publication policy",
+    "Runtime sns:ConfirmSubscription permission and confirmed HTTPS subscription with RawMessageDelivery=false",
+    "Mailbox Simulator success, bounce and complaint through Orbit EmailService, each with FEEDBACK_CONFIRMED; no real tests run in this PR",
+    "Regional AWS production access and controlled recipient receipt qualification"
+  ],
+  "awsAccountReadThisPr": false,
+  "realMessagesSent": 0,
+  "cloudResourcesChanged": false,
+  "deploymentExecuted": false,
+  "pushExecuted": false,
+  "mergeExecuted": false,
+  "pr09Started": false
+}

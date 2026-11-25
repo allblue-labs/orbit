@@ -1,3 +1,4 @@
+import { brandImageStub } from '../../../test/support/brand-image.stub';
 /**
  * O documento do plano de PMOC, no que dá para afirmar sobre bytes de PDF.
  *
@@ -144,6 +145,8 @@ function servico(
     undefined as never,
     new PmocPlanDocumentService(),
     storage as never,
+    undefined,
+    brandImageStub(),
   );
   return { service, repository, storage };
 }

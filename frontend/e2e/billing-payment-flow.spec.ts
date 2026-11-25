@@ -1,6 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { BillingOverview } from "../src/types/billing";
 
+const SIGNUP_EMAIL = "owner@example.test";
+const SIGNUP_PASSWORD = "Orbit#Signup2026";
+const VERIFICATION_TOKEN = "Ab3_".repeat(16);
+
 const period = {
   start: new Date().toISOString(),
   end: new Date(Date.now() + 20 * 86400000).toISOString(),
@@ -15,6 +19,7 @@ const plans = [
   label: String(label),
   description: "Plano para a operação",
   monthlyPrice: String(Number(amount) / 100),
+  trialDays: code === "ESSENTIAL" ? 30 : 0,
   currency: "BRL",
   capabilities: [],
   allocation: {},
@@ -31,19 +36,35 @@ const plans = [
   ),
 }));
 
-function overview(status = "TRIALING"): BillingOverview {
+function overview(
+  status = "TRIALING",
+  activePlan = "ESSENTIAL",
+): BillingOverview {
   const pending = status === "PENDING_PAYMENT";
-  const code = pending ? "PROFESSIONAL" : "ESSENTIAL";
+  const code = pending
+    ? "PROFESSIONAL"
+    : status === "ACTIVE"
+      ? activePlan
+      : "ESSENTIAL";
+  const plan = plans.find((entry) => entry.code === code)!;
   return {
     catalog: { plans },
+    contractedAmountMinor:
+      status === "ACTIVE" ? plan.prices.MONTHLY.amountMinor : null,
     subscription: {
       id: "subscription-fixture",
       planCode: code,
-      planLabel: pending ? "Profissional" : "Essencial",
+      planLabel: plan.label,
       billingInterval: "MONTHLY",
       status,
       version: 3,
-      billingPeriod: period,
+      billingPeriod:
+        status === "ACTIVE"
+          ? {
+              ...period,
+              start: new Date(Date.now() - 10 * 86400000).toISOString(),
+            }
+          : period,
       usagePeriod: period,
       trial: pending
         ? null
@@ -81,6 +102,7 @@ async function fixture(
   page: Page,
   options: {
     status?: string;
+    activePlan?: "ESSENTIAL" | "PROFESSIONAL";
     signup?: boolean;
     checkoutFails?: boolean;
     changeFails?: boolean;
@@ -92,15 +114,16 @@ async function fixture(
     cancelFails?: boolean;
   } = {},
 ) {
-  let registered = !options.signup;
+  let authenticated = !options.signup;
+  let emailVerified = !options.signup;
   const writes: { path: string; body: Record<string, unknown> }[] = [];
-  const data = overview(options.status);
+  const data = overview(options.status, options.activePlan);
   if (options.status === "ACTIVE")
     data.subscription!.allowedActions = [
       ...data.subscription!.allowedActions,
       "CANCEL_AT_PERIOD_END",
     ];
-  data.billing.canStartEssentialTrial = options.trialEligible;
+  data.billing.canStartTrial = options.trialEligible;
   if (options.overLimit)
     data.entitlements.limitAdjustment = {
       effectiveAt: period.start,
@@ -117,7 +140,7 @@ async function fixture(
     };
   const profile = {
     id: "billing-user",
-    email: "owner@example.test",
+    email: SIGNUP_EMAIL,
     firstName: "Marina",
     lastName: "Silva",
     displayName: "Marina Silva",
@@ -125,7 +148,7 @@ async function fixture(
     welcomeDismissedAt: new Date().toISOString(),
   };
   const session = () =>
-    registered
+    authenticated
       ? {
           authenticated: true,
           user: profile,
@@ -176,7 +199,7 @@ async function fixture(
       },
     ]);
   }
-  if (registered) await cookie();
+  if (authenticated) await cookie();
   await page.route("https://checkout.stripe.test/**", (route) =>
     route.fulfill({
       contentType: "text/html",
@@ -202,7 +225,37 @@ async function fixture(
         body: route.request().postDataJSON() as Record<string, unknown>,
       });
     if (path === "/api/auth/register") {
-      registered = true;
+      return route.fulfill({
+        status: 201,
+        json: {
+          success: true,
+          data: {
+            authenticated: false,
+            status: "EMAIL_VERIFICATION_REQUIRED",
+            email: body.email,
+          },
+        },
+      });
+    } else if (path.endsWith("/identity/email/verify")) {
+      expect(writes.some((write) => write.path === "/api/auth/register")).toBe(
+        true,
+      );
+      expect(body).toEqual({ token: VERIFICATION_TOKEN });
+      emailVerified = true;
+      return route.fulfill({ status: 204 });
+    } else if (path === "/api/auth/login") {
+      if (!emailVerified)
+        return route.fulfill({
+          status: 403,
+          json: {
+            success: false,
+            error: {
+              code: "EMAIL_VERIFICATION_REQUIRED",
+              message: "Confirme seu e-mail.",
+            },
+          },
+        });
+      authenticated = true;
       await cookie();
       result = { authenticated: true };
     } else if (path === "/api/auth/session") result = session();
@@ -240,6 +293,26 @@ async function fixture(
         !options.malformedChange &&
         data.subscription?.status === "ACTIVE"
       ) {
+        const price = plans.find((plan) => plan.code === body.planCode)?.prices
+          .MONTHLY;
+        if (
+          body.billingInterval !== "MONTHLY" ||
+          !price ||
+          data.contractedAmountMinor == null
+        ) {
+          return route.fulfill({
+            json: {
+              success: true,
+              data: { kind: "SUPPORT_TICKET", ticketId: "ORB-CHANGE-42" },
+            },
+          });
+        }
+        if (price.amountMinor > data.contractedAmountMinor) {
+          expect(body.acknowledgeImmediateCharge).toBe(true);
+          return route.fulfill({
+            json: { success: true, data: { kind: "UPGRADE_PROCESSING" } },
+          });
+        }
         data.subscription.pendingChange = {
           planCode: String(body.planCode),
           billingInterval: String(body.billingInterval),
@@ -285,11 +358,10 @@ async function fixture(
         });
         return;
       }
-      data.subscription!.cancelAtPeriodEnd = true;
-      data.dataRetentionEndsAt = new Date(
-        new Date(period.end).getTime() + 30 * 86400000,
-      ).toISOString();
-      result = data.subscription;
+      result = {
+        ...data.subscription,
+        cancellation: { kind: "SUPPORT_TICKET", ticketId: "ORB-CANCEL-42" },
+      };
     } else if (path.endsWith("/organizations/current/entitlements"))
       result = data.entitlements;
     else if (path.endsWith("/identity/me")) result = profile;
@@ -305,48 +377,78 @@ async function fillSignup(page: Page, planCode = "PROFESSIONAL") {
   for (const [label, value] of [
     ["Nome", "Marina"],
     ["Sobrenome", "Silva"],
-    ["E-mail corporativo", "owner@example.test"],
-    ["Senha", "Orbit#Signup2026"],
-    ["Confirmar senha", "Orbit#Signup2026"],
+    ["E-mail corporativo", SIGNUP_EMAIL],
+    ["Senha", SIGNUP_PASSWORD],
+    ["Confirmar senha", SIGNUP_PASSWORD],
   ])
     await page.getByLabel(label, { exact: true }).fill(value);
   await page.getByRole("button", { name: "Continuar", exact: true }).click();
   await page
-    .getByLabel("Nome da organização", { exact: true })
+    .getByLabel(/^Nome da organização(?:\s*\*?\s*\(obrigatório\))?$/)
     .fill("Empresa do cadastro");
   await page
-    .getByLabel("Razão social", { exact: true })
+    .getByLabel(/^Razão social(?:\s*\*?\s*\(obrigatório\))?$/)
     .fill("Empresa do cadastro Ltda");
   await page.locator("#documentNumber").fill("52998224725");
   await page.getByRole("button", { name: "Continuar", exact: true }).click();
-  await page.getByLabel("Cidade", { exact: true }).fill("Recife");
-  await page.getByLabel("UF", { exact: true }).fill("PE");
+  await page.getByLabel(/^Cidade(?:\s*\*?\s*\(obrigatório\))?$/).fill("Recife");
+  await page.getByLabel(/^UF(?:\s*\*?\s*\(obrigatório\))?$/).fill("PE");
   await page
-    .getByLabel("Endereço da matriz", { exact: true })
+    .getByLabel(/^Endereço da matriz(?:\s*\*?\s*\(obrigatório\))?$/)
     .fill("Rua da Aurora, 100");
   await page.locator("#terms").check();
   await page.getByRole("button", { name: /Criar/ }).click();
 }
 
-test("canceling renewal explains automatic deletion and preserves the paid plan", async ({
+async function verifyEmailAndSignIn(page: Page) {
+  const pending = page.getByRole("heading", { name: "Confirme seu e-mail" });
+  await expect(pending).toBeFocused();
+  await expect(page.getByText(SIGNUP_EMAIL, { exact: false })).toBeVisible();
+  await page.goto(`/confirmar-email#token=${VERIFICATION_TOKEN}`);
+  await expect(pending).toBeFocused();
+  await expect(
+    page.getByRole("button", { name: "Confirmar meu e-mail" }),
+  ).toBeVisible();
+  await page.keyboard.press("Tab");
+  await expect(
+    page.getByRole("button", { name: "Confirmar meu e-mail" }),
+  ).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(
+    page.getByRole("heading", { name: "E-mail confirmado!" }),
+  ).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(
+    page.getByRole("link", { name: "Continuar para o Orbit" }),
+  ).toBeFocused();
+  await page.keyboard.press("Enter");
+  await page.locator("#email").fill(SIGNUP_EMAIL);
+  await page.locator("#password").fill(SIGNUP_PASSWORD);
+  await page.getByRole("button", { name: "Entrar", exact: true }).click();
+}
+
+test("cancelamento fora do prazo de estorno abre chamado e preserva a assinatura paga", async ({
   page,
 }) => {
   const { writes, data } = await fixture(page, { status: "ACTIVE" });
   await page.goto("/configuracoes?secao=assinatura");
   await page
-    .getByRole("button", { name: "Cancelar renovação", exact: true })
+    .getByRole("button", { name: "Cancelar assinatura", exact: true })
     .click();
   const dialog = page.getByRole("alertdialog");
   await expect(dialog).toContainText("30 dias");
-  await expect(dialog).toContainText("excluídos automaticamente");
+  await expect(dialog).toContainText("são excluídos");
   expect(writes).toEqual([]);
   await dialog
-    .getByRole("button", { name: "Cancelar renovação", exact: true })
+    .getByRole("button", { name: "Confirmar cancelamento", exact: true })
     .click();
   await expect(
-    page.getByText("Renovação cancelada; seu período continua disponível", {
-      exact: true,
-    }),
+    page.getByText(
+      "Chamado ORB-CANCEL-42 aberto para análise da equipe de suporte.",
+      {
+        exact: true,
+      },
+    ),
   ).toBeVisible();
   expect(writes[0].body).toMatchObject({
     expectedVersion: 3,
@@ -354,6 +456,7 @@ test("canceling renewal explains automatic deletion and preserves the paid plan"
   });
   expect(data.subscription?.status).toBe("ACTIVE");
   expect(data.subscription?.planCode).toBe("ESSENTIAL");
+  expect(data.subscription?.cancelAtPeriodEnd).toBe(false);
 });
 
 test("provider cancellation errors remain visible for retry", async ({
@@ -365,11 +468,11 @@ test("provider cancellation errors remain visible for retry", async ({
   });
   await page.goto("/configuracoes?secao=assinatura");
   await page
-    .getByRole("button", { name: "Cancelar renovação", exact: true })
+    .getByRole("button", { name: "Cancelar assinatura", exact: true })
     .click();
   const dialog = page.getByRole("alertdialog");
   await dialog
-    .getByRole("button", { name: "Cancelar renovação", exact: true })
+    .getByRole("button", { name: "Confirmar cancelamento", exact: true })
     .click();
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("alert")).toBeVisible();
@@ -421,7 +524,7 @@ test("settings makes both legal documents readable after login", async ({
   ).toBeVisible();
 });
 
-test("paid signup opens Stripe after creating the account exactly once", async ({
+test("o cadastro pago exige confirmação e login antes de abrir o pagamento", async ({
   page,
 }) => {
   const { writes } = await fixture(page, {
@@ -429,12 +532,23 @@ test("paid signup opens Stripe after creating the account exactly once", async (
     status: "PENDING_PAYMENT",
   });
   await fillSignup(page);
+  await expect(
+    page.getByRole("heading", { name: "Confirme seu e-mail" }),
+  ).toBeVisible();
+  expect(writes.map((write) => write.path)).toEqual(["/api/auth/register"]);
+  await verifyEmailAndSignIn(page);
+  await expect(page).toHaveURL(/configuracoes\?secao=assinatura/);
+  await page
+    .getByRole("button", { name: "Continuar para o pagamento", exact: true })
+    .click();
   await expect(page).toHaveURL("https://checkout.stripe.test/pay");
   expect(writes.map((write) => write.path)).toEqual([
     "/api/auth/register",
+    "/api/orbit/identity/email/verify",
+    "/api/auth/login",
     "/api/orbit/billing/checkout-session",
   ]);
-  expect(writes[1].body).toMatchObject({
+  expect(writes.at(-1)?.body).toMatchObject({
     planCode: "PROFESSIONAL",
     billingInterval: "MONTHLY",
   });
@@ -449,15 +563,19 @@ test("checkout failure preserves signup and offers payment recovery", async ({
     checkoutFails: true,
   });
   await fillSignup(page);
-  await expect(page).toHaveURL(
-    /configuracoes\?secao=assinatura&cadastro=concluido&pagamento=pendente/,
-  );
+  await verifyEmailAndSignIn(page);
+  const pay = page.getByRole("button", {
+    name: "Continuar para o pagamento",
+    exact: true,
+  });
+  await pay.click();
+  await expect(page).toHaveURL(/configuracoes\?secao=assinatura/);
   await expect(
     page.getByText("Seu cadastro está concluído. Falta finalizar o pagamento."),
   ).toBeVisible();
+  await expect(pay).toBeEnabled();
   await expect(
-    page.getByRole("button", {
-      name: "Continuar para o pagamento",
+    page.getByText("Não foi possível abrir o pagamento. Tente novamente.", {
       exact: true,
     }),
   ).toBeVisible();
@@ -496,6 +614,7 @@ test("trial plan change warns first; cancel preserves trial and confirmation ope
         planCode: "PROFESSIONAL",
         billingInterval: "MONTHLY",
         acknowledgeTrialEnd: true,
+        acknowledgeImmediateCharge: false,
       },
     },
   ]);
@@ -560,18 +679,26 @@ test("Essential trial signup enters the app without opening a paid checkout", as
 }) => {
   const { writes } = await fixture(page, { signup: true, status: "TRIALING" });
   await fillSignup(page, "ESSENTIAL");
+  await verifyEmailAndSignIn(page);
   await expect(page).toHaveURL(/dashboard$/);
-  expect(writes.map((write) => write.path)).toEqual(["/api/auth/register"]);
+  expect(writes.map((write) => write.path)).toEqual([
+    "/api/auth/register",
+    "/api/orbit/identity/email/verify",
+    "/api/auth/login",
+  ]);
 });
 
-test("active customer schedules the change at renewal and keeps the paid plan", async ({
+test("downgrade mensal é agendado para a renovação e mantém o plano pago", async ({
   page,
 }) => {
-  const { writes, data } = await fixture(page, { status: "ACTIVE" });
+  const { writes, data } = await fixture(page, {
+    status: "ACTIVE",
+    activePlan: "PROFESSIONAL",
+  });
   await page.goto("/configuracoes?secao=assinatura");
   await page
-    .getByRole("article", { name: "Profissional", exact: true })
-    .getByRole("button", { name: "Migrar para este" })
+    .getByRole("article", { name: "Essencial", exact: true })
+    .getByRole("button", { name: "Mudar para este" })
     .click();
   const dialog = page.getByRole("alertdialog");
   await expect(dialog).toContainText(
@@ -586,6 +713,34 @@ test("active customer schedules the change at renewal and keeps the paid plan", 
   ).toBeVisible();
   await expect(page).toHaveURL(/configuracoes/);
   expect(writes[0].body.acknowledgeTrialEnd).toBe(false);
+  expect(writes[0].body.acknowledgeImmediateCharge).toBe(false);
+  expect(data.subscription?.planCode).toBe("PROFESSIONAL");
+  expect(data.subscription?.pendingChange?.planCode).toBe("ESSENTIAL");
+});
+
+test("upgrade mensal exige autorização da cobrança e aguarda a confirmação", async ({
+  page,
+}) => {
+  const { writes, data } = await fixture(page, { status: "ACTIVE" });
+  await page.goto("/configuracoes?secao=assinatura");
+  await page
+    .getByRole("article", { name: "Profissional", exact: true })
+    .getByRole("button", { name: "Migrar para este" })
+    .click();
+  const dialog = page.getByRole("alertdialog");
+  await expect(dialog).toContainText("desconto proporcional");
+  expect(writes).toEqual([]);
+  await dialog.getByRole("button", { name: "Autorizar cobrança" }).click();
+  await expect(
+    page.getByText(/Estamos confirmando sua assinatura/),
+  ).toBeVisible();
+  expect(writes).toHaveLength(1);
+  expect(writes[0].body).toMatchObject({
+    planCode: "PROFESSIONAL",
+    billingInterval: "MONTHLY",
+    acknowledgeTrialEnd: false,
+    acknowledgeImmediateCharge: true,
+  });
   expect(data.subscription?.planCode).toBe("ESSENTIAL");
 });
 
@@ -697,14 +852,15 @@ test("pending Professional can start the unused Essential trial without Stripe n
   const dialog = page.getByRole("alertdialog");
   await expect(dialog).toContainText("30 dias gratuitos");
   await dialog.getByRole("button", { name: "Começar 30 dias grátis" }).click();
-  await expect(
-    page.getByText("Seu teste gratuito no Essencial começou", { exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByText("Período de teste", { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByText(/^Período de teste até /)).toBeVisible();
   await expect(page).toHaveURL(/configuracoes/);
   expect(writes.some((w) => w.path.endsWith("/checkout-session"))).toBe(false);
+  expect(writes).toHaveLength(1);
+  expect(writes[0].body).toMatchObject({
+    planCode: "ESSENTIAL",
+    acknowledgeImmediateCharge: false,
+    acknowledgeTrialEnd: false,
+  });
   expect(data.subscription?.status).toBe("TRIALING");
 });
 

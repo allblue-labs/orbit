@@ -240,50 +240,56 @@ test("creates an operation for the selected customer and refreshes the tab and c
     name: "Nova operação",
     exact: true,
   });
-  await expect(dialog.getByLabel("Cliente", { exact: true })).toContainText(
-    NAME,
-  );
+  await expect(
+    dialog.getByLabel(/^Cliente(?:\s*\*?\s*\(obrigatório\))?$/),
+  ).toContainText(NAME);
   await dialog.getByRole("button", { name: "Continuar", exact: true }).click();
-  await dialog.getByLabel("Título", { exact: true }).fill("Visita no cliente");
+  await dialog
+    .getByLabel(/^Título(?:\s*\*?\s*\(obrigatório\))?$/)
+    .fill("Visita no cliente");
   await dialog.getByRole("button", { name: "Cancelar", exact: true }).click();
   expect(writes).toEqual([]);
   await page
     .getByRole("button", { name: "Nova operação", exact: true })
     .first()
     .click();
-  await expect(dialog.getByLabel("Cliente", { exact: true })).toContainText(
-    NAME,
-  );
+  await expect(
+    dialog.getByLabel(/^Cliente(?:\s*\*?\s*\(obrigatório\))?$/),
+  ).toContainText(NAME);
   const next = dialog.getByRole("button", { name: "Continuar", exact: true });
   await next.click();
-  await expect(dialog.getByLabel("Título", { exact: true })).toHaveValue("");
+  await expect(
+    dialog.getByLabel(/^Título(?:\s*\*?\s*\(obrigatório\))?$/),
+  ).toHaveValue("");
   await expect(next).toBeDisabled();
-  await dialog.getByLabel("Título", { exact: true }).fill("Visita no cliente");
+  await dialog
+    .getByLabel(/^Título(?:\s*\*?\s*\(obrigatório\))?$/)
+    .fill("Visita no cliente");
   await next.click();
   await dialog
-    .getByLabel("Início previsto", { exact: true })
+    .getByLabel(/^Início previsto(?:\s*\*?\s*\(obrigatório\))?$/)
     .fill("2026-10-22T09:00");
   await dialog
-    .getByLabel("Término previsto", { exact: true })
+    .getByLabel(/^Término previsto(?:\s*\*?\s*\(obrigatório\))?$/)
     .fill("2026-10-22T08:00");
   await expect(next).toBeDisabled();
   await dialog
-    .getByLabel("Término previsto", { exact: true })
+    .getByLabel(/^Término previsto(?:\s*\*?\s*\(obrigatório\))?$/)
     .fill("2026-10-22T10:00");
   await next.click();
   await dialog
-    .getByLabel("Valor manual (R$)", { exact: true })
+    .getByLabel(/^Valor manual \(R\$\)(?:\s*\*?\s*\(obrigatório\))?$/)
     .fill("1.250,50");
   await dialog
     .getByRole("checkbox", { name: "Mostrar o valor ao técnico em campo" })
     .check();
   await dialog.getByRole("button", { name: "Voltar", exact: true }).click();
   await expect(
-    dialog.getByLabel("Início previsto", { exact: true }),
+    dialog.getByLabel(/^Início previsto(?:\s*\*?\s*\(obrigatório\))?$/),
   ).toHaveValue("2026-10-22T09:00");
   await next.click();
   await expect(
-    dialog.getByLabel("Valor manual (R$)", { exact: true }),
+    dialog.getByLabel(/^Valor manual \(R\$\)(?:\s*\*?\s*\(obrigatório\))?$/),
   ).toHaveValue("1.250,50");
   await next.click();
   await expect(
@@ -332,16 +338,20 @@ test("creates a quote with the preselected customer and stays on its quotes tab"
   const next = () =>
     dialog.getByRole("button", { name: "Continuar", exact: true }).click();
   await next();
-  await expect(dialog.getByLabel("Cliente", { exact: true })).toContainText(
-    NAME,
-  );
+  await expect(
+    dialog.getByLabel(/^Cliente(?:\s*\*?\s*\(obrigatório\))?$/),
+  ).toContainText(NAME);
   await dialog
-    .getByLabel("Título", { exact: true })
+    .getByLabel(/^Título(?:\s*\*?\s*\(obrigatório\))?$/)
     .fill("Orçamento no cliente");
   await next();
   await dialog.getByRole("tab", { name: "Item livre", exact: true }).click();
-  await dialog.getByLabel("Descrição", { exact: true }).fill("Manutenção");
-  await dialog.getByLabel("Valor unitário", { exact: true }).fill("100");
+  await dialog
+    .getByLabel(/^Descrição(?:\s*\*?\s*\(obrigatório\))?$/)
+    .fill("Manutenção");
+  await dialog
+    .getByLabel(/^Valor unitário(?:\s*\*?\s*\(obrigatório\))?$/)
+    .fill("100");
   await dialog.getByRole("button", { name: "Adicionar", exact: true }).click();
   await next();
   await next();
@@ -419,14 +429,20 @@ test("keeps the wizard draft after an API error and clears a saved manual value 
   const next = dialog.getByRole("button", { name: "Continuar", exact: true });
   await next.click();
   await dialog
-    .getByLabel("Título", { exact: true })
+    .getByLabel(/^Título(?:\s*\*?\s*\(obrigatório\))?$/)
     .fill("Atendimento com valor zero");
-  const code = await dialog.getByLabel("Código", { exact: true }).inputValue();
+  const code = await dialog
+    .getByLabel(/^Código(?:\s*\*?\s*\(obrigatório\))?$/)
+    .inputValue();
   await next.click();
   await next.click();
-  await dialog.getByLabel("Valor manual (R$)", { exact: true }).fill("-1");
+  await dialog
+    .getByLabel(/^Valor manual \(R\$\)(?:\s*\*?\s*\(obrigatório\))?$/)
+    .fill("-1");
   await expect(next).toBeDisabled();
-  await dialog.getByLabel("Valor manual (R$)", { exact: true }).fill("0,00");
+  await dialog
+    .getByLabel(/^Valor manual \(R\$\)(?:\s*\*?\s*\(obrigatório\))?$/)
+    .fill("0,00");
   await next.click();
   const save = dialog.getByRole("button", {
     name: "Criar operação",
@@ -437,7 +453,7 @@ test("keeps the wizard draft after an API error and clears a saved manual value 
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: "Voltar", exact: true }).click();
   await expect(
-    dialog.getByLabel("Valor manual (R$)", { exact: true }),
+    dialog.getByLabel(/^Valor manual \(R\$\)(?:\s*\*?\s*\(obrigatório\))?$/),
   ).toHaveValue("0,00");
   await next.click();
   await save.click();
@@ -457,9 +473,11 @@ test("keeps the wizard draft after an API error and clears a saved manual value 
     exact: true,
   });
   await expect(
-    editing.getByLabel("Valor manual (R$)", { exact: true }),
+    editing.getByLabel(/^Valor manual \(R\$\)(?:\s*\*?\s*\(obrigatório\))?$/),
   ).toHaveValue("0");
-  await editing.getByLabel("Valor manual (R$)", { exact: true }).fill("");
+  await editing
+    .getByLabel(/^Valor manual \(R\$\)(?:\s*\*?\s*\(obrigatório\))?$/)
+    .fill("");
   await editing
     .getByRole("button", { name: "Salvar alterações", exact: true })
     .click();
@@ -493,18 +511,18 @@ test("reuses address creation and checklist in the wizard on mobile", async ({
   });
   await address.locator("#address-label").fill("Matriz");
   await address.locator("#address-street").fill("Rua da Aurora");
-  await address.getByLabel("Número", { exact: true }).fill("100");
+  await address.getByLabel(/^Número(?:\s*\*?\s*\(obrigatório\))?$/).fill("100");
   await address.locator("#address-city").fill("Recife");
   await address
-    .getByLabel("Complemento", { exact: true })
+    .getByLabel(/^Complemento(?:\s*\*?\s*\(obrigatório\))?$/)
     .fill("Bloco B, sala 3");
   await address
-    .getByLabel("Ponto de referência e acesso", { exact: true })
+    .getByLabel(/^Ponto de referência e acesso(?:\s*\*?\s*\(obrigatório\))?$/)
     .fill("Entrada ao lado da farmácia");
   await address.getByRole("button", { name: "Criar", exact: true }).click();
   await expect(address).toHaveCount(0);
   await expect(
-    dialog.getByLabel("Endereço do atendimento", { exact: true }),
+    dialog.getByLabel(/^Endereço do atendimento(?:\s*\*?\s*\(obrigatório\))?$/),
   ).toContainText("Matriz");
   await expect(
     dialog.getByText("Bloco B, sala 3", { exact: true }),
@@ -518,7 +536,9 @@ test("reuses address creation and checklist in the wizard on mobile", async ({
     dialog.getByText("Limpeza dos filtros", { exact: true }),
   ).toBeVisible();
   await dialog
-    .getByLabel("Acrescentar item só para este atendimento", { exact: true })
+    .getByLabel(
+      /^Acrescentar item só para este atendimento(?:\s*\*?\s*\(obrigatório\))?$/,
+    )
     .fill("Conferir acesso ao bloco");
   await dialog
     .getByRole("button", { name: "Adicionar item", exact: true })

@@ -1,7 +1,20 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { IHashProvider, IUuidProvider, UUID } from '../../../contracts';
-import { HASH_PROVIDER, UUID_PROVIDER } from '../../../providers';
-import { UnauthorizedException } from '../../../exceptions';
+import type {
+  ICryptoProvider,
+  IHashProvider,
+  IUuidProvider,
+  UUID,
+} from '../../../contracts';
+import {
+  CRYPTO_PROVIDER,
+  HASH_PROVIDER,
+  UUID_PROVIDER,
+} from '../../../providers';
+import {
+  BaseException,
+  ForbiddenException,
+  UnauthorizedException,
+} from '../../../exceptions';
 import type {
   AuthenticatedIdentity,
   SessionMetadata,
@@ -18,6 +31,11 @@ import {
 } from '../domain/surface-access';
 import { IdentityTokenService } from './token.service';
 import { MfaService } from './mfa.service';
+import { VerifiedPlatformAuthority } from '../../../common/verified-platform-authority';
+import {
+  isPlatformPermission,
+  isReservedRoleKey,
+} from '../../../common/role-namespace';
 
 /** Pure, shared resolution used at issuance and at every authenticated call. */
 export function toAuthenticatedIdentity(
@@ -25,25 +43,31 @@ export function toAuthenticatedIdentity(
   sessionId: UUID,
 ): AuthenticatedIdentity {
   const organization = user.organizationMemberships[0] ?? null;
-  const roles = new Set<string>();
-  const permissions = new Set<string>();
-  const allowedSurfaces = new Set<string>();
-  user.platformRoleAssignments.forEach((assignment) => {
-    roles.add(assignment.role.key);
-    assignment.role.permissions.forEach((item) => permissions.add(item));
-    assignment.role.allowedSurfaces.forEach((item) =>
-      allowedSurfaces.add(item),
-    );
-  });
+  const platformAuthority = VerifiedPlatformAuthority.forUser(
+    user.platformAuthority,
+    user.id,
+  );
+  const roles = new Set<string>(platformAuthority?.roles ?? []);
+  const permissions = new Set<string>(platformAuthority?.permissions ?? []);
+  const allowedSurfaces = new Set<string>(
+    platformAuthority?.allowedSurfaces ?? [],
+  );
+  const organizationRoles: string[] = [];
   if (organization) {
-    roles.add(organization.role.key);
+    // Conflicting legacy tenant roles retain tenant access, never global power.
+    if (!isReservedRoleKey(organization.role.key)) {
+      roles.add(organization.role.key);
+      organizationRoles.push(organization.role.key);
+    }
     const accessPermissions = organization.usesCustomAccess
       ? organization.customPermissions
       : organization.role.permissions;
     const accessSurfaces = organization.usesCustomAccess
       ? organization.customAllowedSurfaces
       : organization.role.allowedSurfaces;
-    accessPermissions.forEach((item) => permissions.add(item));
+    accessPermissions
+      .filter((item) => !isPlatformPermission(item))
+      .forEach((item) => permissions.add(item));
     accessSurfaces.forEach((item) => allowedSurfaces.add(item));
   }
   if (user.isOrganizationOwner) {
@@ -53,6 +77,8 @@ export function toAuthenticatedIdentity(
   }
   const unitIds = user.effectiveBusinessUnitIds;
   return {
+    platformAuthority,
+    organizationRoles,
     id: user.id as UUID,
     sessionId,
     organizationId: (organization?.organizationId as UUID) ?? null,
@@ -67,16 +93,45 @@ export function toAuthenticatedIdentity(
 
 @Injectable()
 export class AuthenticationService {
-  private static readonly MAX_FAILED_ATTEMPTS = 5;
-  private static readonly LOCK_MINUTES = 15;
-
   constructor(
     private readonly repository: IdentityRepository,
     private readonly tokens: IdentityTokenService,
     private readonly mfa: MfaService,
     @Inject(HASH_PROVIDER) private readonly hashes: IHashProvider,
     @Inject(UUID_PROVIDER) private readonly uuids: IUuidProvider,
+    @Inject(CRYPTO_PROVIDER) private readonly crypto: ICryptoProvider,
   ) {}
+
+  async confirmSecurityChange(
+    userId: string,
+    password: string,
+    mfaCode?: string,
+  ): Promise<void> {
+    const user = await this.repository.findById(userId);
+    if (
+      !user?.credential ||
+      user.status !== 'ACTIVE' ||
+      user.deletedAt ||
+      user.requiresEmailVerification ||
+      user.credential.mustChangePassword ||
+      !(await this.hashes.verify(user.credential.passwordHash, password))
+    )
+      throw new ForbiddenException(
+        'A senha atual não pôde ser confirmada.',
+        'SECURITY_PASSWORD_INVALID',
+      );
+    const factor = user.mfaFactors[0];
+    if (!factor) return;
+    try {
+      await this.mfa.verifyFactor(factor, mfaCode);
+    } catch (error) {
+      if (!(error instanceof UnauthorizedException)) throw error;
+      throw new ForbiddenException(
+        'Informe um código válido do aplicativo autenticador.',
+        'SECURITY_MFA_INVALID',
+      );
+    }
+  }
 
   async login(
     email: string,
@@ -114,7 +169,15 @@ export class AuthenticationService {
       );
     }
     const factor = user.mfaFactors[0];
-    if (factor) await this.mfa.verifyFactor(factor, mfaCode);
+    if (factor) {
+      try {
+        await this.mfa.verifyFactor(factor, mfaCode);
+      } catch (error) {
+        if (error instanceof BaseException && error.code === 'MFA_INVALID')
+          await this.recordFailedAttempt(user);
+        throw error;
+      }
+    }
 
     /**
      * A superfície, depois da senha e do segundo fator.
@@ -127,10 +190,76 @@ export class AuthenticationService {
       throw new SurfaceNotAllowedException(normalizeSurface(metadata.client));
     }
 
+    if (user.requiresEmailVerification)
+      throw new UnauthorizedException(
+        'Confirme seu e-mail antes de entrar.',
+        'EMAIL_VERIFICATION_REQUIRED',
+      );
+
     const sessionId = this.uuids.generate();
     const identity = toAuthenticatedIdentity(user, sessionId);
     const pair = await this.tokens.issue(identity);
-    await this.repository.createSession({
+    await this.repository.completeLogin(
+      {
+        id: sessionId,
+        userId: user.id,
+        organizationId: identity.organizationId,
+        businessUnitId: identity.businessUnitId,
+        refreshTokenHash: pair.refreshTokenHash,
+        expiresAt: pair.expiresAt,
+        ...metadata,
+      },
+      user.credential.id,
+      user.credential.passwordHash,
+    );
+    return {
+      ...this.publicPair(pair),
+      mustChangePassword: user.credential.mustChangePassword,
+    };
+  }
+
+  /**
+   * Sessão para quem já provou quem é por outro meio — a biometria.
+   *
+   * As mesmas portas do login com senha, menos a senha: conta ativa,
+   * superfície permitida, e-mail confirmado. Bloqueio por tentativas de senha
+   * também vale — a biometria não é atalho para fugir dele — e senha
+   * temporária pendente recusa: quem recebeu uma senha nova entra com ela.
+   */
+  async openVerifiedSession(
+    userId: string,
+    metadata: SessionMetadata,
+  ): Promise<TokenPair> {
+    const user = await this.repository.findById(userId);
+    if (
+      !user?.credential ||
+      user.deletedAt ||
+      user.status !== 'ACTIVE' ||
+      user.credential.mustChangePassword
+    )
+      throw new UnauthorizedException(
+        'Invalid credentials',
+        'INVALID_CREDENTIALS',
+      );
+    if (
+      user.credential.lockedUntil &&
+      user.credential.lockedUntil.getTime() > Date.now()
+    )
+      throw new UnauthorizedException(
+        'Account temporarily locked',
+        'ACCOUNT_LOCKED',
+      );
+    if (!allowsSurface(user, metadata.client))
+      throw new SurfaceNotAllowedException(normalizeSurface(metadata.client));
+    if (user.requiresEmailVerification)
+      throw new UnauthorizedException(
+        'Confirme seu e-mail antes de entrar.',
+        'EMAIL_VERIFICATION_REQUIRED',
+      );
+    const sessionId = this.uuids.generate();
+    const identity = toAuthenticatedIdentity(user, sessionId);
+    const pair = await this.tokens.issue(identity);
+    await this.repository.openSession({
       id: sessionId,
       userId: user.id,
       organizationId: identity.organizationId,
@@ -139,60 +268,90 @@ export class AuthenticationService {
       expiresAt: pair.expiresAt,
       ...metadata,
     });
-    await this.repository.markAuthenticated(user.id, user.credential.id);
-    return {
-      ...this.publicPair(pair),
-      mustChangePassword: user.credential.mustChangePassword,
-    };
+    return { ...this.publicPair(pair), mustChangePassword: false };
   }
 
   async refresh(refreshToken: string): Promise<TokenPair> {
     const hash = this.tokens.hashOpaqueToken(refreshToken);
-    const session = await this.repository.findSessionByRefreshHash(hash);
-    if (
-      !session ||
-      session.revokedAt ||
-      session.expiresAt.getTime() <= Date.now()
-    ) {
-      throw new UnauthorizedException('Invalid refresh token');
+    // One CAS winner. A competing replica rereads the canonical encrypted pair,
+    // rather than publishing the unused pair it happened to generate.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const session = await this.repository.findRefreshSession(hash);
+      if (!session) throw new UnauthorizedException('Invalid refresh token');
+      const user = await this.repository.findById(session.userId);
+      if (!user || user.deletedAt || user.status !== 'ACTIVE') {
+        await this.repository.revokeSession(session.id, session.userId);
+        throw new UnauthorizedException('Invalid refresh token');
+      }
+      if (user.requiresEmailVerification) {
+        await this.repository.revokeSession(session.id, session.userId);
+        throw new UnauthorizedException(
+          'Confirme seu e-mail antes de entrar.',
+          'EMAIL_VERIFICATION_REQUIRED',
+        );
+      }
+      if (!allowsSurface(user, session.client)) {
+        await this.repository.revokeSession(session.id, session.userId);
+        throw new SurfaceNotAllowedException(normalizeSurface(session.client));
+      }
+      if (session.inGrace && session.rotationResponse) {
+        try {
+          const pair = JSON.parse(
+            this.crypto.decrypt(session.rotationResponse),
+          ) as TokenPair;
+          if (
+            typeof pair.accessToken !== 'string' ||
+            typeof pair.refreshToken !== 'string' ||
+            pair.tokenType !== 'Bearer' ||
+            !Number.isFinite(pair.expiresIn) ||
+            pair.expiresIn <= 0 ||
+            this.tokens.hashOpaqueToken(pair.refreshToken) !==
+              session.refreshTokenHash
+          )
+            throw new Error('Invalid rotation response');
+          return pair;
+        } catch {
+          await this.repository.revokeSession(session.id, session.userId);
+          throw new UnauthorizedException('Invalid refresh token');
+        }
+      }
+      if (session.refreshTokenHash !== hash) {
+        // Confirmed reuse of the previous generation after the fixed grace.
+        await this.repository.revokeSession(session.id, session.userId);
+        throw new UnauthorizedException('Invalid refresh token');
+      }
+      const pair = await this.tokens.issue(
+        toAuthenticatedIdentity(user, session.id as UUID),
+      );
+      const publicPair = this.publicPair(pair);
+      if (
+        await this.repository.rotateSession(
+          session.id,
+          hash,
+          pair.refreshTokenHash,
+          pair.expiresAt,
+          this.crypto.encrypt(JSON.stringify(publicPair)),
+          session.userId,
+        )
+      )
+        return publicPair;
     }
-    const user = await this.repository.findById(session.userId);
-    if (!user || user.deletedAt || user.status !== 'ACTIVE') {
-      await this.repository.revokeSession(session.id);
-      throw new UnauthorizedException('Invalid refresh token');
-    }
-
-    /**
-     * A superfície é reconferida a cada renovação, e a sessão morre se mudou.
-     *
-     * Só barrar o login deixaria de pé tudo o que já foi emitido: a sessão web
-     * de um técnico criada antes desta regra seguiria se renovando por dias. E
-     * o mesmo vale quando o dono muda o papel de alguém — a mudança tem de
-     * alcançar quem já está dentro, não só a próxima entrada.
-     */
-    if (!allowsSurface(user, session.client)) {
-      await this.repository.revokeSession(session.id);
-      throw new SurfaceNotAllowedException(normalizeSurface(session.client));
-    }
-    const pair = await this.tokens.issue(
-      toAuthenticatedIdentity(user, session.id as UUID),
-    );
-    await this.repository.rotateSession(
-      session.id,
-      pair.refreshTokenHash,
-      pair.expiresAt,
-    );
-    return this.publicPair(pair);
+    throw new UnauthorizedException('Invalid refresh token');
   }
 
-  async logout(sessionId: string | undefined, refreshToken?: string) {
-    if (sessionId) {
-      await this.repository.revokeSession(sessionId);
+  async logout(
+    sessionId: string | undefined,
+    refreshToken?: string,
+    userId?: string,
+  ) {
+    if (sessionId && userId) {
+      await this.repository.revokeSession(sessionId, userId);
     } else if (refreshToken) {
       const session = await this.repository.findSessionByRefreshHash(
         this.tokens.hashOpaqueToken(refreshToken),
       );
-      if (session) await this.repository.revokeSession(session.id);
+      if (session)
+        await this.repository.revokeSession(session.id, session.userId);
     }
   }
 
@@ -201,24 +360,21 @@ export class AuthenticationService {
   }
 
   revokeSession(userId: string, sessionId: string): Promise<void> {
-    return this.repository.findSessionById(sessionId).then(async (session) => {
-      if (!session || session.userId !== userId) {
-        throw new UnauthorizedException();
-      }
-      await this.repository.revokeSession(sessionId);
-    });
+    return this.repository
+      .findSessionById(sessionId, userId)
+      .then(async (session) => {
+        if (!session || session.userId !== userId) {
+          throw new UnauthorizedException();
+        }
+        await this.repository.revokeSession(sessionId, userId);
+      });
   }
 
   private async recordFailedAttempt(user: IdentityUser): Promise<void> {
-    const attempts = user.credential!.failedAttempts + 1;
-    const lockedUntil =
-      attempts >= AuthenticationService.MAX_FAILED_ATTEMPTS
-        ? new Date(Date.now() + AuthenticationService.LOCK_MINUTES * 60_000)
-        : null;
     await this.repository.updateFailedLogin(
       user.credential!.id,
-      attempts,
-      lockedUntil,
+      user.credential!.passwordHash,
+      user.id,
     );
   }
 

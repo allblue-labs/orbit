@@ -1,12 +1,15 @@
+import { TenantRecovery } from '../../tenant-operations/tenant-operation.policy';
 import {
   Body,
   Controller,
   HttpCode,
+  Header,
   HttpStatus,
   Post,
   Req,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { requestClientIp } from '../../../common/trusted-client-origin';
 import { ApiPublicErrors } from '../../../common/public-errors';
 import { Public, Surfaces } from '../../../decorators';
 import { AuthenticationService } from '../application/authentication.service';
@@ -21,6 +24,7 @@ import {
   RefreshTokenDto,
   RegisterOrganizationDto,
   ResetPasswordDto,
+  ResetPasswordTokenDto,
 } from './dto/identity.dto';
 
 @ApiTags('Identity')
@@ -41,13 +45,12 @@ export class AuthController {
     @Body() input: RegisterOrganizationDto,
     @Req() request: IdentityRequest,
   ) {
-    const session = await this.registration.register(input, {
+    return this.registration.register(input, {
       client: input.client,
       deviceId: input.deviceId,
       userAgent: request.header('user-agent'),
-      ipAddress: request.ip,
+      ipAddress: requestClientIp(request),
     });
-    return this.readModels.session(session);
   }
 
   @Public()
@@ -62,7 +65,7 @@ export class AuthController {
         client: input.client,
         deviceId: input.deviceId,
         userAgent: request.header('user-agent'),
-        ipAddress: request.ip,
+        ipAddress: requestClientIp(request),
       },
     );
     return this.readModels.session(session);
@@ -77,6 +80,7 @@ export class AuthController {
     );
   }
 
+  @TenantRecovery('identity')
   @Post('logout')
   @Surfaces('WEB', 'MOBILE', 'API')
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -84,6 +88,7 @@ export class AuthController {
     return this.authentication.logout(
       request.identity?.sessionId,
       input.refreshToken,
+      request.identity?.id,
     );
   }
 
@@ -93,13 +98,23 @@ export class AuthController {
   async forgotPassword(@Body() input: ForgotPasswordDto) {
     await this.recovery.request(input.email);
     return {
-      message: 'If the account exists, recovery instructions were sent',
+      message:
+        'Se a conta existir, as instruções de recuperação serão enviadas por e-mail.',
     };
+  }
+
+  @Public()
+  @Post('password/reset/validate')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Header('Cache-Control', 'no-store')
+  validateResetPassword(@Body() input: ResetPasswordTokenDto) {
+    return this.recovery.validate(input.token);
   }
 
   @Public()
   @Post('password/reset')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @Header('Cache-Control', 'no-store')
   resetPassword(@Body() input: ResetPasswordDto) {
     return this.recovery.reset(input.token, input.password);
   }

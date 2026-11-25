@@ -59,6 +59,7 @@ import { PRODUCT_CAPABILITY, PRODUCT_FEATURE } from "@/registry/product-access";
 import type { Customer } from "@/types/customers";
 import { TabBoundary } from "@/workspace";
 import { CustomerFormDialog } from "../customer-form.dialog";
+import { CustomerAccessPanel } from "./customer-access.panel";
 import {
   CustomerStatusBadge,
   customerTypeLabel,
@@ -250,6 +251,12 @@ function WorkspaceBody({
               </div>
               <div className="min-w-0 space-y-6">
                 <IndicatorsSection customer={customer} />
+                {canManage ? (
+                  <CustomerAccessPanel
+                    customerId={customer.id}
+                    customerName={customer.tradeName ?? customer.legalName}
+                  />
+                ) : null}
                 {canReadIntelligence ? (
                   <IntelligenceSection customerId={customer.id} enabled />
                 ) : null}

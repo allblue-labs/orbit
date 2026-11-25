@@ -1,3 +1,6 @@
+import { TenantOperationPolicy } from '../tenant-operations/tenant-operation.policy';
+import { Optional } from '@nestjs/common';
+import { FieldAssignmentOutbox } from '../notifications/field-assignment-outbox';
 /**
  * Persistência do domínio PMOC.
  *
@@ -276,6 +279,8 @@ export class PmocRepository {
      * declarar. A credencial é o token, e a validação dele é dentro da função.
      */
     private readonly prisma: PrismaService,
+    private readonly operational: TenantOperationPolicy,
+    @Optional() private readonly assignmentPush?: FieldAssignmentOutbox,
   ) {}
 
   /* ---------------------------------------------------------------- */
@@ -302,6 +307,7 @@ export class PmocRepository {
     expectedVersion: Date;
     publicSummary: Prisma.InputJsonValue;
     documentBucket: string;
+    documentProvider: string;
     documentObjectKey: string;
     documentSha256: string;
   }) {
@@ -340,6 +346,7 @@ export class PmocRepository {
           createdById: data.createdById,
           publicSummary: data.publicSummary,
           documentBucket: data.documentBucket,
+          documentProvider: data.documentProvider,
           documentObjectKey: data.documentObjectKey,
           documentSha256: data.documentSha256,
         },
@@ -412,7 +419,36 @@ export class PmocRepository {
     return rows[0] ?? null;
   }
 
+  /**
+   * A assinatura de um link **já assinado**, para o PDF público levar o aceite.
+   * Link pendente, revogado sem assinatura ou token inexistente: `null`.
+   */
+  async signatureAcceptance(tokenHash: string) {
+    const rows = await this.prisma.$queryRaw<
+      {
+        signer_name: string;
+        signer_document: string | null;
+        signed_at: Date;
+        signature_bucket: string;
+        signature_object_key: string;
+        signature_sha256: string | null;
+      }[]
+    >`SELECT * FROM app_pmoc_signature_acceptance(${tokenHash})`;
+    return rows[0] ?? null;
+  }
+
   /** Registra a assinatura do contratante — arquivo e marca, na mesma transação. */
+  async signatureUploadScope(tokenHash: string): Promise<string | null> {
+    const rows = await this.prisma.$queryRaw<
+      { organization_id: string | null }[]
+    >`
+      SELECT app_pmoc_signature_upload_scope(${tokenHash}) AS organization_id`;
+    const organizationId = rows[0]?.organization_id ?? null;
+    if (organizationId)
+      await this.operational.assertCapabilityTenant(organizationId);
+    return organizationId;
+  }
+
   async signByToken(input: {
     tokenHash: string;
     signerName: string;
@@ -425,10 +461,11 @@ export class PmocRepository {
     mimeType: string;
     sizeBytes: number;
     sha256: string;
+    provider: string;
   }): Promise<{ state: string; signed: boolean }> {
     const rows = await this.prisma.$queryRaw<
       { state: string; signed: boolean }[]
-    >`SELECT * FROM app_pmoc_signature_link_sign(
+    >`SELECT * FROM app_pmoc_signature_link_sign_storage(
         ${input.tokenHash},
         ${input.signerName},
         ${input.signerDocument ?? null},
@@ -439,7 +476,8 @@ export class PmocRepository {
         ${input.objectKey},
         ${input.mimeType},
         ${input.sizeBytes}::bigint,
-        ${input.sha256}
+        ${input.sha256},
+        ${input.provider}
       )`;
     return rows[0] ?? { state: 'INEXISTENTE', signed: false };
   }
@@ -970,6 +1008,7 @@ export class PmocRepository {
         },
       });
 
+      await this.assignmentPush?.pmoc(tx, executionId);
       return { plan, executionId };
     });
   }
@@ -1098,7 +1137,10 @@ export class PmocRepository {
         ON CONFLICT DO NOTHING
         RETURNING id
       `;
-      if (rows[0]) return rows[0].id;
+      if (rows[0]) {
+        await this.assignmentPush?.pmoc(tx, rows[0].id);
+        return rows[0].id;
+      }
 
       const existing = await tx.pmocExecution.findFirst({
         where: { planId, dueOn, status: { not: 'CANCELLED' } },

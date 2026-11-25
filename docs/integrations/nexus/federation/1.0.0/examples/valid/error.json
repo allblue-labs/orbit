@@ -1,0 +1,7 @@
+{
+  "protocolVersion": "1.0.0",
+  "code": "STALE_VERSION",
+  "correlationId": "00000000-0000-7000-8000-000000000002",
+  "retryable": false,
+  "message": "Consulte a versão atual antes de enviar outra solicitação."
+}

@@ -35,7 +35,11 @@ export function useBillingOverview() {
   return useApiQuery(
     billingService.keys.overview(),
     ({ signal }) => billingService.overview({ signal }),
-    CACHE.fresh,
+    {
+      ...CACHE.fresh,
+      refetchInterval: (query) =>
+        query.state.data?.refundRequestStatus === "OPEN" ? 12_000 : false,
+    },
   );
 }
 

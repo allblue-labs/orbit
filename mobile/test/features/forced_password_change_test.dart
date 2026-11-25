@@ -138,6 +138,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         authControllerProvider.overrideWith((ref) => controlador),
+        ...customerPortalAbsent(),
         sharedPreferencesProvider.overrideWithValue(preferences),
       ],
     );
@@ -185,6 +186,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         authControllerProvider.overrideWith((ref) => controlador),
+        ...customerPortalAbsent(),
         sharedPreferencesProvider.overrideWithValue(preferences),
       ],
     );

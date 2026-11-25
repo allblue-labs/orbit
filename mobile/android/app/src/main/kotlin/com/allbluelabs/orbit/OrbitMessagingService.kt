@@ -14,6 +14,7 @@ import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.EventChannel
+import org.json.JSONObject
 
 class OrbitMessagingService : FirebaseMessagingService() {
     override fun onNewToken(token: String) = OrbitPushBridge.token(token)
@@ -26,6 +27,9 @@ class OrbitMessagingService : FirebaseMessagingService() {
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra("deepLink", deepLink)
+            for (key in listOf("notificationId", "organizationId", "recipientUserId")) {
+                putExtra(key, data[key])
+            }
         }
         val pending = PendingIntent.getActivity(this, id.hashCode(), intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         @Suppress("DEPRECATION")
@@ -37,7 +41,7 @@ class OrbitMessagingService : FirebaseMessagingService() {
             .setContentIntent(pending)
             .setAutoCancel(true)
             .build()
-        getSystemService(NotificationManager::class.java).notify(id.hashCode(), notification)
+        getSystemService(NotificationManager::class.java).notify(id, 0, notification)
         OrbitPushBridge.received(id)
     }
 }
@@ -63,8 +67,13 @@ object OrbitPushBridge {
     fun received(id: String) { main.post { messageSink?.success(id) } }
     fun open(intent: Intent?) {
         val link = intent?.getStringExtra("deepLink")?.takeIf { it.startsWith("/field/") } ?: return
-        intent.removeExtra("deepLink")
-        if (linkSink != null) linkSink?.success(link) else pendingLink = link
+        val data = JSONObject()
+        for (key in listOf("deepLink", "notificationId", "organizationId", "recipientUserId")) {
+            intent.getStringExtra(key)?.let { data.put(key, it) }
+            intent.removeExtra(key)
+        }
+        val event = data.toString()
+        if (linkSink != null) linkSink?.success(event) else pendingLink = event
     }
     fun detach() { tokenSink = null; linkSink = null; messageSink = null }
     fun createChannel(context: Context) {

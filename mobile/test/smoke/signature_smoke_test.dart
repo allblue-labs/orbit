@@ -4,6 +4,7 @@
 /// a recusa de formato e tamanho, a substituição criando nova versão, o aceite
 /// amarrado ao resumo congelado, e — o mais importante — que registrar aceite
 /// **não toca o cadastro do cliente**.
+@Tags(['integration'])
 library;
 
 import 'dart:convert';
@@ -166,6 +167,9 @@ void main() {
                 as String
           : null;
       if (customerId == null) {
+        if (const bool.fromEnvironment('ORBIT_REQUIRE_API')) {
+          fail('sem cliente neste tenant');
+        }
         markTestSkipped('sem cliente neste tenant');
         return;
       }

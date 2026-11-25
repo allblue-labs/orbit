@@ -56,7 +56,7 @@ export function createKpiDomainWidget(options: KpiDomainWidgetOptions) {
         <PanelState
           query={analytics.dashboard}
           loadingRows={2}
-          emptyMessage="O Analytics não publica indicadores para este domínio no período."
+          emptyMessage="Ainda não há indicadores desta área no período."
           isEmpty={(data) => select(data.metrics).length === 0}
         >
           {(data) => (

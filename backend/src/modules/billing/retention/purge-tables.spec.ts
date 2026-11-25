@@ -19,6 +19,7 @@ describe('exclusão operacional após prazo de retorno', () => {
       'operations',
       'field_evidence',
       'storage_files',
+      'storage_upload_admissions',
       'audit_logs',
       'customer_portal_sessions',
     ])

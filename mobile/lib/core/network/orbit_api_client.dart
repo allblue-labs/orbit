@@ -45,6 +45,10 @@ class OrbitApiClient {
     String Function()? timezoneProvider,
     Dio? dio,
     Dio? retryDio,
+
+    /// Onde a sessão se renova. A equipe renova em `/identity/refresh`; o
+    /// cliente, em `/portal/auth/refresh` — cada um com o seu armazenamento.
+    String refreshPath = '/identity/refresh',
   }) {
     BaseOptions options() => BaseOptions(
       baseUrl: environment.apiBaseUrl,
@@ -78,19 +82,26 @@ class OrbitApiClient {
       storage: storage,
       logger: logger,
       refreshCall: (refreshToken) async {
-        final response = await plain.post<dynamic>(
-          '/identity/refresh',
-          data: {'refreshToken': refreshToken},
-        );
-        final data = _unwrap(response.data);
-        if (data is! Map<String, dynamic>) {
-          throw const OrbitException(
-            kind: OrbitErrorKind.parse,
-            publicMessage: OrbitPublicCopy.unknown,
-            code: 'PARSE',
+        try {
+          final response = await plain.post<dynamic>(
+            refreshPath,
+            data: {'refreshToken': refreshToken},
           );
+          final data = _unwrap(response.data);
+          if (data is! Map<String, dynamic>) {
+            throw const OrbitException(
+              kind: OrbitErrorKind.parse,
+              publicMessage: OrbitPublicCopy.unknown,
+              code: 'PARSE',
+            );
+          }
+          return TokenPair.fromJson(data);
+        } on DioException catch (error) {
+          // Classify before the authenticator decides whether to expire.
+          throw ErrorMappingInterceptor(
+            destination: environment.diagnosticHost,
+          ).map(error);
         }
-        return TokenPair.fromJson(data);
       },
     );
 
@@ -115,13 +126,17 @@ class OrbitApiClient {
   final Dio _dio;
   int? _boundGeneration;
   bool _closed = false;
+  bool _mobileManagement = false;
 
   /// Feature repositories keep this lease, never a client that can switch accounts.
-  OrbitApiClient scoped() => OrbitApiClient._(
-    dio: _dio,
-    authenticator: authenticator,
-    apiBase: _apiBase,
-  ).._boundGeneration = authenticator.generation;
+  OrbitApiClient scoped({bool mobileManagement = false}) =>
+      OrbitApiClient._(
+          dio: _dio,
+          authenticator: authenticator,
+          apiBase: _apiBase,
+        )
+        .._boundGeneration = authenticator.generation
+        .._mobileManagement = mobileManagement;
 
   void closeScope() => _closed = true;
 
@@ -240,6 +255,28 @@ class OrbitApiClient {
     ),
   );
 
+  /// Substitui um recurso por um arquivo em memória (`PUT` multipart, campo
+  /// `file`) — a foto e a assinatura do cliente, que nascem na tela e nunca
+  /// viram arquivo no disco.
+  Future<T> putFile<T>(
+    String path, {
+    required List<int> bytes,
+    required String fileName,
+    required String mimeType,
+  }) => _send<T>(
+    () => _dio.put<dynamic>(
+      path,
+      data: FormData.fromMap({
+        'file': MultipartFile.fromBytes(
+          bytes,
+          filename: fileName,
+          contentType: DioMediaType.parse(mimeType),
+        ),
+      }),
+      options: _options(false),
+    ),
+  );
+
   /// Envia um arquivo em `multipart/form-data`.
   ///
   /// O backend recebe um arquivo por requisição, no campo `file`
@@ -247,7 +284,7 @@ class OrbitApiClient {
   /// sobe — é o que alimenta a barra na tela.
   Future<T> upload<T>(
     String path, {
-    required String filePath,
+    required List<int> bytes,
     required String fileName,
     required String mimeType,
     CancelToken? cancelToken,
@@ -256,8 +293,8 @@ class OrbitApiClient {
     checkSession();
     final generation = authenticator.generation;
     final form = FormData.fromMap({
-      'file': await MultipartFile.fromFile(
-        filePath,
+      'file': MultipartFile.fromBytes(
+        bytes,
         filename: fileName,
         contentType: DioMediaType.parse(mimeType),
       ),
@@ -297,15 +334,33 @@ class OrbitApiClient {
     checkSession();
     final generation = authenticator.generation;
     try {
+      final multipart = headers['x-orbit-upload-mode'] == 'multipart';
+      final requestHeaders = Map<String, dynamic>.from(headers);
+      Object body = Stream<List<int>>.value(bytes);
+      if (multipart) {
+        final mimeType = headers['content-type'] ?? 'application/octet-stream';
+        requestHeaders.remove('content-type');
+        requestHeaders.remove('x-orbit-upload-mode');
+        final extension = mimeType.split('/').last;
+        body = FormData.fromMap({
+          'file': MultipartFile.fromBytes(
+            bytes,
+            filename: 'arquivo.$extension',
+            contentType: DioMediaType.parse(mimeType),
+          ),
+        });
+      } else {
+        requestHeaders[Headers.contentLengthHeader] = bytes.length;
+      }
       await _dio.putUri<dynamic>(
         resolveBackendUrl(url, _apiBase),
-        data: Stream<List<int>>.value(bytes),
+        data: body,
         cancelToken: cancelToken,
         onSendProgress: (sent, total) {
           if (total > 0) onProgress?.call(sent / total);
         },
         options: Options(
-          headers: {...headers, Headers.contentLengthHeader: bytes.length},
+          headers: requestHeaders,
 
           /// Sem interceptor de sessão: a URL assinada é a credencial.
           extra: _requestExtra(true),
@@ -425,8 +480,12 @@ class OrbitApiClient {
     return name.isEmpty || name == '.' || name == '..' ? null : name;
   }
 
-  Options _options(bool isPublic, {Map<String, String>? headers}) =>
-      Options(extra: _requestExtra(isPublic), headers: headers);
+  Options _options(bool isPublic, {Map<String, String>? headers}) => Options(
+    extra: _requestExtra(isPublic),
+    headers: _mobileManagement && !isPublic
+        ? {...?headers, 'x-orbit-mobile-management': '1'}
+        : headers,
+  );
 
   /// Remove chaves nulas ou vazias — o `ValidationPipe` do backend usa
   /// `forbidNonWhitelisted` e rejeita parâmetros vazios.

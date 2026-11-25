@@ -32,6 +32,7 @@ export function transactionalPushMessage(
     'notificationId',
     'version',
     'organizationId',
+    'recipientUserId',
     'tenantId',
     'eventType',
     'title',

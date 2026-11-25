@@ -1,3 +1,5 @@
+import { registerVerifiedOwner } from './support/verified-owner-fixture';
+import { paidSubscriptionFixture } from './support/paid-subscription-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
  * Planos, direitos e cotas mensais — contra o banco de verdade.
@@ -153,24 +155,22 @@ describe('Plans, entitlements and monthly usage limits (e2e)', () => {
   async function registrar(planKey: string, label: string) {
     const local = randomUUID().slice(0, 8);
     const email = `entitlements.${label}.${local}@orbit.local`;
-    const response = await http()
-      .post('/api/v1/identity/register')
-      .send({
-        ...REGISTRATION_LEGAL_ACCEPTANCE,
-        email,
-        firstName: 'Cota',
-        lastName: label,
-        password: PASSWORD,
-        organizationName: `Cota ${label} ${local}`,
-        legalName: `Cota ${label} ${local} LTDA`,
-        documentType: 'CNPJ',
-        documentNumber: cnpj(),
-        city: 'Recife',
-        street: 'Rua do Sol',
-        stateCode: 'PE',
-        planKey,
-      })
-      .expect(201);
+    const response = await registerVerifiedOwner(app, {
+      ...REGISTRATION_LEGAL_ACCEPTANCE,
+      email,
+      firstName: 'Cota',
+      lastName: label,
+      password: PASSWORD,
+      organizationName: `Cota ${label} ${local}`,
+      legalName: `Cota ${label} ${local} LTDA`,
+      documentType: 'CNPJ',
+      documentNumber: cnpj(),
+      city: 'Recife',
+      street: 'Rua do Sol',
+      stateCode: 'PE',
+      planKey,
+    });
+    await paidSubscriptionFixture(app, prisma, email);
     return {
       email,
       token: (response.body as Envelope<{ accessToken: string }>).data
@@ -217,7 +217,7 @@ describe('Plans, entitlements and monthly usage limits (e2e)', () => {
       where: { key: 'ESSENTIAL' },
       select: { capabilities: true },
     });
-    await prisma.plan.create({
+    const planoDeTeste = await prisma.plan.create({
       data: {
         id: generateUuidV7(),
         key: chaveDoPlanoDeTeste,
@@ -229,7 +229,27 @@ describe('Plans, entitlements and monthly usage limits (e2e)', () => {
       },
     });
 
-    const inquilino = await registrar(chaveDoPlanoDeTeste, 'teste');
+    // Public registration accepts published offers. Attach the legacy custom
+    // plan administratively after creating a real identity and membership.
+    const inquilino = await registrar('ESSENTIAL', 'teste');
+    const donoDoPlanoDeTeste = await prisma.user.findUniqueOrThrow({
+      where: { email: inquilino.email },
+      select: { id: true },
+    });
+    const organizacaoDoPlanoDeTeste =
+      await prisma.organization.findFirstOrThrow({
+        where: { ownerUserId: donoDoPlanoDeTeste.id },
+        select: { id: true },
+      });
+    await prisma.$transaction([
+      prisma.organizationSubscription.deleteMany({
+        where: { organizationId: organizacaoDoPlanoDeTeste.id },
+      }),
+      prisma.organization.update({
+        where: { id: organizacaoDoPlanoDeTeste.id },
+        data: { planId: planoDeTeste.id, subscriptionStatus: 'ACTIVE' },
+      }),
+    ]);
     token = inquilino.token;
     const contexto = await auth(
       http().get('/api/v1/organizations/current'),
@@ -349,10 +369,20 @@ describe('Plans, entitlements and monthly usage limits (e2e)', () => {
       }
     });
 
-    it('não publica limite comercial de armazenamento', async () => {
+    it('publica a avaliação sem expor limites de armazenamento ou dados do Stripe', async () => {
       const resposta = await http().get('/api/v1/plans/catalog').expect(200);
       expect(JSON.stringify(resposta.body)).not.toMatch(/storage/i);
-      expect(JSON.stringify(resposta.body)).not.toMatch(/stripe|trial/i);
+      expect(JSON.stringify(resposta.body)).not.toMatch(/stripe/i);
+      expect(resposta.body).toMatchObject({
+        data: {
+          plans: [
+            { code: 'ESSENTIAL', trialDays: 30 },
+            { code: 'PROFESSIONAL', trialDays: 0 },
+            { code: 'PROFESSIONAL_INTELLIGENCE', trialDays: 0 },
+            { code: 'ENTERPRISE_UNLIMITED', trialDays: 0 },
+          ],
+        },
+      });
     });
   });
 
@@ -534,6 +564,10 @@ describe('Plans, entitlements and monthly usage limits (e2e)', () => {
      */
     async function criarPessoa(rotulo: string): Promise<string> {
       const id = generateUuidV7();
+      const { id: fieldRoleId } = await prisma.role.findFirstOrThrow({
+        where: { organizationId, key: 'FIELD_TECHNICIAN' },
+        select: { id: true },
+      });
       const local = randomUUID().slice(0, 8);
       await prisma.user.create({
         data: {
@@ -548,10 +582,20 @@ describe('Plans, entitlements and monthly usage limits (e2e)', () => {
         },
       });
       await prisma.organizationMembership.create({
-        data: { organizationId, userId: id, roleId, status: 'ACTIVE' },
+        data: {
+          organizationId,
+          userId: id,
+          roleId: fieldRoleId,
+          status: 'ACTIVE',
+        },
       });
       await prisma.businessUnitMembership.create({
-        data: { organizationId, businessUnitId, userId: id, roleId },
+        data: {
+          organizationId,
+          businessUnitId,
+          userId: id,
+          roleId: fieldRoleId,
+        },
       });
       return id;
     }
@@ -931,11 +975,28 @@ describe('Plans, entitlements and monthly usage limits (e2e)', () => {
     });
 
     it('o inquilino anterior ao catálogo continua sem teto', async () => {
-      const legado = await prisma.organization.findFirst({
-        where: { plan: { key: 'STARTER' }, deletedAt: null },
-        select: { id: true },
+      // STARTER is also the compatibility plan FK of new canonical subscriptions.
+      // Build a genuinely pre-catalog tenant instead of choosing an arbitrary row
+      // (or silently skipping when none happens to exist).
+      const oldPlan = await prisma.plan.findUniqueOrThrow({
+        where: { key: 'STARTER' },
       });
-      if (!legado) return;
+      const legado = await prisma.organization.create({
+        data: {
+          ownerUserId: userId,
+          planId: oldPlan.id,
+          slug: `legacy-${randomUUID()}`,
+          displayName: 'Pre-catalog fixture',
+          primarySegment: 'HVAC',
+          status: 'ACTIVE',
+          subscriptionStatus: 'ACTIVE',
+        },
+      });
+      expect(
+        await prisma.organizationSubscription.count({
+          where: { organizationId: legado.id },
+        }),
+      ).toBe(0);
       const direitos = await como(legado.id, () =>
         entitlements.resolve(legado.id),
       );

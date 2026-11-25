@@ -15,6 +15,9 @@ import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../observability/orbit_logger.dart';
+import '../errors/orbit_exception.dart';
+import '../storage/offline_data.dart';
+import 'upload_executor.dart' show maxAttachmentBytes;
 import 'upload_queue.dart';
 import 'upload_queue_store.dart';
 import 'upload_task.dart';
@@ -194,12 +197,24 @@ class EvidenceRepository {
   }
 
   Future<File> _copyToAppStorage(CapturedEvidence captured) async {
+    final source = File(captured.path);
+    if (await source.length() > maxAttachmentBytes) {
+      throw const OrbitException(
+        kind: OrbitErrorKind.http,
+        status: 413,
+        code: 'PAYLOAD_TOO_LARGE',
+        publicMessage: 'Este arquivo passa do limite de 20 MB.',
+      );
+    }
     final directory = await _directory();
-    final extension = captured.fileName.contains('.')
-        ? captured.fileName.substring(captured.fileName.lastIndexOf('.'))
-        : '';
+    final extension =
+        RegExp(r'\.[a-zA-Z0-9]{1,10}$').stringMatch(captured.fileName) ?? '';
     final destination = File('${directory.path}/${_newId()}$extension');
-    return File(captured.path).copy(destination.path);
+    await OfflineDataFile(
+      destination,
+      scope: 'legacy-evidence',
+    ).write(await source.readAsBytes());
+    return destination;
   }
 
   static final _random = Random.secure();

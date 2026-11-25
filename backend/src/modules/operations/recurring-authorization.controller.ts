@@ -1,3 +1,4 @@
+import { MobileManagement } from '../../common/mobile-management';
 import { Body, Controller, Get, Post, Query, Req } from '@nestjs/common';
 import { Permissions } from '../../decorators';
 import { ForbiddenException } from '../../exceptions';
@@ -17,6 +18,7 @@ import {
 export class RecurringAuthorizationController {
   constructor(private readonly service: RecurringAuthorizationService) {}
   @Get()
+  @MobileManagement('authorization')
   @Capabilities('operations.read')
   @Permissions('operations.assign')
   list(
@@ -26,6 +28,7 @@ export class RecurringAuthorizationController {
     return this.service.list(this.actor(request), query);
   }
   @Post()
+  @MobileManagement('authorization')
   @Capabilities('operations.manage')
   @Permissions('operations.assign')
   authorize(
@@ -34,6 +37,17 @@ export class RecurringAuthorizationController {
   ) {
     return this.service.authorize(this.actor(request), input.items);
   }
+  @Post('revoke')
+  @MobileManagement('authorization')
+  @Capabilities('operations.manage')
+  @Permissions('operations.assign')
+  revoke(
+    @Req() request: IdentityRequest,
+    @Body() input: AuthorizeRecurringAssignmentsDto,
+  ) {
+    return this.service.authorize(this.actor(request), input.items, false);
+  }
+
   private actor(request: IdentityRequest) {
     const identity = request.identity;
     if (!identity?.organizationId)

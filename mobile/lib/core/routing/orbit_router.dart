@@ -12,10 +12,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/providers.dart';
+import '../../features/authentication/application/biometric_login.dart';
+import '../../features/authentication/presentation/biometric_widgets.dart';
 import '../../features/authentication/domain/session.dart';
 import '../../features/authentication/presentation/change_password_screen.dart';
 import '../../features/authentication/presentation/login_screen.dart';
 import '../../features/authentication/presentation/splash_screen.dart';
+import '../../features/customer_portal/application/portal_session.dart';
+import '../../features/customer_portal/presentation/portal_profile.dart';
+import '../../features/customer_portal/presentation/portal_shell_screen.dart';
 import '../../features/field/presentation/field_dashboard_screen.dart';
 import '../../features/field/presentation/operation_execution_screen.dart';
 import '../../features/field/presentation/work_item_detail_screen.dart';
@@ -28,6 +33,7 @@ import '../../features/sync/presentation/sync_triggers.dart';
 import '../../features/pmoc/presentation/pmoc_attendance_screen.dart';
 import '../../features/pmoc/presentation/pmoc_plan_screen.dart';
 import '../../features/pmoc/presentation/pmoc_plans_screen.dart';
+import '../../features/owner/presentation/owner_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import '../../features/profile/presentation/settings_screen.dart';
 import '../../features/scheduling/presentation/agenda_screen.dart';
@@ -48,6 +54,10 @@ abstract final class OrbitRoutes {
 
   /// Troca obrigatória de senha — irmã do login, fora do shell.
   static const changePassword = '/definir-senha';
+
+  /// A área do cliente. Tudo dela vive sob este prefixo, e só ela.
+  static const customerArea = '/cliente';
+  static const customerChangePassword = '/cliente/definir-senha';
   static const home = '/inicio';
 
   /// A fila de campo — o item de trabalho canônico, não a lista
@@ -71,11 +81,14 @@ abstract final class OrbitRoutes {
 
   /// A leitura de etiqueta. Fora do shell: a câmera ocupa a tela inteira.
   static const scanner = '/etiqueta';
+  static String equipmentFromQr(String token) =>
+      '$home/equipamento/${Uri.encodeComponent(token)}';
   static const notifications = '/avisos';
 
   /// Perfil, sincronização e assinatura. É o "mais" do aplicativo, com o nome
   /// do que ele de fato contém.
   static const profile = '/perfil';
+  static const ownerArea = '$home/area-proprietario';
 
   static String operationDetail(String id) => '$operations/$id';
 
@@ -141,6 +154,46 @@ abstract final class OrbitRoutes {
       '$workQueue/execucao/$operationId/aceite';
 }
 
+/// A rota é da área do cliente?
+///
+/// Compara o **segmento**, não o prefixo: `/clientes` (a lista de clientes da
+/// equipe) começa com `/cliente` e não é da área do cliente.
+bool isCustomerAreaPath(String location) =>
+    location == OrbitRoutes.customerArea ||
+    location.startsWith('${OrbitRoutes.customerArea}/');
+
+/// O que a sessão do cliente decide sobre uma rota.
+///
+/// `target` nulo: fica onde está.
+class RouteDecision {
+  const RouteDecision(this.target);
+  final String? target;
+}
+
+/// A área do cliente, separada da equipe nas duas direções.
+///
+/// Cliente logado: só `/cliente`, e a troca da senha temporária antes de
+/// qualquer coisa — nenhuma rota da equipe é alcançável, nem digitando o
+/// caminho. Sem cliente logado, `/cliente` não abre para ninguém.
+///
+/// `null`: não é com a sessão do cliente; vale a regra da equipe.
+RouteDecision? customerRouteDecision({
+  required PortalAuthState portal,
+  required bool teamSignedIn,
+  required String location,
+}) {
+  if (portal is PortalSignedIn) {
+    final destino = portal.me.mustChangePassword
+        ? OrbitRoutes.customerChangePassword
+        : OrbitRoutes.customerArea;
+    return RouteDecision(location == destino ? null : destino);
+  }
+  if (isCustomerAreaPath(location)) {
+    return RouteDecision(teamSignedIn ? OrbitRoutes.home : OrbitRoutes.login);
+  }
+  return null;
+}
+
 final routerProvider = Provider<GoRouter>((ref) {
   final rootNavigatorKey = GlobalKey<NavigatorState>();
   final notifier = _AuthRefreshNotifier(ref);
@@ -148,9 +201,11 @@ final routerProvider = Provider<GoRouter>((ref) {
 
   final router = GoRouter(
     initialLocation: OrbitRoutes.splash,
+    overridePlatformDefaultLocation: true,
     refreshListenable: notifier,
     redirect: (context, state) {
       final auth = ref.read(authControllerProvider);
+      final portal = ref.read(portalSessionProvider);
       final location = state.matchedLocation;
       // Somente estes documentos públicos passam sem autenticação, inclusive
       // durante a restauração e a troca obrigatória de senha.
@@ -158,9 +213,16 @@ final routerProvider = Provider<GoRouter>((ref) {
         return null;
       }
 
-      if (auth is AuthRestoring) {
+      if (auth is AuthRestoring || portal is PortalRestoring) {
         return location == OrbitRoutes.splash ? null : OrbitRoutes.splash;
       }
+
+      final cliente = customerRouteDecision(
+        portal: portal,
+        teamSignedIn: auth is AuthAuthenticated,
+        location: location,
+      );
+      if (cliente != null) return cliente.target;
       if (auth is AuthUnauthenticated) {
         return location == OrbitRoutes.login ? null : OrbitRoutes.login;
       }
@@ -206,6 +268,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       OrbitPageRoute(
         path: OrbitRoutes.changePassword,
         builder: (context, state) => const ChangePasswordScreen(),
+      ),
+      OrbitPageRoute(
+        path: OrbitRoutes.customerArea,
+        builder: (context, state) => const PortalShellScreen(),
+      ),
+      OrbitPageRoute(
+        path: OrbitRoutes.customerChangePassword,
+        builder: (context, state) => const PortalChangePasswordScreen(),
       ),
 
       /// A leitura de etiqueta fica **fora** do shell, e por isso é declarada
@@ -270,7 +340,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         /// Os gatilhos vivem no shell: existem enquanto houver sessão, e não
         /// por tela.
         builder: (context, state, child) => SyncTriggers(
-          child: AppShell(location: state.matchedLocation, child: child),
+          child: BiometricOfferGate(
+            audience: BiometricAudience.team,
+            settingsHint: 'Perfil → Configurações',
+            child: AppShell(location: state.matchedLocation, child: child),
+          ),
         ),
         routes: [
           OrbitPageRoute(
@@ -279,6 +353,21 @@ final routerProvider = Provider<GoRouter>((ref) {
             /// One operational mobile product. Permissions change data and
             /// actions; they never select a parallel visual application.
             builder: (context, state) => const FieldDashboardScreen(),
+            routes: [
+              OrbitPageRoute(
+                path: 'equipamento/:token',
+                parentNavigatorKey: rootNavigatorKey,
+                builder: (context, state) => EquipmentDetailsScreen(
+                  token: state.pathParameters['token']!,
+                  onScanAnother: () => context.replace(OrbitRoutes.scanner),
+                ),
+              ),
+              OrbitPageRoute(
+                path: 'area-proprietario',
+                parentNavigatorKey: rootNavigatorKey,
+                builder: (context, state) => const OwnerScreen(),
+              ),
+            ],
           ),
           OrbitPageRoute(
             path: OrbitRoutes.workQueue,
@@ -399,13 +488,19 @@ class _AuthRefreshNotifier extends ChangeNotifier {
       authControllerProvider,
       (_, __) => notifyListeners(),
     );
+    _portal = ref.listen<PortalAuthState>(
+      portalSessionProvider,
+      (_, __) => notifyListeners(),
+    );
   }
 
   late final ProviderSubscription<AuthState> _subscription;
+  late final ProviderSubscription<PortalAuthState> _portal;
 
   @override
   void dispose() {
     _subscription.close();
+    _portal.close();
     super.dispose();
   }
 }

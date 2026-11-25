@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { RlsTransaction } from '../../database';
+import { documentTypesFilter } from './customer-portal-document-category';
 import type {
   CustomerPortalAssetListQueryDto,
   CustomerPortalDocumentListQueryDto,
@@ -54,14 +55,25 @@ const operationSelect = {
     select: { asset: { select: { id: true, name: true } } },
   },
   responsibleFieldTechnician: { select: { displayName: true } },
-  _count: {
+  /**
+   * O documento mais recente do atendimento, para o app baixar direto da
+   * linha. O manifesto, e não a execução: é ele que `documents/:id/access`
+   * recebe, e é ele que passa pelas mesmas regras de disponibilidade.
+   */
+  artifactExecutions: {
+    where: {
+      deletedAt: null,
+      status: { in: FINAL_EXECUTION_STATUSES },
+      manifests: { some: availableManifestWhere },
+    },
+    orderBy: [{ updatedAt: 'desc' as const }, { id: 'desc' as const }],
+    take: 1,
     select: {
-      artifactExecutions: {
-        where: {
-          deletedAt: null,
-          status: { in: FINAL_EXECUTION_STATUSES },
-          manifests: { some: availableManifestWhere },
-        },
+      manifests: {
+        where: { ...availableManifestWhere, issuedAt: { not: null } },
+        orderBy: [{ issuedAt: 'desc' as const }, { id: 'desc' as const }],
+        take: 1,
+        select: { id: true },
       },
     },
   },
@@ -170,6 +182,8 @@ const documentSelect = {
   execution: {
     select: {
       customerId: true,
+      operationId: true,
+      code: true,
       title: true,
       status: true,
       snapshot: { select: { artifactType: true, templateName: true } },
@@ -241,6 +255,9 @@ export class CustomerPortalReadRepository {
         ...scope,
         deletedAt: null,
         ...(status ? { status } : {}),
+        ...(query.assetId
+          ? { assets: { some: { assetId: query.assetId } } }
+          : {}),
         ...(query.search
           ? {
               OR: [
@@ -510,7 +527,41 @@ export class CustomerPortalReadRepository {
     query: CustomerPortalDocumentListQueryDto,
   ): Promise<CustomerPortalRepositoryPage<CustomerPortalDocumentRecord>> {
     return this.rls.run(async (tx) => {
-      const where = this.documentWhere(scope, query.search);
+      const where: Prisma.ArtifactManifestWhereInput = {
+        AND: [
+          this.documentWhere(scope, query.search),
+          ...(query.category
+            ? [
+                {
+                  execution: {
+                    snapshot: {
+                      artifactType: documentTypesFilter(query.category),
+                    },
+                  },
+                },
+              ]
+            : []),
+          ...(query.operationId
+            ? [{ execution: { operationId: query.operationId } }]
+            : []),
+          ...(query.assetId
+            ? [
+                {
+                  execution: {
+                    OR: [
+                      { assetId: query.assetId },
+                      {
+                        operation: {
+                          assets: { some: { assetId: query.assetId } },
+                        },
+                      },
+                    ],
+                  },
+                },
+              ]
+            : []),
+        ],
+      };
       const total = await tx.artifactManifest.count({ where });
       const data = await tx.artifactManifest.findMany({
         where,

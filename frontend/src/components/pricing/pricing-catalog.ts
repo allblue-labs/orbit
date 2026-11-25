@@ -20,21 +20,10 @@
  * Este módulo não importa nenhum hook de assinatura. É a fronteira que impede
  * a página pública de, por descuido, passar a exigir login para mostrar preço.
  */
-import { backendJson } from "@/server/backend-client";
-import type { PlanCatalog, PlanCatalogEntry } from "@/types/billing";
+import type { PlanCatalogEntry } from "@/types/billing";
 
 /** A capacidade que separa os planos com inteligência. */
 export const INTELLIGENCE_CAPABILITY = "ORBIT_INTELLIGENCE";
-
-/**
- * O plano que oferece avaliação gratuita.
- *
- * Espelha `PLANOS_COM_AVALIACAO` do backend. A superfície pública anuncia a
- * regra geral; **quem** tem direito é decidido lá, na contratação, e esta tela
- * nunca avalia elegibilidade individual.
- */
-export const TRIAL_PLAN_CODE = "ESSENTIAL";
-export const TRIAL_DAYS = 30;
 
 /**
  * Ordem comercial: do menor para o maior.
@@ -47,7 +36,8 @@ export function ordenarPlanos(
 ): PlanCatalogEntry[] {
   return [...plans].sort(
     (a, b) =>
-      (a.prices.MONTHLY?.amountMinor ?? 0) - (b.prices.MONTHLY?.amountMinor ?? 0),
+      (a.prices.MONTHLY?.amountMinor ?? 0) -
+      (b.prices.MONTHLY?.amountMinor ?? 0),
   );
 }
 
@@ -56,28 +46,5 @@ export function temInteligencia(plano: PlanCatalogEntry): boolean {
 }
 
 export function ofereceAvaliacao(plano: PlanCatalogEntry): boolean {
-  return plano.code === TRIAL_PLAN_CODE;
-}
-
-/**
- * O catálogo público.
- *
- * Sem contexto de sessão: a rota é `@Public()` no backend, e mandar
- * credencial de servidor numa leitura pública seria dar a ela um privilégio
- * que ela não precisa.
- */
-export async function carregarCatalogoPublico(): Promise<PlanCatalog> {
-  return backendJson<PlanCatalog>({
-    path: "/plans/catalog",
-
-    /**
-     * Cacheável porque é igual para todo mundo.
-     *
-     * O catálogo é congelado no código do backend e muda quando alguém publica
-     * uma versão nova — não a cada minuto, e nunca por visitante. Cinco minutos
-     * de reaproveitamento evitam uma ida ao backend por visita à landing, que é
-     * a página mais acessada do produto e a que mais depende de abrir rápido.
-     */
-    revalidateSeconds: 300,
-  });
+  return plano.isActive !== false && (plano.trialDays ?? 0) > 0;
 }

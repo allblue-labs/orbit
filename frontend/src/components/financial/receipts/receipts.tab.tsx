@@ -29,7 +29,6 @@ import { FileText, Plus } from "lucide-react";
 import Link from "next/link";
 
 import { PanelFrame, PanelState, toPanelQuery } from "@/components/panels";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -39,6 +38,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { RenderStatusBadge } from "@/documents/document-components";
 import { useArtifactExecutionsList } from "@/hooks/artifact-executions/use-artifact-executions";
 
 import { useDateFormatters } from "@/hooks/use-date-formatters";
@@ -49,22 +49,6 @@ import { ReceiptWizardDialog } from "./receipt-wizard.dialog";
 
 /** O tipo de artefato que representa dinheiro recebido. */
 const RECEIPT_TYPE = "RECIBO";
-
-/**
- * O estado da emissão, em português.
- *
- * `renderStatus` é do motor de documentos: é ele que diz se existe arquivo. Um
- * recibo sem arquivo é um rascunho — e um rascunho não prova pagamento nenhum, nem
- * virou receita.
- */
-const RENDER_LABELS: Readonly<Record<string, { label: string; tone: string }>> =
-  {
-    NOT_RENDERED: { label: "Rascunho", tone: "outline" },
-    PENDING: { label: "Em processamento", tone: "secondary" },
-    RENDERING: { label: "Em processamento", tone: "secondary" },
-    COMPLETED: { label: "Emitido", tone: "default" },
-    FAILED: { label: "Falhou", tone: "destructive" },
-  };
 
 export function FinancialReceiptsTab() {
   const { formatDateTime } = useDateFormatters();
@@ -114,10 +98,6 @@ export function FinancialReceiptsTab() {
             </TableHeader>
             <TableBody>
               {page.data.map((receipt) => {
-                const estado =
-                  RENDER_LABELS[receipt.renderStatus] ??
-                  RENDER_LABELS.NOT_RENDERED!;
-
                 return (
                   <TableRow key={receipt.id}>
                     <TableCell className="font-mono text-xs">
@@ -132,14 +112,16 @@ export function FinancialReceiptsTab() {
                       {formatDateTime(receipt.createdAt)}
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant={
-                          estado.tone as
-                            "default" | "secondary" | "outline" | "destructive"
-                        }
-                      >
-                        {estado.label}
-                      </Badge>
+                      {/*
+                       * O selo é o mesmo do detalhe do recibo e da central de
+                       * documentos.
+                       *
+                       * Havia aqui um mapa próprio que chamava o estado pronto
+                       * de `COMPLETED` — e o motor o chama de `READY`. Todo
+                       * recibo emitido caía no padrão e aparecia como
+                       * "Rascunho", enquanto a página dele dizia "Emitido".
+                       */}
+                      <RenderStatusBadge status={receipt.renderStatus} />
                     </TableCell>
                     <TableCell>
                       {/* Abrir leva à execução, que é onde o documento se

@@ -1,14 +1,17 @@
 # Publicação de notificações mobile
 
-A API persiste o aviso do usuário e envia diretamente pelo SDK Firebase Admin,
-sem gateway externo, com `PUSH_PROVIDER=firebase`. As chaves VAPID são de web
-push e não habilitam as notificações nativas do aplicativo. O cliente Android
-já fornece tokens FCM; o iPhone atual usa APNs direto e precisa da migração de
-cliente descrita em `backend/docs/firebase-push.md` para usar o Firebase.
+O Orbit envia notificações transacionais pelo SDK Firebase Admin no backend e
+recebe tokens FCM dos SDKs oficiais no Android e iOS. Não depende do painel de
+campanhas do Firebase. VAPID configura web push, não o app mobile.
 
-## API em produção
+O [guia de release mobile](../../mobile/docs/firebase-push-release.md) é a referência
+para arquivos, assinatura, builds e testes físicos. Ambos os apps usam
+`com.allbluelabs.orbit`. O iOS associa APNs ao FCM; o backend não envia para tokens
+APNs puros no modo Firebase.
 
-Configure no ambiente de deploy (não no app):
+## Backend e worker
+
+Configurar no ambiente de deploy, exclusivamente no backend:
 
 ```dotenv
 PUSH_PROVIDER=firebase
@@ -19,122 +22,57 @@ JOBS_WORKER_ENABLED=true
 JOBS_POLL_INTERVAL_MS=2000
 ```
 
-Copie os três campos da service account para as variáveis correspondentes.
-Não versione o JSON privado. Consulte `backend/docs/firebase-push.md` para a
-configuração da API FCM e das permissões. O Compose repassa as variáveis à API.
-`JOBS_WORKER_ENABLED` controla o worker de push; `BILLING_EVENTS_WORKER_ENABLED`
-controla outro worker e não o substitui. Recrie a API após alterar o ambiente.
+O projeto deve ser o mesmo dos aplicativos. Habilitar a Cloud Messaging API HTTP v1
+e a permissão de envio da conta de serviço, conforme o [guia do backend](../../backend/docs/firebase-push.md).
+Recriar a API/worker após mudar as envs. `BILLING_EVENTS_WORKER_ENABLED` controla
+outro worker e não substitui `JOBS_WORKER_ENABLED`. Nunca colocar JSON Admin ou
+chave privada no app. O Compose já repassa essas envs; o worker vem ativo por padrão.
 
-O modo `disabled` mantém a caixa de avisos e o monitor em primeiro plano,
-mas não entrega notificações pelo sistema operacional. No app aberto, o monitor
-consulta a API autenticada a cada 12 segundos, somente enquanto o aplicativo
-está visível. Ao receber um push nativo, também atualiza os dados, sem repetir
-o banner. As preferências de avisos do usuário são respeitadas.
+## Android agora
 
-## iPhone com Firebase
+1. Usar `mobile/android/app/google-services.json`, com **services no plural**.
+2. Preparar o arquivo ignorado `mobile/config/production.json` com a URL HTTPS,
+   `ORBIT_FLAVOR=production` e `ORBIT_FIREBASE_PROJECT_ID` correspondente ao arquivo.
+3. Em `mobile/`, executar `make build-android-prod`. A release valida a configuração
+   Firebase e a chave de upload; não existe fallback silencioso para release sem push.
+4. Instalar no Android e permitir notificações. O canal se chama **Atendimentos e
+   documentos** (`orbit_work`). O backend envia notification+data: o SDK mostra o
+   alerta em segundo plano e o serviço nativo trata o app aberto.
 
-O backend Firebase exige um token FCM. A implementação iOS atual fornece APNs
-puro: será necessário integrar Firebase Messaging no cliente e configurar a
-autenticação APNs no Firebase. O backend não converte tokens APNs em FCM e não
-os invalida por incompatibilidade. Veja `backend/docs/firebase-push.md`.
+A configuração APNs da Apple não é necessária para entregar pushes Android.
 
-## iPhone com APNs direto (gateway legado)
+## iOS aguardando a conta Apple/APNs
 
-1. No Apple Developer, habilite **Push Notifications** no identificador
-   `com.allbluelabs.orbitOperator` e atualize o provisioning profile.
-2. Em Xcode → Runner → Signing & Capabilities, use a equipe e o perfil com essa
-   capacidade. O push é opcional em Debug, Profile e Release: `flutter run
-   --release` também pode instalar diretamente em um iPhone com Personal Team,
-   que não suporta APNs. Nessa equipe, deixe o arquivo de configuração local
-   ausente; os avisos dentro do app continuam funcionando.
+O arquivo é `mobile/ios/Runner/GoogleService-Info.plist`, sem hífen entre Google e
+Service. Enquanto a conta estiver em análise, manter o push nativo desligado.
+O app funciona sem ele; instalação local Release exige opt-out explícito conforme
+o guia mobile. Archives de distribuição continuam exigindo push configurado.
 
-   Para builds com push, usando uma equipe do Apple Developer Program e um perfil
-   compatível, execute a partir de `mobile/`:
+Quando aprovado, habilitar Push Notifications para `com.allbluelabs.orbit`, gerar
+um perfil compatível e cadastrar a chave APNs com Key ID/Team ID no Firebase, no
+app iOS do projeto correto. A chave `.p8` fica fora do repositório. Preparar
+`ios/Flutter/Push.local.xcconfig` a partir do exemplo, habilitar push/entitlement e
+recompilar. O SDK publica FCM somente depois de associar o token APNs. Desenvolvimento
+usa o ambiente do perfil; App Store/TestFlight exigem `production`.
 
-   ```bash
-   cp ios/Flutter/Push.local.xcconfig.example ios/Flutter/Push.local.xcconfig
-   ```
+## Verificação com o aparelho
 
-   Esse arquivo local habilita `Runner/Runner.entitlements` e está ignorado no Git.
-   Prepare-o também na máquina de CI/publicação antes de gerar a build assinada.
-   Remova o arquivo local ao voltar a instalar com Personal Team. A URL de produção
-   da API e `--release` não habilitam push automaticamente.
-3. Configure a autenticação APNs (chave ou certificado), Team ID, Key ID quando
-   aplicável, e o bundle ID no gateway de envio. Esses segredos permanecem no
-   servidor do gateway. O Orbit recebe diretamente um token **APNS**, não FCM.
-4. Confira o entitlement da aplicação assinada: desenvolvimento usa
-   `aps-environment=development`; TestFlight/App Store usam `production`, conforme
-   o perfil de distribuição. O gateway deve usar o ambiente correspondente.
-5. Instale a nova build, entre na conta e aceite as notificações. Se recusou,
-   habilite em Ajustes → Notificações → Orbit. Valide em um iPhone real.
+- Após login, conferir `POST /api/v1/mobile/devices` com sucesso e
+  `push_device_registered` no app, sem copiar tokens para logs ou tickets.
+- De outra conta da mesma organização, atribuir OS, RVT e PMOC ao técnico. Se o
+  fluxo de autorização estiver ativo, autorizar antes; não deve haver aviso antecipado.
+- Conferir o aviso na API e `mobile_push_delivery` no worker. `ACCEPTED_BY_PROVIDER`
+  prova aceitação FCM, não exibição no aparelho. Falha APNs/projeto não apaga tokens;
+  somente token comprovadamente inválido é desativado.
+- Testar app aberto, em segundo plano e iniciado pelo toque na notificação. O destino
+  deve ser o atendimento correto, com destinatário e tenant conferidos na sessão.
+- Testar recusa/reativação da permissão, cancelamento/substituição, rotação do token,
+  logout/troca de conta e preferência PUSH desativada. A matriz completa está no guia.
 
-Referências: [ativar push no Xcode](https://help.apple.com/xcode/mac/current/en.lproj/devdfd3d04a1.html),
-[entitlement APNs](https://developer.apple.com/documentation/bundleresources/entitlements/aps-environment).
+O monitor em primeiro plano continua consultando a API enquanto o app está visível,
+mesmo sem push. Os detalhes vêm da API autenticada com RLS/RBAC. As falhas de envio
+não desfazem o atendimento. O transporte gateway permanece apenas como opção legada;
+este procedimento usa `PUSH_PROVIDER=firebase`.
 
-## Android
-
-1. Crie/selecione um projeto no Firebase e registre o aplicativo Android com o
-   pacote `com.allbluelabs.orbit`.
-2. Baixe `google-services.json` e coloque em `mobile/android/app/` antes de compilar.
-   O arquivo está ignorado no Git. Builds sem esse arquivo continuam funcionando,
-   mas não registram um token FCM.
-3. Habilite o envio FCM e configure os campos `FIREBASE_*` no backend, usando
-   o mesmo projeto do aplicativo. Não coloque credenciais de servidor no APK.
-4. Gere e instale a nova build; Android 13+ solicita permissão para notificações.
-   O canal nativo se chama **Atendimentos e documentos** (`orbit_work`).
-
-Referências: [configuração Android](https://firebase.google.com/docs/android/setup),
-[FCM e permissões](https://firebase.google.com/docs/cloud-messaging/android/get-started),
-[recebimento de mensagens](https://firebase.google.com/docs/cloud-messaging/android/receive-messages).
-
-## Contrato do gateway legado
-
-Somente com `PUSH_PROVIDER=gateway`, configure `PUSH_GATEWAY_URL` e
-`PUSH_GATEWAY_CREDENTIAL`. Esse transporte é opcional e não participa do envio
-Firebase direto.
-
-O backend envia `POST PUSH_GATEWAY_URL` com `Authorization: Bearer <credencial>`:
-
-```json
-{
-  "target": { "platform": "IOS", "provider": "APNS", "token": "token-do-aparelho" },
-  "payload": {
-    "version": 1,
-    "notificationId": "id-do-aviso",
-    "type": "WORK_ASSIGNED",
-    "deepLink": "/field/work-items/PMOC:cycle-id:asset-id",
-    "title": "Novo atendimento atribuído",
-    "body": "Abra o Orbit para consultar os detalhes atualizados."
-  }
-}
-```
-
-Para APNs, converta título/corpo para `aps.alert` e mantenha `notificationId` e
-`deepLink` como campos customizados na raiz de `userInfo`. Para FCM, use uma
-mensagem de dados com `notificationId`, `deepLink`, `title` e `body` como strings;
-o serviço Android cria a notificação em primeiro ou segundo plano. Use prioridade
-adequada para alertas de trabalho. O identificador de item de OS começa com
-`SERVICE_OPERATION:`; PMOC usa `PMOC:<cycleId>:<assetId>`.
-
-Respostas esperadas: 2xx com `{"messageId":"id-do-provedor"}` quando aceito;
-404/410 para token inválido; 408/429/5xx para falha temporária; outros 4xx para
-falha permanente. Uma resposta pode incluir `{"code":"codigo-sem-dados-sensiveis"}`.
-Aceitação pelo provedor não comprova que o aparelho exibiu a notificação.
-
-## Verificação após publicar
-
-- Após login, confirme `POST /api/v1/mobile/devices` com sucesso e o evento
-  `push_device_registered` no app. Não copie tokens para tickets ou logs.
-- De outra conta da mesma organização, atribua uma operação ou execução PMOC ao
-  técnico. Verifique o novo aviso em `GET /api/v1/notifications` nessa conta.
-- Com o app aberto, verifique o aviso e a atualização da Home/fila. Com o app em
-  segundo plano, verifique o banner nativo e toque para abrir o atendimento.
-- No backend, procure `mobile_push_delivery`: `ACCEPTED_BY_PROVIDER` indica que o
-  provider aceitou; `PROVIDER_DISABLED`, falha temporária e token inválido apontam
-  para etapas diferentes. O registro não inclui token nem conteúdo do atendimento.
-- Teste logout e login com outro usuário no mesmo aparelho. O vínculo anterior
-  deve ser revogado, e o monitor anterior descarta respostas ainda em trânsito.
-
-A compilação e os testes locais não validam credenciais, provisionamento nem a
-entrega pelo provider de produção. Essa verificação exige a build assinada e o
-serviço de envio configurado.
+Referências oficiais: [Android/FCM](https://firebase.google.com/docs/cloud-messaging/android/receive-messages),
+[Apple/FCM e APNs](https://firebase.google.com/docs/cloud-messaging/ios/get-started).

@@ -1,3 +1,7 @@
+import {
+  renderPdfInThread,
+  shouldOffloadPdf,
+} from '../../../../runtime/pdf-thread';
 import { documentContent } from '../document-content';
 /**
  * Renderer PDF premium.
@@ -39,7 +43,7 @@ import { composeAirQuality } from './documents/air-quality.document';
 import { documentTitleFor } from './documents/labels';
 import { composeGeneric } from './documents/generic.document';
 
-const VERSION = '2.0.3';
+const VERSION = '2.0.4';
 
 @Injectable()
 export class ArtifactPremiumPdfRenderer implements ArtifactRenderer {
@@ -49,6 +53,7 @@ export class ArtifactPremiumPdfRenderer implements ArtifactRenderer {
   readonly mimeType = 'application/pdf';
 
   render(input: RenderInput): Promise<RenderOutput> {
+    if (shouldOffloadPdf()) return renderPdfInThread('premium', input);
     input = documentContent(input);
     return new Promise((resolve, reject) => {
       const theme = buildTheme(input.branding.primaryColor);

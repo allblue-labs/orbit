@@ -133,10 +133,24 @@ interface OperationSource {
     completedAt: DateValue | null;
     updatedAt: DateValue;
   }>;
+  /**
+   * Opcional na fonte: nem toda consulta que passa por este mapper inclui os
+   * documentos (as projeções internas de agenda e comissão não precisam), e
+   * exigir a relação em todas para publicar um campo de lista seria custo sem
+   * resposta. Ausente vira `document: null`.
+   */
+  artifactExecutions?: ReadonlyArray<{
+    id: string;
+    code: string;
+    title: string;
+    renderStatus: string;
+    snapshot: { artifactType: string };
+  }>;
 }
 
 interface ActorContext {
   id: string;
+  isOrganizationOwner?: boolean;
   permissions: readonly string[];
 }
 
@@ -167,7 +181,10 @@ export class OperationReadModelMapper {
   ): OperationDetailsReadModel {
     return {
       ...this.base(source, actor),
-      transitions: OperationStateMachine.allowedTransitions(source.status),
+      transitions:
+        source.status === 'COMPLETED' && actor?.isOrganizationOwner
+          ? ['OPEN']
+          : OperationStateMachine.allowedTransitions(source.status),
     };
   }
 
@@ -246,8 +263,25 @@ export class OperationReadModelMapper {
         completedAt: this.nullableDate(checklist.completedAt),
         updatedAt: this.date(checklist.updatedAt),
       })),
+      document: this.document(source),
       allowedActions: this.allowedActions(source, actor),
     };
+  }
+
+  /** O documento emitido mais recente, no recorte que a linha precisa. */
+  private document(source: OperationSource) {
+    const emitido = source.artifactExecutions?.find(
+      (execution) => execution.renderStatus === 'READY',
+    );
+    return emitido
+      ? {
+          executionId: emitido.id,
+          code: emitido.code,
+          title: emitido.title,
+          renderStatus: emitido.renderStatus,
+          artifactType: emitido.snapshot.artifactType,
+        }
+      : null;
   }
 
   private allowedActions(
@@ -281,7 +315,11 @@ export class OperationReadModelMapper {
     if (has('operations.read')) actions.push('VIEW');
     if (has('operations.update')) actions.push('EDIT');
     if (manager) actions.push('MANAGE_ASSIGNMENTS');
-    if (has('operations.status.update') && canExecute) {
+    if (
+      has('operations.status.update') &&
+      canExecute &&
+      (source.status !== 'COMPLETED' || actor.isOrganizationOwner)
+    ) {
       actions.push('CHANGE_STATUS');
       if (
         OperationStateMachine.allowedTransitions(source.status).includes(

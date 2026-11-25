@@ -36,6 +36,7 @@ import '../../../core/contracts/mobile_field_contracts.dart';
 import '../../../core/presentation/field_registry.dart';
 import '../../../core/presentation/orbit_format.dart';
 import '../../../core/routing/orbit_router.dart';
+import '../../pmoc/presentation/pmoc_entry.dart';
 import '../../../core/theme/orbit_theme.dart';
 import '../../../core/widgets/section_states.dart';
 import '../../../core/contracts/field_operation_contracts.dart';
@@ -855,12 +856,18 @@ VoidCallback? _iniciar(
       final cycleId = navegacao.cycleId;
       final assetId = navegacao.equipmentId;
       if (planId == null || cycleId == null || assetId == null) return null;
-      return () => context.push(
-        OrbitRoutes.pmocAttendance(
+      /* Inicia **e** entra, como o atendimento comum. Antes este ramo só
+         navegava, e quem abria de fato era um segundo botão, dentro da
+         tela — "Abrir atendimento" depois de "Iniciar o atendimento". */
+      return () => enterPmocAttendance(
+        context,
+        PmocAddressContract(
           planId: planId,
           cycleId: cycleId,
           assetId: assetId,
         ),
+        start: comecar || retomar ||
+            item.allowedActions.contains(MobileFieldAction.executePmoc),
       );
 
     case MobileWorkItemKind.rvt:

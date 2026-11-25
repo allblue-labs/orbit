@@ -1,0 +1,139 @@
+name: Orbit verification
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: orbit-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-24.04
+    # Includes the source-pinned MinIO build and a second disposable database gate.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "22.23.5"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+        working-directory: backend
+      - run: npx prisma generate
+        working-directory: backend
+      - run: npm run lint && npm run typecheck && npm run lint:public-errors && npm run contracts:guard
+        working-directory: backend
+      - run: npm run contracts:nexus && npx eslint scripts/nexus-contract-validator.cjs scripts/nexus-contracts.test.cjs
+        working-directory: backend
+      - run: node --test scripts/audit-policy.test.mjs
+      - run: python3 scripts/test_proxy_origin.py
+      - run: python3 scripts/test_deployment_preflight.py
+      - run: node scripts/verify-proxy-ingress.mjs
+      - run: npm run security:audit
+        working-directory: backend
+      - run: npm run build
+        working-directory: backend
+      - run: npm test -- --runInBand --watchman=false
+        working-directory: backend
+      # Creates its own PostgreSQL, bootstraps orbit_app, applies every migration,
+      # seeds catalogues, enforces the restricted runtime role and always cleans up.
+      - run: npm run test:e2e
+        working-directory: backend
+      # Hard gate: real disposable MinIO from pinned official source; no cloud credentials.
+      - run: node scripts/verify-storage-integrity.mjs
+      - run: node scripts/verify-worker-isolation.mjs
+      - run: node --expose-gc scripts/verify-analytics-benchmark.mjs
+
+  web:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "22.23.5"
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+      - run: npm ci
+        working-directory: backend
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run security:audit && npm run lint && npm run typecheck && npm test
+        working-directory: frontend
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      # Includes a production Next build and a real, isolated Nest/Postgres stack.
+      - run: npm run test:e2e
+        working-directory: frontend
+      - run: docker build --file frontend/Dockerfile --tag orbit-upload-bff:ci frontend
+      - run: node scripts/verify-upload-bff-image.mjs orbit-upload-bff:ci
+
+  mobile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "22.23.5"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: "3.47.2"
+          channel: stable
+      - run: npm ci
+        working-directory: backend
+      - run: flutter pub get --enforce-lockfile
+        working-directory: mobile
+      - run: flutter analyze --fatal-infos
+        working-directory: mobile
+      - run: python3 mobile/tool/test_push_config.py
+      # The visual scenarios retain their behavioral assertions; recording PNGs
+      # is a separate manual tool and cannot silently accept a changed baseline.
+      - run: flutter test --exclude-tags integration
+        working-directory: mobile
+      - run: node scripts/verify-integrations.mjs mobile
+      - run: flutter build apk --debug --dart-define=ORBIT_API_URL=https://orbit.allblue-labs.com/api/v1
+        working-directory: mobile
+
+  deployment:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      # No registry push, cloud credentials or existing DB: each gate uses its own project.
+      - run: docker build --target migrator --tag orbit-pr14-migrator:local backend
+      - run: docker build --target runner --tag orbit-pr14-api:local backend
+      - run: docker build --target runner --tag orbit-pr14-frontend:local frontend
+      - run: docker build --target runner --tag orbit-pr14-pgbouncer:local deploy/pgbouncer
+      - run: python3 scripts/verify-deployment-images.py
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "22.23.5"
+      - run: npm ci
+        working-directory: backend
+      - run: node scripts/verify-pgbouncer.mjs
+        env:
+          ORBIT_TEST_PGBOUNCER_IMAGE: orbit-pr14-pgbouncer:local
+      - run: docker build --target backup --tag orbit-backup:ci backend
+      - run: node scripts/verify-orbit-backup.mjs
+        env:
+          ORBIT_TEST_BACKUP_IMAGE: orbit-backup:ci

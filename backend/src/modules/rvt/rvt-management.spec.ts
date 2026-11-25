@@ -1,11 +1,15 @@
-/* Prisma transaction fixtures use partial mocks rather than generated clients. */
-/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return */
+import type { PrismaTransactionClient } from '../../database/prisma.types';
 import { RvtRepository } from './rvt.repository';
 import { RvtService, type RvtActor } from './rvt.service';
 import { RvtMapper } from './rvt.mapper';
 import { CreateRvtOccurrenceDto, UpdateRvtConfigurationDto } from './rvt.dto';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
+
+// Jest's asymmetric matcher types expose untyped return values.
+const objectContaining = (sample: object): unknown =>
+  expect.objectContaining(sample);
+const anyDate: unknown = expect.any(Date);
 
 const actor: RvtActor = {
   organizationId: 'org',
@@ -40,7 +44,19 @@ const current = {
   execution: null,
 };
 
-function scenario(visit: any = current) {
+function repositoryWithTransaction(fixture: unknown) {
+  const tx = fixture as PrismaTransactionClient;
+  return new RvtRepository({
+    run: <T>(callback: (client: PrismaTransactionClient) => Promise<T>) =>
+      callback(tx),
+  } as never);
+}
+
+function scenario(
+  visit: Omit<typeof current, 'execution'> & {
+    execution: { id: string } | null;
+  } = current,
+) {
   const tx = {
     $executeRaw: jest.fn(),
     rvtConfiguration: {
@@ -49,11 +65,13 @@ function scenario(visit: any = current) {
     rvtOccurrence: {
       findFirstOrThrow: jest.fn().mockResolvedValue(visit),
       aggregate: jest.fn().mockResolvedValue({ _max: { sequenceNumber: 8 } }),
-      create: jest.fn().mockImplementation(({ data }) => ({
-        id: 'new',
-        status: 'SCHEDULED',
-        ...data,
-      })),
+      create: jest
+        .fn()
+        .mockImplementation(({ data }: { data: Record<string, unknown> }) => ({
+          id: 'new',
+          status: 'SCHEDULED',
+          ...data,
+        })),
       update: jest
         .fn()
         .mockImplementation(({ data }: { data: Record<string, unknown> }) => ({
@@ -69,7 +87,12 @@ function scenario(visit: any = current) {
     businessUnit: { findFirst: jest.fn().mockResolvedValue({ id: 'unit' }) },
     customer: { findFirst: jest.fn().mockResolvedValue({ id: 'customer' }) },
     asset: {
-      count: jest.fn().mockImplementation(({ where }) => where.id.in.length),
+      count: jest
+        .fn()
+        .mockImplementation(
+          ({ where }: { where: { id: { in: string[] } } }) =>
+            where.id.in.length,
+        ),
     },
     organization: {
       findFirst: jest.fn().mockResolvedValue(null),
@@ -94,10 +117,7 @@ function scenario(visit: any = current) {
     schedulingResourceAllocation: { deleteMany: jest.fn(), create: jest.fn() },
     auditLog: { create: jest.fn() },
   };
-  const repository = new RvtRepository({
-    run: (callback: any) => callback(tx),
-  } as never);
-  return { tx, repository };
+  return { tx, repository: repositoryWithTransaction(tx) };
 }
 
 describe('RVT visit management', () => {
@@ -108,7 +128,7 @@ describe('RVT visit management', () => {
       scheduledFor: new Date('2027-02-10T17:30:00Z'),
     });
     expect(tx.rvtOccurrence.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
+      data: objectContaining({
         sequenceNumber: 9,
         equipmentIds: ['asset1', 'asset2'],
         responsibleFieldTechnicianId: 'tech',
@@ -116,16 +136,16 @@ describe('RVT visit management', () => {
       }),
     });
     expect(tx.schedulingEvent.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        create: expect.objectContaining({
+      objectContaining({
+        create: objectContaining({
           calendarId: 'calendar',
           startsAt: new Date('2027-02-10T17:30:00Z'),
         }),
       }),
     );
     expect(tx.schedulingCalendar.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
+      objectContaining({
+        where: objectContaining({
           id: 'calendar',
           organizationId: 'org',
           OR: [{ businessUnitId: 'unit' }, { businessUnitId: null }],
@@ -150,8 +170,8 @@ describe('RVT visit management', () => {
       'visit',
     );
     expect(tx.rvtOccurrence.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
+      objectContaining({
+        data: objectContaining({
           scheduledFor: when,
           originalScheduledDate: current.originalScheduledDate,
           equipmentIds: ['asset2'],
@@ -161,12 +181,12 @@ describe('RVT visit management', () => {
       }),
     );
     expect(tx.schedulingEvent.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        update: expect.objectContaining({ startsAt: when }),
+      objectContaining({
+        update: objectContaining({ startsAt: when }),
       }),
     );
     expect(tx.schedulingResourceAllocation.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
+      data: objectContaining({
         userId: 'replacement',
         eventId: 'event',
       }),
@@ -187,8 +207,8 @@ describe('RVT visit management', () => {
     });
     expect(tx.schedulingResourceAllocation.create).not.toHaveBeenCalled();
     expect(tx.rvtOccurrence.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ responsibleFieldTechnicianId: null }),
+      objectContaining({
+        data: objectContaining({ responsibleFieldTechnicianId: null }),
       }),
     );
   });
@@ -211,24 +231,24 @@ describe('RVT visit management', () => {
         where: { id: 'event' },
         data: {
           status: 'CANCELLED',
-          ...(remove ? { deletedAt: expect.any(Date) } : {}),
+          ...(remove ? { deletedAt: anyDate } : {}),
         },
       });
       expect(tx.auditLog.create).toHaveBeenCalled();
       if (remove)
         expect(tx.rvtOccurrence.update).toHaveBeenCalledWith(
-          expect.objectContaining({
-            data: expect.objectContaining({
+          objectContaining({
+            data: objectContaining({
               localScheduledDate: null,
               originalScheduledDate: current.originalScheduledDate,
             }),
           }),
         );
       expect(tx.rvtOccurrence.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
+        objectContaining({
+          data: objectContaining({
             status: 'CANCELLED',
-            deletedAt: remove ? expect.any(Date) : null,
+            deletedAt: remove ? anyDate : null,
           }),
         }),
       );
@@ -261,7 +281,7 @@ describe('RVT visit management', () => {
       ),
     ).rejects.toThrow('BUSINESS_UNIT_SCOPE_INVALID');
     expect(tx.asset.count).toHaveBeenCalledWith({
-      where: expect.objectContaining({
+      where: objectContaining({
         organizationId: 'org',
         businessUnitId: 'unit',
         customerId: 'customer',
@@ -323,6 +343,8 @@ describe('RVT execution authority', () => {
         responsibleFieldTechnicianId: 'tech',
         status: 'IN_PROGRESS',
         startedAt: new Date(),
+        equipment: [],
+        evidence: [],
       }),
       updateExecution: jest.fn(),
     };
@@ -338,7 +360,7 @@ describe('RVT execution authority', () => {
     const { repository, service } = setup();
     await service.start('visit', actor, {});
     expect(repository.startExecution).toHaveBeenCalledWith(
-      expect.objectContaining({ responsibleId: 'tech' }),
+      objectContaining({ responsibleId: 'tech' }),
     );
   });
   it.each([false, true])(
@@ -421,7 +443,7 @@ describe('RVT execution authority', () => {
       {},
     );
     expect(repository.startExecution).toHaveBeenCalledWith(
-      expect.objectContaining({ responsibleId: 'owner', actorId: 'owner' }),
+      objectContaining({ responsibleId: 'owner', actorId: 'owner' }),
     );
   });
   it('denies execution outside the actor business units', async () => {
@@ -470,12 +492,10 @@ describe('RVT completed-visit timeline and reconciliation', () => {
         .fn()
         .mockResolvedValue([{ id: 'tech', displayName: 'Técnico' }]),
     };
-    const repository = new RvtRepository({
-      run: (callback: any) => callback({ ...tx, rvtExecution, user }),
-    } as never);
+    const repository = repositoryWithTransaction({ ...tx, rvtExecution, user });
     const result = await repository.timeline('config', 'org', { limit: 1 });
     expect(rvtExecution.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
+      objectContaining({
         where: {
           organizationId: 'org',
           businessUnitId: 'unit',
@@ -522,9 +542,7 @@ describe('RVT completed-visit timeline and reconciliation', () => {
       },
       rvtOccurrence: { ...tx.rvtOccurrence, findMany },
     };
-    const repository = new RvtRepository({
-      run: (callback: any) => callback(extended),
-    } as never);
+    const repository = repositoryWithTransaction(extended);
     const result = await repository.updateConfiguration(
       'config',
       'org',
@@ -545,8 +563,8 @@ describe('RVT completed-visit timeline and reconciliation', () => {
     );
     expect(findMany).toHaveBeenNthCalledWith(
       1,
-      expect.objectContaining({
-        where: expect.objectContaining({
+      objectContaining({
+        where: objectContaining({
           customized: false,
           deletedAt: null,
           execution: null,
@@ -565,7 +583,7 @@ describe('RVT completed-visit timeline and reconciliation', () => {
       businessUnitId: 'unit',
       equipmentIds: ['asset2'],
       configuration: { ...configuration, procedure: {}, maintenanceType: null },
-    } as any);
+    });
     const operation = {
       create: jest.fn().mockResolvedValue({ id: 'operation' }),
     };
@@ -579,10 +597,13 @@ describe('RVT completed-visit timeline and reconciliation', () => {
         .fn()
         .mockResolvedValue([{ id: 'asset2', name: 'Equipamento 2' }]),
     };
-    const repository = new RvtRepository({
-      run: (callback: any) =>
-        callback({ ...tx, operation, operationAsset, rvtExecution, asset }),
-    } as never);
+    const repository = repositoryWithTransaction({
+      ...tx,
+      operation,
+      operationAsset,
+      rvtExecution,
+      asset,
+    });
     await repository.startExecution({
       organizationId: 'org',
       occurrenceId: 'visit',
@@ -591,7 +612,7 @@ describe('RVT completed-visit timeline and reconciliation', () => {
       auxiliaries: [],
     });
     expect(asset.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
+      objectContaining({
         where: {
           id: { in: ['asset2'] },
           organizationId: 'org',
@@ -605,10 +626,10 @@ describe('RVT completed-visit timeline and reconciliation', () => {
       data: [{ operationId: 'operation', assetId: 'asset2' }],
     });
     expect(rvtExecution.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
+      objectContaining({
+        data: objectContaining({
           equipment: {
-            create: [expect.objectContaining({ assetId: 'asset2' })],
+            create: [objectContaining({ assetId: 'asset2' })],
           },
         }),
       }),
@@ -645,7 +666,7 @@ describe('RVT visit schedule patches', () => {
       'config',
       'org',
       'tech',
-      expect.objectContaining({
+      objectContaining({
         scheduledFor: new Date('2027-01-12T17:35:00Z'),
       }),
       'visit',

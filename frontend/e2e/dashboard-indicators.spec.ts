@@ -42,7 +42,7 @@ const rate = (id: string, sampleSize: number, value = 75) => ({
   dataQuality: "DERIVED",
 });
 
-async function setup(page: Page, empty = false) {
+async function setup(page: Page, empty = false, financialZone?: string) {
   const claims = {
     sub: "owner",
     sid: "test",
@@ -50,15 +50,13 @@ async function setup(page: Page, empty = false) {
     organizationId: "org",
     exp: Math.floor(Date.now() / 1000) + 3600,
   };
-  await page
-    .context()
-    .addCookies([
-      {
-        name: "orbit_access",
-        value: `preview.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.preview`,
-        url: test.info().project.use.baseURL as string,
-      },
-    ]);
+  await page.context().addCookies([
+    {
+      name: "orbit_access",
+      value: `preview.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.preview`,
+      url: test.info().project.use.baseURL as string,
+    },
+  ]);
   const unit = {
     id: "unit",
     legalName: "Matriz",
@@ -90,6 +88,7 @@ async function setup(page: Page, empty = false) {
           id: "owner",
           firstName: "Ana",
           displayName: "Ana",
+          timezone: financialZone,
           welcomeDismissedAt: stamp,
         },
         scope: {
@@ -116,6 +115,16 @@ async function setup(page: Page, empty = false) {
         layout: {
           version: 1,
           widgets: [
+            ...(financialZone
+              ? [
+                  {
+                    id: "financial-health",
+                    title: "Saúde financeira",
+                    size: "LARGE",
+                    order: 30,
+                  },
+                ]
+              : []),
             {
               id: "operations-comparative-radar",
               title: "Radar comparativo",
@@ -130,27 +139,31 @@ async function setup(page: Page, empty = false) {
             },
             {
               id: "health-score",
-              title: "Índice de Saúde",
+              title: "Saúde da operação",
               size: "MEDIUM",
               order: 20,
             },
           ],
         },
       };
-    else if (path === "/api/orbit/analytics/dashboard")
-      data = {
+    else if (path === "/api/orbit/analytics/panel") {
+      const dashboard = {
         generatedAt: stamp,
         metrics: [
           ...metrics,
           { ...rate("operations.scheduling_coverage", 4), executive: false },
+          {
+            ...rate("operations.backlog_punctuality", empty ? 0 : 12),
+            basis: { numerator: empty ? 0 : 9, denominator: empty ? 0 : 12 },
+            executive: false,
+          },
         ],
         headline: {},
         series: [],
         forecasts: [],
         environmentalImpact: [],
       };
-    else if (path === "/api/orbit/analytics/health")
-      data = {
+      const health = {
         generatedAt: stamp,
         score: empty ? 0 : 75,
         status: "ATTENTION",
@@ -177,7 +190,8 @@ async function setup(page: Page, empty = false) {
           },
         ],
       };
-    else if (path === "/api/orbit/analytics/kpis") {
+      data = { dashboard, health, intelligence: null };
+    } else if (path === "/api/orbit/analytics/kpis") {
       data = {
         generatedAt: stamp,
         period,
@@ -194,15 +208,77 @@ async function setup(page: Page, empty = false) {
       };
     else if (path.endsWith("/environmental-impact"))
       data = { indicators: [], impacts: [] };
-    else if (path.endsWith("/agenda"))
+    else if (path === "/api/orbit/financial/analytics/summary") {
+      const totals = { confirmed: "0", pending: "0", cancelled: "0", count: 0 };
+      data = {
+        period: {
+          from: url.searchParams.get("from"),
+          to: url.searchParams.get("to"),
+        },
+        currency: "BRL",
+        income: totals,
+        expense: totals,
+        overdue: totals,
+        netConfirmed: "0",
+        netPending: "0",
+      };
+    } else if (path.endsWith("/agenda"))
       data = { days: [], occurrences: [], warnings: [] };
     await route.fulfill({ json: { success: true, data } });
+  });
+}
+
+for (const zone of ["Asia/Tokyo", "America/Los_Angeles"]) {
+  test(`saúde financeira envia o dia civil da preferência em ${zone}`, async ({
+    page,
+  }) => {
+    await page.clock.setFixedTime(new Date("2026-11-10T12:00:00Z"));
+    await setup(page, false, zone);
+    const summary = page.waitForRequest(
+      (request) =>
+        new URL(request.url()).pathname ===
+        "/api/orbit/financial/analytics/summary",
+    );
+    const timeline = page.waitForRequest(
+      (request) =>
+        new URL(request.url()).pathname ===
+        "/api/orbit/financial/analytics/timeline",
+    );
+    await page.goto("/dashboard");
+    const painel = page.locator('[data-panel="financial-health"]');
+    await expect(painel).toContainText("A receber");
+    /* "Este mês" é o padrão: o mês inteiro, dia a dia, no fuso da pessoa. */
+    const dates = new URL((await summary).url()).searchParams;
+    expect(dates.get("from")).toBe("2026-11-01");
+    expect(dates.get("to")).toBe("2026-11-30");
+    const history = new URL((await timeline).url()).searchParams;
+    expect(history.get("from")).toBe("2026-11-01");
+    expect(history.get("granularity")).toBe("DAY");
+
+    /* 7 dias terminam hoje. */
+    const semana = page.waitForRequest(
+      (request) =>
+        new URL(request.url()).pathname ===
+          "/api/orbit/financial/analytics/summary" &&
+        new URL(request.url()).searchParams.get("from") === "2026-11-04",
+    );
+    await painel.getByRole("button", { name: "7 dias", exact: true }).click();
+    expect(new URL((await semana).url()).searchParams.get("to")).toBe(
+      "2026-11-10",
+    );
   });
 }
 
 test("mostra oito indicadores acionáveis, bases de cálculo e dimensões reais", async ({
   page,
 }) => {
+  await page.clock.setFixedTime(new Date(stamp));
+  const analyticsRequests: string[] = [];
+  page.on("request", (request) => {
+    const { pathname } = new URL(request.url());
+    if (pathname.startsWith("/api/orbit/analytics/"))
+      analyticsRequests.push(pathname.split("/").at(-1)!);
+  });
   await setup(page);
   await page.goto("/dashboard");
   const executive = page.locator('[data-panel="executive-kpis"]');
@@ -217,21 +293,31 @@ test("mostra oito indicadores acionáveis, bases de cálculo e dimensões reais"
     executive.getByText("Contratos ativos", { exact: true }),
   ).toHaveCount(0);
   const health = page.locator('[data-panel="health-score"]');
-  await expect(health.getByText(/9 de 12 no prazo/)).toBeVisible();
-  const radar = page
-    .locator(".glass-panel")
-    .filter({ has: page.getByText("Radar comparativo", { exact: true }) });
-  for (const axis of ["Prazo", "Agenda", "Equipe", "PMOC", "RVT"])
-    await expect(
-      radar
-        .locator(".recharts-polar-angle-axis")
-        .getByText(axis, { exact: true }),
-    ).toBeVisible();
-  await expect(radar.locator(".recharts-radar-polygon")).toHaveCount(2);
-  await page.screenshot({
-    path: "/private/tmp/orbit-dashboard-review.png",
-    fullPage: true,
-  });
+  await expect(
+    health.getByText("Atendimentos em aberto sem atraso", { exact: true }),
+  ).toBeVisible();
+  await expect(health.getByText("9 de 12", { exact: true })).toBeVisible();
+  await expect(health.getByText("3 atrasados", { exact: true })).toBeVisible();
+  await expect(health.getByText(/pontos de atenção/)).toBeVisible();
+  /* Sem nota abstrata de 0 a 100. */
+  await expect(health.getByText("/ 100")).toHaveCount(0);
+
+  const comparativo = page.locator(
+    '[data-panel="operations-comparative-radar"]',
+  );
+  for (const linha of ["Concluídos no prazo", "PMOC em dia", "Visitas de RVT em dia"])
+    await expect(comparativo.getByText(linha, { exact: true })).toBeVisible();
+  await expect(comparativo.getByText("igual").first()).toBeVisible();
+  /* Cinco eixos medidos nos dois meses: os dois polígonos e o resumo. */
+  await expect(comparativo.locator(".recharts-radar-polygon")).toHaveCount(2);
+  await expect(
+    comparativo.getByText("Estável nos 5 indicadores comparáveis."),
+  ).toBeVisible();
+  expect(analyticsRequests.filter((path) => path === "panel")).toHaveLength(1);
+  expect(analyticsRequests.filter((path) => path === "kpis")).toHaveLength(2);
+  expect(analyticsRequests).not.toContain("dashboard");
+  expect(analyticsRequests).not.toContain("health");
+  expect(analyticsRequests).not.toContain("intelligence");
 });
 
 test("organização nova distingue ausência de base de cálculo de desempenho zero", async ({
@@ -245,12 +331,11 @@ test("organização nova distingue ausência de base de cálculo de desempenho z
   ).toBeVisible();
   await expect(executive.getByText("0%", { exact: true })).toHaveCount(0);
   const health = page.locator('[data-panel="health-score"]');
-  await expect(health.getByText(/Não há atendimentos em aberto/)).toBeVisible();
-  await expect(health.getByText("Crítico", { exact: true })).toHaveCount(0);
+  await expect(health.getByText(/Ainda não há atendimentos, PMOC ou RVT/)).toBeVisible();
+  await expect(health.getByText("0%", { exact: true })).toHaveCount(0);
   await expect(
     page
-      .locator(".glass-panel")
-      .filter({ has: page.getByText("Radar comparativo", { exact: true }) })
-      .getByText(/Ainda não há três indicadores/),
+      .locator('[data-panel="operations-comparative-radar"]')
+      .getByText(/Ainda não há atendimentos nem manutenções/),
   ).toBeVisible();
 });

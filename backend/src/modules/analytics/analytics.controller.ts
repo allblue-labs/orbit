@@ -1,4 +1,4 @@
-import { Controller, Get, Query, Req } from '@nestjs/common';
+import { Controller, Get, Header, Query, Req } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOkResponse,
@@ -16,6 +16,7 @@ import { AnalyticsService } from './analytics.service';
 import { AnalyticsQueryDto } from './dto/analytics-query.dto';
 import { PlanCapability } from '../subscription-plans/catalog/plan-catalog.types';
 import {
+  ProductAccessService,
   ProductCapabilities,
   ProductFeature,
   RequiresProductFeature,
@@ -28,7 +29,10 @@ import {
 @Capabilities('analytics.read')
 @Permissions('analytics.read')
 export class AnalyticsController {
-  constructor(private readonly analytics: AnalyticsService) {}
+  constructor(
+    private readonly analytics: AnalyticsService,
+    private readonly productAccess: ProductAccessService,
+  ) {}
 
   @Get('overview')
   @ApiOperation({ summary: 'Aggregate the complete Analytics Read Model' })
@@ -111,6 +115,26 @@ export class AnalyticsController {
       this.org(request),
       query,
       request.identity!.permissions,
+    );
+  }
+
+  @Get('panel')
+  @Header('Cache-Control', 'private, no-store')
+  async panel(
+    @Req() request: IdentityRequest,
+    @Query() query: AnalyticsQueryDto,
+  ) {
+    const organizationId = this.org(request);
+    const includeIntelligence = await this.productAccess.canUse(
+      organizationId,
+      PlanCapability.ORBIT_INTELLIGENCE,
+      ProductFeature.ORBIT_INTELLIGENCE,
+    );
+    return this.analytics.panel(
+      organizationId,
+      query,
+      request.identity!.permissions,
+      includeIntelligence,
     );
   }
 

@@ -1,0 +1,93 @@
+{
+  "pr": "PR-13",
+  "finding": "F13",
+  "date": "2026-11-17",
+  "baseCommit": "f7bdc7d",
+  "implementationCommit": "a23e9c2fccccc87c8b5c4d28d049dd6c486f3c11",
+  "productionAccess": false,
+  "push": false,
+  "deploy": false,
+  "migration": {
+    "name": "20261117130000_storage_retention_lifecycle",
+    "sha256": "e04316c7648fab16ace9267f9fd1c0441b56db60405124df52e5f17fc5c77389",
+    "appliedTo": "disposable PostgreSQL only",
+    "count": 124,
+    "runtimeTables": 150
+  },
+  "checks": {
+    "unit": {
+      "status": "passed",
+      "suites": 273,
+      "tests": 2278
+    },
+    "storageProfiles": {
+      "status": "passed",
+      "profiles": [
+        "LOCAL",
+        "MINIO",
+        "S3",
+        "R2"
+      ],
+      "transport": "official AWS SDK adapter; local MinIO protocol tests",
+      "realCloud": false,
+      "suites": 3,
+      "tests": 77,
+      "scope": [
+        "canonical and legacy physical removal",
+        "R2 aliases and tenant ownership",
+        "active uploads block purge",
+        "existing upload/evidence regression"
+      ]
+    },
+    "fullE2e": {
+      "status": "passed",
+      "suites": 52,
+      "tests": 670
+    },
+    "build": "passed",
+    "typecheck": "passed",
+    "changedTypescriptLint": "passed",
+    "contractBoundaries": "passed",
+    "publicErrorCodes": 75,
+    "freshSchemaProbe": {
+      "status": "passed",
+      "indexes": 3,
+      "ledgerRlsForced": true,
+      "backupLedgerSql": "validated in disposable DB"
+    },
+    "relationalPreflight": {
+      "status": "passed",
+      "rules": 199,
+      "findings": []
+    },
+    "backupShellSyntax": "passed",
+    "targetedPostgresFinal": {
+      "status": "passed",
+      "suites": 2,
+      "tests": 15,
+      "scope": [
+        "storage-retention with active uploads",
+        "self-contained operation assignments"
+      ]
+    },
+    "runtime": "Node 25.1.0 local; Node 22/Linux release qualification deferred to CI/PR-19"
+  },
+  "externalAcceptance": [
+    "Cloudflare token limited to Zone / Cache Purge, CDN URL absence and real R2 confirmation at rollout",
+    "Explicit legacy locator reconciliation before enabling retention",
+    "Off-host encrypted backup/ledger retention and restore rehearsal in PR-19",
+    "Versioned S3/Object Lock lifecycle if used",
+    "Final Node 22/Linux CI gates"
+  ],
+  "limitations": [
+    "Cloudflare cache API was stubbed; public/private routing and failure/retry tested locally",
+    "No production purge, restore, backup, migration, build publication or bucket access",
+    "Orphan candidates are reported, never automatically deleted",
+    "Database purge timestamp is not physical completion; use purge ledger and deletion jobs"
+  ],
+  "fixtureCorrections": [
+    "PMOC MONTHS instead of invalid MONTH",
+    "assignment fixture uses FIELD_TECHNICIAN, explicit profile state and its own foreign tenant"
+  ],
+  "status": "LOCAL_CHECKS_PASSED_EXTERNAL_ACCEPTANCE_PENDING"
+}

@@ -323,6 +323,76 @@ export class ArtifactExecutionService {
     }
   }
 
+  /** The issuer acknowledges receipt as the authenticated account holder. */
+  async signReceiptAsIssuer(
+    id: string,
+    organizationId: string,
+    actorId: string,
+    signerName: string,
+  ): Promise<void> {
+    const current = await this.source(id, organizationId);
+    if (current.snapshot.artifactType !== 'RECIBO')
+      throw new EntityNotFoundException('Receipt', id);
+    this.policy.assertEditable(current.status);
+    const slots = this.mapper
+      .details(current)
+      .snapshot.signatureSlots.filter(
+        (slot) =>
+          slot.signerRole === 'ISSUER' &&
+          slot.required &&
+          !current.signatures.some((signature) => signature.slotId === slot.id),
+      );
+    if (slots.length === 0) return;
+    const signature = await this.workforce.activeSignature(
+      organizationId,
+      actorId,
+    );
+    if (!signature)
+      throw new BusinessException(
+        'Cadastre sua assinatura no Perfil para emitir o recibo.',
+        'SIGNATURE_MISSING',
+      );
+    const storage = await this.workforce.findStorageFile(
+      organizationId,
+      signature.storageObjectId,
+    );
+    if (storage?.status !== 'AVAILABLE' || storage.sha256 !== signature.sha256)
+      throw new BusinessException(
+        'Cadastre novamente sua assinatura no Perfil para emitir o recibo.',
+        'SIGNATURE_MISSING',
+      );
+    const signatureData = {
+      storageObjectId: signature.storageObjectId,
+      sha256: signature.sha256,
+      version: signature.version,
+    };
+    const signatureHash = createHash('sha256')
+      .update(JSON.stringify(signatureData))
+      .digest('hex');
+    for (const slot of slots) {
+      await this.repository.collectSignature(
+        id,
+        organizationId,
+        actorId,
+        {
+          slotId: slot.id,
+          userId: actorId,
+          signerName,
+          signatureData,
+          consentText:
+            'Confirmo que recebi o pagamento informado neste recibo.',
+        },
+        'ISSUER',
+        signatureHash,
+        {
+          signatureAssetId: signature.storageObjectId,
+          signatureAssetHash: signature.sha256,
+          capturedAt: new Date(),
+        },
+      );
+    }
+  }
+
   private signedAsFor(
     signerRole: string,
   ): 'FIELD_TECHNICIAN' | 'TECHNICAL_RESPONSIBLE' | 'CUSTOMER' {

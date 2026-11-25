@@ -3,6 +3,7 @@
 /// Cada gate roda sobre um **cenário próprio**, criado agora pelas APIs do
 /// produto. Nenhum teste procura "algum atendimento em determinado estado":
 /// era assim que uma suíte quebrava a outra.
+@Tags(['integration'])
 library;
 
 import 'dart:convert';
@@ -25,6 +26,7 @@ void main() {
     available = await smokeApiIsUp();
     if (!available) return;
     provisioner = await ScenarioProvisioner.connect();
+    await provisioner.ensureProfessionalSignature();
     artifacts = ArtifactRepository(client: provisioner.client);
   });
 
@@ -118,7 +120,11 @@ void main() {
         sourceId: scenario.operationId,
       );
       expect(before.existingArtifact, isNull);
-      expect(before.allows(FieldArtifactAllowedAction.prepareDocument), isTrue);
+      expect(
+        before.allows(FieldArtifactAllowedAction.prepareDocument),
+        isTrue,
+        reason: before.eligibility.blockedReasons.join(', '),
+      );
 
       final artifact = await artifacts.prepare(
         sourceType: FieldArtifactSourceType.operation,
@@ -305,6 +311,9 @@ void main() {
       final current = await readyArtifact();
 
       if (current!.isTransient) {
+        if (const bool.fromEnvironment('ORBIT_REQUIRE_API')) {
+          fail('a renderização não concluiu no tempo do smoke');
+        }
         markTestSkipped('a renderização não concluiu no tempo do smoke');
         return;
       }
@@ -329,6 +338,9 @@ void main() {
       if (offline()) return;
       final current = await readyArtifact();
       if (current!.status != FieldArtifactStatus.ready) {
+        if (const bool.fromEnvironment('ORBIT_REQUIRE_API')) {
+          fail('o documento não ficou pronto no tempo do smoke');
+        }
         markTestSkipped('o documento não ficou pronto no tempo do smoke');
         return;
       }

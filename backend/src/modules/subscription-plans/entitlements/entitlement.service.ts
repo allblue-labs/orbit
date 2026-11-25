@@ -32,12 +32,11 @@ import {
   type PlanLimit,
   type PlanResource,
 } from '../catalog/plan-catalog.types';
-import { isKnownPlan, planDefinition } from '../catalog/plan-registry';
+import { CommercialPlanService } from '../catalog/commercial-plan.service';
 import { SubscriptionService } from '../subscriptions/subscription.service';
 import { grantsProductAccess } from '../subscriptions/subscription.types';
 import {
   customProfile,
-  fromCatalog,
   fromSubscription,
   isAllocationResource,
   isUsageResource,
@@ -105,6 +104,7 @@ export class EntitlementService {
     private readonly rls: RlsTransaction,
     private readonly contexts: RequestContextService,
     private readonly metrics: EntitlementMetrics,
+    private readonly commercial: CommercialPlanService,
     private readonly mapper: EntitlementMapper,
   ) {}
 
@@ -135,12 +135,14 @@ export class EntitlementService {
         assinatura.pendingEffectiveAt !== null &&
         assinatura.pendingEffectiveAt <= new Date() &&
         assinatura.pendingEntitlementsSnapshot !== null;
+      const snapshot = vencida
+        ? assinatura.pendingEntitlementsSnapshot
+        : assinatura.entitlementsSnapshot;
+      const code = vencida ? assinatura.pendingPlanCode! : assinatura.planCode;
       const current = fromSubscription(
-        vencida ? assinatura.pendingPlanCode! : assinatura.planCode,
-        vencida ? assinatura.pendingPlanCode! : assinatura.planCode,
-        vencida
-          ? assinatura.pendingEntitlementsSnapshot
-          : assinatura.entitlementsSnapshot,
+        code,
+        (snapshot as { label?: string } | null)?.label ?? code,
+        snapshot,
         grantsProductAccess(assinatura.effectiveStatus),
       );
       return includeAdjustment
@@ -159,10 +161,15 @@ export class EntitlementService {
 
   /** A escolha da origem, num lugar só. */
   private direitosDe(plano: PlanRow): EffectiveEntitlements {
-    if (isKnownPlan(plano.planKey)) {
+    if (plano.commercial) {
       /** Catálogo comercial sem assinatura canônica nunca concede acesso. */
       return {
-        ...fromCatalog(planDefinition(plano.planKey)),
+        ...fromSubscription(
+          plano.planKey,
+          plano.planName,
+          (plano.commercial as { entitlements: unknown }).entitlements,
+          false,
+        ),
         accessGranted: false,
       };
     }
@@ -255,8 +262,8 @@ export class EntitlementService {
   }
 
   /** O catálogo comercial congelado, igual para toda organização. */
-  catalog(): PlanCatalogReadModel {
-    return this.mapper.catalog();
+  async catalog(organizationId?: string): Promise<PlanCatalogReadModel> {
+    return this.mapper.catalog(await this.commercial.list(organizationId));
   }
 
   /* ---------------------------------------------------------------- */

@@ -7,45 +7,13 @@ import {
   round,
   statusFor,
 } from '../analytics.math';
-import type {
-  AnalyticsCommitment,
-  AnalyticsOperation,
-  AnalyticsSnapshot,
-} from '../analytics.types';
-
-const completed = (status: string) =>
-  ['COMPLETED', 'DONE', 'CLOSED', 'FINALIZED', 'PUBLISHED'].includes(status);
-const cancelled = (status: string) =>
-  ['CANCELLED', 'CANCELED'].includes(status);
-const during = (date: Date | null | undefined, from: Date, to: Date) =>
-  Boolean(date && date >= from && date <= to);
+import type { AnalyticsSnapshot } from '../analytics.types';
 
 @Injectable()
 export class KpiEngine {
   execute(snapshot: AnalyticsSnapshot): KpiReadModel {
-    const { range } = snapshot;
-    const current = this.operationStats(
-      snapshot.operations,
-      range.from,
-      range.to,
-    );
-    const before = this.operationStats(
-      snapshot.previousOperations,
-      range.previousFrom,
-      range.previousTo,
-    );
-    const pmoc = this.commitments(snapshot.pmocs, range.from, range.to);
-    const previousPmoc = this.commitments(
-      snapshot.previousPmocs ?? [],
-      range.previousFrom,
-      range.previousTo,
-    );
-    const rvt = this.commitments(snapshot.rvts ?? [], range.from, range.to);
-    const previousRvt = this.commitments(
-      snapshot.previousRvts ?? [],
-      range.previousFrom,
-      range.previousTo,
-    );
+    const { range, operations, pmoc, rvt } = snapshot;
+    const { current, previous: before } = operations;
     const indicators: AnalyticsKpi[] = [];
     const count = (
       id: string,
@@ -128,14 +96,14 @@ export class KpiEngine {
       'operations.open',
       'OPERATIONS',
       'Atendimentos em aberto',
-      current.open.length,
+      operations.open,
       'Fila atual, incluindo demandas antigas.',
     );
     count(
       'operations.overdue',
       'OPERATIONS',
       'Atendimentos atrasados',
-      current.overdue,
+      operations.overdue,
       'Em aberto com término previsto já vencido.',
       undefined,
       true,
@@ -145,7 +113,7 @@ export class KpiEngine {
       'operations.unassigned',
       'TECHNICIANS',
       'Sem técnico definido',
-      current.unassigned,
+      operations.unassigned,
       'Em aberto e sem técnico operacional responsável.',
       undefined,
       true,
@@ -155,7 +123,7 @@ export class KpiEngine {
       'operations.unscheduled',
       'OPERATIONS',
       'Sem agendamento',
-      current.unscheduled,
+      operations.unscheduled,
       'Em aberto e sem data de início prevista.',
       undefined,
       true,
@@ -165,18 +133,18 @@ export class KpiEngine {
       'operations.completed',
       'OPERATIONS',
       'Concluídos no período',
-      current.delivered.length,
+      current.delivered,
       'Conclusões pela data de encerramento, inclusive demandas antigas.',
-      before.delivered.length,
+      before.delivered,
     );
     rate(
       'operations.sla_compliance',
       'OPERATIONS',
       'Concluídos no prazo',
       current.onTime,
-      current.withDeadline.length,
+      current.withDeadline,
       before.onTime,
-      before.withDeadline.length,
+      before.withDeadline,
       'Entre os atendimentos concluídos no período que tinham término previsto.',
       true,
     );
@@ -184,7 +152,7 @@ export class KpiEngine {
       'pmoc.overdue',
       'PMOC',
       'Ciclos PMOC pendentes',
-      pmoc.overdue,
+      pmoc.current.overdue,
       'Ciclos vencidos e ainda não concluídos, incluindo anteriores ao período.',
       undefined,
       true,
@@ -194,7 +162,7 @@ export class KpiEngine {
       'rvt.overdue',
       'RVT',
       'Visitas RVT pendentes',
-      rvt.overdue,
+      rvt.current.overdue,
       'Visitas vencidas e ainda não concluídas, incluindo anteriores ao período.',
       undefined,
       true,
@@ -205,9 +173,9 @@ export class KpiEngine {
       'OPERATIONS',
       'Demandas com agenda',
       current.scheduled,
-      current.cohort.length,
+      current.cohort,
       before.scheduled,
-      before.cohort.length,
+      before.cohort,
       'Demandas criadas em cada período com início previsto; conforme cadastro atual.',
     );
     rate(
@@ -215,37 +183,37 @@ export class KpiEngine {
       'TECHNICIANS',
       'Demandas com técnico',
       current.assigned,
-      current.cohort.length,
+      current.cohort,
       before.assigned,
-      before.cohort.length,
+      before.cohort,
       'Demandas criadas em cada período com técnico operacional responsável; auxiliares não substituem o responsável.',
     );
     rate(
       'pmoc.compliance',
       'PMOC',
       'PMOC em dia',
-      pmoc.onTime,
-      pmoc.total,
-      previousPmoc.onTime,
-      previousPmoc.total,
+      pmoc.current.onTime,
+      pmoc.current.total,
+      pmoc.previous.onTime,
+      pmoc.previous.total,
       'Ciclos vencidos no período e pendências anteriores; conclusão até o vencimento.',
     );
     rate(
       'rvt.compliance',
       'RVT',
       'RVT em dia',
-      rvt.onTime,
-      rvt.total,
-      previousRvt.onTime,
-      previousRvt.total,
+      rvt.current.onTime,
+      rvt.current.total,
+      rvt.previous.onTime,
+      rvt.previous.total,
       'Visitas com data vencida no período e pendências anteriores; conclusão até o fim do dia agendado.',
     );
     rate(
       'operations.backlog_punctuality',
       'OPERATIONS',
       'Fila dentro do prazo',
-      current.openWithDeadline - current.overdue,
-      current.openWithDeadline,
+      operations.openWithDeadline - operations.overdue,
+      operations.openWithDeadline,
       0,
       0,
       'Atendimentos em aberto com término previsto que ainda não venceram.',
@@ -254,8 +222,8 @@ export class KpiEngine {
       'operations.backlog_scheduling',
       'OPERATIONS',
       'Fila com agenda',
-      current.open.length - current.unscheduled,
-      current.open.length,
+      operations.open - operations.unscheduled,
+      operations.open,
       0,
       0,
       'Atendimentos em aberto com início previsto.',
@@ -264,8 +232,8 @@ export class KpiEngine {
       'technicians.backlog_coverage',
       'TECHNICIANS',
       'Fila com técnico',
-      current.open.length - current.unassigned,
-      current.open.length,
+      operations.open - operations.unassigned,
+      operations.open,
       0,
       0,
       'Atendimentos em aberto com responsável operacional.',
@@ -274,20 +242,17 @@ export class KpiEngine {
       'operations.total',
       'OPERATIONS',
       'Demandas criadas',
-      current.cohort.length,
+      current.cohort,
       'Criadas no período, excluindo canceladas.',
-      before.cohort.length,
+      before.cohort,
       false,
     );
     rate(
       'operations.completion_rate',
       'OPERATIONS',
       'Demandas do período concluídas',
-      current.cohort.filter(
-        (op) =>
-          completed(op.status) && op.completedAt && op.completedAt <= range.to,
-      ).length,
-      current.cohort.length,
+      operations.completedCohort,
+      current.cohort,
       0,
       0,
       'Conclusões entre as demandas criadas no próprio período; não mede produtividade.',
@@ -296,13 +261,7 @@ export class KpiEngine {
       'technicians.active',
       'TECHNICIANS',
       'Técnicos responsáveis',
-      new Set(
-        current.cohort.flatMap((op) =>
-          op.responsibleFieldTechnicianId
-            ? [op.responsibleFieldTechnicianId]
-            : [],
-        ),
-      ).size,
+      operations.activeTechnicians,
       'Responsáveis distintos nas demandas criadas no período.',
       undefined,
       false,
@@ -311,7 +270,7 @@ export class KpiEngine {
       'equipment.registered',
       'EQUIPMENT',
       'Equipamentos cadastrados',
-      snapshot.assets.length,
+      snapshot.equipmentRegistered,
       'Cadastro de equipamentos; não representa disponibilidade física.',
       undefined,
       false,
@@ -325,60 +284,6 @@ export class KpiEngine {
       },
       availability: [],
       indicators,
-    };
-  }
-
-  private operationStats(
-    operations: AnalyticsOperation[],
-    from: Date,
-    to: Date,
-  ) {
-    const active = operations.filter(
-      (op) => !cancelled(op.status) && op.createdAt <= to,
-    );
-    const cohort = active.filter((op) => during(op.createdAt, from, to));
-    const delivered = active.filter(
-      (op) => completed(op.status) && during(op.completedAt, from, to),
-    );
-    const withDeadline = delivered.filter((op) => op.scheduledEnd !== null);
-    const open = active.filter((op) => !completed(op.status));
-    return {
-      cohort,
-      delivered,
-      withDeadline,
-      open,
-      onTime: withDeadline.filter((op) => op.completedAt! <= op.scheduledEnd!)
-        .length,
-      assigned: cohort.filter((op) => Boolean(op.responsibleFieldTechnicianId))
-        .length,
-      scheduled: cohort.filter((op) => Boolean(op.scheduledStart)).length,
-      overdue: open.filter((op) => op.scheduledEnd && op.scheduledEnd < to)
-        .length,
-      openWithDeadline: open.filter((op) => op.scheduledEnd !== null).length,
-      unassigned: open.filter((op) => !op.responsibleFieldTechnicianId).length,
-      unscheduled: open.filter((op) => !op.scheduledStart).length,
-    };
-  }
-
-  private commitments(rows: AnalyticsCommitment[], from: Date, to: Date) {
-    const due = rows.filter(
-      (row) =>
-        !cancelled(row.status) && (row.deadlineAt ?? row.createdAt) <= to,
-    );
-    const isDone = (row: AnalyticsCommitment) =>
-      completed(row.status) &&
-      row.finalizedAt !== null &&
-      row.finalizedAt <= to;
-    const evaluated = due.filter(
-      (row) => (row.deadlineAt ?? row.createdAt) >= from || !isDone(row),
-    );
-    return {
-      total: evaluated.length,
-      overdue: due.filter((row) => !isDone(row)).length,
-      onTime: evaluated.filter(
-        (row) =>
-          isDone(row) && row.finalizedAt! <= (row.deadlineAt ?? row.createdAt),
-      ).length,
     };
   }
 }

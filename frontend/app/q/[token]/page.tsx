@@ -1,3 +1,4 @@
+import { OpenEquipmentInApp } from "@/components/equipment-qr/open-equipment-in-app";
 import { QrResolution } from "@/components/equipment-qr/qr-resolution";
 import { WorkspacePage } from "@/workspace";
 
@@ -28,6 +29,7 @@ export default async function QrTokenPage({
       activeLabel="Etiqueta"
       suspense={false}
     >
+      <OpenEquipmentInApp path={`/q/${token}`} />
       <QrResolution token={token} />
     </WorkspacePage>
   );

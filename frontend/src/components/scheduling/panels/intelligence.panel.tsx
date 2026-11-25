@@ -57,9 +57,7 @@ export function IntelligencePanel({
         {(intelligence) => (
           <div className="space-y-5">
             <p className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs">
-              A análise indica <code>source: {intelligence.source}</code> nesta
-              resposta. Os blocos abaixo existem para o contrato — os números
-              não são observações da sua operação. Os conflitos reais estão no
+              Estes números são de demonstração e não vêm da sua operação. Os conflitos reais estão no
               painel de conflitos.
             </p>
 

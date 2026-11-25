@@ -1,0 +1,32 @@
+{
+  "protocolVersion": "1.0.0",
+  "target": {
+    "productId": "orbit-v2",
+    "environment": "staging",
+    "instanceId": "orbit-staging-01",
+    "tenantId": "00000000-0000-7000-8000-000000000001"
+  },
+  "asOf": "2026-11-15T12:00:00Z",
+  "aggregateVersion": "7",
+  "watermark": "wm-demo",
+  "freshness": {
+    "observedAt": "2026-11-15T12:00:00Z",
+    "completeThrough": "2026-11-15T12:00:00Z",
+    "state": "FRESH",
+    "gapDetected": false
+  },
+  "data": {
+    "kind": "USAGE",
+    "metric": {
+      "definitionRef": "tenant-storage",
+      "definitionVersion": 1,
+      "value": 1024,
+      "unit": "BYTES",
+      "window": {
+        "from": "2026-11-14T00:00:00Z",
+        "until": "2026-11-15T00:00:00Z",
+        "timeZone": "UTC"
+      }
+    }
+  }
+}

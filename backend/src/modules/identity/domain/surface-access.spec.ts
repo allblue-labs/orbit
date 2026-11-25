@@ -12,6 +12,7 @@ import {
   surfacesOf,
 } from './surface-access';
 import type { IdentityUser } from '../infrastructure/identity.repository';
+import { VerifiedPlatformAuthority } from '../../../common/verified-platform-authority';
 
 type Papel = { allowedSurfaces: string[] } | null;
 
@@ -22,6 +23,24 @@ function usuario(options: {
   owner?: boolean;
 }): IdentityUser {
   return {
+    id: 'user',
+    platformAuthority: VerifiedPlatformAuthority.fromPersistedAssignments(
+      'user',
+      (options.plataforma ?? []).map((role, index) => ({
+        id: `grant-${index}`,
+        userId: 'user',
+        roleId: `role-${index}`,
+        revokedAt: null,
+        role: {
+          id: `role-${index}`,
+          key: 'PLATFORM_ADMIN',
+          organizationId: null,
+          deletedAt: null,
+          permissions: [],
+          allowedSurfaces: role?.allowedSurfaces ?? [],
+        },
+      })),
+    ),
     organizationMemberships: options.organizacao
       ? [{ role: options.organizacao }]
       : [],

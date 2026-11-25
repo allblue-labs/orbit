@@ -107,7 +107,7 @@ test("sem token oferece reenvio com resposta genérica em português", async ({
     page.getByRole("button", { name: "Confirmar meu e-mail", exact: true }),
   ).toHaveCount(0);
   await page
-    .getByLabel("Seu e-mail", { exact: true })
+    .getByLabel(/^Seu e-mail(?:\s*\*?\s*\(obrigatório\))?$/)
     .fill("owner@example.test");
   await page
     .getByRole("button", { name: "Solicitar novo e-mail", exact: true })
@@ -121,4 +121,31 @@ test("sem token oferece reenvio com resposta genérica em português", async ({
       body: { email: "owner@example.test" },
     },
   ]);
+});
+
+test("o reenvio permite uma nova tentativa depois de um minuto, sem disparos automáticos", async ({
+  page,
+}) => {
+  await page.clock.install();
+  const { writes } = await setup(page);
+  await page.goto("/confirmar-email");
+  await page
+    .getByRole("textbox", { name: "Seu e-mail" })
+    .fill("owner@example.test");
+  await page
+    .getByRole("button", { name: "Solicitar novo e-mail", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Aguarde um minuto para reenviar" }),
+  ).toBeDisabled();
+  expect(writes).toHaveLength(1);
+  await page.clock.fastForward(61000);
+  const resend = page.getByRole("button", {
+    name: "Solicitar novo e-mail",
+    exact: true,
+  });
+  await expect(resend).toBeEnabled();
+  expect(writes).toHaveLength(1);
+  await resend.click();
+  await expect.poll(() => writes.length).toBe(2);
 });

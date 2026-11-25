@@ -18,6 +18,8 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'offline_data.dart';
+
 /// Valor em cache com o instante em que foi gravado.
 class CachedValue<T> {
   const CachedValue({required this.value, required this.cachedAt});
@@ -38,17 +40,21 @@ abstract interface class ReadCache {
 }
 
 class PreferencesReadCache implements ReadCache {
-  PreferencesReadCache(this._preferences, {String? namespace})
-    : _prefix = namespace == null
-          ? 'orbit.cache.'
-          : 'orbit.cache.v2.$namespace.';
+  PreferencesReadCache(
+    this._preferences, {
+    String? namespace,
+    OfflineDataCipher? cipher,
+  }) : _prefix = 'orbit.cache.v3.${namespace ?? 'unscoped'}.',
+       _cipher = cipher ?? OfflineDataCipher.device;
 
+  static const _maxAge = Duration(hours: 24);
   final String _prefix;
+  final OfflineDataCipher _cipher;
   bool _closed = false;
 
   void close() => _closed = true;
 
-  /// Old versions did not record an owner: those entries cannot be migrated safely.
+  /// Discard unencrypted caches from earlier versions. They're rebuilt online.
   static Future<void> purgeLegacy(SharedPreferences preferences) async {
     for (final key
         in preferences
@@ -56,7 +62,7 @@ class PreferencesReadCache implements ReadCache {
             .where(
               (key) =>
                   key.startsWith('orbit.cache.') &&
-                  !key.startsWith('orbit.cache.v2.'),
+                  !key.startsWith('orbit.cache.v3.'),
             )
             .toList()) {
       await preferences.remove(key);
@@ -68,17 +74,29 @@ class PreferencesReadCache implements ReadCache {
   @override
   Future<CachedValue<Map<String, dynamic>>?> read(String key) async {
     if (_closed) return null;
-    final raw = _preferences.getString('$_prefix$key');
+    final entry = '$_prefix$key';
+    final raw = _preferences.getString(entry);
     if (raw == null) return null;
     try {
-      final decoded = jsonDecode(raw) as Map<String, dynamic>;
-      final cachedAt = DateTime.tryParse(decoded['cachedAt'] as String? ?? '');
+      final bytes = await _cipher.open(base64Decode(raw), purpose: entry);
+      if (_closed) return null;
+      final decoded = jsonDecode(utf8.decode(bytes));
+      if (decoded is! Map<String, dynamic>) return null;
+      final timestamp = decoded['cachedAt'];
+      final cachedAt = timestamp is String
+          ? DateTime.tryParse(timestamp)
+          : null;
       final value = decoded['value'];
       if (cachedAt == null || value is! Map<String, dynamic>) return null;
+      if (DateTime.now().difference(cachedAt) > _maxAge) {
+        if (_preferences.getString(entry) == raw) {
+          await _preferences.remove(entry);
+        }
+        return null;
+      }
       return CachedValue(value: value, cachedAt: cachedAt);
-    } on FormatException {
-      // Cache corrompido não pode derrubar a leitura: descarta e segue online.
-      await _preferences.remove('$_prefix$key');
+    } on Exception {
+      // A cache miss keeps network reads working while device storage is locked.
       return null;
     }
   }
@@ -86,13 +104,21 @@ class PreferencesReadCache implements ReadCache {
   @override
   Future<void> write(String key, Map<String, dynamic> value) async {
     if (_closed) return;
-    await _preferences.setString(
-      '$_prefix$key',
-      jsonEncode({
-        'cachedAt': DateTime.now().toIso8601String(),
-        'value': value,
-      }),
-    );
+    final entry = '$_prefix$key';
+    try {
+      final bytes = await _cipher.seal(
+        utf8.encode(
+          jsonEncode({
+            'cachedAt': DateTime.now().toIso8601String(),
+            'value': value,
+          }),
+        ),
+        purpose: entry,
+      );
+      if (!_closed) await _preferences.setString(entry, base64Encode(bytes));
+    } on Exception {
+      // The cache is optional. Never fall back to writing plaintext.
+    }
   }
 
   @override

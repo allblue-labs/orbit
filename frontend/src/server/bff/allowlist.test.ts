@@ -23,14 +23,45 @@ const TOKEN =
   "Ab3-_xYz01234567890123456789012345678901234567890123456789012xZ_";
 
 describe("inspectPath", () => {
+  it.each([
+    ["/organizations/current/operational-access", "GET"],
+    [
+      "/platform-admin/organizations/00000000-0000-7000-8000-000000000001/operational-status",
+      "POST",
+    ],
+    ["/platform-admin/tenants", "POST"],
+    [
+      "/platform-admin/tenant-provisionings/00000000-0000-7000-8000-000000000001",
+      "GET",
+    ],
+    [
+      "/platform-admin/tenant-provisionings/00000000-0000-7000-8000-000000000001/resume",
+      "POST",
+    ],
+  ] as const)(
+    "mantém autenticação no provisionamento administrativo %s %s",
+    (path, method) => {
+      expect(inspectPath(path, method)).toEqual({
+        allowed: true,
+        requiresSession: true,
+      });
+    },
+  );
   const quoteToken = "Ab3_".repeat(16);
   it.each([
+    ["/public/contact", "POST"],
+    ["/identity/password/reset/validate", "POST"],
     ["/identity/email/verify", "POST"],
     ["/identity/email/resend", "POST"],
     [`/public/quotes/proposals/${quoteToken}`, "GET"],
     [`/public/quotes/proposals/${quoteToken}/document`, "GET"],
     [`/public/quotes/proposals/${quoteToken}/response`, "POST"],
     [`/public/pmoc/contracts/${quoteToken}/document`, "GET"],
+    [`/public/quotes/proposals/${quoteToken}/document/exports`, "POST"],
+    [
+      `/public/quotes/proposals/${quoteToken}/document/exports/01a20400-cd6f-772e-b3be-1d02b20ee35e`,
+      "GET",
+    ],
   ] as const)("libera somente o comando público %s %s", (path, method) => {
     expect(inspectPath(path, method)).toEqual({
       allowed: true,
@@ -39,10 +70,15 @@ describe("inspectPath", () => {
   });
   it.each([
     ["/identity/email/verify", "GET"],
+    ["/public/contact", "GET"],
+    ["/public/contact/other", "POST"],
+    ["/identity/password/reset/validate", "GET"],
     ["/identity/email/resend", "GET"],
     ["/identity/email/other", "POST"],
     [`/public/quotes/proposals/${quoteToken}/response`, "GET"],
     [`/public/quotes/proposals/${quoteToken}/document`, "POST"],
+    [`/public/quotes/proposals/${quoteToken}/document/exports`, "GET"],
+    [`/public/quotes/proposals/${quoteToken}/document/exports/x`, "GET"],
     [`/public/quotes/proposals/${quoteToken}/other`, "GET"],
     [`/public/quotes/proposals/${quoteToken.slice(1)}`, "GET"],
     [`/public/quotes/proposals`, "GET"],
@@ -137,5 +173,48 @@ describe("inspectPath", () => {
       allowed: false,
       status: 403,
     });
+  });
+
+  it("biometria: entrada e segredo de aparelho não passam pelo proxy", () => {
+    for (const path of [
+      "/identity/biometrics/webauthn/authentication",
+      "/identity/biometrics/webauthn/authentication/options",
+      "/identity/biometrics/devices/login",
+      "/identity/me/biometrics/devices",
+    ])
+      expect(inspectPath(path, "POST")).toMatchObject({
+        allowed: false,
+        status: 403,
+      });
+    /* Cadastrar a passkey e listar passam, com sessão. */
+    expect(
+      inspectPath("/identity/me/biometrics/webauthn/registration", "POST"),
+    ).toEqual({ allowed: true, requiresSession: true });
+  });
+
+  it("objeto assinado se lê sem sessão; enviar continua exigindo", () => {
+    expect(inspectPath("/storage/objects", "GET")).toEqual({
+      allowed: true,
+      requiresSession: false,
+    });
+    expect(inspectPath("/storage/objects", "PUT")).toEqual({
+      allowed: true,
+      requiresSession: true,
+    });
+  });
+
+  it("os chamados de clientes passam pelo BFF da equipe", () => {
+    expect(inspectPath("/customer-service-requests", "GET")).toEqual({
+      allowed: true,
+      requiresSession: true,
+    });
+  });
+});
+
+describe("exportações de documento", () => {
+  it("a consulta autenticada passa pelo proxy e exige sessão", () => {
+    expect(
+      inspectPath("/document-exports/01a20400-cd6f-772e-b3be-1d02b20ee35e", "GET"),
+    ).toEqual({ allowed: true, requiresSession: true });
   });
 });

@@ -4,7 +4,7 @@
  * Configuração de um lembrete.
  *
  * Escreve em `POST`/`PATCH /scheduling/events` — o mesmo contrato do evento
- * comum, com o calendário de lembretes fixado. O que muda em relação ao
+ * comum, usando o calendário selecionado na central. O que muda em relação ao
  * formulário da agenda é o vocabulário: "quando lembrar" em vez de início e
  * fim, "repetir a cada" em vez de recorrência crua.
  *
@@ -204,9 +204,21 @@ function ReminderForm({
     form.whenLocal.length > 0;
 
   const submit = () => {
-    const payload = buildPayload(form, calendar, timeZone, businessUnitId);
+    const payload = buildPayload(
+      form,
+      calendar,
+      timeZone,
+      editing ? (editing.businessUnitId ?? undefined) : businessUnitId,
+    );
     if (editing) {
-      update.mutate(payload, { onSuccess: onClose });
+      update.mutate(
+        {
+          ...payload,
+          sourceModule: editing.sourceModule,
+          sourceEntityType: editing.sourceEntityType,
+        },
+        { onSuccess: onClose },
+      );
       return;
     }
     create.mutate(payload, { onSuccess: onClose });

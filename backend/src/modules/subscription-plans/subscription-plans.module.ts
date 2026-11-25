@@ -1,3 +1,4 @@
+import { CommercialPlanService } from './catalog/commercial-plan.service';
 import { Global, Module } from '@nestjs/common';
 import { EntitlementMapper } from './entitlements/entitlement.mapper';
 import { EntitlementMetrics } from './entitlements/entitlement.metrics';
@@ -24,6 +25,7 @@ import { ProductAccessService } from './product-access';
   providers: [
     SubscriptionPlanRepository,
     SubscriptionPlanService,
+    CommercialPlanService,
     UsageRepository,
     UsageService,
     EntitlementRepository,
@@ -42,6 +44,7 @@ import { ProductAccessService } from './product-access';
   ],
   exports: [
     SubscriptionPlanService,
+    CommercialPlanService,
     UsageService,
     EntitlementService,
     SubscriptionService,

@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { createHash } from 'node:crypto';
+import { ValidationException } from '../../exceptions';
 import type { RegisterMobileDeviceDto } from './mobile-device.dto';
 import { MobileDeviceRepository } from './mobile-device.repository';
 import type { MobileDeviceInstallationReadModel } from './mobile-device.read-models';
@@ -14,6 +15,17 @@ export class MobileDeviceService {
     actor: { id: string; organizationId: string },
     input: RegisterMobileDeviceDto,
   ): Promise<MobileDeviceInstallationReadModel> {
+    if (
+      (process.env.PUSH_PROVIDER === 'firebase' &&
+        input.pushProvider !== 'FCM') ||
+      (input.platform === 'ANDROID' && input.pushProvider !== 'FCM')
+    ) {
+      throw new ValidationException(
+        'Esta versão do aplicativo usa um registro de notificações incompatível. Atualize o Orbit para ativar os avisos.',
+        undefined,
+        'MOBILE_PUSH_UPGRADE_REQUIRED',
+      );
+    }
     const installation = await this.repository.register(
       input,
       createHash('sha256').update(input.pushToken).digest('hex'),

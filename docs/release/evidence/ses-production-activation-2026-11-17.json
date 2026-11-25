@@ -1,0 +1,138 @@
+{
+  "date": "2026-11-17",
+  "baseline": "6f7d9e9",
+  "status": "STAGING_SES_QUALIFIED",
+  "tests": {
+    "backendUnit": {
+      "suites": 275,
+      "tests": 2289,
+      "passed": true
+    },
+    "backendIntegration": {
+      "suites": 52,
+      "tests": 673,
+      "passed": true
+    },
+    "firstOwnerRegression": {
+      "suites": 2,
+      "tests": 31,
+      "passed": true
+    },
+    "frontendUnit": {
+      "files": 73,
+      "tests": 695,
+      "passed": true
+    },
+    "browserIdentityLinks": {
+      "tests": 4,
+      "passed": true
+    },
+    "typescript": [
+      "backend",
+      "frontend"
+    ],
+    "lint": "changed TypeScript files passed",
+    "verifiedIdentityRegression": {
+      "suites": 4,
+      "tests": 46,
+      "passed": true
+    }
+  },
+  "awsPreflight": {
+    "region": "us-east-2",
+    "productionAccess": true,
+    "sendingEnabled": true,
+    "identityVerified": true,
+    "dkimVerified": true,
+    "max24HourSend": 50000,
+    "maxSendRate": 14,
+    "emailsSentByPreflight": 0
+  },
+  "staging": {
+    "backup": "/var/backups/orbit/20261117T125307Z",
+    "roleNamespaceConflicts": 0,
+    "invalidGlobalAssignments": 0,
+    "automaticEmailPaused": false,
+    "retentionPaused": true,
+    "deployed": true,
+    "currentCommit": "513c431bc9d2d7e3dc5d3bc0a9d0d6fc734b4ece",
+    "appliedMigrations": 14,
+    "totalMigrations": 125,
+    "relationalRules": 199,
+    "relationalFindings": 0,
+    "httpsOrbit": 200,
+    "httpsNexus": 200,
+    "freshBackup": "/home/ninja/orbit-releases/ses-20261117/before/postgres-before-migrations-20261117T155717Z.dump",
+    "finalApiReady": true,
+    "finalFrontendReady": true,
+    "finalHttpsOrbit": 200,
+    "finalHttpsNexus": 200,
+    "nodeVersion": "22.23.5",
+    "pendingEmailBeforeEnable": 0,
+    "firstOwnerBindings": 2,
+    "unprovenPrimaryRegistrations": 0
+  },
+  "secretsIncluded": false,
+  "gitPush": false,
+  "sns": {
+    "signatureVersion": 2,
+    "confirmedSubscriptions": 1,
+    "pendingSubscriptions": 0,
+    "effectiveIdentityType": "EMAIL_ADDRESS",
+    "exactIdentityCheckPreserved": true
+  },
+  "realTests": {
+    "gmail": {
+      "requestedRecipient": "darlansimplicio@gmail.com",
+      "sent": 2,
+      "resent": 0,
+      "status": "ACCEPTED_BY_PROVIDER",
+      "providerMessageIds": [
+        "010f01a1ea42ae37-ff229589-666a-45f6-a5cc-b9403f337dd5-000000",
+        "010f01a1ea42afc7-5d317d63-e184-45ab-85e5-bbfcb6ded877-000000"
+      ],
+      "feedbackStatus": "UNOBSERVED",
+      "inboxOrReadConfirmed": false
+    },
+    "simulator": {
+      "success": {
+        "event": "ses_simulator",
+        "scenario": "success",
+        "providerMessageId": "010f01a1ea494d6f-318d52c4-f024-46e0-9377-454824d1e7ef-000000",
+        "status": "FEEDBACK_CONFIRMED",
+        "feedback": "DELIVERY",
+        "suppressionVerified": false
+      },
+      "bounce": {
+        "event": "ses_simulator",
+        "scenario": "bounce",
+        "providerMessageId": "010f01a1ea4b3b70-8d1883df-d5f9-487e-910a-993fbfdc08bd-000000",
+        "status": "FEEDBACK_CONFIRMED",
+        "feedback": "HARD_BOUNCE",
+        "suppressionVerified": true
+      },
+      "complaint": {
+        "event": "ses_simulator",
+        "scenario": "complaint",
+        "providerMessageId": "010f01a1ea4b48a3-98685d6e-c7b4-487f-a789-94670fb9a358-000000",
+        "status": "FEEDBACK_CONFIRMED",
+        "feedback": "COMPLAINT",
+        "suppressionVerified": true
+      }
+    }
+  },
+  "domainAuthentication": {
+    "dkimVerifiedBySES": true,
+    "spfRecordPresent": true,
+    "dmarcRecordPresent": true,
+    "dmarcPolicy": "quarantine"
+  },
+  "iam": {
+    "bootstrapPolicyAppliedByUser": true,
+    "cleanupStatus": "CONFIRMED_BY_USER_AND_READ_PERMISSION_DENIED",
+    "runtimePolicyFile": "/private/tmp/orbit-ses-staging-iam-runtime-policy.json",
+    "cleanupConfirmedByUser": true,
+    "bootstrapGetTopicAttributesResult": "AuthorizationErrorException",
+    "sesAfterCleanup": "READY"
+  }
+}

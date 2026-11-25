@@ -1,14 +1,6 @@
-/**
- * Persistência da foto de perfil.
- *
- * Duas tabelas com donos diferentes, e por isso dois caminhos de acesso:
- * `storage_files` é do inquilino e tem RLS forçada — toda leitura passa pela
- * transação com a organização declarada. `users` é global (a mesma pessoa
- * pertence a mais de uma organização) e é lida pelo cliente comum, como o
- * resto do módulo de identidade já faz.
- */
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service';
+import { withIdentity } from '../../../database/rls/identity-scope';
 import { RlsTransaction } from '../../../database/rls/rls-transaction';
 
 @Injectable()
@@ -22,7 +14,12 @@ export class AvatarRepository {
   reservedFile(organizationId: string, id: string) {
     return this.rls.run((tx) =>
       tx.storageFile.findFirst({
-        where: { id, organizationId, deletedAt: null },
+        where: {
+          id,
+          organizationId,
+          deletedAt: null,
+          metadata: { path: ['purpose'], equals: 'USER_AVATAR' },
+        },
         select: { id: true, createdById: true },
       }),
     );
@@ -38,10 +35,12 @@ export class AvatarRepository {
   }
 
   currentAvatar(userId: string) {
-    return this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { avatarStorageFileId: true },
-    });
+    return withIdentity(this.prisma, userId, (tx) =>
+      tx.user.findUnique({
+        where: { id: userId },
+        select: { avatarStorageFileId: true },
+      }),
+    );
   }
 
   /**
@@ -52,22 +51,26 @@ export class AvatarRepository {
    */
   async attach(userId: string, fileId: string): Promise<string | null> {
     const previous = await this.currentAvatar(userId);
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { avatarStorageFileId: fileId },
-      select: { id: true },
-    });
+    await withIdentity(this.prisma, userId, (tx) =>
+      tx.user.update({
+        where: { id: userId },
+        data: { avatarStorageFileId: fileId },
+        select: { id: true },
+      }),
+    );
     return previous?.avatarStorageFileId ?? null;
   }
 
   async detach(userId: string): Promise<string | null> {
     const previous = await this.currentAvatar(userId);
     if (!previous?.avatarStorageFileId) return null;
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { avatarStorageFileId: null },
-      select: { id: true },
-    });
+    await withIdentity(this.prisma, userId, (tx) =>
+      tx.user.update({
+        where: { id: userId },
+        data: { avatarStorageFileId: null },
+        select: { id: true },
+      }),
+    );
     return previous.avatarStorageFileId;
   }
 

@@ -1,16 +1,13 @@
+import { requestClientIp } from '../common/trusted-client-origin';
 import {
   CallHandler,
   type ExecutionContext,
-  HttpException,
-  HttpStatus,
   Injectable,
-  Logger,
   type NestInterceptor,
   StreamableFile,
 } from '@nestjs/common';
-import { redactSensitivePath } from '../common/redact-sensitive-path';
-import type { Request, Response } from 'express';
-import { defer, type Observable, tap, map } from 'rxjs';
+import type { Request } from 'express';
+import { Observable, map } from 'rxjs';
 import type {
   IBaseResponse,
   IAuthenticatedUser,
@@ -19,10 +16,11 @@ import type {
 } from '../contracts';
 import { RequestContext, RequestContextStorage } from '../context';
 import { generateUuidV7 } from '../utils';
+import type { VerifiedPlatformAuthority } from '../common/verified-platform-authority';
 
 interface FoundationRequest extends Request {
   id?: string;
-  user?: IAuthenticatedUser;
+  user?: IAuthenticatedUser & { platformAuthority?: VerifiedPlatformAuthority };
   requestContext?: IRequestContext;
   actorType?: IRequestContext['actorType'];
   portalIdentityId?: UUID;
@@ -30,19 +28,6 @@ interface FoundationRequest extends Request {
   organizationId?: UUID;
   businessUnitId?: UUID;
   businessUnitIds?: readonly UUID[];
-}
-
-@Injectable()
-export class RequestIdInterceptor implements NestInterceptor {
-  intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
-    const request = context.switchToHttp().getRequest<FoundationRequest>();
-    const response = context.switchToHttp().getResponse<Response>();
-    const incoming = request.header('x-request-id')?.trim();
-    request.id ??=
-      incoming && incoming.length <= 128 ? incoming : generateUuidV7();
-    response.setHeader('x-request-id', request.id);
-    return next.handle();
-  }
 }
 
 /**
@@ -70,56 +55,17 @@ export class RequestContextInterceptor implements NestInterceptor {
         request.businessUnitIds ??
         (request.businessUnitId ? [request.businessUnitId] : []),
       roles: request.user?.roles ?? [],
+      platformAuthority: request.user?.platformAuthority,
       permissions: request.user?.permissions ?? [],
       allowedSurfaces: request.user?.allowedSurfaces ?? [],
       isOrganizationOwner: request.user?.isOrganizationOwner ?? false,
-      ip: request.ip ?? null,
+      ip: requestClientIp(request),
       userAgent: request.header('user-agent') ?? null,
       locale: request.acceptsLanguages()[0] ?? 'pt-BR',
     });
     request.requestContext = context;
-    return defer(() => this.storage.run(context, () => next.handle()));
-  }
-}
-
-/** Logs request completion without serializing request bodies or credentials. */
-@Injectable()
-export class LoggingInterceptor implements NestInterceptor {
-  private readonly logger = new Logger(LoggingInterceptor.name);
-
-  intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
-    const request = context.switchToHttp().getRequest<FoundationRequest>();
-    const response = context.switchToHttp().getResponse<Response>();
-    const startedAt = performance.now();
-    return next.handle().pipe(
-      tap({
-        next: () =>
-          this.log(request, response.statusCode, performance.now() - startedAt),
-        error: (error: unknown) =>
-          this.log(
-            request,
-            error instanceof HttpException
-              ? error.getStatus()
-              : HttpStatus.INTERNAL_SERVER_ERROR,
-            performance.now() - startedAt,
-          ),
-      }),
-    );
-  }
-
-  private log(
-    request: FoundationRequest,
-    statusCode: number,
-    durationMs: number,
-  ): void {
-    this.logger.log(
-      JSON.stringify({
-        requestId: request.id,
-        method: request.method,
-        path: redactSensitivePath(request.originalUrl),
-        statusCode,
-        durationMs: Number(durationMs.toFixed(2)),
-      }),
+    return new Observable((subscriber) =>
+      this.storage.run(context, () => next.handle().subscribe(subscriber)),
     );
   }
 }

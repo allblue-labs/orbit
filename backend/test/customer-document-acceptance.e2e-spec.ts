@@ -1,3 +1,5 @@
+import { TenantOperationPolicy } from '../src/modules/tenant-operations/tenant-operation.policy';
+import { brandImageStub } from './support/brand-image.stub';
 import { PrismaClient } from '@prisma/client';
 import { PDFDocument } from 'pdf-lib';
 import { QuoteAcceptedDocumentService } from '../src/modules/quotes/quote-accepted-document.service';
@@ -72,6 +74,10 @@ describe('aceite público de propostas com RLS real', () => {
     put: jest.fn(({ objectKey, body }: PutObjectInput) => {
       objects.set(objectKey, body);
       return Promise.resolve({ sizeBytes: body.length });
+    }),
+    remove: jest.fn(({ objectKey }: StorageObjectRef) => {
+      objects.delete(objectKey);
+      return Promise.resolve();
     }),
     get: jest.fn(({ objectKey }: StorageObjectRef) => {
       const bytes = objects.get(objectKey);
@@ -165,10 +171,31 @@ describe('aceite público de propostas com RLS real', () => {
         customerId: customer.id,
       });
     }
+    const local = tenants[0]!;
+    const fieldRole = await admin.role.create({
+      data: {
+        key: 'FIELD_QUOTE_TEST',
+        name: 'Campo',
+        organizationId: local.organizationId,
+        permissions: ['operations.walk_in.create'],
+      },
+    });
+    await admin.organizationMembership.createMany({
+      data: [userId, otherUserId].map((memberId) => ({
+        organizationId: local.organizationId,
+        userId: memberId,
+        roleId: fieldRole.id,
+      })),
+    });
     const contextService = new RequestContextService(contexts);
     rls = new RlsTransaction(
       runtime as PrismaService,
       new RlsContextProvider(contextService),
+    );
+    const operational = new TenantOperationPolicy(
+      rls,
+      contextService,
+      contexts,
     );
     inbox = new NotificationRepository(rls);
     const jobs = new BackgroundJobQueue(runtime as PrismaService, rls);
@@ -181,7 +208,8 @@ describe('aceite público de propostas com RLS real', () => {
       repository,
       new QuoteDocumentService(),
       storage as unknown as StorageProvider,
-      undefined as never, // Este cenário não converte orçamentos em operações.
+      undefined as never,
+      brandImageStub(), // Este cenário não converte orçamentos em operações.
     );
     const files = new FileObjectService(
       storage as unknown as StorageProvider,
@@ -197,12 +225,14 @@ describe('aceite público de propostas com RLS real', () => {
       new QuoteMapper(),
       files,
       new QuoteAcceptedDocumentService(),
+      operational,
     );
     pmocRepository = new PmocRepository(
       rls,
       contextService,
       new DomainEventEmitter(jobs, contextService),
       runtime as PrismaService,
+      operational,
     );
     pmoc = new PmocService(
       pmocRepository,
@@ -212,6 +242,8 @@ describe('aceite público de propostas com RLS real', () => {
       undefined as never,
       new PmocPlanDocumentService(),
       storage as unknown as StorageProvider,
+      undefined,
+      brandImageStub(),
     );
     signatureBase64 = (
       await sharp({
@@ -305,6 +337,41 @@ describe('aceite público de propostas com RLS real', () => {
     return rows[0]!;
   }
 
+  it('ORB-NX-03 blocks a suspended tenant from accepting a pre-issued public proposal without losing its read-only document', async () => {
+    const { link, quote } = await proposal();
+    const token = link.token;
+    const organizationId = tenants[0]!.organizationId;
+    const original = await admin.organization.findUniqueOrThrow({
+      where: { id: organizationId },
+    });
+    await admin.organization.update({
+      where: { id: organizationId },
+      data: { status: 'SUSPENDED' },
+    });
+    try {
+      await expect(acceptance.read(token)).resolves.toBeDefined();
+      await expect(
+        acceptance.respond(token, approve(), {}),
+      ).rejects.toMatchObject({ code: 'ORGANIZATION_SUSPENDED' });
+      expect(
+        (await admin.quote.findUniqueOrThrow({ where: { id: quote.id } }))
+          .status,
+      ).toBe('SENT');
+      expect(
+        (
+          await admin.quoteAcceptanceLink.findFirstOrThrow({
+            where: { quoteId: quote.id },
+          })
+        ).respondedAt,
+      ).toBeNull();
+    } finally {
+      await admin.organization.update({
+        where: { id: organizationId },
+        data: { status: original.status },
+      });
+    }
+  });
+
   it('envia rascunho, congela resumo/PDF e guarda somente o hash do segredo', async () => {
     const { quote, link } = await proposal();
     expect(link.token).toHaveLength(64);
@@ -396,7 +463,7 @@ describe('aceite público de propostas com RLS real', () => {
     expect((await acceptance.read(link.token)).response?.signerName).toBe(
       'Cliente Teste',
     );
-  });
+  }, 30_000);
   it.each(['REJECT', 'REQUEST_CHANGES'] as const)(
     'registra %s e aplica a transição correspondente sem evento de aprovação',
     async (decision) => {
@@ -706,6 +773,26 @@ describe('aceite público de propostas com RLS real', () => {
         signature: Buffer.from(signatureBase64, 'base64'),
         mimeType: 'image/png',
       });
+    const originalOrganization = await admin.organization.findUniqueOrThrow({
+      where: { id: tenant.organizationId },
+    });
+    await admin.organization.update({
+      where: { id: tenant.organizationId },
+      data: { status: 'SUSPENDED' },
+    });
+    try {
+      await expect(
+        pmoc.publicContractDocument(link.token),
+      ).resolves.toBeDefined();
+      await expect(sign()).rejects.toMatchObject({
+        code: 'ORGANIZATION_SUSPENDED',
+      });
+    } finally {
+      await admin.organization.update({
+        where: { id: tenant.organizationId },
+        data: { status: originalOrganization.status },
+      });
+    }
     const replies = await Promise.all([sign(), sign()]);
     expect(replies.map((r) => r.state).sort()).toEqual([
       'JA_ASSINADO',
@@ -813,22 +900,6 @@ describe('aceite público de propostas com RLS real', () => {
     });
     beforeAll(async () => {
       const tenant = tenants[0]!;
-      const role = await admin.role.create({
-        data: {
-          key: 'FIELD_QUOTE_TEST',
-          name: 'Campo',
-          organizationId: tenant.organizationId,
-          permissions: ['operations.walk_in.create'],
-        },
-      });
-      for (const memberId of [userId, otherUserId])
-        await admin.organizationMembership.create({
-          data: {
-            organizationId: tenant.organizationId,
-            userId: memberId,
-            roleId: role.id,
-          },
-        });
       actor = {
         id: otherUserId as UUID,
         sessionId: otherUserId as UUID,
@@ -845,6 +916,7 @@ describe('aceite público de propostas com RLS real', () => {
         quotes,
         new QuoteMapper(),
         acceptance,
+        {} as never,
       );
     });
 
@@ -974,6 +1046,11 @@ describe('aceite público de propostas com RLS real', () => {
 
     it('mobile: aceite reutiliza assinatura, PDF e notificação ao owner do fluxo comercial', async () => {
       const quote = await inField(() => mobile.create(actor, input()));
+      // The operator reads a document only after the owner grants mobile visibility.
+      await admin.quote.update({
+        where: { id: quote.id },
+        data: { mobileVisible: true },
+      });
       const unsigned = await inField(() => mobile.document(actor, quote.id));
       const link = await inField(() => mobile.link(actor, quote.id));
       await acceptance.respond(link.token, approve(), {

@@ -72,7 +72,10 @@ const TODAS_AS_SECOES = [
  * nos favoritos de alguém cairia numa aba que não existe mais e a página abriria
  * vazia. Fora da lista, o endereço volta para a primeira seção.
  */
-const OCULTAS: readonly (typeof TODAS_AS_SECOES)[number][] = ["integracoes"];
+const OCULTAS: readonly (typeof TODAS_AS_SECOES)[number][] = [
+  "integracoes",
+  "automacoes",
+];
 
 const SECOES = TODAS_AS_SECOES.filter((secao) => !OCULTAS.includes(secao));
 
@@ -103,7 +106,9 @@ export function SettingsWorkspace() {
           <TabsTrigger value="documentos">Documentos</TabsTrigger>
           <TabsTrigger value="financeiro">Financeiro</TabsTrigger>
           <TabsTrigger value="notificacoes">Notificações</TabsTrigger>
-          <TabsTrigger value="automacoes">Automações</TabsTrigger>
+          {visivel("automacoes") ? (
+            <TabsTrigger value="automacoes">Automações</TabsTrigger>
+          ) : null}
           <TabsTrigger value="seguranca">Segurança</TabsTrigger>
           <TabsTrigger value="termos">Termos e privacidade</TabsTrigger>
           {visivel("integracoes") ? (
@@ -156,11 +161,13 @@ export function SettingsWorkspace() {
           </TabBoundary>
         </TabsContent>
 
-        <TabsContent value="automacoes">
-          <TabBoundary id="settings-automations" label="as automações">
-            <AutomationsSettingsTab />
-          </TabBoundary>
-        </TabsContent>
+        {visivel("automacoes") ? (
+          <TabsContent value="automacoes">
+            <TabBoundary id="settings-automations" label="as automações">
+              <AutomationsSettingsTab />
+            </TabBoundary>
+          </TabsContent>
+        ) : null}
 
         <TabsContent value="seguranca">
           <TabBoundary id="settings-security" label="a segurança">

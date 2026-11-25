@@ -68,7 +68,7 @@ export function StructureTree({
         <ul
           className="space-y-2"
           role="tree"
-          aria-label="Estrutura do template"
+          aria-label="Estrutura do modelo"
         >
           {root.children.map((node, index) => (
             <TreeNode

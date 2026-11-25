@@ -37,7 +37,9 @@ import {
   RendererLabel,
   resolveFormat,
 } from "@/documents";
+import { previewSandbox } from "@/documents/preview-frame";
 import { useSignedUrl } from "@/hooks/documents/use-signed-url";
+import { browserUrlFor } from "@/lib/backend-url";
 
 import { useDateFormatters } from "@/hooks/use-date-formatters";
 import type {
@@ -116,7 +118,7 @@ export function DocumentPreview({
               decide entre abrir e salvar.
             */}
             <a
-              href={signed.data.url}
+              href={browserUrlFor(signed.data.url)}
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => setOperation("download")}
@@ -129,7 +131,7 @@ export function DocumentPreview({
 
         {signed.data ? (
           <Button variant="ghost" size="sm" asChild>
-            <a href={signed.data.url} target="_blank" rel="noopener noreferrer">
+            <a href={browserUrlFor(signed.data.url)} target="_blank" rel="noopener noreferrer">
               <ExternalLink className="size-4" />
               Abrir em nova aba
             </a>
@@ -167,8 +169,9 @@ export function DocumentPreview({
       ) : signed.data ? (
         <div className="space-y-2">
           <Frame
-            url={signed.data.url}
+            url={browserUrlFor(signed.data.url)}
             viewer={format.viewer}
+            sandbox={previewSandbox(summary.format)}
             title={`Documento ${summary.revision}`}
           />
           <p className="text-xs text-muted-foreground">
@@ -194,10 +197,13 @@ function Frame({
   url,
   viewer,
   title,
+  sandbox,
 }: {
   url: string;
   viewer: "embedded" | "text" | "download-only";
   title: string;
+  /** Ver `previewSandbox`: PDF sem, o resto isolado. */
+  sandbox: string | undefined;
 }) {
   if (viewer === "download-only") {
     return (
@@ -211,7 +217,7 @@ function Frame({
     <iframe
       src={url}
       title={title}
-      sandbox=""
+      sandbox={sandbox}
       referrerPolicy="no-referrer"
       className="h-[60vh] w-full rounded-lg border border-border bg-white"
     />
@@ -251,7 +257,7 @@ function Metadata({ summary }: { summary: ArtifactManifestSummary }) {
       <Field label="Código de verificação da origem">
         <ContentHash hash={summary.sourceHash} />
       </Field>
-      <Field label="Versão do template">
+      <Field label="Versão do modelo">
         <span className="text-sm">v{summary.templateVersion}</span>
       </Field>
     </dl>

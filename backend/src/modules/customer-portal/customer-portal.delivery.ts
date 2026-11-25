@@ -7,6 +7,8 @@ import type {
 /** Safe boundary: no token is logged or returned while email is not connected. */
 @Injectable()
 export class NoopCustomerPortalTokenDelivery implements CustomerPortalTokenDelivery {
+  readonly connected = false;
+
   deliver(
     purpose: CustomerPortalTokenPurpose,
     recipient: string,

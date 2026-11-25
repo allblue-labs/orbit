@@ -205,7 +205,20 @@ class OrbitWizardState extends State<OrbitWizard> {
         ehAcao: true,
         tocar: () async {
           FocusManager.instance.primaryFocus?.unfocus();
-          await acao.onPressed();
+          /*
+           * "On success" é literal: a ação que falha não avança.
+           *
+           * Antes o roteiro seguia para a próxima etapa sempre que a ação
+           * terminava — inclusive recusada —, e a pessoa caía numa etapa travada
+           * dizendo "abra o atendimento antes", depois de ter tocado justamente
+           * em abrir. Quem declara a ação é quem mostra o erro dela; aqui só se
+           * decide não avançar.
+           */
+          try {
+            await acao.onPressed();
+          } on Object {
+            return;
+          }
           /* Avança só se ainda estamos montados e há para onde: a ação pode ter
              mudado a lista de etapas. */
           if (acao.advanceOnSuccess && mounted && proxima != null) {

@@ -211,34 +211,38 @@ void main() {
     /// bytes cheguem ao endereço reservado. Com a leitura antiga, o `PUT` saía para
     /// string vazia e a ativação mandava id vazio — e nada disso levantava erro
     /// perto de onde o erro estava.
-    test('manda os bytes para o endereço reservado e ativa aquele arquivo', () async {
-      final backend = Backend();
-      final container = containerCom(backend);
+    test(
+      'manda os bytes para o endereço reservado e ativa aquele arquivo',
+      () async {
+        final backend = Backend();
+        final container = containerCom(backend);
 
-      final ok = await container
-          .read(profileEditControllerProvider.notifier)
-          .changePhoto(
-            bytes: Uint8List.fromList(const [137, 80, 78, 71]),
-            fileName: 'avatar.png',
-            mimeType: 'image/png',
-          );
+        final ok = await container
+            .read(profileEditControllerProvider.notifier)
+            .changePhoto(
+              bytes: Uint8List.fromList(const [137, 80, 78, 71]),
+              fileName: 'avatar.png',
+              mimeType: 'image/png',
+            );
 
-      expect(ok, isTrue);
+        expect(ok, isTrue);
 
-      final put = backend.pedidos.firstWhere(
-        (pedido) => pedido.method == 'PUT' && pedido.path.contains('avatars'),
-      );
-      expect(put.path, '/avatars/storage-file-7');
+        final put = backend.pedidos.firstWhere(
+          (pedido) => pedido.method == 'PUT' && pedido.path.contains('avatars'),
+        );
+        expect(put.path, '/avatars/storage-file-7');
 
-      final ativacao = backend.pedidos.lastWhere(
-        (pedido) =>
-            pedido.method == 'PUT' && pedido.path.endsWith('/identity/me/avatar'),
-      );
-      expect(
-        (ativacao.body as Map<String, dynamic>)['storageObjectId'],
-        'storage-file-7',
-      );
-    });
+        final ativacao = backend.pedidos.lastWhere(
+          (pedido) =>
+              pedido.method == 'PUT' &&
+              pedido.path.endsWith('/identity/me/avatar'),
+        );
+        expect(
+          (ativacao.body as Map<String, dynamic>)['storageObjectId'],
+          'storage-file-7',
+        );
+      },
+    );
   });
 
   /// A foto vem por bytes, e não por um endereço guardado.
@@ -330,7 +334,7 @@ void main() {
       final corpo =
           backend.pedidos.lastWhere((p) => p.method == 'PATCH').body
               as Map<String, dynamic>;
-      expect(corpo['channels'], containsAll(['IN_APP', 'REALTIME', 'PUSH']));
+      expect(corpo['channels'], ['IN_APP', 'PUSH']);
     });
 
     test('os três tipos do app são os três que o backend empurra', () {

@@ -20,6 +20,7 @@ export const ACCEPTED_IMAGE_MIME_TYPES = [
   'image/png',
   'image/jpeg',
   'image/webp',
+  'image/heic',
 ] as const;
 
 export type AcceptedImageMimeType = (typeof ACCEPTED_IMAGE_MIME_TYPES)[number];
@@ -52,5 +53,13 @@ export function detectImageMime(body: Buffer): AcceptedImageMimeType | null {
     body.toString('ascii', 8, 12) === 'WEBP'
   )
     return 'image/webp';
+  if (
+    body.length >= 24 &&
+    body.toString('ascii', 4, 8) === 'ftyp' &&
+    ['heic', 'heix', 'hevc', 'hevx', 'mif1', 'msf1'].includes(
+      body.toString('ascii', 8, 12),
+    )
+  )
+    return 'image/heic';
   return null;
 }

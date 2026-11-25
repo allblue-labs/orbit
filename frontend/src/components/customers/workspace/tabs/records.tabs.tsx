@@ -34,6 +34,7 @@ import {
   RenderStatusBadge,
 } from "@/components/artifact-executions/execution-badges";
 import { DocumentViewer } from "@/components/documents/document-viewer";
+import { IssuedDocumentActions } from "@/documents/issued-document-actions";
 import { UserReference } from "@/components/identity/user-reference";
 import { OperationFormDialog } from "@/components/operations/operation-form.dialog";
 import { useSchedulingTimeZone } from "@/components/scheduling/use-scheduling-timezone";
@@ -126,7 +127,7 @@ export function OperationsTab({
                   <TableHead>Status</TableHead>
                   <TableHead>Responsável</TableHead>
                   <TableHead>Agendamento</TableHead>
-                  <TableHead className="w-10" />
+                  <TableHead className="w-28" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -176,14 +177,27 @@ export function OperationsTab({
                           : "—"}
                       </TableCell>
                       <TableCell>
-                        <Button variant="ghost" size="icon" asChild>
-                          <Link
-                            href={href}
-                            aria-label={`Abrir ${operation.title}`}
-                          >
-                            <ArrowRight className="size-4" />
-                          </Link>
-                        </Button>
+                        <div className="flex items-center justify-end gap-1">
+                          {/* O documento emitido (OS, RVT, PMOC) vem na
+                              própria linha: baixar ou compartilhar sem abrir
+                              a operação. Sem documento, nada aparece. */}
+                          {operation.document ? (
+                            <IssuedDocumentActions
+                              executionId={operation.document.executionId}
+                              renderStatus={operation.document.renderStatus}
+                              code={operation.document.code}
+                              title={operation.document.title}
+                            />
+                          ) : null}
+                          <Button variant="ghost" size="icon" asChild>
+                            <Link
+                              href={href}
+                              aria-label={`Abrir ${operation.title}`}
+                            >
+                              <ArrowRight className="size-4" />
+                            </Link>
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
@@ -257,7 +271,7 @@ export function ExecutionsTab({ customerId }: { customerId: string }) {
                   <TableHead>Status</TableHead>
                   <TableHead className="min-w-36">Progresso</TableHead>
                   <TableHead>Responsável</TableHead>
-                  <TableHead className="w-10" />
+                  <TableHead className="w-28" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -292,14 +306,22 @@ export function ExecutionsTab({ customerId }: { customerId: string }) {
                         <UserReference userId={execution.responsibleUserId} />
                       </TableCell>
                       <TableCell>
-                        <Button variant="ghost" size="icon" asChild>
-                          <Link
-                            href={href}
-                            aria-label={`Abrir ${execution.title}`}
-                          >
-                            <ArrowRight className="size-4" />
-                          </Link>
-                        </Button>
+                        <div className="flex items-center justify-end gap-1">
+                          <IssuedDocumentActions
+                            executionId={execution.id}
+                            renderStatus={execution.renderStatus}
+                            code={execution.code}
+                            title={execution.title}
+                          />
+                          <Button variant="ghost" size="icon" asChild>
+                            <Link
+                              href={href}
+                              aria-label={`Abrir ${execution.title}`}
+                            >
+                              <ArrowRight className="size-4" />
+                            </Link>
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
@@ -383,7 +405,7 @@ export function DocumentsTab({ customerId }: { customerId: string }) {
                   <TableHead>Execução</TableHead>
                   <TableHead>Documento</TableHead>
                   <TableHead>Atualizado</TableHead>
-                  <TableHead className="w-24" />
+                  <TableHead className="w-40" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -402,13 +424,21 @@ export function DocumentsTab({ customerId }: { customerId: string }) {
                       {formatDateTime(execution.updatedAt)}
                     </TableCell>
                     <TableCell>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSelected(execution.id)}
-                      >
-                        Abrir
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <IssuedDocumentActions
+                          executionId={execution.id}
+                          renderStatus={execution.renderStatus}
+                          code={execution.code}
+                          title={execution.title}
+                        />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelected(execution.id)}
+                        >
+                          Abrir
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

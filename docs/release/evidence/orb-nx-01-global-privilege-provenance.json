@@ -1,0 +1,134 @@
+{
+  "pr": "ORB-NX-01",
+  "finding": "NX-A01",
+  "date": "2026-11-14",
+  "verdict": "TECHNICALLY_COMPLETE_LOCAL_SECURITY_GATE",
+  "git": {
+    "branch": "feat/features-and-backlogs",
+    "baseHead": "3a13b34f48fc271241898534186e95b8dae037f7",
+    "finalHead": "3a13b34f48fc271241898534186e95b8dae037f7",
+    "initialUntracked": "six PR-00.C reports only",
+    "commitPerformed": false,
+    "pushPerformed": false,
+    "deployPerformed": false,
+    "snapshotStage": "Implementation completed before user-authorized checkpoint commits"
+  },
+  "scope": {
+    "productionOperations": false,
+    "providerCalls": false,
+    "nexusImplementation": false,
+    "billingOrSuspensionChanges": false,
+    "publicContractChanges": false,
+    "auditReportsPreserved": {
+      "docs/integrations/nexus/orbit-v2-admin-capabilities.md": "897abdb778b4aac383f01bd94d3f7249dede4a51d4321a69dd9776de9b55486e",
+      "docs/integrations/nexus/orbit-v2-current-state-audit.md": "10245b8d522e5603078ff006ec2f5915afd0190ee2f1c9e1fe5e49aff28517f3",
+      "docs/integrations/nexus/orbit-v2-integration-gap-analysis.md": "6a7af5f81331ccde11a3a48eacb1f0693fbaeb2e3fa9dae527e9e8a616969894",
+      "docs/integrations/nexus/orbit-v2-integration-roadmap.md": "2e68068ffc639a11e035abb930414866ae18a6b4754964d5cf78911e1e14ad29",
+      "docs/integrations/nexus/orbit-v2-nexus-integration-contracts.md": "6b502be698c1b7173ba974526107577212103bc5a4ff76ada8e0ddf504b7d245",
+      "docs/integrations/nexus/orbit-v2-stripe-and-billing-audit.md": "b5f497e135e0a19bcdc1a1b132b5021990c43f0d0c8a562224b385b1777ef4d1"
+    }
+  },
+  "tests": {
+    "unit": {
+      "command": "npm test -- --runInBand --watchman=false --testPathPatterns='verified-platform-authority|role-namespace|authorization.service|foundation.guards|jwt-authentication.guard|authentication-concurrency|login-refusal|surface-access|organization.service|request-context|identity.repository'",
+      "suitesPassed": 11,
+      "testsPassed": 60,
+      "durationSeconds": 11.126
+    },
+    "httpPostgres": {
+      "command": "node scripts/verify-integrations.mjs backend --testPathPatterns='global-privilege-provenance|identity-concurrency|rls.e2e'",
+      "suitesPassed": 3,
+      "testsPassed": 43,
+      "newSecurityCases": 12,
+      "durationSeconds": 82.022,
+      "postgresImage": "postgres:17.11-alpine3.24",
+      "runtimeRole": "orbit_app",
+      "runtimeSuperuser": false,
+      "runtimeBypassRls": false,
+      "forceRlsAsserted": [
+        "organizations",
+        "business_units",
+        "roles",
+        "platform_role_assignments"
+      ],
+      "database": "new disposable database; no host DATABASE_URL target",
+      "adminConnectionUsage": "fixtures, read-only conflict inspection and integrity negative cases only; HTTP and unfiltered RLS proofs use restricted runtime"
+    },
+    "checks": {
+      "typecheck": "PASS",
+      "backendBuild": "PASS",
+      "eslintChangedTypescriptFiles": "PASS",
+      "contractsGuard": "PASS",
+      "publicErrorContractGuard": "PASS",
+      "gitDiffCheck": "PASS"
+    }
+  },
+  "migration": {
+    "name": "20261114195000_orbnx01_role_authority_namespace",
+    "appliedOnlyToDisposableDatabases": true,
+    "legacyDataRewritten": false,
+    "preflight": "backend/scripts/audit-role-namespace.sql",
+    "preflightValidatedAgainstLegacyFixture": true,
+    "productionConflictInventory": "NOT_EXECUTED"
+  },
+  "securityEvidence": [
+    "tenant reserved roles rejected by API and restricted SQL",
+    "legacy collision retained without global authority before/after login, refresh and MOBILE",
+    "stale signed JWT role claims cannot grant privilege",
+    "global assignment grants access even on a token issued earlier",
+    "revocation denies global endpoints on existing sessions",
+    "tenant A/A1 cannot read tenant B/B1 or unit A2 through unfiltered SQL in HTTP context",
+    "legitimate global administrator can create/update plans and query platform administration",
+    "global-only administrator supported and session revoked after grant loss",
+    "structural owner retains tenant administration without platform authority",
+    "cloned proof and proof for another user rejected",
+    "tenant cannot create global role or assignment via restricted SQL",
+    "assigned global role cannot become a tenant role"
+  ],
+  "limitations": [
+    "Node local 25.1.0; Node 22 release/CI qualification not repeated",
+    "No production data inventory or deployment",
+    "No complete product suite or web/mobile native builds repeated",
+    "Existing pg concurrency deprecation warning remains",
+    "Revocation checked at request boundary; no retroactive interruption of in-flight transaction",
+    "Other audit findings and production release gates remain outside scope"
+  ],
+  "backendFileSha256": {
+    "backend/prisma/migrations/20261114195000_orbnx01_role_authority_namespace/migration.sql": "e32a5d11b0c2a646c6dbe24aa652f5f514b3a59bfa77c3b12f4063f81a8253a3",
+    "backend/prisma/schema.prisma": "4ce090a11ebc21fa7f9c8fb905134cd78533ab3713be7ed2a116081ace379ee8",
+    "backend/scripts/audit-role-namespace.sql": "a0432cc0589b2fd50244e12f3543f135fc6c345b882e081ce4e7e816ef4de060",
+    "backend/src/common/authorization.service.ts": "389b6ee4a1e155cbc9a2c5b1e6b4a1fbee1d31a6735b8d30c0dbc1320339b574",
+    "backend/src/common/role-namespace.spec.ts": "03defa73061528f97e4c8e58cb7b04ebe4c3eb4ff067f78afd7bbf8c112230f5",
+    "backend/src/common/role-namespace.ts": "b1004e451ebc4cae6c7b0891e0d4c2249388e39b6b189a2ec4ebf97bf1f5bc1f",
+    "backend/src/common/verified-platform-authority.spec.ts": "1b12d9decd7747e974c7190b7ae504f318f6b8db5dee95b8974a25f0705d4cc6",
+    "backend/src/common/verified-platform-authority.ts": "20870f1e7f89666978cb5786f72ef1f50c36c729c0a43c2d10e7f3a64134b971",
+    "backend/src/context/request-context.ts": "9c0087edb59377ff6cc791999e77c86fe7fdbee2e994727666c9410cac33b073",
+    "backend/src/database/rls/rls-context.provider.ts": "5516fcaccc2cafbde73765c2f5cc26c0997d614c48aaed1081a9dc7077061ec5",
+    "backend/src/interceptors/foundation.interceptors.ts": "bd37bf895bfb31befee01d8814642377a71786f8cae66cad918b163779daf508",
+    "backend/src/modules/identity/application/authentication.service.ts": "5cf5bfae55b1b85b0f73341927dca2fadf4412ad9f3ee5c6b24ee6ba052e99d6",
+    "backend/src/modules/identity/domain/identity.types.ts": "682430a99307faaa3f8780ae3aec27a990df80a0677f82ba502485efe6f5b04d",
+    "backend/src/modules/identity/domain/surface-access.spec.ts": "4312d1938f3a961abf6624964065a4864a09aefa3210dab703554ea215799d4a",
+    "backend/src/modules/identity/domain/surface-access.ts": "1a16a1bbbe2c3231777f2dc5f0c187fc4030e08adde79dfbf4392be82f81fabd",
+    "backend/src/modules/identity/infrastructure/identity.repository.ts": "2c8a8c40b927bb8317712411d4d9ccf8bd80443547884649f0843af377de7d08",
+    "backend/src/modules/identity/infrastructure/jwt-authentication.guard.spec.ts": "7aafcf049f06e66e8d99afbe8d6e279117acb38b93ee614f6c3aaa25f6b44400",
+    "backend/src/modules/identity/infrastructure/jwt-authentication.guard.ts": "0649b03a15fc5e0d8b448e8331080810a076a1abd06b00ae084b39137b101121",
+    "backend/src/modules/organizations/organization.service.ts": "2ed28f7d2c67a4ac00267d793f721dfaf86d2c5674bf6642d5db6a5a3428e236",
+    "backend/src/modules/subscription-plans/subscription-plan.controller.ts": "f8498e965933e61ae72187c392148798927ae5a13a529290108f7d91d49e6e27",
+    "backend/test/global-privilege-provenance.e2e-spec.ts": "85df63b66be0369ed1cca396d14b09d0333a0423d4cdd5c8819f3ed8a554e7b1"
+  },
+  "checkpointRegistration": {
+    "authorizedByUser": true,
+    "auditCheckpoint": {
+      "commit": "7e8fec077fd9fbbb1f80f31ed1ebe7a6137b6e77",
+      "scope": "PR-00.C: six audit reports only"
+    },
+    "implementationCheckpoint": {
+      "reference": "the commit containing this registration",
+      "scope": "ORB-NX-01: implementation, migration, read-only preflight, tests and evidence"
+    },
+    "pushPerformed": false,
+    "mergePerformed": false,
+    "deployPerformed": false,
+    "validation": "Implementation source hashes match the previously tested files; no application changes during checkpoint registration"
+  }
+}

@@ -6,6 +6,7 @@
 ///
 /// O cenário é montado **pelas APIs do produto** — nenhuma escrita direta no
 /// banco. Sem API no ar, cada teste é pulado com motivo.
+@Tags(['integration'])
 library;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -98,6 +99,9 @@ void main() {
     if (action != FieldOperationAllowedAction.start &&
         action != FieldOperationAllowedAction.resume &&
         action != FieldOperationAllowedAction.complete) {
+      if (const bool.fromEnvironment('ORBIT_REQUIRE_API')) {
+        fail('atendimento sem comando de estado disponível');
+      }
       markTestSkipped('atendimento sem comando de estado disponível');
       return;
     }
@@ -125,6 +129,9 @@ void main() {
     if (!preparation.allowedActions.contains(
       FieldOperationAllowedAction.addNote,
     )) {
+      if (const bool.fromEnvironment('ORBIT_REQUIRE_API')) {
+        fail('atendimento não aceita observação agora');
+      }
       markTestSkipped('atendimento não aceita observação agora');
       return;
     }

@@ -19,7 +19,8 @@ const globalWidgets: DashboardWidgetDefinition[] = [
   {
     id: 'operations-comparative-radar',
     title: 'Radar comparativo',
-    description: 'Indicadores operacionais do mês atual contra o mês anterior.',
+    description:
+      'Prazo, conclusão, equipe, agenda, PMOC e RVT: este mês contra o mesmo trecho do mês anterior.',
     category: 'OPERATIONS',
     order: 5,
     size: 'MEDIUM',
@@ -116,7 +117,8 @@ const globalWidgets: DashboardWidgetDefinition[] = [
   {
     id: 'financial-health',
     title: 'Saúde Financeira',
-    description: 'Saldo, receitas, despesas, previsto e evolução mensal.',
+    description:
+      'Recebido, pago e saldo em 7 dias, 15 dias, no mês ou em 12 meses — com o que falta receber e pagar.',
     category: 'EXECUTIVE',
     order: 25,
     size: 'LARGE',
@@ -129,9 +131,9 @@ const globalWidgets: DashboardWidgetDefinition[] = [
   },
   {
     id: 'health-score',
-    title: 'Índice de Saúde',
+    title: 'Saúde da operação',
     description:
-      'Prazos, agenda, equipe e regularidade das manutenções; somente dimensões com dados.',
+      'Por categoria: a fila em aberto, o volume do mês contra o anterior, prazos e manutenções contratuais.',
     category: 'EXECUTIVE',
     order: 30,
     size: 'MEDIUM',
@@ -172,8 +174,9 @@ const globalWidgets: DashboardWidgetDefinition[] = [
   },
   {
     id: 'recent-activity',
-    title: 'Atividades Recentes',
-    description: 'Linha do tempo recente da organização.',
+    title: 'Atividades recentes',
+    description:
+      'Atendimentos, chamados de clientes, orçamentos decididos e manutenções concluídas.',
     category: 'ACTIVITY',
     order: 60,
     size: 'MEDIUM',
@@ -186,8 +189,9 @@ const globalWidgets: DashboardWidgetDefinition[] = [
   },
   {
     id: 'upcoming-events',
-    title: 'Próximos Eventos',
-    description: 'Agenda consolidada de compromissos e vencimentos.',
+    title: 'Próximos compromissos',
+    description:
+      'Atendimentos agendados, visitas de RVT e vencimentos de PMOC dos próximos 14 dias.',
     category: 'EVENTS',
     order: 70,
     size: 'MEDIUM',

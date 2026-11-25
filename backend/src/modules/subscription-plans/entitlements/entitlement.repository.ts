@@ -25,6 +25,7 @@ export interface PlanRow {
   planKey: string;
   planName: string;
   limits: Prisma.JsonValue;
+  commercial?: Prisma.JsonValue;
   /** A âncora da janela mensal. A PR-PL-02 a substituirá pela assinatura. */
   anchor: Date;
 }
@@ -71,7 +72,9 @@ export class EntitlementRepository {
           createdAt: true,
           subscriptionStartedAt: true,
           currentPeriodStart: true,
-          plan: { select: { key: true, name: true, limits: true } },
+          plan: {
+            select: { key: true, name: true, limits: true, commercial: true },
+          },
         },
       });
       if (!organization) return null;
@@ -79,6 +82,7 @@ export class EntitlementRepository {
         planKey: organization.plan.key,
         planName: organization.plan.name,
         limits: organization.plan.limits,
+        commercial: organization.plan.commercial,
         anchor:
           organization.subscriptionStartedAt ??
           organization.currentPeriodStart ??

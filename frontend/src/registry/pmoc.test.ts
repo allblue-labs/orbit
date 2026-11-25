@@ -195,3 +195,32 @@ describe("apresentação do ciclo de vida", () => {
     expect(description).not.toMatch(/notifica|e-mail|agenda/i);
   });
 });
+
+/**
+ * A situação do equipamento no ciclo, inclusive antes da execução.
+ *
+ * `NOT_STARTED` não é estado de execução, e por isso o mapa de execução não o
+ * conhecia. A tela desenhava esse único estado como texto cinza solto, enquanto
+ * os outros viravam selo — e o equipamento que **falta** atender era o que menos
+ * chamava atenção na lista.
+ */
+describe("equipamento no ciclo", () => {
+  it("o que ainda não foi executado tem selo, e não cai no padrão", async () => {
+    const { cycleEquipmentStatus } = await import("./pmoc");
+    const naoIniciado = cycleEquipmentStatus("NOT_STARTED");
+
+    expect(naoIniciado.label).toBe("A executar");
+    /* Chama atenção: é o que falta fazer. */
+    expect(naoIniciado.tone).toBe("warning");
+  });
+
+  it("os estados de execução continuam com o mesmo rótulo", async () => {
+    const { cycleEquipmentStatus } = await import("./pmoc");
+
+    for (const status of ["IN_PROGRESS", "COMPLETED", "CANCELLED"] as const) {
+      expect(cycleEquipmentStatus(status)).toEqual(
+        EQUIPMENT_EXECUTION_STATUS[status],
+      );
+    }
+  });
+});

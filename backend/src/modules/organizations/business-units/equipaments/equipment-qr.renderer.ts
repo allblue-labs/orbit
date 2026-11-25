@@ -1,3 +1,7 @@
+import {
+  renderPdfInThread,
+  shouldOffloadPdf,
+} from '../../../../runtime/pdf-thread';
 import { Injectable } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
 import QRCode from 'qrcode';
@@ -37,6 +41,8 @@ export class EquipmentQrRenderer {
     input: EquipmentQrLabelInput,
     format: 'svg' | 'png' | 'pdf',
   ): Promise<EquipmentQrRenderedLabel> {
+    if (format === 'pdf' && shouldOffloadPdf())
+      return renderPdfInThread('equipment', input, format);
     const svg = await this.svg(input);
     if (format === 'svg')
       return {

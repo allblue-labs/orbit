@@ -1,0 +1,115 @@
+{
+  "pr": "PR-19",
+  "date": "2026-11-18",
+  "decision": "PRODUCTION_BLOCKED",
+  "applicationCommit": "ba5e4077b652b5e77a0ed7efdc2093a22bbc2b1b",
+  "recoveryToolCommit": "262aec5abffae7450f40e19aaee8a095c03ddb44",
+  "fixtureFixCommit": "ecb8287659e41dd93f26fea792186f73499a5ecd",
+  "staging": {
+    "revision": "e133b24a2f8fd4412f65d85def1e6875a360a66f",
+    "httpsLoginStatus": 200,
+    "tlsVerified": true,
+    "protectedApiWithoutSession": 401,
+    "migrationsApplied": 126,
+    "runtimeSuperuser": false,
+    "runtimeBypassRls": false,
+    "backupLastResult": "success",
+    "backupTimerActive": true,
+    "localServicesBoundToLoopback": ["api", "frontend", "dockge"],
+    "sesRegion": "us-east-2",
+    "sesPreflight": "READY",
+    "sesFeedbackEnabled": true,
+    "firebaseConfigured": true,
+    "androidPhysicalPushVerified": false,
+    "iosPhysicalPushVerified": false,
+    "cdnPurgeConfigured": false,
+    "automaticRetentionEnabled": false,
+    "storeLinksArePlaceholders": true
+  },
+  "recovery": {
+    "provider": "LOCAL",
+    "postgresMigrations": 127,
+    "backupBytes": 1251958,
+    "elapsedMs": 50668,
+    "pdfSha256Verified": true,
+    "crossTenantAccessDenied": true,
+    "activeRevisions": 1,
+    "sourceRollbackVerified": true,
+    "schemaRolledBack": false,
+    "imageRollbackVerified": false,
+    "liveR2RestoreVerified": false
+  },
+  "load": {
+    "analyticsOperations": 112000,
+    "analyticsDataQueries": 5,
+    "legacyOperationRows": 12000,
+    "legacyOperationResultBytes": 2952001,
+    "aggregatedResultBytes": 958,
+    "pmocPreviewSamples": 20,
+    "pmocPreviewP95Ms": 254.44,
+    "pmocPreviewQueries": 3
+  },
+  "artifacts": {
+    "android": {
+      "applicationId": "com.allbluelabs.orbit",
+      "version": "0.1.0",
+      "versionCode": 1,
+      "apiUrl": "https://orbit.allblue-labs.com/api/v1",
+      "flavor": "production",
+      "firebaseProjectMatches": true,
+      "format": "aab",
+      "bytes": 70969737,
+      "sha256": "ebc30dfe4d86133832d94f855f9ec1c7f6398d058acb817687a7f6a3eb5e958a",
+      "uploadSignatureVerified": true
+    },
+    "ios": {
+      "bundleId": "com.allbluelabs.orbit",
+      "version": "0.1.0",
+      "buildNumber": 1,
+      "firebaseProjectMatches": true,
+      "unsignedReleaseBuild": "PASS",
+      "validLocalDistributionIdentities": 0,
+      "distributionSigned": false
+    },
+    "oci": {
+      "requestedPlatform": "linux/amd64",
+      "export": "BLOCKED",
+      "dockerVmDiskPercentUsed": 100
+    },
+    "npmSbom": {
+      "format": "CycloneDX",
+      "backendComponents": 209,
+      "backendSha256": "9781b78d83b4bda9553c6f914198b4571d6b2b71f4fcc34f3c4868e7092c49e7",
+      "frontendComponents": 151,
+      "frontendSha256": "10125ac81687660214e822c35e12eae4970eb46258cd88fd254af050472b7610"
+    }
+  },
+  "advisories": {
+    "backendProduction": 0,
+    "frontendProduction": 0,
+    "backendDevGraph": { "high": 43, "moderate": 9 },
+    "frontendDevGraph": { "high": 11, "moderate": 6 },
+    "blockingAdvisory": "GHSA-fc5q-39xc-vjpf",
+    "latestPicomatch": "4.0.7",
+    "patchAvailable": false
+  },
+  "tests": {
+    "backendUnitPassed": 2324,
+    "frontendUnitPassed": 704,
+    "flutterPassed": 1281,
+    "flutterSkipped": 1,
+    "flutterLiveApiSmokePassed": 60,
+    "flutterPinnedVersion": "3.47.2",
+    "firebaseConfigPassed": 15,
+    "accountMediaBrowserRecheckPassed": 7,
+    "unitQrRecheckPassed": 6,
+    "storageUploadRecheckPassed": 4,
+    "relationalIntegrityRecheckPassed": 10,
+    "mobileFieldArtifactsRecheckPassed": 2,
+    "pmocConcurrentStartRecheckPassed": true,
+    "globalBackendSuitesPassedBeforeInterruption": 33,
+    "globalBackendSuitesFailedBeforeInterruption": 3,
+    "globalBackend": "INTERRUPTED_WITH_FAILURES",
+    "globalWeb": "INTERRUPTED_WITH_FAILURES"
+  }
+}

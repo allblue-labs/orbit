@@ -48,3 +48,9 @@ export interface IdentityDeviceSessionReadModel {
   revokedAt: string | null;
   createdAt: string;
 }
+
+/** Public signup persists a pending account; no authentication capability is issued. */
+export interface IdentityRegistrationReadModel {
+  status: 'EMAIL_VERIFICATION_REQUIRED';
+  email: string;
+}

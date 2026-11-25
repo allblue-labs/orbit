@@ -18,6 +18,7 @@ export const OPERATIONS_SECTIONS = {
   overview: "atendimentos",
   pmoc: "pmoc",
   rvt: "rvt",
+  sales: "vendas",
   authorization: "autorizacao",
 } as const;
 

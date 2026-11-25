@@ -24,9 +24,10 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { Injectable } from '@nestjs/common';
 import type { ITransactionManager } from '../../contracts';
+import { InfrastructureException } from '../../exceptions';
 import { PrismaService } from '../prisma.service';
 import type { PrismaTransactionClient } from '../prisma.types';
-import { RlsContextProvider } from './rls-context.provider';
+import { RlsContextProvider, type RlsContext } from './rls-context.provider';
 
 /** A ordem importa: casa com os parâmetros posicionais de `APPLY_CONTEXT`. */
 const CONTEXT_KEYS = [
@@ -58,8 +59,10 @@ export class RlsTransaction implements ITransactionManager<PrismaTransactionClie
    * parâmetro. Um teto verificado numa transação e aplicado noutra não é teto:
    * entre as duas cabe uma requisição concorrente.
    */
-  private static readonly ambient =
-    new AsyncLocalStorage<PrismaTransactionClient>();
+  private static readonly ambient = new AsyncLocalStorage<{
+    transaction: PrismaTransactionClient;
+    scope: string;
+  }>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -69,10 +72,11 @@ export class RlsTransaction implements ITransactionManager<PrismaTransactionClie
   run<T>(
     work: (transaction: PrismaTransactionClient) => Promise<T>,
   ): Promise<T> {
-    const emCurso = RlsTransaction.ambient.getStore();
-    if (emCurso) return work(emCurso);
+    const context = this.contextProvider.get();
+    const ambient = this.current(context);
+    if (ambient) return work(ambient);
     return this.prisma.$transaction(async (transaction) => {
-      await this.applyContext(transaction);
+      await this.applyContext(transaction, context);
       return work(transaction);
     });
   }
@@ -92,12 +96,16 @@ export class RlsTransaction implements ITransactionManager<PrismaTransactionClie
     work: (transaction: PrismaTransactionClient) => Promise<T>,
     options?: { timeout?: number; maxWait?: number },
   ): Promise<T> {
-    const emCurso = RlsTransaction.ambient.getStore();
-    if (emCurso) return work(emCurso);
+    const context = this.contextProvider.get();
+    const ambient = this.current(context);
+    if (ambient) return work(ambient);
     return this.prisma.$transaction(
       async (transaction) => {
-        await this.applyContext(transaction);
-        return RlsTransaction.ambient.run(transaction, () => work(transaction));
+        await this.applyContext(transaction, context);
+        return RlsTransaction.ambient.run(
+          { transaction, scope: JSON.stringify(context) },
+          () => work(transaction),
+        );
       },
       {
         timeout: options?.timeout ?? 15_000,
@@ -106,10 +114,20 @@ export class RlsTransaction implements ITransactionManager<PrismaTransactionClie
     );
   }
 
+  private current(context: RlsContext): PrismaTransactionClient | undefined {
+    const ambient = RlsTransaction.ambient.getStore();
+    if (ambient && ambient.scope !== JSON.stringify(context)) {
+      throw new InfrastructureException(
+        'An open transaction cannot change its RLS context',
+      );
+    }
+    return ambient?.transaction;
+  }
+
   private async applyContext(
     transaction: PrismaTransactionClient,
+    context: RlsContext,
   ): Promise<void> {
-    const context = this.contextProvider.get();
     await transaction.$queryRawUnsafe(
       APPLY_CONTEXT,
       context.actorType,

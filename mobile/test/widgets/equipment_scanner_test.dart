@@ -253,6 +253,11 @@ void main() {
       expect(find.text('Reparo anterior'), findsOneWidget);
       expect(requests.last.queryParameters['page'], 2);
       await reveal(tester, find.text('Ler outra etiqueta'));
+      final scanAgain = find.widgetWithText(
+        OutlinedButton,
+        'Ler outra etiqueta',
+      );
+      expect(tester.getSize(scanAgain).height, greaterThanOrEqualTo(48));
       await tester.tap(find.text('Ler outra etiqueta'));
       await tester.pumpAndSettle();
       expect(find.byType(MobileScanner), findsOneWidget);

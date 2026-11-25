@@ -97,6 +97,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.7"
+  cryptography:
+    dependency: "direct main"
+    description:
+      name: cryptography
+      sha256: "3eda3029d34ec9095a27a198ac9785630fe525c0eb6a49f3d575272f8e792ef0"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.9.0"
   dbus:
     dependency: transitive
     description:
@@ -449,10 +457,10 @@ packages:
     dependency: transitive
     description:
       name: jni
-      sha256: f038e58b4dc2c9037f50e233175086337e0b305e356d28211bf55f21c504cbd3
+      sha256: "19764f78f6b9e0d40f6395b04649d1046eb57f5ccf05afce50cc63e5a82777b0"
       url: "https://pub.dev"
     source: hosted
-    version: "1.0.3"
+    version: "1.2.1"
   jni_flutter:
     dependency: transitive
     description:
@@ -509,6 +517,46 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "5.1.1"
+  local_auth:
+    dependency: "direct main"
+    description:
+      name: local_auth
+      sha256: ecf24edf2283c509ecd217e3595f6f71034b68888d28ad1dae6bfa0857b816ac
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.0.2"
+  local_auth_android:
+    dependency: transitive
+    description:
+      name: local_auth_android
+      sha256: e2ceb84cdecefe1bc0ddd4ac308b0f6525bbfa0a60d0e552082b2970e1fb38c2
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.3.0"
+  local_auth_darwin:
+    dependency: transitive
+    description:
+      name: local_auth_darwin
+      sha256: "45a9db01b57082bc9d6115cb25eb8fc0b72f43e5f330819bdd8352ecdae87589"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.5"
+  local_auth_platform_interface:
+    dependency: transitive
+    description:
+      name: local_auth_platform_interface
+      sha256: f98b8e388588583d3f781f6806e4f4c9f9e189d898d27f0c249b93a1973dd122
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.1.0"
+  local_auth_windows:
+    dependency: transitive
+    description:
+      name: local_auth_windows
+      sha256: d72b8a441e5e6a679902f87c51529fcce65f442d77598484cf35454c3d733eda
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.2"
   logging:
     dependency: transitive
     description:
@@ -717,6 +765,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.6.1"
+  sentry:
+    dependency: transitive
+    description:
+      name: sentry
+      sha256: "2e81b9ec260e4ef7174feb0a599f69e74f3f38d713058df9576a86856afa84bf"
+      url: "https://pub.dev"
+    source: hosted
+    version: "10.6.0"
+  sentry_flutter:
+    dependency: "direct main"
+    description:
+      name: sentry_flutter
+      sha256: "6bc012fec2357471cb4a8370e32cf4ffb4d63684c6df66c2df09cee314cf4ce4"
+      url: "https://pub.dev"
+    source: hosted
+    version: "10.6.0"
   share_plus:
     dependency: "direct main"
     description:

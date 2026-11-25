@@ -1,3 +1,6 @@
+import { adminPrisma } from './support/admin-prisma';
+import { paidSubscriptionFixture } from './support/paid-subscription-fixture';
+import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
  * E2E do documento oficial.
@@ -88,23 +91,22 @@ describe('Artifact Manifest (e2e)', () => {
     /** Nome único: o slug da organização é único e o teste pode rodar de novo. */
     const suffix = randomUUID().slice(0, 8);
     const email = `manifest.e2e.${suffix}@orbit.local`;
-    const registration = await http()
-      .post('/api/v1/identity/register')
-      .send({
-        ...REGISTRATION_LEGAL_ACCEPTANCE,
-        email,
-        firstName: 'Manifest',
-        lastName: 'E2E',
-        password: 'Orbit#Manifest@2026',
-        organizationName: `Manifest E2E ${suffix}`,
-        legalName: `Manifest E2E ${suffix} LTDA`,
-        documentType: 'CNPJ',
-        documentNumber: cnpj(),
-        city: 'Recife',
-        street: 'Rua da Aurora',
-        stateCode: 'PE',
-      })
-      .expect(201);
+    const registration = await registerVerifiedOwner(app, {
+      ...REGISTRATION_LEGAL_ACCEPTANCE,
+      email,
+      firstName: 'Manifest',
+      lastName: 'E2E',
+      password: 'Orbit#Manifest@2026',
+      organizationName: `Manifest E2E ${suffix}`,
+      legalName: `Manifest E2E ${suffix} LTDA`,
+      documentType: 'CNPJ',
+      documentNumber: cnpj(),
+      city: 'Recife',
+      street: 'Rua da Aurora',
+      stateCode: 'PE',
+      planKey: 'ENTERPRISE_UNLIMITED',
+    });
+    await paidSubscriptionFixture(app, adminPrisma(), email);
 
     token = (registration.body as { data: { accessToken: string } }).data
       .accessToken;
@@ -291,6 +293,38 @@ describe('Artifact Manifest (e2e)', () => {
     );
   });
 
+  it('a pré-visualização chega como PDF, e o download continua binário', async () => {
+    /* Sem isto o navegador recusava exibir o PDF no visualizador
+       (`octet-stream` com `nosniff`) e a tela mostrava uma página quebrada. */
+    const preview = await auth(
+      http().get(
+        `/api/v1/artifact-manifests/${manifestId}/download?operation=preview`,
+      ),
+    ).expect(200);
+    const previewUrl = new URL(
+      (preview.body as { data: { url: string } }).data.url,
+    );
+    const inline = await http()
+      .get(`${previewUrl.pathname}${previewUrl.search}`)
+      .expect(200);
+    expect(inline.headers['content-type']).toContain('application/pdf');
+    expect(inline.headers['content-disposition']).toBe('inline');
+    expect(inline.headers['x-content-type-options']).toBe('nosniff');
+
+    const download = await auth(
+      http().get(`/api/v1/artifact-manifests/${manifestId}/download`),
+    ).expect(200);
+    const downloadUrl = new URL(
+      (download.body as { data: { url: string } }).data.url,
+    );
+    const binario = await http()
+      .get(`${downloadUrl.pathname}${downloadUrl.search}`)
+      .expect(200);
+    expect(binario.headers['content-type']).toContain(
+      'application/octet-stream',
+    );
+  });
+
   it('recusa acesso ao objeto sem assinatura válida', async () => {
     const response = await auth(
       http().get(`/api/v1/artifact-manifests/${manifestId}/download`),
@@ -318,7 +352,7 @@ describe('Artifact Manifest (e2e)', () => {
       .send({
         fileName: 'relatorio-v2.pdf',
         mimeType: 'application/pdf',
-        sizeBytes: 32,
+        sizeBytes: Buffer.byteLength('%PDF-1.7 revisao dois'),
       })
       .expect(201);
     const reserved = (
@@ -329,7 +363,8 @@ describe('Artifact Manifest (e2e)', () => {
     await http()
       .put(`${upload.pathname}${upload.search}`)
       .set('content-type', 'application/pdf')
-      .send(Buffer.from('%PDF-1.7 revisao dois'));
+      .send(Buffer.from('%PDF-1.7 revisao dois'))
+      .expect(200);
 
     await auth(http().post(`/api/v1/artifact-manifests/${second.id}/issue`))
       .send({ fileId: reserved.fileId })

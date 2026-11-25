@@ -215,6 +215,7 @@ export const SUGGESTED_EVENT_TYPES = [
 export interface SchedulingEventQuery {
   from: string;
   to: string;
+  remindersOnly?: "true" | "false";
   calendarId?: string;
   businessUnitId?: string;
   userId?: string;

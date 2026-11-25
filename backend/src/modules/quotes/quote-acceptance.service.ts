@@ -1,3 +1,5 @@
+import type { DocumentExportService } from '../document-exports/document-export.service';
+import { TenantOperationPolicy } from '../tenant-operations/tenant-operation.policy';
 import { Injectable } from '@nestjs/common';
 import { Prisma, type QuoteAcceptanceLink } from '@prisma/client';
 import { randomBytes } from 'node:crypto';
@@ -42,6 +44,7 @@ export class QuoteAcceptanceService {
     private readonly mapper: QuoteMapper,
     private readonly files: FileObjectService,
     private readonly acceptedDocuments: QuoteAcceptedDocumentService,
+    private readonly operational: TenantOperationPolicy,
   ) {}
 
   async create(id: string, organizationId: string, actorId: string) {
@@ -188,6 +191,17 @@ export class QuoteAcceptanceService {
   }
 
   document(token: string) {
+    return this.scoped(token, (tx, context) => this.buildDocument(tx, context));
+  }
+
+  /**
+   * Pede a exportação assíncrona do documento do link (202).
+   *
+   * O token abre o contexto do tenant (`scoped`), como na rota síncrona; a
+   * exportação é gravada e enfileirada na transação desse contexto — sob o
+   * RLS forçado de `document_exports`, nunca fora dele.
+   */
+  requestDocumentExport(token: string, exports: DocumentExportService) {
     return this.scoped(token, async (tx, context) => {
       const link = await this.link(tx, context);
       const view = await this.view(link, tx);
@@ -195,53 +209,112 @@ export class QuoteAcceptanceService {
         throw new ConflictException(
           'Este link não permite baixar a proposta. Peça um link atualizado.',
         );
-      const file = await tx.storageFile.findFirstOrThrow({
-        where: {
-          id: link.documentFileId,
-          organizationId: link.organizationId,
-          status: 'AVAILABLE',
+      return exports.request(
+        {
+          kind: 'QUOTE_ACCEPTED',
+          entityId: context.quote_id,
+          businessUnitId: context.business_unit_id,
+          acceptanceLinkId: context.link_id,
+        },
+        tx,
+      );
+    });
+  }
+
+  /** Situação da exportação, só se ela for deste link. */
+  documentExportStatus(
+    token: string,
+    exportId: string,
+    exports: DocumentExportService,
+  ) {
+    return this.scoped(token, (tx, context) =>
+      exports.statusForAcceptanceLink(exportId, context.link_id, tx),
+    );
+  }
+
+  /**
+   * O documento a partir do link, para o worker de exportação.
+   *
+   * Roda no contexto do tenant reaberto pelo worker; o link é lido sob RLS e
+   * o documento sai pelo mesmo caminho da rota pública.
+   */
+  documentForLink(linkId: string) {
+    return this.rls.runAmbient(async (tx) => {
+      const link = await tx.quoteAcceptanceLink.findFirst({
+        where: { id: linkId },
+        select: {
+          id: true,
+          organizationId: true,
+          businessUnitId: true,
+          quoteId: true,
         },
       });
-      let bytes = await this.files.read(file.bucket, file.objectKey);
-      if (FileObjectService.hash(bytes) !== file.sha256)
-        throw new ConflictException(
-          'Não foi possível conferir o documento enviado.',
-        );
-      if (
-        link.decision === 'APPROVE' &&
-        link.respondedAt &&
-        link.signatureFileId &&
-        link.consentAccepted
-      ) {
-        const signatureFile = await tx.storageFile.findFirstOrThrow({
-          where: {
-            id: link.signatureFileId,
-            organizationId: link.organizationId,
-            status: 'AVAILABLE',
-            mimeType: 'image/png',
-          },
-        });
-        const signature = await this.files.read(
-          signatureFile.bucket,
-          signatureFile.objectKey,
-        );
-        if (FileObjectService.hash(signature) !== signatureFile.sha256)
-          throw new ConflictException(
-            'Não foi possível conferir a assinatura do cliente.',
-          );
-        bytes = await this.acceptedDocuments.render(bytes, {
-          code: (link.snapshot as unknown as QuoteAcceptanceSnapshot).code,
-          signerName: link.signerName!,
-          signedAt: link.respondedAt,
-          originalSha256: file.sha256,
-          signature,
-        });
-      }
-      return {
-        bytes,
-        fileName: `orcamento-${(link.snapshot as unknown as QuoteAcceptanceSnapshot).code.replace(/[^A-Za-z0-9_-]/g, '_')}.pdf`,
-      };
+      if (!link) throw new EntityNotFoundException('Proposta');
+      return this.buildDocument(tx, {
+        link_id: link.id as UUID,
+        organization_id: link.organizationId as UUID,
+        business_unit_id: link.businessUnitId as UUID,
+        quote_id: link.quoteId as UUID,
+      });
     });
+  }
+
+  private async buildDocument(
+    tx: Prisma.TransactionClient,
+    context: LinkContext,
+  ) {
+    const link = await this.link(tx, context);
+    const view = await this.view(link, tx);
+    if (!['AVAILABLE', 'COMPLETED'].includes(view.state))
+      throw new ConflictException(
+        'Este link não permite baixar a proposta. Peça um link atualizado.',
+      );
+    const file = await tx.storageFile.findFirstOrThrow({
+      where: {
+        id: link.documentFileId,
+        organizationId: link.organizationId,
+        status: 'AVAILABLE',
+      },
+    });
+    let bytes = await this.files.read(file.bucket, file.objectKey);
+    if (FileObjectService.hash(bytes) !== file.sha256)
+      throw new ConflictException(
+        'Não foi possível conferir o documento enviado.',
+      );
+    if (
+      link.decision === 'APPROVE' &&
+      link.respondedAt &&
+      link.signatureFileId &&
+      link.consentAccepted
+    ) {
+      const signatureFile = await tx.storageFile.findFirstOrThrow({
+        where: {
+          id: link.signatureFileId,
+          organizationId: link.organizationId,
+          status: 'AVAILABLE',
+          mimeType: { in: ['image/png', 'image/webp'] },
+        },
+      });
+      const signature = await this.files.read(
+        signatureFile.bucket,
+        signatureFile.objectKey,
+      );
+      if (FileObjectService.hash(signature) !== signatureFile.sha256)
+        throw new ConflictException(
+          'Não foi possível conferir a assinatura do cliente.',
+        );
+      bytes = await this.acceptedDocuments.render(bytes, {
+        code: (link.snapshot as unknown as QuoteAcceptanceSnapshot).code,
+        signerName: link.signerName!,
+        signedAt: link.respondedAt,
+        originalSha256: file.sha256,
+        signature,
+      });
+    }
+    return {
+      bytes,
+      fileName: `orcamento-${(link.snapshot as unknown as QuoteAcceptanceSnapshot).code.replace(/[^A-Za-z0-9_-]/g, '_')}.pdf`,
+    };
   }
 
   async respond(
@@ -280,6 +353,7 @@ export class QuoteAcceptanceService {
       }
     }
     return this.scoped(token, async (tx, context) => {
+      await this.operational.assertOperational();
       // Mesma ordem de locks da geração; conteúdo e resposta são decididos juntos.
       await tx.$executeRaw`SELECT id FROM quotes WHERE id=${context.quote_id}::uuid AND organization_id=${context.organization_id}::uuid FOR UPDATE`;
       await tx.$executeRaw`SELECT id FROM quote_acceptance_links WHERE id=${context.link_id}::uuid FOR UPDATE`;

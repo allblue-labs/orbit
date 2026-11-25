@@ -1,3 +1,4 @@
+import { TenantRecovery } from '../tenant-operations/tenant-operation.policy';
 import { Controller, Get, Req } from '@nestjs/common';
 import { RlsTransaction } from '../../database';
 import type { IdentityRequest } from '../identity/infrastructure/jwt-authentication.guard';
@@ -5,6 +6,7 @@ import type { IdentityRequest } from '../identity/infrastructure/jwt-authenticat
 export class LegalAcceptanceController {
   constructor(private readonly rls: RlsTransaction) {}
   @Get('acceptance')
+  @TenantRecovery('billing')
   async current(@Req() request: IdentityRequest) {
     const organizationId = request.identity?.organizationId;
     const userId = request.identity?.id;

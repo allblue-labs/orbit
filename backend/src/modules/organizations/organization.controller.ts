@@ -1,5 +1,12 @@
+import { MobileManagement } from '../../common/mobile-management';
+import { UploadLimitsInterceptor } from '../storage/upload-limits.interceptor';
+import { TenantRecovery } from '../tenant-operations/tenant-operation.policy';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { imageUploadOptions } from '../storage/image-upload.options';
 import {
   Body,
+  UploadedFile,
+  UseInterceptors,
   Controller,
   Delete,
   Get,
@@ -54,6 +61,7 @@ export class OrganizationController {
     );
   }
 
+  @TenantRecovery('context')
   @Get('current')
   @Surfaces('WEB', 'MOBILE', 'API')
   @RequiresActivePlan()
@@ -72,6 +80,7 @@ export class OrganizationController {
    * `GET /organizations/current`, e por isso segue a mesma autorização.
    */
   @Get('current/members')
+  @MobileManagement('team')
   @RequiresActivePlan()
   async members(
     @Req() request: IdentityRequest,
@@ -124,6 +133,7 @@ export class OrganizationController {
    * administra em `identity/me`. Um gestor não edita a identidade de outro.
    */
   @Patch('current/members/:userId')
+  @MobileManagement('team')
   @RequiresActivePlan()
   @Permissions('organization.members.update')
   async updateMember(
@@ -155,6 +165,7 @@ export class OrganizationController {
    * contrato nenhum.
    */
   @Get('current/roles')
+  @MobileManagement('team')
   @RequiresActivePlan()
   async roles(@Req() request: IdentityRequest) {
     return this.readModels.roles(
@@ -249,15 +260,22 @@ export class OrganizationController {
 
   /** `PUT` e não `PATCH`: o recurso é a imagem inteira, substituída de uma vez. */
   @Put('current/logo')
+  @UseInterceptors(
+    UploadLimitsInterceptor,
+    FileInterceptor('file', imageUploadOptions),
+  )
   @RequiresActivePlan()
   @Permissions('organization.update')
   async setLogo(
     @Req() request: IdentityRequest,
     @Body() input: UpdateOrganizationLogoDto,
+    @UploadedFile() file?: Express.Multer.File,
   ) {
     return this.organizations.setLogo(
       this.organizationId(request),
-      input.image,
+      file
+        ? `data:${file.mimetype};base64,${file.buffer.toString('base64')}`
+        : (input.image ?? ''),
     );
   }
 

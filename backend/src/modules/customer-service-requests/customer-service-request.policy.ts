@@ -71,13 +71,54 @@ export class CustomerServiceRequestPolicy {
     }
   }
 
+  /**
+   * O que o cliente pode fazer agora — a mesma regra do trigger do banco.
+   *
+   * Editar só antes da triagem: depois disso alguém já leu e decidiu com base
+   * no que estava escrito. Responder enquanto o chamado estiver vivo. Cancelar
+   * enquanto ninguém começou.
+   */
   portalActions(
     status: CustomerServiceRequestStatus,
     converted: boolean,
   ): CustomerServiceRequestAction[] {
-    return !converted && ['OPEN', 'IN_TRIAGE'].includes(status)
-      ? ['CANCEL']
-      : [];
+    /* Convertido, o chamado virou atendimento: a conversa segue por lá. */
+    if (converted) return [];
+    const acoes: CustomerServiceRequestAction[] = [];
+    if (status === 'OPEN') acoes.push('EDIT');
+    if (
+      ['OPEN', 'IN_TRIAGE', 'IN_PROGRESS', 'WAITING_CUSTOMER'].includes(status)
+    )
+      acoes.push('REPLY');
+    if (['OPEN', 'IN_TRIAGE'].includes(status)) acoes.push('CANCEL');
+    return acoes;
+  }
+
+  assertPortalEdit(
+    status: CustomerServiceRequestStatus,
+    converted: boolean,
+  ): void {
+    if (converted || status !== 'OPEN') {
+      throw new BusinessException(
+        'Este chamado já foi analisado pela equipe e não pode mais ser editado. Envie uma mensagem no chamado.',
+        'SERVICE_REQUEST_NOT_EDITABLE',
+      );
+    }
+  }
+
+  assertPortalReply(
+    status: CustomerServiceRequestStatus,
+    converted: boolean,
+  ): void {
+    if (
+      converted ||
+      !['OPEN', 'IN_TRIAGE', 'IN_PROGRESS', 'WAITING_CUSTOMER'].includes(status)
+    ) {
+      throw new BusinessException(
+        'Este chamado está encerrado. Abra um novo chamado se precisar.',
+        'SERVICE_REQUEST_CLOSED',
+      );
+    }
   }
 
   internalActions(

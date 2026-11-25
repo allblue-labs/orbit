@@ -1,21 +1,18 @@
-/**
- * Provider S3 Compatible — serve AWS S3 e MinIO com o mesmo código.
- *
- * MinIO implementa o protocolo S3; a única diferença prática é o endereçamento
- * por caminho (`https://host/bucket/key`) em vez de subdomínio, e isso é uma
- * bandeira de configuração.
- *
- * ## Transferência pela própria URL assinada
- *
- * `put`, `get` e `head` assinam a URL e usam `fetch`. Não há caminho de acesso
- * privilegiado paralelo: **a mesma assinatura que o cliente usaria** é a que o
- * servidor usa. Um erro de política de bucket aparece no primeiro teste, não
- * em produção quando o primeiro cliente tentar baixar.
- */
-import { Injectable } from '@nestjs/common';
+/** Official AWS SDK v3 adapter for R2, S3 and MinIO. Credentials never leave the server. */
+import { addAbortSignal, Readable } from 'node:stream';
+import { performance } from 'node:perf_hooks';
+import { Injectable, Logger, OnApplicationShutdown } from '@nestjs/common';
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  HeadObjectCommand,
+  DeleteObjectCommand,
+  S3ServiceException,
+} from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { InfrastructureException } from '../../../exceptions';
 import type { S3Config } from '../storage.config';
-import { presignS3Url } from './aws-signature-v4';
 import type {
   ObjectStat,
   PutObjectInput,
@@ -27,153 +24,221 @@ import type {
 } from '../storage.types';
 
 @Injectable()
-export class S3CompatibleStorageProvider implements StorageProvider {
+export class S3CompatibleStorageProvider
+  implements StorageProvider, OnApplicationShutdown
+{
+  private readonly client: S3Client;
+  private activeRequests = 0;
+  private activeReads = 0;
+  private readonly deadlineMs: number;
+  private readonly aliases: Readonly<Record<string, string>>;
+  private readonly logger = new Logger(S3CompatibleStorageProvider.name);
   constructor(
     readonly name: StorageProviderName,
     readonly defaultBucket: string,
-    private readonly config: S3Config,
-  ) {}
-
-  /**
-   * Gravação pela URL assinada.
-   *
-   * **Sem cabeçalhos `x-amz-meta-*`.** A assinatura cobre apenas `host`
-   * (`X-Amz-SignedHeaders=host`), e um `x-amz-*` que não entrou na assinatura
-   * é recusado com 400 — verificado contra o MinIO. Os metadados que
-   * interessam (organização, hash, vínculos) já vivem em `storage_files`, que
-   * é onde a plataforma os consulta; duplicá-los no objeto acrescentaria
-   * acoplamento ao provider sem nenhum uso.
-   */
-  async put(input: PutObjectInput): Promise<ObjectStat> {
-    const signed = this.presign('PUT', input, 300);
-    const response = await fetch(signed.url, {
-      method: 'PUT',
-      body: new Uint8Array(input.body),
-      headers: { 'content-type': input.mimeType },
+    config: S3Config,
+  ) {
+    this.deadlineMs = config.deadlineMs ?? 20_000;
+    this.aliases = config.legacyBucketAliases ?? {};
+    this.client = new S3Client({
+      ...config,
+      credentials: {
+        accessKeyId: config.accessKeyId,
+        secretAccessKey: config.secretAccessKey,
+      },
+      // R2 implements the S3 subset. Do not require optional AWS checksum extensions.
+      requestChecksumCalculation: 'WHEN_REQUIRED',
+      responseChecksumValidation: 'WHEN_REQUIRED',
+      maxAttempts: 2,
+      requestHandler: {
+        connectionTimeout: 3_000,
+        requestTimeout: Math.min(this.deadlineMs, 10_000),
+        throwOnRequestTimeout: true,
+        httpsAgent: { maxSockets: 12 },
+        httpAgent: { maxSockets: 12 },
+      },
     });
-    if (!response.ok) {
-      throw new InfrastructureException(
-        `Storage rejected the object upload (${response.status})`,
-      );
-    }
-    return {
-      bucket: input.bucket,
-      objectKey: input.objectKey,
-      sizeBytes: input.body.length,
-      mimeType: input.mimeType,
-    };
   }
-
+  onApplicationShutdown() {
+    this.client.destroy();
+  }
+  async put(input: PutObjectInput): Promise<ObjectStat> {
+    return this.execute('put', async (abortSignal) => {
+      await this.client.send(
+        new PutObjectCommand({
+          Bucket: this.bucket(input.bucket),
+          Key: input.objectKey,
+          Body: input.body,
+          ContentType: input.mimeType,
+          ContentLength: input.body.length,
+          IfNoneMatch: '*',
+          CacheControl: input.cacheControl ?? 'private, no-store',
+          Metadata: input.metadata,
+        }),
+        { abortSignal },
+      );
+      return {
+        bucket: input.bucket,
+        objectKey: input.objectKey,
+        sizeBytes: input.body.length,
+        mimeType: input.mimeType,
+      };
+    });
+  }
   async get(ref: StorageObjectRef): Promise<Buffer> {
-    const signed = this.presign('GET', ref, 60);
-    const response = await fetch(signed.url);
-    if (!response.ok) {
-      throw new InfrastructureException(
-        `Storage object is unavailable (${response.status})`,
+    return this.execute('get', async (abortSignal) => {
+      const result = await this.client.send(
+        new GetObjectCommand({
+          Bucket: this.bucket(ref.bucket),
+          Key: ref.objectKey,
+        }),
+        { abortSignal },
       );
-    }
-    return Buffer.from(await response.arrayBuffer());
+      if (!(result.Body instanceof Readable))
+        throw new Error('Missing Node.js object stream');
+      const body = addAbortSignal(abortSignal, result.Body);
+      // Signed client downloads do not buffer in this process. Internal reads
+      // (evidence, branding and manifests) have a separate memory ceiling.
+      const maxBytes = 64 * 1024 * 1024;
+      let bytes = 0;
+      const chunks: Buffer[] = [];
+      try {
+        if ((result.ContentLength ?? 0) > maxBytes)
+          throw new Error('Object exceeds internal read limit');
+        for await (const chunk of body as AsyncIterable<Buffer>) {
+          bytes += chunk.length;
+          if (bytes > maxBytes)
+            throw new Error('Object exceeds internal read limit');
+          chunks.push(chunk);
+        }
+        return Buffer.concat(chunks, bytes);
+      } finally {
+        body.destroy();
+      }
+    });
   }
-
-  /**
-   * O método faz parte da assinatura.
-   *
-   * Assinar como `GET` e requisitar `HEAD` devolve 403 — verificado. A
-   * assinatura é feita para o método que será usado.
-   */
   async head(ref: StorageObjectRef): Promise<ObjectStat | null> {
-    const signed = this.presign('HEAD', ref, 60);
-    const response = await fetch(signed.url, { method: 'HEAD' });
-    if (response.status === 404) return null;
-    if (!response.ok) {
-      throw new InfrastructureException(
-        `Storage metadata is unavailable (${response.status})`,
-      );
-    }
-    return {
-      ...ref,
-      sizeBytes: Number(response.headers.get('content-length') ?? 0),
-      mimeType: response.headers.get('content-type'),
-    };
+    return this.execute('head', async (abortSignal) => {
+      try {
+        const result = await this.client.send(
+          new HeadObjectCommand({
+            Bucket: this.bucket(ref.bucket),
+            Key: ref.objectKey,
+          }),
+          { abortSignal },
+        );
+        return {
+          ...ref,
+          sizeBytes: result.ContentLength ?? 0,
+          mimeType: result.ContentType ?? null,
+        };
+      } catch (error) {
+        if (
+          error instanceof S3ServiceException &&
+          error.$metadata.httpStatusCode === 404
+        )
+          return null;
+        throw error;
+      }
+    });
   }
-
-  /**
-   * Remoção.
-   *
-   * `DELETE` não é assinado por este módulo de propósito: apagar objeto é
-   * operação de ciclo de vida do bucket, e um documento emitido não deve
-   * desaparecer do storage por ação da aplicação. O manifest revoga; o objeto
-   * permanece para auditoria.
-   */
-  remove(ref: StorageObjectRef): Promise<void> {
-    void ref;
-    return Promise.reject(
-      new InfrastructureException(
-        'Removing objects is not supported: issued documents are retained for audit',
+  async remove(ref: StorageObjectRef): Promise<void> {
+    await this.execute('delete', (abortSignal) =>
+      this.client.send(
+        new DeleteObjectCommand({
+          Bucket: this.bucket(ref.bucket),
+          Key: ref.objectKey,
+        }),
+        { abortSignal },
       ),
     );
   }
-
-  sign(request: SignedUrlRequest): Promise<SignedUrl> {
-    const method = request.operation === 'upload' ? 'PUT' : 'GET';
-    const query: Record<string, string> = {};
-
-    /**
-     * `download` força salvar; `preview` deixa o navegador abrir. É a única
-     * diferença entre as duas operações — o objeto é o mesmo.
-     */
-    if (request.operation === 'download' && request.fileName) {
-      query['response-content-disposition'] =
-        `attachment; filename="${request.fileName.replace(/"/g, '')}"`;
+  async sign(request: SignedUrlRequest): Promise<SignedUrl> {
+    if (request.operation === 'upload')
+      throw new InfrastructureException(
+        'Uploads require a reserved gateway capability',
+      );
+    return this.execute<SignedUrl>('sign', async () => {
+      const command = new GetObjectCommand({
+        Bucket: this.bucket(request.bucket),
+        Key: request.objectKey,
+        ResponseContentType: request.mimeType,
+        ResponseContentDisposition:
+          request.operation === 'preview'
+            ? 'inline'
+            : `attachment; filename*=UTF-8''${encodeURIComponent(request.fileName ?? 'arquivo')}`,
+      });
+      const requiredHeaders: Record<string, string> = {};
+      return {
+        url: await getSignedUrl(this.client, command, {
+          expiresIn: request.expiresInSeconds,
+        }),
+        expiresAt: new Date(Date.now() + request.expiresInSeconds * 1000),
+        method: 'GET',
+        requiredHeaders,
+      };
+    });
+  }
+  private bucket(value: string): string {
+    return this.aliases[value] ?? value;
+  }
+  private async execute<T>(
+    operation: string,
+    work: (signal: AbortSignal) => Promise<T>,
+  ): Promise<T> {
+    const read = operation === 'get';
+    if (this.activeRequests >= 16 || (read && this.activeReads >= 4)) {
+      this.logResult(operation, 'busy', 0);
+      throw new InfrastructureException(
+        'O armazenamento está ocupado. Tente novamente.',
+      );
     }
-    if (request.operation === 'preview') {
-      query['response-content-disposition'] = 'inline';
+    this.activeRequests++;
+    if (read) this.activeReads++;
+    const signal = AbortSignal.timeout(this.deadlineMs);
+    const started = performance.now();
+    let result = 'ok';
+    try {
+      const value = await work(signal);
+      if (value === null) result = 'missing';
+      return value;
+    } catch (error) {
+      result = signal.aborted ? 'deadline' : 'error';
+      this.logger.error(
+        JSON.stringify({
+          stage: 'object-storage-failed',
+          provider: this.name,
+          operation,
+          errorClass: error instanceof Error ? error.name : 'Unknown',
+          status:
+            error instanceof S3ServiceException
+              ? error.$metadata.httpStatusCode
+              : undefined,
+        }),
+      );
+      throw new InfrastructureException(
+        'O armazenamento está indisponível. Tente novamente.',
+      );
+    } finally {
+      this.activeRequests--;
+      if (read) this.activeReads--;
+      this.logResult(
+        operation,
+        result,
+        Math.round(performance.now() - started),
+      );
     }
-    if (request.mimeType && request.operation !== 'upload') {
-      query['response-content-type'] = request.mimeType;
-    }
+  }
 
-    const signed = this.presign(
-      method,
-      request,
-      request.expiresInSeconds,
-      query,
+  private logResult(operation: string, result: string, durationMs: number) {
+    this.logger.log(
+      JSON.stringify({
+        event: 'storage_request',
+        provider: this.name,
+        operation,
+        result,
+        durationMs,
+      }),
     );
-
-    return Promise.resolve({
-      url: signed.url,
-      expiresAt: signed.expiresAt,
-      method,
-      requiredHeaders: this.uploadHeaders(request),
-    });
-  }
-
-  /** O `content-type` do PUT entra na assinatura; o cliente precisa repeti-lo. */
-  private uploadHeaders(
-    request: SignedUrlRequest,
-  ): Readonly<Record<string, string>> {
-    return request.operation === 'upload' && request.mimeType
-      ? { 'content-type': request.mimeType }
-      : {};
-  }
-
-  private presign(
-    method: 'GET' | 'PUT' | 'HEAD',
-    ref: StorageObjectRef,
-    expiresInSeconds: number,
-    query?: Record<string, string>,
-  ) {
-    return presignS3Url({
-      method,
-      endpoint: this.config.endpoint,
-      region: this.config.region,
-      accessKeyId: this.config.accessKeyId,
-      secretAccessKey: this.config.secretAccessKey,
-      bucket: ref.bucket,
-      objectKey: ref.objectKey,
-      expiresInSeconds,
-      forcePathStyle: this.config.forcePathStyle,
-      query,
-    });
   }
 }

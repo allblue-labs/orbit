@@ -168,6 +168,8 @@ export const defaultNavigation: { group: string; items: NavItem[] }[] = [
        * procura.
        */
       fromEntity("customer"),
+      /* Os chamados chegam dos clientes: ficam ao lado deles. */
+      fromEntity("customer-service-request"),
       fromEntity("catalog-item"),
       /*
        * Orçamento virou **aba do Financeiro**, com realce entre as abas.

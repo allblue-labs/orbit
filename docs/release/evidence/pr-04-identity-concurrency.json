@@ -1,0 +1,47 @@
+{
+  "pr": "PR-04",
+  "baseCommit": "aa87034",
+  "findings": ["F03", "F04"],
+  "qualification": "Local identity gates passed. Deployment and remote CI not performed. Overall production release still requires the remaining PRs.",
+  "migration": "20261113190000_identity_atomic_rotation",
+  "checks": {
+    "backendUnit": { "suites": 252, "passed": 2009 },
+    "backendIntegration": { "suites": 3, "passed": 39, "migrationsApplied": 112 },
+    "webUnit": { "files": 69, "passed": 673 },
+    "webBrowserIdentity": { "passed": 2 },
+    "webStandaloneSmoke": { "passed": 5 },
+    "mobileIdentitySecurity": { "passed": 125 },
+    "lint": ["backend", "web"],
+    "typecheck": ["backend", "web"],
+    "contracts": "passed",
+    "flutterAnalyzer": "no issues",
+    "build": ["backend", "next-standalone"]
+  },
+  "concurrencyProof": {
+    "instances": "Two NestJS applications in one test process, separate Prisma clients/pools, shared restricted PostgreSQL runtime role",
+    "sameRecoveryCode": "One success and one MFA_INVALID; different-code removals accumulate without restoring consumed codes",
+    "parallelRefreshRequests": 8,
+    "canonicalResponse": "One refresh token and one access token across successful responses; successor returns the same pair during grace",
+    "revocationRace": "Concurrent database rotation/revocation leaves the session revoked and clears the encrypted response",
+    "loginFailures": "Eight parallel incorrect-password requests reach exactly five recorded failures and the existing account lock",
+    "credentialChange": "Stale verification cannot create a session after a password change or account lock"
+  },
+  "policy": {
+    "graceSeconds": 15,
+    "clockAuthority": "PostgreSQL",
+    "graceExtensionOnRead": false,
+    "responseEncryption": "AES-256-GCM using the existing shared ENCRYPTION_KEY",
+    "completedClientResponseCache": false,
+    "history": "Only previous generation; unknown older tokens are rejected without family attribution",
+    "ciphertextRetention": "One response per session; overwritten on next rotation and cleared on revocation. Expiry is a logical read limit, not a physical TTL purge."
+  },
+  "scope": {
+    "customerPortalChanged": false,
+    "newDependencies": false,
+    "cloudDeliveryTests": false,
+    "deployment": false,
+    "push": false,
+    "fullMobileSuiteRepeated": false,
+    "fullIntegrationMatrixRepeated": false
+  }
+}

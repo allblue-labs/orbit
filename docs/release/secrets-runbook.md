@@ -46,3 +46,25 @@ Regras:
 O bootstrap de produção valida JWT, AES, trial secret e origem. Mensagens de
 falha citam somente a chave, nunca o conteúdo.
 
+
+## Separação de credenciais de banco
+
+- A API e os workers recebem somente `APP_DATABASE_URL`. Produção recusa URL
+  administrativa e senhas de bootstrap no ambiente do processo.
+- `DATABASE_URL` administrativa é injetada somente no job efêmero de migrations
+  ou no bootstrap explícito. O frontend não recebe nenhuma credencial do banco.
+- Para rotacionar a senha restrita, mantenha o acesso administrativo no cofre,
+  pause writers e injete a nova `APP_DATABASE_PASSWORD` no migrator e na release.
+  Execute o migrator para reconciliar o papel, recrie API/workers e valide
+  readiness, login web/mobile e isolamento antes de reabrir writers. Essa troca
+  pode interromper conexões antigas: exige janela operacional, não edição pelo
+  painel HTTP. Para evitar janela futura, planeje dois papéis e grants equivalentes.
+- Uma rotação do administrador não exige trocar a URL do runtime. Atualize o
+  cofre e o ambiente do PostgreSQL/jobs conforme o procedimento do banco;
+  alterar apenas `POSTGRES_PASSWORD` no Compose não muda a senha de um volume
+  PostgreSQL já inicializado.
+- `PLATFORM_ADMIN_PASSWORD` é removida do arquivo operacional após bootstrap.
+  Não compartilhe a senha com API/worker para executar manutenção.
+
+Nenhum segredo foi rotacionado automaticamente pelo PR-14. As credenciais R2,
+SES, SNS, Stripe e Firebase continuam limitadas aos processos que as utilizam.

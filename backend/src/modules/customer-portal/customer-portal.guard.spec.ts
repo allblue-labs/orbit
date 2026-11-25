@@ -39,7 +39,9 @@ describe('CustomerPortalGuard', () => {
     };
     const context = {
       switchToHttp: () => ({ getRequest: () => request }),
-    } as ExecutionContext;
+      getHandler: () => () => undefined,
+      getClass: () => class {},
+    } as unknown as ExecutionContext;
     const tokens = {
       verifyAccessToken: jest.fn().mockResolvedValue({
         sub: record.id,
@@ -57,6 +59,10 @@ describe('CustomerPortalGuard', () => {
     const guard = new CustomerPortalGuard(
       tokens as unknown as CustomerPortalTokenService,
       repository as unknown as CustomerPortalRepository,
+      {
+        assertCapabilityTenant: jest.fn().mockResolvedValue(undefined),
+      } as never,
+      { getAllAndOverride: jest.fn().mockReturnValue(false) } as never,
     );
     return { guard, context, request, tokens };
   };

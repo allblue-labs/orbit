@@ -349,7 +349,7 @@ class ProvenanceChip extends StatelessWidget {
     return Tooltip(
       message: isMock
           ? 'Valor não observado — não representa dados reais da operação.'
-          : 'Aproximação: o backend usa outra entidade como substituta.',
+          : 'Aproximação: calculado a partir de um dado parecido, não do valor exato.',
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
         decoration: BoxDecoration(

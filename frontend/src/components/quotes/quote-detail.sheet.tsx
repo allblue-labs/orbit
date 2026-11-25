@@ -39,6 +39,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { EntityBadge, EntityLink } from "@/entities";
+import { IssuedDocumentActions } from "@/documents/issued-document-actions";
 import { useQuote, useQuoteDocument } from "@/hooks/quotes/use-quotes";
 import type { QuoteSummary } from "@/types/quotes";
 import { Money, Quantity, ValidUntil } from "./quote-presentation";
@@ -170,19 +171,32 @@ function Body({ summary }: { summary: QuoteSummary }) {
               Abrir a proposta
             </EntityLink>
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={download.isPending}
-            onClick={() => download.mutate(undefined)}
-          >
-            {download.isPending ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <FileDown className="size-4" />
-            )}
-            Baixar PDF
-          </Button>
+          {/* Emitida, a proposta é o documento oficial — o mesmo arquivo que
+              o cliente recebe, para baixar ou compartilhar. Antes disso, o PDF
+              de conferência continua disponível. */}
+          {quote.document ? (
+            <IssuedDocumentActions
+              executionId={quote.document.executionId}
+              renderStatus={quote.document.renderStatus}
+              code={quote.document.code}
+              title={quote.title}
+              variant="full"
+            />
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={download.isPending}
+              onClick={() => download.mutate(undefined)}
+            >
+              {download.isPending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <FileDown className="size-4" />
+              )}
+              {download.isPending ? "Gerando documento…" : "Baixar PDF"}
+            </Button>
+          )}
         </div>
 
         <p className="text-xs text-muted-foreground">

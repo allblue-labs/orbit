@@ -62,6 +62,7 @@ export interface EquipmentServiceOrderPreparationReadModel {
 export interface EquipmentServiceHistoryReadModel {
   id: string;
   code: string;
+  serviceOrderCode: string | null;
   title: string;
   type: string;
   completedAt: Date | null;

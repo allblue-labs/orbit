@@ -76,8 +76,10 @@ test("a aba Organização envia e mostra o logo da empresa", async ({ page }) =>
   await expect(previa).toBeVisible();
   await expect(previa).toHaveAttribute(
     "src",
-    /^data:image\/(png|jpeg);base64,/,
+    /^(?:https?:\/\/|data:image\/(?:png|jpeg|webp);base64,)/,
   );
+
+  await expect(previa).toHaveJSProperty("naturalWidth", 16);
 
   /* E dá para desfazer, sem levar o resto da organização junto. */
   await remover.click();

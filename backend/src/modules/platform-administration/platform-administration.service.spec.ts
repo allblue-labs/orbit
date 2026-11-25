@@ -1,86 +1,120 @@
-import { BusinessUnitType } from '../../contracts';
-import { EntityNotFoundException, ValidationException } from '../../exceptions';
+import { VerifiedPlatformAuthority } from '../../common/verified-platform-authority';
 import { PlatformAdministrationService } from './platform-administration.service';
+import {
+  ForbiddenException,
+  ValidationException,
+  ConflictException,
+} from '../../exceptions';
 
-describe('PlatformAdministrationService', () => {
+const authority = VerifiedPlatformAuthority.fromPersistedAssignments('admin', [
+  {
+    id: 'grant',
+    userId: 'admin',
+    roleId: 'global-role',
+    revokedAt: null,
+    role: {
+      id: 'global-role',
+      organizationId: null,
+      deletedAt: null,
+      key: 'PLATFORM_ADMIN',
+      permissions: ['platform.admin'],
+      allowedSurfaces: ['WEB'],
+    },
+  },
+]);
+
+describe('PlatformAdministrationService canonical boundary', () => {
+  const tx = { auditLog: { create: jest.fn().mockResolvedValue({}) } };
   const repository = {
-    findOrganization: jest.fn(),
-    findPlan: jest.fn(),
+    transaction: jest.fn((work: (tx: unknown) => unknown) =>
+      Promise.resolve(work(tx)),
+    ),
     updateOrganization: jest.fn(),
-    overview: jest.fn(),
-    listOrganizations: jest.fn(),
-    listUsers: jest.fn(),
-    plansAndModules: jest.fn(),
+    findOrganization: jest.fn(),
   };
-  const registration = { register: jest.fn() };
-  const verification = { sendWelcome: jest.fn().mockResolvedValue(undefined) };
-  const hashes = {
-    hash: jest.fn().mockResolvedValue('hash'),
-    verify: jest.fn().mockResolvedValue(true),
+  const contexts = {
+    get: () => ({
+      userId: 'admin',
+      actorType: 'INTERNAL_USER',
+      platformAuthority: authority,
+      requestId: 'request',
+    }),
   };
   const service = new PlatformAdministrationService(
     repository as never,
-    registration as never,
-    hashes,
-    verification as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    contexts as never,
+    {} as never,
   );
-
   beforeEach(() => jest.clearAllMocks());
-
-  it('provisions the first tenant owner through the shared onboarding boundary', async () => {
-    registration.register.mockResolvedValue({
-      organizationId: 'org-1',
-      userId: 'owner-1',
-    });
-    repository.findOrganization.mockResolvedValue({ id: 'org-1' });
-    await expect(
-      service.createTenant('admin-1', {
-        owner: {
-          email: 'owner@example.com',
-          firstName: 'Owner',
-          lastName: 'Orbit',
-          password: 'password-strong',
-        },
-        organizationName: 'Tenant Example',
-        primarySegment: 'HVAC_R',
-        planKey: 'STARTER',
-        primaryBusinessUnit: {
-          legalName: 'Tenant Example LTDA',
-          type: BusinessUnitType.HEADQUARTERS,
-          documentType: 'CNPJ',
-          documentNumber: '11222333000181',
-          city: 'Recife',
-          street: 'Rua Principal',
-          stateCode: 'PE',
-        },
-        organizationStatus: 'ACTIVE',
-        subscriptionStatus: 'TRIALING',
-      }),
-    ).resolves.toEqual({ id: 'org-1' });
-    expect(verification.sendWelcome).toHaveBeenCalledWith('owner-1');
-    expect(registration.register).toHaveBeenCalledWith(
-      expect.objectContaining({
-        email: 'owner@example.com',
-        planKey: 'STARTER',
-      }),
-      'hash',
-      'tenant-example',
-      expect.objectContaining({ actorUserId: 'admin-1', platformAdmin: true }),
+  it('does not accept a tenant role string or structural owner as global authority', async () => {
+    const unsafe = new PlatformAdministrationService(
+      repository as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {
+        get: () => ({
+          userId: 'tenant-owner',
+          actorType: 'INTERNAL_USER',
+          roles: ['PLATFORM_ADMIN'],
+          isOrganizationOwner: true,
+        }),
+      } as never,
+      {} as never,
     );
+    await expect(unsafe.organization('tenant')).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    expect(repository.findOrganization).not.toHaveBeenCalled();
   });
-
-  it('rejects an unknown plan during administrative changes', async () => {
-    repository.findPlan.mockResolvedValue(null);
+  it('audits rejected legacy billing writes without turning them into canonical commands', async () => {
+    repository.updateOrganization.mockRejectedValue(
+      new Error('ADMIN_FINANCIAL_FIELDS_READ_ONLY'),
+    );
     await expect(
-      service.updateOrganization('org-1', 'admin-1', { planKey: 'UNKNOWN' }),
+      service.updateOrganization('tenant', 'admin', {
+        subscriptionStatus: 'ACTIVE',
+      }),
     ).rejects.toBeInstanceOf(ValidationException);
-    expect(repository.updateOrganization).not.toHaveBeenCalled();
+    const call = tx.auditLog.create.mock.calls[0] as unknown as [
+      {
+        data: {
+          action: string;
+          metadata: {
+            grantIds: string[];
+            correlationId: string;
+            result: string;
+          };
+        };
+      },
+    ];
+    expect(call[0].data.action).toBe('PLATFORM_ORGANIZATION_UPDATE_REJECTED');
+    expect(call[0].data.metadata).toMatchObject({
+      grantIds: ['grant'],
+      correlationId: 'request',
+      result: 'REJECTED',
+    });
   });
-
-  it('does not expose absent tenants as valid administration targets', async () => {
-    repository.findOrganization.mockResolvedValue(null);
-    await expect(service.organization('missing')).rejects.toBeInstanceOf(
-      EntityNotFoundException,
+  it('exposes optimistic concurrency conflicts explicitly', async () => {
+    repository.updateOrganization.mockRejectedValue(
+      new Error('ADMIN_VERSION_CONFLICT'),
     );
+    await expect(
+      service.updateOrganization('tenant', 'admin', {
+        displayName: 'New tenant',
+        expectedUpdatedAt: new Date(),
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
   });
 });

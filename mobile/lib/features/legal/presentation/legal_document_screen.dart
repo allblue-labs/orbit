@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/design/orbit_primitives.dart';
+import '../../../core/design/orbit_settings_list.dart';
 import '../../../core/presentation/orbit_format.dart';
 import '../../../core/routing/orbit_router.dart';
 import '../../../core/theme/orbit_theme.dart';
@@ -26,6 +27,63 @@ class LegalLinks extends StatelessWidget {
       ),
     ],
   );
+}
+
+/// "Termos e privacidade" — o mesmo bloco das configurações da web.
+///
+/// Mesmos títulos, mesmas descrições, e o mesmo texto: as telas abertas daqui
+/// leem `/legal/documents/:slug`, a mesma fonte da página `/legal/:slug` da web.
+/// As lojas exigem que os termos estejam ao alcance dentro do app, e não só no
+/// login — por isso este bloco vive no perfil da equipe e no do cliente.
+class LegalDocumentsGroup extends ConsumerWidget {
+  const LegalDocumentsGroup({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final palette = context.orbit;
+    final versao = ref
+        .watch(legalDocumentProvider(LegalDocumentKind.terms))
+        .valueOrNull
+        ?.version;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        OrbitSettingsGroup(
+          title: 'Termos e privacidade',
+          children: [
+            OrbitSettingsRow(
+              key: const Key('legal.terms'),
+              icon: Icons.description_outlined,
+              label: 'Termos de Uso',
+              description:
+                  'Planos, pagamentos, cancelamento e responsabilidades.',
+              onTap: () => context.push(OrbitRoutes.terms),
+            ),
+            OrbitSettingsRow(
+              key: const Key('legal.privacy'),
+              icon: Icons.privacy_tip_outlined,
+              label: 'Política de Privacidade',
+              description:
+                  'Tratamento de dados, conservação, exclusão e seus direitos.',
+              onTap: () => context.push(OrbitRoutes.privacy),
+            ),
+          ],
+        ),
+        Padding(
+          padding: const EdgeInsets.only(
+            left: OrbitSpacing.xs,
+            top: OrbitSpacing.sm,
+          ),
+          child: Text(
+            versao == null
+                ? 'Consulte os documentos do Orbit e guarde uma cópia.'
+                : 'Consulte os documentos do Orbit e guarde uma cópia. Versão $versao.',
+            style: OrbitType.caption.copyWith(color: palette.inkMuted),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 class LegalDocumentScreen extends ConsumerWidget {

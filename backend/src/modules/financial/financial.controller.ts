@@ -1,3 +1,5 @@
+import { MobileManagement } from '../../common/mobile-management';
+import { Idempotent } from '../../common/hotpath/idempotent.decorator';
 /**
  * API do Financeiro.
  *
@@ -69,6 +71,7 @@ export class FinancialController {
   /* ---------------------------------------------------------------- */
 
   @Get('entries')
+  @MobileManagement('finance')
   @Capabilities('financial.read')
   @Permissions('financial.read')
   async entries(
@@ -93,6 +96,8 @@ export class FinancialController {
   }
 
   @Post('entries')
+  @Idempotent('financial.entry.create', 'financial-entry')
+  @MobileManagement('finance')
   @Capabilities('financial.manage')
   @Permissions('financial.manage')
   async createEntry(
@@ -110,6 +115,7 @@ export class FinancialController {
   }
 
   @Patch('entries/:id')
+  @MobileManagement('finance')
   @Capabilities('financial.manage')
   @Permissions('financial.manage')
   async updateEntry(
@@ -128,6 +134,8 @@ export class FinancialController {
   }
 
   @Post('entries/:id/confirm')
+  @Idempotent('financial.entry.confirm', 'financial-entry')
+  @MobileManagement('finance')
   @Capabilities('financial.manage')
   @Permissions('financial.manage')
   async confirmEntry(
@@ -153,6 +161,7 @@ export class FinancialController {
    * mentira que alguém acredita na hora de conferir o caixa.
    */
   @Post('entries/:id/cancel')
+  @MobileManagement('finance')
   @Capabilities('financial.manage')
   @Permissions('financial.manage')
   async cancelEntry(
@@ -175,6 +184,7 @@ export class FinancialController {
   /* ---------------------------------------------------------------- */
 
   @Get('categories')
+  @MobileManagement('finance')
   @Capabilities('financial.read')
   @Permissions('financial.read')
   async categories(
@@ -298,6 +308,7 @@ export class FinancialController {
    * na busca do modelo — com "modelo de recibo não encontrado", que é verdade.
    */
   @Post('receipts')
+  @MobileManagement('receipts')
   @Capabilities('financial.manage')
   @Permissions('financial.manage')
   createReceipt(
@@ -312,14 +323,7 @@ export class FinancialController {
     );
   }
 
-  /**
-   * O atendimento que pode originar um recibo, com o que ele oferece de pronto.
-   *
-   * Leitura: a tela pergunta antes de abrir o formulário, para já vir com o
-   * pagador e o serviço preenchidos. O valor **não** vem — o sistema não sabe o que
-   * foi cobrado a menos que exista proposta ou lançamento, e adivinhar o número de
-   * um recibo é pior que pedir que alguém o digite.
-   */
+  /** Prefills the payer, service and known amount for completed operations. */
   @Get('receipts/sources/:operationId')
   @Capabilities('financial.read')
   @Permissions('financial.read')

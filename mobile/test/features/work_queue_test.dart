@@ -24,6 +24,7 @@ MobileWorkItemContract _item(String id, MobileDueState due) =>
         MobileDueState.dueToday => 'DUE_TODAY',
         MobileDueState.upcoming => 'UPCOMING',
         MobileDueState.unscheduled => 'UNSCHEDULED',
+        MobileDueState.completed => 'COMPLETED',
       },
       'operationalStatus': 'SCHEDULED',
       'allowedActions': <String>['VIEW'],

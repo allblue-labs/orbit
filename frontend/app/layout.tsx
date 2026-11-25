@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { IBM_Plex_Mono, Inter, Space_Grotesk } from "next/font/google";
 import type { ReactNode } from "react";
 import "./globals.css";
@@ -30,17 +30,21 @@ const ibmPlexMono = IBM_Plex_Mono({
   weight: ["400", "500"],
 });
 
+const title = "Orbit | Gestão de serviços e manutenção";
+const description =
+  "Gerencie clientes, equipamentos, orçamentos e equipes de campo. Acompanhe ordens de serviço, PMOC, visitas técnicas e relatórios em um só lugar.";
+
 export const metadata: Metadata = {
-  title: "Orbit Design System — Fundação Visual",
-  description:
-    "Fundação do design system do Orbit Operations ERP: tokens, componentes, layout e motion.",
+  title,
+  description,
   openGraph: {
-    title: "Orbit Design System — Fundação Visual",
-    description:
-      "Tokens, biblioteca de componentes e layout base da plataforma Orbit.",
+    title,
+    description,
+    siteName: "Orbit",
+    locale: "pt_BR",
     type: "website",
   },
-  twitter: { card: "summary_large_image" },
+  twitter: { card: "summary_large_image", title, description },
   /**
    * O símbolo do Orbit na aba do navegador.
    *
@@ -65,6 +69,7 @@ export default async function RootLayout({
    * hidratação — que era exatamente o piscar a cada navegação.
    */
   const store = await cookies();
+  const nonce = (await headers()).get("x-orbit-csp-nonce") ?? undefined;
   const theme = parseThemeCookie(store.get(THEME_COOKIE)?.value);
   const sidebarCollapsed = parseSidebarCookie(store.get(SIDEBAR_COOKIE)?.value);
   /* Pela mesma razão: saber antes de pintar evita o aviso de assinatura
@@ -89,7 +94,10 @@ export default async function RootLayout({
       suppressHydrationWarning
     >
       <head>
-        <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
+        <script
+          nonce={nonce}
+          dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }}
+        />
       </head>
       <body>
         <MobileAppLinksProvider

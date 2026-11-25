@@ -112,7 +112,7 @@ describe('PushNotificationService', () => {
         recipient,
         'Aviso',
         'Abra o Orbit.',
-        data as Record<string, string>,
+        data as unknown as Record<string, string>,
       ),
     ).rejects.toThrow();
     expect(materialize).not.toHaveBeenCalled();

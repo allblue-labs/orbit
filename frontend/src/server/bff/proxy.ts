@@ -1,3 +1,4 @@
+import { readBffBody, BffBodyError } from "./request-body";
 /**
  * Proxy do BFF: `/api/orbit/**` → NestJS.
  *
@@ -11,10 +12,12 @@
  * Nenhum módulo de negócio precisa criar Route Handlers próprios: basta
  * chamar `/api/orbit/<rota-do-backend>` pelo cliente em `@/api`.
  */
+import { logProxy } from "./proxy-telemetry";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import { toApiError } from "@/lib/api-error";
+import { withClientOrigin } from "@/server/trusted-client-origin";
 import { backendFetch } from "@/server/backend-client";
 import {
   endSession,
@@ -36,6 +39,7 @@ const FORWARDED_REQUEST_HEADERS: readonly string[] = [
   "accept",
   "content-type",
   "idempotency-key",
+  "x-orbit-security-confirmation",
   "if-none-match",
   "if-modified-since",
 ];
@@ -48,13 +52,15 @@ const FORWARDED_REQUEST_HEADERS: readonly string[] = [
 const FORWARDED_RESPONSE_HEADERS: readonly string[] = [
   "content-type",
   "content-disposition",
-  "cache-control",
+  "vary",
   "etag",
   "last-modified",
   "location",
   "x-content-type-options",
   "x-document-sha256",
+  "x-correlation-id",
   "x-request-id",
+  "retry-after",
 ];
 
 const METHODS_WITH_BODY: readonly HttpMethod[] = ["POST", "PUT", "PATCH"];
@@ -68,6 +74,63 @@ export async function proxyToBackend(
   context: ProxyRouteContext,
 ): Promise<Response> {
   const requestContext = readContextFromRequest(request);
+  const started = performance.now();
+  return withClientOrigin(
+    request,
+    async () => {
+      let status = 503;
+      let identity:
+        { userId: string; organizationId: string | null } | undefined;
+      try {
+        const response = await proxyWithOrigin(
+          request,
+          context,
+          requestContext,
+          (actor) => {
+            identity = actor;
+          },
+        );
+        status = response.status;
+        return response;
+      } catch (error) {
+        const apiError = toApiError(error);
+        status =
+          error instanceof BffBodyError
+            ? error.status
+            : apiError.status === 429
+              ? 429
+              : 503;
+        return bffError({
+          status,
+          code: apiError.code,
+          message: apiError.message,
+          requestId: requestContext.requestId,
+          details: apiError.details,
+        });
+      } finally {
+        logProxy(
+          request,
+          "orbit",
+          requestContext.requestId,
+          performance.now() - started,
+          status,
+          identity,
+        );
+      }
+    },
+    requestContext.requestId,
+  );
+}
+
+async function proxyWithOrigin(
+  request: NextRequest,
+  context: ProxyRouteContext,
+  requestContext: ReturnType<typeof readContextFromRequest>,
+  authenticated: (actor: {
+    userId: string;
+    organizationId: string | null;
+  }) => void,
+): Promise<Response> {
   const { requestId } = requestContext;
 
   if (!isSameOriginRequest(request)) {
@@ -101,7 +164,7 @@ export async function proxyToBackend(
     });
   }
 
-  const access = await resolveAccess({ allowRefresh: true });
+  const access = await resolveAccess({ allowRefresh: true, requestId });
   if (verdict.requiresSession && (!access.accessToken || !access.claims)) {
     const response = bffError({
       status: 401,
@@ -113,15 +176,18 @@ export async function proxyToBackend(
     return response;
   }
 
-  /** Materializado para permitir a reexecução após renovar o token. */
-  const body = METHODS_WITH_BODY.includes(method)
-    ? await request.arrayBuffer()
-    : null;
-
+  let retained: { body: ArrayBuffer | null; release: () => void } = {
+    body: null,
+    release: () => undefined,
+  };
   let rotated: TokenPair | null = access.rotated;
   let accessToken = access.accessToken;
 
   try {
+    // Retain bounded bytes throughout the token-refresh retry.
+    if (METHODS_WITH_BODY.includes(method))
+      retained = await readBffBody(request);
+    const body = retained.body;
     let upstream = await forward({
       request,
       requestContext,
@@ -136,7 +202,9 @@ export async function proxyToBackend(
     /** Endpoints públicos não têm sessão para renovar. */
     if (upstream.status === 401 && verdict.requiresSession) {
       const { refreshToken } = await readStoredTokens();
-      const renewed = refreshToken ? await refreshTokens(refreshToken) : null;
+      const renewed = refreshToken
+        ? await refreshTokens(refreshToken, requestId)
+        : null;
       if (!renewed) {
         await upstream.body?.cancel();
         const response = bffError({
@@ -163,17 +231,37 @@ export async function proxyToBackend(
       });
     }
 
+    if (verdict.requiresSession && access.claims && upstream.status < 400) {
+      authenticated({
+        userId: access.claims.sub,
+        organizationId: access.claims.organizationId,
+      });
+    }
     const response = buildResponse(upstream, requestId);
     if (rotated) persistSession(response.cookies, rotated);
     return response;
   } catch (error) {
     const apiError = toApiError(error);
-    return bffError({
-      status: apiError.kind === "timeout" ? 504 : 502,
+    const response = bffError({
+      status:
+        error instanceof BffBodyError
+          ? error.status
+          : apiError.status === 429
+            ? 429
+            : apiError.kind === "timeout"
+              ? 504
+              : 502,
       code: apiError.code,
       message: apiError.message,
+      details: apiError.details,
       requestId,
     });
+    if (error instanceof BffBodyError)
+      response.headers.set("Connection", "close");
+    if (rotated) persistSession(response.cookies, rotated);
+    return response;
+  } finally {
+    retained.release();
   }
 }
 
@@ -209,6 +297,11 @@ function forward(input: ForwardInput): Promise<Response> {
     businessUnitId: input.requestContext.businessUnitId ?? input.businessUnitId,
     /** O retry idempotente do BFF é desligado: quem decide é o cliente. */
     retries: 0,
+    signal: input.request.signal,
+    ...(input.request.headers.get("content-type")?.startsWith("multipart/") ||
+    input.path.startsWith("/storage/")
+      ? { timeoutMs: 60_000 }
+      : {}),
   });
 }
 
@@ -218,10 +311,10 @@ function buildResponse(upstream: Response, requestId: string): NextResponse {
     const value = upstream.headers.get(name);
     if (value) headers.set(name, value);
   }
-  headers.set(
-    CONTEXT_HEADERS.requestId,
-    upstream.headers.get(CONTEXT_HEADERS.requestId) ?? requestId,
-  );
+  headers.set("Cache-Control", "private, no-store");
+  headers.append("Vary", "Cookie");
+  headers.set(CONTEXT_HEADERS.requestId, requestId);
+  headers.set(CONTEXT_HEADERS.correlationId, requestId);
   const hasBody = upstream.status !== 204 && upstream.status !== 304;
   return new NextResponse(hasBody ? upstream.body : null, {
     status: upstream.status,

@@ -1,5 +1,5 @@
 import { OperationKind, OperationStatus } from '../../contracts';
-import { ValidationException } from '../../exceptions';
+import { ForbiddenException, ValidationException } from '../../exceptions';
 import type { OperationRepository } from './operation.repository';
 import { OperationService } from './operation.service';
 import type { OperationStorageService } from './operation-storage.service';
@@ -169,6 +169,7 @@ describe('OperationService', () => {
         expect.objectContaining({ manualAmount }),
         'actor-id',
         expect.any(Object),
+        false,
       );
     },
   );
@@ -194,6 +195,7 @@ describe('OperationService', () => {
       expect.objectContaining({ scheduledStart, scheduledEnd: null }),
       'actor-id',
       expect.any(Object),
+      true,
     );
   });
 
@@ -244,7 +246,11 @@ describe('OperationService', () => {
         if (OperationStateMachine.allowedTransitions(from).includes(to)) {
           await expect(action).resolves.toMatchObject({ status: to });
         } else {
-          await expect(action).rejects.toBeInstanceOf(ValidationException);
+          const error =
+            from === OperationStatus.COMPLETED && to === OperationStatus.OPEN
+              ? ForbiddenException
+              : ValidationException;
+          await expect(action).rejects.toBeInstanceOf(error);
         }
       }
     }

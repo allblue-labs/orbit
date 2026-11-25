@@ -52,6 +52,8 @@ export function loginFailure(error: unknown): LoginFailure {
         title: "Não foi possível entrar",
         description,
       };
+    case "EMAIL_VERIFICATION_REQUIRED":
+      return { revealMfa: false, title: "Confirme seu e-mail", description };
     case "ACCOUNT_LOCKED":
       return { revealMfa: false, title: "Acesso bloqueado", description };
     default:

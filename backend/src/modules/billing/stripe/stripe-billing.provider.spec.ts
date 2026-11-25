@@ -7,9 +7,17 @@ import { BillingMode } from '../billing.types';
 import { BillingConfigurationInvalidException } from '../billing.errors';
 import { StripeBillingProvider } from './stripe-billing.provider';
 
+// Keep the paid/trial periods active regardless of the day this suite runs.
+beforeEach(() => {
+  jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+  jest.setSystemTime(new Date('2026-10-23T12:00:00Z'));
+});
+afterEach(() => jest.useRealTimers());
+
 describe('StripeBillingProvider subscription commands', () => {
   const current = (overrides: Record<string, unknown> = {}) => ({
     id: 'sub_test_1',
+    livemode: false,
     customer: 'cus_test_1',
     status: 'active',
     cancel_at_period_end: false,
@@ -40,10 +48,15 @@ describe('StripeBillingProvider subscription commands', () => {
         'https://orbit.example.test/configuracoes?secao=assinatura',
       checkoutSuccessUrl:
         'https://orbit.example.test/configuracoes?secao=assinatura&assinatura=sucesso',
-      priceId: jest.fn().mockReturnValue('price_target'),
+      catalogEntryForPrice: jest.fn().mockResolvedValue({
+        planCode: PlanCode.PROFESSIONAL_INTELLIGENCE,
+        billingInterval: BillingInterval.MONTHLY,
+        amountMinor: 24990,
+      }),
     };
     const subscriptions = {
       retrieve: jest.fn().mockResolvedValue(current()),
+      cancel: jest.fn().mockResolvedValue(current({ status: 'canceled' })),
       update: jest.fn().mockResolvedValue(
         current({
           metadata: {
@@ -117,11 +130,27 @@ describe('StripeBillingProvider subscription commands', () => {
           .mockResolvedValue({ url: 'https://billing.stripe.test/confirm' }),
       },
     };
-    const invoices = { retrieve: jest.fn() };
-    const refunds = { retrieve: jest.fn() };
+    const invoices = { retrieve: jest.fn(), createPreview: jest.fn() };
+    const events = {
+      list: jest.fn().mockResolvedValue({ data: [], has_more: false }),
+    };
+    const refunds = { retrieve: jest.fn(), create: jest.fn() };
     const disputes = { retrieve: jest.fn() };
-    const invoicePayments = { list: jest.fn() };
-    const provider = new StripeBillingProvider(config as never);
+    const invoicePayments = {
+      retrieve: jest.fn(),
+      list: jest.fn().mockResolvedValue({ data: [], has_more: false }),
+    };
+    const provider = new StripeBillingProvider(
+      config as never,
+      {
+        selectable: jest.fn().mockResolvedValue({
+          prices: {
+            MONTHLY: { stripePriceId: 'price_target' },
+            ANNUAL: { stripePriceId: 'price_target' },
+          },
+        }),
+      } as never,
+    );
     Object.defineProperty(provider, 'client', {
       value: {
         prices,
@@ -131,6 +160,7 @@ describe('StripeBillingProvider subscription commands', () => {
         subscriptions,
         subscriptionSchedules,
         invoices,
+        events,
         refunds,
         disputes,
         invoicePayments,
@@ -138,15 +168,16 @@ describe('StripeBillingProvider subscription commands', () => {
     });
     return {
       provider,
+      config,
       billingPortal,
       portalConfiguration,
       price,
-      config,
       prices,
       checkout,
       subscriptions,
       subscriptionSchedules,
       invoices,
+      events,
       refunds,
       disputes,
       invoicePayments,
@@ -161,6 +192,137 @@ describe('StripeBillingProvider subscription commands', () => {
     billingInterval: BillingInterval.MONTHLY,
     idempotencyKey: 'orbit:change-plan:stable',
   } as const;
+
+  it('previews an unused-period credit and submits an atomic upgrade pending payment', async () => {
+    const { provider, subscriptions, invoices } = setup();
+    subscriptions.retrieve.mockResolvedValue(
+      current({
+        latest_invoice: 'in_old',
+        collection_method: 'charge_automatically',
+      }),
+    );
+    subscriptions.update.mockResolvedValue(
+      current({
+        latest_invoice: 'in_upgrade',
+        pending_update: { expires_at: 1_793_000_000 },
+      }),
+    );
+    const periodStart = new Date(1_791_158_400_000);
+    const periodEnd = new Date(1_793_836_800_000);
+    const requestedAt = new Date();
+    const invoice = {
+      providerSubscriptionId: 'sub_test_1',
+      providerCustomerId: 'cus_test_1',
+      creditNotesMinor: 0,
+      amountPaidMinor: 14990,
+      subscriptionLines: [
+        {
+          subscriptionId: 'sub_test_1',
+          priceId: 'price_old',
+          periodStart,
+          periodEnd,
+        },
+      ],
+      paymentEvidence: [{ amountMinor: 14990 }],
+    };
+    jest
+      .spyOn(provider, 'retrieveInvoice')
+      .mockResolvedValueOnce({ ...invoice, status: 'PAID' } as never)
+      .mockResolvedValueOnce({ ...invoice, status: 'OPEN' } as never);
+    invoices.createPreview.mockResolvedValue({
+      amount_due: 20175,
+      lines: {
+        has_more: false,
+        data: [
+          {
+            amount: 24990,
+            pricing: { price_details: { price: 'price_target' } },
+          },
+          {
+            amount: -4815,
+            pricing: { price_details: { price: 'price_old' } },
+            parent: { subscription_item_details: { proration: true } },
+          },
+        ],
+      },
+    });
+    const result = await provider.beginMonthlyUpgrade({
+      requestId: 'up_1',
+      requestedAt,
+      providerSubscriptionId: 'sub_test_1',
+      providerCustomerId: 'cus_test_1',
+      currentPriceId: 'price_old',
+      currentPeriodStart: periodStart,
+      currentPeriodEnd: periodEnd,
+      priceId: 'price_target',
+      planCode: PlanCode.PROFESSIONAL_INTELLIGENCE,
+      organizationId: 'org_1',
+      subscriptionId: 'local_sub_1',
+    });
+    const parameters = {
+      billing_cycle_anchor: 'now',
+      proration_behavior: 'always_invoice',
+      proration_date: Math.floor(requestedAt.getTime() / 1000),
+      items: [{ id: 'si_test_1', price: 'price_target' }],
+    };
+    expect(invoices.createPreview).toHaveBeenCalledWith({
+      subscription: 'sub_test_1',
+      subscription_details: parameters,
+    });
+    expect(subscriptions.update).toHaveBeenCalledWith(
+      'sub_test_1',
+      {
+        ...parameters,
+        payment_behavior: 'pending_if_incomplete',
+        metadata: { orbitMonthlyUpgradeId: 'up_1' },
+      },
+      { idempotencyKey: 'orbit:monthly-upgrade:up_1' },
+    );
+    expect(result).toMatchObject({
+      invoice: { status: 'OPEN' },
+      subscription: { hasPendingUpdate: true, providerPriceId: 'price_old' },
+    });
+  });
+
+  it('refunds the full identified payment and cancels the subscription without a final charge', async () => {
+    const { provider, subscriptions, refunds } = setup();
+    jest.spyOn(provider, 'retrieveInvoice').mockResolvedValue({
+      providerCustomerId: 'cus_test_1',
+      providerSubscriptionId: 'sub_test_1',
+      status: 'PAID',
+      paymentEvidence: [
+        { paymentIntentId: 'pi_unit', amountMinor: 14990, currency: 'brl' },
+      ],
+      currency: 'brl',
+      amountPaidMinor: 14990,
+      creditNotesMinor: 0,
+    } as never);
+    refunds.create.mockResolvedValue({ id: 're_unit', status: 'succeeded' });
+    await expect(
+      provider.refundAndCancel({
+        requestId: 'refund_1',
+        providerSubscriptionId: 'sub_test_1',
+        providerCustomerId: 'cus_test_1',
+        invoiceId: 'in_unit',
+        paymentIntentId: 'pi_unit',
+        amountMinor: 14990,
+      }),
+    ).resolves.toEqual({ refundId: 're_unit', status: 'succeeded' });
+    expect(refunds.create).toHaveBeenCalledWith(
+      {
+        payment_intent: 'pi_unit',
+        amount: 14990,
+        reason: 'requested_by_customer',
+        metadata: { orbitRefundRequestId: 'refund_1' },
+      },
+      { idempotencyKey: 'orbit:refund:refund_1' },
+    );
+    expect(subscriptions.cancel).toHaveBeenCalledWith(
+      'sub_test_1',
+      { invoice_now: false, prorate: false },
+      { idempotencyKey: 'orbit:refund-cancel:refund_1' },
+    );
+  });
 
   it('portal geral não oferece troca imediata e reutiliza configuração restrita', async () => {
     const { provider, billingPortal } = setup();
@@ -189,6 +351,7 @@ describe('StripeBillingProvider subscription commands', () => {
     const { provider, billingPortal, subscriptions, config } = setup();
     await expect(
       provider.createPlanChangeSession({
+        organizationId: 'org_1',
         providerCustomerId: 'cus_test_1',
         providerSubscriptionId: 'sub_test_1',
         planCode: PlanCode.PROFESSIONAL_INTELLIGENCE,
@@ -222,6 +385,7 @@ describe('StripeBillingProvider subscription commands', () => {
       'continue_trial';
     await expect(
       provider.createPlanChangeSession({
+        organizationId: 'org_1',
         providerCustomerId: 'cus_test_1',
         providerSubscriptionId: 'sub_test_1',
         planCode: PlanCode.PROFESSIONAL_INTELLIGENCE,
@@ -238,6 +402,7 @@ describe('StripeBillingProvider subscription commands', () => {
       'none';
     await expect(
       provider.createPlanChangeSession({
+        organizationId: 'org_1',
         providerCustomerId: 'cus_test_1',
         providerSubscriptionId: 'sub_test_1',
         planCode: PlanCode.PROFESSIONAL_INTELLIGENCE,
@@ -251,6 +416,7 @@ describe('StripeBillingProvider subscription commands', () => {
     const { provider } = setup();
     const payload = JSON.stringify({
       id: 'evt_unit',
+      livemode: false,
       type: 'customer.subscription.updated',
       api_version: '2026-08-26.dahlia',
       created: Math.floor(Date.now() / 1000),
@@ -279,6 +445,7 @@ describe('StripeBillingProvider subscription commands', () => {
     const { provider } = setup();
     const payload = JSON.stringify({
       id: 'evt_unit',
+      livemode: false,
       type: 'customer.subscription.updated',
       data: { object: { id: 'sub_unit' } },
     });
@@ -380,7 +547,12 @@ describe('StripeBillingProvider subscription commands', () => {
   });
 
   it('preserva o preço atual e agenda downgrade para o fim do período', async () => {
-    const { provider, prices, subscriptionSchedules } = setup();
+    const { provider, prices, subscriptionSchedules, config } = setup();
+    config.catalogEntryForPrice.mockResolvedValue({
+      planCode: PlanCode.ESSENTIAL,
+      billingInterval: BillingInterval.ANNUAL,
+      amountMinor: 59900,
+    });
     prices.retrieve.mockResolvedValue({
       id: 'price_target',
       active: true,
@@ -458,6 +630,7 @@ describe('StripeBillingProvider subscription commands', () => {
     const { provider, invoices } = setup();
     invoices.retrieve.mockResolvedValue({
       id: 'in_test_1',
+      livemode: false,
       customer: 'cus_test_1',
       parent: {
         subscription_details: { subscription: 'sub_test_1' },
@@ -527,7 +700,7 @@ describe('StripeBillingProvider subscription commands', () => {
       receipt_number: 'secret_receipt_not_projected',
     });
     invoicePayments.list.mockResolvedValue({
-      data: [{ invoice: 'in_test_1' }],
+      data: [{ invoice: 'in_test_1', livemode: false }],
       has_more: false,
     });
 
@@ -548,5 +721,211 @@ describe('StripeBillingProvider subscription commands', () => {
     expect(JSON.stringify(adjustment)).not.toContain(
       'secret_receipt_not_projected',
     );
+  });
+  const cashInvoice = () => ({
+    id: 'in_cash',
+    livemode: false,
+    customer: 'cus_test_1',
+    parent: { subscription_details: { subscription: 'sub_test_1' } },
+    number: null,
+    status: 'paid',
+    currency: 'brl',
+    subtotal: 5000,
+    total: 5000,
+    amount_due: 5000,
+    amount_paid: 5000,
+    amount_remaining: 0,
+    pre_payment_credit_notes_amount: 0,
+    post_payment_credit_notes_amount: 0,
+    attempted: true,
+    attempt_count: 1,
+    billing_reason: 'subscription_cycle',
+    collection_method: 'charge_automatically',
+    period_start: 1791158400,
+    period_end: 1793836800,
+    due_date: null,
+    next_payment_attempt: null,
+    status_transitions: {
+      finalized_at: 1791158400,
+      paid_at: 1791158500,
+      voided_at: null,
+      marked_uncollectible_at: null,
+    },
+    created: 1791158400,
+  });
+  const cashPayment = () => ({
+    id: 'inpay_cash',
+    invoice: 'in_cash',
+    livemode: false,
+    status: 'paid',
+    amount_paid: 5000,
+    currency: 'brl',
+    status_transitions: { paid_at: 1791158500 },
+    payment: {
+      type: 'payment_intent',
+      payment_intent: {
+        id: 'pi_cash',
+        status: 'succeeded',
+        customer: 'cus_test_1',
+        currency: 'brl',
+        amount_received: 5000,
+        livemode: false,
+      },
+    },
+  });
+  it('PAID and a payment record alone do not assert Stripe cash', async () => {
+    const { provider, invoices, invoicePayments } = setup();
+    invoices.retrieve.mockResolvedValue(cashInvoice());
+    invoicePayments.list.mockResolvedValue({
+      data: [
+        {
+          ...cashPayment(),
+          payment: { type: 'payment_record', payment_record: 'pyr_external' },
+        },
+      ],
+      has_more: false,
+    });
+    expect((await provider.retrieveInvoice('in_cash')).paymentEvidence).toEqual(
+      [],
+    );
+  });
+  it('records only a succeeded, correlated Stripe PaymentIntent and original paid timestamp', async () => {
+    const { provider, invoices, invoicePayments } = setup();
+    invoices.retrieve.mockResolvedValue(cashInvoice());
+    invoicePayments.list.mockResolvedValue({
+      data: [cashPayment()],
+      has_more: false,
+    });
+    expect((await provider.retrieveInvoice('in_cash')).paymentEvidence).toEqual(
+      [
+        {
+          invoicePaymentId: 'inpay_cash',
+          paymentIntentId: 'pi_cash',
+          amountMinor: 5000,
+          currency: 'brl',
+          confirmedAt: new Date(1791158500000).toISOString(),
+        },
+      ],
+    );
+  });
+  it.each(['WRONG_CUSTOMER', 'PROCESSING', 'SHORT_AMOUNT', 'WRONG_CURRENCY'])(
+    'does not assert cash without valid payment evidence: %s',
+    async (scenario) => {
+      const { provider, invoices, invoicePayments } = setup();
+      invoices.retrieve.mockResolvedValue(cashInvoice());
+      const payment = cashPayment();
+      if (scenario === 'WRONG_CUSTOMER')
+        payment.payment.payment_intent.customer = 'cus_other';
+      if (scenario === 'PROCESSING')
+        payment.payment.payment_intent.status = 'processing';
+      if (scenario === 'SHORT_AMOUNT')
+        payment.payment.payment_intent.amount_received = 1;
+      if (scenario === 'WRONG_CURRENCY')
+        payment.payment.payment_intent.currency = 'usd';
+      invoicePayments.list.mockResolvedValue({
+        data: [payment],
+        has_more: false,
+      });
+      expect(
+        (await provider.retrieveInvoice('in_cash')).paymentEvidence,
+      ).toEqual([]);
+    },
+  );
+  it('fails closed for a LIVE invoice in a TEST provider', async () => {
+    const { provider, invoices } = setup();
+    invoices.retrieve.mockResolvedValue({ ...cashInvoice(), livemode: true });
+    await expect(provider.retrieveInvoice('in_cash')).rejects.toThrow(
+      'BILLING_MODE_MISMATCH',
+    );
+  });
+  it('fails closed on unbounded payment pagination', async () => {
+    const { provider, invoices, invoicePayments } = setup();
+    invoices.retrieve.mockResolvedValue(cashInvoice());
+    invoicePayments.list.mockResolvedValue({
+      data: [cashPayment()],
+      has_more: true,
+    });
+    await expect(provider.retrieveInvoice('in_cash')).rejects.toThrow(
+      'BILLING_PAYMENT_PAGE_LIMIT',
+    );
+    expect(invoicePayments.list).toHaveBeenCalledTimes(3);
+  });
+  it('discovers bounded Stripe event history with original occurrence time and cursor', async () => {
+    const { provider, events } = setup();
+    events.list.mockResolvedValue({
+      data: [
+        {
+          id: 'evt_recovered',
+          type: 'invoice.paid',
+          livemode: false,
+          created: 1791158500,
+          api_version: '2026-08-26.dahlia',
+          data: {
+            object: {
+              id: 'in_cash',
+              parent: { subscription_details: { subscription: 'sub_test_1' } },
+            },
+          },
+        },
+      ],
+      has_more: true,
+    });
+    const from = new Date('2026-10-01'),
+      through = new Date('2026-10-02');
+    const page = await provider.listRecoveryEvents({
+      from,
+      through,
+      after: 'evt_after',
+      limit: 25,
+    });
+    expect(events.list).toHaveBeenCalledWith({
+      created: {
+        gte: Math.floor(from.getTime() / 1000),
+        lte: Math.floor(through.getTime() / 1000),
+      },
+      starting_after: 'evt_after',
+      limit: 25,
+    });
+    expect(page.events[0]).toMatchObject({
+      mode: 'TEST',
+      providerEventId: 'evt_recovered',
+      objectId: 'in_cash',
+      subscriptionId: 'sub_test_1',
+      createdAt: new Date(1791158500000),
+    });
+    expect(page.hasMore).toBe(true);
+  });
+  it('rejects a signed LIVE webhook in TEST mode', () => {
+    const { provider } = setup();
+    const payload = JSON.stringify({
+      id: 'evt_live',
+      type: 'invoice.paid',
+      livemode: true,
+      data: { object: { id: 'in_live' } },
+    });
+    const signature = Stripe.webhooks.generateTestHeaderString({
+      payload,
+      secret: 'whsec_unit_only',
+    });
+    expect(() =>
+      provider.verifyWebhook(Buffer.from(payload), signature),
+    ).toThrow('mode mismatch');
+  });
+  it('correlates invoice_payment.paid through the authoritative InvoicePayment', async () => {
+    const { provider, invoicePayments } = setup();
+    invoicePayments.retrieve.mockResolvedValue({
+      invoice: 'in_cash',
+      livemode: false,
+    });
+    await expect(
+      provider.retrieveInvoicePaymentInvoice('inpay_cash'),
+    ).resolves.toBe('in_cash');
+    invoicePayments.retrieve.mockResolvedValue({
+      invoice: 'in_live',
+      livemode: true,
+    });
+    await expect(
+      provider.retrieveInvoicePaymentInvoice('inpay_live'),
+    ).rejects.toThrow('BILLING_MODE_MISMATCH');
   });
 });

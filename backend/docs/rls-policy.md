@@ -1,8 +1,8 @@
 # Row Level Security policy
 
-The canonical executable definition is
-`prisma/migrations/20260730170000_enable_rls/migration.sql`. It is intentionally
-separate from the baseline schema migration.
+The base policies are in `prisma/migrations/20260730170000_enable_rls/migration.sql`.
+Subsequent migrations extend them. The [release runbook](../../docs/release/rls-pgbouncer.md)
+describes the current role grants and connection topology.
 
 ## Context contract
 
@@ -22,7 +22,7 @@ state when a pooled connection is reused.
 
 ## Policy groups
 
-- Global catalogs: `modules` and `plans`.
+- Shared read-only catalogs: `modules` and `pmoc_plan_name_options`.
 - Authentication bootstrap: `users`, `credentials`, `mfa_factors`,
   `password_reset_tokens`, `sessions`, and `identity_invitations`.
 - Organization root: `organizations`.
@@ -51,22 +51,21 @@ System roles (`organization_id IS NULL`) are readable by authenticated users but
 mutable only by platform administrators. Tenant roles remain isolated by
 organization.
 
-## Identity bootstrap exception
+## Identity bootstrap
 
-Authentication and token-consumption tables cannot use forced tenant RLS because
-login, refresh, password reset, and invitation acceptance begin before a trusted
-tenant context exists. Their repositories use exact identifiers or token
-hashes, generic recovery responses, expiration checks, one-time consumption,
-and application authorization.
+Identity tables enforce RLS. Login, refresh, recovery and invitation acceptance
+begin with exact lookups using a normalized email, credential ID or token digest.
+The new lookup routines run with a dedicated NOLOGIN owner. Further reads and
+writes set the validated identity or organization inside a transaction. Team
+rosters keep read access to identities associated with their organization.
+
+Public plans are shared catalog data. Private offers and their Stripe mappings
+require the tenant or platform context. The administrative catalog writer has
+an explicit write policy.
 
 ## Applying
 
-The migration has not been applied by Codex. After confirming the target
-database:
-
-```bash
-npx prisma migrate deploy
-```
-
-Use an application database role without `BYPASSRLS`. Superusers and roles with
-`BYPASSRLS` defeat tenant isolation even when policies are forced.
+Use the Compose migrator through `DIRECT_DATABASE_URL` to apply schema changes
+and reconcile grants. The API and consumers connect through PgBouncer using
+restricted roles. PostgreSQL superusers and `BYPASSRLS` roles bypass policies
+even when RLS is forced.

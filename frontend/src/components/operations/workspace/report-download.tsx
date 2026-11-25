@@ -1,18 +1,23 @@
 "use client";
 
-import { Download, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useAction } from "@/actions";
 import { MutationError } from "@/components/artifact-studio/mutation-error";
 import { Button } from "@/components/ui/button";
-import {
-  useExecutionManifests,
-  useRenderState,
-} from "@/hooks/documents/use-documents";
-import { useSignedUrl } from "@/hooks/documents/use-signed-url";
-import { browserUrlFor } from "@/lib/backend-url";
+import { IssuedDocumentActions } from "@/documents/issued-document-actions";
+import { isDocumentIssued } from "@/documents/issued-document";
+import { useRenderState } from "@/hooks/documents/use-documents";
 import type { ArtifactExecutionListItem } from "@/types/artifact-executions";
 
-/** Downloads the issued document of any type, including documents created in the app. */
+/**
+ * Baixar ou compartilhar o documento emitido da operação — de qualquer tipo,
+ * inclusive os gerados pelo app.
+ *
+ * Emitido, delega ao `IssuedDocumentActions`: o mesmo par de botões de toda
+ * lista de documentos, e que só busca o arquivo no clique. Antes buscava a URL
+ * assinada ao abrir a página — e ela expira, então o link podia estar vencido
+ * quando a pessoa clicasse. Em emissão, acompanha o estado até ficar pronto.
+ */
 export function OperationReportDownload({
   execution,
 }: {
@@ -26,61 +31,35 @@ export function OperationReportDownload({
   const status = pending
     ? (render.data?.renderStatus ?? execution.renderStatus)
     : execution.renderStatus;
-  const revisions = useExecutionManifests(
-    execution.id,
-    access.allowed && status === "READY",
-  );
-  const manifest = revisions.data?.data.find(
-    (item) =>
-      item.isActive && item.status === "ISSUED" && Boolean(item.contentHash),
-  );
-  const signed = useSignedUrl(manifest?.id ?? "", "download", {
-    enabled: access.allowed && Boolean(manifest),
-  });
 
   if (!access.allowed)
     return (
       <p className="text-xs text-muted-foreground">{access.blockReason}</p>
     );
-  const error =
-    (pending ? render.error : null) ?? revisions.error ?? signed.error;
-  if (error)
+  if (pending && render.error)
     return (
       <div className="space-y-2">
-        <MutationError error={error} />
+        <MutationError error={render.error} />
         <Button
           size="sm"
           variant="outline"
-          onClick={() => {
-            if (render.error) void render.refetch();
-            else if (revisions.error) void revisions.refetch();
-            else void signed.refetch();
-          }}
+          onClick={() => void render.refetch()}
         >
-          Tentar baixar novamente
+          Verificar novamente
         </Button>
       </div>
     );
-  if (signed.data)
+  if (isDocumentIssued(status))
     return (
-      <Button size="sm" variant="outline" asChild>
-        <a
-          href={browserUrlFor(signed.data.url)}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label={`Baixar relatório: ${execution.title}`}
-        >
-          <Download className="size-4" />
-          Baixar relatório
-        </a>
-      </Button>
+      <IssuedDocumentActions
+        executionId={execution.id}
+        renderStatus={status}
+        code={execution.code}
+        title={execution.title}
+        variant="full"
+      />
     );
-  if (
-    status === "PENDING" ||
-    status === "RENDERING" ||
-    (status === "READY" &&
-      (revisions.isPending || (manifest && signed.isPending)))
-  ) {
+  if (status === "PENDING" || status === "RENDERING")
     return (
       <p
         role="status"
@@ -90,14 +69,11 @@ export function OperationReportDownload({
         Preparando relatório…
       </p>
     );
-  }
   return (
     <p className="text-xs text-muted-foreground">
-      {status === "READY"
-        ? "Nenhuma revisão emitida está disponível para download."
-        : status === "FAILED"
-          ? "Não foi possível gerar este relatório. Abra o documento para verificar a emissão."
-          : "O relatório ainda não foi gerado."}
+      {status === "FAILED"
+        ? "Não foi possível gerar este relatório. Abra o documento para verificar a emissão."
+        : "O relatório ainda não foi gerado."}
     </p>
   );
 }

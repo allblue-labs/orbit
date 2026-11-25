@@ -97,15 +97,24 @@ export function PmocContractSigning({ token }: { token: string }) {
     );
   }
 
-  return <Conteudo token={token} contrato={contrato.data} />;
+  return (
+    <Conteudo
+      token={token}
+      contrato={contrato.data}
+      onReler={() => void contrato.refetch()}
+    />
+  );
 }
 
 function Conteudo({
   token,
   contrato,
+  onReler,
 }: {
   token: string;
   contrato: PmocPublicContract;
+  /** Relê o contrato depois de assinar: nome, data e o PDF já assinado. */
+  onReler: () => void;
 }) {
   const { formatDateTime } = useDateFormatters();
   /**
@@ -119,6 +128,8 @@ function Conteudo({
     mutationFn: () => pmocContractService.document(token),
   });
   const etapa = assinado ? "CONCLUIDO" : etapaDoContrato(contrato.state);
+  /* Assinado, o PDF do link já vem com a página de aceite — e o botão diz isso. */
+  const jaAssinado = assinado || contrato.state === "JA_ASSINADO";
 
   return (
     <Moldura emitente={contrato.emitter.name}>
@@ -136,7 +147,9 @@ function Conteudo({
               <Download className="size-4" />
               {download.isPending
                 ? "Baixando…"
-                : "Baixar contrato completo em PDF"}
+                : jaAssinado
+                  ? "Baixar contrato assinado em PDF"
+                  : "Baixar contrato completo em PDF"}
             </Button>
             <MutationError error={download.error} />
           </div>
@@ -146,7 +159,10 @@ function Conteudo({
           <FormularioDeAssinatura
             token={token}
             expiresAt={contrato.expiresAt}
-            onAssinado={() => setAssinado(true)}
+            onAssinado={() => {
+              setAssinado(true);
+              onReler();
+            }}
           />
         ) : null}
 

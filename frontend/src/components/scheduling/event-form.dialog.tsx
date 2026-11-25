@@ -89,8 +89,8 @@ import {
   type SchedulingEventStatus,
   type SchedulingPriority,
 } from "@/types/scheduling";
-import { CalendarSetup } from "./calendar-setup";
-import { eventStatusLabel } from "./event-badges";
+import { CalendarSetup, defaultCalendarOf } from "./calendar-setup";
+import { eventStatusLabel, eventTypeLabel } from "./event-badges";
 
 /** Origem dos eventos nascidos na agenda — `sourceModule` é obrigatório. */
 const MANUAL_SOURCE = { module: "scheduling", entityType: "MANUAL" } as const;
@@ -330,26 +330,27 @@ function EventForm({
           <Label htmlFor="event-type" required>
             Tipo
           </Label>
-          <Input
-            id="event-type"
-            required
-            aria-required="true"
-            list="event-type-options"
+          <Select
             value={form.type}
-            maxLength={SCHEDULING_LIMITS.typeMaxLength}
-            onChange={(event) =>
-              edit({ type: event.target.value.toUpperCase() })
-            }
-            className="font-mono text-sm"
-          />
-          <datalist id="event-type-options">
-            {SUGGESTED_EVENT_TYPES.map((type) => (
-              <option key={type} value={type} />
-            ))}
-          </datalist>
-          <p className="text-xs text-muted-foreground">
-            Texto livre: apenas o formato é conferido.
-          </p>
+            onValueChange={(value) => edit({ type: value })}
+          >
+            <SelectTrigger id="event-type" aria-required="true">
+              <SelectValue placeholder="Selecione" />
+            </SelectTrigger>
+            <SelectContent>
+              {/* Um evento criado pelo Orbit (atendimento, visita do RVT)
+                  mantém o tipo que tem, mesmo fora das sugestões. */}
+              {(SUGGESTED_EVENT_TYPES as readonly string[]).includes(form.type) ||
+              !form.type ? null : (
+                <SelectItem value={form.type}>{eventTypeLabel(form.type)}</SelectItem>
+              )}
+              {SUGGESTED_EVENT_TYPES.map((type) => (
+                <SelectItem key={type} value={type}>
+                  {eventTypeLabel(type)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="space-y-2">
@@ -622,13 +623,6 @@ function RecurrenceFields({
       ) : null}
     </div>
   );
-}
-
-/** Calendário padrão da organização, ou o primeiro da lista. */
-function defaultCalendarOf(
-  calendars: readonly SchedulingCalendar[],
-): SchedulingCalendar | undefined {
-  return calendars.find((calendar) => calendar.isDefault) ?? calendars[0];
 }
 
 function initialState(

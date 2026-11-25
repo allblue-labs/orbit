@@ -1,6 +1,8 @@
+import { outboundConfiguration } from './network/outbound.config';
 import { InfrastructureException } from './exceptions';
 import { isEmail } from 'class-validator';
 import { emailConfiguration } from './modules/email/email.config';
+import { sesFeedbackConfiguration } from './modules/email/ses-feedback.config';
 
 const PLACEHOLDER = /change[-_]?me|placeholder|example|dummy|test[-_]?only/i;
 
@@ -12,6 +14,70 @@ export function validateReleaseEnvironment(
   environment: NodeJS.ProcessEnv,
 ): void {
   if (environment.NODE_ENV !== 'production') return;
+  // Only explicit administrative jobs may receive these credentials. Reject
+  // even an unused duplicate: an HTTP/worker compromise must not expose it.
+  for (const key of [
+    'DIRECT_DATABASE_URL',
+    'BACKUP_DATABASE_PASSWORD',
+    'PGBOUNCER_STATS_PASSWORD',
+    'APP_DATABASE_URL',
+    'POSTGRES_PASSWORD',
+    'PLATFORM_ADMIN_PASSWORD',
+    'OWNER_PASSWORD',
+  ]) {
+    if (environment[key]?.trim()) {
+      throw new InfrastructureException(
+        `${key} is reserved outside runtime; use the pooled DATABASE_URL`,
+      );
+    }
+  }
+  try {
+    const url = new URL(environment.DATABASE_URL ?? '');
+    const expectedUser = {
+      api: 'orbit_app',
+      worker: 'orbit_worker',
+      documents: 'orbit_documents',
+    }[environment.ORBIT_PROCESS_ROLE ?? 'api'];
+    if (
+      !['postgres:', 'postgresql:'].includes(url.protocol) ||
+      url.hostname !== 'pgbouncer' ||
+      url.port !== '6432' ||
+      url.searchParams.get('pgbouncer') !== 'true' ||
+      !expectedUser ||
+      url.username !== expectedUser ||
+      !url.password ||
+      url.pathname.length < 2
+    )
+      throw new Error('invalid runtime database URL');
+  } catch {
+    throw new InfrastructureException(
+      'DATABASE_URL must point to PgBouncer with the expected runtime role',
+    );
+  }
+  if (environment.DATABASE_ENFORCE_RESTRICTED_ROLE?.trim() === 'false') {
+    throw new InfrastructureException(
+      'DATABASE_ENFORCE_RESTRICTED_ROLE cannot be disabled in production',
+    );
+  }
+  if (
+    (environment.ORBIT_DEPLOYMENT ?? 'production') === 'production' &&
+    environment.SUBSCRIPTION_DATA_RETENTION_ENABLED?.trim() === 'true' &&
+    (!/^[a-f0-9]{32}$/.test(
+      environment.CLOUDFLARE_CACHE_PURGE_ZONE_ID?.trim() ?? '',
+    ) ||
+      !environment.CLOUDFLARE_CACHE_PURGE_TOKEN?.trim())
+  ) {
+    throw new InfrastructureException(
+      'Production retention requires Cloudflare cache purge configuration',
+    );
+  }
+  try {
+    outboundConfiguration(environment);
+  } catch {
+    throw new InfrastructureException(
+      'Invalid outbound HTTP destination policy configuration',
+    );
+  }
 
   const secret = (key: string, minimum: number): string => {
     const value = environment[key]?.trim() ?? '';
@@ -25,8 +91,19 @@ export function validateReleaseEnvironment(
 
   secret('JWT_ACCESS_SECRET', 32);
   secret('TRIAL_FINGERPRINT_SECRET', 32);
+  secret('AUTH_RATE_LIMIT_SECRET', 32);
+  secret('TRUSTED_PROXY_SECRET', 32);
 
   const email = emailConfiguration(environment);
+  try {
+    sesFeedbackConfiguration(environment);
+  } catch (error) {
+    throw new InfrastructureException(
+      error instanceof Error
+        ? error.message
+        : 'Invalid SES feedback configuration',
+    );
+  }
   for (const key of [
     'IDENTITY_PUBLIC_WEB_URL',
     'AWS_ACCESS_KEY_ID',

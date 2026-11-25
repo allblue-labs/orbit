@@ -1,0 +1,21 @@
+{
+  "protocolVersion": "1.0.0",
+  "linkId": "link-demo",
+  "nexusPartyId": "party-demo",
+  "target": {
+    "productId": "orbit-v2",
+    "environment": "staging",
+    "instanceId": "orbit-staging-01",
+    "tenantId": "00000000-0000-7000-8000-000000000001"
+  },
+  "nexusCommercialContractIds": [
+    "contract-demo"
+  ],
+  "orbitSubscriptionId": "subscription-demo",
+  "status": "ACTIVE",
+  "version": 1,
+  "evidenceRef": "verification-demo",
+  "verifiedAt": "2026-11-15T12:00:00Z",
+  "updatedAt": "2026-11-15T12:00:00Z",
+  "auditRef": "audit-demo"
+}

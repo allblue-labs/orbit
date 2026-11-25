@@ -32,8 +32,12 @@
  * verificável: os módulos que existem e o que cada um faz.
  */
 import Link from "next/link";
+import { ContactSection } from "./contact-section";
 import {
+  UsersRound,
   ArrowRight,
+  Briefcase,
+  ChevronDown,
   CalendarClock,
   ClipboardCheck,
   FileText,
@@ -54,6 +58,14 @@ import {
   OrbitMobilePresentation,
 } from "@/components/mobile/orbit-mobile-presentation";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ROUTES } from "@/lib/routes";
 import type { PlanCatalog } from "@/types/billing";
 
@@ -154,11 +166,7 @@ const aparecer = {
 function Header() {
   return (
     <header className="sticky top-0 z-40 border-b border-border/60 bg-background/70 backdrop-blur-xl">
-      {/*
-        Altura automática e quebra de linha — mesma razão da página de planos:
-        em 375 a marca e os dois botões não cabem numa linha só.
-      */}
-      <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-y-2 px-4 py-3 sm:h-16 sm:flex-nowrap sm:px-6 sm:py-0">
+      <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
         <Link
           href="/"
           aria-label="Orbit — início"
@@ -189,19 +197,82 @@ function Header() {
             Planos
           </Link>
         </nav>
-        <div className="flex items-center gap-2">
-          <Button asChild variant="ghost" size="sm">
-            <Link href="/login">Entrar</Link>
-          </Button>
+        {/*
+          Duas ações, uma por público.
+
+          Antes eram três botões com três pesos diferentes, e o de menor
+          público (portal do cliente) era o mais chamativo. Agora quem já tem
+          conta encontra um "Entrar" só e escolhe ali onde entra — equipe ou
+          portal —, e quem está conhecendo o produto tem um destaque só.
+          Cabe numa linha até em 375.
+        */}
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <AccessMenu />
           <Button asChild size="sm">
             <Link href="/cadastro">
-              Começar agora
+              <span className="sm:hidden">Começar</span>
+              <span className="hidden sm:inline">Começar agora</span>
               <ArrowRight className="size-4" />
             </Link>
           </Button>
         </div>
       </div>
     </header>
+  );
+}
+
+/**
+ * "Entrar", para quem já tem acesso: a equipe da empresa ou o cliente dela.
+ *
+ * Cada opção diz para quem é, com uma linha do que se encontra lá — a pessoa
+ * se reconhece na descrição, não precisa adivinhar pelo nome do produto.
+ */
+function AccessMenu() {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="sm" className="gap-1">
+          Entrar
+          <ChevronDown className="size-3.5 opacity-70" aria-hidden />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        collisionPadding={12}
+        className="w-72 max-w-[calc(100vw-24px)] p-1.5"
+      >
+        <DropdownMenuLabel className="px-2 pt-1 pb-1.5 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+          Entrar como
+        </DropdownMenuLabel>
+        <DropdownMenuItem asChild className="items-start gap-3 rounded-md p-2">
+          <Link href="/login">
+            <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+              <Briefcase className="size-4" aria-hidden />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-sm font-medium">Equipe da empresa</span>
+              <span className="block text-xs text-muted-foreground">
+                Agenda, atendimentos, PMOC, orçamentos e financeiro.
+              </span>
+            </span>
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator className="my-1" />
+        <DropdownMenuItem asChild className="items-start gap-3 rounded-md p-2">
+          <Link href="/portal/entrar">
+            <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-foreground">
+              <UsersRound className="size-4" aria-hidden />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-sm font-medium">Portal do cliente</span>
+              <span className="block text-xs text-muted-foreground">
+                Acompanhe seus equipamentos e atendimentos, e abra chamados.
+              </span>
+            </span>
+          </Link>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -312,6 +383,7 @@ const COLUNAS: {
     titulo: "Conta",
     itens: [
       { rotulo: "Entrar", href: "/login" },
+      { rotulo: "Portal do cliente", href: "/portal/entrar" },
       { rotulo: "Criar organização", href: "/cadastro" },
       { rotulo: "Recuperar senha", href: "/recuperar-senha" },
     ],
@@ -319,6 +391,7 @@ const COLUNAS: {
   {
     titulo: "Suporte",
     itens: [
+      { rotulo: "Suporte e feedback", href: "#contato", externo: false },
       {
         rotulo: "Falar com a AllBlue Labs",
         href: "https://allblue-labs.com",
@@ -439,7 +512,7 @@ export function LandingContent({ catalog }: { catalog: PlanCatalog }) {
                 </Button>
               </div>
               <p className="mt-6 text-sm text-muted-foreground">
-                Implantação guiada · sem custo de setup · suporte em português
+                Implantação guiada · sem custo de implantação · suporte em português
               </p>
             </motion.div>
 
@@ -695,6 +768,7 @@ export function LandingContent({ catalog }: { catalog: PlanCatalog }) {
             </Button>
           </div>
         </section>
+        <ContactSection />
         <section
           id="app-mobile"
           aria-labelledby="app-mobile-title"

@@ -46,7 +46,7 @@ Resultados:
 - `PERMANENT_FAILURE`: terminal;
 - `SKIPPED`: binding ou eligibility deixou de existir.
 
-O modo `PUSH_PROVIDER=disabled` mantém a caixa de avisos sem entrega nativa. `PUSH_PROVIDER=firebase` usa o SDK oficial diretamente com `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL` e `FIREBASE_PRIVATE_KEY`. O transporte legado `gateway` continua opcional. Habilitar Firebase sem credenciais válidas falha no boot. Credenciais nunca são persistidas no banco. Consulte `firebase-push.md`, inclusive sobre os tokens APNs atuais do iOS e a configuração de cliente necessária para FCM.
+O modo `PUSH_PROVIDER=disabled` mantém a caixa de avisos sem entrega nativa. `PUSH_PROVIDER=firebase` usa o SDK oficial diretamente com `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL` e `FIREBASE_PRIVATE_KEY`. O transporte legado `gateway` continua opcional. Habilitar Firebase sem credenciais válidas falha no boot. Credenciais nunca são persistidas no banco. Consulte `firebase-push.md`, e o guia mobile `../../mobile/docs/firebase-push-release.md`: o iOS agora associa APNs ao FCM e registra somente FCM.
 
 ## RLS e observabilidade
 

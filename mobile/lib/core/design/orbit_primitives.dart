@@ -491,6 +491,7 @@ class OrbitListRow extends StatelessWidget {
     this.onTap,
     this.emphasis = false,
     this.tone,
+    this.padding = const EdgeInsets.symmetric(vertical: OrbitSpacing.ms),
   });
 
   /// O dado de leitura rápida. Horário, na maioria das vezes.
@@ -501,6 +502,7 @@ class OrbitListRow extends StatelessWidget {
   final Widget? trailing;
   final VoidCallback? onTap;
   final bool emphasis;
+  final EdgeInsetsGeometry padding;
 
   /// Tinge o horário — o sinal de severidade mais barato que existe.
   final OrbitTone? tone;
@@ -509,6 +511,7 @@ class OrbitListRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return OrbitServiceRow(
       time: leading,
+      padding: padding,
       title: title,
       subtitle: subtitle,
       detail: detail,

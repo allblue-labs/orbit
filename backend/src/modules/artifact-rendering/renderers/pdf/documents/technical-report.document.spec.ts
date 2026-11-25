@@ -208,4 +208,11 @@ describe('Laudo Técnico premium', () => {
     expect(texto).toContain('Emitido');
     expect(texto).not.toContain('COMPLETED');
   });
+
+  it('escreve o papel de quem assina em palavras, nunca o código', async () => {
+    const texto = pdfText((await renderer.render(entrada())).bytes);
+
+    expect(texto).not.toContain('TECHNICAL_MANAGER');
+    expect(texto).toContain('Responsável técnico');
+  });
 });

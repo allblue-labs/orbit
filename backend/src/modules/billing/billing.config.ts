@@ -1,25 +1,9 @@
-/**
- * A configuração da cobrança, conferida na subida.
- *
- * ## Dois estados, e nenhum meio-termo
- *
- * Desligada, o Orbit sobe normalmente e não toca na rede: cobrança é uma
- * fronteira do produto, não o produto. Ligada com configuração incompleta, a
- * subida **falha** — subir pela metade produziria um `checkout` que descobre o
- * preço faltando na frente do cliente, e é tarde demais.
- *
- * ## Os doze preços são configuração, não domínio
- *
- * Quatro planos vezes três periodicidades. O mapa mora aqui e em nenhum outro
- * lugar; o domínio conhece `(plano, periodicidade)` e nada de identificador de
- * provedor. Mapeamento ausente falha fechado — jamais escolhe outro plano.
- */
 import { Injectable, Logger } from '@nestjs/common';
 import { InfrastructureException } from '../../exceptions';
+import { CommercialPlanService } from '../subscription-plans/catalog/commercial-plan.service';
 import { EnvironmentProvider } from '../../providers/common.providers';
 import {
   BillingInterval,
-  PlanCode,
   type BillingInterval as BillingIntervalType,
   type PlanCode as PlanCodeType,
 } from '../subscription-plans/catalog/plan-catalog.types';
@@ -37,20 +21,11 @@ import {
  */
 export const STRIPE_API_VERSION = '2026-08-26.dahlia';
 
-/** Chave de ambiente de um preço: `STRIPE_PRICE_<PLANO>_<PERIODICIDADE>`. */
-export function priceEnvKey(
-  planCode: PlanCodeType,
-  interval: BillingIntervalType,
-): string {
-  return `STRIPE_PRICE_${planCode}_${interval}`;
-}
-
 export interface BillingConfiguration {
   readonly enabled: boolean;
   readonly mode: BillingModeType;
   readonly secretKey: string;
   readonly webhookSecret: string;
-  readonly prices: ReadonlyMap<string, string>;
   readonly checkoutSuccessUrl: string;
   readonly checkoutCancelUrl: string;
   readonly portalReturnUrl: string;
@@ -61,7 +36,10 @@ export class BillingConfig {
   private readonly logger = new Logger(BillingConfig.name);
   private readonly configuration: BillingConfiguration;
 
-  constructor(private readonly environment: EnvironmentProvider) {
+  constructor(
+    private readonly environment: EnvironmentProvider,
+    private readonly plans: CommercialPlanService,
+  ) {
     this.configuration = this.carregar();
   }
 
@@ -93,39 +71,25 @@ export class BillingConfig {
     return this.configuration.portalReturnUrl;
   }
 
-  /**
-   * O identificador de preço de um plano e periodicidade.
-   *
-   * Ausente é erro, nunca um preço parecido: cobrar o valor de outro plano é
-   * pior do que não cobrar.
-   */
-  priceId(
-    planCode: PlanCodeType,
-    interval: BillingIntervalType,
-  ): string | null {
-    return this.configuration.prices.get(`${planCode}:${interval}`) ?? null;
-  }
-
-  /**
-   * Tradução inversa usada somente na reconciliação.
-   *
-   * O preço observado no provedor jamais vira plano por aproximação: ou é um
-   * dos doze IDs configurados na subida, ou o acesso contratado não muda.
-   */
-  catalogEntryForPrice(
-    providerPriceId: string,
-  ): { planCode: PlanCodeType; billingInterval: BillingIntervalType } | null {
-    for (const planCode of Object.values(PlanCode)) {
-      for (const billingInterval of Object.values(BillingInterval)) {
-        if (
-          this.configuration.prices.get(`${planCode}:${billingInterval}`) ===
-          providerPriceId
-        ) {
-          return { planCode, billingInterval };
-        }
-      }
-    }
-    return null;
+  async catalogEntryForPrice(providerPriceId: string): Promise<{
+    planCode: PlanCodeType;
+    billingInterval: BillingIntervalType;
+    amountMinor: number;
+  } | null> {
+    if (!providerPriceId) return null;
+    const row = await this.plans.stripePrice(providerPriceId);
+    if (
+      !row ||
+      !Object.values(BillingInterval).some(
+        (interval) => interval === row.billingInterval,
+      )
+    )
+      return null;
+    return {
+      planCode: row.planCode,
+      billingInterval: row.billingInterval,
+      amountMinor: row.amountMinor,
+    };
   }
 
   private carregar(): BillingConfiguration {
@@ -142,7 +106,6 @@ export class BillingConfig {
         mode: BillingMode.TEST,
         secretKey: '',
         webhookSecret: '',
-        prices: new Map(),
         checkoutSuccessUrl: '',
         checkoutCancelUrl: '',
         portalReturnUrl: '',
@@ -161,19 +124,6 @@ export class BillingConfig {
     const checkoutSuccessUrl = obrigatoria('BILLING_CHECKOUT_SUCCESS_URL');
     const checkoutCancelUrl = obrigatoria('BILLING_CHECKOUT_CANCEL_URL');
     const portalReturnUrl = obrigatoria('BILLING_PORTAL_RETURN_URL');
-
-    const prices = new Map<string, string>();
-    for (const planCode of Object.values(PlanCode)) {
-      for (const interval of Object.values(BillingInterval)) {
-        const chave = priceEnvKey(planCode, interval);
-        const valor = this.environment.getOptional(chave)?.trim();
-        if (!valor) {
-          faltando.push(chave);
-          continue;
-        }
-        prices.set(`${planCode}:${interval}`, valor);
-      }
-    }
 
     if (faltando.length > 0) {
       /**
@@ -197,23 +147,6 @@ export class BillingConfig {
         'STRIPE_WEBHOOK_SECRET must be a webhook signing secret (whsec_)',
       );
     }
-    const seen = new Set<string>();
-    for (const [entry, price] of prices) {
-      const [plan, interval] = entry.split(':');
-      const envKey = `STRIPE_PRICE_${plan}_${interval}`;
-      if (!/^price_[A-Za-z0-9_]+$/.test(price)) {
-        throw new InfrastructureException(
-          `${envKey} must contain a Price ID (price_), not a Product ID (prod_)`,
-        );
-      }
-      if (seen.has(price)) {
-        throw new InfrastructureException(
-          `${envKey} duplicates another price mapping`,
-        );
-      }
-      seen.add(price);
-    }
-
     /** Price IDs don't encode their mode; price.livemode is checked via the API. */
     const mode = /^(sk|rk)_live_/.test(secretKey)
       ? BillingMode.LIVE
@@ -228,7 +161,6 @@ export class BillingConfig {
         stage: 'billing-enabled',
         mode,
         apiVersion: STRIPE_API_VERSION,
-        prices: prices.size,
       }),
     );
 
@@ -237,7 +169,6 @@ export class BillingConfig {
       mode,
       secretKey,
       webhookSecret,
-      prices,
       checkoutSuccessUrl,
       checkoutCancelUrl,
       portalReturnUrl,

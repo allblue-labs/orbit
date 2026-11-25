@@ -1,3 +1,5 @@
+import { renderPdfInThread, shouldOffloadPdf } from '../../runtime/pdf-thread';
+import sharp from 'sharp';
 import { Injectable } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
 import { PDFDocument as PdfArchive } from 'pdf-lib';
@@ -12,12 +14,39 @@ import {
 } from '../artifact-rendering/renderers/pdf/kit/blocks';
 import { signatureBlock } from '../artifact-rendering/renderers/pdf/kit/media-blocks';
 
-interface CustomerAcceptance {
+/**
+ * Os textos da página de aceite. O padrão é o do orçamento; o contrato de PMOC
+ * usa a mesma página com as suas palavras — o mesmo papel, assinado do mesmo
+ * jeito, para quem recebeu o link e para o owner.
+ */
+export interface AcceptanceLabels {
+  title: string;
+  statement: string;
+  roleLabel: string;
+  integrityTitle: string;
+  /** Antes do hash: "Este aceite corresponde ao PDF original…". */
+  integrityLead: string;
+}
+
+const ORCAMENTO = (code: string): AcceptanceLabels => ({
+  title: `Aceite do orçamento ${code}`,
+  statement:
+    'O cliente conferiu os itens, valores e condições da proposta nas páginas anteriores e autorizou sua execução por meio da assinatura abaixo.',
+  roleLabel: 'Cliente · Aprovação da proposta',
+  integrityTitle: 'Integridade da proposta aprovada',
+  integrityLead:
+    'Este aceite corresponde ao PDF original apresentado ao cliente.',
+});
+
+export interface CustomerAcceptance {
   code: string;
   signerName: string;
+  /** CPF/CNPJ informado por quem assinou, quando há. */
+  signerDocument?: string | null;
   signedAt: Date;
   originalSha256: string;
   signature: Buffer;
+  labels?: AcceptanceLabels;
 }
 
 /** Mantém todas as páginas da proposta congelada e acrescenta seu aceite. */
@@ -27,7 +56,16 @@ export class QuoteAcceptedDocumentService {
     original: Buffer,
     acceptance: CustomerAcceptance,
   ): Promise<Buffer> {
-    const receipt = await this.receipt(acceptance);
+    if (shouldOffloadPdf())
+      return renderPdfInThread('accepted-quote', original, acceptance);
+    const receipt = await this.receipt({
+      ...acceptance,
+      signature: await sharp(acceptance.signature, {
+        limitInputPixels: 4_000_000,
+      })
+        .png()
+        .toBuffer(),
+    });
     const document = await PdfArchive.load(original);
     const appendix = await PdfArchive.load(receipt);
     const pages = await document.copyPages(appendix, appendix.getPageIndices());
@@ -54,20 +92,19 @@ export class QuoteAcceptedDocumentService {
       document.on('error', reject);
       try {
         registerFonts(document);
-        sectionTitle(document, `Aceite do orçamento ${acceptance.code}`, theme);
-        noteBlock(
-          document,
-          'O cliente conferiu os itens, valores e condições da proposta nas páginas anteriores e autorizou sua execução por meio da assinatura abaixo.',
-          theme,
-        );
+        const textos = acceptance.labels ?? ORCAMENTO(acceptance.code);
+        sectionTitle(document, textos.title, theme);
+        noteBlock(document, textos.statement, theme);
         document.moveDown(2);
         signatureBlock(
           document,
           [
             {
               label: 'Cliente',
-              signerName: acceptance.signerName,
-              roleLabel: 'Cliente · Aprovação da proposta',
+              signerName: acceptance.signerDocument
+                ? `${acceptance.signerName} · ${acceptance.signerDocument}`
+                : acceptance.signerName,
+              roleLabel: textos.roleLabel,
               image: acceptance.signature,
               imageMimeType: 'image/png',
               signedAtLabel: `${new Intl.DateTimeFormat('pt-BR', {
@@ -80,10 +117,10 @@ export class QuoteAcceptedDocumentService {
           theme,
         );
         document.moveDown(2);
-        sectionTitle(document, 'Integridade da proposta aprovada', theme);
+        sectionTitle(document, textos.integrityTitle, theme);
         noteBlock(
           document,
-          `Este aceite corresponde ao PDF original apresentado ao cliente. SHA-256: ${acceptance.originalSha256}`,
+          `${textos.integrityLead} SHA-256: ${acceptance.originalSha256}`,
           theme,
         );
         document.end();

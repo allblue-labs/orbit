@@ -1,11 +1,8 @@
 /**
- * Os quatro planos comerciais do Orbit.
+ * Referência histórica dos quatro planos originais do Orbit.
  *
- * Este arquivo é a autoridade do catálogo. Ele é **explícito**: cada plano
- * declara as suas capacidades e todos os seus limites, sem herdar de outro em
- * tempo de execução. "Profissional + Inteligência é o Profissional mais IA" é
- * verdade comercial, não mecanismo — herança dinâmica economizaria vinte
- * linhas e cobraria a conta no dia em que um plano precisasse divergir.
+ * As ofertas vigentes são lidas da tabela `plans`. Esta matriz representa a
+ * versão original para testes, reparações e leitura de registros legados.
  *
  * ## O que este catálogo não faz
  *

@@ -48,10 +48,21 @@ app.*.map.json
 /config/local.json
 /config/staging.json
 /config/production.json
+/config/firebase/
+/ios/Runner/GoogleService-Info.plist
+# Ignore the old misspelling too; only GoogleService-Info.plist is used by iOS.
+/ios/Runner/Google-Service-Info.plist
 
 # APNs is enabled per signing environment, never by the API URL or build mode.
 /ios/Flutter/Push.local.xcconfig
+/ios/Flutter/AppLinks.local.xcconfig
 
 # Artefatos de comparacao dos goldens: gerados quando um golden falha,
 # substituidos a cada execucao. O golden em si ja e ignorado logo acima.
 test/screenshots/failures/
+
+# Manual visual review output (not automatically accepted golden baselines).
+/tool/out/
+/tool/failures/
+/test/screenshots/out_portal/
+/test/screenshots/out_owner/

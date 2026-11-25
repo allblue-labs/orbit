@@ -30,6 +30,9 @@ import type { OperationFieldRecordReadModel } from './operation.read-models';
 import { ChecklistService } from './checklist.service';
 import { PlanCapability } from '../subscription-plans/catalog/plan-catalog.types';
 
+const COMPLETED_RESCHEDULE_MESSAGE =
+  'Uma operação concluída não pode ser reagendada. O proprietário pode reabri-la em Alterar status.';
+
 @Injectable()
 export class OperationService {
   private readonly logger = new Logger(OperationService.name);
@@ -177,6 +180,18 @@ export class OperationService {
         'Use explicit assignment commands to change operation technicians',
       );
     const current = await this.get(id, organizationId);
+    const changesSchedule =
+      (input.scheduledStart !== undefined &&
+        input.scheduledStart?.getTime() !==
+          current.scheduledStart?.getTime()) ||
+      (input.scheduledEnd !== undefined &&
+        input.scheduledEnd?.getTime() !== current.scheduledEnd?.getTime());
+    if (changesSchedule && current.status === OperationStatus.COMPLETED) {
+      throw new ConflictException(
+        COMPLETED_RESCHEDULE_MESSAGE,
+        'OPERATION_COMPLETED_RESCHEDULE',
+      );
+    }
     const businessUnitId = input.businessUnitId ?? current.businessUnitId;
     const customerId = input.customerId ?? current.customerId ?? undefined;
     const assetIds =
@@ -218,8 +233,8 @@ export class OperationService {
           title: input.title,
           description: input.description,
           priority: input.priority,
-          scheduledStart: input.scheduledStart,
-          scheduledEnd: input.scheduledEnd,
+          scheduledStart: changesSchedule ? input.scheduledStart : undefined,
+          scheduledEnd: changesSchedule ? input.scheduledEnd : undefined,
           location: input.location as Prisma.InputJsonValue | undefined,
           data: input.data as Prisma.InputJsonValue | undefined,
           /* `undefined` quando o campo não veio: é um `PATCH`, e ausente
@@ -228,8 +243,19 @@ export class OperationService {
         },
         actorId,
         this.json({ changedFields: Object.keys(input) }),
+        changesSchedule,
       );
     } catch (error) {
+      if (
+        changesSchedule &&
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2025'
+      ) {
+        throw new ConflictException(
+          COMPLETED_RESCHEDULE_MESSAGE,
+          'OPERATION_COMPLETED_RESCHEDULE',
+        );
+      }
       this.mapConflict(error);
     }
   }
@@ -240,6 +266,7 @@ export class OperationService {
     actorId: string,
     input: ChangeOperationStatusDto,
     permissions?: readonly string[],
+    isOrganizationOwner = false,
   ) {
     const current = await this.get(id, organizationId);
     /**
@@ -271,7 +298,14 @@ export class OperationService {
         );
     }
     const from = current.status;
-    if (!OperationStateMachine.allows(from, input.status)) {
+    const reopening =
+      from === OperationStatus.COMPLETED &&
+      input.status === OperationStatus.OPEN;
+    if (reopening && !isOrganizationOwner)
+      throw new ForbiddenException(
+        'Somente o proprietário pode reabrir uma operação concluída.',
+      );
+    if (!reopening && !OperationStateMachine.allows(from, input.status)) {
       throw new ValidationException(
         `Status transition from ${from} to ${input.status} is not allowed`,
       );
@@ -283,22 +317,49 @@ export class OperationService {
       input.status,
       {
         status: input.status,
+        ...(reopening ? { scheduledStart: null, scheduledEnd: null } : {}),
         startedAt:
           input.status === OperationStatus.IN_PROGRESS
             ? (current.startedAt ?? now)
-            : undefined,
+            : reopening
+              ? null
+              : undefined,
         startedByUserId:
           input.status === OperationStatus.IN_PROGRESS &&
           !current.startedByUserId
             ? actorId
-            : undefined,
+            : reopening
+              ? null
+              : undefined,
         completedAt:
-          input.status === OperationStatus.COMPLETED ? now : undefined,
+          input.status === OperationStatus.COMPLETED
+            ? now
+            : reopening
+              ? null
+              : undefined,
         completedByUserId:
-          input.status === OperationStatus.COMPLETED ? actorId : undefined,
+          input.status === OperationStatus.COMPLETED
+            ? actorId
+            : reopening
+              ? null
+              : undefined,
       },
       actorId,
-      this.json({ reason: input.reason }),
+      this.json({
+        reason: input.reason,
+        ...(reopening
+          ? {
+              previousCompletion: {
+                completedAt: current.completedAt?.toISOString() ?? null,
+                completedByUserId: current.completedByUserId,
+                startedAt: current.startedAt?.toISOString() ?? null,
+                startedByUserId: current.startedByUserId,
+                scheduledStart: current.scheduledStart?.toISOString() ?? null,
+                scheduledEnd: current.scheduledEnd?.toISOString() ?? null,
+              },
+            }
+          : {}),
+      }),
     );
     if (!result) {
       throw new ConflictException(
@@ -637,16 +698,18 @@ export class OperationService {
     if (!file || file.size === 0) {
       throw new ValidationException('Attachment file is required');
     }
-    const stored = await this.storage.store(file);
+    const stored = await this.storage.store(file, organizationId);
     try {
       return await this.repository.createAttachment(
         {
           operationId: id,
           uploadedById: actorId,
-          fileName: this.fileName(file.originalname),
-          mimeType: file.mimetype || 'application/octet-stream',
+          fileName: this.fileName(stored.fileName),
+          mimeType: stored.mimeType || 'application/octet-stream',
           size: stored.size,
           storageKey: stored.storageKey,
+          storageProvider: stored.storageProvider,
+          storageBucket: stored.storageBucket,
           checksum: stored.checksum,
         },
         actorId,

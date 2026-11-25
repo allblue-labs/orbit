@@ -1,0 +1,27 @@
+{
+  "protocolVersion": "1.0.0",
+  "snapshotId": "snapshot-demo",
+  "asOf": "2026-11-15T12:00:00Z",
+  "watermark": "wm-demo",
+  "nextCursor": null,
+  "freshness": {
+    "observedAt": "2026-11-15T12:00:00Z",
+    "completeThrough": "2026-11-15T12:00:00Z",
+    "state": "FRESH",
+    "gapDetected": false
+  },
+  "items": [
+    {
+      "target": {
+        "productId": "orbit-v2",
+        "environment": "staging",
+        "instanceId": "orbit-staging-01",
+        "tenantId": "00000000-0000-7000-8000-000000000001"
+      },
+      "registered": true,
+      "operationalStatus": "ACTIVE",
+      "subscriptionStatus": "PENDING_PAYMENT",
+      "linkId": "link-demo"
+    }
+  ]
+}

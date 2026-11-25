@@ -14,6 +14,8 @@ export class HealthEngine {
     kpis: KpiReadModel,
     _environment?: EnvironmentalImpactReadModel,
   ): AnalyticsHealthReadModel {
+    // Older callers pass environmental data; it must never influence health.
+    void _environment;
     const definitions = [
       [
         'operations',

@@ -24,6 +24,7 @@
  * quando existe, com o estado que o servidor publica, e o download passa pelo
  * pipeline canônico de artefatos — esta tela não renderiza PDF.
  */
+import { ASSET_CATEGORY_LABELS } from "@/entities";
 import { useState } from "react";
 import { FileText, Images, Package, UserRound } from "lucide-react";
 import Link from "next/link";
@@ -235,7 +236,7 @@ function EquipmentSection({ execution }: { execution: RvtExecution }) {
                 ) : null}
               </p>
               <p className="truncate text-xs text-muted-foreground">
-                {item.category}
+                {ASSET_CATEGORY_LABELS[item.category] ?? item.category}
                 {item.identifier ? ` · ${item.identifier}` : ""}
                 {item.serialNumber ? ` · série ${item.serialNumber}` : ""}
               </p>

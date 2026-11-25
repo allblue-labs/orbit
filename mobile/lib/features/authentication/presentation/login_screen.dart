@@ -13,7 +13,17 @@ import '../../../app/providers.dart';
 import '../../../core/errors/orbit_exception.dart';
 import '../../../core/theme/orbit_theme.dart';
 import '../../../core/widgets/orbit_brand.dart';
+import '../../customer_portal/application/portal_session.dart';
+import '../application/biometric_login.dart';
 import '../domain/session.dart';
+
+/// Quem está entrando. A equipe e o cliente usam a mesma tela e o mesmo
+/// formato de e-mail — por isso a escolha é explícita, e não um palpite.
+enum LoginAudience { team, customer }
+
+/// A última escolha deste aparelho: o celular do cliente abre já no modo
+/// cliente, sem ele precisar entender que existe outro.
+const loginAudienceKey = 'orbit.login.audience';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -32,6 +42,55 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _submitting = false;
   bool _requiresMfa = false;
   String? _error;
+  late LoginAudience _audience = _lembrado();
+
+  /// A escolha guardada; sem preferências legíveis, equipe — o caso comum.
+  LoginAudience _lembrado() {
+    try {
+      return ref.read(sharedPreferencesProvider).getString(loginAudienceKey) ==
+              LoginAudience.customer.name
+          ? LoginAudience.customer
+          : LoginAudience.team;
+    } on Object {
+      return LoginAudience.team;
+    }
+  }
+
+  bool get _customer => _audience == LoginAudience.customer;
+
+  BiometricAudience get _biometricAudience =>
+      _customer ? BiometricAudience.customer : BiometricAudience.team;
+
+  /// Entra com a biometria guardada para o público escolhido.
+  Future<void> _entrarComBiometria() async {
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      await ref.read(biometricLoginProvider).signIn(_biometricAudience);
+      // Cancelou: fica onde está. Entrou: a navegação reage à sessão.
+    } on OrbitException catch (error) {
+      if (mounted) setState(() => _error = error.publicMessage);
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  void _setAudience(LoginAudience audience) {
+    setState(() {
+      _audience = audience;
+      _error = null;
+      _requiresMfa = false;
+    });
+    try {
+      ref
+          .read(sharedPreferencesProvider)
+          .setString(loginAudienceKey, audience.name);
+    } on Object {
+      // Lembrar é conveniência; não lembrar não impede entrar.
+    }
+  }
 
   @override
   void dispose() {
@@ -47,8 +106,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _submitting = true;
       _error = null;
     });
+    final biometric = ref.read(biometricLoginProvider);
+    // Marcado antes: depois do login esta tela já não existe. O shell lê a
+    // marca e convida a ativar a biometria.
+    await biometric.markPasswordLogin(_biometricAudience);
 
     try {
+      if (_customer) {
+        await ref
+            .read(portalSessionProvider.notifier)
+            .login(email: _email.text, password: _password.text);
+        return;
+      }
       await ref
           .read(authControllerProvider.notifier)
           .login(
@@ -58,8 +127,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           );
       // A navegação reage à mudança de sessão; nada a fazer aqui.
     } on OrbitException catch (error) {
-      final needsMfa = error.code == 'MFA_REQUIRED';
+      await biometric.clearPasswordLogin();
+      final needsMfa = !_customer && error.code == 'MFA_REQUIRED';
       if (!mounted) return;
+      if (_customer && error.isUnauthorized) {
+        setState(
+          () => _error =
+              'E-mail ou senha incorretos. Confira o acesso que a empresa passou para você.',
+        );
+        return;
+      }
       setState(() {
         _requiresMfa = _requiresMfa || needsMfa;
         _error = needsMfa
@@ -77,6 +154,28 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   /// nos dois casos, e a tela não pode contar o que ele esconde. Falha de rede
   /// também não vira "não existe": ela vira uma mensagem de rede.
   Future<void> _pedirRecuperacao() async {
+    /* O acesso do cliente é dado pela empresa que o atende, com senha
+       temporária — e é ela quem gera uma nova. Não há e-mail para onde
+       mandar um link: o endereço é um login, não uma caixa de correio. */
+    if (_customer) {
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Esqueceu a senha?'),
+          content: const Text(
+            'Peça uma nova senha à empresa que cuida dos seus equipamentos. '
+            'Ela gera uma senha temporária, e você cria a sua no primeiro acesso.',
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Entendi'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
     final email = _email.text.trim();
     if (!email.contains('@')) {
       setState(() => _error = 'Escreva seu e-mail acima para receber o link.');
@@ -110,7 +209,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authControllerProvider);
-    final motivo = auth is AuthUnauthenticated ? auth.reason : null;
+    final portal = ref.watch(portalSessionProvider);
+    final motivo = _customer
+        ? (portal is PortalSignedOut ? portal.reason : null)
+        : (auth is AuthUnauthenticated ? auth.reason : null);
     return Scaffold(
       body: OrbitBackground(
         child: SafeArea(
@@ -135,13 +237,36 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         ),
                       ),
                       const SizedBox(height: OrbitSpacing.xs),
-                      const Text(
-                        'Use as credenciais da sua organização.',
+                      Text(
+                        _customer
+                            ? 'Use o acesso que a empresa que atende você criou.'
+                            : 'Use as credenciais da sua organização.',
                         textAlign: TextAlign.center,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 13,
                           color: OrbitColors.textSecondary,
                         ),
+                      ),
+                      const SizedBox(height: OrbitSpacing.lg),
+                      SegmentedButton<LoginAudience>(
+                        key: const Key('login.audience'),
+                        segments: const [
+                          ButtonSegment(
+                            value: LoginAudience.team,
+                            icon: Icon(Icons.engineering_outlined),
+                            label: Text('Sou da equipe'),
+                          ),
+                          ButtonSegment(
+                            value: LoginAudience.customer,
+                            icon: Icon(Icons.storefront_outlined),
+                            label: Text('Sou cliente'),
+                          ),
+                        ],
+                        selected: {_audience},
+                        showSelectedIcon: false,
+                        onSelectionChanged: _submitting
+                            ? null
+                            : (escolha) => _setAudience(escolha.first),
                       ),
                       const SizedBox(height: OrbitSpacing.lg),
 
@@ -196,11 +321,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         TextFormField(
                           key: const Key('login.mfa'),
                           controller: _mfaCode,
-                          keyboardType: TextInputType.number,
+                          keyboardType: TextInputType.visiblePassword,
+                          autocorrect: false,
+                          enableSuggestions: false,
+                          maxLength: 16,
                           textInputAction: TextInputAction.done,
                           decoration: const InputDecoration(
                             labelText: 'Código de verificação',
                             prefixIcon: Icon(Icons.shield_outlined),
+                            counterText: '',
+                            helperText:
+                                'Use o autenticador ou um código de recuperação.',
+                            helperMaxLines: 2,
                           ),
                         ),
                       ],
@@ -232,6 +364,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               )
                             : const Text('Entrar'),
                       ),
+                      if (ref
+                                  .watch(
+                                    biometricEnabledProvider(
+                                      _biometricAudience,
+                                    ),
+                                  )
+                                  .valueOrNull ==
+                              true &&
+                          ref.watch(biometricAvailableProvider).valueOrNull ==
+                              true) ...[
+                        const SizedBox(height: OrbitSpacing.sm),
+                        OutlinedButton.icon(
+                          key: const Key('login.biometric'),
+                          onPressed: _submitting ? null : _entrarComBiometria,
+                          icon: const Icon(Icons.fingerprint_rounded),
+                          label: const Text('Entrar com biometria'),
+                        ),
+                      ],
                       const SizedBox(height: OrbitSpacing.sm),
 
                       /// Recuperação por e-mail.
@@ -244,6 +394,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         key: const Key('login.forgot'),
                         onPressed: _submitting ? null : _pedirRecuperacao,
                         child: const Text('Esqueci minha senha'),
+                      ),
+                      const SizedBox(height: OrbitSpacing.sm),
+                      const Text(
+                        'Ao entrar, você concorda com os Termos de Uso e a '
+                        'Política de Privacidade do Orbit.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: OrbitColors.textSecondary,
+                        ),
                       ),
                       const LegalLinks(),
                     ],

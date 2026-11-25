@@ -310,7 +310,11 @@ class MediaUploadController extends StateNotifier<MediaSyncState> {
   /// muda. O arquivo **fica** nos dois casos — descartar o trabalho de alguém
   /// porque o servidor disse não é a pessoa quem decide.
   Future<void> _handleFailure(LocalMedia media, OrbitException error) async {
-    final retryable = error.isOffline || error.isServer || error.status == 429;
+    final retryable =
+        error.isOffline ||
+        error.isServer ||
+        error.status == 408 ||
+        error.status == 429;
 
     if (retryable) {
       await _queue.mark(

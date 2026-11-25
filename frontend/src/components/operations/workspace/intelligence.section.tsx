@@ -155,7 +155,7 @@ function ExecutionCard({ execution }: { execution: AiExecution }) {
       ) : execution.output ? (
         <details className="group">
           <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
-            Saída sem formato reconhecido — ver JSON
+            Resultado em formato não reconhecido — ver conteúdo bruto
           </summary>
           <pre className="glass mt-2 max-h-56 overflow-auto rounded-lg p-3 font-mono text-xs">
             {JSON.stringify(execution.output, null, 2)}

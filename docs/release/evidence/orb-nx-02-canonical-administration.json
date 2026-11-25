@@ -1,0 +1,329 @@
+{
+  "schemaVersion": 1,
+  "task": "ORB-NX-02",
+  "generatedAtUtc": "2026-11-15T02:38:56.237Z",
+  "scope": "Canonical local platform administration and tenant provisioning only",
+  "git": {
+    "branch": "feat/features-and-backlogs",
+    "initialHead": "deaba1ea1e008613296f506cb4de9f015414b64f",
+    "finalHead": "deaba1ea1e008613296f506cb4de9f015414b64f",
+    "initialWorktree": "clean, observed before implementation",
+    "priorAuditCommit": "7e8fec077fd9fbbb1f80f31ed1ebe7a6137b6e77",
+    "priorAuthorizationCommit": "deaba1ea1e008613296f506cb4de9f015414b64f",
+    "stagedFiles": [],
+    "commitCreated": false,
+    "pushed": false,
+    "merged": false,
+    "deployed": false,
+    "snapshotPhase": "PRE_COMMIT_VALIDATION"
+  },
+  "runtime": {
+    "node": "v25.1.0",
+    "supportedCiRuntime": "Node 22",
+    "ciNode22Executed": false,
+    "database": "disposable local PostgreSQL; no production access",
+    "migrationCount": 117,
+    "tablesGranted": 143,
+    "applicationRole": "orbit_app",
+    "rolsuper": false,
+    "rolbypassrls": false,
+    "forceRls": true,
+    "provisioningDeletePrivilege": false,
+    "privilegedFixtureSetup": "test fixture creation/inspection/cleanup only"
+  },
+  "sources": [
+    {
+      "path": "backend/prisma/migrations/20261114220000_orbnx02_canonical_administration/migration.sql",
+      "sha256": "ed195ba21b15a1f738f77dfce27d31ff1577132d8172555948d7cae24f0f5a14"
+    },
+    {
+      "path": "backend/prisma/schema.prisma",
+      "sha256": "ef3d0b2692cfcc6017aa66be5e3867802293addc47f8dd1deb738cc9ef981f1d"
+    },
+    {
+      "path": "backend/scripts/audit-administrative-subscriptions.sql",
+      "sha256": "f137ebba99247b81503a5e164324b14cee4875e9b0127c670f8c441bbea6636c"
+    },
+    {
+      "path": "backend/src/modules/identity/infrastructure/identity.repository.ts",
+      "sha256": "fb5848175a55c06966922bf9cb1a7e57f46929e1abd73d9ef342e28d62158c2e"
+    },
+    {
+      "path": "backend/src/modules/identity/infrastructure/registration.repository.ts",
+      "sha256": "09abb0ad1ad89abd0adf830fbdcfb322d27c4ad8bc639a7a19cdc22e201811b6"
+    },
+    {
+      "path": "backend/src/modules/platform-administration/dto/platform-administration.dto.ts",
+      "sha256": "35cd8c3e77ec3dae921434f6728910dc3a35aa8ba0b5c6d93fea516fbf9ba5ab"
+    },
+    {
+      "path": "backend/src/modules/platform-administration/platform-administration.controller.ts",
+      "sha256": "b1e69cc4ea4ba90ec04bbba8e98be462496bd237d47a318410bb25a6d793aa32"
+    },
+    {
+      "path": "backend/src/modules/platform-administration/platform-administration.repository.ts",
+      "sha256": "21c5d22ebe662c1dd39dc65909189543d16ea3bcf33c68158d1aca9c5d12a1f1"
+    },
+    {
+      "path": "backend/src/modules/platform-administration/platform-administration.service.spec.ts",
+      "sha256": "f7e0c2795a5169772d6db92ee9c5f3ca1183e5beaa068f34e05480dd1af90e73"
+    },
+    {
+      "path": "backend/src/modules/platform-administration/platform-administration.service.ts",
+      "sha256": "5ae593f7f6c6760c1260b7381589884d111715d0845baa77bd539440cb916ddf"
+    },
+    {
+      "path": "backend/src/modules/platform-administration/platform-subscription.projection.spec.ts",
+      "sha256": "908928bb3b61184cd5a3bea4e303fc4d33948277c590b0da28b217da606e1cf1"
+    },
+    {
+      "path": "backend/src/modules/platform-administration/platform-subscription.projection.ts",
+      "sha256": "3f6141fe42bb8f31f4f707e78ab4f072c0136457b2e5c79c958e2ec25f1b55b0"
+    },
+    {
+      "path": "backend/src/modules/subscription-plans/subscriptions/subscription-provisioning.service.ts",
+      "sha256": "c9a598f71ee425152dd05d7df414df530f02d2882af4c3dc67128061da929eaa"
+    },
+    {
+      "path": "backend/src/modules/subscription-plans/subscriptions/subscription.repository.ts",
+      "sha256": "060c2335ed8b75dc20e5c727266a636dde1b1a1f146f92289d9dbad5995557d9"
+    },
+    {
+      "path": "backend/src/modules/subscription-plans/subscriptions/trial-eligibility.service.ts",
+      "sha256": "27638ba577cd0cc10fbbbeb8d30f1ec2064bd84ce7396cccbd22ff5cca17ced3"
+    },
+    {
+      "path": "backend/src/scripts/provision-database-roles.ts",
+      "sha256": "4c76dd69b98bd4e3760c5dfe3d222d6c75841debebc0271741ddad5ba9986a60"
+    },
+    {
+      "path": "backend/test/platform-canonical-administration.e2e-spec.ts",
+      "sha256": "2c38a073acfca978883df9a6be81b4e10b89e8d4bfd0073d49dbc23dc2b37959"
+    },
+    {
+      "path": "frontend/src/server/bff/allowlist.test.ts",
+      "sha256": "3c5cd2686a50b7d242867f0e363b9aadf0e368b780fce69c0186b7a689e06afa"
+    }
+  ],
+  "report": {
+    "path": "docs/release/orb-nx-02-canonical-administration.md",
+    "sha256": "9eb485a5bf3d258df990ff5bdda5040427382a2002d19454a7f69565794a4270"
+  },
+  "preservedAuditReports": [
+    {
+      "path": "docs/integrations/nexus/orbit-v2-admin-capabilities.md",
+      "sha256": "897abdb778b4aac383f01bd94d3f7249dede4a51d4321a69dd9776de9b55486e",
+      "unchanged": true
+    },
+    {
+      "path": "docs/integrations/nexus/orbit-v2-current-state-audit.md",
+      "sha256": "10245b8d522e5603078ff006ec2f5915afd0190ee2f1c9e1fe5e49aff28517f3",
+      "unchanged": true
+    },
+    {
+      "path": "docs/integrations/nexus/orbit-v2-integration-gap-analysis.md",
+      "sha256": "6a7af5f81331ccde11a3a48eacb1f0693fbaeb2e3fa9dae527e9e8a616969894",
+      "unchanged": true
+    },
+    {
+      "path": "docs/integrations/nexus/orbit-v2-integration-roadmap.md",
+      "sha256": "2e68068ffc639a11e035abb930414866ae18a6b4754964d5cf78911e1e14ad29",
+      "unchanged": true
+    },
+    {
+      "path": "docs/integrations/nexus/orbit-v2-nexus-integration-contracts.md",
+      "sha256": "6b502be698c1b7173ba974526107577212103bc5a4ff76ada8e0ddf504b7d245",
+      "unchanged": true
+    },
+    {
+      "path": "docs/integrations/nexus/orbit-v2-stripe-and-billing-audit.md",
+      "sha256": "b5f497e135e0a19bcdc1a1b132b5021990c43f0d0c8a562224b385b1777ef4d1",
+      "unchanged": true
+    }
+  ],
+  "checks": [
+    {
+      "name": "backend_targeted_unit",
+      "status": "PASS",
+      "cwd": "backend",
+      "command": "npm test -- --runInBand --watchman=false --testPathPatterns='platform-administration|platform-subscription.projection|trial-eligibility|verified-platform-authority|role-namespace|authentication-concurrency|registration.service|registration-conflict|identity-email|identity.repository'",
+      "suites": 10,
+      "tests": 64,
+      "seconds": 12.811,
+      "log": {
+        "path": "/private/tmp/orbit-nx02-final-unit.log",
+        "sha256": "6778ab8ebc2a99414c11c9cae5fdcbc2fed703acb2407e2751e40ec98471809d",
+        "persistence": "temporary local file; not committed"
+      }
+    },
+    {
+      "name": "postgres_http_rls_consolidated",
+      "status": "PASS",
+      "cwd": ".",
+      "command": "node scripts/verify-integrations.mjs backend --testPathPatterns='platform-canonical-administration|global-privilege-provenance|identity-email-outbox|subscriptions.e2e|subscription-expiry|billing-stripe.e2e|rls.e2e'",
+      "suites": 7,
+      "tests": 126,
+      "seconds": 75.071,
+      "log": {
+        "path": "/private/tmp/orbit-nx02-final-integration.log",
+        "sha256": "dec626e837900f864e8736d245084fc9c95c8d06cb1a40fe241daabf4f75bf8f",
+        "persistence": "temporary local file; not committed"
+      }
+    },
+    {
+      "name": "owner_setup_and_later_password_recovery",
+      "status": "PASS",
+      "cwd": ".",
+      "command": "node scripts/verify-integrations.mjs backend --testPathPatterns='platform-canonical-administration'",
+      "suites": 1,
+      "tests": 15,
+      "seconds": 37.066,
+      "subsetOf": "postgres_http_rls_consolidated",
+      "note": "Same suite rerun after extending owner test to request a subsequent password reset. Existing forgot endpoint returns 202. Do not add these 15 again to unique test total.",
+      "log": {
+        "path": "/private/tmp/orbit-nx02-recovery-integration.log",
+        "sha256": "f2f3c894db7d057850fc421263d3e4205636d94bbc21ec86814a38e452508ca4",
+        "persistence": "temporary local file; not committed"
+      }
+    },
+    {
+      "name": "web_bff_auth_signup",
+      "status": "PASS",
+      "cwd": "frontend",
+      "command": "npm test -- src/server/bff/allowlist.test.ts src/server/auth/refresh.test.ts src/server/auth/subscription-state.test.ts src/components/auth/signup-schema.test.ts",
+      "files": 4,
+      "tests": 51,
+      "seconds": 1.73,
+      "log": {
+        "path": "/private/tmp/orbit-nx02-web.log",
+        "sha256": "d12c4f70852f107626c2c5392d95fd0accd9e11723c09896b7b7b2e34b342269",
+        "persistence": "temporary local file; not committed"
+      }
+    },
+    {
+      "name": "backend_typecheck",
+      "status": "PASS",
+      "cwd": "backend",
+      "command": "npm run typecheck",
+      "log": {
+        "path": "/private/tmp/orbit-nx02-final-types.log",
+        "sha256": "2e7e00819655840671fe81ecc31c20f985e49e337d20a48c99eac1d1910fa1d2",
+        "persistence": "temporary local file; not committed"
+      }
+    },
+    {
+      "name": "backend_build",
+      "status": "PASS",
+      "cwd": "backend",
+      "command": "npm run build",
+      "log": {
+        "path": "/private/tmp/orbit-nx02-build.log",
+        "sha256": "0de4692e4208e8b05bf233ccc10cde3bb2f3a7a6e1e6fe4bdbff027b1b647179",
+        "persistence": "temporary local file; not committed"
+      }
+    },
+    {
+      "name": "backend_targeted_eslint",
+      "status": "PASS",
+      "cwd": "backend",
+      "command": "npx eslint src/modules/platform-administration src/modules/identity/infrastructure/identity.repository.ts src/modules/identity/infrastructure/registration.repository.ts src/modules/subscription-plans/subscriptions/subscription-provisioning.service.ts src/modules/subscription-plans/subscriptions/subscription.repository.ts src/modules/subscription-plans/subscriptions/trial-eligibility.service.ts src/scripts/provision-database-roles.ts test/platform-canonical-administration.e2e-spec.ts",
+      "log": {
+        "path": "/private/tmp/orbit-nx02-final-lint.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "persistence": "temporary local file; not committed"
+      }
+    },
+    {
+      "name": "frontend_targeted_eslint",
+      "status": "PASS",
+      "cwd": "frontend",
+      "command": "npx eslint src/server/bff/allowlist.test.ts",
+      "log": {
+        "path": "/private/tmp/orbit-nx02-web-lint.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "persistence": "temporary local file; not committed"
+      }
+    },
+    {
+      "name": "contract_boundaries",
+      "status": "PASS",
+      "cwd": "backend",
+      "command": "npm run contracts:guard",
+      "log": {
+        "path": "/private/tmp/orbit-nx02-contracts.log",
+        "sha256": "c4a830e604c9353d68966c533c961db9f2e3cba860292885e2663761e28994f6",
+        "persistence": "temporary local file; not committed"
+      }
+    },
+    {
+      "name": "public_error_contract",
+      "status": "PASS",
+      "cwd": "backend",
+      "command": "npm run lint:public-errors",
+      "publicCodes": 72,
+      "backendMessageMatchingInWeb": 0,
+      "backendMessageMatchingInFlutter": 0,
+      "log": {
+        "path": "/private/tmp/orbit-nx02-public-errors.log",
+        "sha256": "46a1b26c57226c31d495218d501eb7cebce86fb361941fa9952852f00d799722",
+        "persistence": "temporary local file; not committed"
+      }
+    }
+  ],
+  "verifiedBehaviors": [
+    "Paid plan creates PENDING_PAYMENT and blocks product operations before canonical confirmation",
+    "Essential trial uses existing eligibility and 30-day policy; consumed document grant is not repeated",
+    "Initial owner/tenant failure rolls back entities while keeping original operation resumable",
+    "Trial/subscription failure rolls back phase without consuming trial or duplicating subscription",
+    "Owner token/outbox enqueue failure preserves tenant and canonical subscription; resume enqueues once",
+    "Three concurrent identical requests share operation and tenant; changed payload returns 409",
+    "Legacy password and omitted idempotency header remain supported without paid access",
+    "Financial creation/PATCH inputs cannot force ACTIVE, effective plan or financial period",
+    "Administrative metadata uses optimistic updatedAt; stale version conflicts",
+    "Canonical projection overrides fake legacy ACTIVE and represents trial, pending, active, scheduled, ended and unknown",
+    "Setup token is used once; later password recovery remains compatible with provisioning token FK",
+    "Owner cannot use global status/resume endpoints or read provisioning table under RLS",
+    "Verified authority grant IDs, actual operator, correlation and confirmed transitions are audited",
+    "Read-only diagnostic compares historical stored states without data repair"
+  ],
+  "apiSemantics": {
+    "postTenantLocalComplete": 201,
+    "postTenantLocalPending": 202,
+    "resumeLocalComplete": 200,
+    "resumeLocalPending": 202,
+    "conflictingKeyOrMetadataVersion": 409,
+    "forbiddenFinancialMutation": 400,
+    "completedMeans": "Local phases and setup outbox committed; not payment, invitation acceptance, consent or email delivery",
+    "initialPhaseRecovery": "Resubmit original POST with original idempotency key/body",
+    "laterPhaseRecovery": "POST tenant-provisionings/:id/resume",
+    "financialSource": "OrganizationSubscription via canonical projector",
+    "unknownLegacyAccessGranted": false
+  },
+  "uniquePassingTestCases": 241,
+  "externalValidation": {
+    "stripeLive": false,
+    "stripeSandboxExternal": false,
+    "sesDelivery": false,
+    "production": false,
+    "fullMonorepoSuite": false,
+    "fullNextBuild": false,
+    "nativeMobileBuild": false,
+    "loadTest": false
+  },
+  "limitations": [
+    "Node 22 CI remains required before publication",
+    "No automated legacy repair or production historical inventory",
+    "Unknown external admin consumers must remove financial inputs and handle pending/unknown projections",
+    "No new admin financial command; existing customer billing/consent paths remain authoritative",
+    "Outbox enqueue is not email delivery or legal acceptance",
+    "Global overview not qualified with load or a cross-batch snapshot consistency test",
+    "No ORB-NX-03, Nexus integration, SSO/M2M, Stripe sweep, price changes, refunds or remote tenant deletion",
+    "No commit without new explicit authorization"
+  ],
+  "verdict": "LOCAL_TECHNICAL_GATE_PASSED; publication and broader release approval not granted",
+  "commitAuthorization": {
+    "authorized": true,
+    "scope": "Local ORB-NX-02 commit only; no push, merge or deploy",
+    "source": "Explicit user instruction after technical validation"
+  }
+}

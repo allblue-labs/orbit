@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.allblue-labs.com/federation/1.0.0/authority-context.schema.json",
+  "title": "PROPOSED / PENDING_NEXUS_DECISION — authority-context.schema.json",
+  "type": "object",
+  "properties": {
+    "protocolVersion": {
+      "const": "1.0.0"
+    },
+    "issuer": {
+      "type": "string",
+      "format": "uri"
+    },
+    "audience": {
+      "type": "string",
+      "format": "uri"
+    },
+    "connectorClientId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "corporateSubject": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "grantId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "target": {
+      "$ref": "common.schema.json#/$defs/optionalTenantTarget"
+    },
+    "purpose": {
+      "enum": [
+        "DIRECTORY",
+        "PROVISIONING",
+        "CUSTOMER_REQUEST",
+        "SECURITY",
+        "FINANCIAL_REVIEW"
+      ]
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "tenant.provision.v1",
+          "tenant.update.v1",
+          "subscription.request_plan_change.v1",
+          "subscription.request_cancel.v1",
+          "subscription.request_keep.v1",
+          "tenant.request_suspend.v1",
+          "tenant.request_reactivate.v1",
+          "tenant.read",
+          "directory.read",
+          "subscription.read",
+          "billing.read",
+          "usage.read",
+          "receipt.read",
+          "events.publish",
+          "events.catch_up"
+        ]
+      },
+      "maxItems": 20,
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "issuedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "expiresAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "delegationProofRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "approvalProofRef": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "authenticationContext": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    }
+  },
+  "required": [
+    "protocolVersion",
+    "issuer",
+    "audience",
+    "connectorClientId",
+    "corporateSubject",
+    "grantId",
+    "target",
+    "purpose",
+    "actions",
+    "issuedAt",
+    "expiresAt",
+    "delegationProofRef",
+    "approvalProofRef",
+    "authenticationContext"
+  ],
+  "additionalProperties": false
+}

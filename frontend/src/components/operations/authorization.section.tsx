@@ -240,7 +240,7 @@ function AuthorizationForm({ organization }: { organization: Organization }) {
 
         {!canEdit ? (
           <p className="text-xs text-muted-foreground">
-            Somente quem tem <code>organization.update</code> pode alterar esta
+            Somente quem pode alterar os dados da organização muda esta
             configuração.
           </p>
         ) : null}

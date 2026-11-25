@@ -1,3 +1,5 @@
+import { paidSubscriptionFixture } from './support/paid-subscription-fixture';
+import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
@@ -87,23 +89,23 @@ describe('RVT PR-30.1 closure (e2e)', () => {
   async function register(label: string) {
     const suffix = randomUUID().slice(0, 8);
     const email = `rvt.${label}.${suffix}@orbit.local`;
-    const response = await http()
-      .post('/api/v1/identity/register')
-      .send({
-        ...REGISTRATION_LEGAL_ACCEPTANCE,
-        email,
-        firstName: 'RVT',
-        lastName: label,
-        password: PASSWORD,
-        organizationName: `RVT ${label} ${suffix}`,
-        legalName: `RVT ${label} ${suffix} LTDA`,
-        documentType: 'CNPJ',
-        documentNumber: cnpj(),
-        city: 'Recife',
-        street: 'Rua da Agenda',
-        stateCode: 'PE',
-      })
-      .expect(201);
+    const response = await registerVerifiedOwner(app, {
+      ...REGISTRATION_LEGAL_ACCEPTANCE,
+      email,
+      firstName: 'RVT',
+      lastName: label,
+      password: PASSWORD,
+      organizationName: `RVT ${label} ${suffix}`,
+      legalName: `RVT ${label} ${suffix} LTDA`,
+      documentType: 'CNPJ',
+      documentNumber: cnpj(),
+      city: 'Recife',
+      street: 'Rua da Agenda',
+      stateCode: 'PE',
+      planKey: 'ENTERPRISE_UNLIMITED',
+    });
+    /* O cadastro exige plano, e as rotas de PMOC/RVT, assinatura ativa. */
+    await paidSubscriptionFixture(app, adminPrisma(), email);
     return {
       email,
       token: (response.body as Envelope<{ accessToken: string }>).data
@@ -296,6 +298,12 @@ describe('RVT PR-30.1 closure (e2e)', () => {
       '2027-02-28',
       '2027-08-31',
     ]);
+    const page = await auth(http().get('/api/v1/rvt/configurations')).expect(
+      200,
+    );
+    expect(
+      (page.body as Envelope<{ data: Configuration[] }>).data.data,
+    ).toEqual(expect.arrayContaining([weekly, semi]));
     const events = await prisma.schedulingEvent.findMany({
       where: {
         sourceEntityId: {
@@ -425,6 +433,112 @@ describe('RVT PR-30.1 closure (e2e)', () => {
         http().get(`/api/v1/mobile/field/offline/packages/${workItemId}`),
         foreignToken,
       ).expect(404);
+    }
+  });
+
+  it('cancels an RVT and its scheduled agenda events without deleting visit history', async () => {
+    const configuration = await createConfiguration({
+      scheduleMode: 'ONE_TIME',
+      coverageStart: '2027-10-02',
+      coverageEnd: undefined,
+    });
+    const path = `/api/v1/rvt/configurations/${configuration.id}`;
+    const visit = await prisma.rvtOccurrence.findUniqueOrThrow({
+      where: { id: configuration.occurrences[0]!.id },
+    });
+    await auth(http().delete(path), foreignToken).expect(404);
+
+    for (let replay = 0; replay < 2; replay++) {
+      const result = await auth(http().delete(path)).expect(200);
+      const { data } = result.body as Envelope<
+        Configuration & { status: string }
+      >;
+      expect(data.status).toBe('CANCELLED');
+      expect(data.occurrences).toEqual([
+        expect.objectContaining({ id: visit.id, status: 'CANCELLED' }),
+      ]);
+    }
+
+    const event = await prisma.schedulingEvent.findUniqueOrThrow({
+      where: { id: visit.schedulingEventId! },
+      select: { status: true, deletedAt: true },
+    });
+    expect(event).toEqual({ status: 'CANCELLED', deletedAt: null });
+    await auth(http().post(`${path}/occurrences`))
+      .send({ scheduledDate: '2027-10-05', equipmentIds: assets })
+      .expect(400);
+  });
+
+  it('authorizes and blocks an assigned RVT using the displayed version', async () => {
+    const configuration = await createConfiguration({
+      scheduleMode: 'ONE_TIME',
+      coverageStart: '2027-10-09',
+      coverageEnd: undefined,
+      defaultResponsibleFieldTechnicianId: userId,
+    });
+    const visitId = configuration.occurrences[0]!.id;
+    const path = '/api/v1/operations/recurring-authorizations';
+    const organization = await prisma.organization.findUniqueOrThrow({
+      where: { id: organizationId },
+      select: { settings: true },
+    });
+    type QueueItem = { id: string; version: string; kind: 'RVT' };
+    const current = async (state: 'pending' | 'authorized') => {
+      const response = await auth(http().get(path))
+        .query({ state, businessUnitId: unitId })
+        .expect(200);
+      return (response.body as Envelope<{ data: QueueItem[] }>).data.data.find(
+        (item) => item.id === visitId,
+      )!;
+    };
+    await prisma.organization.update({
+      where: { id: organizationId },
+      data: {
+        settings: { operations: { requireAssignmentAuthorization: true } },
+      },
+    });
+    try {
+      const pending = await current('pending');
+      expect(pending?.kind).toBe('RVT');
+      await auth(http().post(path))
+        .send({
+          items: [
+            { id: pending.id, version: pending.version, kind: pending.kind },
+          ],
+        })
+        .expect(201);
+      const authorized = await current('authorized');
+      expect(authorized?.id).toBe(visitId);
+      await auth(http().post(`${path}/revoke`))
+        .send({
+          items: [
+            {
+              id: authorized.id,
+              version: pending.version,
+              kind: authorized.kind,
+            },
+          ],
+        })
+        .expect(409);
+      await auth(http().post(`${path}/revoke`))
+        .send({
+          items: [
+            {
+              id: authorized.id,
+              version: authorized.version,
+              kind: authorized.kind,
+            },
+          ],
+        })
+        .expect(201);
+      expect((await current('pending'))?.id).toBe(visitId);
+    } finally {
+      await prisma.organization.update({
+        where: { id: organizationId },
+        data: {
+          settings: organization.settings ?? {},
+        },
+      });
     }
   });
 
@@ -585,6 +699,20 @@ describe('RVT PR-30.1 closure (e2e)', () => {
       foreignToken,
     );
     expect([400, 404]).toContain(crossTenant.status);
+    await auth(
+      http().post(
+        `/api/v1/rvt/executions/${execution.id}/customer-acknowledgement`,
+      ),
+    )
+      .send({
+        name: 'Cliente presente',
+        storageFileId: signatureFileId,
+        signedAt: 'data inválida',
+      })
+      .expect(400);
+    await auth(http().post(`/api/v1/rvt/executions/${execution.id}/complete`))
+      .send({ performedAt: 'data inválida' })
+      .expect(400);
     await auth(
       http().post(
         `/api/v1/rvt/executions/${execution.id}/customer-acknowledgement`,

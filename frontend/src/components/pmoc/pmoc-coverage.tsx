@@ -14,6 +14,7 @@
  * página, e recomeçar. Voltar exigiria guardar os cursores anteriores; a pilha
  * local resolve isso sem inventar contrato.
  */
+import { ASSET_CATEGORY_LABELS } from "@/entities";
 import { useState } from "react";
 import { Package, Plus, Trash2 } from "lucide-react";
 
@@ -84,7 +85,11 @@ export function PmocCoveragePanel({
           hint="A busca considera toda a cobertura, não apenas esta página."
         />
         {canManage ? (
-          <Button size="sm" onClick={() => setAdding(true)}>
+          <Button
+            size="sm"
+            disabled={page.isPending || page.isError}
+            onClick={() => setAdding(true)}
+          >
             <Plus className="size-3.5" />
             Adicionar equipamento
           </Button>
@@ -102,7 +107,11 @@ export function PmocCoveragePanel({
           description:
             "A cobertura define quais equipamentos este plano mantém. Sem cobertura, as execuções nascem vazias.",
           action: canManage ? (
-            <Button size="sm" onClick={() => setAdding(true)}>
+            <Button
+              size="sm"
+              disabled={page.isPending || page.isError}
+              onClick={() => setAdding(true)}
+            >
               <Plus className="size-3.5" />
               Adicionar equipamento
             </Button>
@@ -134,7 +143,8 @@ export function PmocCoveragePanel({
                         "—"}
                     </TableCell>
                     <TableCell className="text-sm">
-                      {coverage.asset.category}
+                      {ASSET_CATEGORY_LABELS[coverage.asset.category] ??
+                        coverage.asset.category}
                     </TableCell>
                     <TableCell className="text-sm">
                       {coverage.asset.status === "ACTIVE" ? "Ativo" : "Inativo"}

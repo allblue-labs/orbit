@@ -76,7 +76,18 @@ export class ReceiptService {
     actorId: string,
     input: CreateReceiptDto,
   ): Promise<ArtifactExecutionReadModel> {
-    const businessUnitId = input.businessUnitId ?? contextBusinessUnitId;
+    const operation = input.operationId
+      ? await this.eligibleOperation(organizationId, input.operationId)
+      : null;
+    const businessUnitId =
+      input.businessUnitId ??
+      operation?.businessUnitId ??
+      contextBusinessUnitId;
+    if (operation && businessUnitId !== operation.businessUnitId) {
+      throw new ValidationException(
+        'Use a unidade do atendimento para emitir o recibo.',
+      );
+    }
     if (!businessUnitId) {
       throw new ValidationException(
         'A unidade emissora é obrigatória: o recibo sai no papel dela',
@@ -94,10 +105,11 @@ export class ReceiptService {
             { organizationId: null, visibility: 'GLOBAL' },
           ],
         },
-        /* O da organização vence o global: quem publicou o próprio modelo quer
-           emitir no dele. `organizationId` nulo ordena por último em `desc`
-           porque `NULLS LAST` é o padrão do PostgreSQL nessa direção. */
-        orderBy: [{ organizationId: 'desc' }, { createdAt: 'asc' }],
+        // Prefere o modelo ativo da organização ao catálogo global.
+        orderBy: [
+          { organizationId: { sort: 'desc', nulls: 'last' } },
+          { createdAt: 'asc' },
+        ],
         include: { versions: { orderBy: { version: 'desc' }, take: 1 } },
       });
 
@@ -218,9 +230,12 @@ export class ReceiptService {
           id: true,
           code: true,
           serviceOrderNumber: true,
+          businessUnitId: true,
           title: true,
           status: true,
           completedAt: true,
+          manualAmount: true,
+          quote: { select: { total: true } },
           customer: {
             select: {
               id: true,
@@ -239,6 +254,10 @@ export class ReceiptService {
         'O recibo prova pagamento de serviço concluído; este atendimento ainda não foi',
       );
     }
-    return operation;
+    const { manualAmount, quote, ...source } = operation;
+    return {
+      ...source,
+      amount: (manualAmount ?? quote?.total)?.toFixed(2) ?? null,
+    };
   }
 }

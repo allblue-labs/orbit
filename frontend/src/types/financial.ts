@@ -28,11 +28,7 @@ import type {
   FinancialEntryType,
 } from "./contracts";
 
-export type {
-  FinancialEntrySource,
-  FinancialEntryStatus,
-  FinancialEntryType,
-};
+export type { FinancialEntrySource, FinancialEntryStatus, FinancialEntryType };
 
 /** Lançamento (`GET /financial/entries`). */
 export type FinancialEntry = FinancialEntryReadModel;
@@ -90,6 +86,8 @@ export interface FinancialAnalyticsQuery {
   from?: string;
   to?: string;
   businessUnitId?: string;
+  /** Só a série: por dia (7 e 15 dias, mês) ou por mês (12 meses). */
+  granularity?: "DAY" | "MONTH";
 }
 
 /** `GET /financial/categories` (`FinancialCategoryQueryDto`). */
@@ -260,6 +258,7 @@ export interface ReceiptSource {
   title: string;
   status: string;
   completedAt: string | null;
+  amount?: string | null;
   customer: {
     id: string;
     legalName: string;

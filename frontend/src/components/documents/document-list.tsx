@@ -38,6 +38,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { RenderStatusBadge } from "@/documents";
+import { IssuedDocumentActions } from "@/documents/issued-document-actions";
 import { EntityLink } from "@/entities/entity-components";
 
 import { useDateFormatters } from "@/hooks/use-date-formatters";
@@ -93,7 +94,7 @@ export function DocumentList({
             <TableHead>Arquivo</TableHead>
             <TableHead>Vínculos</TableHead>
             <TableHead>Emitido</TableHead>
-            <TableHead className="w-20" />
+            <TableHead className="w-40" />
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -180,16 +181,35 @@ export function DocumentList({
                     tem manifesto — tem um arquivo, que a página dele entrega.
                     Oferecer "abrir" aqui abriria um visualizador vazio.
                   */}
-                  {hasRevisionHistory(document) ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => onOpen(document.id)}
-                    >
-                      Abrir
-                      <ArrowRight className="size-4" />
-                    </Button>
-                  ) : null}
+                  <div className="flex items-center justify-end gap-1">
+                    {/* Baixar e compartilhar sem sair da lista — dos dois
+                        tipos: o arquivo da revisão emitida, ou o do
+                        relatório. Só aparece o que já está emitido. */}
+                    {document.source === "REPORT" ? (
+                      <IssuedDocumentActions
+                        reportId={document.id}
+                        renderStatus={document.renderStatus}
+                        title={identidade.primary}
+                      />
+                    ) : (
+                      <IssuedDocumentActions
+                        executionId={document.id}
+                        renderStatus={document.renderStatus}
+                        code={document.code}
+                        title={document.title ?? identidade.primary}
+                      />
+                    )}
+                    {hasRevisionHistory(document) ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onOpen(document.id)}
+                      >
+                        Abrir
+                        <ArrowRight className="size-4" />
+                      </Button>
+                    ) : null}
+                  </div>
                 </TableCell>
               </TableRow>
             );

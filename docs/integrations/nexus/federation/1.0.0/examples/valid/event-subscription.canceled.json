@@ -1,0 +1,34 @@
+{
+  "specversion": "1.0",
+  "id": "00000000-0000-7000-8000-000000000002",
+  "source": "urn:allblue:orbit-v2:staging:orbit-staging-01",
+  "type": "com.allbluelabs.orbit-v2.subscription.canceled.v1",
+  "subject": "tenants/00000000-0000-7000-8000-000000000001",
+  "time": "2026-11-15T12:00:00Z",
+  "occurrencebasis": "RECORDED",
+  "observedat": "2026-11-15T12:00:00Z",
+  "datacontenttype": "application/json",
+  "dataschema": "https://contracts.allblue-labs.com/federation/1.0.0/event.schema.json",
+  "correlationid": "00000000-0000-7000-8000-000000000002",
+  "data": {
+    "schemaVersion": "1.0.0",
+    "target": {
+      "productId": "orbit-v2",
+      "environment": "staging",
+      "instanceId": "orbit-staging-01",
+      "tenantId": "00000000-0000-7000-8000-000000000001"
+    },
+    "aggregate": {
+      "kind": "SUBSCRIPTION",
+      "id": "subscription-demo",
+      "version": 1
+    },
+    "sequence": 1,
+    "provenance": "CANONICAL_COMMIT",
+    "payload": {
+      "subscriptionId": "subscription-demo",
+      "subscriptionVersion": 9,
+      "endedAt": "2026-11-15T12:00:00Z"
+    }
+  }
+}

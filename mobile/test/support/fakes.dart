@@ -4,10 +4,14 @@
 /// e as regras exercitadas são os reais.
 library;
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:orbit_operator/features/customer_portal/application/portal_session.dart';
 import 'dart:convert';
 
 import 'package:orbit_operator/core/contracts/session_contracts.dart';
 import 'package:orbit_operator/core/storage/read_cache.dart';
+import 'package:orbit_operator/core/network/session_authenticator.dart';
+import 'package:orbit_operator/core/observability/orbit_logger.dart';
 import 'package:orbit_operator/core/storage/token_storage.dart';
 import 'package:orbit_operator/features/authentication/domain/session.dart';
 
@@ -140,5 +144,28 @@ OrbitSession sessionFrom({
       'subscriptionStatus': 'ACTIVE',
       'capabilities': ['operations.read', 'operations.manage'],
     }),
+  );
+}
+
+/// Aparelho sem cliente logado: armazenamento do portal em memória e sessão
+/// já resolvida como "fora". Para testes que montam o roteador real sem
+/// passar pela restauração do app.
+List<Override> customerPortalAbsent() => [
+  portalTokenStorageProvider.overrideWithValue(InMemoryTokenStorage()),
+  portalSessionProvider.overrideWith(
+    (ref) => PortalSessionController(
+      repository: ref.watch(portalRepositoryProvider),
+      authenticator: ref.watch(portalApiClientProvider).authenticator,
+      initial: const PortalSignedOut(),
+    ),
+  ),
+];
+
+/// Autenticador sobre armazenamento em memória, sem renovação.
+abstract final class InMemorySessionAuthenticator {
+  static SessionAuthenticator create() => SessionAuthenticator(
+    storage: InMemoryTokenStorage(),
+    logger: const OrbitLogger(isProduction: true),
+    refreshCall: (_) async => throw StateError('sem renovação no teste'),
   );
 }

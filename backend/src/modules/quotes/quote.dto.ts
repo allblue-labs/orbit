@@ -27,6 +27,15 @@ const trim = ({ value }: { value: unknown }): unknown =>
 const upper = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.trim().toUpperCase() : value;
 
+export class QuoteMobileAccessDto {
+  @ApiProperty({
+    description:
+      'Permite a leitura deste orçamento por outros usuários no aplicativo.',
+  })
+  @IsBoolean()
+  mobileVisible!: boolean;
+}
+
 /* -------------------------------------------------------------------- */
 /* Orçamento                                                             */
 /* -------------------------------------------------------------------- */

@@ -1,0 +1,2172 @@
+{
+  "workItem": "ORB-NX-04",
+  "qualifiedAt": "2026-11-15",
+  "scope": [
+    "NX-A04",
+    "NX-A06"
+  ],
+  "git": {
+    "repository": "/Users/ds_/Documents/Devs/AllBlueLabs/Applications/Orbit",
+    "branch": "feat/features-and-backlogs",
+    "baseHead": "f552249270bdd1e24603ecceee7fb1391ea9634d",
+    "initialWorktree": "clean",
+    "initialStaging": "empty",
+    "technicalSnapshotPhase": "before_authorized_local_commit",
+    "deliveryCommit": "commit containing this evidence file",
+    "authorization": "Standing user instruction: agent must perform the commits; no push/merge/deploy authorized",
+    "technicalStatus": [
+      "M .env.example",
+      " M backend/prisma/schema.prisma",
+      " M backend/src/modules/billing/billing-checkout-fulfillment.service.spec.ts",
+      " M backend/src/modules/billing/billing-checkout-fulfillment.service.ts",
+      " M backend/src/modules/billing/billing-reconciliation.service.spec.ts",
+      " M backend/src/modules/billing/billing-reconciliation.service.ts",
+      " M backend/src/modules/billing/billing-webhook.service.ts",
+      " M backend/src/modules/billing/billing.module.ts",
+      " M backend/src/modules/billing/billing.repository.ts",
+      " M backend/src/modules/billing/billing.types.ts",
+      " M backend/src/modules/billing/stripe/stripe-billing.provider.spec.ts",
+      " M backend/src/modules/billing/stripe/stripe-billing.provider.ts",
+      " M backend/src/modules/subscription-plans/subscriptions/subscription.repository.ts",
+      " M backend/test/billing-stripe.e2e-spec.ts",
+      "?? backend/prisma/migrations/20261115160000_orbnx04_billing_recovery/",
+      "?? backend/src/modules/billing/billing-recovery.service.spec.ts",
+      "?? backend/src/modules/billing/billing-recovery.service.ts",
+      "?? backend/src/modules/billing/billing-work-budget.ts",
+      "?? backend/test/billing-recovery.e2e-spec.ts"
+    ]
+  },
+  "priorCheckpoints": {
+    "PR-00.C": "7e8fec077fd9fbbb1f80f31ed1ebe7a6137b6e77",
+    "ORB-NX-01": "deaba1ea1e008613296f506cb4de9f015414b64f",
+    "ORB-NX-02": "03efc9d51a95221b1cbb7f9636019ce596b20896",
+    "ORB-NX-03": "f552249270bdd1e24603ecceee7fb1391ea9634d"
+  },
+  "preservedPriorArtifacts": [
+    {
+      "file": "docs/integrations/nexus/orbit-v2-admin-capabilities.md",
+      "sha256": "897abdb778b4aac383f01bd94d3f7249dede4a51d4321a69dd9776de9b55486e",
+      "matchesBaseHead": true
+    },
+    {
+      "file": "docs/integrations/nexus/orbit-v2-current-state-audit.md",
+      "sha256": "10245b8d522e5603078ff006ec2f5915afd0190ee2f1c9e1fe5e49aff28517f3",
+      "matchesBaseHead": true
+    },
+    {
+      "file": "docs/integrations/nexus/orbit-v2-integration-gap-analysis.md",
+      "sha256": "6a7af5f81331ccde11a3a48eacb1f0693fbaeb2e3fa9dae527e9e8a616969894",
+      "matchesBaseHead": true
+    },
+    {
+      "file": "docs/integrations/nexus/orbit-v2-integration-roadmap.md",
+      "sha256": "2e68068ffc639a11e035abb930414866ae18a6b4754964d5cf78911e1e14ad29",
+      "matchesBaseHead": true
+    },
+    {
+      "file": "docs/integrations/nexus/orbit-v2-nexus-integration-contracts.md",
+      "sha256": "6b502be698c1b7173ba974526107577212103bc5a4ff76ada8e0ddf504b7d245",
+      "matchesBaseHead": true
+    },
+    {
+      "file": "docs/integrations/nexus/orbit-v2-stripe-and-billing-audit.md",
+      "sha256": "b5f497e135e0a19bcdc1a1b132b5021990c43f0d0c8a562224b385b1777ef4d1",
+      "matchesBaseHead": true
+    },
+    {
+      "file": "docs/release/evidence/orb-nx-01-global-privilege-provenance.json",
+      "sha256": "bfbc95037d5110340c7fa00430887f560db3ca4e3c2219db4bc3de09c4785edf",
+      "matchesBaseHead": true
+    },
+    {
+      "file": "docs/release/evidence/orb-nx-02-canonical-administration.json",
+      "sha256": "e1f695e3b26a260b8fbd9e7ee432f78804e448ab3672443a44fce62c79ac6bc6",
+      "matchesBaseHead": true
+    },
+    {
+      "file": "docs/release/evidence/orb-nx-03-operational-suspension.json",
+      "sha256": "98e0bed8a4e301f6688322f432009ca76a4b42957e89839d938dc37201d49748",
+      "matchesBaseHead": true
+    },
+    {
+      "file": "docs/release/orb-nx-01-global-privilege-provenance.md",
+      "sha256": "91809bbf1267c12b365805f27aa3818003bc63d568fc8224f34d265cfa778940",
+      "matchesBaseHead": true
+    },
+    {
+      "file": "docs/release/orb-nx-02-canonical-administration.md",
+      "sha256": "9eb485a5bf3d258df990ff5bdda5040427382a2002d19454a7f69565794a4270",
+      "matchesBaseHead": true
+    },
+    {
+      "file": "docs/release/orb-nx-03-operational-suspension.md",
+      "sha256": "5fc65896da0e3957f38baccc1dfd307857f2a5f730b7bc4b054a3e57ef75f998",
+      "matchesBaseHead": true
+    }
+  ],
+  "validatedSources": {
+    ".env.example": "7750337ec062ae9b8b49cf5395c7169f3854f59dbadd9ad3a0adb9b7119e426f",
+    "backend/prisma/migrations/20261115160000_orbnx04_billing_recovery/migration.sql": "a229ef894ba24903059ffa9c5da95705ef16660ea2a333c22ef4fb982ba6a521",
+    "backend/prisma/schema.prisma": "9a67ca94d42823d07b8e21f6e65fcb3b3445953493acb08bee407896f23ec380",
+    "backend/src/modules/billing/billing-checkout-fulfillment.service.spec.ts": "04fcd80801f0e34248f4c21980ce709d91047a11417b519dc1d8973959cb9356",
+    "backend/src/modules/billing/billing-checkout-fulfillment.service.ts": "f199cff8abbbf2df6178d48cf96707a1a21d555ea232d8c425bee814d57b480f",
+    "backend/src/modules/billing/billing-reconciliation.service.spec.ts": "bfe85f8339413f3fabd41dff3e367f5d849b6e1b0f39f28c047d3444c23f1985",
+    "backend/src/modules/billing/billing-reconciliation.service.ts": "b2198949caeb4cab4e74fc22cc1a6ebea8c08b207bc7a5b75ea4ef3bde6e8959",
+    "backend/src/modules/billing/billing-recovery.service.spec.ts": "e1e74a26fda2380bf601d48262a45a498083eb861aa028ed8b39f11f512d0b78",
+    "backend/src/modules/billing/billing-recovery.service.ts": "cd128ad8918c88894d5c1659f0b19718635e69fd9c8f2be4a091be05e1103f07",
+    "backend/src/modules/billing/billing-webhook.service.ts": "236551be3bdb294936d366d659daa8c4ff555d221c461d305e39370ee23c6a58",
+    "backend/src/modules/billing/billing-work-budget.ts": "f781566595f0fba5f8a1958b575cc267dc662e243af5054f407618f42d4f45c1",
+    "backend/src/modules/billing/billing.module.ts": "00aa7dcabfb50ba79a70bd3a7105595c0fc3eb46868de1b13ae02ad5fa08fd8b",
+    "backend/src/modules/billing/billing.repository.ts": "fcbecb9d0f5729b9a1ad3fe121c5937dc57f04dfe0361c916f187dde7e4a4f44",
+    "backend/src/modules/billing/billing.types.ts": "6b42d39262eeadc08c87956f989193c3137d720f13b3f77bdeb93eab4a5b9559",
+    "backend/src/modules/billing/stripe/stripe-billing.provider.spec.ts": "e20db3e357439e9a137e11722e7ea0f416d7991ed4fd885bd99ff6a4bc01e7a2",
+    "backend/src/modules/billing/stripe/stripe-billing.provider.ts": "37b1051cf4702dd3cecc0e3d1f4704f3506096acd0fc695f686e37311c756e9e",
+    "backend/src/modules/subscription-plans/subscriptions/subscription.repository.ts": "7f82aa01698aa18c6f26fe494aa146dfd8b8dfea26e2bebc21e08a44c57f984a",
+    "backend/test/billing-recovery.e2e-spec.ts": "f9c4829d17b9716ad02451958140031044596856c227925e0c1d807914e2f651",
+    "backend/test/billing-stripe.e2e-spec.ts": "91c95967df9be65d4e880fed8008b91eed80a6c96a299a756f762443714e5f3c"
+  },
+  "validation": {
+    "unit": {
+      "tests": 217,
+      "suites": 24,
+      "failed": 0,
+      "results": [
+        {
+          "file": "backend/src/modules/billing/billing-reconciliation.service.spec.ts",
+          "tests": 11,
+          "cases": [
+            {
+              "name": "BillingReconciliationService durable inbox arquiva evento suportado por assinatura, mas sem consumidor",
+              "status": "passed"
+            },
+            {
+              "name": "BillingReconciliationService durable inbox devolve ao backoff quando o Stripe está indisponível",
+              "status": "passed"
+            },
+            {
+              "name": "BillingReconciliationService durable inbox does not apply an old subscription event to a new purchase",
+              "status": "passed"
+            },
+            {
+              "name": "BillingReconciliationService durable inbox manda correlação de checkout inválida para dead-letter",
+              "status": "passed"
+            },
+            {
+              "name": "BillingReconciliationService durable inbox encerra em dead-letter quando o orçamento de tentativas acaba",
+              "status": "passed"
+            },
+            {
+              "name": "BillingReconciliationService durable inbox traduz o price id canônico para plano sem confiar no evento",
+              "status": "passed"
+            },
+            {
+              "name": "BillingReconciliationService durable inbox não libera plano alterado sem pagamento comprovado: OPEN",
+              "status": "passed"
+            },
+            {
+              "name": "BillingReconciliationService durable inbox não libera plano alterado sem pagamento comprovado: WRONG_CUSTOMER",
+              "status": "passed"
+            },
+            {
+              "name": "BillingReconciliationService durable inbox não libera plano alterado sem pagamento comprovado: NO_INVOICE",
+              "status": "passed"
+            },
+            {
+              "name": "BillingReconciliationService durable inbox materializa a fatura canônica sem persistir payload do webhook",
+              "status": "passed"
+            },
+            {
+              "name": "BillingReconciliationService durable inbox correlaciona reembolso pela fatura canônica e registra somente dados financeiros normalizados",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/common/role-namespace.spec.ts",
+          "tests": 9,
+          "cases": [
+            {
+              "name": "ORB-NX-01 tenant role namespace rejects creation and rename for PLATFORM_ADMIN",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 tenant role namespace rejects creation and rename for platform admin",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 tenant role namespace rejects creation and rename for  Plátform---Admín ",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 tenant role namespace rejects creation and rename for PlatformAdmin",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 tenant role namespace rejects creation and rename for platform.supervisor",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 tenant role namespace rejects creation and rename for GLOBAL_ADMIN",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 tenant role namespace rejects creation and rename for Corporate Admin",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 tenant role namespace rejects creation and rename for nexus.admin",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 tenant role namespace preserves ordinary tenant role normalization",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/modules/billing/billing-checkout-fulfillment.service.spec.ts",
+          "tests": 9,
+          "cases": [
+            {
+              "name": "BillingCheckoutFulfillmentService liga e conclui apenas após validar a sessão canônica",
+              "status": "passed"
+            },
+            {
+              "name": "BillingCheckoutFulfillmentService recusa metadata que tenta correlacionar outra organização",
+              "status": "passed"
+            },
+            {
+              "name": "BillingCheckoutFulfillmentService recusa preço diferente do catálogo server-owned",
+              "status": "passed"
+            },
+            {
+              "name": "BillingCheckoutFulfillmentService não concede acesso enquanto o primeiro pagamento está pendente",
+              "status": "passed"
+            },
+            {
+              "name": "BillingCheckoutFulfillmentService troca fora do Essencial exige pagamento: unpaid",
+              "status": "passed"
+            },
+            {
+              "name": "BillingCheckoutFulfillmentService troca fora do Essencial exige pagamento: no_payment_required",
+              "status": "passed"
+            },
+            {
+              "name": "BillingCheckoutFulfillmentService aceita a contratação paga de outro plano sem exigir troca local antecipada",
+              "status": "passed"
+            },
+            {
+              "name": "BillingCheckoutFulfillmentService não repete o início da contratação quando o webhook é reentregue após ativação",
+              "status": "passed"
+            },
+            {
+              "name": "BillingCheckoutFulfillmentService recusa intenção antiga quando outro comando alterou a assinatura",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/modules/billing/stripe/stripe-billing.provider.spec.ts",
+          "tests": 30,
+          "cases": [
+            {
+              "name": "StripeBillingProvider subscription commands portal geral não oferece troca imediata e reutiliza configuração restrita",
+              "status": "passed"
+            },
+            {
+              "name": "StripeBillingProvider subscription commands abre confirmação da assinatura existente sem cobrar ou alterar itens antes da visita",
+              "status": "passed"
+            },
+            {
+              "name": "StripeBillingProvider subscription commands recusa configuração que manteria dias grátis em plano não elegível",
+              "status": "passed"
+            },
+            {
+              "name": "StripeBillingProvider subscription commands recusa portal sem cobrança imediata dos ajustes",
+              "status": "passed"
+            },
+            {
+              "name": "StripeBillingProvider subscription commands verifica o webhook sobre os bytes originais e publica apenas a referência do evento",
+              "status": "passed"
+            },
+            {
+              "name": "StripeBillingProvider subscription commands recusa assinatura de outro segredo de webhook",
+              "status": "passed"
+            },
+            {
+              "name": "StripeBillingProvider subscription commands confere o preço antes de criar checkout e mantém a chave de idempotência",
+              "status": "passed"
+            },
+            {
+              "name": "StripeBillingProvider subscription commands recusa preço divergente antes de checkout ou troca de plano: {\"unit_amount\":1}",
+              "status": "passed"
+            },
+            {
+              "name": "StripeBillingProvider subscription commands recusa preço divergente antes de checkout ou troca de plano: {\"currency\":\"usd\"}",
+              "status": "passed"
+            },
+            {
+              "name": "StripeBillingProvider subscription commands recusa preço divergente antes de checkout ou troca de plano: {\"active\":false}",
+              "status": "passed"
+            },
+            {
+              "name": "StripeBillingProvider subscription commands recusa preço divergente antes de checkout ou troca de plano: {\"livemode\":true}",
+              "status": "passed"
+            },
+            {
+              "name": "StripeBillingProvider subscription commands recusa preço divergente antes de checkout ou troca de plano: {\"recurring\":null}",
+              "status": "passed"
+            },
+            {
+              "name": "StripeBillingProvider subscription commands recusa preço divergente antes de checkout ou troca de plano: {\"recurring\":{\"interval\":\"month\",\"interval_count\":6}}",
+              "status": "passed"
+            },
+            {
+              "name": "StripeBillingProvider subscription commands não cria checkout quando não consegue verificar o preço",
+              "status": "passed"
+            },
+            {
+              "name": "StripeBillingProvider subscription commands cobra upgrade imediatamente e recusa estado incomplete",
+              "status": "passed"
+            },
+            {
+              "name": "StripeBillingProvider subscription commands preserva o preço atual e agenda downgrade para o fim do período",
+              "status": "passed"
+            },
+            {
+              "name": "StripeBillingProvider subscription commands só desfaz schedule criado para a mesma organização e assinatura",
+              "status": "passed"
+            },
+            {
+              "name": "StripeBillingProvider subscription commands normaliza fatura sem PII, client secret ou URL insegura",
+              "status": "passed"
+            },
+            {
+              "name": "StripeBillingProvider subscription commands correlaciona reembolso à fatura pelo payment intent",
+              "status": "passed"
+            },
+            {
+              "name": "StripeBillingProvider subscription commands PAID and a payment record alone do not assert Stripe cash",
+              "status": "passed"
+            },
+            {
+              "name": "StripeBillingProvider subscription commands records only a succeeded, correlated Stripe PaymentIntent and original paid timestamp",
+              "status": "passed"
+            },
+            {
+              "name": "StripeBillingProvider subscription commands does not assert cash without valid payment evidence: WRONG_CUSTOMER",
+              "status": "passed"
+            },
+            {
+              "name": "StripeBillingProvider subscription commands does not assert cash without valid payment evidence: PROCESSING",
+              "status": "passed"
+            },
+            {
+              "name": "StripeBillingProvider subscription commands does not assert cash without valid payment evidence: SHORT_AMOUNT",
+              "status": "passed"
+            },
+            {
+              "name": "StripeBillingProvider subscription commands does not assert cash without valid payment evidence: WRONG_CURRENCY",
+              "status": "passed"
+            },
+            {
+              "name": "StripeBillingProvider subscription commands fails closed for a LIVE invoice in a TEST provider",
+              "status": "passed"
+            },
+            {
+              "name": "StripeBillingProvider subscription commands fails closed on unbounded payment pagination",
+              "status": "passed"
+            },
+            {
+              "name": "StripeBillingProvider subscription commands discovers bounded Stripe event history with original occurrence time and cursor",
+              "status": "passed"
+            },
+            {
+              "name": "StripeBillingProvider subscription commands rejects a signed LIVE webhook in TEST mode",
+              "status": "passed"
+            },
+            {
+              "name": "StripeBillingProvider subscription commands correlates invoice_payment.paid through the authoritative InvoicePayment",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/modules/subscription-plans/subscriptions/subscription.snapshot.spec.ts",
+          "tests": 3,
+          "cases": [
+            {
+              "name": "retrato dos direitos guarda os limites do plano no momento da contratação",
+              "status": "passed"
+            },
+            {
+              "name": "retrato dos direitos ilimitado vira null declarado, nunca um número mágico",
+              "status": "passed"
+            },
+            {
+              "name": "retrato dos direitos passa pelo mesmo verificador que lê o perfil de um plano",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/modules/billing/billing-recovery.service.spec.ts",
+          "tests": 7,
+          "cases": [
+            {
+              "name": "bounded recovery scheduling polls independently of HTTP and stops the timer on shutdown",
+              "status": "passed"
+            },
+            {
+              "name": "bounded recovery scheduling does not overlap a slow execution in one replica and waits for shutdown",
+              "status": "passed"
+            },
+            {
+              "name": "bounded recovery scheduling respects global worker disable with recovery enabled=true",
+              "status": "passed"
+            },
+            {
+              "name": "bounded recovery scheduling respects global worker disable with recovery enabled=false",
+              "status": "passed"
+            },
+            {
+              "name": "bounded recovery scheduling exhausts nested SDK call budget and does not leak it into HTTP",
+              "status": "passed"
+            },
+            {
+              "name": "bounded recovery scheduling checks duration before starting another SDK call",
+              "status": "passed"
+            },
+            {
+              "name": "bounded recovery scheduling empty deployment variables use safe defaults, invalid bounds fail closed",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/modules/billing/retention/subscription-data-retention.service.spec.ts",
+          "tests": 8,
+          "cases": [
+            {
+              "name": "automatic cancellation retention safeguards preserves a paid return already linked to Stripe while activation is being reconciled",
+              "status": "passed"
+            },
+            {
+              "name": "automatic cancellation retention safeguards continues scanning when the first page is waiting for financial confirmation",
+              "status": "passed"
+            },
+            {
+              "name": "automatic cancellation retention safeguards queries only explicitly scheduled deadlines and requires the provider subscription to be ended",
+              "status": "passed"
+            },
+            {
+              "name": "automatic cancellation retention safeguards preserves data while checkout is COMPLETE",
+              "status": "passed"
+            },
+            {
+              "name": "automatic cancellation retention safeguards preserves data while checkout is UNKNOWN",
+              "status": "passed"
+            },
+            {
+              "name": "automatic cancellation retention safeguards retains unfinished checkout creation instead of assuming it failed",
+              "status": "passed"
+            },
+            {
+              "name": "automatic cancellation retention safeguards deletes a queued object before acknowledging its removal",
+              "status": "passed"
+            },
+            {
+              "name": "automatic cancellation retention safeguards retries storage failures without losing the only object reference",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/modules/subscription-plans/subscriptions/trial-eligibility.service.spec.ts",
+          "tests": 5,
+          "cases": [
+            {
+              "name": "teste posterior ao cadastro histórico elegível true, documento já testou false -> elegível true",
+              "status": "passed"
+            },
+            {
+              "name": "teste posterior ao cadastro histórico elegível false, documento já testou false -> elegível false",
+              "status": "passed"
+            },
+            {
+              "name": "teste posterior ao cadastro histórico elegível true, documento já testou true -> elegível false",
+              "status": "passed"
+            },
+            {
+              "name": "teste posterior ao cadastro não usa documento enviado pelo navegador e concede exatamente 30 dias",
+              "status": "passed"
+            },
+            {
+              "name": "teste posterior ao cadastro recusa cliente que já pagou ou já teve avaliação sem conceder novos dias",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/modules/subscription-plans/subscriptions/subscription-lifecycle.worker.spec.ts",
+          "tests": 4,
+          "cases": [
+            {
+              "name": "worker do ciclo de vida da assinatura reconcilia ao subir, sem esperar o primeiro intervalo",
+              "status": "passed"
+            },
+            {
+              "name": "worker do ciclo de vida da assinatura uma varredura por vez",
+              "status": "passed"
+            },
+            {
+              "name": "worker do ciclo de vida da assinatura falha não derruba o worker",
+              "status": "passed"
+            },
+            {
+              "name": "worker do ciclo de vida da assinatura desligado por configuração não reconcilia",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/modules/subscription-plans/subscriptions/subscription-retention.spec.ts",
+          "tests": 5,
+          "cases": [
+            {
+              "name": "cancellation retention keeps paid rights and starts the 30 days at the paid term end",
+              "status": "passed"
+            },
+            {
+              "name": "cancellation retention uses the actual trial end when canceling an evaluation",
+              "status": "passed"
+            },
+            {
+              "name": "cancellation retention does not schedule deletion retroactively for a client that did not see the policy",
+              "status": "passed"
+            },
+            {
+              "name": "cancellation retention clears the deletion deadline after successful provider reactivation",
+              "status": "passed"
+            },
+            {
+              "name": "cancellation retention keeps the 30-day deadline aligned with the authoritative paid term",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/modules/subscription-plans/entitlements/limit-adjustment.spec.ts",
+          "tests": 3,
+          "cases": [
+            {
+              "name": "adequação de limites após a renovação identifica reduções por cotas e preserva melhorias",
+              "status": "passed"
+            },
+            {
+              "name": "adequação de limites após a renovação mantém cotas anteriores até o último milissegundo e aplica as novas exatamente após 48 horas",
+              "status": "passed"
+            },
+            {
+              "name": "adequação de limites após a renovação publica limite contratado e aviso durante o prazo; bloqueia operações vencidas e libera após regularização sem alterar registros",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/modules/subscription-plans/subscriptions/plan-change.spec.ts",
+          "tests": 6,
+          "cases": [
+            {
+              "name": "trocar de plano durante a avaliação a subida é programada para o fim da avaliação, não aplicada na hora",
+              "status": "passed"
+            },
+            {
+              "name": "trocar de plano durante a avaliação em plano pago, a subida aguarda o vencimento do período atual",
+              "status": "passed"
+            },
+            {
+              "name": "trocar de plano durante a avaliação o rebaixamento continua programado para o fim do período",
+              "status": "passed"
+            },
+            {
+              "name": "renovação financeira e prazo de adequação o prazo de adequação de contratos antigos também vale quando o worker atrasa",
+              "status": "passed"
+            },
+            {
+              "name": "renovação financeira e prazo de adequação não antecipa troca de um período pago ainda em andamento",
+              "status": "passed"
+            },
+            {
+              "name": "renovação financeira e prazo de adequação webhook do plano anterior não apaga a troca agendada",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/modules/tenant-operations/tenant-operation.policy.spec.ts",
+          "tests": 9,
+          "cases": [
+            {
+              "name": "Operational policy is separate from financial eligibility permits operational status ACTIVE independently of legacy billing flags",
+              "status": "passed"
+            },
+            {
+              "name": "Operational policy is separate from financial eligibility permits operational status ONBOARDING independently of legacy billing flags",
+              "status": "passed"
+            },
+            {
+              "name": "Operational policy is separate from financial eligibility fails closed for SUSPENDED even when a role name says PLATFORM_ADMIN",
+              "status": "passed"
+            },
+            {
+              "name": "Operational policy is separate from financial eligibility fails closed for CANCELLED even when a role name says PLATFORM_ADMIN",
+              "status": "passed"
+            },
+            {
+              "name": "Operational policy is separate from financial eligibility fails closed for UNKNOWN even when a role name says PLATFORM_ADMIN",
+              "status": "passed"
+            },
+            {
+              "name": "Operational policy is separate from financial eligibility fails closed for active even when a role name says PLATFORM_ADMIN",
+              "status": "passed"
+            },
+            {
+              "name": "Operational policy is separate from financial eligibility does not resume data already purging or no longer visible",
+              "status": "passed"
+            },
+            {
+              "name": "Operational policy is separate from financial eligibility does not memoize status across decisions or successive requests",
+              "status": "passed"
+            },
+            {
+              "name": "Operational policy is separate from financial eligibility rejects role strings and serialized authority before opening an administrative transaction",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/modules/billing/billing.service.spec.ts",
+          "tests": 14,
+          "cases": [
+            {
+              "name": "BillingService checkout intent libera 30 dias ao escolher Essencial sem pagamento ou teste anterior",
+              "status": "passed"
+            },
+            {
+              "name": "BillingService checkout intent não concede teste quando um checkout já foi concluído e aguarda webhook",
+              "status": "passed"
+            },
+            {
+              "name": "BillingService checkout intent persiste a intenção antes de abrir a sessão no provedor",
+              "status": "passed"
+            },
+            {
+              "name": "BillingService checkout intent replay usa a identidade durável já existente",
+              "status": "passed"
+            },
+            {
+              "name": "BillingService checkout intent recusa cobrar um plano diferente da assinatura local",
+              "status": "passed"
+            },
+            {
+              "name": "BillingService checkout intent provider-backed commands confirma cancelamento no provedor antes de refletir localmente",
+              "status": "passed"
+            },
+            {
+              "name": "BillingService checkout intent provider-backed commands releases a scheduled change before disabling renewal, retaining the current paid period",
+              "status": "passed"
+            },
+            {
+              "name": "BillingService checkout intent provider-backed commands não altera estado local quando o cancelamento falha no provedor",
+              "status": "passed"
+            },
+            {
+              "name": "BillingService checkout intent provider-backed commands recusa o comando antes da escrita quando o customer não pertence ao vínculo",
+              "status": "passed"
+            },
+            {
+              "name": "BillingService checkout intent provider-backed commands agenda ESSENTIAL na renovação, sem cobrança imediata nem antecipação de direitos",
+              "status": "passed"
+            },
+            {
+              "name": "BillingService checkout intent provider-backed commands agenda PROFESSIONAL_INTELLIGENCE na renovação, sem cobrança imediata nem antecipação de direitos",
+              "status": "passed"
+            },
+            {
+              "name": "BillingService checkout intent provider-backed commands recusa troca de teste sem confirmação explícita antes de chamar Stripe",
+              "status": "passed"
+            },
+            {
+              "name": "BillingService checkout intent trial para PROFESSIONAL/MONTHLY abre checkout sem dias gratuitos e preserva assinatura até pagar",
+              "status": "passed"
+            },
+            {
+              "name": "BillingService checkout intent trial para ESSENTIAL/ANNUAL abre checkout sem dias gratuitos e preserva assinatura até pagar",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/modules/subscription-plans/subscriptions/subscription-status-migration.spec.ts",
+          "tests": 1,
+          "cases": [
+            {
+              "name": "keeps the persisted subscription statuses aligned with the domain",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/modules/subscription-plans/subscriptions/trial-fingerprint.spec.ts",
+          "tests": 9,
+          "cases": [
+            {
+              "name": "impressão digital da entidade contratante normaliza a pontuação antes de assinar",
+              "status": "passed"
+            },
+            {
+              "name": "impressão digital da entidade contratante é determinística",
+              "status": "passed"
+            },
+            {
+              "name": "impressão digital da entidade contratante documentos diferentes têm impressões diferentes",
+              "status": "passed"
+            },
+            {
+              "name": "impressão digital da entidade contratante segredo diferente produz impressão diferente",
+              "status": "passed"
+            },
+            {
+              "name": "impressão digital da entidade contratante não é um SHA simples do documento",
+              "status": "passed"
+            },
+            {
+              "name": "impressão digital da entidade contratante não contém o documento em lugar nenhum",
+              "status": "passed"
+            },
+            {
+              "name": "impressão digital da entidade contratante compara em tempo constante",
+              "status": "passed"
+            },
+            {
+              "name": "impressão digital da entidade contratante aceita CPF e CNPJ, e recusa o resto",
+              "status": "passed"
+            },
+            {
+              "name": "impressão digital da entidade contratante recusa segredo curto demais",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/modules/platform-administration/platform-administration.service.spec.ts",
+          "tests": 3,
+          "cases": [
+            {
+              "name": "PlatformAdministrationService canonical boundary does not accept a tenant role string or structural owner as global authority",
+              "status": "passed"
+            },
+            {
+              "name": "PlatformAdministrationService canonical boundary audits rejected legacy billing writes without turning them into canonical commands",
+              "status": "passed"
+            },
+            {
+              "name": "PlatformAdministrationService canonical boundary exposes optimistic concurrency conflicts explicitly",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/modules/billing/billing.config.spec.ts",
+          "tests": 27,
+          "cases": [
+            {
+              "name": "configuração de cobrança desligada sobe sem exigir nada",
+              "status": "passed"
+            },
+            {
+              "name": "configuração de cobrança desligada valor diferente de \"true\" mantém desligada",
+              "status": "passed"
+            },
+            {
+              "name": "configuração de cobrança ligada aceita configuração completa e mapeia os doze preços",
+              "status": "passed"
+            },
+            {
+              "name": "configuração de cobrança ligada falha na subida sem STRIPE_SECRET_KEY",
+              "status": "passed"
+            },
+            {
+              "name": "configuração de cobrança ligada falha na subida sem STRIPE_WEBHOOK_SECRET",
+              "status": "passed"
+            },
+            {
+              "name": "configuração de cobrança ligada falha na subida sem BILLING_CHECKOUT_SUCCESS_URL",
+              "status": "passed"
+            },
+            {
+              "name": "configuração de cobrança ligada falha na subida sem BILLING_CHECKOUT_CANCEL_URL",
+              "status": "passed"
+            },
+            {
+              "name": "configuração de cobrança ligada falha na subida sem BILLING_PORTAL_RETURN_URL",
+              "status": "passed"
+            },
+            {
+              "name": "configuração de cobrança ligada falha na subida com um preço faltando",
+              "status": "passed"
+            },
+            {
+              "name": "configuração de cobrança ligada a mensagem de falha nomeia as chaves, nunca os valores",
+              "status": "passed"
+            },
+            {
+              "name": "configuração de cobrança ligada recusa o formato incorreto de preço prod_nao_e_preco sem expor seu valor",
+              "status": "passed"
+            },
+            {
+              "name": "configuração de cobrança ligada recusa o formato incorreto de preço valor_invalido sem expor seu valor",
+              "status": "passed"
+            },
+            {
+              "name": "configuração de cobrança ligada recusa chave de API de tipo incorreto pk_live_nao_e_segredo",
+              "status": "passed"
+            },
+            {
+              "name": "configuração de cobrança ligada recusa chave de API de tipo incorreto valor_invalido",
+              "status": "passed"
+            },
+            {
+              "name": "configuração de cobrança ligada recusa chave de API de tipo incorreto sk_org_nao_suportada",
+              "status": "passed"
+            },
+            {
+              "name": "configuração de cobrança ligada recusa segredo de webhook com prefixo incorreto",
+              "status": "passed"
+            },
+            {
+              "name": "configuração de cobrança ligada recusa repetir um preço em planos ou periodicidades diferentes",
+              "status": "passed"
+            },
+            {
+              "name": "configuração de cobrança ligada não tenta inferir o modo pelo texto do Price ID",
+              "status": "passed"
+            },
+            {
+              "name": "configuração de cobrança ligada aceita chave restrita rk_live_exemplo com modo correto",
+              "status": "passed"
+            },
+            {
+              "name": "configuração de cobrança ligada aceita chave restrita rk_test_exemplo com modo correto",
+              "status": "passed"
+            },
+            {
+              "name": "configuração de cobrança ligada deduz o modo pelo prefixo da chave",
+              "status": "passed"
+            },
+            {
+              "name": "configuração de cobrança URLs de retorno recusa URL que não seja absoluta",
+              "status": "passed"
+            },
+            {
+              "name": "configuração de cobrança URLs de retorno exige https fora de localhost",
+              "status": "passed"
+            },
+            {
+              "name": "configuração de cobrança URLs de retorno recusa esquema ou credenciais em URL ftp://localhost/retorno",
+              "status": "passed"
+            },
+            {
+              "name": "configuração de cobrança URLs de retorno recusa esquema ou credenciais em URL javascript://localhost/retorno",
+              "status": "passed"
+            },
+            {
+              "name": "configuração de cobrança URLs de retorno recusa esquema ou credenciais em URL https://usuario:senha@exemplo.com/retorno",
+              "status": "passed"
+            },
+            {
+              "name": "configuração de cobrança URLs de retorno aceita http em localhost, para desenvolvimento",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/modules/billing/billing-event.worker.spec.ts",
+          "tests": 2,
+          "cases": [
+            {
+              "name": "BillingEventWorker não sobrepõe ciclos na mesma réplica",
+              "status": "passed"
+            },
+            {
+              "name": "BillingEventWorker isola falha do ciclo para o próximo poll continuar",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/common/verified-platform-authority.spec.ts",
+          "tests": 9,
+          "cases": [
+            {
+              "name": "ORB-NX-01 verified global authority rejects role strings, tenant wildcard and structural owner as platform proof",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 verified global authority accepts a real request-local proof but rejects clones and cross-user reuse",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 verified global authority rejects invalid persisted assignment provenance: {\"revokedAt\":\"2026-11-15T14:05:43.979Z\"}",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 verified global authority rejects invalid persisted assignment provenance: {\"userId\":\"other\"}",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 verified global authority rejects invalid persisted assignment provenance: {\"roleId\":\"other\"}",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 verified global authority rejects invalid persisted assignment provenance: {\"role\":{\"id\":\"role\",\"organizationId\":\"tenant\",\"deletedAt\":null,\"key\":\"PLATFORM_ADMIN\",\"permissions\":[\"platform.admin\"],\"allowedSurfaces\":[\"WEB\"]}}",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 verified global authority rejects invalid persisted assignment provenance: {\"role\":{\"id\":\"role\",\"organizationId\":null,\"deletedAt\":\"2026-11-15T14:05:43.979Z\",\"key\":\"PLATFORM_ADMIN\",\"permissions\":[\"platform.admin\"],\"allowedSurfaces\":[\"WEB\"]}}",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 verified global authority legacy tenant role and platform permission never become global grants",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 verified global authority RLS requires verified provenance, matching user and internal actor",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/modules/subscription-plans/subscriptions/subscription.types.spec.ts",
+          "tests": 15,
+          "cases": [
+            {
+              "name": "ciclo de vida da assinatura acesso ao produto PENDING_PAYMENT concede acesso: false",
+              "status": "passed"
+            },
+            {
+              "name": "ciclo de vida da assinatura acesso ao produto TRIALING concede acesso: true",
+              "status": "passed"
+            },
+            {
+              "name": "ciclo de vida da assinatura acesso ao produto ACTIVE concede acesso: true",
+              "status": "passed"
+            },
+            {
+              "name": "ciclo de vida da assinatura acesso ao produto PAST_DUE concede acesso: true",
+              "status": "passed"
+            },
+            {
+              "name": "ciclo de vida da assinatura acesso ao produto GRACE_PERIOD concede acesso: true",
+              "status": "passed"
+            },
+            {
+              "name": "ciclo de vida da assinatura acesso ao produto SUSPENDED concede acesso: false",
+              "status": "passed"
+            },
+            {
+              "name": "ciclo de vida da assinatura acesso ao produto CANCELED concede acesso: false",
+              "status": "passed"
+            },
+            {
+              "name": "ciclo de vida da assinatura acesso ao produto EXPIRED concede acesso: false",
+              "status": "passed"
+            },
+            {
+              "name": "ciclo de vida da assinatura troca de plano só quem está em avaliação ou ativo troca de plano",
+              "status": "passed"
+            },
+            {
+              "name": "ciclo de vida da assinatura primeira contratação abre checkout somente para a assinatura corrente ainda não paga ou em avaliação",
+              "status": "passed"
+            },
+            {
+              "name": "ciclo de vida da assinatura transições o fluxo de falha de pagamento é permitido ponta a ponta",
+              "status": "passed"
+            },
+            {
+              "name": "ciclo de vida da assinatura transições pagamento confirmado é o único caminho da pendência para acesso",
+              "status": "passed"
+            },
+            {
+              "name": "ciclo de vida da assinatura transições pagar restaura o acesso a partir de qualquer estado recuperável",
+              "status": "passed"
+            },
+            {
+              "name": "ciclo de vida da assinatura transições estados terminais não têm saída",
+              "status": "passed"
+            },
+            {
+              "name": "ciclo de vida da assinatura transições o que não está declarado é recusado",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/modules/subscription-plans/subscriptions/subscription.projection.spec.ts",
+          "tests": 14,
+          "cases": [
+            {
+              "name": "projeção do estado da assinatura dentro do período, nada muda",
+              "status": "passed"
+            },
+            {
+              "name": "projeção do estado da assinatura avaliação vale até o último instante",
+              "status": "passed"
+            },
+            {
+              "name": "projeção do estado da assinatura avaliação vence e não se converte sozinha",
+              "status": "passed"
+            },
+            {
+              "name": "projeção do estado da assinatura avaliação o atraso do reconciliador não dá tempo extra",
+              "status": "passed"
+            },
+            {
+              "name": "projeção do estado da assinatura carência mantém o acesso enquanto corre",
+              "status": "passed"
+            },
+            {
+              "name": "projeção do estado da assinatura carência termina em suspensão, sem destruir nada",
+              "status": "passed"
+            },
+            {
+              "name": "projeção do estado da assinatura cancelamento agendado mantém o acesso até o fim do período pago",
+              "status": "passed"
+            },
+            {
+              "name": "projeção do estado da assinatura cancelamento agendado num contrato anual, o acesso vai até o fim do ano contratado",
+              "status": "passed"
+            },
+            {
+              "name": "projeção do estado da assinatura renovação contrato do provedor entra em carência sem pagamento confirmado",
+              "status": "passed"
+            },
+            {
+              "name": "projeção do estado da assinatura renovação carência implícita também é limitada quando o worker para",
+              "status": "passed"
+            },
+            {
+              "name": "projeção do estado da assinatura renovação contrato legado sem provedor preserva a renovação anterior",
+              "status": "passed"
+            },
+            {
+              "name": "projeção do estado da assinatura mudança programada aguarda confirmação financeira de planos geridos pelo Stripe mesmo após o vencimento",
+              "status": "passed"
+            },
+            {
+              "name": "projeção do estado da assinatura mudança programada só vale a partir da data marcada",
+              "status": "passed"
+            },
+            {
+              "name": "projeção do estado da assinatura projetar duas vezes dá o mesmo resultado",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/modules/billing/stripe/stripe-status.mapper.spec.ts",
+          "tests": 11,
+          "cases": [
+            {
+              "name": "tradução do estado do provedor trialing vira TRIALING",
+              "status": "passed"
+            },
+            {
+              "name": "tradução do estado do provedor active vira ACTIVE",
+              "status": "passed"
+            },
+            {
+              "name": "tradução do estado do provedor past_due vira PAYMENT_FAILED",
+              "status": "passed"
+            },
+            {
+              "name": "tradução do estado do provedor unpaid vira PAYMENT_FAILED",
+              "status": "passed"
+            },
+            {
+              "name": "tradução do estado do provedor paused vira PAYMENT_FAILED",
+              "status": "passed"
+            },
+            {
+              "name": "tradução do estado do provedor canceled vira ENDED",
+              "status": "passed"
+            },
+            {
+              "name": "tradução do estado do provedor incomplete_expired vira ENDED",
+              "status": "passed"
+            },
+            {
+              "name": "tradução do estado do provedor incomplete vira INCOMPLETE",
+              "status": "passed"
+            },
+            {
+              "name": "tradução do estado do provedor estado desconhecido nunca vira acesso",
+              "status": "passed"
+            },
+            {
+              "name": "tradução do estado do provedor assinatura sem primeiro pagamento não é assinatura paga",
+              "status": "passed"
+            },
+            {
+              "name": "tradução do estado do provedor só em dia e em avaliação contam como pagas",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/modules/billing/retention/purge-tables.spec.ts",
+          "tests": 3,
+          "cases": [
+            {
+              "name": "exclusão operacional após prazo de retorno preserva conta, cobrança, consentimentos e memória antifraude",
+              "status": "passed"
+            },
+            {
+              "name": "exclusão operacional após prazo de retorno remove dependências antes dos pais e ignora relações externas à operação",
+              "status": "passed"
+            },
+            {
+              "name": "exclusão operacional após prazo de retorno recusa ciclo em vez de fazer exclusão parcial",
+              "status": "passed"
+            }
+          ]
+        }
+      ]
+    },
+    "postgres": {
+      "tests": 190,
+      "suites": 8,
+      "newNx04Tests": 49,
+      "failedInSelectedFinalSuites": 0,
+      "runtimeRole": "orbit_app",
+      "superuser": false,
+      "bypassRls": false,
+      "forcedRlsProven": true,
+      "migrationsApplied": 119,
+      "runtimeTablesProvisioned": 144,
+      "database": "new disposable PostgreSQL 17.11 database per invocation",
+      "stripe": "synthetic fixtures and mocked network; official SDK for signatures and adapter unit tests",
+      "finalQualificationComposition": "Seven unchanged regression suites from pg-qualified-results.json plus requalified billing-recovery.e2e-spec.ts from pg-recovery-final-results.json. Earlier failed recovery suite is superseded, not counted as passed. Only the recovery test file changed between these runs.",
+      "results": [
+        {
+          "file": "backend/test/billing-stripe.e2e-spec.ts",
+          "tests": 33,
+          "cases": [
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) autenticidade do webhook aceita evento com assinatura válida sobre o corpo cru",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) autenticidade do webhook recusa sem o cabeçalho de assinatura",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) autenticidade do webhook recusa assinatura inválida",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) autenticidade do webhook recusa corpo adulterado depois de assinado",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) autenticidade do webhook recusa assinatura feita com outro segredo",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) autenticidade do webhook evento recusado não entra na caixa de entrada",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) entrega repetida o mesmo evento dez vezes grava uma linha",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) entrega repetida quatro entregas simultâneas produzem uma linha só",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) reconciliação pagamento confirmado mantém a assinatura ativa",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) reconciliação falha de pagamento leva à carência da PR-PL-02",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) reconciliação evento antigo de falha não derruba assinatura já paga",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) reconciliação estado desconhecido do provedor não vira acesso",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) reconciliação encerramento no provedor encerra o acesso local",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) reconciliação evento sem consumidor é reconhecido e arquivado",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) reconciliação processar duas vezes não muda o resultado",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) provedor indisponível tempo esgotado não suspende ninguém, e o evento fica para depois",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) provedor indisponível a varredura periódica corrige entrega perdida",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) o cliente não decide preço, valor, avaliação nem organização aceita apenas plano e periodicidade",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) o cliente não decide preço, valor, avaliação nem organização recusa o corpo que tenta enviar amount",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) o cliente não decide preço, valor, avaliação nem organização recusa o corpo que tenta enviar currency",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) o cliente não decide preço, valor, avaliação nem organização recusa o corpo que tenta enviar stripePriceId",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) o cliente não decide preço, valor, avaliação nem organização recusa o corpo que tenta enviar priceId",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) o cliente não decide preço, valor, avaliação nem organização recusa o corpo que tenta enviar trialDays",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) o cliente não decide preço, valor, avaliação nem organização recusa o corpo que tenta enviar organizationId",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) o cliente não decide preço, valor, avaliação nem organização recusa o corpo que tenta enviar customerId",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) o cliente não decide preço, valor, avaliação nem organização recusa periodicidade inventada",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) o cliente não decide preço, valor, avaliação nem organização exige sessão autenticada",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) o cliente não decide preço, valor, avaliação nem organização não abre uma segunda assinatura para contrato já ativo",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) prontidão da cobrança publica o que dá para fazer, sem segredo nem identificador do provedor",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) prontidão da cobrança a visão consolidada traz catálogo, assinatura, uso e prontidão",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) prontidão da cobrança desligada, a tela recebe indisponibilidade e não erro técnico",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) prontidão da cobrança desligada, o webhook não aceita evento nenhum",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) as demais rotas continuam recebendo JSON uma rota comum segue interpretando o corpo normalmente",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/test/tenant-suspension.e2e-spec.ts",
+          "tests": 28,
+          "cases": [
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) runs with forced RLS and no SUPERUSER/BYPASSRLS",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) operational ACTIVE / canonical ACTIVE preserves independent read and write gates",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) operational SUSPENDED / canonical ACTIVE preserves independent read and write gates",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) operational SUSPENDED / canonical TRIALING preserves independent read and write gates",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) operational ACTIVE / canonical EXPIRED preserves independent read and write gates",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) operational ACTIVE / canonical PENDING_PAYMENT preserves independent read and write gates",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) blocks an existing WEB session on the next operational request without trusting old JWT claims",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) blocks an existing MOBILE session on the next operational request without trusting old JWT claims",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) blocks an existing API session on the next operational request without trusting old JWT claims",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) keeps identity, recovery, billing and own restriction status available without granting operational access",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) reactivates a valid contract without touching any canonical financial field or Stripe link",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) does not restore permissions revoked while operationally suspended",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) does not revive the legacy financial fallback when there is no canonical contract",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) reactivation of an ended contract does not grant writes, trial or paid rights",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) serializes opposite decisions and rejects a stale administrative version",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) persists one receipt for concurrent duplicates, rejects payload reuse and records an explicit no-op",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) enforces tenant/unit isolation and refuses unauthorized target selection, including nonexistent targets",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) grants administrative recovery only with current persisted global authority, never a product bypass",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) defers already queued operational work without exhausting attempts and wakes the same job after reactivation",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) keeps financial/security/cleanup queue artifact.manifest.issued running while suspended",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) keeps financial/security/cleanup queue quote.status.changed running while suspended",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) keeps financial/security/cleanup queue mobile.sync.cleanup running while suspended",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) keeps financial/security/cleanup queue mobile.evidence.cleanup running while suspended",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) reactivation cannot execute operational jobs for an ineligible canonical subscription",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) allows a job admitted before suspension to finish and blocks subsequent admissions",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) checks a pre-issued signed upload after signature authentication and before accepting data",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) does not emit realtime tenant data into sockets established before suspension",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) does not reactivate retained, canceled or purging organizations",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/test/subscriptions.e2e-spec.ts",
+          "tests": 27,
+          "cases": [
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) preços por periodicidade publica os três preços congelados de cada plano",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) preços por periodicidade preço é inteiro em centavos, nunca ponto flutuante",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) preços por periodicidade não antecipa Stripe nem checkout",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) avaliação gratuita a primeira empresa recebe trinta dias no Essencial",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) avaliação gratuita recusa um novo cadastro com CNPJ já utilizado antes de conceder outra avaliação",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) avaliação gratuita usuário novo não gera avaliação nova",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) avaliação gratuita mudar de endereço não burla, porque o documento é o mesmo",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) avaliação gratuita documento diferente no mesmo endereço continua elegível",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) avaliação gratuita PROFESSIONAL não oferece avaliação",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) avaliação gratuita PROFESSIONAL_INTELLIGENCE não oferece avaliação",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) avaliação gratuita ENTERPRISE_UNLIMITED não oferece avaliação",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) avaliação gratuita quatro pedidos concorrentes com o mesmo documento concedem um só",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) avaliação gratuita a recusa não conta o motivo nem devolve a impressão",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) fronteira do registro antifraude uma organização não lista a concessão de outra",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) cobrança e uso são períodos diferentes com cobrança MONTHLY, o acesso dura 1 mês(es) e a cota continua mensal",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) cobrança e uso são períodos diferentes com cobrança SEMIANNUAL, o acesso dura 6 mês(es) e a cota continua mensal",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) cobrança e uso são períodos diferentes com cobrança ANNUAL, o acesso dura 12 mês(es) e a cota continua mensal",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) cobrança e uso são períodos diferentes o limite mensal não muda com a periodicidade",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) troca de plano subir é programado e não libera inteligência antes do vencimento",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) troca de plano descer é programado e não muda nada agora",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) troca de plano dois comandos concorrentes: um passa, o outro encontra versão vencida",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) cancelamento mantém o acesso até o fim do período e pode ser desfeito",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) carência e suspensão falha de pagamento dá sete dias, e o acesso continua",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) carência e suspensão carência vencida suspende, e a suspensão nega o produto sem apagar dados",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) reconciliação põe o banco em dia e rodar de novo não muda nada",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) leitura da assinatura publica períodos e ações sem vazar antifraude",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) leitura da assinatura organização sem assinatura recebe o código previsto",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/test/rls.e2e-spec.ts",
+          "tests": 19,
+          "cases": [
+            {
+              "name": "Row Level Security (e2e) 1 · a aplicação conecta com papel que não contorna RLS",
+              "status": "passed"
+            },
+            {
+              "name": "Row Level Security (e2e) 1.1 · sem contexto nenhum, nada é visível",
+              "status": "passed"
+            },
+            {
+              "name": "Row Level Security (e2e) 2 · o contexto de A não enxerga uma linha de B",
+              "status": "passed"
+            },
+            {
+              "name": "Row Level Security (e2e) 2.1 · e enxerga o próprio cliente pelo mesmo caminho",
+              "status": "passed"
+            },
+            {
+              "name": "Row Level Security (e2e) 3 · contexto limitado a A1 não enxerga a ordem de A2",
+              "status": "passed"
+            },
+            {
+              "name": "Row Level Security (e2e) 3.1 · a mesma organização com as duas unidades enxerga as três",
+              "status": "passed"
+            },
+            {
+              "name": "Row Level Security (e2e) 3.5 · o contexto vale da primeira à última consulta da transação",
+              "status": "passed"
+            },
+            {
+              "name": "Row Level Security (e2e) 3.6 · duas transações concorrentes não compartilham contexto",
+              "status": "passed"
+            },
+            {
+              "name": "Row Level Security (e2e) 3.7 · o contexto não sobrevive ao fim da transação",
+              "status": "passed"
+            },
+            {
+              "name": "Row Level Security (e2e) 3.2 · lista de unidades vazia devolve zero, não tudo",
+              "status": "passed"
+            },
+            {
+              "name": "Row Level Security (e2e) 4 · o escopo organizacional de A continua cego para B",
+              "status": "passed"
+            },
+            {
+              "name": "Row Level Security (e2e) 4.1 · declarar a unidade de B no contexto de A não abre nada",
+              "status": "passed"
+            },
+            {
+              "name": "Row Level Security (e2e) 5 · escrever para outra organização é recusado pelo banco",
+              "status": "passed"
+            },
+            {
+              "name": "Row Level Security (e2e) 5.1 · escrever para unidade fora do escopo também é recusado",
+              "status": "passed"
+            },
+            {
+              "name": "Row Level Security (e2e) 6 · `app.job_worker` abre a fila e nada mais",
+              "status": "passed"
+            },
+            {
+              "name": "Row Level Security (e2e) 7 · relatório sem filial nasce com escopo ORGANIZATION resolvido",
+              "status": "passed"
+            },
+            {
+              "name": "Row Level Security (e2e) 7.1 · e o snapshot cobre as duas filiais, sem zerar",
+              "status": "passed"
+            },
+            {
+              "name": "Row Level Security (e2e) 7.2 · e a organização vizinha não aparece no retrato",
+              "status": "passed"
+            },
+            {
+              "name": "Row Level Security (e2e) 8 · job organizacional sem escopo resolvido é enterrado, não executado",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/test/platform-canonical-administration.e2e-spec.ts",
+          "tests": 15,
+          "cases": [
+            {
+              "name": "ORB-NX-02 canonical platform administration (HTTP / restricted PostgreSQL) paid provisioning creates canonical pending access, owner bindings and setup outbox without an owner password",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-02 canonical platform administration (HTTP / restricted PostgreSQL) essential uses canonical 30-day eligibility and exposes trial separately from active paid contracts",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-02 canonical platform administration (HTTP / restricted PostgreSQL) creation rejects legacy financial activation and malformed nested owner input",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-02 canonical platform administration (HTTP / restricted PostgreSQL) consumed legal-document trial is not granted again by administrative creation",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-02 canonical platform administration (HTTP / restricted PostgreSQL) canonical transaction failure preserves tenant, rolls back trial and resumes without duplicating either",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-02 canonical platform administration (HTTP / restricted PostgreSQL) a failed initial transaction leaves a durable retry record without orphan owner or tenant",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-02 canonical platform administration (HTTP / restricted PostgreSQL) setup enqueue failure preserves canonical access state and resumes the existing operation",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-02 canonical platform administration (HTTP / restricted PostgreSQL) same request is idempotent under concurrent callers, and a changed body conflicts",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-02 canonical platform administration (HTTP / restricted PostgreSQL) legacy clients can omit the idempotency header and provide a password without bypassing billing",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-02 canonical platform administration (HTTP / restricted PostgreSQL) PATCH cannot modify effective billing through legacy fields: {\"subscriptionStatus\":\"ACTIVE\"}",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-02 canonical platform administration (HTTP / restricted PostgreSQL) PATCH cannot modify effective billing through legacy fields: {\"planKey\":\"ESSENTIAL\"}",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-02 canonical platform administration (HTTP / restricted PostgreSQL) PATCH cannot modify effective billing through legacy fields: {\"currentPeriodEnd\":\"2099-01-01T00:00:00Z\"}",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-02 canonical platform administration (HTTP / restricted PostgreSQL) administrative metadata updates require version and do not change billing; suspension is not added",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-02 canonical platform administration (HTTP / restricted PostgreSQL) projections ignore false legacy ACTIVE and distinguish scheduled, ended and unknown contracts",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-02 canonical platform administration (HTTP / restricted PostgreSQL) keeps ORB-NX-01 authority/RLS and records verified operator, intent, correlation and confirmed/pending results",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/test/global-privilege-provenance.e2e-spec.ts",
+          "tests": 12,
+          "cases": [
+            {
+              "name": "ORB-NX-01 global privilege provenance (real HTTP / restricted PostgreSQL) runtime really enforces RLS and has no superuser/BYPASSRLS",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 global privilege provenance (real HTTP / restricted PostgreSQL) rejects reserved create/rename through HTTP and restricted SQL: PLATFORM_ADMIN",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 global privilege provenance (real HTTP / restricted PostgreSQL) rejects reserved create/rename through HTTP and restricted SQL: platform admin",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 global privilege provenance (real HTTP / restricted PostgreSQL) rejects reserved create/rename through HTTP and restricted SQL: Plátform---Admín",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 global privilege provenance (real HTTP / restricted PostgreSQL) rejects reserved create/rename through HTTP and restricted SQL: PlatformAdmin",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 global privilege provenance (real HTTP / restricted PostgreSQL) rejects reserved create/rename through HTTP and restricted SQL: nexus.admin",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 global privilege provenance (real HTTP / restricted PostgreSQL) legacy rename cannot elevate a session issued before OR after the rename, including refresh/mobile",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 global privilege provenance (real HTTP / restricted PostgreSQL) rejects stale signed platform claims with no persisted assignment",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 global privilege provenance (real HTTP / restricted PostgreSQL) keeps owner tenant administration without granting platform authority",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 global privilege provenance (real HTTP / restricted PostgreSQL) global grant is effective even on an older token, and revocation removes it without waiting for token expiry",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 global privilege provenance (real HTTP / restricted PostgreSQL) supports global administrators without tenant membership and revokes global-only sessions",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 global privilege provenance (real HTTP / restricted PostgreSQL) rejects binding tenant roles as global grants and moving assigned global roles into a tenant",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/test/subscription-expiry.e2e-spec.ts",
+          "tests": 7,
+          "cases": [
+            {
+              "name": "Subscription expiry (e2e) enquanto vale, ler e escrever funcionam",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription expiry (e2e) com a assinatura vencida continua lendo o que a organização já tem",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription expiry (e2e) com a assinatura vencida e recusa qualquer escrita, com 402 e não 403",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription expiry (e2e) com a assinatura vencida nem alterar, nem apagar",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription expiry (e2e) com a assinatura vencida o que já foi emitido continua podendo ser baixado",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription expiry (e2e) com a assinatura vencida mas emitir um documento novo, não",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription expiry (e2e) renovada, a escrita volta sem que ninguém precise reentrar",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/test/billing-recovery.e2e-spec.ts",
+          "tests": 49,
+          "cases": [
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL runs as orbit_app without superuser or BYPASSRLS",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL reproduces P2002 and transaction rollback with PostgreSQL, not a mock",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL proves queries after caught uniqueness error fail in the aborted transaction",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL concurrent replay inserts one invoice and one transition and commits successfully",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL concurrent distinct events share one invoice and retain both observations",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL rolls invoice and transition back together when a financial constraint fails",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL ignores delayed invoice snapshots without regressing a newer payment",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL recovers a lost webhook through scheduled discovery and the real inbox",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL deduplicates concurrent webhook / sweep delivery durably",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL two replicas cannot hold the same recovery stream lease",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL two event workers cannot claim the same subscription event",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL reclaims a crashed discovery lease and rejects its stale checkpoint",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL fences a crashed event before persistence and converges after reclamation",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL recovers crash after financial persistence before ACK without a second effect",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL an old failure event reads current provider truth without revoking paid access",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL records refund and invoice atomically, rejecting a partial negative adjustment",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL retains refund requested and completed observations, without inventing completion time",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL records dispute open and closed states against the same invoice",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL an old contract event cannot end a newer purchase, while its invoice can be recovered",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL preserves a scheduled plan change and the current paid period",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL preserves future cancellation without ending the paid period now",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL reactivates a new pending contract only after a matching paid invoice",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL does not activate without financial confirmation: NO_INVOICE",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL does not activate without financial confirmation: OPEN",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL does not activate without financial confirmation: WRONG_CUSTOMER",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL does not activate without financial confirmation: WRONG_PERIOD",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL does not extend a paid period from ACTIVE alone",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL does not grant a remote trial that Orbit never approved",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL retains a completed page and resumes after partial backfill failure",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL a restarted instance resumes the persisted cursor",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL quarantines expired history instead of silently skipping a gap",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL separates TEST/LIVE claims and rejects wrong-mode contract bindings",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL does not expose another tenant financial records through RLS",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL does not claim invoice PAID as confirmed Stripe cash",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL keeps stable payment correlation IDs under financial replay",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL financial recovery still runs while the organization is operationally suspended",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL dead letters exhausted recovery and reports backlog without payloads",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL the real timer triggers recovery and stops cleanly",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL rolls back a conflicting event identity across tenants instead of leaving a partial invoice",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL two replicas handling different events for the same contract converge once",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL a delayed stale subscription read cannot overwrite a newer snapshot",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL an interrupted financial transaction rolls back and later replay converges",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL duplicate refund replay after another event does not change the adjustment version",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL orders invoice observations by database tickets even with replica clock skew",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL a future diagnostic timestamp cannot prevent fresh canonical recovery",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL recovers confirmed payment facts delivered as invoice_payment.paid",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL does not discover a LIVE contract merely because its tenant also has a TEST customer",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL returns after an ended contract through a new confirmed purchase, preserving the old history",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-04 recovery and financial atomicity / real restricted PostgreSQL keeps the limit adjustment deadline tied to the confirmed renewal under replay",
+              "status": "passed"
+            }
+          ]
+        }
+      ]
+    },
+    "backend": {
+      "typecheck": "passed",
+      "build": "passed",
+      "changedTypeScriptLint": "passed",
+      "changedTypeScriptFiles": 16,
+      "contractsBoundary": "passed",
+      "publicErrors": {
+        "status": "passed",
+        "codes": 75
+      },
+      "whitespace": "passed"
+    },
+    "totalFinalTests": 407,
+    "clients": "No frontend/mobile changes or claim of new client builds."
+  },
+  "financialSemantics": {
+    "invoicePaidIsStripeCash": false,
+    "cashEvidence": "Paid InvoicePayment correlated with succeeded PaymentIntent, invoice/customer/currency/mode/amount and provider paid_at",
+    "refundCompletedTimeInvented": false,
+    "historicalEventTimestampInvented": false,
+    "snapshotIsHistoricalStateReconstruction": false,
+    "recoveryMutatesStripe": false,
+    "databaseTicketsBeforeRemoteReads": true,
+    "eventLeaseFencedInFinancialTransaction": true,
+    "invoiceTransitionAdjustmentAtomic": true,
+    "priorContractCanModifyNewPurchase": false
+  },
+  "recovery": {
+    "enabledByDefault": false,
+    "streams": [
+      "EVENTS",
+      "SUBSCRIPTIONS"
+    ],
+    "checkpointScope": "STRIPE + mode + stream",
+    "leaseMs": 120000,
+    "attemptsBeforeDeadLetter": 8,
+    "maxBatch": 25,
+    "defaultPollMs": 10000,
+    "defaultCycleMs": 300000,
+    "defaultHistoryWindowDays": 7,
+    "maxHistoryWindowDays": 29,
+    "defaultAdmissionBudgetMs": 30000,
+    "defaultDiscoverySdkCalls": 4,
+    "inboxMaxEvents": 50,
+    "inboxSdkCallBudget": 60,
+    "backgroundSdkTimeoutMs": 5000,
+    "backgroundSdkNetworkRetries": 0,
+    "deadlineSemantics": "bounded admission; in-flight calls/transactions finish under their timeouts, not hard process cancellation",
+    "historicalModeNull": "quarantined for authorized verified classification; no automatic financial data migration"
+  },
+  "qualificationHistory": [
+    {
+      "round": "pg-initial",
+      "passed": 28,
+      "failed": 10,
+      "findings": "Prisma void deserialization, in-progress migration snapshot mismatch and nullable JSON fixture; corrected before final qualification."
+    },
+    {
+      "round": "pg-second",
+      "failed": 184,
+      "findings": "Empty environment variables interpreted as zero prevented app initialization; fixed safe defaults and added regression test."
+    },
+    {
+      "round": "pg-third",
+      "passed": 183,
+      "failed": 1,
+      "findings": "Old test assumed unbounded sweep; updated fixture to walk bounded pages."
+    },
+    {
+      "round": "pg-final",
+      "passed": 186,
+      "failed": 0,
+      "findings": "Full eight-suite qualification with monotonic observation tickets."
+    },
+    {
+      "round": "pg-qualified",
+      "passed": 187,
+      "failed": 1,
+      "findings": "New mode/payment-event coverage included; financial recovery succeeded but the test demanded first-pass ACK. Requalified final recovery suite verifies bounded retry convergence, plus return and limit adjustment."
+    },
+    {
+      "round": "pg-recovery-final",
+      "passed": 49,
+      "failed": 0,
+      "findings": "Final recovery source tests; seven passing regression suites unchanged."
+    }
+  ],
+  "commands": [
+    {
+      "cwd": "/Users/ds_/Documents/Devs/AllBlueLabs/Applications/Orbit/backend",
+      "command": "npm test -- --runInBand --watchman=false --testPathPatterns=billing|subscriptions|tenant-operation|verified-platform-authority|role-namespace|platform-administration.service|plan-change|limit-adjustment|subscription-retention",
+      "exitCode": 0
+    },
+    {
+      "cwd": "/Users/ds_/Documents/Devs/AllBlueLabs/Applications/Orbit/backend",
+      "command": "npm run typecheck",
+      "exitCode": 0
+    },
+    {
+      "cwd": "/Users/ds_/Documents/Devs/AllBlueLabs/Applications/Orbit/backend",
+      "command": "npm run build",
+      "exitCode": 0
+    },
+    {
+      "cwd": "/Users/ds_/Documents/Devs/AllBlueLabs/Applications/Orbit/backend",
+      "command": "npm run contracts:guard",
+      "exitCode": 0
+    },
+    {
+      "cwd": "/Users/ds_/Documents/Devs/AllBlueLabs/Applications/Orbit/backend",
+      "command": "npm run lint:public-errors",
+      "exitCode": 0
+    },
+    {
+      "cwd": "/Users/ds_/Documents/Devs/AllBlueLabs/Applications/Orbit/backend",
+      "command": "node_modules/.bin/eslint --fix <changed TypeScript files>",
+      "exitCode": 0
+    },
+    {
+      "cwd": "/Users/ds_/Documents/Devs/AllBlueLabs/Applications/Orbit",
+      "command": "node scripts/verify-integrations.mjs backend --testPathPatterns='billing-recovery.e2e|billing-stripe.e2e|subscriptions.e2e|subscription-expiry.e2e|tenant-suspension.e2e|global-privilege-provenance.e2e|platform-canonical-administration.e2e|rls.e2e' --json --outputFile=/private/tmp/orbit-nx04/pg-qualified-results.json",
+      "exitCode": 1,
+      "supersededRecoverySuite": true,
+      "unchangedPassingRegressionSuites": 7
+    },
+    {
+      "cwd": "/Users/ds_/Documents/Devs/AllBlueLabs/Applications/Orbit",
+      "command": "node scripts/verify-integrations.mjs backend --testPathPatterns='billing-recovery.e2e' --json --outputFile=/private/tmp/orbit-nx04/pg-recovery-final-results.json",
+      "exitCode": 0
+    },
+    {
+      "cwd": "/Users/ds_/Documents/Devs/AllBlueLabs/Applications/Orbit",
+      "command": "git diff --check",
+      "exitCode": 0
+    }
+  ],
+  "temporaryEvidence": [
+    {
+      "path": "/private/tmp/orbit-nx04/lint-final.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/private/tmp/orbit-nx04/typecheck-final.log",
+      "sha256": "2e7e00819655840671fe81ecc31c20f985e49e337d20a48c99eac1d1910fa1d2"
+    },
+    {
+      "path": "/private/tmp/orbit-nx04/build-final.log",
+      "sha256": "0de4692e4208e8b05bf233ccc10cde3bb2f3a7a6e1e6fe4bdbff027b1b647179"
+    },
+    {
+      "path": "/private/tmp/orbit-nx04/contracts-final.log",
+      "sha256": "c4a830e604c9353d68966c533c961db9f2e3cba860292885e2663761e28994f6"
+    },
+    {
+      "path": "/private/tmp/orbit-nx04/public-errors-final.log",
+      "sha256": "f226892f1313d4a88c16832c3ab0f1fcad1537780bbd442c05961fe6b2464fd8"
+    },
+    {
+      "path": "/private/tmp/orbit-nx04/unit-final.log",
+      "sha256": "7bee03060fd4fd29e8dc94f25a1614194c718ac9a9f015376cf310666e99b3bf"
+    },
+    {
+      "path": "/private/tmp/orbit-nx04/pg-qualified.log",
+      "sha256": "5586a5112c705a38d205a2270efb9b30a736db685bc27ca0c884db13927b9256"
+    },
+    {
+      "path": "/private/tmp/orbit-nx04/pg-recovery-final.log",
+      "sha256": "4c7d324c1e4f6d3539604d1f2f0deb21b77ff99ec78b2e24cff47babd4d68a0e"
+    },
+    {
+      "path": "/private/tmp/orbit-nx04/lint-test-qualified.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/private/tmp/orbit-nx04/typecheck-qualified.log",
+      "sha256": "2e7e00819655840671fe81ecc31c20f985e49e337d20a48c99eac1d1910fa1d2"
+    },
+    {
+      "path": "/private/tmp/orbit-nx04/unit-final-results.json",
+      "sha256": "d4d867d7458db33907644cbdaae1206d8ad405b3797e69159306aaf3105a69cd"
+    },
+    {
+      "path": "/private/tmp/orbit-nx04/pg-qualified-results.json",
+      "sha256": "2575e43a74f7e585986409fe686a682a5eabadbd681d2da64d3a92e82dda2523"
+    },
+    {
+      "path": "/private/tmp/orbit-nx04/pg-recovery-final-results.json",
+      "sha256": "fe21da1a0513441ba053e0f3b8d1c688c21d378556ebfa4032f6314d477265d5"
+    }
+  ],
+  "limits": [
+    "External Stripe account qualification and production acceptance remain separate gates",
+    "No real Stripe calls, deployment, push or merge",
+    "History only within approved bounded event window; no fabricated missing states",
+    "Legacy webhook mode NULL requires verified authorized replay plan",
+    "No Stripe Connect/multi-account migration, bank payout accounting, Nexus integration or NX05",
+    "Background deadlines govern admission and permit bounded in-flight completion"
+  ],
+  "technicalConclusion": "ORB-NX-04 qualified locally; external rollout disabled by default pending its separate gates."
+}

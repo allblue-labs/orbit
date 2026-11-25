@@ -5,6 +5,7 @@ import type { AnalyticsReadPort } from './analytics.port';
 import type {
   AnalyticsDashboardReadModel,
   AnalyticsOverviewReadModel,
+  AnalyticsPanelReadModel,
   OrbitIntelligenceAnalyticsContext,
 } from './analytics.read-models';
 import { AnalyticsRepository } from './analytics.repository';
@@ -35,20 +36,12 @@ export class AnalyticsService implements AnalyticsReadPort {
     query: AnalyticsQueryDto,
     permissions: readonly string[],
   ): Promise<AnalyticsOverviewReadModel> {
-    const range = this.range(query);
-    const access = analyticsAccess(permissions);
-    const [snapshot, environmental] = await Promise.all([
-      this.repository.snapshot(organizationId, range, access.domains),
-      Promise.resolve(this.environmentalProvider.read()),
-    ]);
-    const rawKpis = this.kpiEngine.execute(snapshot);
-    const kpis = {
-      ...rawKpis,
-      availability: access.availability,
-      indicators: rawKpis.indicators.filter((item) =>
-        access.domains.has(item.domain),
-      ),
-    };
+    const { snapshot, access, kpis } = await this.readKpis(
+      organizationId,
+      query,
+      permissions,
+      true,
+    );
     const rawTrends = this.trendEngine.execute(snapshot);
     const trends = {
       ...rawTrends,
@@ -57,25 +50,8 @@ export class AnalyticsService implements AnalyticsReadPort {
         access.domains.has(item.domain),
       ),
     };
-    const environmentalImpact =
-      this.environmentalImpactEngine.execute(environmental);
-    const rawHealth = this.healthEngine.execute(kpis, environmentalImpact);
-    const dimensions = rawHealth.dimensions.filter((item) =>
-      access.domains.has(item.domain),
-    );
-    const healthScore = this.healthEngine.score(dimensions);
-    const health = {
-      ...rawHealth,
-      score: healthScore,
-      status:
-        healthScore >= 90
-          ? ('HEALTHY' as const)
-          : healthScore >= 70
-            ? ('ATTENTION' as const)
-            : ('CRITICAL' as const),
-      availability: access.availability,
-      dimensions,
-    };
+    const environmentalImpact = this.environmentalImpact();
+    const health = this.healthEngine.execute(kpis);
     const forecasts = this.forecastEngine.execute(trends);
     return {
       generatedAt: new Date().toISOString(),
@@ -83,9 +59,36 @@ export class AnalyticsService implements AnalyticsReadPort {
       availability: access.availability,
       kpis,
       trends,
-      health,
+      health: { ...health, availability: access.availability },
       forecasts,
       environmentalImpact,
+    };
+  }
+
+  private async readKpis(
+    organizationId: string,
+    query: AnalyticsQueryDto,
+    permissions: readonly string[],
+    includeTrends: boolean,
+  ) {
+    const access = analyticsAccess(permissions);
+    const snapshot = await this.repository.snapshot(
+      organizationId,
+      this.range(query),
+      access.domains,
+      includeTrends,
+    );
+    const raw = this.kpiEngine.execute(snapshot);
+    return {
+      snapshot,
+      access,
+      kpis: {
+        ...raw,
+        availability: access.availability,
+        indicators: raw.indicators.filter((item) =>
+          access.domains.has(item.domain),
+        ),
+      },
     };
   }
 
@@ -94,7 +97,8 @@ export class AnalyticsService implements AnalyticsReadPort {
     query: AnalyticsQueryDto,
     permissions: readonly string[],
   ) {
-    return (await this.overview(organizationId, query, permissions)).kpis;
+    return (await this.readKpis(organizationId, query, permissions, false))
+      .kpis;
   }
   async trends(
     organizationId: string,
@@ -108,7 +112,16 @@ export class AnalyticsService implements AnalyticsReadPort {
     query: AnalyticsQueryDto,
     permissions: readonly string[],
   ) {
-    return (await this.overview(organizationId, query, permissions)).health;
+    const { kpis } = await this.readKpis(
+      organizationId,
+      query,
+      permissions,
+      false,
+    );
+    return {
+      ...this.healthEngine.execute(kpis),
+      availability: kpis.availability,
+    };
   }
   async forecasts(
     organizationId: string,
@@ -128,7 +141,28 @@ export class AnalyticsService implements AnalyticsReadPort {
     query: AnalyticsQueryDto,
     permissions: readonly string[],
   ): Promise<AnalyticsDashboardReadModel> {
+    return this.dashboardOf(
+      await this.overview(organizationId, query, permissions),
+    );
+  }
+
+  async panel(
+    organizationId: string,
+    query: AnalyticsQueryDto,
+    permissions: readonly string[],
+    includeIntelligence: boolean,
+  ): Promise<AnalyticsPanelReadModel> {
     const model = await this.overview(organizationId, query, permissions);
+    return {
+      dashboard: this.dashboardOf(model),
+      health: model.health,
+      intelligence: includeIntelligence ? this.intelligenceOf(model) : null,
+    };
+  }
+
+  private dashboardOf(
+    model: AnalyticsOverviewReadModel,
+  ): AnalyticsDashboardReadModel {
     const metric = (id: string) => {
       const item = model.kpis.indicators.find((item) => item.id === id);
       return item?.unit === '%' && item.sampleSize === 0
@@ -159,7 +193,14 @@ export class AnalyticsService implements AnalyticsReadPort {
     query: AnalyticsQueryDto,
     permissions: readonly string[],
   ): Promise<OrbitIntelligenceAnalyticsContext> {
-    const model = await this.overview(organizationId, query, permissions);
+    return this.intelligenceOf(
+      await this.overview(organizationId, query, permissions),
+    );
+  }
+
+  private intelligenceOf(
+    model: AnalyticsOverviewReadModel,
+  ): OrbitIntelligenceAnalyticsContext {
     return {
       generatedAt: model.generatedAt,
       availability: model.availability,

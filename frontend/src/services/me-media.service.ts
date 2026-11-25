@@ -24,8 +24,7 @@
  */
 import { apiClient } from "@/api/client";
 import { queryKeys, type QueryKey } from "@/api/query-keys";
-import { BFF_BASE_PATH } from "@/lib/env";
-import { ApiError } from "@/lib/api-error";
+import { uploadMedia } from "@/lib/upload-media";
 import type { RequestOptions } from "@/types/api";
 
 const RESOURCE = "identity-profile";
@@ -76,6 +75,7 @@ export const ACCEPTED_IMAGE_TYPES = [
   "image/png",
   "image/jpeg",
   "image/webp",
+  "image/heic",
 ] as const;
 
 export const MAX_IMAGE_BYTES = 2_000_000;
@@ -87,22 +87,11 @@ export const MAX_IMAGE_BYTES = 2_000_000;
  * erro de transporte — não o contrato público de erro da API.
  */
 async function enviarBytes(target: UploadTarget, blob: Blob): Promise<void> {
-  const assinada = new URL(target.upload.url);
-  const destino = `${BFF_BASE_PATH}/storage/objects${assinada.search}`;
-
-  const response = await fetch(destino, {
-    method: "PUT",
-    headers: { ...target.upload.requiredHeaders },
-    body: blob,
-  });
-  if (!response.ok) {
-    throw new ApiError({
-      kind: "http",
-      status: response.status,
-      code: "UPLOAD_FAILED",
-      message: "Não foi possível enviar o arquivo. Tente novamente.",
-    });
-  }
+  await uploadMedia(
+    target.upload,
+    blob,
+    blob instanceof File ? blob.name : "assinatura.png",
+  );
 }
 
 export const meMediaService = {
@@ -145,7 +134,10 @@ export const meMediaService = {
    * assinatura que tinha quando foi emitido, e é essa a razão de o histórico
    * existir.
    */
-  async uploadSignature(blob: Blob, fileName: string): Promise<SignatureStatus> {
+  async uploadSignature(
+    blob: Blob,
+    fileName: string,
+  ): Promise<SignatureStatus> {
     const target = await apiClient.post<UploadTarget>(
       "/identity/me/signature/uploads",
       {

@@ -350,13 +350,14 @@ export interface CreatedTeamMember {
 /**
  * O link de definição de senha que o owner repassa.
  *
- * `emailSent` diz se o servidor conseguiu mandar por e-mail — quando não, é o
- * link na mão do owner que resolve, por WhatsApp, Telegram ou o que a pessoa
- * usar.
+ * `emailQueued` confirma a gravação durável para envio posterior. O owner
+ * também pode compartilhar o link por outro canal.
  */
 export interface TeamPasswordLink {
   link: string;
   expiresAt: string;
+  /** Legacy provider acceptance, not proof of mailbox delivery. */
   emailSent: boolean;
+  emailQueued?: boolean;
   member: TeamMember;
 }

@@ -38,6 +38,7 @@
  * que o aceitam — e é assim que ele é apresentado aqui: seleção de contexto de
  * trabalho, não mudança de sessão.
  */
+import { UNIT_TYPE_LABELS } from "./business-unit-form.dialog";
 import { useState } from "react";
 import { Building2, Check, MapPin, Pencil, Plus, Trash2 } from "lucide-react";
 
@@ -106,13 +107,12 @@ export function BusinessUnitsSection({ canManage }: { canManage: boolean }) {
 
         <div className="space-y-1 border-t border-border pt-3 text-xs text-muted-foreground">
           <p>
-            <strong>Ativar e desativar não existem no contrato.</strong> O campo{" "}
-            <code>status</code> é publicado na leitura, mas
-            <code> UpdateBusinessUnitDto</code> não o aceita.
+            <strong>Ativar e desativar unidades</strong> ainda não é possível
+            por aqui.
           </p>
           <p>
-            <strong>Trocar a unidade ativa é local.</strong> O escopo vem da sua sessão e não pode ser trocado por aqui; a seleção acima muda o filtro <code>businessUnitId</code> das consultas que o
-            aceitam, não a sessão.
+            <strong>A unidade escolhida acima só filtra o que você vê.</strong>{" "}
+            Ela não muda as unidades a que você tem acesso.
           </p>
         </div>
       </div>
@@ -166,7 +166,7 @@ function UnitRow({
             </Badge>
           ) : null}
           <Badge variant="outline" className="text-[10px]">
-            {unit.type}
+            {UNIT_TYPE_LABELS[unit.type] ?? unit.type}
           </Badge>
           <Badge variant="outline" className="text-[10px]">
             {lifecycleLabel(unit.status)}

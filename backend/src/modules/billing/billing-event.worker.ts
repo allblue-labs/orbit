@@ -1,3 +1,4 @@
+import { runsMaintenance } from '../../runtime/process-role';
 /**
  * Aciona a inbox de cobrança sem acoplar processamento ao webhook HTTP.
  *
@@ -22,8 +23,7 @@ export class BillingEventWorker implements OnModuleInit, OnModuleDestroy {
   constructor(private readonly reconciliation: BillingReconciliationService) {}
 
   onModuleInit(): void {
-    const globallyEnabled =
-      (process.env.JOBS_WORKER_ENABLED ?? 'true').trim() !== 'false';
+    const globallyEnabled = runsMaintenance();
     const billingEnabled =
       (process.env.BILLING_EVENTS_WORKER_ENABLED ?? 'true').trim() !== 'false';
     if (!globallyEnabled || !billingEnabled) {

@@ -115,7 +115,6 @@ export function isTerminal(status: SubscriptionStatus): boolean {
 export const GRACE_PERIOD_DAYS = 7;
 
 /** A avaliação congelada: trinta dias, e só no Essencial. */
-export const TRIAL_DAYS = 30;
 
 export const TrialGrantStatus = literal({
   GRANTED: 'GRANTED',

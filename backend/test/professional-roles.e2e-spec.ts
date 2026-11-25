@@ -1,3 +1,4 @@
+import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
@@ -54,23 +55,20 @@ describe('Professional roles, signatures and tenant isolation (e2e)', () => {
   async function register(label: string) {
     const suffix = randomUUID().slice(0, 8);
     const email = `professional.${label}.${suffix}@orbit.local`;
-    const response = await http()
-      .post('/api/v1/identity/register')
-      .send({
-        ...REGISTRATION_LEGAL_ACCEPTANCE,
-        email,
-        firstName: 'Professional',
-        lastName: label,
-        password: PASSWORD,
-        organizationName: `Professional ${label} ${suffix}`,
-        legalName: `Professional ${label} ${suffix} LTDA`,
-        documentType: 'CNPJ',
-        documentNumber: cnpj(),
-        city: 'Recife',
-        street: 'Rua do Sol',
-        stateCode: 'PE',
-      })
-      .expect(201);
+    const response = await registerVerifiedOwner(app, {
+      ...REGISTRATION_LEGAL_ACCEPTANCE,
+      email,
+      firstName: 'Professional',
+      lastName: label,
+      password: PASSWORD,
+      organizationName: `Professional ${label} ${suffix}`,
+      legalName: `Professional ${label} ${suffix} LTDA`,
+      documentType: 'CNPJ',
+      documentNumber: cnpj(),
+      city: 'Recife',
+      street: 'Rua do Sol',
+      stateCode: 'PE',
+    });
     return {
       email,
       token: (response.body as Envelope<{ accessToken: string }>).data

@@ -23,7 +23,7 @@
  */
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { ConflictException } from '../../exceptions';
+import { ConflictException, EntityNotFoundException } from '../../exceptions';
 import { PaginationHelper, RlsTransaction } from '../../database';
 import type { PrismaTransactionClient } from '../../database/prisma.types';
 import { generateUuidV7 } from '../../utils';
@@ -54,6 +54,7 @@ const quoteView = {
   number: true,
   code: true,
   status: true,
+  mobileVisible: true,
   title: true,
   notes: true,
   introText: true,
@@ -115,10 +116,31 @@ const detailView = {
   items: { select: itemView, orderBy: { position: 'asc' } },
 } satisfies Prisma.QuoteSelect;
 
-export type QuoteRecord = Prisma.QuoteGetPayload<{ select: typeof quoteView }>;
-export type QuoteDetailRecord = Prisma.QuoteGetPayload<{
-  select: typeof detailView;
-}>;
+/**
+ * O documento emitido da proposta, quando já existe.
+ *
+ * Não há chave estrangeira: a emissão cria a execução com o **código da
+ * proposta**, e `(organization_id, code)` é único em `artifact_executions`. É
+ * esse vínculo que se lê aqui — só a execução pronta (`READY` significa que o
+ * manifesto já foi emitido), porque é ela que se baixa ou compartilha.
+ */
+export interface QuoteIssuedDocument {
+  id: string;
+  code: string;
+  title: string;
+  renderStatus: string;
+}
+
+type WithDocument<T> = T & { issuedDocument?: QuoteIssuedDocument | null };
+
+export type QuoteRecord = WithDocument<
+  Prisma.QuoteGetPayload<{ select: typeof quoteView }>
+>;
+export type QuoteDetailRecord = WithDocument<
+  Prisma.QuoteGetPayload<{
+    select: typeof detailView;
+  }>
+>;
 
 export interface CreateQuoteData {
   organizationId: string;
@@ -155,6 +177,35 @@ export class QuoteRepository {
     private readonly jobs: BackgroundJobQueue,
     private readonly events: DomainEventEmitter,
   ) {}
+
+  setMobileVisibility(
+    id: string,
+    organizationId: string,
+    ownerId: string,
+    visible: boolean,
+  ) {
+    return this.rls.run(async (tx) => {
+      // Access policy is independent of the commercial version/signature links.
+      // Deliberately do not change updated_at or the signed proposal content.
+      const rows = await tx.$queryRaw<{ businessUnitId: string }[]>`
+        UPDATE quotes SET mobile_visible = ${visible}
+        WHERE id = ${id}::uuid AND organization_id = ${organizationId}::uuid AND deleted_at IS NULL
+          AND EXISTS (SELECT 1 FROM organizations WHERE id = ${organizationId}::uuid AND owner_user_id = ${ownerId}::uuid)
+        RETURNING business_unit_id AS "businessUnitId"`;
+      if (!rows[0]) throw new EntityNotFoundException('Orçamento', id);
+      await tx.auditLog.create({
+        data: {
+          organizationId,
+          businessUnitId: rows[0].businessUnitId,
+          userId: ownerId,
+          action: 'quote.mobile_visibility.updated',
+          entityType: 'QUOTE',
+          entityId: id,
+          after: { mobileVisible: visible },
+        },
+      });
+    });
+  }
 
   latestCustomerSignature(quoteId: string, organizationId: string) {
     return this.rls.run(async (tx) => {
@@ -202,7 +253,11 @@ export class QuoteRepository {
         ...PaginationHelper.toPrisma(pagination),
       });
       const total = await tx.quote.count({ where });
-      return PaginationHelper.result(data, total, pagination);
+      return PaginationHelper.result(
+        await this.withIssuedDocuments(tx, organizationId, data),
+        total,
+        pagination,
+      );
     });
   }
 
@@ -432,11 +487,41 @@ export class QuoteRepository {
   find(id: string, organizationId: string) {
     return this.rls.run(async (tx) => {
       await this.expireStale(tx, organizationId);
-      return tx.quote.findFirst({
+      const quote = await tx.quote.findFirst({
         where: { id, organizationId, deletedAt: null },
         select: detailView,
       });
+      if (!quote) return null;
+      const [comDocumento] = await this.withIssuedDocuments(
+        tx,
+        organizationId,
+        [quote],
+      );
+      return comDocumento;
     });
+  }
+
+  /** Anexa a cada proposta o seu documento emitido — uma consulta por página. */
+  private async withIssuedDocuments<T extends { code: string }>(
+    tx: PrismaTransactionClient,
+    organizationId: string,
+    quotes: T[],
+  ): Promise<(T & { issuedDocument: QuoteIssuedDocument | null })[]> {
+    if (quotes.length === 0) return [];
+    const documentos = await tx.artifactExecution.findMany({
+      where: {
+        organizationId,
+        deletedAt: null,
+        renderStatus: 'READY',
+        code: { in: quotes.map((quote) => quote.code) },
+      },
+      select: { id: true, code: true, title: true, renderStatus: true },
+    });
+    const porCodigo = new Map(documentos.map((doc) => [doc.code, doc]));
+    return quotes.map((quote) => ({
+      ...quote,
+      issuedDocument: porCodigo.get(quote.code) ?? null,
+    }));
   }
 
   /* ---------------------------------------------------------------- */

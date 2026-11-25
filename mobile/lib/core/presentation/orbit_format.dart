@@ -24,12 +24,17 @@ import '../time/orbit_timezone.dart';
 abstract final class OrbitFormat {
   static OrbitDateTimeFormat of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<OrbitTimeScope>()?.format ??
+      standard;
+
+  /// O formato sem contexto: o fuso padrão da aplicação.
+  static OrbitDateTimeFormat get standard =>
       OrbitDateTimeFormat(OrbitTimezone.resolve());
   static final _dayMonth = DateFormat("dd 'de' MMM", 'pt_BR');
   static final _fullDate = DateFormat("dd 'de' MMMM 'de' y", 'pt_BR');
   static final _shortDate = DateFormat('dd/MM/y', 'pt_BR');
   static final _hour = DateFormat('HH:mm', 'pt_BR');
   static final _dateHour = DateFormat('dd/MM HH:mm', 'pt_BR');
+  static final _dayShort = DateFormat('dd/MM', 'pt_BR');
   static final _weekdayDay = DateFormat("EEEE, dd 'de' MMMM", 'pt_BR');
   static final _currency = NumberFormat.currency(
     locale: 'pt_BR',
@@ -90,6 +95,14 @@ class OrbitDateTimeFormat {
       instant == null ? '—' : OrbitFormat._dateHour.format(at(instant));
   String weekdayAndDay(DateTime instant) =>
       OrbitFormat._weekdayDay.format(at(instant));
+
+  /// `20/11` — um dia na largura de um horário.
+  ///
+  /// Existe para a coluna da esquerda das listas, que tem 48 pixels e foi feita
+  /// para "09:30". "quinta-feira, 20 de novembro" não cabe ali: quebrava em
+  /// quatro linhas e desmontava a linha inteira.
+  String dayShortOf(DateTime? instant) =>
+      instant == null ? '—' : OrbitFormat._dayShort.format(at(instant));
 }
 
 class OrbitTimeScope extends InheritedWidget {

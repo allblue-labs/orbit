@@ -1,7 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AuthorizationService } from '../../common';
-import { readEmbeddedImage } from '../../common/embedded-image';
+import { BrandImageService } from '../storage/brand-image.service';
+import {
+  normalizeRoleKey,
+  isReservedRoleKey,
+} from '../../common/role-namespace';
 import type { AuthenticatedIdentity } from '../identity/domain/identity.types';
 import {
   ConflictException,
@@ -36,6 +40,7 @@ export class OrganizationService {
   constructor(
     private readonly repository: OrganizationRepository,
     private readonly authorization: AuthorizationService,
+    private readonly brands: BrandImageService,
   ) {}
 
   async create(ownerUserId: string, input: CreateOrganizationDto) {
@@ -174,6 +179,8 @@ export class OrganizationService {
       userId,
     );
     if (!membership) throw new EntityNotFoundException('Member', userId);
+    if (!actor.isOrganizationOwner && membership.mobileDelegations?.length)
+      throw new ForbiddenException('O proprietário administra este acesso.');
     await this.assertMemberInActorScope(actor, organizationId, userId);
 
     const role = await this.repository.findRole(
@@ -452,13 +459,13 @@ export class OrganizationService {
    * identificador técnico que ele não deveria inventar.
    */
   private roleKey(name: string): string {
-    return name
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toUpperCase()
-      .replace(/[^A-Z0-9]+/g, '_')
-      .replace(/^_+|_+$/g, '')
-      .slice(0, 80);
+    const key = normalizeRoleKey(name);
+    if (!key || isReservedRoleKey(key)) {
+      throw new ValidationException(
+        'Este nome de perfil é reservado à administração da plataforma.',
+      );
+    }
+    return key;
   }
 
   private rethrowRoleConflict(error: unknown): never {
@@ -486,7 +493,7 @@ export class OrganizationService {
   async getLogo(organizationId: string) {
     const logo = await this.repository.findLogo(organizationId);
     if (!logo) throw new EntityNotFoundException('Organization');
-    return logo;
+    return { ...logo, logoUrl: await this.brands.url(logo.logoUrl) };
   }
 
   /**
@@ -496,25 +503,32 @@ export class OrganizationService {
    * dentro do gerador de documento.
    */
   async setLogo(organizationId: string, image: string) {
-    await this.getLogo(organizationId);
-
-    const imagem = readEmbeddedImage(image);
-    if (!imagem) {
-      throw new ValidationException(
-        'A imagem precisa ser um PNG ou JPEG de até 512 KB, enviado como data URI.',
-      );
+    const previous = await this.repository.findLogo(organizationId);
+    if (!previous) throw new EntityNotFoundException('Organization');
+    const logoUrl = await this.brands.store(
+      organizationId,
+      organizationId,
+      image,
+    );
+    try {
+      const saved = await this.repository.setLogo(organizationId, logoUrl);
+      await this.brands.remove(previous.logoUrl, organizationId);
+      return { ...saved, logoUrl: await this.brands.url(saved.logoUrl) };
+    } catch (error) {
+      // Preserve the old logo if the database write fails.
+      const current = await this.repository.findLogo(organizationId);
+      if (current?.logoUrl !== logoUrl)
+        await this.brands.remove(logoUrl, organizationId);
+      throw error;
     }
-
-    return this.repository.setLogo(organizationId, imagem.dataUrl);
   }
 
-  /**
-   * Volta a emitir sem timbre — a não ser onde a unidade tenha marca própria,
-   * que não é esta.
-   */
   async removeLogo(organizationId: string) {
-    await this.getLogo(organizationId);
-    return this.repository.setLogo(organizationId, null);
+    const previous = await this.repository.findLogo(organizationId);
+    if (!previous) throw new EntityNotFoundException('Organization');
+    const saved = await this.repository.setLogo(organizationId, null);
+    await this.brands.remove(previous.logoUrl, organizationId);
+    return saved;
   }
 
   async update(organizationId: string, input: UpdateOrganizationDto) {

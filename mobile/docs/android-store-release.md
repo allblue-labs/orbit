@@ -57,3 +57,11 @@ O app usa os seletores do sistema para anexar imagens/arquivos. O manifesto remo
 - [Assinatura de apps do Google Play](https://support.google.com/googleplay/android-developer/answer/9842756?hl=pt-BR)
 - [Conteúdo do app e política de privacidade](https://support.google.com/googleplay/android-developer/answer/9859455?hl=pt-BR)
 - [Política de permissões de fotos e vídeos](https://support.google.com/googleplay/android-developer/answer/15800983?hl=pt-BR)
+
+## Configuração Firebase exigida a partir da PR-06
+
+Além da chave de upload, a build Release precisa do `android/app/google-services.json`
+do projeto selecionado e dos defines `ORBIT_FLAVOR` e `ORBIT_FIREBASE_PROJECT_ID`.
+Preparar `config/production.json` conforme o [guia de push](firebase-push-release.md)
+e usar `flutter build appbundle --release --dart-define-from-file=config/production.json`.
+O comando antigo com somente ORBIT_API_URL não atende mais à barreira de push.

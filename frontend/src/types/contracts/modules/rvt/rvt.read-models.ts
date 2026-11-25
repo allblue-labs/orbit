@@ -124,6 +124,37 @@ export interface RvtExecutionPreparationReadModel {
   };
   allowedActions: readonly string[];
 }
+
+export interface RvtCursorPageReadModel<T> {
+  data: T[];
+  nextCursor: string | null;
+  hasNextPage: boolean;
+}
+
+export interface RvtConfigurationUpdateReadModel {
+  configuration: RvtConfigurationReadModel;
+  reconciliation: {
+    created: number;
+    cancelled: number;
+    rescheduled: number;
+  };
+}
+
+export interface RvtExecutionCompletionReadModel {
+  execution: RvtExecutionReadModel;
+  artifactExecutionId: string;
+}
+
+export interface RvtArtifactReadModel {
+  artifactExecutionId: string;
+  created: boolean;
+}
+
+export interface RvtAdHocReadModel {
+  execution: RvtExecutionReadModel;
+  idempotency: { key: string; replayed: boolean };
+}
+
 export interface RvtTimelineItemReadModel {
   id: string;
   type: string;
@@ -131,5 +162,5 @@ export interface RvtTimelineItemReadModel {
   occurredAt: string;
   actor: RvtPartyReadModel | null;
   equipment: RvtPartyReadModel | null;
-  data: Record<string, unknown>;
+  data: { executionId: string; sequenceNumber: number };
 }

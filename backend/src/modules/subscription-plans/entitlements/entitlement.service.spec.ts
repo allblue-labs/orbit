@@ -46,6 +46,11 @@ class RepositorioFalso {
       planKey: this.planKey,
       planName: this.planKey,
       limits: this.limits as PlanRow['limits'],
+      commercial: isKnownPlan(this.planKey)
+        ? ({
+            entitlements: snapshotOf(planDefinition(this.planKey)),
+          } as unknown as PlanRow['commercial'])
+        : null,
       anchor: ANCORA,
     });
   }
@@ -134,6 +139,7 @@ function montar(contexto?: RequestContext, commercialSubscription = true) {
     rls,
     contexts,
     new EntitlementMetrics(),
+    {} as never,
     new EntitlementMapper(),
   );
   return { repositorio, service };
