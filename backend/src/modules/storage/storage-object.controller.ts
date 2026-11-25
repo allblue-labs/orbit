@@ -3,7 +3,7 @@ import { UploadLimitsInterceptor } from './upload-limits.interceptor';
 import { requestClientIp } from '../../common/trusted-client-origin';
 import { StorageUploadGuard } from './storage-upload.guard';
 /** Signed upload gateway: buffers are bounded, validated and optimized before storage.
- * Only the development LOCAL provider serves GET here; R2 uses CDN/private signed GET.
+ * The LOCAL provider serves signed GET here; R2 uses CDN/private signed GET.
  */
 import {
   Controller,

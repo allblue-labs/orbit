@@ -14,6 +14,7 @@ services:
       - ${ORBIT_BACKUP_ENV_FILE:-/etc/orbit/backup.env}
     environment:
       NODE_ENV: production
+      ORBIT_DEPLOYMENT: production
       DIRECT_DATABASE_URL: postgresql://orbit_backup:${BACKUP_DATABASE_PASSWORD:?BACKUP_DATABASE_PASSWORD is required}@postgres:5432/${POSTGRES_DB}
       ORBIT_BACKUP_PASSPHRASE_FILE: /run/secrets/orbit-backup-passphrase
       ORBIT_BACKUP_SCRATCH: /scratch

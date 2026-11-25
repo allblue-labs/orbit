@@ -122,6 +122,7 @@ services:
     init: true
     environment: &backend-environment
       NODE_ENV: production
+      ORBIT_DEPLOYMENT: production
       ORBIT_PROCESS_ROLE: api
       REDIS_HOTPATH_ENABLED: ${REDIS_HOTPATH_ENABLED:-false}
       REDIS_HOTPATH_HOST: redis-hotpath
@@ -161,12 +162,12 @@ services:
       AUTH_RATE_LIMIT_ORIGIN_MAX: ${AUTH_RATE_LIMIT_ORIGIN_MAX:-120}
       AUTH_RATE_LIMIT_WINDOW_MS: ${AUTH_RATE_LIMIT_WINDOW_MS:-60000}
       STORAGE_PROVIDER: R2
-      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:?R2_ACCOUNT_ID is required}
-      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:?R2_ACCESS_KEY_ID is required}
-      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:?R2_SECRET_ACCESS_KEY is required}
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
       R2_BUCKET_NAME: ${R2_BUCKET_NAME:-orbit-assets}
       R2_PRIVATE_BUCKET_NAME: ${R2_PRIVATE_BUCKET_NAME:-orbit-assets-private}
-      R2_ENDPOINT: ${R2_ENDPOINT:?R2_ENDPOINT is required}
+      R2_ENDPOINT: ${R2_ENDPOINT:-}
       R2_LEGACY_PRIVATE_BUCKETS: ${R2_LEGACY_PRIVATE_BUCKETS:-orbit-artifacts,documents}
       R2_PUBLIC_URL: ${R2_PUBLIC_URL:-https://cdn-orbit.allblue-labs.com}
       CLOUDFLARE_CACHE_PURGE_ZONE_ID: ${CLOUDFLARE_CACHE_PURGE_ZONE_ID:-}

@@ -31,7 +31,7 @@ as três imagens são diferentes, mesmo compartilhando o repositório.
 O lock usa digests completos. Nenhum build ou checkout Git ocorre no Ubuntu.
 
 Depois da implantação, `docker compose up -d` em `/opt/stacks/orbit` usa o
-mesmo lock por meio de `COMPOSE_FILE`. Para conferir, rode
+mesmo lock e o overlay `docker-compose.staging.yml` por meio de `COMPOSE_FILE`. Para conferir, rode
 `docker compose config --images`. Uma nova revisão no Git vira release de
 staging após publicar as três imagens, instalar o lock correspondente e
 executar o deploy. `docker compose down -v` apaga os volumes do projeto,
@@ -291,15 +291,40 @@ pacotes 443 na interface do Ubuntu. Não adicione UDP nem outra porta pública.
 - [Cloudflare Full (strict)](https://developers.cloudflare.com/ssl/origin-configuration/ssl-modes/full-strict/)
 - [IPs Cloudflare](https://www.cloudflare.com/ips/)
 
-## Armazenamento R2
+## Armazenamento local
 
-A release de mídia exige as variáveis `R2_*` da raiz e
-`STORAGE_PUBLIC_API_URL=https://orbit.allblue-labs.com/api/v1`.
-O domínio de avatares/logos é `cdn-orbit.allblue-labs.com`; evidências, PDFs e
-assinaturas ficam em `orbit-assets-private`, sem acesso público. Antes de
-substituir uma release LOCAL, siga a [migração offline](../../backend/docs/cloudflare-r2.md)
-e transfira também `docker-compose.storage-migration.yml` para `/opt/stacks/orbit`.
-Não reutilize um lock/digest da release anterior para esta migração.
+Instale `docker-compose.staging.yml` ao lado do Compose base e do lock.
+API, worker e geração de documentos compartilham o volume nomeado
+`staging_media`. A aplicação entrega arquivos por URLs assinadas em
+`STORAGE_PUBLIC_API_URL=https://orbit.allblue-labs.com/api/v1`. O overlay
+remove do runtime as credenciais R2 e de expurgo. O deploy também as retira
+do `.env` do staging. `docker compose down -v` remove o volume junto com o
+banco. Para atualizar a release, use `bin/deploy.sh`.
+
+Se o banco de staging já usa R2, importe os bytes uma única vez. O job coleta
+referências do banco `orbit_staging`, baixa apenas os objetos correspondentes,
+verifica a integridade e preserva chaves, hashes e IDs. Faça a importação com
+os processos Orbit parados e o PostgreSQL ativo. Crie um arquivo temporário
+`0600` fora da stack contendo `ORBIT_IMPORT_R2_ENDPOINT`,
+`ORBIT_IMPORT_R2_ACCESS_KEY_ID` e `ORBIT_IMPORT_R2_SECRET_ACCESS_KEY`.
+Use uma credencial de leitura limitada aos buckets de origem e revogue-a
+após a transição.
+
+```bash
+cd /opt/stacks/orbit
+docker compose stop api worker documents
+ORBIT_API_IMAGE='docker.io/allbluelabs/orbit-api@sha256:<digest-api>' \
+  ORBIT_STAGING_IMPORT_ENV_FILE=/caminho/privado/staging-import.env \
+  docker compose -f docker-compose.yml -f docker-compose.lock.yml \
+    -f docker-compose.staging.yml -f docker-compose.staging-import.yml \
+    --profile storage-import run --rm --no-deps -T storage-import
+bash ~/orbit-bootstrap/bin/deploy.sh
+```
+
+Confirme o evento `orbit_staging_media_import_complete` antes do deploy.
+O job não apaga objetos do R2. Depois da promoção, valide um upload, o download
+e a ausência de credenciais R2 nos contêineres. Consulte o
+[runbook de produção](../../docs/release/edge-storage-sentry.md).
 
 ## Atualização de segurança PR-05
 

@@ -77,7 +77,8 @@ function storage() {
   if (
     (!local &&
       (bucket !== 'orbit-production-backups' ||
-        process.env.ORBIT_BACKUP_DEPLOYMENT !== 'production')) ||
+        process.env.ORBIT_BACKUP_DEPLOYMENT !== 'production' ||
+        process.env.ORBIT_DEPLOYMENT !== 'production')) ||
     (local && bucket !== 'orbit-e2e-backups')
   )
     throw new Error('invalid_backup_bucket');

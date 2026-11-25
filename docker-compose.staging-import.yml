@@ -1,0 +1,24 @@
+# Offline job for existing staging installations only.
+services:
+  storage-import:
+    profiles: [storage-import]
+    image: ${ORBIT_API_IMAGE:?Use o digest da nova imagem API}
+    command: [node, dist/src/scripts/import-staging-media.js]
+    read_only: true
+    user: "1001:1001"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+    pids_limit: 64
+    env_file:
+      - ${ORBIT_STAGING_IMPORT_ENV_FILE:?Informe o arquivo temporário de leitura R2}
+    environment:
+      ORBIT_DEPLOYMENT: staging
+      DIRECT_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    volumes:
+      - staging_media:/app/staging-media
+    networks: [orbit_database, orbit_import_egress]
+
+networks:
+  orbit_import_egress:
+    driver: bridge

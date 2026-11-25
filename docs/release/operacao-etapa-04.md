@@ -184,7 +184,7 @@ git worktree add --detach "$ORBIT_GATE_DIR/source" "$ORBIT_CANDIDATE_SHA"
 )
 ssh "$ORBIT_STAGING_HOST" \
   'umask 077; mkdir -p ~/orbit-release-candidate ~/orbit-bootstrap/bin ~/orbit-bootstrap/nginx'
-scp "$ORBIT_GATE_DIR/source/docker-compose.yml" \
+scp "$ORBIT_GATE_DIR/source/"{docker-compose.yml,docker-compose.staging.yml} \
   "$ORBIT_GATE_DIR/images/"{docker-compose.lock.yml,release.json} \
   "$ORBIT_STAGING_HOST:~/orbit-release-candidate/"
 scp "$ORBIT_GATE_DIR/source/deploy/staging/bin/"{deploy.sh,deployment_preflight.py,collect-worker-observability.sh,worker-observability.py,activate-tls.sh,configure-proxy-origin.py} \
@@ -215,10 +215,11 @@ compatibilidade do schema com a revisão de destino.
 set -euo pipefail
 cd /opt/stacks/orbit
 install -m 600 "$HOME/orbit-release-candidate/docker-compose.yml" docker-compose.yml
+install -m 600 "$HOME/orbit-release-candidate/docker-compose.staging.yml" docker-compose.staging.yml
 install -m 600 "$HOME/orbit-release-candidate/docker-compose.lock.yml" docker-compose.lock.yml
 install -m 600 "$HOME/orbit-release-candidate/release.json" release.json
 bash "$HOME/orbit-bootstrap/bin/deploy.sh" --check
-compose=(docker compose --env-file .env -f docker-compose.yml -f docker-compose.lock.yml --profile hotpath)
+compose=(docker compose --env-file .env -f docker-compose.yml -f docker-compose.lock.yml -f docker-compose.staging.yml --profile hotpath)
 "${compose[@]}" pull
 sudo install -m 644 "$HOME/orbit-bootstrap/nginx/00-orbit-common.conf" /etc/nginx/conf.d/00-orbit-common.conf
 sudo install -m 644 "$HOME/orbit-bootstrap/nginx/proxy-common.inc" /etc/nginx/orbit-proxy.inc
@@ -297,8 +298,7 @@ esperada do tenant, calculada com HMAC. Use o DSN do projeto de staging.
 
 ```bash
 cd /opt/stacks/orbit
-docker compose --env-file .env -f docker-compose.yml -f docker-compose.lock.yml \
-  exec -T api node - <<'JS'
+docker compose exec -T api node - <<'JS'
 const assert = require('node:assert/strict');
 const { randomUUID, createHmac } = require('node:crypto');
 const sentry = require('@sentry/node');

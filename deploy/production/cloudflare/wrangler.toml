@@ -1,0 +1,12 @@
+name = "orbit-production-static"
+main = "static-worker.mjs"
+compatibility_date = "2026-11-25"
+workers_dev = false
+preview_urls = false
+
+[vars]
+ORBIT_PRODUCTION_HOST = "orbit.allblue-labs.com"
+
+[[r2_buckets]]
+binding = "ORBIT_WEB_STATIC"
+bucket_name = "orbit-web-static"

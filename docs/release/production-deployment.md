@@ -34,19 +34,17 @@ nunca imprima a configuração interpolada: ela contém segredos.
    existentes, migre os volumes antes de iniciar a API nova. Produção recusa
    `STORAGE_PROVIDER=LOCAL`; a API não monta diretórios de mídia. Preserve no
    Nginx `/api/v1/` para a API e `/api/orbit/`/`/api/auth/` para o Next.js.
+8. Use o [runbook de estáticos, backup e Sentry](edge-storage-sentry.md) para
+   publicar os assets do digest de produção no R2 e ativar a rota restrita da
+   Cloudflare. O lock e o manifesto de produção também são usados pelo backup.
 
 ## Build reproduzível e provenance
 
-Defina `ORBIT_VERSION`, o SHA completo em `ORBIT_COMMIT_SHA` e um timestamp UTC
-RFC 3339 em `ORBIT_BUILD_TIME`. Então execute:
+Em um checkout limpo, publique as imagens e gere o lock e o manifesto:
 
 ```bash
-# Somente na estação de desenvolvimento/CI:
-docker compose -f docker-compose.yml -f docker-compose.build.yml build --pull api migrate frontend
-docker compose -f docker-compose.yml -f docker-compose.build.yml push api migrate frontend
-
-# No servidor, use as imagens publicadas, sem Git/build:
-docker compose pull
+ORBIT_RELEASE_DEPLOYMENT=production ORBIT_BUILD_BACKUP_IMAGE=true \
+  ORBIT_RELEASE_OUTPUT=/caminho/privado/orbit-release bash deploy/staging/bin/build-push.sh
 ```
 
 Registre digest, `org.opencontainers.image.revision` e
@@ -57,7 +55,9 @@ O Compose principal usa o repositório privado `docker.io/allbluelabs/orbit-api`
 com sufixos `-api`, `-migrator` e `-frontend` nas tags. `ORBIT_API_IMAGE`,
 `ORBIT_MIGRATOR_IMAGE` e `ORBIT_FRONTEND_IMAGE` permitem fornecer referências
 completas com digest. Crie/confirme o repositório como privado antes do push.
-O staging usa um arquivo de lock por digest; consulte
+Instale `release.json` e `docker-compose.lock.yml` em `/opt/stacks/orbit`.
+Em produção use `COMPOSE_FILE=docker-compose.yml:docker-compose.lock.yml` e
+`ORBIT_VERSION` igual a `tag` do manifesto. O staging usa um overlay separado. Consulte
 [`../../deploy/staging/README.md`](../../deploy/staging/README.md).
 
 ## Migrate e deploy

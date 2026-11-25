@@ -7,7 +7,14 @@ cd /opt/stacks/orbit
 exec 9>/run/lock/orbit-verify-restore.lock
 flock -n 9 || { echo 'Outro ensaio de restore está em execução.' >&2; exit 1; }
 
-backup_image=$(python3 -c 'import json,re; ref=json.load(open("release.json"))["images"]["backup"]["digest"]; assert re.fullmatch(r"docker.io/allbluelabs/orbit-api@sha256:[a-f0-9]{64}",ref); print(ref)')
+backup_image=$(python3 -c '
+import json, re, sys
+release = json.load(open("release.json"))
+ref = release.get("images", {}).get("backup", {}).get("digest", "")
+if release.get("deployment") != "production" or not re.fullmatch(r"docker\.io/allbluelabs/orbit-api@sha256:[a-f0-9]{64}", ref):
+    sys.exit("A rotina requer uma release de produção com digest de backup.")
+print(ref)
+')
 postgres_image=postgres:17.11-alpine3.24@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0
 suffix=$(openssl rand -hex 10)
 network=orbit-restore-$suffix
@@ -36,5 +43,5 @@ docker run --rm --init --network "$network" --read-only --cap-drop ALL --securit
     --memory 768m --cpus 1 --tmpfs /var/lib/postgresql/data:rw,noexec,nosuid,size=1048576 --env-file /etc/orbit/backup-restore.env --env DIRECT_DATABASE_URL \
     --mount 'type=bind,src=/etc/orbit/backup-passphrase,dst=/run/secrets/orbit-backup-passphrase,readonly' \
     --mount 'type=bind,src=/var/lib/orbit-backup/scratch,dst=/scratch' \
-    --env ORBIT_BACKUP_PASSPHRASE_FILE=/run/secrets/orbit-backup-passphrase --env ORBIT_BACKUP_SCRATCH=/scratch \
+    --env ORBIT_DEPLOYMENT=production --env ORBIT_BACKUP_PASSPHRASE_FILE=/run/secrets/orbit-backup-passphrase --env ORBIT_BACKUP_SCRATCH=/scratch \
     "$backup_image" verify "$@"

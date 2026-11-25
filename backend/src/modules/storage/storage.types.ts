@@ -21,7 +21,7 @@
  * | Provider     | Situação                                        |
  * | ------------ | ----------------------------------------------- |
  * | `R2`         | padrão; SDK AWS S3 v3, buckets público/privado    |
- * | `LOCAL`      | somente desenvolvimento/testes                 |
+ * | `LOCAL`      | desenvolvimento, testes e staging               |
  * | `S3`/`MINIO` | S3 Compatible — mesma implementação, SigV4      |
  * | `AZURE_BLOB` | futura: implementar esta interface              |
  * | `GCS`        | futura: implementar esta interface              |

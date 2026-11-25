@@ -36,12 +36,14 @@ settings = {
     'PUSH_PROVIDER': 'disabled',
     'STRIPE_ENABLED': 'false',
 }
-lines = ['COMPOSE_FILE=docker-compose.yml:docker-compose.lock.yml']
+lines = ['COMPOSE_FILE=docker-compose.yml:docker-compose.lock.yml:docker-compose.staging.yml']
 for line in template.read_text().splitlines():
     key = line.partition('=')[0]
+    if key.startswith(('R2_', 'CLOUDFLARE_CACHE_PURGE_', 'ORBIT_BACKUP_')):
+        continue
     lines.append(f'{key}={settings[key]}' if key in settings else line)
 fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
 with os.fdopen(fd, 'w') as out:
     out.write('\n'.join(lines) + '\n')
 print('Arquivo criado com segredos exclusivos do staging:', target)
-print('Preencha as variáveis AWS_* e R2_* sem enviar credenciais pelo chat.')
+print('Preencha as variáveis AWS_* sem enviar credenciais pelo chat.')

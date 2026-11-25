@@ -58,7 +58,8 @@ Guarde as chaves no cofre. [Política de ciclo de vida do R2](https://developers
 
 ### Instalação no host de produção
 
-1. Gere a imagem `backup` com `ORBIT_BUILD_BACKUP_IMAGE=true` e confira
+1. Gere a imagem `backup` com `ORBIT_RELEASE_DEPLOYMENT=production` e
+   `ORBIT_BUILD_BACKUP_IMAGE=true` e confira
    seu digest em `release.json`. Disponibilize `docker-compose.backup.yml`
    junto ao Compose e lock da release.
 2. Configure `BACKUP_DATABASE_PASSWORD` no `.env` do Compose e execute o
@@ -81,6 +82,27 @@ Guarde as chaves no cofre. [Política de ciclo de vida do R2](https://developers
    eventos `orbit_backup_complete` e `orbit_backup_restore_verified` e
    só então habilite `orbit-backup.timer` e
    `orbit-verify-backup-restore.timer`.
+
+```bash
+sudo install -d -m 0700 /etc/orbit
+sudo install -d -o 1001 -g 1001 -m 0700 /var/lib/orbit-backup/scratch
+sudo install -m 0750 deploy/production/bin/backup.sh /usr/local/sbin/orbit-backup
+sudo install -m 0750 deploy/production/bin/verify-backup-restore /usr/local/sbin/orbit-verify-backup-restore
+sudo install -m 0644 deploy/production/systemd/orbit-* /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl start orbit-backup.service
+sudo journalctl -u orbit-backup.service -n 20 --no-pager
+sudo systemctl start orbit-verify-backup-restore.service
+sudo journalctl -u orbit-verify-backup-restore.service -n 20 --no-pager
+sudo systemctl enable --now orbit-backup.timer orbit-verify-backup-restore.timer
+systemctl list-timers 'orbit-*'
+```
+
+O timer dispara às 03:15 UTC, com até cinco minutos de atraso aleatório
+(00:15 a 00:20 em Recife). O script exige um manifesto de produção e um
+contêiner Orbit identificado como produção. Use a credencial de restore
+somente no ensaio e mantenha o acesso ao Docker restrito aos operadores
+autorizados. [Tokens R2 por bucket](https://developers.cloudflare.com/r2/api/tokens/)
 
 O dump, metadados e ledger cifrados usam o mesmo snapshot PostgreSQL.
 Um prefixo só é elegível a restore quando `complete.json` existe e os

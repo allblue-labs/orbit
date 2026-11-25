@@ -4,7 +4,13 @@ set -Eeuo pipefail
 cd "$(dirname "$0")/../../.."
 [[ -z $(git -c core.fsmonitor=false status --porcelain) ]] || { echo 'Faça commit das alterações antes de gerar imagens.' >&2; exit 1; }
 sha=$(git rev-parse HEAD)
-tag="staging-${sha:0:12}"
+deployment=${ORBIT_RELEASE_DEPLOYMENT:-staging}
+case "$deployment" in staging|production) ;; *) echo 'Ambiente de release inválido.' >&2; exit 1 ;; esac
+if [[ -n ${NEXT_PUBLIC_SENTRY_DSN:-} && ${NEXT_PUBLIC_SENTRY_ENVIRONMENT:-} != "$deployment" ]]; then
+    echo 'NEXT_PUBLIC_SENTRY_ENVIRONMENT deve corresponder ao ambiente da release.' >&2
+    exit 1
+fi
+tag="$deployment-${sha:0:12}"
 created=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 repository=docker.io/allbluelabs/orbit-api
 output=${ORBIT_RELEASE_OUTPUT:?Informe ORBIT_RELEASE_OUTPUT fora do repositório}
@@ -36,12 +42,12 @@ for component in "${components[@]}"; do
         --build-arg "ORBIT_BUILD_TIME=$created" --tag "$image" \
         --metadata-file "$output/$component.json" --push "$context"
 done
-python3 - "$output" "$repository" "$tag" "$sha" "$created" "${ORBIT_BUILD_BACKUP_IMAGE:-false}" <<'PY'
+python3 - "$output" "$repository" "$tag" "$sha" "$created" "${ORBIT_BUILD_BACKUP_IMAGE:-false}" "$deployment" <<'PY'
 import json, pathlib, re, sys
-p=pathlib.Path(sys.argv[1]); repository, tag, sha, created, include_backup=sys.argv[2:]
+p=pathlib.Path(sys.argv[1]); repository, tag, sha, created, include_backup, deployment=sys.argv[2:]
 services={'api':'api', 'worker':'api', 'documents':'api', 'migrate':'migrator', 'bootstrap-admin':'migrator', 'storage-migration':'migrator', 'frontend':'frontend', 'pgbouncer':'pgbouncer'}
 lock=['# Referências imutáveis publicadas no Docker Hub privado.', 'services:']
-manifest={'commit': sha, 'created': created, 'tag': tag, 'images': {}}
+manifest={'commit': sha, 'created': created, 'tag': tag, 'deployment': deployment, 'images': {}}
 for service, component in services.items():
     digest=json.loads((p/(component+'.json')).read_text())['containerimage.digest']
     if not re.fullmatch(r'sha256:[a-f0-9]{64}',digest): raise SystemExit('Digest inválido.')

@@ -43,6 +43,16 @@ def check(config, require_digests=True):
         for k in ["api", "frontend", "postgres", "migrate", "bootstrap-admin"]
     ]
     runtime = api.get("environment", {})
+    deployment = runtime.get("ORBIT_DEPLOYMENT")
+    require(deployment in {"production", "staging"}, "Identifique o ambiente do Orbit.")
+    staging = deployment == "staging"
+    if staging:
+        volume = config.get("volumes", {}).get("staging_media")
+        require(
+            volume is not None and volume.get("driver", "local") == "local"
+            and not volume.get("driver_opts") and not volume.get("external"),
+            "Staging exige um volume de mídia local gerenciado pelo Compose.",
+        )
     pooler = services["pgbouncer"]
     pool_env = pooler.get("environment", {})
     database = pool_env.get("POSTGRES_DB")
@@ -62,6 +72,30 @@ def check(config, require_digests=True):
     for name in ("api", "worker", "documents"):
         env = services[name].get("environment", {})
         require(env.get("ORBIT_PROCESS_ROLE") == name, "Papel incorreto: " + name)
+        require(env.get("ORBIT_DEPLOYMENT") == deployment, "Ambiente divergente: " + name)
+        if env.get("SENTRY_DSN"):
+            require(env.get("SENTRY_ENVIRONMENT") == deployment
+                    and bool(re.fullmatch(r"[a-fA-F0-9]{64}", env.get("SENTRY_TENANT_HASH_KEY", ""))),
+                    "Configure o ambiente e uma chave HMAC exclusiva para o Sentry: " + name)
+        require(
+            env.get("STORAGE_PROVIDER") == ("LOCAL" if staging else "R2"),
+            "Provider de armazenamento incompatível com o ambiente: " + name,
+        )
+        mounts = services[name].get("volumes", [])
+        if staging:
+            require(
+                not any(key.startswith(("R2_", "CLOUDFLARE_CACHE_PURGE_", "ORBIT_BACKUP_"))
+                        and value for key, value in env.items())
+                and env.get("STORAGE_LOCAL_DIR") == "/app/staging-media"
+                and len(mounts) == 1
+                and mounts[0].get("type") == "volume"
+                and mounts[0].get("source") == "staging_media"
+                and mounts[0].get("target") == "/app/staging-media"
+                and not mounts[0].get("read_only"),
+                "Staging deve usar somente o volume de mídia local: " + name,
+            )
+        else:
+            require(not mounts, "Produção não deve persistir mídia local: " + name)
         expected_user, expected_password = expected_users[name]
         try:
             url = urlsplit(env.get("DATABASE_URL", ""))
@@ -131,6 +165,10 @@ def check(config, require_digests=True):
         web.get("environment", {}).get("ORBIT_API_URL") == "http://api:5001/api/v1",
         "frontend: upstream interno inválido.",
     )
+    web_env = web.get("environment", {})
+    if web_env.get("SENTRY_DSN"):
+        require(web_env.get("SENTRY_ENVIRONMENT") == deployment,
+                "Configure SENTRY_ENVIRONMENT para o frontend.")
     for key in web.get("environment", {}):
         require(
             not re.match(
@@ -255,14 +293,12 @@ def check(config, require_digests=True):
                 and ports[0].get("target") == (5001 if name == "api" else 3000),
                 "Porta incompatível com Nginx: " + name,
             )
-            require(
-                not service.get("volumes"),
-                "Runtime não deve persistir arquivos: " + name,
-            )
+            if name == "frontend":
+                require(not service.get("volumes"), "Frontend não deve persistir arquivos.")
         elif name in ["worker", "documents"]:
             require(
-                not service.get("ports") and not service.get("volumes"),
-                "Worker não pode publicar porta ou montar volume: " + name,
+                not service.get("ports"),
+                "Worker não pode publicar porta: " + name,
             )
             require(
                 set(service.get("networks", {})) == {"orbit_private", "orbit_public"},

@@ -76,10 +76,27 @@ export function loadStorageConfig(
     );
   }
   const provider = raw as StorageProviderName;
-  if (provider === 'LOCAL' && environment.NODE_ENV === 'production')
+  const deployment = environment.ORBIT_DEPLOYMENT ?? 'production';
+  if (deployment !== 'staging' && deployment !== 'production')
     throw new InfrastructureException(
-      'LOCAL storage is disabled in production; configure R2',
+      'ORBIT_DEPLOYMENT must be staging or production',
     );
+  if (
+    deployment === 'staging' &&
+    (provider !== 'LOCAL' ||
+      Object.entries(environment).some(
+        ([key, value]) => key.startsWith('R2_') && Boolean(value?.trim()),
+      ))
+  )
+    throw new InfrastructureException(
+      'Staging must use LOCAL storage without R2 configuration',
+    );
+  if (
+    deployment === 'production' &&
+    environment.NODE_ENV === 'production' &&
+    provider !== 'R2'
+  )
+    throw new InfrastructureException('Production storage requires R2');
   let r2: S3Config | undefined;
   let publicUrl: string | undefined;
   let privateBucket: string | undefined;
@@ -151,7 +168,11 @@ export function loadStorageConfig(
     privateBucket,
     publicUrl,
     publicBucket:
-      provider === 'R2' ? required('R2_BUCKET_NAME', environment) : undefined,
+      provider === 'R2'
+        ? required('R2_BUCKET_NAME', environment)
+        : deployment === 'staging'
+          ? environment.STORAGE_LOCAL_BRAND_BUCKET?.trim() || undefined
+          : undefined,
     signedUrlTtlSeconds: ttl,
     localRoot: environment.STORAGE_LOCAL_DIR?.trim() || 'storage/objects',
     localPublicBaseUrl:

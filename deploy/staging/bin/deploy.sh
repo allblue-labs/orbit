@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 cd /opt/stacks/orbit
-[[ -f .env && -f docker-compose.lock.yml && -f release.json ]] || { echo 'Configure .env, docker-compose.lock.yml e release.json antes.' >&2; exit 1; }
+[[ -f .env && -f docker-compose.lock.yml && -f docker-compose.staging.yml && -f release.json ]] || { echo 'Configure .env, o overlay de staging, o lock e release.json antes.' >&2; exit 1; }
 [[ $(stat -c '%a' .env) == 600 ]] || { echo 'Use chmod 600 .env.' >&2; exit 1; }
-compose=(docker compose --env-file .env -f docker-compose.yml -f docker-compose.lock.yml)
+compose=(docker compose --env-file .env -f docker-compose.yml -f docker-compose.lock.yml -f docker-compose.staging.yml)
 "${compose[@]}" config --quiet
 preflight_profiles=(--profile admin)
 hotpath_profile=false
@@ -16,7 +16,7 @@ fi
 python3 - <<'PY'
 import base64, json, re, subprocess, sys
 from pathlib import Path
-x=json.loads(subprocess.check_output(['docker','compose','--env-file','.env','-f','docker-compose.yml','-f','docker-compose.lock.yml','config','--format','json']))
+x=json.loads(subprocess.check_output(['docker','compose','--env-file','.env','-f','docker-compose.yml','-f','docker-compose.lock.yml','-f','docker-compose.staging.yml','config','--format','json']))
 env=x['services']['api']['environment']
 web=x['services']['frontend']['environment']
 origin='https://orbit.allblue-labs.com'
@@ -29,17 +29,13 @@ if not env.get('DATABASE_URL') or any(env.get(k) for k in ['DIRECT_DATABASE_URL'
     sys.exit('O runtime não pode receber credenciais administrativas.')
 release=json.loads(Path('release.json').read_text())
 commit=release.get('commit', '')
-if not re.fullmatch(r'[a-f0-9]{40}', commit) or release.get('tag') != 'staging-'+commit[:12]:
+if release.get('deployment') != 'staging' or not re.fullmatch(r'[a-f0-9]{40}', commit) or release.get('tag') != 'staging-'+commit[:12]:
     sys.exit('Revisão de staging inválida em release.json.')
 for service in ('api', 'worker', 'documents', 'migrate', 'frontend', 'pgbouncer'):
     image=x['services'][service]['image']
     if image != release.get('images', {}).get(service, {}).get('digest'):
         sys.exit('A imagem do lock difere de release.json: '+service)
-zone=str(env.get('CLOUDFLARE_CACHE_PURGE_ZONE_ID', '')).strip()
-token=str(env.get('CLOUDFLARE_CACHE_PURGE_TOKEN', '')).strip()
-if (zone or token) and (not token or not re.fullmatch(r'[a-f0-9]{32}',zone)):
-    sys.exit('Preencha as duas variáveis de expurgo Cloudflare com um Zone ID válido.')
-required=['R2_ACCOUNT_ID','R2_ACCESS_KEY_ID','R2_SECRET_ACCESS_KEY','R2_ENDPOINT','R2_PUBLIC_URL','R2_BUCKET_NAME','R2_PRIVATE_BUCKET_NAME','AWS_ACCESS_KEY_ID','AWS_SECRET_ACCESS_KEY','AWS_REGION','AWS_SES_FROM_EMAIL','EMAIL_SUPPRESSION_HASH_KEY']
+required=['AWS_ACCESS_KEY_ID','AWS_SECRET_ACCESS_KEY','AWS_REGION','AWS_SES_FROM_EMAIL','EMAIL_SUPPRESSION_HASH_KEY']
 if str(env.get('AWS_SES_FEEDBACK_ENABLED','false')).lower() == 'true':
     required += ['AWS_SES_CONFIGURATION_SET','AWS_SES_FEEDBACK_ACCOUNT_ID','AWS_SES_FEEDBACK_TOPIC_ARN','AWS_SES_FEEDBACK_IDENTITY_ARN']
 missing=[key for key in required if not str(env.get(key,'')).strip()]
@@ -64,6 +60,24 @@ if [[ ${1:-} == --check ]]; then
     exit 0
 fi
 "${compose[@]}" pull
+"${compose[@]}" up -d --wait postgres
+remaining=$("${compose[@]}" exec -T postgres sh -c 'psql -X -A -t -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL'
+SELECT (to_regclass('public.storage_files') IS NOT NULL) AS has_storage \gset
+\if :has_storage
+SELECT EXISTS (SELECT 1 FROM storage_files WHERE provider='R2' AND deleted_at IS NULL)
+    OR EXISTS (SELECT 1 FROM pmoc_plan_signature_links WHERE document_provider='R2')
+    OR EXISTS (SELECT 1 FROM generated_documents WHERE storage_provider='R2')
+    OR EXISTS (SELECT 1 FROM operation_attachments WHERE storage_provider='R2' AND deleted_at IS NULL)
+    OR EXISTS (SELECT 1 FROM artifact_execution_attachments WHERE storage_provider='R2' AND deleted_at IS NULL);
+\else
+SELECT false;
+\endif
+SQL
+)
+if [[ "$remaining" != f ]]; then
+    echo 'Importe as referências R2 já existentes antes de ativar o storage local.' >&2
+    exit 1
+fi
 # Preserve os segredos e faça o Compose sem -f usar a mesma release.
 python3 - <<'PYENV'
 import json, os, re, subprocess, tempfile
@@ -72,12 +86,13 @@ from pathlib import Path
 target = Path('.env')
 release = json.loads(Path('release.json').read_text())
 settings = {
-    'COMPOSE_FILE': 'docker-compose.yml:docker-compose.lock.yml',
+    'COMPOSE_FILE': 'docker-compose.yml:docker-compose.lock.yml:docker-compose.staging.yml',
     'ORBIT_VERSION': release['tag'],
 }
 lines = [
     line for line in target.read_text().splitlines(keepends=True)
-    if not any(re.match(r'^\s*(?:export\s+)?'+key+r'\s*=', line) for key in settings)
+    if not re.match(r'^\s*(?:export\s+)?(?:R2_|CLOUDFLARE_CACHE_PURGE_|ORBIT_BACKUP_)', line)
+    and not any(re.match(r'^\s*(?:export\s+)?'+key+r'\s*=', line) for key in settings)
 ]
 fd, filename = tempfile.mkstemp(prefix='.env.release-', dir='.')
 try:
@@ -91,11 +106,13 @@ try:
     for service in ('api', 'worker', 'documents', 'migrate', 'frontend', 'pgbouncer'):
         if preview['services'].get(service, {}).get('image') != release['images'][service]['digest']:
             raise SystemExit('O Compose padrão não carrega o lock para '+service)
+    for service in ('api', 'worker', 'documents'):
+        if preview['services'][service]['environment'].get('ORBIT_DEPLOYMENT') != 'staging':
+            raise SystemExit('O Compose padrão não carrega o overlay de staging.')
     os.replace(filename, target)
 finally:
     Path(filename).unlink(missing_ok=True)
 PYENV
-"${compose[@]}" up -d --wait postgres
 if [[ "$hotpath_profile" == true ]]; then
     "${compose[@]}" up -d redis-hotpath
 fi

@@ -17,6 +17,15 @@ class DeploymentPreflightTest(unittest.TestCase):
     def test_canonical_compose_passes_even_with_developer_loopback_host(self):
         preflight.check(self.canonical)
 
+    def test_staging_uses_only_a_shared_local_volume(self):
+        config = isolated_config(staging=True)
+        preflight.check(config)
+        for service in ("api", "worker", "documents"):
+            runtime = copy.deepcopy(config)
+            runtime["services"][service]["environment"]["R2_ACCESS_KEY_ID"] = "private-canary"
+            with self.assertRaisesRegex(preflight.UnsafeDeployment, "volume de mídia"):
+                preflight.check(runtime)
+
     def test_regressions_are_rejected(self):
         mutations = [
             ("pgbouncer", lambda s: s.update(ports=[{"published": "6432", "target": 6432}])),

@@ -44,3 +44,42 @@ describe('R2 configuration', () => {
       expect(() => loadStorageConfig({ ...environment, ...patch })).toThrow();
   });
 });
+
+describe('release storage isolation', () => {
+  it('uses signed local media in staging even with production runtime checks', () => {
+    expect(
+      loadStorageConfig({
+        NODE_ENV: 'production',
+        ORBIT_DEPLOYMENT: 'staging',
+        STORAGE_PROVIDER: 'LOCAL',
+        STORAGE_LOCAL_DIR: '/app/staging-media',
+        STORAGE_LOCAL_BRAND_BUCKET: 'orbit-assets',
+        JWT_ACCESS_SECRET: 'fixture',
+      }),
+    ).toMatchObject({
+      provider: 'LOCAL',
+      localRoot: '/app/staging-media',
+      publicBucket: 'orbit-assets',
+      publicUrl: undefined,
+      s3: undefined,
+    });
+  });
+
+  it('rejects cloud credentials and providers in staging', () => {
+    for (const provider of ['LOCAL', 'R2', 'MINIO']) {
+      expect(() =>
+        loadStorageConfig({
+          ...environment,
+          ORBIT_DEPLOYMENT: 'staging',
+          STORAGE_PROVIDER: provider,
+        }),
+      ).toThrow('Staging must use LOCAL');
+    }
+  });
+
+  it('requires R2 in production', () => {
+    expect(() =>
+      loadStorageConfig({ NODE_ENV: 'production', STORAGE_PROVIDER: 'LOCAL' }),
+    ).toThrow('Production storage requires R2');
+  });
+});

@@ -19,7 +19,7 @@ preflight = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(preflight)
 
 
-def isolated_config():
+def isolated_config(staging=False):
     compose = ROOT / "docker-compose.yml"
     required = re.findall(r"\$\{([A-Z][A-Z0-9_]*):\?", compose.read_text())
     env = {key: "isolated-fixture-value" for key in required}
@@ -48,6 +48,7 @@ def isolated_config():
             for key, value in os.environ.items()
             if key in ["PATH", "HOME", "DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_CONFIG"]
         }
+        overlays = ["-f", str(ROOT / "docker-compose.staging.yml")] if staging else []
         result = subprocess.run(
             [
                 "docker",
@@ -56,6 +57,7 @@ def isolated_config():
                 str(fixture),
                 "-f",
                 str(compose),
+                *overlays,
                 "--profile",
                 "admin",
                 "config",

@@ -84,7 +84,8 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends openssl \
   && rm -rf /var/lib/apt/lists/* \
   && groupadd --system --gid 1001 orbit \
-  && useradd --system --uid 1001 --gid orbit orbit
+  && useradd --system --uid 1001 --gid orbit orbit \
+  && install -d -m 0700 -o orbit -g orbit /app/staging-media
 
 COPY --from=production-dependencies /app/node_modules ./node_modules
 COPY --from=production-dependencies /app/dist ./dist
