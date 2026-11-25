@@ -203,6 +203,7 @@ await withIntegrationEnvironment(async ({ env, compiled }) => {
       // to force a lease expiry and ensure the old owner cannot close a replay.
       const { PrismaService } = require(join(compiled, "src/database/prisma.service"));
       const { BackgroundJobQueue } = require(join(compiled, "src/modules/jobs/background-job.queue"));
+      const { groupOf } = require(join(compiled, "src/modules/jobs/queue-groups"));
       const values = { NODE_ENV: "test", APP_DATABASE_URL: env.APP_DATABASE_URL };
       const prisma = new PrismaService({ get: key => values[key], getOptional: key => values[key] });
       try {
@@ -220,7 +221,11 @@ await withIntegrationEnvironment(async ({ env, compiled }) => {
         await exited;
         assert.equal(await queue.replayDead(documentJob, "artifact.render"), true);
         assert.equal(await queue.replayDead(documentJob, "artifact.render"), false);
-        const first = await queue.claim("artifact.render", "fixture-lease-old");
+        const first = await queue.claim(
+          groupOf("artifact.render"),
+          ["artifact.render"],
+          "fixture-lease-old",
+        );
         assert(first);
         await db.query("UPDATE background_jobs SET locked_at = now() - interval '30 minutes' WHERE id = $1", [documentJob]);
         assert.equal(await queue.requeueStalled("artifact.render", 300000), 1);
