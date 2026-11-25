@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { IBM_Plex_Mono, Inter, Space_Grotesk } from "next/font/google";
 import type { ReactNode } from "react";
 import "./globals.css";
@@ -69,6 +69,7 @@ export default async function RootLayout({
    * hidratação — que era exatamente o piscar a cada navegação.
    */
   const store = await cookies();
+  const nonce = (await headers()).get("x-orbit-csp-nonce") ?? undefined;
   const theme = parseThemeCookie(store.get(THEME_COOKIE)?.value);
   const sidebarCollapsed = parseSidebarCookie(store.get(SIDEBAR_COOKIE)?.value);
   /* Pela mesma razão: saber antes de pintar evita o aviso de assinatura
@@ -93,7 +94,10 @@ export default async function RootLayout({
       suppressHydrationWarning
     >
       <head>
-        <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
+        <script
+          nonce={nonce}
+          dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }}
+        />
       </head>
       <body>
         <MobileAppLinksProvider

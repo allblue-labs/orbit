@@ -21,6 +21,7 @@
  * enxergam a sessão completa.
  */
 import { NextResponse, type NextRequest } from "next/server";
+import { randomBytes } from "node:crypto";
 import { withClientOrigin } from "@/server/trusted-client-origin";
 import { toApiError } from "@/lib/api-error";
 
@@ -44,6 +45,23 @@ import { decodeAccessToken, claimList, isExpired } from "@/server/auth/jwt";
 import { refreshTokens } from "@/server/auth/refresh";
 import { PLATFORM_ADMIN_ROLE, type AccessTokenClaims } from "@/types/session";
 import type { TokenPair } from "@/types/session";
+import { contentSecurityPolicy } from "@/server/content-security-policy";
+
+function renderPage(request: NextRequest): NextResponse {
+  const nonce = randomBytes(18).toString("base64");
+  const policy = contentSecurityPolicy({
+    nonce,
+    allowSameOriginFrame: request.nextUrl.pathname.startsWith("/legal/"),
+    development: process.env.NODE_ENV === "development",
+  });
+  const headers = new Headers(request.headers);
+  headers.set("x-orbit-csp-nonce", nonce);
+  headers.set("Content-Security-Policy", policy);
+  const response = NextResponse.next({ request: { headers } });
+  response.headers.set("Content-Security-Policy", policy);
+  response.headers.set("Cache-Control", "private, no-store");
+  return response;
+}
 
 export async function proxy(request: NextRequest): Promise<NextResponse> {
   return withClientOrigin(request, async () => {
@@ -82,7 +100,7 @@ async function proxyWithOrigin(request: NextRequest): Promise<NextResponse> {
   const isProtected = isProtectedPath(pathname);
   const isPlatform = isPlatformPath(pathname);
   const isGuest = isGuestPath(pathname);
-  if (!isProtected && !isPlatform && !isGuest) return NextResponse.next();
+  if (!isProtected && !isPlatform && !isGuest) return renderPage(request);
 
   const accessToken = request.cookies.get(ACCESS_COOKIE)?.value;
   const refreshToken = request.cookies.get(REFRESH_COOKIE)?.value;
@@ -111,7 +129,7 @@ async function proxyWithOrigin(request: NextRequest): Promise<NextResponse> {
 
   const response = destination
     ? NextResponse.redirect(new URL(destination, request.url))
-    : NextResponse.next();
+    : renderPage(request);
 
   if (rotated) {
     writeSessionCookies(response.cookies, rotated);
@@ -170,33 +188,6 @@ function destinationForVisitor(
 
 export const config = {
   matcher: [
-    "/dashboard/:path*",
-    "/operacoes/:path*",
-    "/artefatos/:path*",
-    "/execucoes/:path*",
-    "/documentos/:path*",
-    "/agenda/:path*",
-    "/ativos/:path*",
-    "/pmoc/:path*",
-    "/rvt/:path*",
-    "/q/:path*",
-    "/catalogo/:path*",
-    "/equipe/:path*",
-    "/financeiro/:path*",
-    "/orcamentos/:path*",
-    "/relatorios/:path*",
-    "/configuracoes/:path*",
-    "/perfil/:path*",
-    "/organizacao/:path*",
-    "/clientes/:path*",
-    "/chamados/:path*",
-    "/notificacoes/:path*",
-    "/plataforma/:path*",
-    "/design-system/:path*",
-    "/login",
-    "/cadastro",
-    "/recuperar-senha",
-    "/redefinir-senha",
-    "/convite",
+    "/((?!api(?:/|$)|_next(?:/|$)|\\.well-known/|[^/]+\\.(?:png|ico|txt|xml)$).*)",
   ],
 };

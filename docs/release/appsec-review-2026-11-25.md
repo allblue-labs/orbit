@@ -213,3 +213,17 @@ que usuários possam cadastrar e remover a biometria. As credenciais
 com cadastro concluído continuam válidas para login. A validação de posse
 com chave não exportável, a proteção de dados offline, a CSP e a
 qualificação da cadeia de distribuição permanecem no backlog de segurança.
+
+## Política de conteúdo da Web
+
+A CSP agora é aplicada nas páginas da Web com um nonce criptográfico
+gerado por resposta. O Next.js usa o nonce nos scripts que gera e o script
+de tema recebe o mesmo valor. A política restringe scripts, objetos,
+alterações da URL base e enquadramento. A página de termos aceita frame
+somente da própria origem. A publicação deve preservar o bypass de cache
+para páginas HTML. Arquivos estáticos continuam no cache da CDN.
+[CSP no Next.js](https://nextjs.org/docs/app/guides/content-security-policy)
+
+Passaram 30 testes de navegador, incluindo nonce novo por resposta, login,
+MFA, leitura de termos, cadastro e cobrança. Também passaram seis smokes
+das dependências Web.
