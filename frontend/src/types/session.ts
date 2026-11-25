@@ -74,6 +74,7 @@ export interface SessionEntitlements {
 
 export interface SessionAccess {
   isOwner: boolean;
+  platformMfaRequired?: boolean;
   roles: readonly string[];
   permissions: readonly string[];
   surfaceAccess: readonly string[];
@@ -119,6 +120,7 @@ export interface AuthenticatedSession {
    */
   organizations: readonly SessionOrganizationRef[];
   isPlatformAdmin: boolean;
+  platformMfaRequired?: boolean;
   /** Assinatura em estado que libera o produto, inclusive carência vigente. */
   subscriptionActive: boolean;
   /**

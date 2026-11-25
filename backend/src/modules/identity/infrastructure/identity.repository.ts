@@ -320,6 +320,7 @@ export class IdentityRepository {
           client: true,
           expiresAt: true,
           revokedAt: true,
+          platformMfaFactorId: true,
         },
       }),
     );

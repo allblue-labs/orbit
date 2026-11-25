@@ -15,16 +15,20 @@ import { AppModule } from '../src/app.module';
 import { configureApiVersioning } from '../src/configure-api';
 import { RlsTransaction } from '../src/database';
 import { Surfaces } from '../src/decorators';
-import { HASH_PROVIDER } from '../src/providers';
+import { CRYPTO_PROVIDER, HASH_PROVIDER } from '../src/providers';
 import type { IHashProvider } from '../src/contracts';
 import { IdentityTokenService } from '../src/modules/identity/application/token.service';
+import { PlatformMfaSetup } from '../src/modules/identity/platform-mfa-setup.decorator';
 import { adminPrisma, disconnectAdminPrisma } from './support/admin-prisma';
+import { seedActiveMfa } from './support/active-mfa-fixture';
+import { generateTotpToken } from '../src/utils/totp';
 
 /** Test-only endpoint: uses the actual HTTP identity -> context -> RLS chain. */
 @Controller('nx01-test')
 @Surfaces('WEB', 'MOBILE', 'API')
 class RlsProbeController {
   constructor(private readonly rls: RlsTransaction) {}
+  @PlatformMfaSetup()
   @Get()
   probe() {
     return this.rls.run(async (tx) => ({
@@ -86,11 +90,15 @@ describe('ORB-NX-01 global privilege provenance (real HTTP / restricted PostgreS
       },
     });
   }
-  async function login(email: string, client = 'WEB'): Promise<Pair> {
+  async function login(
+    email: string,
+    client = 'WEB',
+    mfaCode?: string,
+  ): Promise<Pair> {
     return data<Pair>(
       await http()
         .post('/api/v1/identity/login')
-        .send({ email, password: PASSWORD, client })
+        .send({ email, password: PASSWORD, client, mfaCode })
         .expect(200),
     );
   }
@@ -471,16 +479,19 @@ describe('ORB-NX-01 global privilege provenance (real HTTP / restricted PostgreS
     expect(state.organizations.map((row) => row.id)).toEqual([orgA]);
   });
 
-  it('global grant is effective even on an older token, and revocation removes it without waiting for token expiry', async () => {
+  it('requires a new MFA login after granting a role and honors revocation immediately', async () => {
     const member = await operator('global');
     const grant = await admin.platformRoleAssignment.create({
       data: { userId: member.id, roleId: globalRoleId },
     });
+    await assertNotPlatform(member.pair.accessToken);
+    const mfaCode = await seedActiveMfa(member.id, app.get(CRYPTO_PROVIDER));
+    const afterGrant = await login(member.email, 'WEB', mfaCode());
     await auth(
       http().get('/api/v1/platform-admin/overview'),
-      member.pair.accessToken,
+      afterGrant.accessToken,
     ).expect(200);
-    const before = await probe(member.pair.accessToken);
+    const before = await probe(afterGrant.accessToken);
     expect(before.role[0]).toMatchObject({
       rolsuper: false,
       rolbypassrls: false,
@@ -490,20 +501,16 @@ describe('ORB-NX-01 global privilege provenance (real HTTP / restricted PostgreS
       expect.arrayContaining([orgA, orgB]),
     );
     const plan = data<{ id: string }>(
-      await auth(http().post('/api/v1/plans'), member.pair.accessToken)
+      await auth(http().post('/api/v1/plans'), afterGrant.accessToken)
         .send({
           key: `NX_PLAN_${randomUUID().slice(0, 8)}`,
           name: 'Global plan fixture',
         })
         .expect(201),
     );
-    await auth(
-      http().patch(`/api/v1/plans/${plan.id}`),
-      member.pair.accessToken,
-    )
+    await auth(http().patch(`/api/v1/plans/${plan.id}`), afterGrant.accessToken)
       .send({ name: 'Updated fixture' })
       .expect(200);
-    const afterGrant = await login(member.email);
     expect(
       (
         await app
@@ -531,7 +538,8 @@ describe('ORB-NX-01 global privilege provenance (real HTTP / restricted PostgreS
     const grant = await admin.platformRoleAssignment.create({
       data: { userId: account.id, roleId: globalRoleId },
     });
-    const pair = await login(account.email);
+    const mfaCode = await seedActiveMfa(account.id, app.get(CRYPTO_PROVIDER));
+    const pair = await login(account.email, 'WEB', mfaCode());
     await auth(
       http().get('/api/v1/platform-admin/organizations'),
       pair.accessToken,
@@ -549,6 +557,137 @@ describe('ORB-NX-01 global privilege provenance (real HTTP / restricted PostgreS
       .post('/api/v1/identity/refresh')
       .send({ refreshToken: pair.refreshToken })
       .expect(401);
+  });
+
+  it('permits MFA setup without tenant context and never elevates the setup session', async () => {
+    const account = await user('mfa-setup');
+    await admin.platformRoleAssignment.create({
+      data: { userId: account.id, roleId: globalRoleId },
+    });
+    const initial = await login(account.email);
+    const access = await auth(
+      http().get('/api/v1/identity/me/access'),
+      initial.accessToken,
+    ).expect(200);
+    expect(data(access)).toMatchObject({
+      platformMfaRequired: true,
+      roles: [],
+      permissions: [],
+    });
+    await auth(http().get('/api/v1/identity/me'), initial.accessToken).expect(
+      200,
+    );
+    await auth(
+      http().get('/api/v1/platform-admin/overview'),
+      initial.accessToken,
+    ).expect(403);
+    expect((await probe(initial.accessToken)).role[0]!.platform).toBe('false');
+
+    const enrollment = data<{ factorId: string; secret: string }>(
+      await auth(
+        http().post('/api/v1/identity/me/mfa/enrollment'),
+        initial.accessToken,
+      ).expect(201),
+    );
+    const confirm = async (token: string, action: string, mfaCode?: string) =>
+      data<{ confirmation: string }>(
+        await auth(
+          http().post('/api/v1/identity/me/security-confirmation'),
+          token,
+        )
+          .send({ action, currentPassword: PASSWORD, mfaCode })
+          .expect(200),
+      ).confirmation;
+    const code = () => generateTotpToken(enrollment.secret);
+    const enabled = data<{ recoveryCodes: string[] }>(
+      await auth(
+        http().post('/api/v1/identity/me/mfa/enable'),
+        initial.accessToken,
+      )
+        .set(
+          'x-orbit-security-confirmation',
+          await confirm(initial.accessToken, 'MFA_ENABLE'),
+        )
+        .send({ factorId: enrollment.factorId, code: code() })
+        .expect(201),
+    );
+
+    const refresh = async (pair: Pair) =>
+      data<Pair>(
+        await http()
+          .post('/api/v1/identity/refresh')
+          .send({ refreshToken: pair.refreshToken })
+          .expect(200),
+      );
+    const setupRenewed = await refresh(initial);
+    await auth(
+      http().get('/api/v1/platform-admin/overview'),
+      setupRenewed.accessToken,
+    ).expect(403);
+    await http()
+      .post('/api/v1/identity/login')
+      .send({ email: account.email, password: PASSWORD, client: 'WEB' })
+      .expect(401);
+
+    const elevated = await login(
+      account.email,
+      'WEB',
+      enabled.recoveryCodes[0],
+    );
+    const renewed = await refresh(elevated);
+    await auth(
+      http().get('/api/v1/platform-admin/overview'),
+      renewed.accessToken,
+    ).expect(200);
+    expect((await probe(renewed.accessToken)).role[0]!.platform).toBe('true');
+
+    const deviceId = `mfa-admin-${randomUUID()}`;
+    const device = data<{ credentialId: string; secret: string }>(
+      await auth(
+        http().post('/api/v1/identity/me/biometrics/devices'),
+        renewed.accessToken,
+      )
+        .set(
+          'x-orbit-security-confirmation',
+          await confirm(renewed.accessToken, 'DEVICE_REGISTER', code()),
+        )
+        .send({ deviceId })
+        .expect(201),
+    );
+    const biometric = data<Pair>(
+      await http()
+        .post('/api/v1/identity/biometrics/devices/login')
+        .send({
+          credentialId: device.credentialId,
+          secret: device.secret,
+          deviceId,
+        })
+        .expect(200),
+    );
+    await auth(
+      http().get('/api/v1/platform-admin/overview'),
+      biometric.accessToken,
+    ).expect(403);
+    expect((await probe(biometric.accessToken)).role[0]!.platform).toBe(
+      'false',
+    );
+
+    await auth(http().delete('/api/v1/identity/me/mfa'), renewed.accessToken)
+      .set(
+        'x-orbit-security-confirmation',
+        await confirm(renewed.accessToken, 'MFA_DISABLE', code()),
+      )
+      .expect(204);
+    await auth(
+      http().get('/api/v1/platform-admin/overview'),
+      renewed.accessToken,
+    ).expect(403);
+    expect((await probe(renewed.accessToken)).role[0]!.platform).toBe('false');
+    await seedActiveMfa(account.id, app.get(CRYPTO_PROVIDER));
+    await auth(
+      http().get('/api/v1/platform-admin/overview'),
+      renewed.accessToken,
+    ).expect(403);
   });
 
   it('rejects binding tenant roles as global grants and moving assigned global roles into a tenant', async () => {

@@ -151,7 +151,19 @@ remova essas variáveis da API/worker antes de iniciar esta release.
 Para provisionar o administrador global após as migrations, preencha os campos
 `PLATFORM_ADMIN_*` e execute `docker compose --profile admin run --rm bootstrap-admin`
 (inclua o arquivo de lock do ambiente, se houver). Remova a senha do `.env`
-após guardar o acesso no cofre. PostgreSQL não publica porta; API/frontend
+após guardar o acesso no cofre. O administrador entra em `/login`, configura
+o aplicativo autenticador em `/plataforma` e guarda os códigos de recuperação
+em local seguro. Depois volta a entrar com senha e código para obter acesso
+global. Combine o primeiro cadastro do autenticador com o titular da conta.
+Para contas já configuradas, basta um novo login com o fator ativo.
+
+Aplique a migration `20261125173000_platform_session_mfa` antes da API e
+publique a Web da mesma versão. Sessões anteriores e sessões abertas pela
+biometria ficam sem privilégios de administração. O refresh de uma sessão
+administrativa só mantém o acesso enquanto a atribuição e o fator que
+autenticou a sessão estiverem ativos.
+
+PostgreSQL não publica porta; API/frontend
 publicam somente em `127.0.0.1`, nas portas 6001/7070 por padrão.
 
 ## Health e smoke

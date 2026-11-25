@@ -264,3 +264,28 @@ concorrente, dados adulterados, cache de outro usuário e falha temporária
 de acesso à chave.
 [Armazenamento Apple](https://developer.apple.com/documentation/foundation/using-the-file-system-effectively) ·
 [Cifragem autenticada](https://pub.dev/packages/cryptography/versions/2.9.0)
+
+## MFA para a administração global
+
+As atribuições globais do SaaS só concedem privilégios à sessão que validou
+senha e um segundo fator com o vínculo global já ativo. A API verifica o
+fator e a atribuição no banco a cada requisição administrativa. A renovação
+preserva essa prova durante a sessão. Revogar a atribuição, remover o fator
+ou substituí-lo invalida o acesso global daquela sessão. Sessões antigas,
+abertas somente com senha, por passkey ou por biometria ficam sem acesso
+administrativo. A regra preserva as permissões próprias da organização
+quando a conta também tem vínculo com um cliente do SaaS.
+
+A tela `/plataforma` permite configurar o autenticador em uma sessão sem
+privilégios, exibe os códigos de recuperação na ativação e orienta um novo
+login. Um código de recuperação válido, usado junto com a senha, serve como
+segundo fator e é consumido pelo backend. A prova de posse por chave não
+exportável para o login biométrico geral permanece como pendência separada.
+
+Passaram 77 cenários de integração com PostgreSQL descartável e RLS ativa,
+incluindo revogação de atribuição, remoção do fator, renovação de sessão e
+login biométrico com acesso restrito. No Chromium, o cenário real de
+primeiro acesso concluiu a ativação e confirmou que a API só liberou os
+privilégios após sair e entrar com o código do autenticador.
+[Runbook de produção](production-deployment.md#migrate-e-deploy) ·
+[Orientação OWASP para MFA](https://cheatsheetseries.owasp.org/cheatsheets/Multifactor_Authentication_Cheat_Sheet.html)

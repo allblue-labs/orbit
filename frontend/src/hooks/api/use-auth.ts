@@ -57,12 +57,14 @@ export function useAuthenticatedRedirect(redirectTo?: string) {
       queryFn: () => authService.session(),
       staleTime: 0,
     });
-    const destination = requiresInitialPayment(state)
-      ? ROUTE_ASSINATURA
-      : (redirectTo ??
-        homeRouteFor({
-          isPlatformAdmin: state.authenticated && state.isPlatformAdmin,
-        }));
+    const isPlatformAdmin = state.authenticated && state.isPlatformAdmin;
+    const platformMfaRequired =
+      state.authenticated && state.platformMfaRequired;
+    const destination = platformMfaRequired
+      ? ROUTES.platform
+      : !isPlatformAdmin && requiresInitialPayment(state)
+        ? ROUTE_ASSINATURA
+        : (redirectTo ?? homeRouteFor({ isPlatformAdmin }));
     router.replace(destination);
     router.refresh();
   }, [queryClient, redirectTo, router]);
