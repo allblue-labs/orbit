@@ -12,6 +12,12 @@ As rotas anotadas com `Idempotent` aceitam chaves de 8 a 160 caracteres. O resul
 
 ## Cloudflare
 
+Configure as regras em cada zona. Staging usa a zona `allblue-labs.com` e
+o host `orbit.allblue-labs.com`. Produção usa a nova zona `portal-orbit.com.br`
+e o host `portal-orbit.com.br`. Nas expressões abaixo, troque somente o valor
+de `http.host` ao publicar na zona de produção. Os caminhos e os limites na
+origem são os mesmos. As evidências ao final desta página são de staging.
+
 ### Cache de tráfego dinâmico
 
 Em **Caching → Cache Rules**, publique `Orbit — bypass dinâmico` com **Bypass cache**. Posicione após regras mais amplas que também correspondam ao Orbit.
@@ -22,6 +28,9 @@ Em **Caching → Cache Rules**, publique `Orbit — bypass dinâmico` com **Bypa
 ```
 
 Após aplicar, confira `CF-Cache-Status: DYNAMIC` ou `BYPASS` e ausência de `Age` em `/login`, nas rotas da API e nas páginas com token. Um arquivo CSS ou JS existente em `/_next/static/` deve continuar retornando `HIT` depois de aquecido. O CDN público `cdn-orbit.allblue-labs.com` tem configuração própria.
+
+Em produção, com o Worker ativo, confirme o estático por `X-Orbit-Static-Source`
+conforme o [teste do CDN](edge-storage-sentry.md#estáticos-do-build-e-buckets-existentes).
 
 ### Limite de taxa no WAF
 
@@ -49,7 +58,9 @@ Com filtro de host disponível, inclua `/api/auth/login`, `/api/auth/register` e
 
 Mantenha **SSL/TLS → Overview → Full (strict)** e o DNS do Orbit com proxy ativo. O firewall da origem deve aceitar tráfego HTTPS da Cloudflare pelas faixas oficiais. O Nginx usa essas faixas para autenticar `CF-Connecting-IP`, remove o cabeçalho recebido antes de repassar a requisição e envia a identidade da rede no par interno autenticado. Mantenha Pseudo IPv4 em **Off** ou **Add Header** para preservar os endereços IPv6.
 
-Os relatórios podem usar a exportação assíncrona (202, consulta de status e download assinado do R2). Preserve os timeouts da origem e o TTL de 300 segundos das URLs assinadas.
+Os relatórios podem usar a exportação assíncrona (202, consulta de status e
+download assinado). Produção usa R2 e staging usa o gateway local. Preserve os
+timeouts da origem e o TTL de 300 segundos das URLs assinadas.
 
 ### Verificação de 24/11/2026
 

@@ -1,4 +1,5 @@
 export const prefix = '/_next/static/';
+export const bucket = 'orbit-assets';
 export const cacheControl = 'public, max-age=31536000, immutable';
 
 const types = {

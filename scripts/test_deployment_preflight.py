@@ -16,10 +16,16 @@ class DeploymentPreflightTest(unittest.TestCase):
 
     def test_canonical_compose_passes_even_with_developer_loopback_host(self):
         preflight.check(self.canonical)
+        production = self.canonical["services"]["api"]["environment"]
+        self.assertEqual(production["ORBIT_DEPLOYMENT"], "production")
+        self.assertEqual(production["STORAGE_PROVIDER"], "R2")
+        self.assertEqual(production["STORAGE_PUBLIC_API_URL"], "https://portal-orbit.com.br/api/v1")
 
     def test_staging_uses_only_a_shared_local_volume(self):
         config = isolated_config(staging=True)
         preflight.check(config)
+        staging = config["services"]["api"]["environment"]
+        self.assertEqual(staging["STORAGE_PUBLIC_API_URL"], "https://orbit.allblue-labs.com/api/v1")
         for service in ("api", "worker", "documents"):
             runtime = copy.deepcopy(config)
             runtime["services"][service]["environment"]["R2_ACCESS_KEY_ID"] = "private-canary"

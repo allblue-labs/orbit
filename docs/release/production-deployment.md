@@ -29,6 +29,21 @@ nunca imprima a configuração interpolada: ela contém segredos.
    smoke local isolado. O mesmo `FRONTEND_ORIGIN` é injetado no frontend: ele é
    a autoridade da validação same-origin do BFF e não pode ser inferido do host
    interno do container ou do reverse proxy.
+   No servidor dedicado, use estes valores:
+
+   ```dotenv
+   FRONTEND_ORIGIN=https://portal-orbit.com.br
+   IDENTITY_PUBLIC_WEB_URL=https://portal-orbit.com.br
+   STORAGE_PUBLIC_API_URL=https://portal-orbit.com.br/api/v1
+   R2_PUBLIC_URL=https://cdn-orbit.allblue-labs.com
+   AUTH_COOKIE_SECURE=true
+   ALLOW_INSECURE_LOCAL_COOKIES=false
+   COMPOSE_PROFILES=hotpath
+   REDIS_HOTPATH_ENABLED=true
+   ```
+
+   Gere as senhas e segredos nesse ambiente. Para Redis, gere
+   `REDIS_HOTPATH_PASSWORD` com `openssl rand -hex 32`.
 7. Configure R2 com os dois buckets e o domínio CDN, conforme
    [`cloudflare-r2.md`](../../backend/docs/cloudflare-r2.md). Em instalações
    existentes, migre os volumes antes de iniciar a API nova. Produção recusa
@@ -37,6 +52,33 @@ nunca imprima a configuração interpolada: ela contém segredos.
 8. Use o [runbook de estáticos, backup e Sentry](edge-storage-sentry.md) para
    publicar os assets do digest de produção no R2 e ativar a rota restrita da
    Cloudflare. O lock e o manifesto de produção também são usados pelo backup.
+
+## Nginx e TLS no servidor dedicado
+
+Use Nginx com HTTP/2 e os mesmos arquivos de segurança de staging. Configure
+no firewall da nuvem e no host entrada TCP 443 pelas faixas IPv4/IPv6 oficiais da
+Cloudflare e acesso SSH pelas redes administrativas autorizadas. Mantenha
+PostgreSQL e Redis sem porta publicada. API e frontend ficam em loopback.
+Instale em `/etc/nginx/cloudflare-realip.conf` uma linha
+`set_real_ip_from <CIDR>;` para cada faixa oficial. A configuração comum usa
+essa lista para validar a origem de `CF-Connecting-IP`. [Faixas Cloudflare](https://www.cloudflare.com/ips/)
+
+Em **SSL/TLS → Origin Server** na zona de produção, emita um certificado
+para `portal-orbit.com.br`. Instale o certificado em
+`/etc/nginx/ssl/orbit-origin.pem` e a chave em `/etc/nginx/ssl/orbit-origin.key`.
+Proteja a chave com modo 600. Com o `.env` da stack já criado em
+`/opt/stacks/orbit`, instale a configuração comum e ative o vhost:
+
+```bash
+sudo install -m 0644 deploy/staging/nginx/00-orbit-common.conf /etc/nginx/conf.d/00-orbit-common.conf
+sudo install -m 0644 deploy/staging/nginx/proxy-common.inc /etc/nginx/orbit-proxy.inc
+sudo bash deploy/staging/bin/activate-tls.sh portal-orbit.com.br
+```
+
+Caso o pacote Nginx tenha instalado um vhost padrão nas mesmas portas, desative
+esse vhost antes de ativar o Orbit. O ativador confere o certificado e sua
+chave, instala o segredo do proxy e testa a configuração antes de recarregar.
+Na zona de produção, selecione **Full (strict)**. [Certificados Origin CA](https://developers.cloudflare.com/ssl/origin-configuration/origin-ca/)
 
 ## Build reproduzível e provenance
 
@@ -71,12 +113,12 @@ O migrator cria/reconcilia primeiro somente os atributos seguros do papel,
 executa `prisma migrate deploy`, reconcilia todos os grants de `orbit_app` e,
 por fim, executa o seed idempotente dos quatro planos comerciais. Esse catálogo
 é referência obrigatória para cadastro e billing e não é dado demo. O runtime
-usa somente `APP_DATABASE_URL` e recusa privilégios administrativos diretos,
+usa `DATABASE_URL` com o papel restrito via PgBouncer e recusa privilégios administrativos diretos,
 herdados e ownership de objetos da aplicação na inicialização. A verificação
 é obrigatória em produção, mesmo sem a flag de enforcement.
 Seeds de owner/admin e o bootstrap de assinaturas existentes continuam sendo
 ações operacionais explícitas, nunca parte do boot normal.
-O runtime de produção recusa `DATABASE_URL`, `POSTGRES_PASSWORD`,
+O runtime de produção recusa `DIRECT_DATABASE_URL`, `POSTGRES_PASSWORD`,
 `PLATFORM_ADMIN_PASSWORD` e `OWNER_PASSWORD`; elas pertencem exclusivamente
 aos jobs administrativos. Ao atualizar uma implantação externa ao Compose,
 remova essas variáveis da API/worker antes de iniciar esta release.

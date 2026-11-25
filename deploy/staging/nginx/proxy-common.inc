@@ -8,7 +8,7 @@ proxy_set_header X-Real-IP $remote_addr;
 proxy_set_header X-Forwarded-For $remote_addr;
 proxy_set_header Forwarded "";
 proxy_set_header CF-Connecting-IP "";
-# Private credential installed from the staging .env, never committed.
+# Private credential installed from this environment's .env, never committed.
 include /etc/nginx/orbit-proxy-secret.inc;
 proxy_set_header X-Orbit-Client-IP $remote_addr;
 proxy_set_header X-Forwarded-Proto https;

@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test } from 'node:test';
+import { readFileSync } from 'node:fs';
 import worker from './static-worker.mjs';
+import { bucket } from './static-assets.mjs';
 
-const host = 'orbit.example.test';
+const host = 'portal-orbit.com.br';
 const asset = `https://${host}/_next/static/chunks/build.js`;
 const previous = { fetch: globalThis.fetch, caches: globalThis.caches };
 const environment = (bucket) => ({ ORBIT_PRODUCTION_HOST: host, ORBIT_WEB_STATIC: bucket });
@@ -77,11 +79,19 @@ test('rejects outside origins, dynamic paths, private extensions and mutations',
   const env = environment({});
   for (const request of [
     new Request(asset, { method: 'POST' }),
-    new Request(asset.replace(host, 'staging.example.test')),
+    new Request(asset.replace(host, 'orbit.allblue-labs.com')),
     new Request(`https://${host}/api/orbit/storage/objects`),
+    new Request(`https://${host}/logos/organization/logo.webp`),
     new Request(`${asset}.map`),
   ]) {
     const response = await worker.fetch(request, env);
     assert.equal(response.status, request.method === 'POST' ? 405 : 404);
   }
+});
+
+test('the Worker binds to the same public bucket as the publisher and only the production host', () => {
+  const config = readFileSync(new URL('./wrangler.toml', import.meta.url), 'utf8');
+  assert.ok(config.includes(`ORBIT_PRODUCTION_HOST = "${host}"`));
+  assert.ok(config.includes(`bucket_name = "${bucket}"`));
+  assert.equal(bucket, 'orbit-assets');
 });

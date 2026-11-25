@@ -18,7 +18,7 @@ R2_BUCKET_NAME=orbit-assets
 R2_PRIVATE_BUCKET_NAME=orbit-assets-private
 R2_ENDPOINT=https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com
 R2_PUBLIC_URL=https://cdn-orbit.allblue-labs.com
-STORAGE_PUBLIC_API_URL=https://orbit.allblue-labs.com/api/v1
+STORAGE_PUBLIC_API_URL=https://portal-orbit.com.br/api/v1
 STORAGE_SIGNED_URL_TTL_SECONDS=300
 # Se existirem referências antigas em snapshots imutáveis:
 R2_LEGACY_PRIVATE_BUCKETS=orbit-artifacts,documents
@@ -28,9 +28,9 @@ A chave precisa de **Object Read & Write** nos dois buckets, não de permissão 
 administração da conta. Restrinja seu uso a esse ambiente. Não use chaves SES no
 R2, não versione JSON de credenciais e não configure segredos no Next/Flutter.
 
-- `orbit-assets`: somente avatares/logos. Configure **Custom Domains** com
-  `cdn-orbit.allblue-labs.com` e aguarde o status **Active**. `r2.dev` pode e deve
-  continuar desativado: ele é independente do domínio personalizado.
+- `orbit-assets`: avatares, logos e arquivos versionados do frontend sob
+  `_next/static/`. Em **Custom Domains**, mantenha
+  `cdn-orbit.allblue-labs.com` **Active** e `r2.dev` desativado.
 - `orbit-assets-private`: evidências, assinaturas, anexos e PDFs. Não configure
   domínio público nem habilite `r2.dev`. Downloads usam URLs temporárias do
   endpoint S3, autorizadas após RLS/permissões. Não reescreva o host dessas URLs.
@@ -45,7 +45,7 @@ adequada à origem real (os uploads passam pela API e não precisam de PUT no R2
 ```json
 [
   {
-    "AllowedOrigins": ["https://orbit.allblue-labs.com"],
+    "AllowedOrigins": ["https://portal-orbit.com.br"],
     "AllowedMethods": ["GET", "HEAD"],
     "AllowedHeaders": ["Range", "Content-Type"],
     "ExposeHeaders": ["Content-Length", "Content-Disposition", "ETag"],
@@ -116,17 +116,10 @@ STORAGE_MIGRATION_OFFLINE=true docker compose \
   run --rm storage-migration --apply
 ```
 
-No staging já preparado, atualize também o script de backup instalado **após**
-validar a migração e antes de subir a API nova. Transfira a versão atual de
-`deploy/staging/bin/backup.sh` para `~/orbit-bootstrap/bin/backup.sh` e execute:
-
-```bash
-sudo install -m 0750 ~/orbit-bootstrap/bin/backup.sh /usr/local/sbin/orbit-backup
-```
-
-A versão antiga tenta copiar diretórios locais que não existem na imagem nova.
-O timer existente continua válido. Teste um backup do banco e o backup separado
-dos buckets depois do rollout.
+Esta migração se aplica à produção. O staging monta sua mídia em um
+[volume local](../../deploy/staging/README.md#armazenamento-local). O
+[backup de produção](../../docs/release/backup-restore.md) usa seu próprio
+bucket e suas próprias credenciais.
 
 O lock deve ser o último arquivo do Compose, para que a ferramenta use o mesmo
 digest do migrator da release, sem herdar uma tag antiga de `ORBIT_VERSION`.

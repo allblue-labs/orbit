@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { join, relative, sep } from 'node:path';
-import { cacheControl, contentType, prefix } from '../cloudflare/static-assets.mjs';
+import { bucket, cacheControl, contentType, prefix } from '../cloudflare/static-assets.mjs';
 
 const require = createRequire(new URL('../../../backend/ops/backup-node/package.json', import.meta.url));
 const { HeadObjectCommand, PutObjectCommand, S3Client } = require('@aws-sdk/client-s3');
@@ -18,13 +18,20 @@ async function* list(directory) {
 
 async function publish() {
   const root = process.argv[2];
-  const { ORBIT_STATIC_R2_ENDPOINT, ORBIT_STATIC_R2_ACCESS_KEY_ID, ORBIT_STATIC_R2_SECRET_ACCESS_KEY } = process.env;
+  const {
+    ORBIT_STATIC_R2_ENDPOINT, ORBIT_STATIC_R2_ACCESS_KEY_ID,
+    ORBIT_STATIC_R2_SECRET_ACCESS_KEY, ORBIT_STATIC_R2_SESSION_TOKEN,
+  } = process.env;
   if (!/^https:\/\/[a-f0-9]{32}\.r2\.cloudflarestorage\.com$/.test(ORBIT_STATIC_R2_ENDPOINT ?? '') ||
       !ORBIT_STATIC_R2_ACCESS_KEY_ID || !ORBIT_STATIC_R2_SECRET_ACCESS_KEY)
     throw new Error('invalid_static_publisher_configuration');
   const client = new S3Client({
     endpoint: ORBIT_STATIC_R2_ENDPOINT,
-    credentials: { accessKeyId: ORBIT_STATIC_R2_ACCESS_KEY_ID, secretAccessKey: ORBIT_STATIC_R2_SECRET_ACCESS_KEY },
+    credentials: {
+      accessKeyId: ORBIT_STATIC_R2_ACCESS_KEY_ID,
+      secretAccessKey: ORBIT_STATIC_R2_SECRET_ACCESS_KEY,
+      sessionToken: ORBIT_STATIC_R2_SESSION_TOKEN || undefined,
+    },
     region: 'auto',
     forcePathStyle: true,
     requestChecksumCalculation: 'WHEN_REQUIRED',
@@ -48,7 +55,7 @@ async function publish() {
       if (!mime) throw new Error(`unexpected_asset_type: ${path}`);
       const bytes = await readFile(file);
       const sha256 = createHash('sha256').update(bytes).digest('hex');
-      const ref = { Bucket: 'orbit-web-static', Key: path.slice(1) };
+      const ref = { Bucket: bucket, Key: path.slice(1) };
       let existing = await head(ref);
       if (existing) reused++;
       else {
