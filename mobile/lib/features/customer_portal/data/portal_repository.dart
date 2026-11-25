@@ -10,6 +10,7 @@ import 'dart:typed_data';
 
 import '../../../core/network/orbit_api_client.dart';
 import '../../../core/network/session_authenticator.dart';
+import '../../../core/security/device_proof.dart';
 import '../../../core/security/security_confirmation.dart';
 import '../../../core/storage/token_storage.dart';
 import 'portal_contracts.dart';
@@ -60,56 +61,39 @@ class PortalRepository {
     );
   }
 
-  /// Entra com a credencial biométrica deste aparelho; devolve a sessão e o
-  /// próximo segredo — o usado deixa de valer.
-  Future<({PortalSession session, String nextSecret})>
-  loginWithDeviceCredential({
+  Future<PortalSession?> loginWithDeviceCredential({
     required String credentialId,
-    required String secret,
+    required SignDeviceChallenge sign,
   }) async {
-    final clearing = authenticator.clearSession();
-    final generation = authenticator.generation;
-    await clearing;
-    if (generation != authenticator.generation) {
-      throw SessionAuthenticator.changed;
-    }
-    final data = await _client.post<Map<String, dynamic>>(
-      '/portal/auth/biometrics/devices/login',
-      isPublic: true,
-      body: {'credentialId': credentialId, 'secret': secret},
+    final data = await authenticateDeviceKey(
+      _client,
+      '/portal/auth/biometrics/devices/authentication',
+      credentialId,
+      sign,
     );
-    final tokens = TokenPair.fromJson(data);
-    await authenticator.storeTokens(tokens, generation: generation);
-    return (
-      session: PortalSession(
-        tokens: tokens,
-        me: PortalMe.fromJson(data['me'] as Map<String, dynamic>),
-      ),
-      nextSecret: data['deviceSecret'] as String,
+    if (data == null) return null;
+    return PortalSession(
+      tokens: TokenPair.fromJson(data),
+      me: PortalMe.fromJson(data['me'] as Map<String, dynamic>),
     );
   }
 
-  Future<({String credentialId, String secret})> enrollDeviceCredential({
+  Future<String?> enrollDeviceCredential({
     required String deviceId,
     required String label,
+    required String publicKey,
+    required SignDeviceChallenge sign,
     required SecurityCredentials credentials,
-  }) async {
-    final proof = await confirmSecurityChange(
-      _client,
-      '/portal/me/biometrics/confirmation',
-      'DEVICE_REGISTER',
-      credentials,
-    );
-    final data = await _client.post<Map<String, dynamic>>(
-      '/portal/me/biometrics/devices',
-      body: {'deviceId': deviceId, 'label': label},
-      headers: {securityConfirmationHeader: proof},
-    );
-    return (
-      credentialId: data['credentialId'] as String,
-      secret: data['secret'] as String,
-    );
-  }
+  }) => registerDeviceKey(
+    _client,
+    '/portal/me/biometrics/devices',
+    '/portal/me/biometrics/confirmation',
+    deviceId: deviceId,
+    label: label,
+    publicKey: publicKey,
+    sign: sign,
+    credentials: credentials,
+  );
 
   Future<void> revokeDeviceCredential(
     String credentialId, {

@@ -127,6 +127,21 @@ const entries = [
     'O código do autenticador não confere. Tente o próximo código.',
   ],
   [
+    'BIOMETRIC_INVALID',
+    HttpStatus.UNAUTHORIZED,
+    'Biometria não reconhecida. Entre com a senha.',
+  ],
+  [
+    'BIOMETRIC_CHALLENGE_EXPIRED',
+    HttpStatus.UNAUTHORIZED,
+    'A confirmação expirou. Tente de novo.',
+  ],
+  [
+    'BIOMETRIC_REGISTRATION_INVALID',
+    HttpStatus.BAD_REQUEST,
+    'Não foi possível confirmar a biometria deste aparelho.',
+  ],
+  [
     'FORBIDDEN',
     HttpStatus.FORBIDDEN,
     'Você não tem permissão para realizar esta ação.',

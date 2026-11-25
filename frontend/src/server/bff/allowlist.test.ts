@@ -175,12 +175,15 @@ describe("inspectPath", () => {
     });
   });
 
-  it("biometria: entrada e segredo de aparelho não passam pelo proxy", () => {
+  it("mantém o login biométrico e as rotas nativas fora do proxy genérico", () => {
     for (const path of [
       "/identity/biometrics/webauthn/authentication",
       "/identity/biometrics/webauthn/authentication/options",
       "/identity/biometrics/devices/login",
+      "/identity/biometrics/devices/authentication",
+      "/identity/biometrics/devices/authentication/options",
       "/identity/me/biometrics/devices",
+      "/identity/me/biometrics/devices/options",
     ])
       expect(inspectPath(path, "POST")).toMatchObject({
         allowed: false,
@@ -214,7 +217,10 @@ describe("inspectPath", () => {
 describe("exportações de documento", () => {
   it("a consulta autenticada passa pelo proxy e exige sessão", () => {
     expect(
-      inspectPath("/document-exports/01a20400-cd6f-772e-b3be-1d02b20ee35e", "GET"),
+      inspectPath(
+        "/document-exports/01a20400-cd6f-772e-b3be-1d02b20ee35e",
+        "GET",
+      ),
     ).toEqual({ allowed: true, requiresSession: true });
   });
 });

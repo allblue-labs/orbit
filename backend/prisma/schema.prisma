@@ -5456,8 +5456,7 @@ model ProductSale {
   @@map("product_sales")
 }
 
-/// Entrar com a biometria do aparelho — equipe. WEBAUTHN (web: só a chave
-/// pública) ou DEVICE (app: SHA-256 de um segredo trocado a cada uso).
+/// Credenciais biométricas da equipe. O servidor armazena somente chaves públicas.
 model IdentityBiometricCredential {
   id                   String    @id @default(uuid(7)) @db.Uuid
   userId               String    @map("user_id") @db.Uuid
@@ -5503,7 +5502,7 @@ model CustomerPortalBiometricCredential {
   @@map("customer_portal_biometric_credentials")
 }
 
-/// Desafio WebAuthn: um uso, poucos minutos.
+/// Desafio de autenticação de uso único e validade curta.
 model AuthChallenge {
   id         String    @id @default(uuid(7)) @db.Uuid
   purpose    String    @db.VarChar(40)

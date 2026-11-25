@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/contracts/session_contracts.dart';
 import '../../../core/errors/orbit_exception.dart';
 import '../../../core/network/session_authenticator.dart';
+import '../../../core/security/device_proof.dart';
 import '../data/auth_repository.dart';
 import '../domain/session.dart';
 
@@ -142,26 +143,23 @@ class AuthController extends StateNotifier<AuthState> {
     if (_current(operation)) state = AuthAuthenticated(session);
   }
 
-  /// Entra com a biometria: o cofre já liberou a credencial; o servidor a
-  /// confere. Devolve o próximo segredo, que substitui o usado no cofre.
-  Future<String> loginWithDeviceCredential({
+  Future<bool> loginWithDeviceCredential({
     required String credentialId,
-    required String secret,
+    required SignDeviceChallenge sign,
   }) async {
     if (_parent case final parent?) {
       return parent.loginWithDeviceCredential(
         credentialId: credentialId,
-        secret: secret,
+        sign: sign,
       );
     }
     final operation = ++_operation;
-    state = const AuthUnauthenticated();
-    final result = await _repository.loginWithDeviceCredential(
+    final tokens = await _repository.loginWithDeviceCredential(
       credentialId: credentialId,
-      secret: secret,
+      sign: sign,
     );
-    if (!_current(operation)) return result.nextSecret;
-    final claims = AuthRepository.decodeClaims(result.tokens.accessToken);
+    if (tokens == null || !_current(operation)) return false;
+    final claims = AuthRepository.decodeClaims(tokens.accessToken);
     if (claims == null) {
       throw const OrbitException(
         kind: OrbitErrorKind.parse,
@@ -170,8 +168,9 @@ class AuthController extends StateNotifier<AuthState> {
       );
     }
     final session = await _composeSession(claims);
-    if (_current(operation)) state = AuthAuthenticated(session);
-    return result.nextSecret;
+    if (!_current(operation)) return false;
+    state = AuthAuthenticated(session);
+    return true;
   }
 
   Future<void> logout() async {

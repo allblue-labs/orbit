@@ -20,6 +20,7 @@ import '../../../core/contracts/session_contracts.dart';
 import '../../../core/errors/orbit_exception.dart';
 import '../../../core/network/orbit_api_client.dart';
 import '../../../core/network/session_authenticator.dart';
+import '../../../core/security/device_proof.dart';
 import '../../../core/security/security_confirmation.dart';
 import '../../../core/storage/token_storage.dart';
 
@@ -33,6 +34,8 @@ class AuthRepository {
        _deviceInstanceId = deviceInstanceId;
 
   final OrbitApiClient _client;
+
+  SessionAuthenticator get authenticator => _client.authenticator;
   final TokenStorage _storage;
   final Future<String> Function()? _deviceInstanceId;
 
@@ -63,58 +66,35 @@ class AuthRepository {
     return tokens;
   }
 
-  /// Entra com a credencial biométrica deste aparelho.
-  ///
-  /// O servidor confere o segredo, abre a sessão e devolve o **próximo**
-  /// segredo — o usado deixa de valer. Quem chama guarda o novo no cofre.
-  Future<({TokenPair tokens, String nextSecret})> loginWithDeviceCredential({
+  Future<TokenPair?> loginWithDeviceCredential({
     required String credentialId,
-    required String secret,
+    required SignDeviceChallenge sign,
   }) async {
-    final clearing = _client.authenticator.clearSession();
-    final generation = _client.authenticator.generation;
-    await clearing;
-    if (generation != _client.authenticator.generation) {
-      throw SessionAuthenticator.changed;
-    }
-    final deviceId = _deviceInstanceId;
-    final data = await _client.post<Map<String, dynamic>>(
-      '/identity/biometrics/devices/login',
-      isPublic: true,
-      body: {
-        'credentialId': credentialId,
-        'secret': secret,
-        'client': 'MOBILE',
-        if (deviceId != null) 'deviceId': await deviceId(),
-      },
+    final data = await authenticateDeviceKey(
+      _client,
+      '/identity/biometrics/devices/authentication',
+      credentialId,
+      sign,
     );
-    final tokens = TokenPair.fromJson(data);
-    await _client.authenticator.storeTokens(tokens, generation: generation);
-    return (tokens: tokens, nextSecret: data['deviceSecret'] as String);
+    return data == null ? null : TokenPair.fromJson(data);
   }
 
-  /// Pede uma credencial biométrica para este aparelho (sessão ativa).
-  Future<({String credentialId, String secret})> enrollDeviceCredential({
+  Future<String?> enrollDeviceCredential({
     required String deviceId,
     required String label,
+    required String publicKey,
+    required SignDeviceChallenge sign,
     required SecurityCredentials credentials,
-  }) async {
-    final proof = await confirmSecurityChange(
-      _client,
-      '/identity/me/security-confirmation',
-      'DEVICE_REGISTER',
-      credentials,
-    );
-    final data = await _client.post<Map<String, dynamic>>(
-      '/identity/me/biometrics/devices',
-      body: {'deviceId': deviceId, 'label': label},
-      headers: {securityConfirmationHeader: proof},
-    );
-    return (
-      credentialId: data['credentialId'] as String,
-      secret: data['secret'] as String,
-    );
-  }
+  }) => registerDeviceKey(
+    _client,
+    '/identity/me/biometrics/devices',
+    '/identity/me/security-confirmation',
+    deviceId: deviceId,
+    label: label,
+    publicKey: publicKey,
+    sign: sign,
+    credentials: credentials,
+  );
 
   /// Remove a credencial no servidor — desativar a biometria no aparelho.
   Future<void> revokeDeviceCredential(

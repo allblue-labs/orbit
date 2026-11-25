@@ -13,6 +13,15 @@ describe("BFF do portal do cliente", () => {
     expect(portalPathAllowed("/portal/me/biometrics/devices", "POST")).toBe(
       false,
     );
+    expect(
+      portalPathAllowed("/portal/me/biometrics/devices/options", "POST"),
+    ).toBe(false);
+    expect(
+      portalPathAllowed(
+        "/portal/auth/biometrics/devices/authentication",
+        "POST",
+      ),
+    ).toBe(false);
     expect(portalPathAllowed("/portal/auth/password", "PATCH")).toBe(true);
     /* Login, renovação e saída têm rotas próprias, que cuidam dos cookies. */
     expect(portalPathAllowed("/portal/auth/login", "POST")).toBe(false);
@@ -25,10 +34,14 @@ describe("BFF do portal do cliente", () => {
   it("token de outra natureza conta como ausente", () => {
     const agora = Math.floor(Date.now() / 1000);
     expect(
-      portalTokenExpired(token({ actorType: "CUSTOMER_PORTAL", exp: agora + 600 })),
+      portalTokenExpired(
+        token({ actorType: "CUSTOMER_PORTAL", exp: agora + 600 }),
+      ),
     ).toBe(false);
     expect(
-      portalTokenExpired(token({ actorType: "CUSTOMER_PORTAL", exp: agora + 5 })),
+      portalTokenExpired(
+        token({ actorType: "CUSTOMER_PORTAL", exp: agora + 5 }),
+      ),
     ).toBe(true);
     /* Um token da equipe nunca vira sessão de cliente. */
     expect(portalTokenExpired(token({ exp: agora + 600 }))).toBe(true);

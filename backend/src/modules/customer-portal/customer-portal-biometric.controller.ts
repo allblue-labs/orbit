@@ -19,9 +19,11 @@ import {
 } from '@nestjs/swagger';
 import {
   DeviceBiometricLoginDto,
+  DeviceBiometricOptionsDto,
   EnrollDeviceBiometricDto,
   WebAuthnAuthenticationDto,
   WebAuthnRegistrationDto,
+  deviceBiometricRefused,
 } from '../../common/biometrics';
 import { ApiPublicErrors } from '../../common/public-errors';
 import { requestClientIp } from '../../common/trusted-client-origin';
@@ -73,6 +75,20 @@ export class CustomerPortalBiometricLoginController {
   }
 
   @Post('devices/login')
+  @Header('Cache-Control', 'no-store')
+  retiredDeviceLogin(): never {
+    throw deviceBiometricRefused();
+  }
+
+  @Post('devices/authentication/options')
+  @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', 'no-store')
+  @ApiOperation({ summary: 'Desafio para entrar com a biometria do app' })
+  deviceLoginOptions(@Body() input: DeviceBiometricOptionsDto) {
+    return this.biometrics.deviceLoginOptions(input.credentialId);
+  }
+
+  @Post('devices/authentication')
   @HttpCode(HttpStatus.OK)
   @Header('Cache-Control', 'no-store')
   @ApiOperation({ summary: 'Entra com a biometria do app' })
@@ -170,6 +186,14 @@ export class CustomerPortalBiometricController {
       input,
       request.header('user-agent'),
     );
+  }
+
+  @Post('devices/options')
+  @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', 'no-store')
+  @ApiOperation({ summary: 'Desafio para cadastrar a biometria do app' })
+  deviceEnrollmentOptions(@Req() request: CustomerPortalRequest) {
+    return this.biometrics.deviceEnrollmentOptions(actor(request));
   }
 
   @Delete(':id')

@@ -14,6 +14,7 @@ import '../../../app/providers.dart';
 import '../../../core/errors/orbit_exception.dart';
 import '../../../core/network/orbit_api_client.dart';
 import '../../../core/network/session_authenticator.dart';
+import '../../../core/security/device_proof.dart';
 import '../../../core/storage/token_storage.dart';
 import '../data/portal_contracts.dart';
 import '../data/portal_repository.dart';
@@ -121,24 +122,24 @@ class PortalSessionController extends StateNotifier<PortalAuthState> {
     if (_current(operation)) state = PortalSignedIn(session.me);
   }
 
-  /// Entra com a biometria; devolve o próximo segredo para o cofre.
-  Future<String> loginWithDeviceCredential({
+  Future<bool> loginWithDeviceCredential({
     required String credentialId,
-    required String secret,
+    required SignDeviceChallenge sign,
   }) async {
     if (_parent case final parent?) {
       return parent.loginWithDeviceCredential(
         credentialId: credentialId,
-        secret: secret,
+        sign: sign,
       );
     }
     final operation = ++_operation;
-    final result = await _repository.loginWithDeviceCredential(
+    final session = await _repository.loginWithDeviceCredential(
       credentialId: credentialId,
-      secret: secret,
+      sign: sign,
     );
-    if (_current(operation)) state = PortalSignedIn(result.session.me);
-    return result.nextSecret;
+    if (session == null || !_current(operation)) return false;
+    state = PortalSignedIn(session.me);
+    return true;
   }
 
   Future<void> logout() async {

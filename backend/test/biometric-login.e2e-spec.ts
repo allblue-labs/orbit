@@ -3,8 +3,8 @@ import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return */
 /**
- * Entrar com a biometria — equipe e cliente, web (WebAuthn) e app (segredo
- * do aparelho).
+ * Entrar com a biometria — equipe e cliente, web (WebAuthn) e app (assinatura por chave
+ * de dispositivo).
  *
  * O WebAuthn é provado com um autenticador de software que assina de verdade:
  * a verificação de origem, RP ID, desafio de uso único e assinatura é a da
@@ -13,11 +13,15 @@ import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { Client } from 'pg';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { configureApiVersioning } from '../src/configure-api';
 import { adminPrisma, disconnectAdminPrisma } from './support/admin-prisma';
+import { deviceProofFixture } from './support/device-proof-fixture';
 import { SoftAuthenticator } from './support/soft-authenticator';
 
 jest.setTimeout(180_000);
@@ -36,6 +40,7 @@ describe('Entrar com a biometria (e2e)', () => {
   const previousOrigin = process.env.FRONTEND_ORIGIN;
   let app: INestApplication<App>;
   let ownerToken: string;
+  let ownerId: string;
   let customerId: string;
   let identityId: string;
   let accessEmail: string;
@@ -99,6 +104,9 @@ describe('Entrar com a biometria (e2e)', () => {
     });
     await paidSubscriptionFixture(app, prisma, email);
     ownerToken = data(registration).accessToken;
+    ({ id: ownerId } = await prisma.user.findUniqueOrThrow({
+      where: { email },
+    }));
 
     customerId = data(
       await bearer(api().post('/api/v1/customers'), ownerToken)
@@ -175,12 +183,23 @@ describe('Entrar com a biometria (e2e)', () => {
         .send(body)
         .expect(403);
       const proof = await confirmation('PASSKEY_REGISTER');
+      const deviceKey = deviceProofFixture();
+      const enrollment = data(
+        await bearer(
+          api().post('/api/v1/identity/me/biometrics/devices/options'),
+          ownerToken,
+        ).expect(200),
+      );
       await bearer(
         api().post('/api/v1/identity/me/biometrics/devices'),
         ownerToken,
       )
         .set('x-orbit-security-confirmation', proof)
-        .send({ deviceId: 'fixture-device' })
+        .send({
+          deviceId: 'fixture-device',
+          publicKey: deviceKey.publicKey,
+          ...deviceKey.prove(enrollment),
+        })
         .expect(403);
       const created = data(
         await bearer(
@@ -328,66 +347,152 @@ describe('Entrar com a biometria (e2e)', () => {
     });
   });
 
-  describe('app (segredo do aparelho)', () => {
-    it('equipe: entra e o segredo troca a cada uso', async () => {
-      const enrolled = data(
-        await bearer(
-          api().post('/api/v1/identity/me/biometrics/devices'),
-          ownerToken,
-        )
+  describe('app (chave do aparelho)', () => {
+    const teamAuth = '/api/v1/identity/biometrics/devices/authentication';
+    const portalAuth = '/api/v1/portal/auth/biometrics/devices/authentication';
+    async function enroll(audience: 'team' | 'portal', deviceId: string) {
+      const path = `/api/v1/${audience === 'team' ? 'identity' : 'portal'}/me/biometrics/devices`;
+      const token = audience === 'team' ? ownerToken : portalToken;
+      const key = deviceProofFixture();
+      const options = data(
+        await bearer(api().post(`${path}/options`), token).expect(200),
+      );
+      const { credentialId } = data(
+        await bearer(api().post(path), token)
           .set(
             'x-orbit-security-confirmation',
-            await confirmation('DEVICE_REGISTER'),
+            await confirmation('DEVICE_REGISTER', audience),
           )
-          .send({ deviceId: 'device-owner-0001', label: 'iPhone do owner' })
+          .send({ deviceId, publicKey: key.publicKey, ...key.prove(options) })
           .expect(201),
+      ) as { credentialId: string };
+      return { credentialId, ...key };
+    }
+
+    async function loginOptions(path: string, credentialId: string) {
+      return data(
+        await api().post(`${path}/options`).send({ credentialId }).expect(200),
+      ) as {
+        challengeId: string;
+        challenge: string;
+      };
+    }
+
+    it('revoga segredos legados dos dois públicos e preserva passkeys na migração', async () => {
+      const { organizationId } =
+        await prisma.customerPortalIdentity.findUniqueOrThrow({
+          where: { id: identityId },
+        });
+      const sql = readFileSync(
+        resolve(
+          __dirname,
+          '../prisma/migrations/20261126110000_device_biometric_key_proofs/migration.sql',
+        ),
+        'utf8',
       );
+      const connection = new Client({
+        connectionString: process.env.DATABASE_URL,
+      });
+      await connection.connect();
+      try {
+        // DDL e fixtures ficam na mesma transação e são desfeitos ao terminar.
+        await connection.query('BEGIN');
+        await connection.query(`
+          ALTER TABLE identity_biometric_credentials DROP CONSTRAINT identity_biometric_kind_check;
+          ALTER TABLE customer_portal_biometric_credentials DROP CONSTRAINT portal_biometric_kind_check;
+          ALTER TABLE identity_biometric_credentials
+            ADD CONSTRAINT identity_biometric_kind_check CHECK (
+              (kind = 'DEVICE' AND secret_hash ~ '^[0-9a-f]{64}$') OR kind = 'WEBAUTHN'
+            );
+          ALTER TABLE customer_portal_biometric_credentials
+            ADD CONSTRAINT portal_biometric_kind_check CHECK (
+              (kind = 'DEVICE' AND secret_hash ~ '^[0-9a-f]{64}$') OR kind = 'WEBAUTHN'
+            );
+        `);
+        const [legacyTeam, webTeam, legacyPortal, webPortal] = Array.from(
+          { length: 4 },
+          () => randomUUID(),
+        );
+        await connection.query(
+          `INSERT INTO identity_biometric_credentials
+           (id, user_id, kind, label, device_id, secret_hash, webauthn_credential_id, public_key)
+           VALUES ($1, $2, 'DEVICE', 'Celular', 'legacy-team', repeat('a', 64), NULL, NULL),
+                  ($3, $2, 'WEBAUTHN', 'Web', NULL, NULL, $3::uuid::text, decode('0102', 'hex'))`,
+          [legacyTeam, ownerId, webTeam],
+        );
+        await connection.query(
+          `INSERT INTO customer_portal_biometric_credentials
+           (id, organization_id, customer_id, portal_identity_id, kind, label, device_id, secret_hash, webauthn_credential_id, public_key)
+           VALUES ($1, $2, $3, $4, 'DEVICE', 'Celular', 'legacy-portal', repeat('b', 64), NULL, NULL),
+                  ($5, $2, $3, $4, 'WEBAUTHN', 'Web', NULL, NULL, $5::uuid::text, decode('0304', 'hex'))`,
+          [legacyPortal, organizationId, customerId, identityId, webPortal],
+        );
+        await connection.query(sql.replace(/^BEGIN;|COMMIT;\s*$/g, ''));
+        const result = await connection.query(
+          `SELECT kind, revoked_at IS NOT NULL AS revoked, secret_hash IS NULL AS cleared, encode(public_key, 'hex') AS key
+             FROM identity_biometric_credentials WHERE id IN ($1, $2)
+           UNION ALL
+           SELECT kind, revoked_at IS NOT NULL, secret_hash IS NULL, encode(public_key, 'hex')
+             FROM customer_portal_biometric_credentials WHERE id IN ($3, $4)
+           ORDER BY key`,
+          [legacyTeam, webTeam, legacyPortal, webPortal],
+        );
+        expect(result.rows.filter((row) => row.kind === 'DEVICE')).toEqual(
+          Array.from({ length: 2 }, () => ({
+            kind: 'DEVICE',
+            revoked: true,
+            cleared: true,
+            key: null,
+          })),
+        );
+        expect(result.rows.filter((row) => row.kind === 'WEBAUTHN')).toEqual([
+          { kind: 'WEBAUTHN', revoked: false, cleared: true, key: '0102' },
+          { kind: 'WEBAUTHN', revoked: false, cleared: true, key: '0304' },
+        ]);
+      } finally {
+        await connection.query('ROLLBACK');
+        await connection.end();
+      }
+    });
+
+    it('equipe: valida assinatura, impede reuso concorrente e substitui a chave', async () => {
+      const enrolled = await enroll('team', 'device-owner-0001');
+      const { credentialId } = enrolled;
       const stored = await prisma.identityBiometricCredential.findUniqueOrThrow(
         {
-          where: { id: enrolled.credentialId },
+          where: { id: credentialId },
         },
       );
-      expect(stored.secretHash).not.toContain(enrolled.secret);
-
-      const first = data(
-        await api()
-          .post('/api/v1/identity/biometrics/devices/login')
-          .send({
-            credentialId: enrolled.credentialId,
-            secret: enrolled.secret,
-            deviceId: 'device-owner-0001',
-          })
-          .expect(200),
+      expect(Buffer.from(stored.publicKey!).toString('base64url')).toBe(
+        enrolled.publicKey,
       );
-      expect(first.accessToken).toBeTruthy();
-      expect(first.deviceSecret).not.toBe(enrolled.secret);
+      expect(stored.secretHash).toBeNull();
 
-      /* O segredo usado não vale mais; o novo vale. */
+      const options = await loginOptions(teamAuth, credentialId);
       await api()
-        .post('/api/v1/identity/biometrics/devices/login')
-        .send({ credentialId: enrolled.credentialId, secret: enrolled.secret })
+        .post(teamAuth)
+        .send({ credentialId, ...deviceProofFixture().prove(options) })
         .expect(401);
-      await api()
-        .post('/api/v1/identity/biometrics/devices/login')
-        .send({
-          credentialId: enrolled.credentialId,
-          secret: first.deviceSecret,
-        })
-        .expect(200);
-
-      /* Cadastrar de novo no mesmo aparelho substitui. */
-      const again = data(
-        await bearer(
-          api().post('/api/v1/identity/me/biometrics/devices'),
-          ownerToken,
-        )
-          .set(
-            'x-orbit-security-confirmation',
-            await confirmation('DEVICE_REGISTER'),
-          )
-          .send({ deviceId: 'device-owner-0001' })
-          .expect(201),
+      const body = { credentialId, ...enrolled.prove(options) };
+      const results = await Promise.all([
+        api().post(teamAuth).send(body),
+        api().post(teamAuth).send(body),
+      ]);
+      expect(results.map((result) => result.status).sort()).toEqual([200, 401]);
+      expect(data(results.find((result) => result.status === 200)!)).toEqual(
+        expect.objectContaining({ accessToken: expect.any(String) }),
       );
+      const expired = await loginOptions(teamAuth, credentialId);
+      await prisma.authChallenge.update({
+        where: { id: expired.challengeId },
+        data: { expiresAt: new Date(0) },
+      });
+      await api()
+        .post(teamAuth)
+        .send({ credentialId, ...enrolled.prove(expired) })
+        .expect(401);
+
+      const again = await enroll('team', 'device-owner-0001');
       const list = data(
         await bearer(
           api().get('/api/v1/identity/me/biometrics'),
@@ -397,8 +502,12 @@ describe('Entrar com a biometria (e2e)', () => {
       expect(list.filter((item: any) => item.kind === 'DEVICE')).toHaveLength(
         1,
       );
+      const revoked = await loginOptions(teamAuth, credentialId);
+      await api()
+        .post(teamAuth)
+        .send({ credentialId, ...enrolled.prove(revoked) })
+        .expect(401);
 
-      /* Remover encerra a biometria. */
       await bearer(
         api().delete(`/api/v1/identity/me/biometrics/${again.credentialId}`),
         ownerToken,
@@ -408,42 +517,28 @@ describe('Entrar com a biometria (e2e)', () => {
           await confirmation('BIOMETRIC_REVOKE'),
         )
         .expect(204);
+      const removed = await loginOptions(teamAuth, again.credentialId);
       await api()
-        .post('/api/v1/identity/biometrics/devices/login')
-        .send({ credentialId: again.credentialId, secret: again.secret })
+        .post(teamAuth)
+        .send({ credentialId: again.credentialId, ...again.prove(removed) })
         .expect(401);
     });
 
-    it('cliente: entra como ele mesmo e cai quando o owner mexe no acesso', async () => {
-      const enrolled = data(
-        await bearer(
-          api().post('/api/v1/portal/me/biometrics/devices'),
-          portalToken,
-        )
-          .set(
-            'x-orbit-security-confirmation',
-            await confirmation('DEVICE_REGISTER', 'portal'),
-          )
-          .send({ deviceId: 'device-client-0001', label: 'Android' })
-          .expect(201),
-      );
-      /* Credencial de cliente não serve na porta da equipe. */
+    it('cliente: isola a audiência e invalida o acesso após troca de senha', async () => {
+      const enrolled = await enroll('portal', 'device-client-0001');
+      const { credentialId } = enrolled;
+      const options = await loginOptions(portalAuth, credentialId);
+      const wrongAudience = await loginOptions(teamAuth, credentialId);
       await api()
-        .post('/api/v1/identity/biometrics/devices/login')
-        .send({ credentialId: enrolled.credentialId, secret: enrolled.secret })
+        .post(portalAuth)
+        .send({ credentialId, ...enrolled.prove(wrongAudience) })
         .expect(401);
 
-      const session = data(
-        await api()
-          .post('/api/v1/portal/auth/biometrics/devices/login')
-          .send({
-            credentialId: enrolled.credentialId,
-            secret: enrolled.secret,
-          })
-          .expect(200),
-      );
+      const body = { credentialId, ...enrolled.prove(options) };
+      await api().post(teamAuth).send(body).expect(401);
+      const session = data(await api().post(portalAuth).send(body).expect(200));
       expect(session.me.customer.id).toBe(customerId);
-      expect(session.deviceSecret).not.toBe(enrolled.secret);
+      await api().post(portalAuth).send(body).expect(401);
 
       const list = data(
         await bearer(
@@ -456,19 +551,26 @@ describe('Entrar com a biometria (e2e)', () => {
         'WEBAUTHN',
       ]);
 
-      /* O owner gera uma senha nova: a biometria espera a senha temporária. */
       await bearer(
         api().post(
           `/api/v1/customers/${customerId}/portal/identities/${identityId}/password`,
         ),
         ownerToken,
       ).expect(200);
+      const afterPasswordChange = await loginOptions(portalAuth, credentialId);
       await api()
-        .post('/api/v1/portal/auth/biometrics/devices/login')
-        .send({
-          credentialId: enrolled.credentialId,
-          secret: session.deviceSecret,
-        })
+        .post(portalAuth)
+        .send({ credentialId, ...enrolled.prove(afterPasswordChange) })
+        .expect(401);
+    });
+
+    it.each([
+      '/api/v1/identity/biometrics/devices/login',
+      '/api/v1/portal/auth/biometrics/devices/login',
+    ])('recusa o protocolo antigo de segredo no endpoint %s', async (path) => {
+      await api()
+        .post(path)
+        .send({ credentialId: randomUUID(), secret: 'legacy' })
         .expect(401);
     });
   });

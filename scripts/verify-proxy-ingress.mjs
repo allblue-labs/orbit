@@ -88,6 +88,13 @@ try {
   assert.equal(blocked.headers['retry-after'], '60');
   assert.equal(JSON.parse(blocked.body).error.code, 'RATE_LIMITED');
   assert.ok(blocked.headers['strict-transport-security']);
+  for (const audience of ['identity', 'portal/auth']) {
+    const path = `/api/v1/${audience}/biometrics/devices/authentication/options`;
+    const attempts = await Promise.all(Array.from({ length: 15 }, () => send(path)));
+    const challenge = attempts.find((response) => response.status === 429);
+    assert.ok(challenge);
+    assert.equal(challenge.headers['retry-after'], '60');
+  }
   const capabilityCanary = 'PR09_CAPABILITY_MUST_NOT_BE_LOGGED';
   const malformed = await send('/api/v1/storage/objects?signature=' + capabilityCanary, { 'content-length': 'invalid' });
   assert.equal(malformed.status, 400);

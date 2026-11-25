@@ -11,11 +11,14 @@ import {
   AuthChallengeStore,
   WebAuthnCeremony,
   deviceLabelFrom,
-  deviceSecretMatches,
-  newDeviceSecret,
+  deviceBiometricRefused,
+  issueDeviceChallenge,
   relyingPartyFrom,
   type AuthenticationResponseJSON,
   type RegistrationResponseJSON,
+  type DeviceProof,
+  verifyDeviceRegistration,
+  verifyDeviceLogin,
 } from '../../common/biometrics';
 import type { CustomerPortalSessionReadModel } from './customer-portal.read-models';
 import { CustomerPortalRepository } from './customer-portal.repository';
@@ -193,12 +196,37 @@ export class CustomerPortalBiometricService {
 
   /* ------------------------------ App (aparelho) --------------------------- */
 
+  deviceEnrollmentOptions(actor: CustomerPortalActor) {
+    return issueDeviceChallenge(
+      this.challenges,
+      'PORTAL_DEVICE_REGISTER',
+      actor.sessionId,
+    );
+  }
+
+  deviceLoginOptions(credentialId: string) {
+    return issueDeviceChallenge(
+      this.challenges,
+      'PORTAL_DEVICE_LOGIN',
+      credentialId,
+    );
+  }
+
   async enrollDevice(
     actor: CustomerPortalActor,
-    input: { deviceId: string; label?: string },
+    input: DeviceProof & {
+      deviceId: string;
+      label?: string;
+      publicKey: string;
+    },
     userAgent: string | undefined,
-  ): Promise<{ credentialId: string; secret: string }> {
-    const { secret, hash } = newDeviceSecret();
+  ): Promise<{ credentialId: string }> {
+    const publicKey = await verifyDeviceRegistration(
+      this.challenges,
+      'PORTAL_DEVICE_REGISTER',
+      actor.sessionId,
+      input,
+    );
     const id = this.uuids.generate();
     const saved = await this.repository.registerBiometric({
       identityId: actor.identityId,
@@ -207,39 +235,30 @@ export class CustomerPortalBiometricService {
       kind: 'DEVICE',
       label: deviceLabelFrom(input.label, userAgent),
       deviceId: input.deviceId,
-      secretHash: hash,
+      publicKey,
     });
     if (!saved) throw new UnauthorizedException();
-    return { credentialId: id, secret };
+    return { credentialId: id };
   }
 
   async deviceLogin(
-    input: { credentialId: string; secret: string },
+    input: DeviceProof & { credentialId: string },
     metadata: PortalRequestMetadata,
-  ): Promise<CustomerPortalSessionReadModel & { deviceSecret: string }> {
+  ): Promise<CustomerPortalSessionReadModel> {
     const credential = await this.repository.findBiometric({
       credentialId: input.credentialId,
     });
-    if (
-      !credential ||
-      credential.kind !== 'DEVICE' ||
-      !credential.secretHash ||
-      !deviceSecretMatches(input.secret, credential.secretHash)
-    )
-      throw refused();
-    const next = newDeviceSecret();
-    if (
-      !(await this.repository.useBiometric(credential.id, {
-        expectedSecretHash: credential.secretHash,
-        newSecretHash: next.hash,
-      }))
-    )
-      throw refused();
-    const session = await this.portal.openVerifiedSession(
-      credential.identityId,
-      metadata,
+    if (!credential || credential.kind !== 'DEVICE' || !credential.publicKey)
+      throw deviceBiometricRefused();
+    await verifyDeviceLogin(
+      this.challenges,
+      'PORTAL_DEVICE_LOGIN',
+      input,
+      credential.publicKey,
     );
-    return { ...session, deviceSecret: next.secret };
+    if (!(await this.repository.useBiometric(credential.id, {})))
+      throw deviceBiometricRefused();
+    return this.portal.openVerifiedSession(credential.identityId, metadata);
   }
 
   private ceremony(): WebAuthnCeremony {

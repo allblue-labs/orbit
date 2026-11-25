@@ -209,9 +209,28 @@ do Nginx verificou sintaxe, cadeia de confiança e 429 com `Retry-After`.
 
 No rollout, aplique a migration de confirmação antes de iniciar a API e
 publique Web e backend da mesma revisão. Distribua o app atualizado para
-que usuários possam cadastrar e remover a biometria. As credenciais
-com cadastro concluído continuam válidas para login. A validação de posse
-com chave não exportável continua no backlog de segurança.
+que usuários possam cadastrar e remover a biometria.
+
+## Biometria vinculada ao aparelho
+
+O Android Keystore e o Secure Enclave do iOS geram a chave privada P-256 no
+aparelho. Cada assinatura exige biometria e a chave é invalidada se o
+conjunto de biometrias mudar. A API guarda apenas a chave pública. A
+assinatura autentica um desafio de cinco minutos, com consumo atômico e um
+escopo por credencial e por audiência. O cadastro continua exigindo a
+confirmação de segurança vinculada à sessão. O servidor verifica a prova
+de posse. A origem em hardware é verificada no app, sem atestação remota.
+[Android Keystore](https://developer.android.com/privacy-and-security/keystore) ·
+[Apple Secure Enclave](https://developer.apple.com/documentation/security/protecting-keys-with-the-secure-enclave) ·
+[Apple biometryCurrentSet](https://developer.apple.com/documentation/security/secaccesscontrolcreateflags/biometrycurrentset)
+
+Aplique a migration ao atualizar a API e publique as novas versões do app.
+A migration revoga as credenciais móveis antigas e apaga seus segredos
+armazenados. Passkeys Web e sessões existentes continuam válidas.
+Usuários do app devem entrar com senha e reativar a biometria uma vez.
+Nos aparelhos sem biometria forte ou chave protegida em hardware, a senha
+continua disponível. O login biométrico móvel mantém o nível de acesso de
+uma sessão móvel comum.
 
 ## Política de conteúdo da Web
 

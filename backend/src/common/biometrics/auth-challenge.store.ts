@@ -7,13 +7,17 @@ export type ChallengePurpose =
   | 'USER_LOGIN'
   | 'PORTAL_REGISTER'
   | 'PORTAL_LOGIN'
+  | 'USER_DEVICE_REGISTER'
+  | 'USER_DEVICE_LOGIN'
+  | 'PORTAL_DEVICE_REGISTER'
+  | 'PORTAL_DEVICE_LOGIN'
   | 'USER_SECURITY_CONFIRMATION'
   | 'PORTAL_SECURITY_CONFIRMATION';
 
 const TTL_MS = 5 * 60_000;
 
 /**
- * Desafios WebAuthn: um uso, cinco minutos.
+ * Desafios de autenticação com validade de cinco minutos e uso único.
  *
  * Ficam no banco, não na memória, para valer com mais de uma réplica. O
  * consumo é um UPDATE condicional: duas respostas para o mesmo desafio, só uma
@@ -23,7 +27,7 @@ const TTL_MS = 5 * 60_000;
 export class AuthChallengeStore {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** Guarda o desafio que a biblioteca gerou nas opções; devolve o id. */
+  /** Persiste o desafio para verificação posterior e devolve seu ID. */
   async issue(
     purpose: ChallengePurpose,
     subjectId: string | null,

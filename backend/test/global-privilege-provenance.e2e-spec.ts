@@ -1,3 +1,4 @@
+import { deviceProofFixture } from './support/device-proof-fixture';
 import {
   Controller,
   Get,
@@ -642,26 +643,35 @@ describe('ORB-NX-01 global privilege provenance (real HTTP / restricted PostgreS
     expect((await probe(renewed.accessToken)).role[0]!.platform).toBe('true');
 
     const deviceId = `mfa-admin-${randomUUID()}`;
-    const device = data<{ credentialId: string; secret: string }>(
+    const key = deviceProofFixture();
+    const registrationPath = '/api/v1/identity/me/biometrics/devices';
+    const authPath = '/api/v1/identity/biometrics/devices/authentication';
+    const enrollmentOptions = data<{ challengeId: string; challenge: string }>(
       await auth(
-        http().post('/api/v1/identity/me/biometrics/devices'),
+        http().post(`${registrationPath}/options`),
         renewed.accessToken,
-      )
+      ).expect(200),
+    );
+    const device = data<{ credentialId: string }>(
+      await auth(http().post(registrationPath), renewed.accessToken)
         .set(
           'x-orbit-security-confirmation',
           await confirm(renewed.accessToken, 'DEVICE_REGISTER', code()),
         )
-        .send({ deviceId })
+        .send({
+          deviceId,
+          publicKey: key.publicKey,
+          ...key.prove(enrollmentOptions),
+        })
         .expect(201),
+    );
+    const loginOptions = data<{ challengeId: string; challenge: string }>(
+      await http().post(`${authPath}/options`).send(device).expect(200),
     );
     const biometric = data<Pair>(
       await http()
-        .post('/api/v1/identity/biometrics/devices/login')
-        .send({
-          credentialId: device.credentialId,
-          secret: device.secret,
-          deviceId,
-        })
+        .post(authPath)
+        .send({ ...device, ...key.prove(loginOptions) })
         .expect(200),
     );
     await auth(
