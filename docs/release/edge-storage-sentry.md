@@ -44,11 +44,13 @@ ORBIT_STATIC_R2_SECRET_ACCESS_KEY=
 ORBIT_STATIC_R2_SESSION_TOKEN=
 ```
 
-Antes de promover um build, publique arquivos de seu digest de frontend. O script confere os hashes registrados no R2 e rejeita sobrescrita de uma chave imutável com conteúdo diferente. Preserve os arquivos de releases ainda elegíveis a rollback.
+Antes de promover um build, gere o manifesto no fluxo de release de produção
+e publique os arquivos de seu digest de frontend. O script confere os hashes
+registrados no R2 e rejeita sobrescrita de uma chave imutável com conteúdo
+diferente. Preserve os arquivos de releases ainda elegíveis a rollback.
+[Build de produção](production-deployment.md#build-reproduzível-e-provenance)
 
 ```bash
-ORBIT_RELEASE_DEPLOYMENT=production ORBIT_BUILD_BACKUP_IMAGE=true \
-  ORBIT_RELEASE_OUTPUT=/caminho/privado/orbit-release bash deploy/staging/bin/build-push.sh
 npm ci --omit=dev --ignore-scripts --prefix backend/ops/backup-node
 bash deploy/production/bin/publish-web-static.sh /caminho/privado/orbit-release/release.json
 ```

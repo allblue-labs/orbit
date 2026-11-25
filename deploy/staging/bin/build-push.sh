@@ -15,6 +15,17 @@ created=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 repository=docker.io/allbluelabs/orbit-api
 output=${ORBIT_RELEASE_OUTPUT:?Informe ORBIT_RELEASE_OUTPUT fora do repositório}
 mkdir -p "$output"
+if [[ $deployment == production ]]; then
+    command -v trivy >/dev/null || { echo 'Instale o Trivy no executor de produção.' >&2; exit 1; }
+    command -v cosign >/dev/null || { echo 'Instale o Cosign no executor de produção.' >&2; exit 1; }
+    signing_key=${ORBIT_RELEASE_SIGNING_KEY:?Informe a referência da chave privada de release}
+    public_key=${ORBIT_RELEASE_PUBLIC_KEY:?Informe o caminho da chave pública confiável de release}
+    [[ -r $public_key ]] || { echo 'Chave pública de release indisponível.' >&2; exit 1; }
+    if [[ -e $output/release.json || -e $output/docker-compose.lock.yml ]]; then
+        echo 'Use um diretório de saída novo para cada release de produção.' >&2
+        exit 1
+    fi
+fi
 # O driver docker clássico não suporta atestações em todos os Docker Desktop.
 # Um builder dedicado evita mudar o builder selecionado de outros projetos.
 builder=${ORBIT_BUILDX_BUILDER:-orbit-staging}
@@ -45,6 +56,40 @@ for component in "${components[@]}"; do
         --build-arg "ORBIT_BUILD_TIME=$created" --tag "$image" \
         --metadata-file "$output/$component.json" --push "$context"
 done
+if [[ $deployment == production ]]; then
+    references=()
+    for component in "${components[@]}"; do
+        digest=$(python3 - "$output/$component.json" <<'PY'
+import json, pathlib, re, sys
+digest = json.loads(pathlib.Path(sys.argv[1]).read_text())['containerimage.digest']
+if not re.fullmatch(r'sha256:[a-f0-9]{64}', digest):
+    raise SystemExit('Digest inválido.')
+print(digest)
+PY
+)
+        reference="$repository@$digest"
+        references+=("$reference")
+        docker buildx imagetools inspect "$reference" \
+            --format '{{ if .SBOM.SPDX }}{{ json .SBOM.SPDX }}{{ else }}{{ json (index .SBOM "linux/amd64").SPDX }}{{ end }}' \
+            > "$output/$component.spdx.json"
+        python3 - "$output/$component.spdx.json" <<'PY'
+import json, pathlib, sys
+inventory = json.loads(pathlib.Path(sys.argv[1]).read_text())
+if not isinstance(inventory, dict) or 'spdxVersion' not in inventory or not inventory.get('packages'):
+    raise SystemExit('SBOM SPDX ausente ou sem inventário de pacotes.')
+PY
+        trivy image --image-src remote --platform linux/amd64 --scanners vuln \
+            --severity HIGH,CRITICAL --exit-code 1 --format json \
+            --output "$output/$component.scan.json" "$reference"
+    done
+    for index in "${!references[@]}"; do
+        reference=${references[$index]}
+        component=${components[$index]}
+        cosign sign --yes --use-signing-config=false --tlog-upload=false --key "$signing_key" "$reference"
+        cosign verify --key "$public_key" --insecure-ignore-tlog "$reference" \
+            > "$output/$component.signature.json"
+    done
+fi
 python3 - "$output" "$repository" "$tag" "$sha" "$created" "${ORBIT_BUILD_BACKUP_IMAGE:-false}" "$deployment" <<'PY'
 import json, pathlib, re, sys
 p=pathlib.Path(sys.argv[1]); repository, tag, sha, created, include_backup, deployment=sys.argv[2:]

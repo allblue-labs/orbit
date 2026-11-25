@@ -82,12 +82,26 @@ Na zona de produção, selecione **Full (strict)**. [Certificados Origin CA](htt
 
 ## Build reproduzível e provenance
 
-Em um checkout limpo, publique as imagens e gere o lock e o manifesto:
+Em um checkout limpo, com Trivy e Cosign v3 instalados no executor de build,
+publique as imagens e gere o lock e o manifesto. Mantenha a chave de assinatura
+em um cofre ou KMS. Use o caminho do arquivo protegido ou a URI do KMS em
+`ORBIT_RELEASE_SIGNING_KEY` e distribua a chave pública por um canal confiável.
 
 ```bash
 ORBIT_RELEASE_DEPLOYMENT=production ORBIT_BUILD_BACKUP_IMAGE=true \
+  ORBIT_RELEASE_SIGNING_KEY=/caminho/seguro/orbit-release.key \
+  ORBIT_RELEASE_PUBLIC_KEY=/caminho/confiavel/orbit-release.pub \
   ORBIT_RELEASE_OUTPUT=/caminho/privado/orbit-release bash deploy/staging/bin/build-push.sh
 ```
+
+O builder só emite o lock depois de verificar o SBOM SPDX, o scan de
+vulnerabilidades altas e críticas e a assinatura de cada digest. Guarde os
+relatórios `*.spdx.json`, `*.scan.json` e `*.signature.json` com a release.
+Com uma chave própria, a assinatura fica no registro privado e não é enviada
+ao log público do Sigstore. A verificação confere o digest com a chave
+pública confiável. [SBOM do BuildKit](https://docs.docker.com/build/metadata/attestations/sbom/) ·
+[Trivy](https://trivy.dev/docs/latest/references/configuration/cli/trivy_image/) ·
+[Cosign](https://docs.sigstore.dev/cosign/verifying/verify/)
 
 Registre digest, `org.opencontainers.image.revision` e
 `org.opencontainers.image.created`. A ausência de qualquer build arg falha
@@ -103,6 +117,18 @@ Em produção use `COMPOSE_FILE=docker-compose.yml:docker-compose.lock.yml` e
 [`../../deploy/staging/README.md`](../../deploy/staging/README.md).
 
 ## Migrate e deploy
+
+No executor de deploy, compare o lock com o manifesto aprovado e valide os
+digests usando a chave pública instalada por um canal independente.
+
+```bash
+set -o pipefail
+jq -er '.images[].digest' release.json | sort -u | while IFS= read -r image; do
+  cosign verify --key /caminho/confiavel/orbit-release.pub --insecure-ignore-tlog "$image" || exit 1
+done
+```
+
+Com as assinaturas aprovadas, aplique as migrations e suba os serviços.
 
 ```bash
 docker compose run --rm migrate
