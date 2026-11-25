@@ -227,3 +227,12 @@ para páginas HTML. Arquivos estáticos continuam no cache da CDN.
 Passaram 30 testes de navegador, incluindo nonce novo por resposta, login,
 MFA, leitura de termos, cadastro e cobrança. Também passaram seis smokes
 das dependências Web.
+
+## Atualização da cadeia de dependências
+
+Os lockfiles passaram a resolver as faixas afetadas de `glob` e
+`minimatch` para `14.0.6` e `11.0.9`. As exceções antigas foram
+retiradas após a auditoria completa ficar zerada nos dois projetos.
+O builder solicita SBOM junto à proveniência nos builds marcados como
+produção. O aceite final ainda exige conferir o inventário, o scan e
+a assinatura dos digests realmente publicados.

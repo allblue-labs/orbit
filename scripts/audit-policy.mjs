@@ -130,7 +130,11 @@ if (
         project,
         full: full.metadata?.vulnerabilities,
         production: production.metadata?.vulnerabilities,
-        reviewedUntil: "2026-11-26",
+        reviewedUntil:
+          exceptions
+            .filter((exception) => exception.project === project)
+            .map((exception) => exception.expiresOn)
+            .sort()[0] ?? null,
         errors,
       },
       null,

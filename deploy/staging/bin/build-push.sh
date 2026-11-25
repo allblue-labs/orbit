@@ -33,6 +33,9 @@ for component in "${components[@]}"; do
     esac
     image="$repository:$tag-$component"
     build_args=(--target "$target")
+    if [[ $deployment == production ]]; then
+        build_args+=(--sbom=true)
+    fi
     if [[ $component == frontend ]]; then
         build_args+=(--build-arg NEXT_PUBLIC_SENTRY_DSN --build-arg NEXT_PUBLIC_SENTRY_ENVIRONMENT)
     fi
