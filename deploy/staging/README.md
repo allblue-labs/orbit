@@ -302,7 +302,7 @@ do `.env` do staging. `docker compose down -v` remove o volume junto com o
 banco. Para atualizar a release, use `bin/deploy.sh`.
 
 Se o banco de staging já usa R2, importe os bytes uma única vez. O job coleta
-referências do banco `orbit_staging`, baixa apenas os objetos correspondentes,
+referências do banco de staging confirmado pelo operador, baixa apenas os objetos correspondentes,
 verifica a integridade e preserva chaves, hashes e IDs. Faça a importação com
 os processos Orbit parados e o PostgreSQL ativo. Crie um arquivo temporário
 `0600` fora da stack contendo `ORBIT_IMPORT_R2_ENDPOINT`,
@@ -314,6 +314,7 @@ após a transição.
 cd /opt/stacks/orbit
 docker compose stop api worker documents
 ORBIT_API_IMAGE='docker.io/allbluelabs/orbit-api@sha256:<digest-api>' \
+  ORBIT_STAGING_IMPORT_DATABASE='<nome exato do banco de staging>' \
   ORBIT_STAGING_IMPORT_ENV_FILE=/caminho/privado/staging-import.env \
   docker compose -f docker-compose.yml -f docker-compose.lock.yml \
     -f docker-compose.staging.yml -f docker-compose.staging-import.yml \

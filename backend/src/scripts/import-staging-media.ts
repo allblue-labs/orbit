@@ -41,10 +41,13 @@ const references = `
 async function main() {
   const connectionString = directDatabaseUrl();
   const database = new URL(connectionString);
+  const expectedDatabase = process.env.ORBIT_STAGING_IMPORT_DATABASE;
   if (
     process.env.ORBIT_DEPLOYMENT !== 'staging' ||
     database.hostname !== 'postgres' ||
-    database.pathname !== '/orbit_staging'
+    !expectedDatabase ||
+    !/^[a-zA-Z0-9_]+$/.test(expectedDatabase) ||
+    database.pathname !== `/${expectedDatabase}`
   )
     throw new Error('staging_database_required');
 
