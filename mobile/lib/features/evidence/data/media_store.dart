@@ -18,6 +18,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../../core/storage/offline_data.dart';
 import '../../sync/data/command_journal.dart' show CommandScope;
 import '../../sync/data/journal_file.dart';
 import '../../sync/data/local_queue_recovery.dart';
@@ -62,19 +63,13 @@ class DocumentsMediaFileStore implements MediaFileStore {
     final directory = await _dir();
     final file = File('${directory.path}/$localMediaId$extension');
 
-    /// Grava num temporário e renomeia: um arquivo pela metade no lugar do
-    /// definitivo seria uma evidência corrompida que só falharia no envio.
-    final temporary = File('${file.path}.tmp');
-    await temporary.writeAsBytes(bytes, flush: true);
-    await temporary.rename(file.path);
+    await OfflineDataFile(file, scope: 'evidence').write(bytes);
     return file.path;
   }
 
   @override
-  Future<Uint8List?> read(String path) async {
-    final file = File(path);
-    return await file.exists() ? file.readAsBytes() : null;
-  }
+  Future<Uint8List?> read(String path) =>
+      OfflineDataFile(File(path), scope: 'evidence').read();
 
   @override
   Future<bool> exists(String path) => File(path).exists();

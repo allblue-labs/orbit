@@ -7,8 +7,39 @@ import UIKit
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    configureOfflineDataDirectories()
     PushBridge.shared.configureFirebase()
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  private func configureOfflineDataDirectories() {
+    let files = FileManager.default
+    for (location, subdirectory) in [
+      (FileManager.SearchPathDirectory.documentDirectory, "orbit"),
+      (.applicationSupportDirectory, "")
+    ] {
+      do {
+        var directory = try files.url(
+          for: location, in: .userDomainMask, appropriateFor: nil, create: true
+        )
+        if !subdirectory.isEmpty {
+          directory = directory.appendingPathComponent(subdirectory, isDirectory: true)
+        }
+        try files.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        var attributes = URLResourceValues()
+        attributes.isExcludedFromBackup = true
+        try directory.setResourceValues(attributes)
+        // Preserve synchronization after the first unlock, including when the
+        // operator has since locked the screen.
+        try files.setAttributes(
+          [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+          ofItemAtPath: directory.path
+        )
+      } catch {
+        NSLog("[orbit] offline directory protection setup failed")
+      }
+    }
   }
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {

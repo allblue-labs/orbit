@@ -211,8 +211,7 @@ No rollout, aplique a migration de confirmação antes de iniciar a API e
 publique Web e backend da mesma revisão. Distribua o app atualizado para
 que usuários possam cadastrar e remover a biometria. As credenciais
 com cadastro concluído continuam válidas para login. A validação de posse
-com chave não exportável, a proteção de dados offline, a CSP e a
-qualificação da cadeia de distribuição permanecem no backlog de segurança.
+com chave não exportável continua no backlog de segurança.
 
 ## Política de conteúdo da Web
 
@@ -233,6 +232,35 @@ das dependências Web.
 Os lockfiles passaram a resolver as faixas afetadas de `glob` e
 `minimatch` para `14.0.6` e `11.0.9`. As exceções antigas foram
 retiradas após a auditoria completa ficar zerada nos dois projetos.
-O builder solicita SBOM junto à proveniência nos builds marcados como
-produção. O aceite final ainda exige conferir o inventário, o scan e
-a assinatura dos digests realmente publicados.
+O builder de produção exige SBOM SPDX, scan de vulnerabilidades altas e
+críticas e assinatura com verificação por digest antes de gerar o lock de
+deploy. O ensaio com ferramentas simuladas confirmou que falhas em
+qualquer etapa impedem a emissão do lock. O aceite final exige executar
+esse gate com as credenciais de release e inventariar as dependências
+nativas dos binários mobile.
+[Runbook de produção](production-deployment.md#build-reproduzível-e-provenance)
+
+## Proteção dos dados offline no app
+
+O cache operacional, as filas, as projeções locais, as evidências e os novos
+arquivos de recuperação usam AES-256-GCM. A chave fica no armazenamento seguro
+do dispositivo. A autenticação do conteúdo usa o escopo da entrada de cache
+ou a finalidade e o nome do arquivo. Arquivos ativos escritos por versões
+anteriores são migrados ao ler, com substituição atômica. Uma falha de chave
+ou de gravação preserva o original para uma tentativa futura. A versão
+descarta o cache operacional em texto aberto, cuja cópia é recuperável online.
+O cache atual expira depois de 24 horas e é limpo quando a sessão é encerrada.
+
+No iOS, `Documents/orbit` e `Application Support` recebem exclusão de backup
+e proteção de arquivo até o primeiro desbloqueio após ligar o aparelho. A
+fila pode sincronizar depois desse desbloqueio, inclusive com a tela bloqueada.
+No Android, continuam valendo as exclusões de backup e transferência. Arquivos
+legados inativos continuam sujeitos à migração sob demanda. O aceite mobile
+em produção exige repetir em aparelhos reais a troca de conta, a atualização
+com evidência ainda pendente, o bloqueio do aparelho e a restauração de backup.
+Passaram a análise Flutter, 1.376 testes da suíte local, 61 testes de
+regressão e o build do iOS para simulador. A regressão inclui migração
+concorrente, dados adulterados, cache de outro usuário e falha temporária
+de acesso à chave.
+[Armazenamento Apple](https://developer.apple.com/documentation/foundation/using-the-file-system-effectively) ·
+[Cifragem autenticada](https://pub.dev/packages/cryptography/versions/2.9.0)

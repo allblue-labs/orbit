@@ -29,6 +29,7 @@ class SessionRuntime {
   }) {
     final environment = root.read(environmentProvider);
     final preferences = root.read(sharedPreferencesProvider);
+    final projection = root.read(syncProjectionProvider);
     scopeKey = sha256
         .convert(
           utf8.encode(
@@ -43,7 +44,11 @@ class SessionRuntime {
         .toString();
     final client = root.read(apiClientProvider).scoped();
     if (session == null) client.closeScope();
-    final cache = PreferencesReadCache(preferences, namespace: scopeKey);
+    final cache = PreferencesReadCache(
+      preferences,
+      namespace: scopeKey,
+      cipher: root.read(offlineDataCipherProvider),
+    );
     if (session == null) cache.close();
     final files = TemporaryDocumentFileStore(scopeKey: scopeKey);
     if (session == null) files.close();
@@ -59,8 +64,7 @@ class SessionRuntime {
           session.businessUnitId ?? 'sem-unidade',
         ].join('.');
         unawaited(
-          root
-              .read(syncProjectionProvider)
+          projection
               .resetScope(projectionScope)
               .then<void>((_) {})
               .catchError((Object _) {}),
@@ -85,9 +89,7 @@ class SessionRuntime {
         commandJournalProvider.overrideWithValue(
           root.read(commandJournalProvider),
         ),
-        syncProjectionProvider.overrideWithValue(
-          root.read(syncProjectionProvider),
-        ),
+        syncProjectionProvider.overrideWithValue(projection),
         mediaQueueProvider.overrideWithValue(root.read(mediaQueueProvider)),
         authRepositoryProvider.overrideWithValue(
           root.read(authRepositoryProvider),

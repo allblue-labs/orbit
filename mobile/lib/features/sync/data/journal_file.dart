@@ -13,6 +13,8 @@ import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
 
+import '../../../core/storage/offline_data.dart';
+
 abstract interface class JournalFile {
   Future<String?> read();
   Future<void> write(String contents);
@@ -38,16 +40,14 @@ class DocumentsJournalFile implements JournalFile {
   @override
   Future<String?> read() async {
     final file = await _file();
-    if (!await file.exists()) return null;
-    return file.readAsString(encoding: utf8);
+    final bytes = await OfflineDataFile(file, scope: 'journal').read();
+    return bytes == null ? null : utf8.decode(bytes);
   }
 
   @override
   Future<void> write(String contents) async {
     final file = await _file();
-    final temporary = File('${file.path}.tmp');
-    await temporary.writeAsString(contents, encoding: utf8, flush: true);
-    await temporary.rename(file.path);
+    await OfflineDataFile(file, scope: 'journal').write(utf8.encode(contents));
   }
 
   @override

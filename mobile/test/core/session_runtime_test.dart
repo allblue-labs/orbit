@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cryptography/cryptography.dart';
 import 'package:orbit_operator/features/customer_portal/application/portal_session.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -15,6 +16,7 @@ import 'package:orbit_operator/core/errors/orbit_exception.dart';
 import 'package:orbit_operator/core/network/connectivity_monitor.dart';
 import 'package:orbit_operator/core/network/orbit_api_client.dart';
 import 'package:orbit_operator/core/observability/orbit_logger.dart';
+import 'package:orbit_operator/core/storage/offline_data.dart';
 import 'package:orbit_operator/core/storage/read_cache.dart';
 import 'package:orbit_operator/core/storage/token_storage.dart';
 import 'package:orbit_operator/core/push/push_channel.dart';
@@ -180,6 +182,11 @@ void main() {
            como o da equipe. */
         portalTokenStorageProvider.overrideWithValue(InMemoryTokenStorage()),
         sharedPreferencesProvider.overrideWithValue(preferences),
+        offlineDataCipherProvider.overrideWithValue(
+          OfflineDataCipher(
+            loadKey: () async => SecretKey(List<int>.filled(32, 7)),
+          ),
+        ),
         connectivityProvider.overrideWithValue(OfflineConnectivity()),
         authControllerProvider.overrideWith((_) => auth),
         pushTokenSourceProvider.overrideWithValue(
@@ -548,17 +555,19 @@ void main() {
     },
   );
 
-  test('cache legado sem proprietário é descartado', () async {
+  test('cache legado em texto aberto é descartado', () async {
     await preferences.setString('orbit.cache.operations', 'old-private-data');
     await preferences.setString(
       'orbit.cache.v2.owner.operations',
       'scoped-data',
     );
+    await preferences.setString('orbit.cache.v3.owner.operations', 'encrypted');
     await PreferencesReadCache.purgeLegacy(preferences);
     expect(preferences.getString('orbit.cache.operations'), isNull);
+    expect(preferences.getString('orbit.cache.v2.owner.operations'), isNull);
     expect(
-      preferences.getString('orbit.cache.v2.owner.operations'),
-      'scoped-data',
+      preferences.getString('orbit.cache.v3.owner.operations'),
+      'encrypted',
     );
   });
 

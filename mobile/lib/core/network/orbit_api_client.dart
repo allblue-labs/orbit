@@ -284,7 +284,7 @@ class OrbitApiClient {
   /// sobe — é o que alimenta a barra na tela.
   Future<T> upload<T>(
     String path, {
-    required String filePath,
+    required List<int> bytes,
     required String fileName,
     required String mimeType,
     CancelToken? cancelToken,
@@ -293,8 +293,8 @@ class OrbitApiClient {
     checkSession();
     final generation = authenticator.generation;
     final form = FormData.fromMap({
-      'file': await MultipartFile.fromFile(
-        filePath,
+      'file': MultipartFile.fromBytes(
+        bytes,
         filename: fileName,
         contentType: DioMediaType.parse(mimeType),
       ),
