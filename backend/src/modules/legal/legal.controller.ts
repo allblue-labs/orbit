@@ -22,6 +22,11 @@ export class LegalController {
       margin: 50,
       info: { Title: document.title, Author: document.provider.name },
     });
+    const effectiveAt = [
+      document.effectiveAt.slice(8, 10),
+      document.effectiveAt.slice(5, 7),
+      document.effectiveAt.slice(0, 4),
+    ].join('/');
     const buffer = new Promise<Buffer>((resolve, reject) => {
       const chunks: Buffer[] = [];
       pdf.on('data', (chunk: Buffer) => chunks.push(chunk));
@@ -32,7 +37,7 @@ export class LegalController {
     pdf
       .fontSize(10)
       .fillColor('#555555')
-      .text(`Versão ${document.version} | Vigência: 23/10/2026`);
+      .text(`Versão ${document.version} | Vigência: ${effectiveAt}`);
     pdf.text(`${document.provider.name} | CNPJ ${document.provider.document}`);
     pdf.text(document.provider.location);
     if (document.provider.privacyEmail)

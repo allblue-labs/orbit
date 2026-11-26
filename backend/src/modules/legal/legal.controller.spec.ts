@@ -1,3 +1,4 @@
+import PDFDocument from 'pdfkit';
 import { LegalController } from './legal.controller';
 import { LEGAL_DOCUMENT_VERSION } from '../../contracts/modules/legal/legal.read-models';
 import { LegalAcceptanceController } from './legal-acceptance.controller';
@@ -30,6 +31,23 @@ describe('documentos públicos e aceite do Orbit', () => {
       expect(result.getHeaders().disposition).toContain('attachment');
     },
   );
+  it('usa a vigência canônica do documento no PDF', async () => {
+    const document = controller.document('termos');
+    const effectiveAt = [
+      document.effectiveAt.slice(8, 10),
+      document.effectiveAt.slice(5, 7),
+      document.effectiveAt.slice(0, 4),
+    ].join('/');
+    const text = jest.spyOn(PDFDocument.prototype, 'text');
+    try {
+      await controller.download('termos');
+      expect(text).toHaveBeenCalledWith(
+        `Versão ${document.version} | Vigência: ${effectiveAt}`,
+      );
+    } finally {
+      text.mockRestore();
+    }
+  });
   it('não aceita nome de arquivo arbitrário', () => {
     expect(() => controller.document('../../.env')).toThrow();
   });
