@@ -3,7 +3,7 @@
   "info": {
     "title": "Orbit Corporate Administration",
     "version": "1.0.0",
-    "description": "API opt-in de administração corporativa, com autenticação técnica por ambiente e HTTPS. Os endpoints de conexão preservam o contrato ADM-01.A."
+    "description": "API opt-in de administração corporativa, com autenticação técnica por ambiente e HTTPS. Inclui cadastro, provisionamento retomável e ciclo operacional. Os endpoints de conexão mantêm o contrato ADM-01.A."
   },
   "servers": [
     {
@@ -433,6 +433,187 @@
             "$ref": "#/components/responses/Unavailable"
           }
         }
+      },
+      "post": {
+        "operationId": "corporateAdminProvisionTenant",
+        "summary": "Provisiona a organização e o primeiro proprietário",
+        "tags": [
+          "Administração corporativa"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/RequiredNexusAdministratorId"
+          },
+          {
+            "$ref": "#/components/parameters/ProvisionIdempotency"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Operação local confirmada.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorporateProvisioningResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "id": "018fed15-f0ea-7e1c-8da0-99da998368d3",
+                    "status": "COMPLETED",
+                    "complete": true,
+                    "version": 4,
+                    "attempts": 0,
+                    "lastErrorCode": null,
+                    "nextAction": null,
+                    "requestedPlanCode": "PROFESSIONAL",
+                    "requestedBillingInterval": "MONTHLY",
+                    "createdAt": "2026-11-26T16:00:00.000Z",
+                    "updatedAt": "2026-11-26T16:00:00.000Z",
+                    "completedAt": "2026-11-26T16:00:00.000Z",
+                    "organization": {
+                      "id": "018fed15-f0ea-7d7f-aa28-846145f70764",
+                      "status": "ACTIVE",
+                      "updatedAt": "2026-11-26T16:00:00.000Z"
+                    },
+                    "subscription": {
+                      "planCode": "PROFESSIONAL",
+                      "status": "PENDING_PAYMENT",
+                      "effectivePlanCode": "PROFESSIONAL",
+                      "effectiveStatus": "PENDING_PAYMENT",
+                      "accessGranted": false,
+                      "trialStartsAt": null,
+                      "trialEndsAt": null
+                    },
+                    "ownerSetup": "QUEUED"
+                  },
+                  "requestId": "e2b06693-0788-43a9-bf10-38af5b94e660",
+                  "timestamp": "2026-11-26T16:00:00.000Z"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Provisionamento parcial. Consulte o estágio e a próxima ação.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorporateProvisioningResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "id": "018fed15-f0ea-7e1c-8da0-99da998368d3",
+                    "status": "TENANT_CREATED",
+                    "complete": false,
+                    "version": 3,
+                    "attempts": 1,
+                    "lastErrorCode": "CANONICAL_PROVISIONING_PENDING",
+                    "nextAction": "RESUME",
+                    "requestedPlanCode": "PROFESSIONAL",
+                    "requestedBillingInterval": "MONTHLY",
+                    "createdAt": "2026-11-26T16:00:00.000Z",
+                    "updatedAt": "2026-11-26T16:00:00.000Z",
+                    "completedAt": null,
+                    "organization": {
+                      "id": "018fed15-f0ea-7d7f-aa28-846145f70764",
+                      "status": "ACTIVE",
+                      "updatedAt": "2026-11-26T16:00:00.000Z"
+                    },
+                    "subscription": null,
+                    "ownerSetup": "NOT_QUEUED"
+                  },
+                  "requestId": "e2b06693-0788-43a9-bf10-38af5b94e660",
+                  "timestamp": "2026-11-26T16:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/CorporateValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "409": {
+            "$ref": "#/components/responses/CorporateLifecycleConflict"
+          }
+        },
+        "x-required-capability": "organizations:provision",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CorporateProvisionOrganization"
+              },
+              "example": {
+                "organizationName": "Arco Climatização",
+                "primarySegment": "HVAC_R",
+                "planKey": "PROFESSIONAL",
+                "owner": {
+                  "email": "administrativo@example.test",
+                  "firstName": "Ana",
+                  "lastName": "Exemplo"
+                },
+                "primaryBusinessUnit": {
+                  "legalName": "Arco Climatização Ltda.",
+                  "documentType": "CNPJ",
+                  "documentNumber": "12.345.678/0001-95",
+                  "city": "Recife",
+                  "street": "Rua Exemplo",
+                  "stateCode": "PE"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/corporate-admin/organizations/{id}": {
@@ -652,6 +833,369 @@
           }
         }
       }
+    },
+    "/api/v1/corporate-admin/tenant-provisionings/{id}": {
+      "get": {
+        "operationId": "corporateAdminReadProvisioning",
+        "summary": "Consulta um provisionamento do mesmo principal técnico",
+        "tags": [
+          "Administração corporativa"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/ProvisioningId"
+          },
+          {
+            "$ref": "#/components/parameters/NexusAdministratorId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Consulta ou retomada confirmada.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorporateProvisioningResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "id": "018fed15-f0ea-7e1c-8da0-99da998368d3",
+                    "status": "TENANT_CREATED",
+                    "complete": false,
+                    "version": 3,
+                    "attempts": 1,
+                    "lastErrorCode": "CANONICAL_PROVISIONING_PENDING",
+                    "nextAction": "RESUME",
+                    "requestedPlanCode": "PROFESSIONAL",
+                    "requestedBillingInterval": "MONTHLY",
+                    "createdAt": "2026-11-26T16:00:00.000Z",
+                    "updatedAt": "2026-11-26T16:00:00.000Z",
+                    "completedAt": null,
+                    "organization": {
+                      "id": "018fed15-f0ea-7d7f-aa28-846145f70764",
+                      "status": "ACTIVE",
+                      "updatedAt": "2026-11-26T16:00:00.000Z"
+                    },
+                    "subscription": null,
+                    "ownerSetup": "NOT_QUEUED"
+                  },
+                  "requestId": "e2b06693-0788-43a9-bf10-38af5b94e660",
+                  "timestamp": "2026-11-26T16:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/CorporateValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/CorporateProvisioningNotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-required-capability": "organizations:provisioning:read"
+      }
+    },
+    "/api/v1/corporate-admin/tenant-provisionings/{id}/resume": {
+      "post": {
+        "operationId": "corporateAdminResumeProvisioning",
+        "summary": "Retoma um provisionamento pelos checkpoints persistidos",
+        "tags": [
+          "Administração corporativa"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/ProvisioningId"
+          },
+          {
+            "$ref": "#/components/parameters/RequiredNexusAdministratorId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Consulta ou retomada confirmada.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorporateProvisioningResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "id": "018fed15-f0ea-7e1c-8da0-99da998368d3",
+                    "status": "COMPLETED",
+                    "complete": true,
+                    "version": 4,
+                    "attempts": 0,
+                    "lastErrorCode": null,
+                    "nextAction": null,
+                    "requestedPlanCode": "PROFESSIONAL",
+                    "requestedBillingInterval": "MONTHLY",
+                    "createdAt": "2026-11-26T16:00:00.000Z",
+                    "updatedAt": "2026-11-26T16:00:00.000Z",
+                    "completedAt": "2026-11-26T16:00:00.000Z",
+                    "organization": {
+                      "id": "018fed15-f0ea-7d7f-aa28-846145f70764",
+                      "status": "ACTIVE",
+                      "updatedAt": "2026-11-26T16:00:00.000Z"
+                    },
+                    "subscription": {
+                      "planCode": "PROFESSIONAL",
+                      "status": "PENDING_PAYMENT",
+                      "effectivePlanCode": "PROFESSIONAL",
+                      "effectiveStatus": "PENDING_PAYMENT",
+                      "accessGranted": false,
+                      "trialStartsAt": null,
+                      "trialEndsAt": null
+                    },
+                    "ownerSetup": "QUEUED"
+                  },
+                  "requestId": "e2b06693-0788-43a9-bf10-38af5b94e660",
+                  "timestamp": "2026-11-26T16:00:00.000Z"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Provisionamento parcial. Consulte o estágio e a próxima ação.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorporateProvisioningResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "id": "018fed15-f0ea-7e1c-8da0-99da998368d3",
+                    "status": "TENANT_CREATED",
+                    "complete": false,
+                    "version": 3,
+                    "attempts": 1,
+                    "lastErrorCode": "CANONICAL_PROVISIONING_PENDING",
+                    "nextAction": "RESUME",
+                    "requestedPlanCode": "PROFESSIONAL",
+                    "requestedBillingInterval": "MONTHLY",
+                    "createdAt": "2026-11-26T16:00:00.000Z",
+                    "updatedAt": "2026-11-26T16:00:00.000Z",
+                    "completedAt": null,
+                    "organization": {
+                      "id": "018fed15-f0ea-7d7f-aa28-846145f70764",
+                      "status": "ACTIVE",
+                      "updatedAt": "2026-11-26T16:00:00.000Z"
+                    },
+                    "subscription": null,
+                    "ownerSetup": "NOT_QUEUED"
+                  },
+                  "requestId": "e2b06693-0788-43a9-bf10-38af5b94e660",
+                  "timestamp": "2026-11-26T16:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/CorporateValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/CorporateProvisioningNotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-required-capability": "organizations:provision"
+      }
+    },
+    "/api/v1/corporate-admin/organizations/{id}/operational-status": {
+      "post": {
+        "operationId": "corporateAdminChangeOperationalStatus",
+        "summary": "Suspende ou reativa o acesso operacional",
+        "tags": [
+          "Administração corporativa"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/OperationalOrganizationId"
+          },
+          {
+            "$ref": "#/components/parameters/RequiredNexusAdministratorId"
+          },
+          {
+            "$ref": "#/components/parameters/OperationalIdempotency"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Operação local confirmada.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorporateOperationalResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "decisionId": "018fed15-f0ea-7ff1-ad52-ddbf8c091b83",
+                    "replayed": false,
+                    "decision": {
+                      "organizationId": "018fed15-f0ea-7d7f-aa28-846145f70764",
+                      "previousStatus": "ACTIVE",
+                      "status": "SUSPENDED",
+                      "reason": "ADMINISTRATIVE",
+                      "updatedAt": "2026-11-26T16:01:00.000Z",
+                      "decidedAt": "2026-11-26T16:01:00.000Z",
+                      "effectiveAt": "2026-11-26T16:01:00.000Z",
+                      "expiresAt": null,
+                      "result": "APPLIED",
+                      "operationalOnly": true
+                    },
+                    "current": {
+                      "status": "SUSPENDED",
+                      "updatedAt": "2026-11-26T16:01:00.000Z"
+                    }
+                  },
+                  "requestId": "e2b06693-0788-43a9-bf10-38af5b94e660",
+                  "timestamp": "2026-11-26T16:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/CorporateValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/CorporateOrganizationNotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "409": {
+            "$ref": "#/components/responses/CorporateLifecycleConflict"
+          }
+        },
+        "x-required-capability-by-status": {
+          "SUSPENDED": "organizations:suspend",
+          "ACTIVE": "organizations:reactivate"
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CorporateOperationalChange"
+              },
+              "example": {
+                "status": "SUSPENDED",
+                "reason": "ADMINISTRATIVE",
+                "expectedUpdatedAt": "2026-11-26T16:00:00.000Z"
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -703,6 +1247,48 @@
         },
         "description": "Referência declarada ao administrador do Nexus. Registrada para auditoria e sem efeito sobre autenticação ou autorização.",
         "example": "e2b06693-0788-43a9-bf10-38af5b94e660"
+      },
+      "ProvisioningId": {
+        "in": "path",
+        "name": "id",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "description": "UUID v7 do provisionamento da credencial técnica."
+      },
+      "OperationalOrganizationId": {
+        "in": "path",
+        "name": "id",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "description": "UUID v7 da organização."
+      },
+      "ProvisionIdempotency": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": true,
+        "description": "Chave do provisionamento, vinculada ao principal técnico e ao conteúdo normalizado.",
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9._:-]{1,128}$"
+        },
+        "example": "6a3508be-21e2-4edc-84a0-0ae87fc6ede8"
+      },
+      "OperationalIdempotency": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": true,
+        "description": "Chave vinculada à organização, ao principal técnico e ao comando.",
+        "schema": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{16,120}$"
+        },
+        "example": "6a3508be-21e2-4edc-84a0-0ae87fc6ede8"
       }
     },
     "schemas": {
@@ -1376,6 +1962,526 @@
             }
           }
         ]
+      },
+      "CorporateTenantOwner": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "firstName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "lastName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          }
+        },
+        "required": [
+          "email",
+          "firstName",
+          "lastName"
+        ],
+        "additionalProperties": false
+      },
+      "CorporateInitialBusinessUnit": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "HEADQUARTERS",
+              "BRANCH",
+              "DEPARTMENT",
+              "SITE"
+            ],
+            "default": "HEADQUARTERS"
+          },
+          "legalName": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 255
+          },
+          "documentType": {
+            "type": "string",
+            "enum": [
+              "CPF",
+              "CNPJ"
+            ]
+          },
+          "documentNumber": {
+            "type": "string",
+            "description": "CPF ou CNPJ válido. Pode ser enviado com máscara."
+          },
+          "city": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 160
+          },
+          "street": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 255
+          },
+          "stateCode": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 2
+          }
+        },
+        "required": [
+          "legalName",
+          "documentType",
+          "documentNumber",
+          "city",
+          "street",
+          "stateCode"
+        ],
+        "additionalProperties": false
+      },
+      "CorporateProvisionOrganization": {
+        "type": "object",
+        "properties": {
+          "organizationName": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 180
+          },
+          "primarySegment": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 60
+          },
+          "planKey": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 40
+          },
+          "billingInterval": {
+            "type": "string",
+            "enum": [
+              "MONTHLY",
+              "SEMIANNUAL",
+              "ANNUAL"
+            ],
+            "default": "MONTHLY"
+          },
+          "owner": {
+            "$ref": "#/components/schemas/CorporateTenantOwner"
+          },
+          "primaryBusinessUnit": {
+            "$ref": "#/components/schemas/CorporateInitialBusinessUnit"
+          }
+        },
+        "required": [
+          "organizationName",
+          "primarySegment",
+          "planKey",
+          "owner",
+          "primaryBusinessUnit"
+        ],
+        "additionalProperties": false
+      },
+      "CorporateProvisioning": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "RECEIVED",
+              "TENANT_CREATED",
+              "SUBSCRIPTION_READY",
+              "COMPLETED"
+            ]
+          },
+          "complete": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "attempts": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lastErrorCode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "nextAction": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "RESUBMIT_ORIGINAL_REQUEST",
+                  "RESUME"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "requestedPlanCode": {
+            "type": "string"
+          },
+          "requestedBillingInterval": {
+            "type": "string",
+            "enum": [
+              "MONTHLY",
+              "SEMIANNUAL",
+              "ANNUAL"
+            ],
+            "default": "MONTHLY"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "organization": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "updatedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                },
+                "required": [
+                  "id",
+                  "status",
+                  "updatedAt"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "subscription": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "planCode": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "UNKNOWN",
+                      "PENDING_PAYMENT",
+                      "TRIALING",
+                      "ACTIVE",
+                      "PAST_DUE",
+                      "GRACE_PERIOD",
+                      "SUSPENDED",
+                      "CANCELED",
+                      "EXPIRED"
+                    ],
+                    "description": "Estado persistido da assinatura canônica. Usado no filtro subscriptionStatus."
+                  },
+                  "effectivePlanCode": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "effectiveStatus": {
+                    "type": "string",
+                    "enum": [
+                      "UNKNOWN",
+                      "PENDING_PAYMENT",
+                      "TRIALING",
+                      "ACTIVE",
+                      "PAST_DUE",
+                      "GRACE_PERIOD",
+                      "SUSPENDED",
+                      "CANCELED",
+                      "EXPIRED"
+                    ],
+                    "description": "Estado persistido da assinatura canônica. Usado no filtro subscriptionStatus."
+                  },
+                  "accessGranted": {
+                    "type": "boolean"
+                  },
+                  "trialStartsAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "trialEndsAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "planCode",
+                  "status",
+                  "effectivePlanCode",
+                  "effectiveStatus",
+                  "accessGranted",
+                  "trialStartsAt",
+                  "trialEndsAt"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ownerSetup": {
+            "type": "string",
+            "enum": [
+              "NOT_QUEUED",
+              "QUEUED",
+              "ACCEPTED_BY_PROVIDER",
+              "FAILED",
+              "SKIPPED",
+              "EXPIRED",
+              "PASSWORD_CONFIGURED",
+              "NOT_OBSERVED"
+            ],
+            "description": "Estado do link de configuração. ACCEPTED_BY_PROVIDER indica aceite do provedor de e-mail."
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "complete",
+          "version",
+          "attempts",
+          "lastErrorCode",
+          "nextAction",
+          "requestedPlanCode",
+          "requestedBillingInterval",
+          "createdAt",
+          "updatedAt",
+          "completedAt",
+          "organization",
+          "subscription",
+          "ownerSetup"
+        ],
+        "additionalProperties": false
+      },
+      "CorporateOperationalChange": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "SUSPENDED",
+              "ACTIVE"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "SECURITY",
+              "ABUSE",
+              "ADMINISTRATIVE",
+              "RESOLVED"
+            ]
+          },
+          "expectedUpdatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "updatedAt da organização, obtido na consulta ou no recibo anterior."
+          }
+        },
+        "required": [
+          "status",
+          "reason",
+          "expectedUpdatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "CorporateOperationalDecision": {
+        "type": "object",
+        "properties": {
+          "decisionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "replayed": {
+            "type": "boolean"
+          },
+          "decision": {
+            "type": "object",
+            "properties": {
+              "organizationId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "previousStatus": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "ACTIVE",
+                  "SUSPENDED"
+                ]
+              },
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "SECURITY",
+                  "ABUSE",
+                  "ADMINISTRATIVE",
+                  "RESOLVED"
+                ]
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "decidedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "effectiveAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "expiresAt": {
+                "type": "null"
+              },
+              "result": {
+                "type": "string",
+                "enum": [
+                  "APPLIED",
+                  "NO_CHANGE"
+                ]
+              },
+              "operationalOnly": {
+                "const": true
+              }
+            },
+            "required": [
+              "organizationId",
+              "previousStatus",
+              "status",
+              "reason",
+              "updatedAt",
+              "decidedAt",
+              "effectiveAt",
+              "expiresAt",
+              "result",
+              "operationalOnly"
+            ],
+            "additionalProperties": false
+          },
+          "current": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string"
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "status",
+              "updatedAt"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "decisionId",
+          "replayed",
+          "decision",
+          "current"
+        ],
+        "additionalProperties": false
+      },
+      "CorporateProvisioningResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/CorporateSuccessEnvelope"
+          },
+          {
+            "properties": {
+              "data": {
+                "$ref": "#/components/schemas/CorporateProvisioning"
+              }
+            }
+          }
+        ]
+      },
+      "CorporateOperationalResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/CorporateSuccessEnvelope"
+          },
+          {
+            "properties": {
+              "data": {
+                "$ref": "#/components/schemas/CorporateOperationalDecision"
+              }
+            }
+          }
+        ]
       }
     },
     "responses": {
@@ -1480,6 +2586,26 @@
       },
       "CorporateOrganizationVersionConflict": {
         "description": "A versão cadastral mudou. Consulte novamente antes de reenviar a alteração.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      },
+      "CorporateLifecycleConflict": {
+        "description": "409 em caso de chave reutilizada com conteúdo diferente, cadastro duplicado, versão desatualizada ou transição recusada pelas regras do Orbit.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      },
+      "CorporateProvisioningNotFound": {
+        "description": "Fronteira desabilitada ou provisionamento indisponível para o principal técnico.",
         "content": {
           "application/json": {
             "schema": {

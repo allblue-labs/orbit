@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   createParamDecorator,
   ForbiddenException,
   Injectable,
@@ -23,12 +24,20 @@ import {
 } from '../../observability/correlation';
 import {
   TechnicalCredentialService,
+  ORGANIZATIONS_REACTIVATE,
+  ORGANIZATIONS_SUSPEND,
   type CorporateCapability,
   type TechnicalPrincipal,
 } from './technical-credential.service';
 
-export const RequiresCorporateCapability =
-  Reflector.createDecorator<CorporateCapability>();
+export const RequiresCorporateCapability = Reflector.createDecorator<
+  CorporateCapability | 'operational-status'
+>();
+export function operationalCapability(status: unknown) {
+  if (status === 'SUSPENDED') return ORGANIZATIONS_SUSPEND;
+  if (status === 'ACTIVE') return ORGANIZATIONS_REACTIVATE;
+  throw new BadRequestException('Estado operacional inválido.');
+}
 const TECHNICAL_PRINCIPAL = Symbol('corporate-technical-principal');
 const auditLogger = new Logger('CorporateAdministrationAudit');
 type CorporateRequest = Request & {
@@ -124,13 +133,18 @@ export class CorporateCapabilityGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const required = this.reflector.get(
+    const declared = this.reflector.get(
       RequiresCorporateCapability,
       context.getHandler(),
     );
-    const principal = context.switchToHttp().getRequest<CorporateRequest>()[
-      TECHNICAL_PRINCIPAL
-    ];
+    const request = context.switchToHttp().getRequest<CorporateRequest>();
+    const required =
+      declared === 'operational-status'
+        ? operationalCapability(
+            (request.body as { status?: unknown } | undefined)?.status,
+          )
+        : declared;
+    const principal = request[TECHNICAL_PRINCIPAL];
     if (!required || !principal?.capabilities.includes(required)) {
       audit(context, 'denied', 'CAPABILITY_REQUIRED');
       throw new ForbiddenException();

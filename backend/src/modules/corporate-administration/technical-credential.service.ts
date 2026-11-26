@@ -4,7 +4,16 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 export const CONNECTION_READ = 'connection:read';
 export const ORGANIZATIONS_READ = 'organizations:read';
 export const ORGANIZATIONS_WRITE = 'organizations:write';
+export const ORGANIZATIONS_PROVISION = 'organizations:provision';
+export const ORGANIZATIONS_PROVISIONING_READ =
+  'organizations:provisioning:read';
+export const ORGANIZATIONS_SUSPEND = 'organizations:suspend';
+export const ORGANIZATIONS_REACTIVATE = 'organizations:reactivate';
 const CAPABILITIES = [
+  ORGANIZATIONS_PROVISION,
+  ORGANIZATIONS_PROVISIONING_READ,
+  ORGANIZATIONS_SUSPEND,
+  ORGANIZATIONS_REACTIVATE,
   CONNECTION_READ,
   ORGANIZATIONS_READ,
   ORGANIZATIONS_WRITE,
@@ -47,6 +56,12 @@ const CREDENTIAL_FIELDS = [
 
 @Injectable()
 export class TechnicalCredentialService {
+  private static readonly authenticated = new WeakSet<TechnicalPrincipal>();
+
+  static isAuthenticated(principal: TechnicalPrincipal): boolean {
+    return this.authenticated.has(principal);
+  }
+
   private readonly configuration: Configuration | null;
 
   constructor() {
@@ -107,6 +122,7 @@ export class TechnicalCredentialService {
       now >= credential.expiresAt
     )
       return null;
+    TechnicalCredentialService.authenticated.add(credential.principal);
     return credential.principal;
   }
 }

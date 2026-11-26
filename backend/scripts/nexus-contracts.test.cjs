@@ -701,7 +701,7 @@ contractTest(
 );
 
 contractTest(
-  'the corporate directory OpenAPI is scoped, closed and consistent with its examples',
+  'the corporate administration OpenAPI is scoped, closed and consistent with its examples',
   () => {
     const Ajv = require('ajv/dist/2020').default;
     const addFormats = require('ajv-formats');
@@ -780,6 +780,73 @@ contractTest(
           false,
         );
         assert.equal(validate({ ...example, planCode: 'ESSENTIAL' }), false);
+      }
+    }
+    const provisioning = '/api/v1/corporate-admin/tenant-provisionings/{id}';
+    for (const [url, method, capability, successes, hasKey] of [
+      [registry, 'post', 'organizations:provision', [201, 202], true],
+      [provisioning, 'get', 'organizations:provisioning:read', [200], false],
+      [
+        provisioning + '/resume',
+        'post',
+        'organizations:provision',
+        [200, 202],
+        false,
+      ],
+      [
+        registry + '/{id}/operational-status',
+        'post',
+        {
+          SUSPENDED: 'organizations:suspend',
+          ACTIVE: 'organizations:reactivate',
+        },
+        [201],
+        true,
+      ],
+    ]) {
+      const op = api.paths[url][method];
+      assert.deepEqual(
+        op['x-required-capability'] ?? op['x-required-capability-by-status'],
+        capability,
+      );
+      const headers = op.parameters.map((p) => (p.$ref ? resolve(p.$ref) : p));
+      assert.equal(
+        headers.find((p) => p.name === 'X-Nexus-Administrator-Id')?.required,
+        method === 'post',
+      );
+      assert.equal(
+        headers.some((p) => p.name === 'Idempotency-Key' && p.required),
+        hasKey,
+      );
+      for (const status of successes) {
+        const { schema, example } =
+          op.responses[status].content['application/json'];
+        const validate = ajv.getSchema(base + schemaPointer(schema.$ref));
+        assert.ok(validate(example), JSON.stringify(validate.errors));
+        assert.equal(
+          validate({
+            ...example,
+            data: { ...example.data, internalToken: 'synthetic' },
+          }),
+          false,
+        );
+      }
+      if (op.requestBody) {
+        const { schema, example } = op.requestBody.content['application/json'];
+        const validate = ajv.getSchema(base + schemaPointer(schema.$ref));
+        assert.ok(validate(example), JSON.stringify(validate.errors));
+        assert.equal(
+          validate({ ...example, subscriptionStatus: 'ACTIVE' }),
+          false,
+        );
+        if (example.owner)
+          assert.equal(
+            validate({
+              ...example,
+              owner: { ...example.owner, password: 'synthetic' },
+            }),
+            false,
+          );
       }
     }
   },

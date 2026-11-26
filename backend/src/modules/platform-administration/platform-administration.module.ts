@@ -8,6 +8,6 @@ import { PlatformAdministrationService } from './platform-administration.service
   imports: [IdentityModule],
   controllers: [PlatformAdministrationController],
   providers: [PlatformAdministrationRepository, PlatformAdministrationService],
-  exports: [PlatformAdministrationRepository],
+  exports: [PlatformAdministrationRepository, PlatformAdministrationService],
 })
 export class PlatformAdministrationModule {}

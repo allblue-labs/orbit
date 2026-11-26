@@ -5249,7 +5249,8 @@ model QuoteAcceptanceLink {
 /// Durable local administration workflow; not a Nexus command inbox.
 model PlatformTenantProvisioning {
   id                    String              @id @default(uuid(7)) @db.Uuid
-  actorUserId           String              @map("actor_user_id") @db.Uuid
+  actorUserId           String?             @map("actor_user_id") @db.Uuid
+  technicalPrincipalId  String?             @map("technical_principal_id") @db.Uuid
   idempotencyKey        String              @map("idempotency_key") @db.Char(64)
   requestHash           String              @map("request_hash") @db.Char(64)
   correlationId         String              @map("correlation_id") @db.VarChar(128)
@@ -5267,12 +5268,13 @@ model PlatformTenantProvisioning {
   createdAt             DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt             DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
   completedAt           DateTime?           @map("completed_at") @db.Timestamptz(3)
-  actor                 User                @relation("ProvisioningActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  actor                 User?               @relation("ProvisioningActor", fields: [actorUserId], references: [id], onDelete: Restrict)
   owner                 User?               @relation("ProvisioningOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
   organization          Organization?       @relation(fields: [organizationId], references: [id], onDelete: SetNull)
   ownerSetupToken       PasswordResetToken? @relation(fields: [ownerSetupTokenId], references: [id], onDelete: SetNull)
 
   @@unique([actorUserId, idempotencyKey])
+  @@unique([technicalPrincipalId, idempotencyKey], map: "platform_provisioning_technical_key")
   @@index([status, updatedAt])
   @@map("platform_tenant_provisionings")
 }

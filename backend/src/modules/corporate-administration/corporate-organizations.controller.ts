@@ -11,9 +11,9 @@ import {
   Patch,
   Query,
   UseGuards,
-  ValidationPipe,
 } from '@nestjs/common';
 import { isUUID } from 'class-validator';
+import { auditReference, corporateValidation } from './corporate-request';
 import { Public } from '../../decorators';
 import { projectCorporateOrganization } from '../platform-administration/corporate-organization.read-model';
 import { PlatformAdministrationRepository } from '../platform-administration/platform-administration.repository';
@@ -32,32 +32,6 @@ import {
   ORGANIZATIONS_READ,
   ORGANIZATIONS_WRITE,
 } from './technical-credential.service';
-
-const corporateValidation = new ValidationPipe({
-  transform: true,
-  whitelist: true,
-  forbidNonWhitelisted: true,
-  forbidUnknownValues: true,
-});
-
-function auditReference(
-  call: CorporateCall,
-  reference: unknown,
-  required = false,
-) {
-  if (
-    (required || reference !== undefined) &&
-    (typeof reference !== 'string' || !isUUID(reference))
-  ) {
-    throw new BadRequestException('Invalid X-Nexus-Administrator-Id');
-  }
-  return {
-    technicalPrincipalId: call.principal.id,
-    declaredNexusAdministratorId:
-      typeof reference === 'string' ? reference : undefined,
-    correlationId: call.correlationId,
-  };
-}
 
 @Public()
 @UseGuards(TechnicalAuthenticationGuard, CorporateCapabilityGuard)

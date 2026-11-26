@@ -29,7 +29,7 @@ No processo **API**:
 | `AUTH_RATE_LIMIT_SECRET`, `AUTH_RATE_LIMIT_ORIGIN_MAX`, `AUTH_RATE_LIMIT_WINDOW_MS` | Reutilizam os valores do limite do Orbit. |
 | `TRUSTED_PROXY_SECRET` | Valor existente do proxy privado. Em implantação atrás de proxy, o salto deve atestar `X-Forwarded-Proto: https` com esse segredo. Use TLS direto ou esse ingresso controlado, com a porta da API privada e sobrescrita dos cabeçalhos de ingress. |
 
-O registro contém `keyId` (slug de até 32 caracteres), `principalId` (UUID v4 ou v7, estável por conector), `environment` (o mesmo ambiente da API), `secretSha256` (64 caracteres hexadecimais minúsculos), `expiresAt` (UTC em ISO 8601), `revoked` (booleano) e `capabilities` (lista explícita com zero ou mais valores entre `connection:read`, `organizations:read` e `organizations:write`, sem repetições). IDs de chave duplicados e configuração inválida desabilitam somente a fronteira. Configuração e alterações de chaves são carregadas na inicialização.
+O registro contém `keyId` (slug de até 32 caracteres), `principalId` (UUID v4 ou v7, estável por conector), `environment` (o mesmo ambiente da API), `secretSha256` (64 caracteres hexadecimais minúsculos), `expiresAt` (UTC em ISO 8601), `revoked` (booleano) e `capabilities` (lista explícita de grants documentados para as rotas, sem repetições). IDs de chave duplicados e configuração inválida desabilitam somente a fronteira. Configuração e alterações de chaves são carregadas na inicialização.
 
 A credencial enviada pelo Nexus no cabeçalho `Authorization: Bearer …` tem formato `orbit-ca1.<ambiente>.<keyId>.<segredo>`. O segredo tem 32 bytes aleatórios codificados em Base64URL, gerados de forma independente por chave e ambiente. O servidor guarda apenas SHA-256 de `orbit-corporate-admin.v1\0<ambiente>\0<keyId>\0<segredo>` e faz comparação em tempo constante do digest de 32 bytes. Vencimento e revogação são verificados a cada autenticação. O bearer deve ficar no cofre do cliente técnico.
 
@@ -80,3 +80,36 @@ Os dois grants são independentes e precisam ser atribuídos explicitamente. O e
 - As consultas bem-sucedidas ou sem resultado no detalhe e as tentativas válidas de escrita registram ação, resultado, correlação e alvo, quando aplicável. O PATCH registra os nomes dos campos alterados. `technicalPrincipalId` é autenticado pelo Orbit e `declaredNexusAdministratorId` é uma referência declarada, sem efeito sobre permissões. O papel SQL dedicado tem grants por coluna, políticas RLS próprias e é inacessível como papel do runtime. A alteração e a auditoria são atômicas. Os guards preservam o log estruturado de falhas de acesso.
 
 O contrato federado TENANT/ACK segue o próprio ciclo de ratificação. O diretório cobre dados cadastrais e usa o Orbit como fonte canônica. A validação foi feita com credenciais sintéticas e PostgreSQL descartável.
+
+## Provisionamento e ciclo operacional · ADM-03.A
+
+| Método | Rota sob `/api/v1/corporate-admin` | Capability |
+| --- | --- | --- |
+| POST | `/organizations` | `organizations:provision` |
+| GET | `/tenant-provisionings/{id}` | `organizations:provisioning:read` |
+| POST | `/tenant-provisionings/{id}/resume` | `organizations:provision` |
+| POST | `/organizations/{id}/operational-status` com `SUSPENDED` | `organizations:suspend` |
+| POST | `/organizations/{id}/operational-status` com `ACTIVE` | `organizations:reactivate` |
+
+Atribua os grants de forma explícita ao verificador do cliente técnico. As sondas de conexão mantêm o contrato ADM-01.A. As escritas exigem `X-Nexus-Administrator-Id` como UUID. Esse identificador entra na auditoria como referência declarada. O Orbit autentica o principal técnico. A consulta e a retomada de um provisionamento exigem o mesmo principal técnico que o iniciou, inclusive após rotação da chave.
+
+### Provisionamento e recuperação
+
+O corpo aceita os dados cadastrais, CPF ou CNPJ válido, unidade inicial, plano comercial e o nome e e-mail do primeiro proprietário. O e-mail do proprietário é o contato de ativação. O cadastro usa o fluxo canônico de reserva do documento, criação da unidade, trial elegível ou pagamento pendente e configuração de acesso por link. O plano pago fica em `PENDING_PAYMENT` até que as condições da contratação sejam cumpridas.
+
+| `status` | Efeito persistido | Próxima ação |
+| --- | --- | --- |
+| `RECEIVED` | Chave e impressão do pedido gravadas. | `RESUBMIT_ORIGINAL_REQUEST` |
+| `TENANT_CREATED` | Organização, unidade e proprietário criados. | `RESUME` |
+| `SUBSCRIPTION_READY` | Assinatura canônica criada conforme a contratação. | `RESUME` |
+| `COMPLETED` | Link de configuração registrado, com o estado de envio consultável. | Fluxo cadastral concluído. |
+
+O POST inicial exige `Idempotency-Key` com 1 a 128 caracteres conforme o OpenAPI. Se a resposta se perder, reenvie o mesmo conteúdo com a mesma chave. Uma mudança no conteúdo com a mesma chave dá `409 IDEMPOTENCY_MISMATCH`. O POST inicial retorna 201 quando completo e 202 quando parcial. Se já tiver o ID, consulte o detalhe e use `/resume` nos estágios indicados. A retomada retorna 200 quando completa e 202 enquanto parcial. As etapas confirmadas são reaproveitadas. A chave bruta e os dados pessoais ficam fora da auditoria.
+
+O campo `ownerSetup` separa `QUEUED`, `ACCEPTED_BY_PROVIDER`, falha, expiração e configuração da senha. O aceite do provedor comprova submissão para envio. A ativação da assinatura vem dos campos `subscription.status`, `effectiveStatus` e `accessGranted`, mesmo depois de `complete: true`.
+
+### Suspensão e reativação
+
+Envie `status`, `reason` e o `expectedUpdatedAt` da organização. Os motivos válidos são `SECURITY`, `ABUSE`, `ADMINISTRATIVE` e `RESOLVED`. A chave de 16 a 120 caracteres é vinculada ao principal, à organização e ao comando. Para recuperar um recibo após perda da resposta, repita o comando com a mesma chave. Nova versão de cadastro, chave reutilizada com outro conteúdo ou transição bloqueada dão 409. O recibo separa a decisão original do estado atual.
+
+A operação altera o acesso operacional e usa os gates financeiros em vigor. A reativação exige contratação canônica existente e preserva os bloqueios de pagamento, suspensão financeira, cancelamento ou retenção. A auditoria da transição e seus efeitos locais são gravados juntos. Consulte os contratos, códigos HTTP e exemplos sintéticos no [OpenAPI](openapi.json).

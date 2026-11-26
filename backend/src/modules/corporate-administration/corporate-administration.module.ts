@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { CorporateAdministrationController } from './corporate-administration.controller';
+import { CorporateTenantLifecycleController } from './corporate-tenant-lifecycle.controller';
 import { CorporateOrganizationsController } from './corporate-organizations.controller';
 import { PlatformAdministrationModule } from '../platform-administration/platform-administration.module';
 import {
@@ -13,6 +14,7 @@ import { TechnicalCredentialService } from './technical-credential.service';
   controllers: [
     CorporateAdministrationController,
     CorporateOrganizationsController,
+    CorporateTenantLifecycleController,
   ],
   providers: [
     TechnicalCredentialService,
