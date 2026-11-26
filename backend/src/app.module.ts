@@ -31,6 +31,7 @@ import { DashboardModule } from './modules/dashboards/dashboard.module';
 import { SchedulingModule } from './modules/scheduling/scheduling.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { PlatformAdministrationModule } from './modules/platform-administration/platform-administration.module';
+import { CorporateAdministrationModule } from './modules/corporate-administration/corporate-administration.module';
 import { ArtifactTemplateModule } from './modules/artifact-templates/artifact-template.module';
 import { ArtifactRenderingModule } from './modules/artifact-rendering/artifact-rendering.module';
 import { JobsModule } from './modules/jobs/jobs.module';
@@ -85,6 +86,7 @@ import {
     SchedulingModule,
     AnalyticsModule,
     PlatformAdministrationModule,
+    CorporateAdministrationModule,
     ArtifactTemplateModule,
     ArtifactExecutionModule,
     IssuedDocumentModule,
