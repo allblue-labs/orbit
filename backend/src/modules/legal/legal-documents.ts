@@ -48,7 +48,7 @@ const terms: LegalDocumentReadModel['sections'] = [
     paragraphs: [
       'Os dados inseridos pela organização continuam sob sua responsabilidade e titularidade, respeitados os direitos das pessoas a quem se referem. A organização concede ao Orbit a autorização necessária para armazenar, processar e apresentar esse conteúdo para prestar o serviço.',
       'O aplicativo móvel permite registrar atendimento, evidências, localização e informações das operações de campo. A sincronização depende de conexão e das permissões concedidas ao dispositivo. A organização deve conferir a conclusão da sincronização e a emissão dos documentos antes de considerar uma entrega finalizada.',
-      'Documentos, assinaturas e recursos de inteligência auxiliam a operação, mas não substituem a responsabilidade técnica, a conferência humana ou os registros e habilitações exigidos pela atividade. Não se deve inserir informação sensível desnecessária ou usar o serviço para finalidades incompatíveis com a contratação.',
+      'Não se deve inserir informação sensível desnecessária ou usar o serviço para finalidades incompatíveis com a contratação.',
     ],
   },
   {
@@ -95,8 +95,8 @@ const privacy: LegalDocumentReadModel['sections'] = [
     title: '4. Compartilhamento e serviços de terceiros',
     paragraphs: [
       'Os dados são apresentados aos membros e destinatários autorizados pela organização. Prestadores de infraestrutura, armazenamento, entrega de comunicações e pagamento podem tratá-los na medida necessária ao serviço. O Stripe processa pagamentos segundo seus próprios avisos de privacidade e condições.',
-      'Recursos de inteligência e integrações, quando habilitados, podem enviar aos respectivos prestadores apenas as informações necessárias à tarefa solicitada. A organização deve conferir as permissões e evitar compartilhar conteúdo desnecessário. Esta Política não autoriza treinamento irrestrito de modelos com dados operacionais.',
-      'Também pode haver compartilhamento para cumprir obrigação legal, ordem válida de autoridade ou defender direitos. O Orbit não comercializa bases de dados pessoais para publicidade. Caso um serviço envolva transferência internacional, serão observados os mecanismos e as garantias aplicáveis.',
+      'Integrações, quando habilitadas, podem enviar aos respectivos prestadores apenas as informações necessárias à tarefa solicitada. A organização deve conferir as permissões e evitar compartilhar conteúdo desnecessário.',
+      'Também pode haver compartilhamento para cumprir obrigação legal, ordem válida de autoridade ou defender direitos. O Orbit não comercializa bases de dados pessoais para publicidade.',
     ],
   },
   {
