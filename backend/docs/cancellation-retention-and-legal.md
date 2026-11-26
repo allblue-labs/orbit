@@ -63,7 +63,7 @@ do conteúdo excluído. Após o prazo, nova compra inicia uma base operacional v
 ## Termos, política e aceite
 
 Fonte canônica: `src/modules/legal/legal-documents.ts`; versão atual
-`2026-10-23.1`, com vigência em 23/10/2026. Responsável:
+`2026-10-23.2`, com vigência em 23/10/2026. Responsável:
 Allblue Labs Inova Simples, CNPJ 67.312.115/0001-92, Paulista, Pernambuco;
 contato@allblue-labs.com.
 
