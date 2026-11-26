@@ -55,6 +55,15 @@ describe('TechnicalCredentialService configuration', () => {
     ['duplicate key IDs', [valid, valid]],
     ['wildcard', [{ ...valid, capabilities: ['*'] }]],
     [
+      'duplicate grants',
+      [
+        {
+          ...valid,
+          capabilities: ['organizations:read', 'organizations:read'],
+        },
+      ],
+    ],
+    [
       'overprivileged capability',
       [{ ...valid, capabilities: ['platform.admin'] }],
     ],

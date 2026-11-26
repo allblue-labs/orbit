@@ -3,6 +3,8 @@ export const runtimeDefinerFunctions = new Set([
   'app_account_email_owner(uuid)',
   'app_auth_rate_limit_consume(text,integer,integer)',
   'app_confirm_email(text)',
+  'app_corporate_read_organizations(uuid,jsonb,uuid,uuid,text)',
+  'app_corporate_update_organization(uuid,timestamp with time zone,text,text,uuid,uuid,text)',
   'app_customer_portal_activate_invitation(text,text)',
   'app_customer_portal_biometric_list(uuid,uuid)',
   'app_customer_portal_biometric_lookup(uuid,text)',

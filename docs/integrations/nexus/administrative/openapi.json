@@ -3,7 +3,7 @@
   "info": {
     "title": "Orbit Corporate Administration",
     "version": "1.0.0",
-    "description": "Fronteira opt-in e uso exclusivamente HTTPS em ambientes implantados."
+    "description": "API opt-in de administração corporativa, com autenticação técnica por ambiente e HTTPS. Os endpoints de conexão preservam o contrato ADM-01.A."
   },
   "servers": [
     {
@@ -24,7 +24,7 @@
         "tags": [
           "Administração corporativa"
         ],
-        "description": "Exige a capability connection:read em todas as rotas desta versão.",
+        "description": "Exige connection:read para a descoberta da conexão técnica ADM-01.A.",
         "parameters": [
           {
             "$ref": "#/components/parameters/CorrelationId"
@@ -73,7 +73,8 @@
           "503": {
             "$ref": "#/components/responses/Unavailable"
           }
-        }
+        },
+        "x-required-capability": "connection:read"
       }
     },
     "/api/v1/corporate-admin/version": {
@@ -83,7 +84,7 @@
         "tags": [
           "Administração corporativa"
         ],
-        "description": "Exige a capability connection:read em todas as rotas desta versão.",
+        "description": "Exige connection:read para a descoberta da conexão técnica ADM-01.A.",
         "parameters": [
           {
             "$ref": "#/components/parameters/CorrelationId"
@@ -132,7 +133,8 @@
           "503": {
             "$ref": "#/components/responses/Unavailable"
           }
-        }
+        },
+        "x-required-capability": "connection:read"
       }
     },
     "/api/v1/corporate-admin/capabilities": {
@@ -142,7 +144,7 @@
         "tags": [
           "Administração corporativa"
         ],
-        "description": "Exige a capability connection:read em todas as rotas desta versão.",
+        "description": "Exige connection:read para a descoberta da conexão técnica ADM-01.A.",
         "parameters": [
           {
             "$ref": "#/components/parameters/CorrelationId"
@@ -191,6 +193,463 @@
           "503": {
             "$ref": "#/components/responses/Unavailable"
           }
+        },
+        "x-required-capability": "connection:read"
+      }
+    },
+    "/api/v1/corporate-admin/organizations": {
+      "get": {
+        "operationId": "corporateAdminListOrganizations",
+        "tags": [
+          "Administração corporativa"
+        ],
+        "summary": "Lista organizações clientes",
+        "x-required-capability": "organizations:read",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/NexusAdministratorId"
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Busca parcial sem distinção de caixa por nome de exibição, empresarial ou comercial. UUID e CPF/CNPJ são pesquisados por correspondência exata, com ou sem máscara do documento.",
+            "schema": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 180
+            },
+            "example": "Arco Clima"
+          },
+          {
+            "name": "operationalStatus",
+            "in": "query",
+            "description": "Estado operacional da organização.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ONBOARDING",
+                "ACTIVE",
+                "SUSPENDED",
+                "CANCELLED"
+              ]
+            },
+            "example": "ACTIVE"
+          },
+          {
+            "name": "planCode",
+            "in": "query",
+            "description": "Código persistido na assinatura canônica.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 60
+            },
+            "example": "ESSENTIAL"
+          },
+          {
+            "name": "subscriptionStatus",
+            "in": "query",
+            "description": "Estado persistido na assinatura canônica. UNKNOWN seleciona organizações sem assinatura canônica.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "UNKNOWN",
+                "PENDING_PAYMENT",
+                "TRIALING",
+                "ACTIVE",
+                "PAST_DUE",
+                "GRACE_PERIOD",
+                "SUSPENDED",
+                "CANCELED",
+                "EXPIRED"
+              ]
+            },
+            "example": "TRIALING"
+          },
+          {
+            "name": "registeredFrom",
+            "in": "query",
+            "description": "Limite inferior inclusivo, em UTC.",
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?!0000)\\d{4}-\\d{2}-\\d{2}T(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d{3})?Z$"
+            },
+            "example": "2026-11-01T00:00:00Z"
+          },
+          {
+            "name": "registeredBefore",
+            "in": "query",
+            "description": "Limite superior exclusivo, em UTC. Deve ser posterior a registeredFrom se ambos estiverem presentes.",
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?!0000)\\d{4}-\\d{2}-\\d{2}T(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d{3})?Z$"
+            },
+            "example": "2026-12-01T00:00:00Z"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Página iniciada em 1.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000,
+              "default": 1
+            },
+            "example": 1
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "description": "Quantidade máxima de organizações por página.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 25
+            },
+            "example": 25
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "Ordenação com desempate pelo identificador.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "registeredAt",
+                "displayName"
+              ],
+              "default": "registeredAt"
+            },
+            "example": "displayName"
+          },
+          {
+            "name": "direction",
+            "in": "query",
+            "description": "Direção da ordenação.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "default": "desc"
+            },
+            "example": "asc"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operação corporativa concluída.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationListResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "items": [
+                      {
+                        "id": "0b2af05c-cb42-48d2-be07-f192f705e06f",
+                        "displayName": "Arco Clima",
+                        "legalName": "Arco Climatização Ltda.",
+                        "tradeName": "Arco Clima",
+                        "document": {
+                          "type": "CNPJ",
+                          "number": "12.345.678/0001-95"
+                        },
+                        "primarySegment": "HVAC_R",
+                        "operationalStatus": "ACTIVE",
+                        "operational": true,
+                        "registeredAt": "2026-11-01T12:00:00.000Z",
+                        "updatedAt": "2026-11-26T16:30:00.123Z",
+                        "unitCount": 1,
+                        "userCount": 3,
+                        "subscription": {
+                          "source": "CANONICAL",
+                          "status": "TRIALING",
+                          "planCode": "ESSENTIAL",
+                          "effectiveStatus": "TRIALING",
+                          "effectivePlanCode": "ESSENTIAL",
+                          "accessGranted": true,
+                          "billingInterval": "MONTHLY",
+                          "currentPeriodStart": "2026-11-01T12:00:00.000Z",
+                          "currentPeriodEnd": "2026-12-01T12:00:00.000Z",
+                          "trialStartsAt": "2026-11-01T12:00:00.000Z",
+                          "trialEndsAt": "2026-12-01T12:00:00.000Z"
+                        }
+                      }
+                    ],
+                    "total": 1,
+                    "page": 1,
+                    "pageSize": 25
+                  },
+                  "requestId": "c935d32a-9ad2-409c-a28c-c922dcc16f2c",
+                  "timestamp": "2026-11-26T16:30:00.123Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/CorporateValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/corporate-admin/organizations/{id}": {
+      "get": {
+        "operationId": "corporateAdminGetOrganization",
+        "tags": [
+          "Administração corporativa"
+        ],
+        "summary": "Consulta dados cadastrais de uma organização",
+        "x-required-capability": "organizations:read",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrganizationId"
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/NexusAdministratorId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operação corporativa concluída.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationDetailResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "id": "0b2af05c-cb42-48d2-be07-f192f705e06f",
+                    "displayName": "Arco Clima",
+                    "legalName": "Arco Climatização Ltda.",
+                    "tradeName": "Arco Clima",
+                    "document": {
+                      "type": "CNPJ",
+                      "number": "12.345.678/0001-95"
+                    },
+                    "primarySegment": "HVAC_R",
+                    "operationalStatus": "ACTIVE",
+                    "operational": true,
+                    "registeredAt": "2026-11-01T12:00:00.000Z",
+                    "updatedAt": "2026-11-26T16:30:00.123Z",
+                    "unitCount": 1,
+                    "userCount": 3,
+                    "subscription": {
+                      "source": "CANONICAL",
+                      "status": "TRIALING",
+                      "planCode": "ESSENTIAL",
+                      "effectiveStatus": "TRIALING",
+                      "effectivePlanCode": "ESSENTIAL",
+                      "accessGranted": true,
+                      "billingInterval": "MONTHLY",
+                      "currentPeriodStart": "2026-11-01T12:00:00.000Z",
+                      "currentPeriodEnd": "2026-12-01T12:00:00.000Z",
+                      "trialStartsAt": "2026-11-01T12:00:00.000Z",
+                      "trialEndsAt": "2026-12-01T12:00:00.000Z"
+                    },
+                    "administrativeContact": {
+                      "email": "administrativo@example.test",
+                      "phone": "+558130000000"
+                    },
+                    "owner": {
+                      "id": "742f7f26-b4eb-42f2-b97e-13350e061d50",
+                      "displayName": "Responsável de exemplo"
+                    },
+                    "activeUserCount": 2,
+                    "units": [
+                      {
+                        "id": "cab5ce9a-154c-466d-a130-55d7c6331abd",
+                        "legalName": "Arco Climatização Ltda.",
+                        "tradeName": "Arco Clima",
+                        "isPrimary": true,
+                        "status": "ACTIVE",
+                        "city": "Recife",
+                        "stateCode": "PE"
+                      }
+                    ]
+                  },
+                  "requestId": "c935d32a-9ad2-409c-a28c-c922dcc16f2c",
+                  "timestamp": "2026-11-26T16:30:00.123Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/CorporateValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/CorporateOrganizationNotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "corporateAdminUpdateOrganization",
+        "tags": [
+          "Administração corporativa"
+        ],
+        "summary": "Atualiza nome de exibição ou segmento",
+        "x-required-capability": "organizations:write",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrganizationId"
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/RequiredNexusAdministratorId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operação corporativa concluída.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationUpdateResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "id": "0b2af05c-cb42-48d2-be07-f192f705e06f",
+                    "updatedAt": "2026-11-26T16:30:00.123Z",
+                    "changedFields": [
+                      "displayName"
+                    ]
+                  },
+                  "requestId": "c935d32a-9ad2-409c-a28c-c922dcc16f2c",
+                  "timestamp": "2026-11-26T16:30:00.123Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/CorporateValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/CorporateOrganizationNotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/CorporateOrganizationVersionConflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOrganizationMetadata"
+              },
+              "example": {
+                "displayName": "Arco Climatização",
+                "expectedUpdatedAt": "2026-11-26T16:00:00.000Z"
+              }
+            }
+          }
         }
       }
     }
@@ -213,6 +672,37 @@
         "schema": {
           "type": "string"
         }
+      },
+      "OrganizationId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "NexusAdministratorId": {
+        "name": "X-Nexus-Administrator-Id",
+        "in": "header",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "description": "Referência declarada ao administrador do Nexus. Registrada para auditoria e sem efeito sobre autenticação ou autorização.",
+        "example": "e2b06693-0788-43a9-bf10-38af5b94e660"
+      },
+      "RequiredNexusAdministratorId": {
+        "name": "X-Nexus-Administrator-Id",
+        "in": "header",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "description": "Referência declarada ao administrador do Nexus. Registrada para auditoria e sem efeito sobre autenticação ou autorização.",
+        "example": "e2b06693-0788-43a9-bf10-38af5b94e660"
       }
     },
     "schemas": {
@@ -370,6 +860,522 @@
           "timestamp"
         ],
         "additionalProperties": false
+      },
+      "CorporateSuccessEnvelope": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "data": {},
+          "requestId": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "success",
+          "data",
+          "requestId",
+          "timestamp"
+        ],
+        "additionalProperties": false
+      },
+      "OrganizationSubscriptionSummary": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "CANONICAL",
+              "UNKNOWN_LEGACY"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "UNKNOWN",
+              "PENDING_PAYMENT",
+              "TRIALING",
+              "ACTIVE",
+              "PAST_DUE",
+              "GRACE_PERIOD",
+              "SUSPENDED",
+              "CANCELED",
+              "EXPIRED"
+            ],
+            "description": "Estado persistido da assinatura canônica. Usado no filtro subscriptionStatus."
+          },
+          "planCode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 60,
+            "description": "Código persistido da assinatura canônica. Usado no filtro planCode."
+          },
+          "effectiveStatus": {
+            "type": "string",
+            "enum": [
+              "UNKNOWN",
+              "PENDING_PAYMENT",
+              "TRIALING",
+              "ACTIVE",
+              "PAST_DUE",
+              "GRACE_PERIOD",
+              "SUSPENDED",
+              "CANCELED",
+              "EXPIRED"
+            ],
+            "description": "Estado calculado pelo Orbit no momento da consulta."
+          },
+          "effectivePlanCode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 60
+          },
+          "accessGranted": {
+            "type": "boolean"
+          },
+          "billingInterval": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "MONTHLY",
+              "SEMIANNUAL",
+              "ANNUAL",
+              null
+            ]
+          },
+          "currentPeriodStart": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "currentPeriodEnd": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "trialStartsAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "trialEndsAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "source",
+          "status",
+          "planCode",
+          "effectiveStatus",
+          "effectivePlanCode",
+          "accessGranted",
+          "billingInterval",
+          "currentPeriodStart",
+          "currentPeriodEnd",
+          "trialStartsAt",
+          "trialEndsAt"
+        ],
+        "additionalProperties": false
+      },
+      "OrganizationRegistrationFields": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "legalName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tradeName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "document": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "number": {
+                    "type": "string",
+                    "maxLength": 32
+                  }
+                },
+                "required": [
+                  "type",
+                  "number"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "primarySegment": {
+            "type": "string"
+          },
+          "operationalStatus": {
+            "type": "string"
+          },
+          "registeredAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?!0000)\\d{4}-\\d{2}-\\d{2}T(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d{3})?Z$"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?!0000)\\d{4}-\\d{2}-\\d{2}T(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d{3})?Z$"
+          },
+          "unitCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Unidades sem exclusão lógica."
+          },
+          "userCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Vínculos de usuário sem exclusão lógica."
+          },
+          "subscription": {
+            "$ref": "#/components/schemas/OrganizationSubscriptionSummary"
+          },
+          "operational": {
+            "type": "boolean",
+            "description": "Decisão operacional do Orbit, incluindo os bloqueios por purga de dados."
+          }
+        },
+        "required": [
+          "id",
+          "displayName",
+          "legalName",
+          "tradeName",
+          "document",
+          "primarySegment",
+          "operationalStatus",
+          "registeredAt",
+          "updatedAt",
+          "unitCount",
+          "userCount",
+          "subscription",
+          "operational"
+        ]
+      },
+      "OrganizationSummary": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/OrganizationRegistrationFields"
+          }
+        ],
+        "unevaluatedProperties": false
+      },
+      "OrganizationUnitSummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "legalName": {
+            "type": "string"
+          },
+          "tradeName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "isPrimary": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string"
+          },
+          "stateCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "legalName",
+          "tradeName",
+          "isPrimary",
+          "status",
+          "city",
+          "stateCode"
+        ],
+        "additionalProperties": false
+      },
+      "OrganizationDetail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/OrganizationRegistrationFields"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "administrativeContact": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "email": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "phone": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "email",
+                      "phone"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "owner": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "displayName": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "displayName"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "activeUserCount": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Vínculos de usuário ativos."
+              },
+              "units": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/OrganizationUnitSummary"
+                },
+                "maxItems": 100,
+                "description": "Até 100 unidades, com a principal primeiro. unitCount informa o total."
+              }
+            },
+            "required": [
+              "administrativeContact",
+              "owner",
+              "activeUserCount",
+              "units"
+            ]
+          }
+        ],
+        "unevaluatedProperties": false
+      },
+      "OrganizationPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrganizationSummary"
+            },
+            "maxItems": 100
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          "pageSize": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "pageSize"
+        ],
+        "additionalProperties": false
+      },
+      "UpdateOrganizationMetadata": {
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 180
+          },
+          "primarySegment": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 60
+          },
+          "expectedUpdatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?!0000)\\d{4}-\\d{2}-\\d{2}T(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d{3})?Z$",
+            "description": "Versão updatedAt da última consulta ou atualização bem-sucedida."
+          }
+        },
+        "required": [
+          "expectedUpdatedAt"
+        ],
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "required": [
+              "displayName"
+            ]
+          },
+          {
+            "required": [
+              "primarySegment"
+            ]
+          }
+        ]
+      },
+      "OrganizationMetadataUpdateReceipt": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?!0000)\\d{4}-\\d{2}-\\d{2}T(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d{3})?Z$"
+          },
+          "changedFields": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "displayName",
+                "primarySegment"
+              ]
+            },
+            "uniqueItems": true,
+            "maxItems": 2
+          }
+        },
+        "required": [
+          "id",
+          "updatedAt",
+          "changedFields"
+        ],
+        "additionalProperties": false
+      },
+      "OrganizationListResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/CorporateSuccessEnvelope"
+          },
+          {
+            "properties": {
+              "data": {
+                "$ref": "#/components/schemas/OrganizationPage"
+              }
+            }
+          }
+        ]
+      },
+      "OrganizationDetailResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/CorporateSuccessEnvelope"
+          },
+          {
+            "properties": {
+              "data": {
+                "$ref": "#/components/schemas/OrganizationDetail"
+              }
+            }
+          }
+        ]
+      },
+      "OrganizationUpdateResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/CorporateSuccessEnvelope"
+          },
+          {
+            "properties": {
+              "data": {
+                "$ref": "#/components/schemas/OrganizationMetadataUpdateReceipt"
+              }
+            }
+          }
+        ]
       }
     },
     "responses": {
@@ -444,6 +1450,36 @@
       "InternalError": {
         "description": "Erro interno.",
         "headers": {},
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      },
+      "CorporateValidationError": {
+        "description": "Parâmetros inválidos, campos adicionais, versão ausente ou referência Nexus inválida ou ausente quando obrigatória.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      },
+      "CorporateOrganizationNotFound": {
+        "description": "Fronteira desabilitada, organização inexistente ou excluída logicamente.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      },
+      "CorporateOrganizationVersionConflict": {
+        "description": "A versão cadastral mudou. Consulte novamente antes de reenviar a alteração.",
         "content": {
           "application/json": {
             "schema": {

@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { CorporateAdministrationController } from './corporate-administration.controller';
+import { CorporateOrganizationsController } from './corporate-organizations.controller';
+import { PlatformAdministrationModule } from '../platform-administration/platform-administration.module';
 import {
   CorporateCapabilityGuard,
   TechnicalAuthenticationGuard,
@@ -7,7 +9,11 @@ import {
 import { TechnicalCredentialService } from './technical-credential.service';
 
 @Module({
-  controllers: [CorporateAdministrationController],
+  imports: [PlatformAdministrationModule],
+  controllers: [
+    CorporateAdministrationController,
+    CorporateOrganizationsController,
+  ],
   providers: [
     TechnicalCredentialService,
     TechnicalAuthenticationGuard,

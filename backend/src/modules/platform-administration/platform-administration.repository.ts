@@ -9,6 +9,12 @@ import type {
   PlatformListQueryDto,
   UpdatePlatformOrganizationDto,
 } from './dto/platform-administration.dto';
+import type {
+  CorporateAuditReference,
+  CorporateMetadataUpdate,
+  CorporateOrganizationDetailRecord,
+  CorporateOrganizationPage,
+} from './corporate-organization.read-model';
 
 const organizationView = {
   owner: {
@@ -71,15 +77,70 @@ export class PlatformAdministrationRepository {
     ids: string[],
   ): Promise<Map<string, OrganizationSubscription>> {
     if (!ids.length) return new Map();
-    const chosen = await tx.$queryRaw<{ id: string }[]>(Prisma.sql`
-      SELECT chosen.id FROM organizations o CROSS JOIN LATERAL (
-        SELECT id FROM organization_subscriptions s WHERE s.organization_id=o.id
-        ORDER BY (ended_at IS NULL) DESC, started_at DESC, id DESC LIMIT 1
-      ) chosen WHERE o.id IN (${Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`))})`);
+    const chosen = await tx.$queryRaw<{ id: string | null }[]>(Prisma.sql`
+      SELECT public.app_platform_canonical_subscription_id(o.id) AS id
+      FROM organizations o
+      WHERE o.id IN (${Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`))})`);
     const rows = await tx.organizationSubscription.findMany({
-      where: { id: { in: chosen.map((row) => row.id) } },
+      where: { id: { in: chosen.flatMap((row) => (row.id ? [row.id] : [])) } },
     });
     return new Map(rows.map((row) => [row.organizationId, row]));
+  }
+
+  listCorporateOrganizations(
+    filters: Prisma.InputJsonObject,
+    audit: CorporateAuditReference,
+  ) {
+    return this.corporateDirectoryRead<CorporateOrganizationPage>(
+      null,
+      filters,
+      audit,
+    );
+  }
+
+  findCorporateOrganization(id: string, audit: CorporateAuditReference) {
+    return this.corporateDirectoryRead<CorporateOrganizationDetailRecord | null>(
+      id,
+      {},
+      audit,
+    );
+  }
+
+  private corporateDirectoryRead<T>(
+    id: string | null,
+    filters: Prisma.InputJsonObject,
+    audit: CorporateAuditReference,
+  ) {
+    return this.rls.run(async (tx) => {
+      const [row] = await tx.$queryRaw<[{ data: T }]>`
+        SELECT public.app_corporate_read_organizations(
+          ${id}::uuid, ${JSON.stringify(filters)}::jsonb,
+          ${audit.technicalPrincipalId}::uuid, ${audit.declaredNexusAdministratorId ?? null}::uuid,
+          ${audit.correlationId}::text
+        ) AS data`;
+      return row.data;
+    });
+  }
+
+  updateCorporateOrganizationMetadata(
+    id: string,
+    input: {
+      displayName?: string;
+      primarySegment?: string;
+      expectedUpdatedAt: string;
+    },
+    audit: CorporateAuditReference,
+  ) {
+    return this.rls.run(async (tx) => {
+      const [row] = await tx.$queryRaw<[{ data: CorporateMetadataUpdate }]>`
+        SELECT public.app_corporate_update_organization(
+          ${id}::uuid, ${input.expectedUpdatedAt}::timestamptz,
+          ${input.displayName ?? null}::text, ${input.primarySegment ?? null}::text,
+          ${audit.technicalPrincipalId}::uuid, ${audit.declaredNexusAdministratorId ?? null}::uuid,
+          ${audit.correlationId}::text
+        ) AS data`;
+      return row.data;
+    });
   }
 
   private async projectOrganizations(

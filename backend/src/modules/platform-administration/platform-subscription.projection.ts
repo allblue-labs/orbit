@@ -9,9 +9,38 @@ import {
   planDefinition,
 } from '../subscription-plans/catalog/plan-registry';
 
-/** Delegates the clock/rights policy to the product's canonical projector. */
+export type PlatformSubscriptionSnapshot = Pick<
+  OrganizationSubscription,
+  | 'id'
+  | 'status'
+  | 'planCode'
+  | 'version'
+  | 'billingInterval'
+  | 'billingAnchorAt'
+  | 'currentPeriodStart'
+  | 'currentPeriodEnd'
+  | 'trialEndsAt'
+  | 'graceStartsAt'
+  | 'graceEndsAt'
+  | 'pendingEffectiveAt'
+  | 'pendingPlanCode'
+  | 'pendingBillingInterval'
+  | 'cancelAtPeriodEnd'
+> & { providerManaged: boolean };
+
 export function platformSubscription(
   row: OrganizationSubscription | undefined,
+  at: Date,
+) {
+  return projectPlatformSubscription(
+    row && { ...row, providerManaged: row.providerSubscriptionId !== null },
+    at,
+  );
+}
+
+/** Delegates the clock/rights policy to the product's canonical projector. */
+export function projectPlatformSubscription(
+  row: PlatformSubscriptionSnapshot | undefined,
   at: Date,
 ) {
   if (!row)
@@ -29,15 +58,7 @@ export function platformSubscription(
       cancelAtPeriodEnd: false,
       id: null,
     };
-  const state = project(
-    {
-      ...row,
-      status: row.status,
-      billingInterval: row.billingInterval,
-      providerManaged: row.providerSubscriptionId !== null,
-    },
-    at,
-  );
+  const state = project(row, at);
   const planCode =
     state.pendingApplied && row.pendingPlanCode
       ? row.pendingPlanCode

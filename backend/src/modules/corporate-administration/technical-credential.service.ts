@@ -2,7 +2,14 @@ import { Injectable, Logger } from '@nestjs/common';
 import { createHash, timingSafeEqual } from 'node:crypto';
 
 export const CONNECTION_READ = 'connection:read';
-export type CorporateCapability = typeof CONNECTION_READ;
+export const ORGANIZATIONS_READ = 'organizations:read';
+export const ORGANIZATIONS_WRITE = 'organizations:write';
+const CAPABILITIES = [
+  CONNECTION_READ,
+  ORGANIZATIONS_READ,
+  ORGANIZATIONS_WRITE,
+] as const;
+export type CorporateCapability = (typeof CAPABILITIES)[number];
 type Deployment = 'local' | 'staging' | 'production';
 
 export interface TechnicalPrincipal {
@@ -153,16 +160,17 @@ function readConfiguration(env: NodeJS.ProcessEnv): Configuration | null {
       typeof secretSha256 !== 'string' ||
       !/^[a-f0-9]{64}$/.test(secretSha256) ||
       typeof revoked !== 'boolean' ||
-      !Array.isArray(capabilities) ||
-      capabilities.length > 1 ||
-      (capabilities.length === 1 && capabilities[0] !== CONNECTION_READ)
+      !Array.isArray(capabilities)
     )
       return null;
+    const requested: unknown[] = capabilities;
+    const granted = CAPABILITIES.filter((capability) =>
+      requested.includes(capability),
+    );
+    // The configured grants must be explicit, recognized and distinct.
+    if (granted.length !== requested.length) return null;
     const expiry = utcExpiry(expiresAt);
     if (expiry === null) return null;
-    const granted: CorporateCapability[] = capabilities.length
-      ? [CONNECTION_READ]
-      : [];
     credentials.set(keyId, {
       digest: Buffer.from(secretSha256, 'hex'),
       expiresAt: expiry,

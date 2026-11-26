@@ -1,4 +1,5 @@
 import {
+  createParamDecorator,
   ForbiddenException,
   Injectable,
   Logger,
@@ -34,6 +35,20 @@ type CorporateRequest = Request & {
   id?: string;
   [TECHNICAL_PRINCIPAL]?: TechnicalPrincipal;
 };
+
+export const CorporateCaller = createParamDecorator(
+  (_: unknown, context: ExecutionContext) => {
+    const request = context.switchToHttp().getRequest<CorporateRequest>();
+    const principal = request[TECHNICAL_PRINCIPAL];
+    if (!principal) throw new UnauthorizedException();
+    return { principal, correlationId: request.id ?? correlationId(request) };
+  },
+);
+
+export interface CorporateCall {
+  principal: TechnicalPrincipal;
+  correlationId: string;
+}
 
 function audit(
   context: ExecutionContext,

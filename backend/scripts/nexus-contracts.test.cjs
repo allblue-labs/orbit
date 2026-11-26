@@ -699,3 +699,88 @@ contractTest(
     );
   },
 );
+
+contractTest(
+  'the corporate directory OpenAPI is scoped, closed and consistent with its examples',
+  () => {
+    const Ajv = require('ajv/dist/2020').default;
+    const addFormats = require('ajv-formats');
+    const api = JSON.parse(
+      fs.readFileSync(
+        path.resolve(
+          __dirname,
+          '../../docs/integrations/nexus/administrative/openapi.json',
+        ),
+      ),
+    );
+    assert.equal(api.openapi, '3.1.0');
+    assert.deepEqual(api.security, [{ TechnicalBearer: [] }]);
+    const resolve = (ref) => {
+      assert.ok(ref.startsWith('#/components/'), ref);
+      return ref
+        .slice(2)
+        .split('/')
+        .reduce((node, key) => node?.[key], api);
+    };
+    function checkReferences(node) {
+      if (!node || typeof node !== 'object') return;
+      if (node.$ref) assert.ok(resolve(node.$ref), node.$ref);
+      Object.values(node).forEach(checkReferences);
+    }
+    checkReferences(api);
+
+    const base = 'https://contracts.example.test/orbit/corporate-admin';
+    const ajv = new Ajv({
+      strict: true,
+      strictTypes: false,
+      strictRequired: false,
+    });
+    addFormats(ajv);
+    const schemaPointer = (ref) =>
+      ref.replace('#/components/schemas/', '#/$defs/');
+    const definitions = JSON.parse(
+      JSON.stringify(api.components.schemas, (key, value) =>
+        key === '$ref' ? schemaPointer(value) : value,
+      ),
+    );
+    ajv.addSchema({ $defs: definitions }, base);
+    const registry = '/api/v1/corporate-admin/organizations';
+    for (const [url, method, scope] of [
+      [registry, 'get', 'organizations:read'],
+      [registry + '/{id}', 'get', 'organizations:read'],
+      [registry + '/{id}', 'patch', 'organizations:write'],
+    ]) {
+      const op = api.paths[url][method];
+      assert.equal(op['x-required-capability'], scope);
+      const parameters = op.parameters.map((p) =>
+        p.$ref ? resolve(p.$ref) : p,
+      );
+      if (url.endsWith('/{id}'))
+        assert.equal(
+          parameters.find((p) => p.in === 'path' && p.name === 'id')?.required,
+          true,
+        );
+      const administrator = parameters.find(
+        (p) => p.name === 'X-Nexus-Administrator-Id',
+      );
+      assert.equal(administrator?.required, method === 'patch');
+      const { schema, example } =
+        op.responses['200'].content['application/json'];
+      const validate = ajv.getSchema(base + schemaPointer(schema.$ref));
+      assert.ok(validate(example), JSON.stringify(validate.errors));
+      const unsafe = structuredClone(example);
+      (unsafe.data.items?.[0] ?? unsafe.data).secretHash = 'synthetic';
+      assert.equal(validate(unsafe), false);
+      if (op.requestBody) {
+        const { schema, example } = op.requestBody.content['application/json'];
+        const validate = ajv.getSchema(base + schemaPointer(schema.$ref));
+        assert.ok(validate(example), JSON.stringify(validate.errors));
+        assert.equal(
+          validate({ expectedUpdatedAt: example.expectedUpdatedAt }),
+          false,
+        );
+        assert.equal(validate({ ...example, planCode: 'ESSENTIAL' }), false);
+      }
+    }
+  },
+);

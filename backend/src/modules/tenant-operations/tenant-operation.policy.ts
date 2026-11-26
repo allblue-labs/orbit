@@ -8,6 +8,7 @@ import type { UUID } from '../../contracts';
 import { RlsTransaction } from '../../database';
 import { ForbiddenException } from '../../exceptions';
 import { generateUuidV7 } from '../../utils';
+import { isOrganizationOperational } from './tenant-operation-state';
 
 export const TENANT_RECOVERY = 'tenant:operational-recovery';
 export const TENANT_STATUS_CHANGE = 'tenant:status-change';
@@ -56,9 +57,10 @@ export class TenantOperationPolicy {
       status: organization?.status ?? 'UNAVAILABLE',
       operational: Boolean(
         organization &&
-        ['ACTIVE', 'ONBOARDING'].includes(organization.status) &&
-        !organization.dataPurgeStartedAt &&
-        !organization.dataPurgedAt,
+        isOrganizationOperational(
+          organization.status,
+          Boolean(organization.dataPurgeStartedAt || organization.dataPurgedAt),
+        ),
       ),
       updatedAt: organization?.updatedAt.toISOString() ?? null,
     };
