@@ -164,8 +164,28 @@ export interface ProviderFinancialAdjustment {
   readonly providerObservedAt: Date;
 }
 
+export interface PromotionPrice {
+  planCode: string;
+  billingInterval: BillingInterval;
+  priceId: string;
+  amountMinor: number;
+}
+
+export interface ProviderPromotionTerms {
+  id: string;
+  mode: string;
+  percentOff: number | null;
+  amountOffMinor: number | null;
+  durationMonths: number | null;
+  totalLimit: number;
+  endsAt: Date;
+  prices: readonly PromotionPrice[];
+  recoverOnly: boolean;
+}
+
 export interface CheckoutSessionRequest {
   readonly checkoutAttemptId: string;
+  readonly promotion?: { providerId: string; expiresAt: Date };
   readonly priceId?: string;
   readonly organizationId: string;
   readonly providerCustomerId: string;
@@ -199,6 +219,13 @@ export interface ProviderCheckoutSession {
   readonly state: ProviderCheckoutState;
   readonly rawStatus: string;
   readonly paymentStatus: string;
+  readonly promotionEvidence?: {
+    providerId: string | null;
+    originalMinor: number | null;
+    discountMinor: number | null;
+    totalMinor: number | null;
+    currency: string | null;
+  };
   readonly providerCustomerId: string | null;
   readonly providerSubscriptionId: string | null;
   readonly providerPriceId: string | null;
@@ -247,6 +274,11 @@ export interface BillingProvider {
     idempotencyKey: string;
   }): Promise<{ providerCustomerId: string }>;
 
+  activatePromotion?(terms: ProviderPromotionTerms): Promise<string>;
+  deactivatePromotion?(
+    terms: ProviderPromotionTerms,
+    providerId: string,
+  ): Promise<void>;
   createCheckoutSession(
     request: CheckoutSessionRequest,
   ): Promise<CheckoutSession>;

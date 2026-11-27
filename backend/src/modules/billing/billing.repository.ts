@@ -14,6 +14,7 @@ import { PrismaService, RlsTransaction } from '../../database';
 import type { PrismaTransactionClient } from '../../database/prisma.types';
 import { ConflictException } from '../../exceptions';
 import { generateUuidV7 } from '../../utils';
+import { BillingCheckoutNotAllowedException } from './billing.errors';
 import type {
   BillingMode,
   BillingProviderName,
@@ -31,6 +32,9 @@ export interface BillingCustomerRow {
 
 export interface BillingCheckoutAttemptRow {
   quotedPriceId: string | null;
+  promotionCode?: string | null;
+  providerPromotionId?: string | null;
+  promotionCheckoutExpiresAt?: Date | null;
   id: string;
   organizationId: string;
   subscriptionId: string;
@@ -267,6 +271,7 @@ export class BillingRepository {
     endsTrial: boolean;
     quotedPriceId: string;
     quotedCatalogVersion: number;
+    promotionCode?: string;
     quotedEntitlements: Prisma.InputJsonValue;
     idempotencyKey: string;
   }): Promise<{ attempt: BillingCheckoutAttemptRow; created: boolean }> {
@@ -305,11 +310,45 @@ export class BillingRepository {
         },
       });
       if (existing) return { attempt: existing, created: false };
+      const reservation = input.promotionCode
+        ? await this.reservePromotion(tx, input)
+        : undefined;
       const attempt = await tx.billingCheckoutAttempt.create({
-        data: { ...input, status: 'CREATING' },
+        data: { ...input, ...reservation, status: 'CREATING' },
       });
       return { attempt, created: true };
     });
+  }
+
+  private async reservePromotion(
+    tx: PrismaTransactionClient,
+    input: {
+      promotionCode?: string;
+      mode: BillingMode;
+      planCode: string;
+      billingInterval: string;
+      quotedPriceId: string;
+    },
+  ) {
+    const [reservation] = await tx.$queryRaw<
+      Array<{
+        promotionId: string;
+        providerPromotionId: string;
+        originalMinor: number;
+        checkoutExpiresAt: Date;
+      }>
+    >`SELECT * FROM public.app_reserve_billing_promotion(
+      ${input.promotionCode}, ${input.mode}, ${input.planCode}, ${input.billingInterval}, ${input.quotedPriceId})`;
+    if (!reservation)
+      throw new BillingCheckoutNotAllowedException(
+        'promotion is unavailable for this purchase',
+      );
+    return {
+      promotionId: reservation.promotionId,
+      providerPromotionId: reservation.providerPromotionId,
+      promotionOriginalMinor: reservation.originalMinor,
+      promotionCheckoutExpiresAt: reservation.checkoutExpiresAt,
+    };
   }
 
   async openCheckoutAttempt(input: {
@@ -399,6 +438,7 @@ export class BillingRepository {
     id: string;
     providerSessionId: string;
     providerSubscriptionId: string;
+    promotionDiscountMinor?: number;
   }): Promise<void> {
     await this.rls.run(async (tx) => {
       const { count } = await tx.billingCheckoutAttempt.updateMany({
@@ -415,6 +455,9 @@ export class BillingRepository {
           providerSessionId: input.providerSessionId,
           providerSubscriptionId: input.providerSubscriptionId,
           completedAt: new Date(),
+          ...(input.promotionDiscountMinor === undefined
+            ? {}
+            : { promotionDiscountMinor: input.promotionDiscountMinor }),
           failedAt: null,
           failureCode: null,
         },
@@ -426,7 +469,9 @@ export class BillingRepository {
         if (
           current?.status !== 'COMPLETED' ||
           current.providerSessionId !== input.providerSessionId ||
-          current.providerSubscriptionId !== input.providerSubscriptionId
+          current.providerSubscriptionId !== input.providerSubscriptionId ||
+          (input.promotionDiscountMinor !== undefined &&
+            current.promotionDiscountMinor !== input.promotionDiscountMinor)
         ) {
           throw new Error('Checkout correlation conflict');
         }

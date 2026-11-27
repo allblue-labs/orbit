@@ -1,5 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, Matches, IsInt, IsOptional, Min } from 'class-validator';
+import {
+  IsIn,
+  Matches,
+  IsInt,
+  IsOptional,
+  Min,
+  ValidateIf,
+} from 'class-validator';
 import {
   BillingInterval,
   type BillingInterval as BillingIntervalType,
@@ -31,4 +38,9 @@ export class CreateCheckoutSessionDto {
   @ApiProperty({ enum: Object.values(BillingInterval) })
   @IsIn(Object.values(BillingInterval))
   billingInterval!: BillingIntervalType;
+
+  @ApiPropertyOptional({ example: 'ORBIT-INICIO' })
+  @ValidateIf((_: unknown, value: unknown) => value !== undefined)
+  @Matches(/^[A-Za-z0-9][A-Za-z0-9-]{2,31}$/)
+  promotionCode?: string;
 }

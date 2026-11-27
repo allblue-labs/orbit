@@ -69,7 +69,7 @@ describe('BillingReconciliationService durable inbox', () => {
       recordInvoice: jest.fn().mockResolvedValue(undefined),
       recordFinancialAdjustment: jest.fn().mockResolvedValue(undefined),
     };
-    const checkout = { fulfill: jest.fn() };
+    const checkout = { fulfill: jest.fn(), expirePromotion: jest.fn() };
     const subscriptions = {
       currentOrNull: jest.fn(),
       applyProviderPlan: jest.fn().mockResolvedValue(undefined),
@@ -142,6 +142,29 @@ describe('BillingReconciliationService durable inbox', () => {
       }),
     );
     expect(repository.finishClaimedEvent).not.toHaveBeenCalled();
+  });
+
+  it('releases an expired checkout reservation without reconciling a subscription', async () => {
+    const claimed = event({
+      eventType: 'checkout.session.expired',
+      providerObjectId: 'cs_test_expired',
+      providerSubscriptionId: null,
+    });
+    const { service, repository, checkout } = setup(claimed);
+    checkout.expirePromotion.mockResolvedValue(undefined);
+
+    await expect(service.drainInbox()).resolves.toMatchObject({
+      processed: 1,
+      failed: 0,
+    });
+    expect(checkout.expirePromotion).toHaveBeenCalledWith('cs_test_expired');
+    expect(checkout.fulfill).not.toHaveBeenCalled();
+    expect(repository.findSubscriptionByProviderId).not.toHaveBeenCalled();
+    expect(repository.finishClaimedEvent).toHaveBeenCalledWith({
+      id: claimed.id,
+      processingToken: claimed.processingToken,
+      status: 'PROCESSED',
+    });
   });
 
   it('does not apply an old subscription event to a new purchase', async () => {

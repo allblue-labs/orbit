@@ -39,6 +39,7 @@ export const runtimeDefinerFunctions = new Set([
   'app_register_mobile_installation(uuid,character varying,character varying,character varying,text,character,character varying,character varying,character varying,character varying)',
   'app_reserve_registration_document(text,uuid)',
   'app_trial_fingerprint_consumed(text)',
+  'app_reserve_billing_promotion(text,text,text,text,text)',
   'billing_assert_event_lease(uuid,uuid)',
   'app_identity_user_by_email(text)',
   'app_identity_session_by_refresh(text)',

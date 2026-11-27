@@ -45,6 +45,7 @@ import {
   ProviderCheckoutState,
   type ProviderCheckoutSession,
   type ProviderPlanChange,
+  type ProviderPromotionTerms,
   type ProviderSubscription,
 } from '../billing.types';
 import {
@@ -55,6 +56,10 @@ import {
   BillingProviderUnavailableException,
   BillingWebhookInvalidException,
 } from '../billing.errors';
+import {
+  activateStripePromotion,
+  deactivateStripePromotion,
+} from './stripe-promotions';
 import { toProviderBillingState } from './stripe-status.mapper';
 
 /** Um provedor lento não pode prender uma requisição do produto. */
@@ -125,6 +130,18 @@ export class StripeBillingProvider implements BillingProvider {
     return { providerCustomerId: customer.id };
   }
 
+  activatePromotion(terms: ProviderPromotionTerms) {
+    return this.chamar('activatePromotion', () =>
+      activateStripePromotion(this.require(), terms),
+    );
+  }
+
+  deactivatePromotion(terms: ProviderPromotionTerms, providerId: string) {
+    return this.chamar('deactivatePromotion', () =>
+      deactivateStripePromotion(this.require(), terms, providerId),
+    );
+  }
+
   async createCheckoutSession(
     request: CheckoutSessionRequest,
   ): Promise<CheckoutSession> {
@@ -144,6 +161,14 @@ export class StripeBillingProvider implements BillingProvider {
           mode: 'subscription',
           customer: request.providerCustomerId,
           line_items: [{ price: priceId, quantity: 1 }],
+          ...(request.promotion
+            ? {
+                discounts: [{ promotion_code: request.promotion.providerId }],
+                expires_at: Math.floor(
+                  request.promotion.expiresAt.getTime() / 1000,
+                ),
+              }
+            : {}),
           /** URLs do servidor. O cliente não escolhe para onde voltar. */
           success_url: this.config.checkoutSuccessUrl,
           cancel_url: this.config.checkoutCancelUrl,
@@ -219,6 +244,20 @@ export class StripeBillingProvider implements BillingProvider {
               : ProviderCheckoutState.UNKNOWN,
       rawStatus: session.status ?? 'unknown',
       paymentStatus: session.payment_status,
+      ...(session.discounts?.length
+        ? {
+            promotionEvidence: {
+              providerId:
+                session.discounts.length === 1
+                  ? this.idDoObjeto(session.discounts[0]?.promotion_code)
+                  : null,
+              originalMinor: session.amount_subtotal,
+              discountMinor: session.total_details?.amount_discount ?? null,
+              totalMinor: session.amount_total,
+              currency: session.currency,
+            },
+          }
+        : {}),
       providerCustomerId: this.idDoObjeto(session.customer),
       providerSubscriptionId: this.idDoObjeto(session.subscription),
       providerPriceId: this.idDoObjeto(price),

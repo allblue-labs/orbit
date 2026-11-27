@@ -17,7 +17,17 @@ export const SUBSCRIPTIONS_CANCEL_SCHEDULED_CHANGE =
   'subscriptions:cancel-scheduled-change';
 export const TRIALS_READ = 'trials:read';
 export const TRIALS_MANAGE = 'trials:manage';
+export const PROMOTIONS_READ = 'promotions:read';
+export const PROMOTIONS_CREATE = 'promotions:create';
+export const PROMOTIONS_UPDATE = 'promotions:update';
+export const PROMOTIONS_ACTIVATE = 'promotions:activate';
+export const PROMOTIONS_DEACTIVATE = 'promotions:deactivate';
 const CAPABILITIES = [
+  PROMOTIONS_READ,
+  PROMOTIONS_CREATE,
+  PROMOTIONS_UPDATE,
+  PROMOTIONS_ACTIVATE,
+  PROMOTIONS_DEACTIVATE,
   PLANS_READ,
   SUBSCRIPTIONS_READ,
   SUBSCRIPTIONS_CHANGE_PLAN,

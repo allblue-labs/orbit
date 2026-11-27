@@ -125,6 +125,7 @@ export class BillingService {
     planCode: PlanCodeType;
     expectedCatalogVersion?: number;
     billingInterval: BillingIntervalType;
+    promotionCode?: string;
     /** Somente o comando autenticado de troca autoriza um destino diferente. */
     changePlan?: boolean;
     acknowledgeTrialEnd?: boolean;
@@ -132,6 +133,7 @@ export class BillingService {
     requestedBy?: string;
   }): Promise<CheckoutSession> {
     this.assertEnabled();
+    const promotionCode = input.promotionCode?.toUpperCase();
     const offer = await this.plans.selectable(
       input.planCode,
       input.organizationId,
@@ -185,6 +187,14 @@ export class BillingService {
       );
     }
 
+    if (
+      promotionCode &&
+      assinatura.effectiveStatus !== SubscriptionStatus.PENDING_PAYMENT
+    )
+      throw new BillingCheckoutNotAllowedException(
+        'promotion requires a paid checkout without trial',
+      );
+
     const customer = await this.ensureCustomer(input.organizationId);
 
     for (let passagem = 0; passagem < 2; passagem += 1) {
@@ -202,6 +212,7 @@ export class BillingService {
         subscriptionVersion: assinatura.version,
         endsTrial,
         quotedPriceId,
+        ...(promotionCode ? { promotionCode } : {}),
         quotedCatalogVersion: offer.version,
         quotedEntitlements: snapshotOf(
           offer,
@@ -235,6 +246,7 @@ export class BillingService {
           (attempt.subscriptionVersion == null ||
             attempt.subscriptionVersion === assinatura.version) &&
           attempt.endsTrial === endsTrial &&
+          (attempt.promotionCode ?? undefined) === promotionCode &&
           (attempt.quotedPriceId === null ||
             attempt.quotedPriceId === quotedPriceId) &&
           currentSession.url
@@ -258,7 +270,8 @@ export class BillingService {
         attempt.billingCustomerId !== customer.id ||
         (attempt.subscriptionVersion != null &&
           attempt.subscriptionVersion !== assinatura.version) ||
-        attempt.endsTrial !== endsTrial
+        attempt.endsTrial !== endsTrial ||
+        (attempt.promotionCode ?? undefined) !== promotionCode
       ) {
         throw new BillingCheckoutNotAllowedException(
           'another checkout is being created',
@@ -270,8 +283,23 @@ export class BillingService {
        * responder, a mesma chave recupera a mesma sessão sem criar cobrança
        * paralela.
        */
+      if (
+        attempt.promotionCheckoutExpiresAt &&
+        attempt.promotionCheckoutExpiresAt.getTime() <= Date.now()
+      )
+        throw new BillingCheckoutNotAllowedException(
+          'unconfirmed promotional checkout requires reconciliation',
+        );
       const session = await this.provider.createCheckoutSession({
         checkoutAttemptId: attempt.id,
+        ...(attempt.providerPromotionId && attempt.promotionCheckoutExpiresAt
+          ? {
+              promotion: {
+                providerId: attempt.providerPromotionId,
+                expiresAt: attempt.promotionCheckoutExpiresAt,
+              },
+            }
+          : {}),
         priceId: attempt.quotedPriceId ?? quotedPriceId,
         organizationId: input.organizationId,
         providerCustomerId: customer.providerCustomerId,

@@ -1042,6 +1042,14 @@ model BillingCheckoutAttempt {
   quotedCatalogVersion Int?    @map("quoted_catalog_version")
   quotedEntitlements   Json?   @map("quoted_entitlements") @db.JsonB
 
+  promotionId                String?   @map("promotion_id") @db.Uuid
+  promotionCode              String?   @map("promotion_code") @db.VarChar(32)
+  providerPromotionId        String?   @map("provider_promotion_id") @db.VarChar(255)
+  promotionOriginalMinor     Int?      @map("promotion_original_minor")
+  promotionDiscountMinor     Int?      @map("promotion_discount_minor")
+  promotionCheckoutExpiresAt DateTime? @map("promotion_checkout_expires_at") @db.Timestamptz(3)
+  promotion BillingPromotion? @relation(fields: [promotionId], references: [id], onDelete: Restrict)
+
   /// `CREATING` · `OPEN` · `COMPLETED` · `EXPIRED` · `FAILED`.
   status String @default("CREATING") @db.VarChar(20)
 
@@ -5534,4 +5542,51 @@ model AuthChallenge {
 
   @@index([expiresAt], map: "auth_challenges_expiry_idx")
   @@map("auth_challenges")
+}
+
+model BillingPromotion {
+  id                  String    @id @default(uuid(7)) @db.Uuid
+  code                String    @unique @db.VarChar(32)
+  name                String    @db.VarChar(120)
+  description         String?   @db.VarChar(500)
+  percentOff          Int?      @map("percent_off")
+  amountOffMinor      Int?      @map("amount_off_minor")
+  currency            String?   @db.VarChar(3)
+  startsAt            DateTime  @map("starts_at") @db.Timestamptz(3)
+  endsAt              DateTime  @map("ends_at") @db.Timestamptz(3)
+  planCodes           String[]  @map("plan_codes")
+  billingIntervals    String[]  @map("billing_intervals")
+  totalLimit          Int       @map("total_limit")
+  customerLimit       Int       @map("customer_limit")
+  audience            String    @db.VarChar(20)
+  durationMonths      Int?      @map("duration_months")
+  status              String    @db.VarChar(20)
+  mode                String?   @db.VarChar(10)
+  eligiblePrices      Json?     @map("eligible_prices") @db.JsonB
+  providerPromotionId String?   @map("provider_promotion_id") @db.VarChar(255)
+  syncStartedAt       DateTime? @map("sync_started_at") @db.Timestamptz(3)
+  version             Int       @default(1)
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  attempts            BillingCheckoutAttempt[]
+  commands            CorporatePromotionCommand[]
+
+  @@unique([mode, providerPromotionId], map: "billing_promotions_mode_provider_promotion_id_key")
+  @@index([status, createdAt, id], map: "billing_promotions_status_created")
+  @@map("billing_promotions")
+}
+
+model CorporatePromotionCommand {
+  id                   String           @id @default(uuid(7)) @db.Uuid
+  technicalPrincipalId String           @map("technical_principal_id") @db.Uuid
+  promotionId          String           @map("promotion_id") @db.Uuid
+  promotion            BillingPromotion @relation(fields: [promotionId], references: [id], onDelete: Restrict)
+  operation            String           @db.VarChar(12)
+  keyHash              String           @map("key_hash") @db.Char(64)
+  requestHash          String           @map("request_hash") @db.Char(64)
+  result               Json?            @db.JsonB
+  createdAt            DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([technicalPrincipalId, operation, keyHash], map: "corporate_promotion_command_key")
+  @@map("corporate_promotion_commands")
 }

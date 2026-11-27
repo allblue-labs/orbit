@@ -909,5 +909,78 @@ contractTest(
       }
     }
     assert.equal(api.paths[commercial + '/cancel'], undefined);
+    const promotions = '/api/v1/corporate-admin/promotions';
+    for (const [suffix, method, capability, statuses] of [
+      ['', 'get', 'read', [200]],
+      ['/{id}', 'get', 'read', [200]],
+      ['/{id}/redemptions', 'get', 'read', [200]],
+      ['', 'post', 'create', [201]],
+      ['/{id}', 'patch', 'update', [200]],
+      ['/{id}/activate', 'post', 'activate', [200, 202]],
+      ['/{id}/deactivate', 'post', 'deactivate', [200, 202]],
+    ]) {
+      const operation = api.paths[promotions + suffix][method];
+      assert.equal(
+        operation['x-required-capability'],
+        'promotions:' + capability,
+      );
+      const parameters = operation.parameters.map((parameter) =>
+        parameter.$ref ? resolve(parameter.$ref) : parameter,
+      );
+      assert.equal(
+        parameters.find((p) => p.name === 'X-Nexus-Administrator-Id').required,
+        method !== 'get',
+      );
+      assert.equal(
+        parameters.some((p) => p.name === 'Idempotency-Key' && p.required),
+        method !== 'get',
+      );
+      for (const status of statuses) {
+        const { schema, example } =
+          operation.responses[status].content['application/json'];
+        const validate = ajv.getSchema(base + schemaPointer(schema.$ref));
+        assert.ok(validate(example), JSON.stringify(validate.errors));
+        const unsafe = structuredClone(example);
+        (
+          unsafe.data.promotion ??
+          unsafe.data.items?.[0] ??
+          unsafe.data
+        ).providerPromotionId = 'promo_synthetic';
+        assert.equal(validate(unsafe), false);
+      }
+      if (operation.requestBody) {
+        const { schema, example } =
+          operation.requestBody.content['application/json'];
+        const validate = ajv.getSchema(base + schemaPointer(schema.$ref));
+        assert.ok(validate(example), JSON.stringify(validate.errors));
+        assert.equal(
+          validate({ ...example, stripeCouponId: 'coupon_synthetic' }),
+          false,
+        );
+        if (example.terms) {
+          assert.equal(
+            validate({
+              ...example,
+              terms: { ...example.terms, amountOffMinor: 100, currency: 'BRL' },
+            }),
+            false,
+          );
+          assert.ok(
+            validate({
+              ...example,
+              terms: {
+                ...example.terms,
+                percentOff: undefined,
+                amountOffMinor: 100,
+                currency: 'BRL',
+                durationMonths: 3,
+              },
+            }),
+            JSON.stringify(validate.errors),
+          );
+        }
+      }
+    }
+    assert.equal(api.paths[promotions + '/{id}'].delete, undefined);
   },
 );

@@ -88,6 +88,21 @@ export class BillingCheckoutFulfillmentService {
         attempt.billingCustomer.mode === this.provider.mode,
       'CHECKOUT_MODE_MISMATCH',
     );
+    const discount = session.promotionEvidence;
+    if (attempt.promotionId) {
+      this.assert(
+        discount &&
+          discount.providerId === attempt.providerPromotionId &&
+          discount.originalMinor === attempt.promotionOriginalMinor &&
+          discount.currency === 'brl' &&
+          typeof discount.discountMinor === 'number' &&
+          Number.isInteger(discount.discountMinor) &&
+          discount.discountMinor > 0 &&
+          discount.originalMinor !== null &&
+          discount.discountMinor <= discount.originalMinor,
+        'CHECKOUT_PROMOTION_MISMATCH',
+      );
+    }
     const expectedPrice = await this.config.catalogEntryForPrice(
       session.providerPriceId ?? '',
     );
@@ -139,6 +154,9 @@ export class BillingCheckoutFulfillmentService {
         );
         const acceptablePayment =
           session.paymentStatus === 'paid' ||
+          (attempt.promotionId &&
+            discount?.totalMinor === 0 &&
+            session.paymentStatus === 'no_payment_required') ||
           (expectedPrice.amountMinor === 0 &&
             session.paymentStatus === 'no_payment_required') ||
           (current.effectiveStatus === SubscriptionStatus.TRIALING &&
@@ -159,10 +177,45 @@ export class BillingCheckoutFulfillmentService {
           id: attempt.id,
           providerSessionId,
           providerSubscriptionId,
+          ...(attempt.promotionId && typeof discount?.discountMinor === 'number'
+            ? { promotionDiscountMinor: discount.discountMinor }
+            : {}),
         });
       }),
     );
     return providerSubscriptionId;
+  }
+
+  async expirePromotion(providerSessionId: string): Promise<void> {
+    const session =
+      await this.provider.retrieveCheckoutSession(providerSessionId);
+    this.assert(
+      session.providerSessionId === providerSessionId &&
+        session.state === ProviderCheckoutState.EXPIRED,
+      'CHECKOUT_NOT_EXPIRED',
+    );
+    const attempt = await this.repository.findCheckoutAttemptForFulfillment({
+      provider: this.provider.name,
+      providerSessionId,
+      checkoutAttemptId: session.metadata.checkoutAttemptId,
+    });
+    if (!attempt?.promotionId) return;
+    this.assert(
+      attempt.id === session.metadata.checkoutAttemptId &&
+        attempt.organizationId === session.metadata.organizationId &&
+        attempt.subscriptionId === session.metadata.subscriptionId &&
+        (!attempt.providerSessionId ||
+          attempt.providerSessionId === providerSessionId) &&
+        attempt.billingCustomer.providerCustomerId ===
+          session.providerCustomerId &&
+        attempt.mode === this.provider.mode,
+      'CHECKOUT_CORRELATION_MISMATCH',
+    );
+    await this.asTenant(attempt.organizationId, () =>
+      this.repository.atomic(() =>
+        this.repository.expireCheckoutAttempt(attempt.id),
+      ),
+    );
   }
 
   private assert(condition: unknown, code: string): asserts condition {

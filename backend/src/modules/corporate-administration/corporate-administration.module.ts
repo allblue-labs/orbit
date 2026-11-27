@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { BillingModule } from '../billing/billing.module';
+import { CorporatePromotionsController } from './corporate-promotions.controller';
+import { CorporatePromotionsService } from './corporate-promotions.service';
 import { CorporateCommercialController } from './corporate-commercial.controller';
 import { CorporateCommercialService } from './corporate-commercial.service';
 import { CorporateAdministrationController } from './corporate-administration.controller';
@@ -19,10 +21,12 @@ import { TechnicalCredentialService } from './technical-credential.service';
     CorporateOrganizationsController,
     CorporateTenantLifecycleController,
     CorporateCommercialController,
+    CorporatePromotionsController,
   ],
   providers: [
     TechnicalCredentialService,
     CorporateCommercialService,
+    CorporatePromotionsService,
     TechnicalAuthenticationGuard,
     CorporateCapabilityGuard,
   ],

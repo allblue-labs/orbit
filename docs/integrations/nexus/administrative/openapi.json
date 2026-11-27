@@ -1893,6 +1893,700 @@
           }
         }
       }
+    },
+    "/api/v1/corporate-admin/promotions": {
+      "get": {
+        "operationId": "corporateAdminListPromotions",
+        "summary": "Lista promoções comerciais",
+        "tags": ["Administração corporativa"],
+        "parameters": [
+          { "$ref": "#/components/parameters/CorrelationId" },
+          { "$ref": "#/components/parameters/PromotionPage" },
+          { "$ref": "#/components/parameters/PromotionPageSize" },
+          { "$ref": "#/components/parameters/PromotionStatus" },
+          { "$ref": "#/components/parameters/PromotionCode" },
+          { "$ref": "#/components/parameters/NexusAdministratorId" }
+        ],
+        "x-required-capability": "promotions:read",
+        "responses": {
+          "200": {
+            "description": "Operação corporativa concluída.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": { "type": "string" }
+              },
+              "Cache-Control": {
+                "schema": { "type": "string", "const": "private, no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromotionPageResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "items": [
+                      {
+                        "id": "018fed15-f0ea-7ff1-ad52-ddbf8c091b83",
+                        "code": "ORBIT-INICIO",
+                        "name": "Campanha sintética",
+                        "description": null,
+                        "version": 1,
+                        "providerMode": null,
+                        "status": "DRAFT",
+                        "availability": "UNAVAILABLE",
+                        "terms": {
+                          "percentOff": 20,
+                          "startsAt": "2026-11-26T16:00:00.000Z",
+                          "endsAt": "2026-12-26T16:00:00.000Z",
+                          "planCodes": ["PROFESSIONAL"],
+                          "billingIntervals": ["MONTHLY"],
+                          "totalLimit": 25,
+                          "customerLimit": 1,
+                          "audience": "NEW_CUSTOMER",
+                          "amountOffMinor": null,
+                          "currency": null,
+                          "durationMonths": null
+                        },
+                        "createdAt": "2026-11-26T16:00:00.000Z",
+                        "updatedAt": "2026-11-26T16:00:00.000Z"
+                      }
+                    ],
+                    "total": 1,
+                    "page": 1,
+                    "pageSize": 25
+                  },
+                  "requestId": "c935d32a-9ad2-409c-a28c-c922dcc16f2c",
+                  "timestamp": "2026-11-26T16:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/CorporateValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/PromotionNotFound" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/PromotionUnavailable" }
+        }
+      },
+      "post": {
+        "operationId": "corporateAdminCreatePromotion",
+        "summary": "Cria um rascunho",
+        "tags": ["Administração corporativa"],
+        "parameters": [
+          { "$ref": "#/components/parameters/CorrelationId" },
+          { "$ref": "#/components/parameters/RequiredNexusAdministratorId" },
+          { "$ref": "#/components/parameters/PromotionIdempotency" }
+        ],
+        "x-required-capability": "promotions:create",
+        "responses": {
+          "201": {
+            "description": "Operação corporativa concluída.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": { "type": "string" }
+              },
+              "Cache-Control": {
+                "schema": { "type": "string", "const": "private, no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromotionReceiptResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "operationId": "018fed15-f0eb-70fa-b28a-25c132da99e3",
+                    "promotion": {
+                      "id": "018fed15-f0ea-7ff1-ad52-ddbf8c091b83",
+                      "code": "ORBIT-INICIO",
+                      "name": "Campanha sintética",
+                      "description": null,
+                      "version": 1,
+                      "providerMode": null,
+                      "status": "DRAFT",
+                      "availability": "UNAVAILABLE",
+                      "terms": {
+                        "percentOff": 20,
+                        "startsAt": "2026-11-26T16:00:00.000Z",
+                        "endsAt": "2026-12-26T16:00:00.000Z",
+                        "planCodes": ["PROFESSIONAL"],
+                        "billingIntervals": ["MONTHLY"],
+                        "totalLimit": 25,
+                        "customerLimit": 1,
+                        "audience": "NEW_CUSTOMER",
+                        "amountOffMinor": null,
+                        "currency": null,
+                        "durationMonths": null
+                      },
+                      "createdAt": "2026-11-26T16:00:00.000Z",
+                      "updatedAt": "2026-11-26T16:00:00.000Z"
+                    },
+                    "pending": false,
+                    "replayed": false
+                  },
+                  "requestId": "c935d32a-9ad2-409c-a28c-c922dcc16f2c",
+                  "timestamp": "2026-11-26T16:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/CorporateValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/PromotionNotFound" },
+          "409": { "$ref": "#/components/responses/PromotionConflict" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/PromotionUnavailable" }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PromotionCreate" },
+              "example": {
+                "code": "ORBIT-INICIO",
+                "name": "Campanha sintética",
+                "reason": "ADMINISTRATIVE",
+                "terms": {
+                  "percentOff": 20,
+                  "startsAt": "2026-11-26T16:00:00.000Z",
+                  "endsAt": "2026-12-26T16:00:00.000Z",
+                  "planCodes": ["PROFESSIONAL"],
+                  "billingIntervals": ["MONTHLY"],
+                  "totalLimit": 25,
+                  "customerLimit": 1,
+                  "audience": "NEW_CUSTOMER"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/corporate-admin/promotions/{id}": {
+      "get": {
+        "operationId": "corporateAdminGetPromotion",
+        "summary": "Consulta uma promoção",
+        "tags": ["Administração corporativa"],
+        "parameters": [
+          { "$ref": "#/components/parameters/CorrelationId" },
+          { "$ref": "#/components/parameters/PromotionId" },
+          { "$ref": "#/components/parameters/NexusAdministratorId" }
+        ],
+        "x-required-capability": "promotions:read",
+        "responses": {
+          "200": {
+            "description": "Operação corporativa concluída.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": { "type": "string" }
+              },
+              "Cache-Control": {
+                "schema": { "type": "string", "const": "private, no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromotionViewResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "id": "018fed15-f0ea-7ff1-ad52-ddbf8c091b83",
+                    "code": "ORBIT-INICIO",
+                    "name": "Campanha sintética",
+                    "description": null,
+                    "version": 1,
+                    "providerMode": null,
+                    "status": "DRAFT",
+                    "availability": "UNAVAILABLE",
+                    "terms": {
+                      "percentOff": 20,
+                      "startsAt": "2026-11-26T16:00:00.000Z",
+                      "endsAt": "2026-12-26T16:00:00.000Z",
+                      "planCodes": ["PROFESSIONAL"],
+                      "billingIntervals": ["MONTHLY"],
+                      "totalLimit": 25,
+                      "customerLimit": 1,
+                      "audience": "NEW_CUSTOMER",
+                      "amountOffMinor": null,
+                      "currency": null,
+                      "durationMonths": null
+                    },
+                    "createdAt": "2026-11-26T16:00:00.000Z",
+                    "updatedAt": "2026-11-26T16:00:00.000Z"
+                  },
+                  "requestId": "c935d32a-9ad2-409c-a28c-c922dcc16f2c",
+                  "timestamp": "2026-11-26T16:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/CorporateValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/PromotionNotFound" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/PromotionUnavailable" }
+        }
+      },
+      "patch": {
+        "operationId": "corporateAdminUpdatePromotion",
+        "summary": "Edita campos permitidos",
+        "tags": ["Administração corporativa"],
+        "parameters": [
+          { "$ref": "#/components/parameters/CorrelationId" },
+          { "$ref": "#/components/parameters/PromotionId" },
+          { "$ref": "#/components/parameters/RequiredNexusAdministratorId" },
+          { "$ref": "#/components/parameters/PromotionIdempotency" }
+        ],
+        "x-required-capability": "promotions:update",
+        "description": "O código é permanente. O objeto terms substitui as condições no estado DRAFT.",
+        "responses": {
+          "200": {
+            "description": "Operação corporativa concluída.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": { "type": "string" }
+              },
+              "Cache-Control": {
+                "schema": { "type": "string", "const": "private, no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromotionReceiptResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "operationId": "018fed15-f0eb-70fa-b28a-25c132da99e3",
+                    "promotion": {
+                      "id": "018fed15-f0ea-7ff1-ad52-ddbf8c091b83",
+                      "code": "ORBIT-INICIO",
+                      "name": "Campanha de entrada",
+                      "description": null,
+                      "version": 2,
+                      "providerMode": null,
+                      "status": "DRAFT",
+                      "availability": "UNAVAILABLE",
+                      "terms": {
+                        "percentOff": 20,
+                        "startsAt": "2026-11-26T16:00:00.000Z",
+                        "endsAt": "2026-12-26T16:00:00.000Z",
+                        "planCodes": ["PROFESSIONAL"],
+                        "billingIntervals": ["MONTHLY"],
+                        "totalLimit": 25,
+                        "customerLimit": 1,
+                        "audience": "NEW_CUSTOMER",
+                        "amountOffMinor": null,
+                        "currency": null,
+                        "durationMonths": null
+                      },
+                      "createdAt": "2026-11-26T16:00:00.000Z",
+                      "updatedAt": "2026-11-26T16:00:00.000Z"
+                    },
+                    "pending": false,
+                    "replayed": false
+                  },
+                  "requestId": "c935d32a-9ad2-409c-a28c-c922dcc16f2c",
+                  "timestamp": "2026-11-26T16:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/CorporateValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/PromotionNotFound" },
+          "409": { "$ref": "#/components/responses/PromotionConflict" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/PromotionUnavailable" }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PromotionUpdate" },
+              "example": {
+                "reason": "CORRECTION",
+                "expectedVersion": 1,
+                "name": "Campanha de entrada"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/corporate-admin/promotions/{id}/redemptions": {
+      "get": {
+        "operationId": "corporateAdminListPromotionRedemptions",
+        "summary": "Lista utilizações de uma promoção",
+        "tags": ["Administração corporativa"],
+        "parameters": [
+          { "$ref": "#/components/parameters/CorrelationId" },
+          { "$ref": "#/components/parameters/PromotionId" },
+          { "$ref": "#/components/parameters/PromotionPage" },
+          { "$ref": "#/components/parameters/PromotionPageSize" },
+          { "$ref": "#/components/parameters/PromotionRedemptionStatus" },
+          { "$ref": "#/components/parameters/NexusAdministratorId" }
+        ],
+        "x-required-capability": "promotions:read",
+        "responses": {
+          "200": {
+            "description": "Operação corporativa concluída.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": { "type": "string" }
+              },
+              "Cache-Control": {
+                "schema": { "type": "string", "const": "private, no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromotionRedemptionPageResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "items": [
+                      {
+                        "id": "cab5ce9a-154c-466d-a130-55d7c6331abd",
+                        "organizationId": "018fed15-f0ea-7d7f-aa28-846145f70764",
+                        "planCode": "PROFESSIONAL",
+                        "billingInterval": "MONTHLY",
+                        "mode": "TEST",
+                        "currency": "BRL",
+                        "status": "CONFIRMED",
+                        "originalMinor": 15990,
+                        "discountMinor": 3198,
+                        "expiresAt": "2026-12-26T16:00:00.000Z",
+                        "createdAt": "2026-11-26T16:00:00.000Z",
+                        "confirmedAt": "2026-11-26T16:00:00.000Z"
+                      }
+                    ],
+                    "total": 1,
+                    "page": 1,
+                    "pageSize": 25
+                  },
+                  "requestId": "c935d32a-9ad2-409c-a28c-c922dcc16f2c",
+                  "timestamp": "2026-11-26T16:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/CorporateValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/PromotionNotFound" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/PromotionUnavailable" }
+        }
+      }
+    },
+    "/api/v1/corporate-admin/promotions/{id}/activate": {
+      "post": {
+        "operationId": "corporateAdminActivatePromotion",
+        "summary": "Sincroniza cupom e código promocional no Stripe",
+        "tags": ["Administração corporativa"],
+        "parameters": [
+          { "$ref": "#/components/parameters/CorrelationId" },
+          { "$ref": "#/components/parameters/PromotionId" },
+          { "$ref": "#/components/parameters/RequiredNexusAdministratorId" },
+          { "$ref": "#/components/parameters/PromotionIdempotency" }
+        ],
+        "x-required-capability": "promotions:activate",
+        "description": "ACTIVE só é gravado após confirmação do Stripe. Reenvie a mesma solicitação para retomar um estado pendente.",
+        "responses": {
+          "200": {
+            "description": "Operação corporativa concluída.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": { "type": "string" }
+              },
+              "Cache-Control": {
+                "schema": { "type": "string", "const": "private, no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromotionReceiptResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "operationId": "018fed15-f0eb-70fa-b28a-25c132da99e3",
+                    "promotion": {
+                      "id": "018fed15-f0ea-7ff1-ad52-ddbf8c091b83",
+                      "code": "ORBIT-INICIO",
+                      "name": "Campanha sintética",
+                      "description": null,
+                      "version": 3,
+                      "providerMode": "TEST",
+                      "status": "ACTIVE",
+                      "availability": "AVAILABLE",
+                      "terms": {
+                        "percentOff": 20,
+                        "startsAt": "2026-11-26T16:00:00.000Z",
+                        "endsAt": "2026-12-26T16:00:00.000Z",
+                        "planCodes": ["PROFESSIONAL"],
+                        "billingIntervals": ["MONTHLY"],
+                        "totalLimit": 25,
+                        "customerLimit": 1,
+                        "audience": "NEW_CUSTOMER",
+                        "amountOffMinor": null,
+                        "currency": null,
+                        "durationMonths": null
+                      },
+                      "createdAt": "2026-11-26T16:00:00.000Z",
+                      "updatedAt": "2026-11-26T16:00:00.000Z"
+                    },
+                    "pending": false,
+                    "replayed": false
+                  },
+                  "requestId": "c935d32a-9ad2-409c-a28c-c922dcc16f2c",
+                  "timestamp": "2026-11-26T16:00:00.000Z"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Sincronização pendente. Reenvie o pedido original com a mesma chave.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": { "type": "string" }
+              },
+              "Cache-Control": {
+                "schema": { "type": "string", "const": "private, no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromotionReceiptResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "operationId": "018fed15-f0eb-70fa-b28a-25c132da99e3",
+                    "promotion": {
+                      "id": "018fed15-f0ea-7ff1-ad52-ddbf8c091b83",
+                      "code": "ORBIT-INICIO",
+                      "name": "Campanha sintética",
+                      "description": null,
+                      "version": 2,
+                      "providerMode": "TEST",
+                      "status": "ACTIVATING",
+                      "availability": "UNAVAILABLE",
+                      "terms": {
+                        "percentOff": 20,
+                        "startsAt": "2026-11-26T16:00:00.000Z",
+                        "endsAt": "2026-12-26T16:00:00.000Z",
+                        "planCodes": ["PROFESSIONAL"],
+                        "billingIntervals": ["MONTHLY"],
+                        "totalLimit": 25,
+                        "customerLimit": 1,
+                        "audience": "NEW_CUSTOMER",
+                        "amountOffMinor": null,
+                        "currency": null,
+                        "durationMonths": null
+                      },
+                      "createdAt": "2026-11-26T16:00:00.000Z",
+                      "updatedAt": "2026-11-26T16:00:00.000Z"
+                    },
+                    "pending": true,
+                    "replayed": false
+                  },
+                  "requestId": "c935d32a-9ad2-409c-a28c-c922dcc16f2c",
+                  "timestamp": "2026-11-26T16:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/CorporateValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/PromotionNotFound" },
+          "409": { "$ref": "#/components/responses/PromotionConflict" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/PromotionUnavailable" }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PromotionVersion" },
+              "example": { "reason": "CAMPAIGN_LAUNCH", "expectedVersion": 1 }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/corporate-admin/promotions/{id}/deactivate": {
+      "post": {
+        "operationId": "corporateAdminDeactivatePromotion",
+        "summary": "Encerra novas utilizações de uma promoção",
+        "tags": ["Administração corporativa"],
+        "parameters": [
+          { "$ref": "#/components/parameters/CorrelationId" },
+          { "$ref": "#/components/parameters/PromotionId" },
+          { "$ref": "#/components/parameters/RequiredNexusAdministratorId" },
+          { "$ref": "#/components/parameters/PromotionIdempotency" }
+        ],
+        "x-required-capability": "promotions:deactivate",
+        "description": "Bloqueia novas reservas ao iniciar. Benefícios já confirmados permanecem registrados. Reenvie a mesma solicitação para retomar um estado pendente.",
+        "responses": {
+          "200": {
+            "description": "Operação corporativa concluída.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": { "type": "string" }
+              },
+              "Cache-Control": {
+                "schema": { "type": "string", "const": "private, no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromotionReceiptResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "operationId": "018fed15-f0eb-70fa-b28a-25c132da99e3",
+                    "promotion": {
+                      "id": "018fed15-f0ea-7ff1-ad52-ddbf8c091b83",
+                      "code": "ORBIT-INICIO",
+                      "name": "Campanha sintética",
+                      "description": null,
+                      "version": 5,
+                      "providerMode": "TEST",
+                      "status": "INACTIVE",
+                      "availability": "UNAVAILABLE",
+                      "terms": {
+                        "percentOff": 20,
+                        "startsAt": "2026-11-26T16:00:00.000Z",
+                        "endsAt": "2026-12-26T16:00:00.000Z",
+                        "planCodes": ["PROFESSIONAL"],
+                        "billingIntervals": ["MONTHLY"],
+                        "totalLimit": 25,
+                        "customerLimit": 1,
+                        "audience": "NEW_CUSTOMER",
+                        "amountOffMinor": null,
+                        "currency": null,
+                        "durationMonths": null
+                      },
+                      "createdAt": "2026-11-26T16:00:00.000Z",
+                      "updatedAt": "2026-11-26T16:00:00.000Z"
+                    },
+                    "pending": false,
+                    "replayed": false
+                  },
+                  "requestId": "c935d32a-9ad2-409c-a28c-c922dcc16f2c",
+                  "timestamp": "2026-11-26T16:00:00.000Z"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Sincronização pendente. Reenvie o pedido original com a mesma chave.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": { "type": "string" }
+              },
+              "Cache-Control": {
+                "schema": { "type": "string", "const": "private, no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromotionReceiptResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "operationId": "018fed15-f0eb-70fa-b28a-25c132da99e3",
+                    "promotion": {
+                      "id": "018fed15-f0ea-7ff1-ad52-ddbf8c091b83",
+                      "code": "ORBIT-INICIO",
+                      "name": "Campanha sintética",
+                      "description": null,
+                      "version": 4,
+                      "providerMode": "TEST",
+                      "status": "DEACTIVATING",
+                      "availability": "UNAVAILABLE",
+                      "terms": {
+                        "percentOff": 20,
+                        "startsAt": "2026-11-26T16:00:00.000Z",
+                        "endsAt": "2026-12-26T16:00:00.000Z",
+                        "planCodes": ["PROFESSIONAL"],
+                        "billingIntervals": ["MONTHLY"],
+                        "totalLimit": 25,
+                        "customerLimit": 1,
+                        "audience": "NEW_CUSTOMER",
+                        "amountOffMinor": null,
+                        "currency": null,
+                        "durationMonths": null
+                      },
+                      "createdAt": "2026-11-26T16:00:00.000Z",
+                      "updatedAt": "2026-11-26T16:00:00.000Z"
+                    },
+                    "pending": true,
+                    "replayed": false
+                  },
+                  "requestId": "c935d32a-9ad2-409c-a28c-c922dcc16f2c",
+                  "timestamp": "2026-11-26T16:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/CorporateValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/PromotionNotFound" },
+          "409": { "$ref": "#/components/responses/PromotionConflict" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/PromotionUnavailable" }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PromotionVersion" },
+              "example": { "reason": "CAMPAIGN_ENDED", "expectedVersion": 3 }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2011,6 +2705,64 @@
         "in": "path",
         "required": true,
         "schema": { "type": "string", "format": "uuid" }
+      },
+      "PromotionId": {
+        "name": "id",
+        "schema": { "type": "string", "format": "uuid" },
+        "required": true,
+        "in": "path"
+      },
+      "PromotionPage": {
+        "name": "page",
+        "schema": { "type": "integer", "minimum": 1, "maximum": 10000 },
+        "description": "Página, a partir de 1.",
+        "required": false,
+        "in": "query"
+      },
+      "PromotionPageSize": {
+        "name": "pageSize",
+        "schema": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "description": "Padrão de 25 registros.",
+        "required": false,
+        "in": "query"
+      },
+      "PromotionStatus": {
+        "name": "status",
+        "schema": {
+          "type": "string",
+          "enum": ["DRAFT", "ACTIVATING", "ACTIVE", "DEACTIVATING", "INACTIVE"]
+        },
+        "description": "Estado persistido da promoção.",
+        "required": false,
+        "in": "query"
+      },
+      "PromotionCode": {
+        "name": "code",
+        "schema": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,31}$"
+        },
+        "description": "Prefixo do código, sem distinção de caixa.",
+        "required": false,
+        "in": "query"
+      },
+      "PromotionRedemptionStatus": {
+        "name": "status",
+        "schema": {
+          "type": "string",
+          "enum": ["RESERVED", "CONFIRMED", "RELEASED"]
+        },
+        "description": "Estado da utilização.",
+        "required": false,
+        "in": "query"
+      },
+      "PromotionIdempotency": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": true,
+        "description": "Chave original, vinculada ao principal técnico e ao tipo de comando. Repita com o mesmo alvo e conteúdo para recuperar.",
+        "schema": { "type": "string", "pattern": "^[A-Za-z0-9_-]{16,120}$" },
+        "example": "6a3508be-21e2-4edc-84a0-0ae87fc6ede8"
       }
     },
     "schemas": {
@@ -4024,6 +4776,416 @@
           "timestamp": { "type": "string", "format": "date-time" }
         },
         "required": ["success", "data", "requestId", "timestamp"]
+      },
+      "PromotionTermsInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "percentOff": { "type": "integer", "minimum": 1, "maximum": 99 },
+          "amountOffMinor": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "currency": { "type": "string", "enum": ["BRL"] },
+          "durationMonths": { "type": "integer", "minimum": 2, "maximum": 12 },
+          "startsAt": { "type": "string", "format": "date-time" },
+          "endsAt": { "type": "string", "format": "date-time" },
+          "planCodes": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,39}$" },
+            "minItems": 1,
+            "maxItems": 25,
+            "uniqueItems": true
+          },
+          "billingIntervals": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["MONTHLY", "SEMIANNUAL", "ANNUAL"]
+            },
+            "minItems": 1,
+            "maxItems": 3,
+            "uniqueItems": true
+          },
+          "totalLimit": { "type": "integer", "minimum": 1, "maximum": 1000000 },
+          "customerLimit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          "audience": {
+            "type": "string",
+            "enum": ["ANY", "NEW_CUSTOMER", "EXISTING_CUSTOMER"]
+          }
+        },
+        "required": [
+          "startsAt",
+          "endsAt",
+          "planCodes",
+          "billingIntervals",
+          "totalLimit",
+          "customerLimit",
+          "audience"
+        ],
+        "oneOf": [
+          {
+            "required": ["percentOff"],
+            "not": {
+              "anyOf": [
+                { "required": ["amountOffMinor"] },
+                { "required": ["currency"] }
+              ]
+            }
+          },
+          {
+            "required": ["amountOffMinor", "currency"],
+            "not": { "required": ["percentOff"] }
+          }
+        ],
+        "allOf": [
+          {
+            "if": { "required": ["durationMonths"] },
+            "then": {
+              "properties": { "billingIntervals": { "const": ["MONTHLY"] } }
+            }
+          }
+        ]
+      },
+      "PromotionTerms": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "percentOff": {
+            "anyOf": [
+              { "type": "integer", "minimum": 1, "maximum": 99 },
+              { "type": "null" }
+            ]
+          },
+          "amountOffMinor": {
+            "anyOf": [
+              { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+              { "type": "null" }
+            ]
+          },
+          "currency": {
+            "anyOf": [{ "type": "string", "enum": ["BRL"] }, { "type": "null" }]
+          },
+          "durationMonths": {
+            "anyOf": [
+              { "type": "integer", "minimum": 2, "maximum": 12 },
+              { "type": "null" }
+            ]
+          },
+          "startsAt": { "type": "string", "format": "date-time" },
+          "endsAt": { "type": "string", "format": "date-time" },
+          "planCodes": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,39}$" },
+            "minItems": 1,
+            "maxItems": 25,
+            "uniqueItems": true
+          },
+          "billingIntervals": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["MONTHLY", "SEMIANNUAL", "ANNUAL"]
+            },
+            "minItems": 1,
+            "maxItems": 3,
+            "uniqueItems": true
+          },
+          "totalLimit": { "type": "integer", "minimum": 1, "maximum": 1000000 },
+          "customerLimit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          "audience": {
+            "type": "string",
+            "enum": ["ANY", "NEW_CUSTOMER", "EXISTING_CUSTOMER"]
+          }
+        },
+        "required": [
+          "percentOff",
+          "amountOffMinor",
+          "currency",
+          "durationMonths",
+          "startsAt",
+          "endsAt",
+          "planCodes",
+          "billingIntervals",
+          "totalLimit",
+          "customerLimit",
+          "audience"
+        ]
+      },
+      "PromotionView": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{2,31}$"
+          },
+          "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "description": {
+            "anyOf": [
+              { "type": "string", "maxLength": 500 },
+              { "type": "null" }
+            ]
+          },
+          "version": { "type": "integer", "minimum": 1 },
+          "providerMode": {
+            "anyOf": [
+              { "type": "string", "enum": ["TEST", "LIVE"] },
+              { "type": "null" }
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "ACTIVATING",
+              "ACTIVE",
+              "DEACTIVATING",
+              "INACTIVE"
+            ]
+          },
+          "availability": {
+            "type": "string",
+            "enum": ["UNAVAILABLE", "SCHEDULED", "AVAILABLE", "EXPIRED"]
+          },
+          "terms": { "$ref": "#/components/schemas/PromotionTerms" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "description",
+          "version",
+          "providerMode",
+          "status",
+          "availability",
+          "terms",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "PromotionRedemption": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "organizationId": { "type": "string", "format": "uuid" },
+          "planCode": { "type": "string" },
+          "billingInterval": {
+            "type": "string",
+            "enum": ["MONTHLY", "SEMIANNUAL", "ANNUAL"]
+          },
+          "mode": { "type": "string", "enum": ["TEST", "LIVE"] },
+          "currency": { "const": "BRL" },
+          "status": {
+            "type": "string",
+            "enum": ["RESERVED", "CONFIRMED", "RELEASED"]
+          },
+          "originalMinor": { "type": "integer", "minimum": 1 },
+          "discountMinor": {
+            "anyOf": [{ "type": "integer", "minimum": 1 }, { "type": "null" }]
+          },
+          "expiresAt": { "type": "string", "format": "date-time" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "confirmedAt": {
+            "anyOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "organizationId",
+          "planCode",
+          "billingInterval",
+          "mode",
+          "currency",
+          "status",
+          "originalMinor",
+          "discountMinor",
+          "expiresAt",
+          "createdAt",
+          "confirmedAt"
+        ]
+      },
+      "PromotionCreate": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{2,31}$"
+          },
+          "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "description": {
+            "anyOf": [
+              { "type": "string", "maxLength": 500 },
+              { "type": "null" }
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "ADMINISTRATIVE",
+              "CAMPAIGN_LAUNCH",
+              "CAMPAIGN_ENDED",
+              "CORRECTION"
+            ]
+          },
+          "terms": { "$ref": "#/components/schemas/PromotionTermsInput" }
+        },
+        "required": ["code", "name", "reason", "terms"]
+      },
+      "PromotionVersion": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "type": "string",
+            "enum": [
+              "ADMINISTRATIVE",
+              "CAMPAIGN_LAUNCH",
+              "CAMPAIGN_ENDED",
+              "CORRECTION"
+            ]
+          },
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483646
+          }
+        },
+        "required": ["reason", "expectedVersion"]
+      },
+      "PromotionUpdate": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "type": "string",
+            "enum": [
+              "ADMINISTRATIVE",
+              "CAMPAIGN_LAUNCH",
+              "CAMPAIGN_ENDED",
+              "CORRECTION"
+            ]
+          },
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483646
+          },
+          "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "description": {
+            "anyOf": [
+              { "type": "string", "maxLength": 500 },
+              { "type": "null" }
+            ]
+          },
+          "terms": { "$ref": "#/components/schemas/PromotionTermsInput" }
+        },
+        "required": ["reason", "expectedVersion"],
+        "anyOf": [
+          { "required": ["name"] },
+          { "required": ["description"] },
+          { "required": ["terms"] }
+        ]
+      },
+      "PromotionReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operationId": { "type": "string", "format": "uuid" },
+          "promotion": { "$ref": "#/components/schemas/PromotionView" },
+          "pending": { "type": "boolean" },
+          "replayed": { "type": "boolean" }
+        },
+        "required": ["operationId", "promotion", "pending", "replayed"]
+      },
+      "PromotionPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/PromotionView" }
+          },
+          "total": { "type": "integer", "minimum": 0 },
+          "page": { "type": "integer", "minimum": 1, "maximum": 10000 },
+          "pageSize": { "type": "integer", "minimum": 1, "maximum": 100 }
+        },
+        "required": ["items", "total", "page", "pageSize"]
+      },
+      "PromotionRedemptionPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/PromotionRedemption" }
+          },
+          "total": { "type": "integer", "minimum": 0 },
+          "page": { "type": "integer", "minimum": 1, "maximum": 10000 },
+          "pageSize": { "type": "integer", "minimum": 1, "maximum": 100 }
+        },
+        "required": ["items", "total", "page", "pageSize"]
+      },
+      "PromotionViewResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "success": { "type": "boolean", "const": true },
+          "data": { "$ref": "#/components/schemas/PromotionView" },
+          "requestId": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        },
+        "required": ["success", "data", "requestId", "timestamp"]
+      },
+      "PromotionReceiptResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "success": { "type": "boolean", "const": true },
+          "data": { "$ref": "#/components/schemas/PromotionReceipt" },
+          "requestId": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        },
+        "required": ["success", "data", "requestId", "timestamp"]
+      },
+      "PromotionPageResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "success": { "type": "boolean", "const": true },
+          "data": { "$ref": "#/components/schemas/PromotionPage" },
+          "requestId": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        },
+        "required": ["success", "data", "requestId", "timestamp"]
+      },
+      "PromotionRedemptionPageResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "success": { "type": "boolean", "const": true },
+          "data": { "$ref": "#/components/schemas/PromotionRedemptionPage" },
+          "requestId": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        },
+        "required": ["success", "data", "requestId", "timestamp"]
       }
     },
     "responses": {
@@ -4177,6 +5339,31 @@
       },
       "CorporateCommercialNotFound": {
         "description": "Organização, plano ou recibo indisponível no escopo informado.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      },
+      "PromotionNotFound": {
+        "description": "A promoção não existe no escopo consultado.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      },
+      "PromotionConflict": {
+        "description": "Código já existente, versão anterior, reutilização de chave com outro conteúdo ou transição comercial bloqueada.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      },
+      "PromotionUnavailable": {
+        "description": "A configuração de cobrança ou o serviço administrativo está temporariamente indisponível. Preserve a chave e o pedido originais.",
+        "headers": {},
         "content": {
           "application/json": {
             "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }

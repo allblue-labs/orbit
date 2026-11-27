@@ -297,6 +297,8 @@ async function provision(): Promise<void> {
        */
       'billing_webhook_events',
       'platform_tenant_provisionings',
+      'billing_promotions',
+      'corporate_promotion_commands',
       'email_outbound_messages',
       'email_provider_messages',
       'email_feedback_events',

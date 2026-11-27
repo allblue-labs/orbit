@@ -150,3 +150,40 @@ Todas as escritas exigem o `expectedSubscriptionId`, o `expectedVersion`, um `re
 O Orbit vincula a chave ao principal, à organização e ao tipo de comando. Após timeout, conexão interrompida ou `5xx`, repita a mesma requisição com a chave original, mesmo que a versão informada tenha ficado antiga. Uma assinatura bloqueada temporariamente por outra transação retorna `503 SERVICE_UNAVAILABLE`. `replayed: true` identifica o recibo já gravado. Quando o ID for conhecido, consulte o recibo em `/operations/{operationId}`. A mesma chave com outro conteúdo retorna `409 IDEMPOTENCY_MISMATCH`. Versão desatualizada retorna `409 STALE_VERSION` ou o conflito canônico de catálogo. Regra comercial impeditiva ou inelegibilidade também retorna 409. Corrija os parâmetros ou aguarde o fluxo do cliente antes de emitir uma nova intenção com outra chave. A API retorna 404 para recursos fora do escopo consultado, 401 para falha de autenticação e 403 para grant insuficiente.
 
 Tentativa, recibo e resultado são correlacionáveis na auditoria. O efeito local, o recibo e o registro terminal confirmado compartilham a transação. A tentativa é registrada separadamente para diagnóstico. O resultado de auditoria `UNCONFIRMED` pede a recuperação pela chave original. Nenhuma escrita corporativa envia comandos ao Stripe. A migration cria apenas o registro de comandos e as políticas RLS necessárias. [OpenAPI](openapi.json)
+
+## Promoções, cupons e descontos · ADM-05.A
+
+| Método | Rota sob `/api/v1/corporate-admin` | Capability | Sucesso |
+| --- | --- | --- | --- |
+| GET | `/promotions` | `promotions:read` | 200 |
+| GET | `/promotions/{id}` | `promotions:read` | 200 |
+| GET | `/promotions/{id}/redemptions` | `promotions:read` | 200 |
+| POST | `/promotions` | `promotions:create` | 201 |
+| PATCH | `/promotions/{id}` | `promotions:update` | 200 |
+| POST | `/promotions/{id}/activate` | `promotions:activate` | 200 ou 202 |
+| POST | `/promotions/{id}/deactivate` | `promotions:deactivate` | 200 ou 202 |
+
+As novas capabilities exigem concessão explícita. A API continua desabilitada por padrão. A listagem filtra por `status` e prefixo de `code`, sem distinção de caixa. Listagem e utilizações aceitam `page` e `pageSize`, com padrão 1 e 25 e até 100 itens por página. O detalhe e o histórico usam UUID. Códigos são únicos, normalizados em maiúsculas e permanentes. O histórico administrativo associa tentativa e resultado ao principal técnico, à referência declarada do administrador, à promoção e à correlação. [OpenAPI](openapi.json)
+
+### Condições comerciais
+
+- Use `percentOff` inteiro de 1 a 99 ou `amountOffMinor` em centavos com `currency: BRL`. O valor fixo deve ser menor que todos os preços-base elegíveis. O Stripe calcula o desconto efetivo. O Orbit mantém o preço-base do catálogo.
+- Sem `durationMonths` vale a primeira cobrança do checkout. Para 2 a 12 meses, selecione somente `MONTHLY`. As condições usam `startsAt` e `endsAt` com fuso explícito, planos públicos ativos e periodicidades com preço publicado e validado no Stripe. A ativação fixa os IDs de preço. Um novo preço só passa a valer para uma nova campanha.
+- `totalLimit` e `customerLimit` incluem utilizações confirmadas e reservas concorrentes. O cliente para esse limite é a organização titular da contratação. A audiência aceita `ANY`, `NEW_CUSTOMER` ou `EXISTING_CUSTOMER`. O histórico canônico de assinaturas ativas ou vinculadas ao provedor e a evidência de pagamento identificam clientes existentes.
+- Após iniciar a ativação, condições comerciais ficam imutáveis. A edição de nome e descrição internos é permitida fora de transições em curso. Desativação é definitiva para aquele código. Benefícios já confirmados permanecem vinculados à campanha.
+
+### Checkout e histórico de utilizações
+
+O checkout autenticado existente (`POST /api/v1/billing/checkout-session`) aceita `promotionCode` opcional. O código é avaliado pelo backend e aplicado como um único desconto explícito na sessão Stripe, sem liberar digitação de códigos no checkout hospedado. O fluxo atende a contratação paga sem trial em curso. Isso inclui o retorno de um cliente que já teve assinatura. Mudanças em assinaturas vinculadas ao provedor seguem os fluxos canônicos atuais.
+
+A reserva nasce na tentativa de checkout e protege os limites por campanha e por organização. `RESERVED` significa sessão em criação ou aberta. `CONFIRMED` significa que a confirmação do Stripe comprovou o desconto, seu valor e o preço original. `RELEASED` corresponde a uma tentativa encerrada sem confirmação. Uma sessão promocional dura até uma hora, limitada ao término da campanha. O Stripe exige antecedência para expiração. Por isso, novas sessões são aceitas com mais de 31 minutos restantes. A expiração confirmada pelo Stripe libera a vaga. Uma tentativa de desfecho desconhecido conserva a reserva até a reconciliação. Os campos `originalMinor` e `discountMinor` são valores em centavos, com `discountMinor` nulo até a confirmação. O histórico registra a utilização do checkout. Descontos de mensalidades seguintes aparecem na projeção canônica das faturas.
+
+### Ativação, auditoria e recuperação
+
+As escritas exigem `X-Nexus-Administrator-Id`, `Idempotency-Key` de 16 a 120 caracteres e `reason` enumerado. Edição e transições exigem `expectedVersion`. Reutilizar a chave com outro conteúdo retorna `409 IDEMPOTENCY_MISMATCH`. Versão antiga retorna `409 STALE_VERSION`. Ausência de grant devolve 403. A auditoria registra metadados de operação e omite chaves, credenciais e payloads financeiros.
+
+O rascunho existe só no Orbit. A ativação grava `ACTIVATING` antes de validar produtos e preços pelo Stripe e criar Coupon e Promotion Code no mesmo modo `TEST` ou `LIVE`. O estado `ACTIVE` exige confirmação dos dois recursos. O início de desativação grava `DEACTIVATING` e interrompe novas reservas imediatamente. `INACTIVE` aparece após a confirmação do Stripe. Os dois fluxos usam identificadores determinísticos e chaves estáveis no provedor. Operações locais, recibos e auditoria ficam na mesma transação PostgreSQL. A rede com o Stripe acontece entre transações.
+
+`202` devolve `operationId`, `pending: true` e a promoção em transição. Reenvie a mesma solicitação com a chave, o motivo e a versão originais e o mesmo principal técnico. Faça o mesmo se a resposta perder-se após o envio. Se o Orbit já gravou o resultado, o recibo reaparece com `replayed: true`. Após 20 horas, uma ativação incerta só confirma recursos que o Stripe já identifica. Se a validação de preço falhar ou o provedor continuar sem evidência, a campanha permanece indisponível. Use o `operationId` e a correlação para localizar a tentativa antes de abrir outra campanha com código distinto.
+
+Para liberar reservas automaticamente após a expiração, a lista de eventos do webhook Stripe deve incluir `checkout.session.expired`. Se a chave for restrita, a ativação usa leitura de preços e produtos e leitura/escrita de Coupon e Promotion Code. A janela local de repetição fica abaixo da retenção documentada das chaves da API v1. [Descontos no Stripe Checkout](https://docs.stripe.com/payments/checkout/discounts) · [Idempotência do Stripe](https://docs.stripe.com/api/idempotent_requests)
