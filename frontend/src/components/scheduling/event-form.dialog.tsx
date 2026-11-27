@@ -112,6 +112,13 @@ const WEEKDAYS = [
   { value: 6, label: "S" },
 ];
 
+const PRIORITY_LABELS: Readonly<Record<SchedulingPriority, string>> = {
+  LOW: "BAIXO",
+  NORMAL: "NORMAL",
+  HIGH: "ALTO",
+  CRITICAL: "CRÍTICO",
+};
+
 export function EventFormDialog({
   open,
   editing,
@@ -421,7 +428,7 @@ function EventForm({
             <SelectContent>
               {SCHEDULING_PRIORITIES.map((priority) => (
                 <SelectItem key={priority} value={priority}>
-                  {priority}
+                  {PRIORITY_LABELS[priority]}
                 </SelectItem>
               ))}
             </SelectContent>
