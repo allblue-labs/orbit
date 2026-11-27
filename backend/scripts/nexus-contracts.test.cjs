@@ -982,5 +982,51 @@ contractTest(
       }
     }
     assert.equal(api.paths[promotions + '/{id}'].delete, undefined);
+
+    const finance = '/api/v1/corporate-admin';
+    const financeGrants = {
+      '/finance/overview': ['overview'],
+      '/finance/invoices': ['invoices'],
+      '/finance/invoices/{id}': ['invoices'],
+      '/finance/payments': ['payments'],
+      '/finance/payments/{id}': ['payments'],
+      '/organizations/{id}/finance': ['organizations'],
+      '/organizations/{id}/finance/invoices': ['organizations', 'invoices'],
+      '/organizations/{id}/finance/payments': ['organizations', 'payments'],
+    };
+    for (const [path, grants] of Object.entries(financeGrants)) {
+      const operations = api.paths[finance + path];
+      assert.deepEqual(Object.keys(operations), ['get']);
+      const operation = operations.get;
+      const required = operation['x-required-capabilities'] ?? [
+        operation['x-required-capability'],
+      ];
+      assert.deepEqual(
+        required,
+        grants.map((grant) => 'finance:' + grant + ':read'),
+      );
+      const query = operation.parameters.map((parameter) =>
+        resolve(parameter.$ref),
+      );
+      assert.deepEqual(
+        query.filter((p) => p.in === 'query' && p.required).map((p) => p.name),
+        /\/finance\/(invoices|payments)\/\{id\}$/.test(path)
+          ? ['mode']
+          : ['mode', 'currency', 'from', 'to'],
+      );
+      const { schema, example } =
+        operation.responses['200'].content['application/json'];
+      const validate = ajv.getSchema(base + schemaPointer(schema.$ref));
+      assert.ok(validate(example), JSON.stringify(validate.errors));
+      const unsafe = structuredClone(example);
+      const payload = unsafe.data;
+      (
+        payload.invoice ??
+        payload.payment ??
+        payload.items?.[0] ??
+        payload
+      ).providerInvoiceId = 'in_synthetic';
+      assert.equal(validate(unsafe), false);
+    }
   },
 );

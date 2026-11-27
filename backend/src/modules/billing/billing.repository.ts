@@ -540,6 +540,9 @@ export class BillingRepository {
           subscriptionId: input.subscriptionId,
           mode: input.mode,
           invoiceNumber: input.invoice.number,
+          planCodeAtIssue:
+            current?.planCodeAtIssue ??
+            (await this.invoicePlanAtIssue(tx, input.invoice)),
           status: input.invoice.status,
           currency: input.invoice.currency,
           subtotalMinor: input.invoice.subtotalMinor,
@@ -612,6 +615,30 @@ export class BillingRepository {
           throw new Error('BILLING_EVENT_CORRELATION_CONFLICT');
       }),
     );
+  }
+
+  private async invoicePlanAtIssue(
+    tx: PrismaTransactionClient,
+    invoice: ProviderInvoice,
+  ): Promise<string | null> {
+    if (!invoice.finalizedAt || !invoice.subscriptionLinesComplete) return null;
+    const prices = new Set(
+      invoice.subscriptionLines
+        ?.filter(
+          (line) => line.subscriptionId === invoice.providerSubscriptionId,
+        )
+        .map((line) => line.priceId),
+    );
+    if (!prices.size || prices.has(null)) return null;
+    const mappings = await tx.planStripePrice.findMany({
+      where: {
+        id: { in: [...prices].filter((id): id is string => id !== null) },
+      },
+      select: { planCode: true },
+    });
+    if (mappings.length !== prices.size) return null;
+    const plans = new Set(mappings.map((mapping) => mapping.planCode));
+    return plans.size === 1 ? (mappings[0]?.planCode ?? null) : null;
   }
 
   async recordFinancialAdjustment(input: {

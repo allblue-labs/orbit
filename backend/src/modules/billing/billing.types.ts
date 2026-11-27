@@ -125,6 +125,7 @@ export interface ProviderInvoice {
   readonly collectionMethod: string;
   readonly hostedInvoiceUrl: string | null;
   readonly invoicePdfUrl: string | null;
+  readonly subscriptionLinesComplete?: boolean;
   readonly subscriptionLines?: readonly {
     priceId: string | null;
     subscriptionId: string | null;

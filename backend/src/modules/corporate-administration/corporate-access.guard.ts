@@ -31,7 +31,7 @@ import {
 } from './technical-credential.service';
 
 export const RequiresCorporateCapability = Reflector.createDecorator<
-  CorporateCapability | 'operational-status'
+  CorporateCapability | readonly CorporateCapability[] | 'operational-status'
 >();
 export function operationalCapability(status: unknown) {
   if (status === 'SUSPENDED') return ORGANIZATIONS_SUSPEND;
@@ -145,7 +145,13 @@ export class CorporateCapabilityGuard implements CanActivate {
           )
         : declared;
     const principal = request[TECHNICAL_PRINCIPAL];
-    if (!required || !principal?.capabilities.includes(required)) {
+    const capabilities = typeof required === 'string' ? [required] : required;
+    if (
+      !capabilities?.length ||
+      !capabilities.every((capability) =>
+        principal?.capabilities.includes(capability),
+      )
+    ) {
       audit(context, 'denied', 'CAPABILITY_REQUIRED');
       throw new ForbiddenException();
     }

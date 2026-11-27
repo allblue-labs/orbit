@@ -2587,6 +2587,799 @@
           }
         }
       }
+    },
+    "/api/v1/corporate-admin/finance/overview": {
+      "get": {
+        "operationId": "corporateAdminFinanceOverview",
+        "summary": "Resume as finanças do SaaS",
+        "tags": ["Administração corporativa"],
+        "description": "A emissão usa finalizedAt ou createdAt. Os recebimentos usam a data original da alocação Stripe. Reembolsos usam a data de criação do ajuste. Os saldos representam a projeção vigente em asOf.",
+        "parameters": [
+          { "$ref": "#/components/parameters/CorrelationId" },
+          { "$ref": "#/components/parameters/NexusAdministratorId" },
+          { "$ref": "#/components/parameters/FinanceMode" },
+          { "$ref": "#/components/parameters/FinanceCurrency" },
+          { "$ref": "#/components/parameters/FinanceFrom" },
+          { "$ref": "#/components/parameters/FinanceTo" },
+          { "$ref": "#/components/parameters/FinancePlan" }
+        ],
+        "x-required-capability": "finance:overview:read",
+        "responses": {
+          "200": {
+            "description": "Consulta financeira concluída.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": { "type": "string" }
+              },
+              "Cache-Control": {
+                "schema": { "type": "string", "const": "private, no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorporateFinanceOverviewResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "source": "ORBIT_STRIPE_RECONCILIATION",
+                    "mode": "TEST",
+                    "asOf": "2026-11-26T16:00:00.000Z",
+                    "currency": "BRL",
+                    "to": "2026-11-01",
+                    "planCode": null,
+                    "from": "2026-10-01",
+                    "totals": {
+                      "subtotalMinor": "10000",
+                      "billedMinor": "8000",
+                      "discountMinor": "2000",
+                      "openMinor": null,
+                      "pendingMinor": null,
+                      "overdueMinor": null,
+                      "uncollectibleMinor": null,
+                      "confirmedReceivedMinor": "8000",
+                      "recordedRefundMinor": null,
+                      "netConfirmedMinor": null,
+                      "invoices": {
+                        "DRAFT": 0,
+                        "OPEN": 0,
+                        "PAID": 1,
+                        "VOID": 0,
+                        "UNCOLLECTIBLE": 0,
+                        "UNKNOWN": 0
+                      },
+                      "overdueOrganizationCount": 0,
+                      "coverage": {
+                        "unattributedInvoiceCount": 0,
+                        "settledWithoutReceiptEvidenceCount": 0,
+                        "confirmedReceiptCount": 1,
+                        "invoiceObservedAt": "2026-11-26T16:00:00.000Z",
+                        "paymentObservedAt": "2026-11-26T16:00:00.000Z"
+                      }
+                    },
+                    "monthly": [
+                      {
+                        "month": "2026-10",
+                        "subtotalMinor": "10000",
+                        "billedMinor": "8000",
+                        "discountMinor": "2000",
+                        "openMinor": null,
+                        "pendingMinor": null,
+                        "overdueMinor": null,
+                        "uncollectibleMinor": null,
+                        "confirmedReceivedMinor": "8000",
+                        "recordedRefundMinor": null,
+                        "netConfirmedMinor": null,
+                        "invoices": {
+                          "DRAFT": 0,
+                          "OPEN": 0,
+                          "PAID": 1,
+                          "VOID": 0,
+                          "UNCOLLECTIBLE": 0,
+                          "UNKNOWN": 0
+                        },
+                        "overdueOrganizationCount": 0,
+                        "coverage": {
+                          "unattributedInvoiceCount": 0,
+                          "settledWithoutReceiptEvidenceCount": 0,
+                          "confirmedReceiptCount": 1,
+                          "invoiceObservedAt": "2026-11-26T16:00:00.000Z",
+                          "paymentObservedAt": "2026-11-26T16:00:00.000Z"
+                        }
+                      }
+                    ]
+                  },
+                  "requestId": "c935d32a-9ad2-409c-a28c-c922dcc16f2c",
+                  "timestamp": "2026-11-26T16:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/CorporateValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
+      }
+    },
+    "/api/v1/corporate-admin/finance/invoices": {
+      "get": {
+        "operationId": "corporateAdminFinanceInvoices",
+        "summary": "Lista faturas de assinaturas",
+        "tags": ["Administração corporativa"],
+        "description": "providerSettledMinor é o saldo liquidado informado pelo provedor. confirmedReceivedMinor exige evidência de recebimento.",
+        "parameters": [
+          { "$ref": "#/components/parameters/CorrelationId" },
+          { "$ref": "#/components/parameters/NexusAdministratorId" },
+          { "$ref": "#/components/parameters/FinanceMode" },
+          { "$ref": "#/components/parameters/FinanceCurrency" },
+          { "$ref": "#/components/parameters/FinanceFrom" },
+          { "$ref": "#/components/parameters/FinanceTo" },
+          { "$ref": "#/components/parameters/FinancePlan" },
+          { "$ref": "#/components/parameters/FinancePage" },
+          { "$ref": "#/components/parameters/FinancePageSize" },
+          { "$ref": "#/components/parameters/FinanceSort" },
+          { "$ref": "#/components/parameters/FinanceInvoiceStatus" },
+          { "$ref": "#/components/parameters/FinanceSearch" }
+        ],
+        "x-required-capability": "finance:invoices:read",
+        "responses": {
+          "200": {
+            "description": "Consulta financeira concluída.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": { "type": "string" }
+              },
+              "Cache-Control": {
+                "schema": { "type": "string", "const": "private, no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorporateFinanceInvoicePageResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "source": "ORBIT_STRIPE_RECONCILIATION",
+                    "mode": "TEST",
+                    "asOf": "2026-11-26T16:00:00.000Z",
+                    "currency": "BRL",
+                    "to": "2026-11-01",
+                    "planCode": null,
+                    "from": "2026-10-01",
+                    "items": [
+                      {
+                        "id": "018fed15-f0ea-7ff1-ad52-ddbf8c091b83",
+                        "organizationId": "018fed15-f0ea-7d7f-aa28-846145f70764",
+                        "subscriptionId": "018fed15-f0eb-70fa-b28a-25c132da99e3",
+                        "mode": "TEST",
+                        "currency": "BRL",
+                        "planCode": "ESSENTIAL",
+                        "number": "ORBIT-0001",
+                        "status": "PAID",
+                        "subtotalMinor": 10000,
+                        "discountMinor": 2000,
+                        "taxMinor": 0,
+                        "totalMinor": 8000,
+                        "amountDueMinor": 8000,
+                        "providerSettledMinor": 8000,
+                        "amountRemainingMinor": 0,
+                        "creditNotesMinor": 0,
+                        "attemptCount": 1,
+                        "periodStart": "2026-10-01T00:00:00.000Z",
+                        "periodEnd": "2026-11-01T00:00:00.000Z",
+                        "dueAt": null,
+                        "nextPaymentAttemptAt": null,
+                        "settledAt": "2026-10-03T12:00:00.000Z",
+                        "voidedAt": null,
+                        "finalizedAt": "2026-10-01T00:00:00.000Z",
+                        "markedUncollectibleAt": null,
+                        "createdAt": "2026-10-01T00:00:00.000Z",
+                        "observedAt": "2026-11-26T16:00:00.000Z",
+                        "reportingAt": "2026-10-01T00:00:00.000Z",
+                        "balanceStatus": "NO_OPEN_BALANCE",
+                        "confirmedReceivedMinor": "8000"
+                      }
+                    ],
+                    "total": 1,
+                    "page": 1,
+                    "pageSize": 25
+                  },
+                  "requestId": "c935d32a-9ad2-409c-a28c-c922dcc16f2c",
+                  "timestamp": "2026-11-26T16:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/CorporateValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
+      }
+    },
+    "/api/v1/corporate-admin/finance/invoices/{id}": {
+      "get": {
+        "operationId": "corporateAdminFinanceInvoice",
+        "summary": "Consulta uma fatura",
+        "tags": ["Administração corporativa"],
+        "description": "Consulta pelo UUID do Orbit no modo indicado.",
+        "parameters": [
+          { "$ref": "#/components/parameters/CorrelationId" },
+          { "$ref": "#/components/parameters/NexusAdministratorId" },
+          { "$ref": "#/components/parameters/FinanceInvoiceId" },
+          { "$ref": "#/components/parameters/FinanceMode" }
+        ],
+        "x-required-capability": "finance:invoices:read",
+        "responses": {
+          "200": {
+            "description": "Consulta financeira concluída.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": { "type": "string" }
+              },
+              "Cache-Control": {
+                "schema": { "type": "string", "const": "private, no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorporateFinanceInvoiceDetailResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "source": "ORBIT_STRIPE_RECONCILIATION",
+                    "mode": "TEST",
+                    "asOf": "2026-11-26T16:00:00.000Z",
+                    "invoice": {
+                      "id": "018fed15-f0ea-7ff1-ad52-ddbf8c091b83",
+                      "organizationId": "018fed15-f0ea-7d7f-aa28-846145f70764",
+                      "subscriptionId": "018fed15-f0eb-70fa-b28a-25c132da99e3",
+                      "mode": "TEST",
+                      "currency": "BRL",
+                      "planCode": "ESSENTIAL",
+                      "number": "ORBIT-0001",
+                      "status": "PAID",
+                      "subtotalMinor": 10000,
+                      "discountMinor": 2000,
+                      "taxMinor": 0,
+                      "totalMinor": 8000,
+                      "amountDueMinor": 8000,
+                      "providerSettledMinor": 8000,
+                      "amountRemainingMinor": 0,
+                      "creditNotesMinor": 0,
+                      "attemptCount": 1,
+                      "periodStart": "2026-10-01T00:00:00.000Z",
+                      "periodEnd": "2026-11-01T00:00:00.000Z",
+                      "dueAt": null,
+                      "nextPaymentAttemptAt": null,
+                      "settledAt": "2026-10-03T12:00:00.000Z",
+                      "voidedAt": null,
+                      "finalizedAt": "2026-10-01T00:00:00.000Z",
+                      "markedUncollectibleAt": null,
+                      "createdAt": "2026-10-01T00:00:00.000Z",
+                      "observedAt": "2026-11-26T16:00:00.000Z",
+                      "reportingAt": "2026-10-01T00:00:00.000Z",
+                      "balanceStatus": "NO_OPEN_BALANCE",
+                      "confirmedReceivedMinor": "8000"
+                    }
+                  },
+                  "requestId": "c935d32a-9ad2-409c-a28c-c922dcc16f2c",
+                  "timestamp": "2026-11-26T16:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/CorporateValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
+      }
+    },
+    "/api/v1/corporate-admin/finance/payments": {
+      "get": {
+        "operationId": "corporateAdminFinancePayments",
+        "summary": "Lista recebimentos, falhas e ajustes",
+        "tags": ["Administração corporativa"],
+        "description": "Cada alocação confirmada entra uma vez. Tentativas rejeitadas têm valor nulo. O estado do ajuste é a última observação canônica.",
+        "parameters": [
+          { "$ref": "#/components/parameters/CorrelationId" },
+          { "$ref": "#/components/parameters/NexusAdministratorId" },
+          { "$ref": "#/components/parameters/FinanceMode" },
+          { "$ref": "#/components/parameters/FinanceCurrency" },
+          { "$ref": "#/components/parameters/FinanceFrom" },
+          { "$ref": "#/components/parameters/FinanceTo" },
+          { "$ref": "#/components/parameters/FinancePlan" },
+          { "$ref": "#/components/parameters/FinancePage" },
+          { "$ref": "#/components/parameters/FinancePageSize" },
+          { "$ref": "#/components/parameters/FinanceSort" },
+          { "$ref": "#/components/parameters/FinanceKind" },
+          { "$ref": "#/components/parameters/FinancePaymentStatus" }
+        ],
+        "x-required-capability": "finance:payments:read",
+        "responses": {
+          "200": {
+            "description": "Consulta financeira concluída.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": { "type": "string" }
+              },
+              "Cache-Control": {
+                "schema": { "type": "string", "const": "private, no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorporateFinancePaymentPageResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "source": "ORBIT_STRIPE_RECONCILIATION",
+                    "mode": "TEST",
+                    "asOf": "2026-11-26T16:00:00.000Z",
+                    "currency": "BRL",
+                    "to": "2026-11-01",
+                    "planCode": null,
+                    "from": "2026-10-01",
+                    "items": [
+                      {
+                        "id": "receipt_018fed15-f0ea-7ff1-ad52-ddbf8c091b83_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                        "invoiceId": "018fed15-f0ea-7ff1-ad52-ddbf8c091b83",
+                        "organizationId": "018fed15-f0ea-7d7f-aa28-846145f70764",
+                        "subscriptionId": "018fed15-f0eb-70fa-b28a-25c132da99e3",
+                        "mode": "TEST",
+                        "currency": "BRL",
+                        "planCode": "ESSENTIAL",
+                        "kind": "RECEIPT",
+                        "status": "CONFIRMED",
+                        "amountMinor": 8000,
+                        "occurredAt": "2026-10-03T12:00:00.000Z",
+                        "observedAt": "2026-11-26T16:00:00.000Z"
+                      }
+                    ],
+                    "total": 1,
+                    "page": 1,
+                    "pageSize": 25
+                  },
+                  "requestId": "c935d32a-9ad2-409c-a28c-c922dcc16f2c",
+                  "timestamp": "2026-11-26T16:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/CorporateValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
+      }
+    },
+    "/api/v1/corporate-admin/finance/payments/{id}": {
+      "get": {
+        "operationId": "corporateAdminFinancePayment",
+        "summary": "Consulta um registro financeiro",
+        "tags": ["Administração corporativa"],
+        "description": "Use o identificador opaco retornado pela listagem.",
+        "parameters": [
+          { "$ref": "#/components/parameters/CorrelationId" },
+          { "$ref": "#/components/parameters/NexusAdministratorId" },
+          { "$ref": "#/components/parameters/FinancePaymentId" },
+          { "$ref": "#/components/parameters/FinanceMode" }
+        ],
+        "x-required-capability": "finance:payments:read",
+        "responses": {
+          "200": {
+            "description": "Consulta financeira concluída.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": { "type": "string" }
+              },
+              "Cache-Control": {
+                "schema": { "type": "string", "const": "private, no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorporateFinancePaymentDetailResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "source": "ORBIT_STRIPE_RECONCILIATION",
+                    "mode": "TEST",
+                    "asOf": "2026-11-26T16:00:00.000Z",
+                    "payment": {
+                      "id": "receipt_018fed15-f0ea-7ff1-ad52-ddbf8c091b83_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                      "invoiceId": "018fed15-f0ea-7ff1-ad52-ddbf8c091b83",
+                      "organizationId": "018fed15-f0ea-7d7f-aa28-846145f70764",
+                      "subscriptionId": "018fed15-f0eb-70fa-b28a-25c132da99e3",
+                      "mode": "TEST",
+                      "currency": "BRL",
+                      "planCode": "ESSENTIAL",
+                      "kind": "RECEIPT",
+                      "status": "CONFIRMED",
+                      "amountMinor": 8000,
+                      "occurredAt": "2026-10-03T12:00:00.000Z",
+                      "observedAt": "2026-11-26T16:00:00.000Z"
+                    }
+                  },
+                  "requestId": "c935d32a-9ad2-409c-a28c-c922dcc16f2c",
+                  "timestamp": "2026-11-26T16:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/CorporateValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
+      }
+    },
+    "/api/v1/corporate-admin/organizations/{id}/finance": {
+      "get": {
+        "operationId": "corporateAdminOrganizationFinance",
+        "summary": "Resume as finanças de uma organização",
+        "tags": ["Administração corporativa"],
+        "description": "O saldo considera o recorte solicitado. nextChargeAt só é informado para uma tentativa automática futura observada no modo selecionado.",
+        "parameters": [
+          { "$ref": "#/components/parameters/CorrelationId" },
+          { "$ref": "#/components/parameters/NexusAdministratorId" },
+          { "$ref": "#/components/parameters/FinanceOrganizationId" },
+          { "$ref": "#/components/parameters/FinanceMode" },
+          { "$ref": "#/components/parameters/FinanceCurrency" },
+          { "$ref": "#/components/parameters/FinanceFrom" },
+          { "$ref": "#/components/parameters/FinanceTo" },
+          { "$ref": "#/components/parameters/FinancePlan" }
+        ],
+        "x-required-capability": "finance:organizations:read",
+        "responses": {
+          "200": {
+            "description": "Consulta financeira concluída.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": { "type": "string" }
+              },
+              "Cache-Control": {
+                "schema": { "type": "string", "const": "private, no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorporateOrganizationFinanceResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "source": "ORBIT_STRIPE_RECONCILIATION",
+                    "mode": "TEST",
+                    "asOf": "2026-11-26T16:00:00.000Z",
+                    "currency": "BRL",
+                    "to": "2026-11-01",
+                    "planCode": null,
+                    "from": "2026-10-01",
+                    "totals": {
+                      "subtotalMinor": "10000",
+                      "billedMinor": "8000",
+                      "discountMinor": "2000",
+                      "openMinor": null,
+                      "pendingMinor": null,
+                      "overdueMinor": null,
+                      "uncollectibleMinor": null,
+                      "confirmedReceivedMinor": "8000",
+                      "recordedRefundMinor": null,
+                      "netConfirmedMinor": null,
+                      "invoices": {
+                        "DRAFT": 0,
+                        "OPEN": 0,
+                        "PAID": 1,
+                        "VOID": 0,
+                        "UNCOLLECTIBLE": 0,
+                        "UNKNOWN": 0
+                      },
+                      "overdueOrganizationCount": 0,
+                      "coverage": {
+                        "unattributedInvoiceCount": 0,
+                        "settledWithoutReceiptEvidenceCount": 0,
+                        "confirmedReceiptCount": 1,
+                        "invoiceObservedAt": "2026-11-26T16:00:00.000Z",
+                        "paymentObservedAt": "2026-11-26T16:00:00.000Z"
+                      }
+                    },
+                    "monthly": [
+                      {
+                        "month": "2026-10",
+                        "subtotalMinor": "10000",
+                        "billedMinor": "8000",
+                        "discountMinor": "2000",
+                        "openMinor": null,
+                        "pendingMinor": null,
+                        "overdueMinor": null,
+                        "uncollectibleMinor": null,
+                        "confirmedReceivedMinor": "8000",
+                        "recordedRefundMinor": null,
+                        "netConfirmedMinor": null,
+                        "invoices": {
+                          "DRAFT": 0,
+                          "OPEN": 0,
+                          "PAID": 1,
+                          "VOID": 0,
+                          "UNCOLLECTIBLE": 0,
+                          "UNKNOWN": 0
+                        },
+                        "overdueOrganizationCount": 0,
+                        "coverage": {
+                          "unattributedInvoiceCount": 0,
+                          "settledWithoutReceiptEvidenceCount": 0,
+                          "confirmedReceiptCount": 1,
+                          "invoiceObservedAt": "2026-11-26T16:00:00.000Z",
+                          "paymentObservedAt": "2026-11-26T16:00:00.000Z"
+                        }
+                      }
+                    ],
+                    "organization": {
+                      "id": "018fed15-f0ea-7d7f-aa28-846145f70764",
+                      "displayName": "Oficina sintética",
+                      "operationalStatus": "ACTIVE"
+                    },
+                    "subscription": {
+                      "id": "018fed15-f0eb-70fa-b28a-25c132da99e3",
+                      "planCode": "ESSENTIAL",
+                      "status": "ACTIVE",
+                      "billingInterval": "MONTHLY",
+                      "currentPeriodStart": "2026-10-01T00:00:00.000Z",
+                      "currentPeriodEnd": "2026-11-01T00:00:00.000Z",
+                      "endedAt": null,
+                      "cancelAtPeriodEnd": false,
+                      "trialEndsAt": null,
+                      "graceEndsAt": null,
+                      "providerUpdatedAt": "2026-11-26T16:00:00.000Z",
+                      "providerMode": "TEST"
+                    },
+                    "nextChargeAt": null,
+                    "subscriptionCoverage": "MATCHED_MODE",
+                    "balanceStatus": "NO_OPEN_BALANCE"
+                  },
+                  "requestId": "c935d32a-9ad2-409c-a28c-c922dcc16f2c",
+                  "timestamp": "2026-11-26T16:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/CorporateValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
+      }
+    },
+    "/api/v1/corporate-admin/organizations/{id}/finance/invoices": {
+      "get": {
+        "operationId": "corporateAdminOrganizationFinanceInvoices",
+        "summary": "Lista faturas de uma organização",
+        "tags": ["Administração corporativa"],
+        "description": "Exige as duas capabilities. A organização vem do UUID da rota.",
+        "parameters": [
+          { "$ref": "#/components/parameters/CorrelationId" },
+          { "$ref": "#/components/parameters/NexusAdministratorId" },
+          { "$ref": "#/components/parameters/FinanceOrganizationId" },
+          { "$ref": "#/components/parameters/FinanceMode" },
+          { "$ref": "#/components/parameters/FinanceCurrency" },
+          { "$ref": "#/components/parameters/FinanceFrom" },
+          { "$ref": "#/components/parameters/FinanceTo" },
+          { "$ref": "#/components/parameters/FinancePlan" },
+          { "$ref": "#/components/parameters/FinancePage" },
+          { "$ref": "#/components/parameters/FinancePageSize" },
+          { "$ref": "#/components/parameters/FinanceSort" },
+          { "$ref": "#/components/parameters/FinanceInvoiceStatus" },
+          { "$ref": "#/components/parameters/FinanceSearch" }
+        ],
+        "x-required-capabilities": [
+          "finance:organizations:read",
+          "finance:invoices:read"
+        ],
+        "responses": {
+          "200": {
+            "description": "Consulta financeira concluída.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": { "type": "string" }
+              },
+              "Cache-Control": {
+                "schema": { "type": "string", "const": "private, no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorporateFinanceInvoicePageResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "source": "ORBIT_STRIPE_RECONCILIATION",
+                    "mode": "TEST",
+                    "asOf": "2026-11-26T16:00:00.000Z",
+                    "currency": "BRL",
+                    "to": "2026-11-01",
+                    "planCode": null,
+                    "from": "2026-10-01",
+                    "items": [
+                      {
+                        "id": "018fed15-f0ea-7ff1-ad52-ddbf8c091b83",
+                        "organizationId": "018fed15-f0ea-7d7f-aa28-846145f70764",
+                        "subscriptionId": "018fed15-f0eb-70fa-b28a-25c132da99e3",
+                        "mode": "TEST",
+                        "currency": "BRL",
+                        "planCode": "ESSENTIAL",
+                        "number": "ORBIT-0001",
+                        "status": "PAID",
+                        "subtotalMinor": 10000,
+                        "discountMinor": 2000,
+                        "taxMinor": 0,
+                        "totalMinor": 8000,
+                        "amountDueMinor": 8000,
+                        "providerSettledMinor": 8000,
+                        "amountRemainingMinor": 0,
+                        "creditNotesMinor": 0,
+                        "attemptCount": 1,
+                        "periodStart": "2026-10-01T00:00:00.000Z",
+                        "periodEnd": "2026-11-01T00:00:00.000Z",
+                        "dueAt": null,
+                        "nextPaymentAttemptAt": null,
+                        "settledAt": "2026-10-03T12:00:00.000Z",
+                        "voidedAt": null,
+                        "finalizedAt": "2026-10-01T00:00:00.000Z",
+                        "markedUncollectibleAt": null,
+                        "createdAt": "2026-10-01T00:00:00.000Z",
+                        "observedAt": "2026-11-26T16:00:00.000Z",
+                        "reportingAt": "2026-10-01T00:00:00.000Z",
+                        "balanceStatus": "NO_OPEN_BALANCE",
+                        "confirmedReceivedMinor": "8000"
+                      }
+                    ],
+                    "total": 1,
+                    "page": 1,
+                    "pageSize": 25
+                  },
+                  "requestId": "c935d32a-9ad2-409c-a28c-c922dcc16f2c",
+                  "timestamp": "2026-11-26T16:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/CorporateValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
+      }
+    },
+    "/api/v1/corporate-admin/organizations/{id}/finance/payments": {
+      "get": {
+        "operationId": "corporateAdminOrganizationFinancePayments",
+        "summary": "Lista pagamentos de uma organização",
+        "tags": ["Administração corporativa"],
+        "description": "Exige as duas capabilities. A organização vem do UUID da rota.",
+        "parameters": [
+          { "$ref": "#/components/parameters/CorrelationId" },
+          { "$ref": "#/components/parameters/NexusAdministratorId" },
+          { "$ref": "#/components/parameters/FinanceOrganizationId" },
+          { "$ref": "#/components/parameters/FinanceMode" },
+          { "$ref": "#/components/parameters/FinanceCurrency" },
+          { "$ref": "#/components/parameters/FinanceFrom" },
+          { "$ref": "#/components/parameters/FinanceTo" },
+          { "$ref": "#/components/parameters/FinancePlan" },
+          { "$ref": "#/components/parameters/FinancePage" },
+          { "$ref": "#/components/parameters/FinancePageSize" },
+          { "$ref": "#/components/parameters/FinanceSort" },
+          { "$ref": "#/components/parameters/FinanceKind" },
+          { "$ref": "#/components/parameters/FinancePaymentStatus" }
+        ],
+        "x-required-capabilities": [
+          "finance:organizations:read",
+          "finance:payments:read"
+        ],
+        "responses": {
+          "200": {
+            "description": "Consulta financeira concluída.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": { "type": "string" }
+              },
+              "Cache-Control": {
+                "schema": { "type": "string", "const": "private, no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorporateFinancePaymentPageResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "source": "ORBIT_STRIPE_RECONCILIATION",
+                    "mode": "TEST",
+                    "asOf": "2026-11-26T16:00:00.000Z",
+                    "currency": "BRL",
+                    "to": "2026-11-01",
+                    "planCode": null,
+                    "from": "2026-10-01",
+                    "items": [
+                      {
+                        "id": "receipt_018fed15-f0ea-7ff1-ad52-ddbf8c091b83_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                        "invoiceId": "018fed15-f0ea-7ff1-ad52-ddbf8c091b83",
+                        "organizationId": "018fed15-f0ea-7d7f-aa28-846145f70764",
+                        "subscriptionId": "018fed15-f0eb-70fa-b28a-25c132da99e3",
+                        "mode": "TEST",
+                        "currency": "BRL",
+                        "planCode": "ESSENTIAL",
+                        "kind": "RECEIPT",
+                        "status": "CONFIRMED",
+                        "amountMinor": 8000,
+                        "occurredAt": "2026-10-03T12:00:00.000Z",
+                        "observedAt": "2026-11-26T16:00:00.000Z"
+                      }
+                    ],
+                    "total": 1,
+                    "page": 1,
+                    "pageSize": 25
+                  },
+                  "requestId": "c935d32a-9ad2-409c-a28c-c922dcc16f2c",
+                  "timestamp": "2026-11-26T16:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/CorporateValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
+      }
     }
   },
   "components": {
@@ -2763,6 +3556,142 @@
         "description": "Chave original, vinculada ao principal técnico e ao tipo de comando. Repita com o mesmo alvo e conteúdo para recuperar.",
         "schema": { "type": "string", "pattern": "^[A-Za-z0-9_-]{16,120}$" },
         "example": "6a3508be-21e2-4edc-84a0-0ae87fc6ede8"
+      },
+      "FinanceMode": {
+        "name": "mode",
+        "in": "query",
+        "required": true,
+        "schema": { "type": "string", "enum": ["TEST", "LIVE"] },
+        "description": "Modo Stripe explícito."
+      },
+      "FinanceCurrency": {
+        "name": "currency",
+        "in": "query",
+        "required": true,
+        "schema": { "type": "string", "pattern": "^[A-Z]{3}$" },
+        "description": "Moeda das unidades monetárias mínimas."
+      },
+      "FinanceFrom": {
+        "name": "from",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "date",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "description": "Data inicial inclusiva em UTC."
+      },
+      "FinanceTo": {
+        "name": "to",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "date",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "description": "Data final exclusiva em UTC. Janela total de 1 a 366 dias."
+      },
+      "FinancePlan": {
+        "name": "planCode",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,59}$"
+        },
+        "description": "Código histórico exato observado na fatura. Registros sem atribuição ficam fora deste filtro."
+      },
+      "FinancePage": {
+        "name": "page",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000,
+          "default": 1
+        },
+        "description": "Número da página."
+      },
+      "FinancePageSize": {
+        "name": "pageSize",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 25
+        },
+        "description": "Itens por página."
+      },
+      "FinanceSort": {
+        "name": "sort",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "enum": ["DATE_DESC", "DATE_ASC", "AMOUNT_ASC", "AMOUNT_DESC"],
+          "default": "DATE_DESC"
+        },
+        "description": "Ordenação por data ou valor. O identificador interno desempata."
+      },
+      "FinanceInvoiceStatus": {
+        "name": "status",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "enum": ["DRAFT", "OPEN", "PAID", "VOID", "UNCOLLECTIBLE", "UNKNOWN"]
+        },
+        "description": "Estado canônico da fatura."
+      },
+      "FinanceSearch": {
+        "name": "search",
+        "in": "query",
+        "required": false,
+        "schema": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "description": "UUID exato ou trecho literal do número da fatura."
+      },
+      "FinanceKind": {
+        "name": "kind",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "enum": ["RECEIPT", "ATTEMPT", "REFUND", "DISPUTE"]
+        },
+        "description": "Tipo de registro financeiro."
+      },
+      "FinancePaymentStatus": {
+        "name": "status",
+        "in": "query",
+        "required": false,
+        "schema": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{0,39}$" },
+        "description": "Estado do registro financeiro."
+      },
+      "FinanceInvoiceId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string", "format": "uuid" }
+      },
+      "FinancePaymentId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^(?:receipt_[0-9a-f-]{36}_[0-9a-f]{64}|(?:attempt|refund|dispute)_[0-9a-f-]{36})$"
+        }
+      },
+      "FinanceOrganizationId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string", "format": "uuid" }
       }
     },
     "schemas": {
@@ -5186,6 +6115,857 @@
           "timestamp": { "type": "string", "format": "date-time" }
         },
         "required": ["success", "data", "requestId", "timestamp"]
+      },
+      "CorporateFinanceCoverage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "unattributedInvoiceCount",
+          "settledWithoutReceiptEvidenceCount",
+          "confirmedReceiptCount",
+          "invoiceObservedAt",
+          "paymentObservedAt"
+        ],
+        "properties": {
+          "unattributedInvoiceCount": { "type": "integer", "minimum": 0 },
+          "settledWithoutReceiptEvidenceCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "confirmedReceiptCount": { "type": "integer", "minimum": 0 },
+          "invoiceObservedAt": {
+            "anyOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ]
+          },
+          "paymentObservedAt": {
+            "anyOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ]
+          }
+        }
+      },
+      "CorporateFinanceTotals": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "subtotalMinor",
+          "billedMinor",
+          "discountMinor",
+          "openMinor",
+          "pendingMinor",
+          "overdueMinor",
+          "uncollectibleMinor",
+          "confirmedReceivedMinor",
+          "recordedRefundMinor",
+          "netConfirmedMinor",
+          "invoices",
+          "overdueOrganizationCount",
+          "coverage"
+        ],
+        "properties": {
+          "subtotalMinor": {
+            "anyOf": [
+              { "type": "string", "pattern": "^-?[0-9]+$" },
+              { "type": "null" }
+            ]
+          },
+          "billedMinor": {
+            "anyOf": [
+              { "type": "string", "pattern": "^-?[0-9]+$" },
+              { "type": "null" }
+            ]
+          },
+          "discountMinor": {
+            "anyOf": [
+              { "type": "string", "pattern": "^-?[0-9]+$" },
+              { "type": "null" }
+            ]
+          },
+          "openMinor": {
+            "anyOf": [
+              { "type": "string", "pattern": "^-?[0-9]+$" },
+              { "type": "null" }
+            ]
+          },
+          "pendingMinor": {
+            "anyOf": [
+              { "type": "string", "pattern": "^-?[0-9]+$" },
+              { "type": "null" }
+            ]
+          },
+          "overdueMinor": {
+            "anyOf": [
+              { "type": "string", "pattern": "^-?[0-9]+$" },
+              { "type": "null" }
+            ]
+          },
+          "uncollectibleMinor": {
+            "anyOf": [
+              { "type": "string", "pattern": "^-?[0-9]+$" },
+              { "type": "null" }
+            ]
+          },
+          "confirmedReceivedMinor": {
+            "anyOf": [
+              { "type": "string", "pattern": "^-?[0-9]+$" },
+              { "type": "null" }
+            ]
+          },
+          "recordedRefundMinor": {
+            "anyOf": [
+              { "type": "string", "pattern": "^-?[0-9]+$" },
+              { "type": "null" }
+            ]
+          },
+          "netConfirmedMinor": {
+            "type": "null",
+            "description": "O histórico atual não comprova o saldo líquido confirmado por período."
+          },
+          "invoices": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "DRAFT",
+              "OPEN",
+              "PAID",
+              "VOID",
+              "UNCOLLECTIBLE",
+              "UNKNOWN"
+            ],
+            "properties": {
+              "DRAFT": { "type": "integer", "minimum": 0 },
+              "OPEN": { "type": "integer", "minimum": 0 },
+              "PAID": { "type": "integer", "minimum": 0 },
+              "VOID": { "type": "integer", "minimum": 0 },
+              "UNCOLLECTIBLE": { "type": "integer", "minimum": 0 },
+              "UNKNOWN": { "type": "integer", "minimum": 0 }
+            }
+          },
+          "overdueOrganizationCount": { "type": "integer", "minimum": 0 },
+          "coverage": {
+            "$ref": "#/components/schemas/CorporateFinanceCoverage"
+          }
+        }
+      },
+      "CorporateFinanceMonth": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "month",
+          "subtotalMinor",
+          "billedMinor",
+          "discountMinor",
+          "openMinor",
+          "pendingMinor",
+          "overdueMinor",
+          "uncollectibleMinor",
+          "confirmedReceivedMinor",
+          "recordedRefundMinor",
+          "netConfirmedMinor",
+          "invoices",
+          "overdueOrganizationCount",
+          "coverage"
+        ],
+        "properties": {
+          "month": { "type": "string", "pattern": "^\\d{4}-\\d{2}$" },
+          "subtotalMinor": {
+            "anyOf": [
+              { "type": "string", "pattern": "^-?[0-9]+$" },
+              { "type": "null" }
+            ]
+          },
+          "billedMinor": {
+            "anyOf": [
+              { "type": "string", "pattern": "^-?[0-9]+$" },
+              { "type": "null" }
+            ]
+          },
+          "discountMinor": {
+            "anyOf": [
+              { "type": "string", "pattern": "^-?[0-9]+$" },
+              { "type": "null" }
+            ]
+          },
+          "openMinor": {
+            "anyOf": [
+              { "type": "string", "pattern": "^-?[0-9]+$" },
+              { "type": "null" }
+            ]
+          },
+          "pendingMinor": {
+            "anyOf": [
+              { "type": "string", "pattern": "^-?[0-9]+$" },
+              { "type": "null" }
+            ]
+          },
+          "overdueMinor": {
+            "anyOf": [
+              { "type": "string", "pattern": "^-?[0-9]+$" },
+              { "type": "null" }
+            ]
+          },
+          "uncollectibleMinor": {
+            "anyOf": [
+              { "type": "string", "pattern": "^-?[0-9]+$" },
+              { "type": "null" }
+            ]
+          },
+          "confirmedReceivedMinor": {
+            "anyOf": [
+              { "type": "string", "pattern": "^-?[0-9]+$" },
+              { "type": "null" }
+            ]
+          },
+          "recordedRefundMinor": {
+            "anyOf": [
+              { "type": "string", "pattern": "^-?[0-9]+$" },
+              { "type": "null" }
+            ]
+          },
+          "netConfirmedMinor": {
+            "type": "null",
+            "description": "O histórico atual não comprova o saldo líquido confirmado por período."
+          },
+          "invoices": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "DRAFT",
+              "OPEN",
+              "PAID",
+              "VOID",
+              "UNCOLLECTIBLE",
+              "UNKNOWN"
+            ],
+            "properties": {
+              "DRAFT": { "type": "integer", "minimum": 0 },
+              "OPEN": { "type": "integer", "minimum": 0 },
+              "PAID": { "type": "integer", "minimum": 0 },
+              "VOID": { "type": "integer", "minimum": 0 },
+              "UNCOLLECTIBLE": { "type": "integer", "minimum": 0 },
+              "UNKNOWN": { "type": "integer", "minimum": 0 }
+            }
+          },
+          "overdueOrganizationCount": { "type": "integer", "minimum": 0 },
+          "coverage": {
+            "$ref": "#/components/schemas/CorporateFinanceCoverage"
+          }
+        }
+      },
+      "CorporateFinanceOverview": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source",
+          "mode",
+          "asOf",
+          "currency",
+          "to",
+          "planCode",
+          "from",
+          "totals",
+          "monthly"
+        ],
+        "properties": {
+          "source": { "const": "ORBIT_STRIPE_RECONCILIATION" },
+          "mode": { "type": "string", "enum": ["TEST", "LIVE"] },
+          "asOf": { "type": "string", "format": "date-time" },
+          "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+          "to": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "planCode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,59}$"
+              },
+              { "type": "null" }
+            ]
+          },
+          "from": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "totals": { "$ref": "#/components/schemas/CorporateFinanceTotals" },
+          "monthly": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/CorporateFinanceMonth" },
+            "maxItems": 14
+          }
+        }
+      },
+      "CorporateFinanceSubscription": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "planCode",
+          "status",
+          "billingInterval",
+          "currentPeriodStart",
+          "currentPeriodEnd",
+          "endedAt",
+          "cancelAtPeriodEnd",
+          "trialEndsAt",
+          "graceEndsAt",
+          "providerUpdatedAt",
+          "providerMode"
+        ],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "planCode": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,59}$"
+          },
+          "status": { "type": "string" },
+          "billingInterval": {
+            "type": "string",
+            "enum": ["MONTHLY", "SEMIANNUAL", "ANNUAL"]
+          },
+          "currentPeriodStart": { "type": "string", "format": "date-time" },
+          "currentPeriodEnd": { "type": "string", "format": "date-time" },
+          "endedAt": {
+            "anyOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ]
+          },
+          "cancelAtPeriodEnd": { "type": "boolean" },
+          "trialEndsAt": {
+            "anyOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ]
+          },
+          "graceEndsAt": {
+            "anyOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ]
+          },
+          "providerUpdatedAt": {
+            "anyOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ]
+          },
+          "providerMode": {
+            "anyOf": [
+              { "type": "string", "enum": ["TEST", "LIVE"] },
+              { "type": "null" }
+            ]
+          }
+        }
+      },
+      "CorporateOrganizationFinance": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source",
+          "mode",
+          "asOf",
+          "currency",
+          "to",
+          "planCode",
+          "from",
+          "totals",
+          "monthly",
+          "organization",
+          "subscription",
+          "subscriptionCoverage",
+          "nextChargeAt",
+          "balanceStatus"
+        ],
+        "properties": {
+          "source": { "const": "ORBIT_STRIPE_RECONCILIATION" },
+          "mode": { "type": "string", "enum": ["TEST", "LIVE"] },
+          "asOf": { "type": "string", "format": "date-time" },
+          "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+          "to": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "planCode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,59}$"
+              },
+              { "type": "null" }
+            ]
+          },
+          "from": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "totals": { "$ref": "#/components/schemas/CorporateFinanceTotals" },
+          "monthly": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/CorporateFinanceMonth" },
+            "maxItems": 14
+          },
+          "organization": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "displayName", "operationalStatus"],
+            "properties": {
+              "id": { "type": "string", "format": "uuid" },
+              "displayName": { "type": "string" },
+              "operationalStatus": { "type": "string" }
+            }
+          },
+          "subscription": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/CorporateFinanceSubscription" },
+              { "type": "null" }
+            ]
+          },
+          "subscriptionCoverage": {
+            "type": "string",
+            "enum": [
+              "MATCHED_MODE",
+              "ORBIT_ONLY",
+              "NO_SUBSCRIPTION",
+              "UNVERIFIED_MODE"
+            ]
+          },
+          "nextChargeAt": {
+            "anyOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ]
+          },
+          "balanceStatus": {
+            "type": "string",
+            "enum": [
+              "OVERDUE",
+              "PENDING",
+              "UNCOLLECTIBLE",
+              "NO_OPEN_BALANCE",
+              "INSUFFICIENT_EVIDENCE"
+            ]
+          }
+        }
+      },
+      "CorporateFinanceInvoice": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "organizationId",
+          "subscriptionId",
+          "planCode",
+          "mode",
+          "currency",
+          "number",
+          "status",
+          "subtotalMinor",
+          "discountMinor",
+          "taxMinor",
+          "totalMinor",
+          "amountDueMinor",
+          "providerSettledMinor",
+          "amountRemainingMinor",
+          "creditNotesMinor",
+          "attemptCount",
+          "periodStart",
+          "periodEnd",
+          "dueAt",
+          "nextPaymentAttemptAt",
+          "settledAt",
+          "voidedAt",
+          "finalizedAt",
+          "markedUncollectibleAt",
+          "createdAt",
+          "observedAt",
+          "reportingAt",
+          "balanceStatus",
+          "confirmedReceivedMinor"
+        ],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "organizationId": { "type": "string", "format": "uuid" },
+          "subscriptionId": { "type": "string", "format": "uuid" },
+          "planCode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,59}$"
+              },
+              { "type": "null" }
+            ]
+          },
+          "mode": { "type": "string", "enum": ["TEST", "LIVE"] },
+          "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+          "number": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+          "status": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "OPEN",
+              "PAID",
+              "VOID",
+              "UNCOLLECTIBLE",
+              "UNKNOWN"
+            ]
+          },
+          "subtotalMinor": {
+            "type": "integer",
+            "minimum": -2147483648,
+            "maximum": 2147483647
+          },
+          "discountMinor": {
+            "type": "integer",
+            "minimum": -2147483648,
+            "maximum": 2147483647
+          },
+          "taxMinor": {
+            "type": "integer",
+            "minimum": -2147483648,
+            "maximum": 2147483647
+          },
+          "totalMinor": {
+            "type": "integer",
+            "minimum": -2147483648,
+            "maximum": 2147483647
+          },
+          "amountDueMinor": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "providerSettledMinor": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "amountRemainingMinor": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "creditNotesMinor": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "attemptCount": { "type": "integer", "minimum": 0 },
+          "periodStart": { "type": "string", "format": "date-time" },
+          "periodEnd": { "type": "string", "format": "date-time" },
+          "dueAt": {
+            "anyOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ]
+          },
+          "nextPaymentAttemptAt": {
+            "anyOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ]
+          },
+          "settledAt": {
+            "anyOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ]
+          },
+          "voidedAt": {
+            "anyOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ]
+          },
+          "finalizedAt": {
+            "anyOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ]
+          },
+          "markedUncollectibleAt": {
+            "anyOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ]
+          },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "observedAt": { "type": "string", "format": "date-time" },
+          "reportingAt": { "type": "string", "format": "date-time" },
+          "balanceStatus": {
+            "type": "string",
+            "enum": [
+              "OVERDUE",
+              "PENDING",
+              "UNCOLLECTIBLE",
+              "NO_OPEN_BALANCE",
+              "INSUFFICIENT_EVIDENCE"
+            ]
+          },
+          "confirmedReceivedMinor": {
+            "anyOf": [
+              { "type": "string", "pattern": "^-?[0-9]+$" },
+              { "type": "null" }
+            ]
+          }
+        }
+      },
+      "CorporateFinancePayment": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "invoiceId",
+          "organizationId",
+          "subscriptionId",
+          "planCode",
+          "mode",
+          "currency",
+          "kind",
+          "status",
+          "amountMinor",
+          "occurredAt",
+          "observedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^(?:receipt_[0-9a-f-]{36}_[0-9a-f]{64}|(?:attempt|refund|dispute)_[0-9a-f-]{36})$"
+          },
+          "invoiceId": { "type": "string", "format": "uuid" },
+          "organizationId": { "type": "string", "format": "uuid" },
+          "subscriptionId": { "type": "string", "format": "uuid" },
+          "planCode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,59}$"
+              },
+              { "type": "null" }
+            ]
+          },
+          "mode": { "type": "string", "enum": ["TEST", "LIVE"] },
+          "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+          "kind": {
+            "type": "string",
+            "enum": ["RECEIPT", "ATTEMPT", "REFUND", "DISPUTE"]
+          },
+          "status": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{0,39}$" },
+          "amountMinor": {
+            "anyOf": [
+              { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+              { "type": "null" }
+            ]
+          },
+          "occurredAt": { "type": "string", "format": "date-time" },
+          "observedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "CorporateFinanceInvoiceDetail": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source", "mode", "asOf", "invoice"],
+        "properties": {
+          "source": { "const": "ORBIT_STRIPE_RECONCILIATION" },
+          "mode": { "type": "string", "enum": ["TEST", "LIVE"] },
+          "asOf": { "type": "string", "format": "date-time" },
+          "invoice": { "$ref": "#/components/schemas/CorporateFinanceInvoice" }
+        }
+      },
+      "CorporateFinancePaymentDetail": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source", "mode", "asOf", "payment"],
+        "properties": {
+          "source": { "const": "ORBIT_STRIPE_RECONCILIATION" },
+          "mode": { "type": "string", "enum": ["TEST", "LIVE"] },
+          "asOf": { "type": "string", "format": "date-time" },
+          "payment": { "$ref": "#/components/schemas/CorporateFinancePayment" }
+        }
+      },
+      "CorporateFinanceInvoicePage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source",
+          "mode",
+          "asOf",
+          "currency",
+          "to",
+          "planCode",
+          "from",
+          "items",
+          "total",
+          "page",
+          "pageSize"
+        ],
+        "properties": {
+          "source": { "const": "ORBIT_STRIPE_RECONCILIATION" },
+          "mode": { "type": "string", "enum": ["TEST", "LIVE"] },
+          "asOf": { "type": "string", "format": "date-time" },
+          "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+          "to": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "planCode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,59}$"
+              },
+              { "type": "null" }
+            ]
+          },
+          "from": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/CorporateFinanceInvoice" },
+            "maxItems": 100
+          },
+          "total": { "type": "integer", "minimum": 0 },
+          "page": { "type": "integer", "minimum": 1, "maximum": 10000 },
+          "pageSize": { "type": "integer", "minimum": 1, "maximum": 100 }
+        }
+      },
+      "CorporateFinancePaymentPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source",
+          "mode",
+          "asOf",
+          "currency",
+          "to",
+          "planCode",
+          "from",
+          "items",
+          "total",
+          "page",
+          "pageSize"
+        ],
+        "properties": {
+          "source": { "const": "ORBIT_STRIPE_RECONCILIATION" },
+          "mode": { "type": "string", "enum": ["TEST", "LIVE"] },
+          "asOf": { "type": "string", "format": "date-time" },
+          "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+          "to": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "planCode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,59}$"
+              },
+              { "type": "null" }
+            ]
+          },
+          "from": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/CorporateFinancePayment" },
+            "maxItems": 100
+          },
+          "total": { "type": "integer", "minimum": 0 },
+          "page": { "type": "integer", "minimum": 1, "maximum": 10000 },
+          "pageSize": { "type": "integer", "minimum": 1, "maximum": 100 }
+        }
+      },
+      "CorporateFinanceOverviewResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["success", "data", "requestId", "timestamp"],
+        "properties": {
+          "success": { "type": "boolean", "const": true },
+          "data": { "$ref": "#/components/schemas/CorporateFinanceOverview" },
+          "requestId": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        }
+      },
+      "CorporateOrganizationFinanceResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["success", "data", "requestId", "timestamp"],
+        "properties": {
+          "success": { "type": "boolean", "const": true },
+          "data": {
+            "$ref": "#/components/schemas/CorporateOrganizationFinance"
+          },
+          "requestId": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        }
+      },
+      "CorporateFinanceInvoiceDetailResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["success", "data", "requestId", "timestamp"],
+        "properties": {
+          "success": { "type": "boolean", "const": true },
+          "data": {
+            "$ref": "#/components/schemas/CorporateFinanceInvoiceDetail"
+          },
+          "requestId": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        }
+      },
+      "CorporateFinancePaymentDetailResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["success", "data", "requestId", "timestamp"],
+        "properties": {
+          "success": { "type": "boolean", "const": true },
+          "data": {
+            "$ref": "#/components/schemas/CorporateFinancePaymentDetail"
+          },
+          "requestId": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        }
+      },
+      "CorporateFinanceInvoicePageResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["success", "data", "requestId", "timestamp"],
+        "properties": {
+          "success": { "type": "boolean", "const": true },
+          "data": {
+            "$ref": "#/components/schemas/CorporateFinanceInvoicePage"
+          },
+          "requestId": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        }
+      },
+      "CorporateFinancePaymentPageResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["success", "data", "requestId", "timestamp"],
+        "properties": {
+          "success": { "type": "boolean", "const": true },
+          "data": {
+            "$ref": "#/components/schemas/CorporateFinancePaymentPage"
+          },
+          "requestId": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        }
       }
     },
     "responses": {

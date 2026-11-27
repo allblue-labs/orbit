@@ -187,3 +187,48 @@ O rascunho existe só no Orbit. A ativação grava `ACTIVATING` antes de validar
 `202` devolve `operationId`, `pending: true` e a promoção em transição. Reenvie a mesma solicitação com a chave, o motivo e a versão originais e o mesmo principal técnico. Faça o mesmo se a resposta perder-se após o envio. Se o Orbit já gravou o resultado, o recibo reaparece com `replayed: true`. Após 20 horas, uma ativação incerta só confirma recursos que o Stripe já identifica. Se a validação de preço falhar ou o provedor continuar sem evidência, a campanha permanece indisponível. Use o `operationId` e a correlação para localizar a tentativa antes de abrir outra campanha com código distinto.
 
 Para liberar reservas automaticamente após a expiração, a lista de eventos do webhook Stripe deve incluir `checkout.session.expired`. Se a chave for restrita, a ativação usa leitura de preços e produtos e leitura/escrita de Coupon e Promotion Code. A janela local de repetição fica abaixo da retenção documentada das chaves da API v1. [Descontos no Stripe Checkout](https://docs.stripe.com/payments/checkout/discounts) · [Idempotência do Stripe](https://docs.stripe.com/api/idempotent_requests)
+
+## ADM-06.A — Financeiro corporativo do SaaS
+
+Estas rotas consultam o faturamento da Allblue Labs para assinantes do Orbit. Elas usam a autenticação técnica opt-in da ADM-01.A. Conceda cada capability explicitamente ao principal do ambiente. O cabeçalho opcional `X-Nexus-Administrator-Id` declara a referência do operador e segue para auditoria com o principal técnico e a correlação. A API devolve `Cache-Control: private, no-store`. [OpenAPI](openapi.json)
+
+| GET sob `/api/v1/corporate-admin` | Capabilities exigidas |
+| --- | --- |
+| `/finance/overview` | `finance:overview:read` |
+| `/finance/invoices`, `/finance/invoices/{id}` | `finance:invoices:read` |
+| `/finance/payments`, `/finance/payments/{id}` | `finance:payments:read` |
+| `/organizations/{id}/finance` | `finance:organizations:read` |
+| `/organizations/{id}/finance/invoices` | `finance:organizations:read` e `finance:invoices:read` |
+| `/organizations/{id}/finance/payments` | `finance:organizations:read` e `finance:payments:read` |
+
+### Consultas e filtros
+
+- Informe `mode=TEST` ou `mode=LIVE` em todas as rotas. Listagens e resumos também exigem `currency` em três letras maiúsculas e `from` e `to` em `YYYY-MM-DD`. Aceitam de 1 a 366 dias, a partir de `from` inclusive até `to` exclusive, à meia-noite UTC. Cada consulta usa uma única moeda. Detalhes retornam a moeda do registro.
+- `planCode` filtra a atribuição histórica da fatura. Faturas sem código continuam acessíveis sem esse filtro. `unattributedInvoiceCount` conta as faturas sem atribuição dentro do recorte retornado.
+- Listagens retornam `items`, `total`, `page` e `pageSize`. Os padrões são 1 e 25, com limites de 10.000 páginas e 100 itens por página. `sort` aceita `DATE_DESC` (padrão), `DATE_ASC`, `AMOUNT_DESC` e `AMOUNT_ASC`, com desempate por identificador e valores nulos ao final.
+- Faturas aceitam `status` canônico e `search` pelo UUID ou trecho literal do número sem distinção de caixa. Pagamentos aceitam `kind` e `status`. Para o detalhe, use o UUID da fatura ou o identificador opaco de pagamento exatamente como aparece na listagem. O documento OpenAPI contém exemplos sintéticos completos. [OpenAPI](openapi.json)
+
+Uma consulta sintética de janeiro de 2026 seria `GET /api/v1/corporate-admin/finance/overview?mode=TEST&currency=BRL&from=2026-01-01&to=2026-02-01`. Para encontrar reembolsos concluídos, aplique `kind=REFUND&status=SUCCEEDED` na listagem de pagamentos com os mesmos filtros.
+
+### Critérios e cobertura
+
+| Indicador | Critério |
+| --- | --- |
+| Faturamento e descontos | `subtotalMinor`, `billedMinor` e `discountMinor` vêm da projeção da fatura em `OPEN`, `PAID` ou `UNCOLLECTIBLE`. Data de emissão `finalizedAt`, com o timestamp de criação como fallback para registros legados. Faturas de outros estados aparecem nas contagens. `billedMinor` é o total da fatura após descontos e com os impostos registrados. |
+| Saldo aberto e inadimplência | `openMinor` soma saldos positivos das faturas `OPEN` emitidas no período. `overdueMinor` exige vencimento conhecido anterior a `asOf`. `pendingMinor` inclui saldos abertos sem vencimento informado ou com vencimento presente/futuro. `overdueOrganizationCount` conta organizações distintas com saldo vencido no recorte. `uncollectibleMinor` mostra à parte o saldo declarado incobrável. Um saldo antigo exige uma janela que inclua sua emissão. |
+| Recebimentos | `confirmedReceivedMinor` soma alocações únicas de Stripe InvoicePayment com PaymentIntent confirmado, com a data original da alocação paga. Dois rateios legítimos do mesmo PaymentIntent contam pelos seus próprios valores. A soma usa o período do pagamento ainda que a fatura seja anterior. `providerSettledMinor` na fatura pode incluir liquidação externa, créditos ou outros meios. |
+| Reembolsos e ajustes | `recordedRefundMinor` soma somente reembolsos Stripe únicos atualmente em `SUCCEEDED`, agrupados pela data de criação original do ajuste. O registro de ajuste indica a última observação e conserva o tipo e estado canônico. A data efetiva de conclusão do reembolso e sua extensão parcial ou integral ficam indeterminadas sem prova persistida suficiente. Disputas e créditos da fatura aparecem separadamente, com seus próprios estados ou valores. |
+| Evolução | `monthly` agrega por mês UTC de emissão, confirmação do pagamento ou criação do ajuste, conforme a métrica. A série inclui meses que possuem registros e avalia os saldos conforme a projeção disponível em `asOf`. Para contagens de organizações, use o total do período para deduplicação. |
+| Assinatura e próxima cobrança | O resumo por organização distingue status operacional e status efetivo da assinatura canônica no instante de consulta. Quando a organização já encerrou o último contrato, a resposta conserva o estado final e a data em `subscription.endedAt`. A assinatura Stripe exige que seu customer corresponda à organização e ao modo selecionado. `ORBIT_ONLY` indica uma assinatura local sem vínculo Stripe. `nextChargeAt` representa a próxima tentativa automática futura observada em uma fatura aberta do mesmo vínculo e moeda. |
+
+Períodos e totais são processados no PostgreSQL. Valores monetários usam unidades inteiras mínimas da moeda, por exemplo 8000 para R$ 80,00. Valores individuais cabem em inteiros JSON. Somas são strings decimais exatas e ficam `null` quando a métrica não tem registros qualificados no recorte. `"0"` representa uma soma com valor zero. Contagens sempre são numéricas. `netConfirmedMinor` fica `null` porque os dados atuais não comprovam o caixa líquido por competência do reembolso nem a cobertura integral do histórico.
+
+O campo `source` identifica a projeção reconciliada local. `asOf` indica quando a consulta avaliou a projeção. `invoiceObservedAt` e `paymentObservedAt` indicam as observações mais recentes entre os fatos filtrados. `settledWithoutReceiptEvidenceCount` sinaliza faturas liquidadas, inclusive liquidações de valor zero, ou com valor liquidado informado e sem evidência válida de uma alocação de caixa.
+
+A listagem de pagamentos mostra `RECEIPT/CONFIRMED` quando há evidência e `ATTEMPT/REJECTED` quando a transição da fatura registra o evento de falha com data original. Tentativas rejeitadas têm valor nulo. `REFUND` e `DISPUTE` usam a projeção do ajuste, incluindo `PENDING` e `CANCELED` quando informados pelo provedor. Eventos da fila de reconciliação ainda sem vínculo confirmado com uma fatura ficam de fora. Os indicadores mostram os fatos já registrados e suas datas de observação. MRR, ARR e reconhecimento contábil ficam fora deste contrato. [Garantias ORB-NX-04](../../../release/orb-nx-04-stripe-recovery.md)
+
+### Rollout e isolamento
+
+A migration `20261127120000_corporate_finance` acrescenta políticas RLS de leitura, uma política para gravar a auditoria e um índice de período. A aplicação registra `plan_code_at_issue` apenas após observar uma fatura finalizada com linhas de assinatura completas e preços históricos que apontem inequivocamente para o mesmo plano. Faturas legadas ou ambíguas preservam o valor nulo até existir evidência inequívoca. A migration dispensa backfill. Acompanhe o DDL pelo gate normal do banco, pois a criação do índice requer lock na tabela.
+
+As consultas usam somente faturas, evidências, ajustes e transições da cobrança do SaaS. Elas não solicitam dados ao Stripe nem alteram cobranças, assinaturas ou pagamentos. A auditoria grava apenas metadados de acesso. IDs do provedor, URLs privadas, dados de cartão e payloads de reconciliação ficam fora das respostas. Os descontos históricos da ADM-05.A entram pela fatura reconciliada. O valor reservado no checkout é informação gerencial daquele fluxo e fica fora desta soma. [OpenAPI](openapi.json)

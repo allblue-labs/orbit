@@ -22,7 +22,15 @@ export const PROMOTIONS_CREATE = 'promotions:create';
 export const PROMOTIONS_UPDATE = 'promotions:update';
 export const PROMOTIONS_ACTIVATE = 'promotions:activate';
 export const PROMOTIONS_DEACTIVATE = 'promotions:deactivate';
+export const FINANCE_OVERVIEW_READ = 'finance:overview:read';
+export const FINANCE_INVOICES_READ = 'finance:invoices:read';
+export const FINANCE_PAYMENTS_READ = 'finance:payments:read';
+export const FINANCE_ORGANIZATIONS_READ = 'finance:organizations:read';
 const CAPABILITIES = [
+  FINANCE_OVERVIEW_READ,
+  FINANCE_INVOICES_READ,
+  FINANCE_PAYMENTS_READ,
+  FINANCE_ORGANIZATIONS_READ,
   PROMOTIONS_READ,
   PROMOTIONS_CREATE,
   PROMOTIONS_UPDATE,

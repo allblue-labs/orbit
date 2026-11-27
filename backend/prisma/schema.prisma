@@ -1090,6 +1090,7 @@ model BillingInvoice {
   mode              String  @db.VarChar(10)
   providerInvoiceId String  @map("provider_invoice_id") @db.VarChar(255)
   invoiceNumber     String? @map("invoice_number") @db.VarChar(120)
+  planCodeAtIssue   String? @map("plan_code_at_issue") @db.VarChar(60)
 
   status               String @db.VarChar(30)
   currency             String @db.Char(3)

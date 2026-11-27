@@ -1382,6 +1382,7 @@ export class StripeBillingProvider implements BillingProvider {
       collectionMethod: invoice.collection_method,
       hostedInvoiceUrl: this.providerUrl(invoice.hosted_invoice_url ?? null),
       invoicePdfUrl: this.providerUrl(invoice.invoice_pdf ?? null),
+      subscriptionLinesComplete: invoice.lines?.has_more === false,
       subscriptionLines: (invoice.lines?.data ?? []).map((line) => ({
         priceId: this.idDoObjeto(line.pricing?.price_details?.price),
         subscriptionId:
