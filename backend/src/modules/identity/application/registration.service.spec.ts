@@ -22,8 +22,18 @@ describe('registration preserves the commercial selection', () => {
     },
     {
       acceptTerms: true,
+      termsVersion: '2026-11-27.1',
+      privacyVersion: LEGAL_DOCUMENT_VERSION,
+    },
+    {
+      acceptTerms: true,
       termsVersion: LEGAL_DOCUMENT_VERSION,
       privacyVersion: '2026-11-19.1',
+    },
+    {
+      acceptTerms: true,
+      termsVersion: LEGAL_DOCUMENT_VERSION,
+      privacyVersion: '2026-11-27.1',
     },
   ])(
     'rejects absent or stale acceptance before writing an account: %j',
@@ -37,7 +47,9 @@ describe('registration preserves the commercial selection', () => {
         {} as never,
       );
       const input = acceptance as RegisterOrganizationDto;
-      await expect(service.register(input, { client: 'WEB' })).rejects.toMatchObject({
+      await expect(
+        service.register(input, { client: 'WEB' }),
+      ).rejects.toMatchObject({
         code:
           input.acceptTerms === true
             ? 'LEGAL_DOCUMENT_VERSION_MISMATCH'

@@ -18,6 +18,9 @@ describe('documentos públicos e aceite do Orbit', () => {
       });
       expect(document.sections.length).toBeGreaterThan(6);
       expect(JSON.stringify(document.sections)).toContain('30 dias');
+      expect(JSON.stringify(document.sections)).toContain(
+        'depende de a rotina de retenção estar habilitada e em execução no ambiente operacional',
+      );
     },
   );
   it.each(['termos', 'privacidade'])(
