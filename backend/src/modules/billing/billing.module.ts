@@ -60,6 +60,7 @@ import { SubscriptionBillingController } from './subscription-billing.controller
     BillingReadService,
   ],
   exports: [
+    BillingRecoveryService,
     BillingService,
     BillingReconciliationService,
     BillingReadService,

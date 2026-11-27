@@ -275,3 +275,41 @@ Numerador e denominador compartilham as organizações distintas com fatura posi
 ### Banco e rollout
 
 A migration `20261127130000_corporate_commercial_analytics` cria uma projeção JSONB opcional em assinaturas, índices para datas de coorte e encerramento, políticas RLS de leitura com escopo por operação e modo, e a permissão restrita de auditoria. Use o gate de migrations habitual. A coluna começa vazia. A reconciliação já existente passa a gravar a observação dos termos em sua transação e versão atuais. As consultas agregam no PostgreSQL e usam somente dados locais. Os indicadores têm um limite de execução por instrução SQL de cinco segundos.
+
+## ADM-08.A — Suporte e diagnóstico corporativo
+
+As rotas estão sob `/api/v1/corporate-admin`. As credenciais técnicas precisam dos grants correspondentes. A API corporativa continua desabilitada por padrão. As consultas usam o PostgreSQL local e respondem com cache privado. [OpenAPI](openapi.json)
+
+| Método e rota | Capability |
+| --- | --- |
+| `GET /support/tickets`, `GET /support/tickets/{id}` | `support:tickets:read` |
+| `POST /support/tickets` | `support:tickets:create` |
+| `PATCH /support/tickets/{id}`, `POST /support/tickets/{id}/notes` | `support:tickets:update` |
+| `GET /organizations/{id}/diagnostics` | `diagnostics:organizations:read` |
+| `GET /diagnostics/integrations` | `diagnostics:integrations:read` |
+| `GET /diagnostics/operations`, `GET /diagnostics/operations/{id}` | `diagnostics:operations:read` |
+| `POST /diagnostics/provisionings/{id}/resume` | `recovery:provisioning:resume` |
+
+### Chamados e escritas
+
+A fila reúne chamados administrativos das categorias `ACCOUNT_ACCESS`, `TECHNICAL` e `GENERAL`, e solicitações comerciais existentes de alteração de plano, cancelamento e análise de reembolso. Os filtros incluem organização, origem, categoria, prioridade, estado e responsável. `search` busca trecho literal de título ou nome da organização e também aceita o ID exato. A ordenação é por criação decrescente e ID, com paginação de 1 a 100 itens e 25 por padrão. A listagem conserva a referência local de assinatura e o plano solicitado quando disponíveis.
+
+As escritas exigem `X-Nexus-Administrator-Id` e uma chave `Idempotency-Key` de 16 a 128 caracteres ASCII alfanuméricos ou `_.:-`. O recorte de idempotência é o principal técnico. Repetir a chave com o mesmo comando e administrador devolve o recibo com `replayed: true`. Reutilizá-la para outro conteúdo retorna `409 IDEMPOTENCY_MISMATCH`. Para atualizar um chamado ou registrar uma nota, envie `expectedVersion` da última leitura. Uma versão divergente retorna `409 STALE_VERSION`, inclusive após uma resolução pelo fluxo de cobrança legado.
+
+Prioridades são `LOW`, `NORMAL`, `HIGH` e `URGENT`. Atribuição aceita uma referência UUID declarada do Nexus e `null` para removê-la. O Nexus resolve a identidade e a elegibilidade desse responsável. Um chamado nasce `OPEN` e pode passar para `RESOLVED` mediante resolução interna. Notas podem complementar chamados já encerrados. Encerrar uma solicitação comercial atualiza somente o chamado canônico. O efeito financeiro ou comercial exige o respectivo fluxo já existente.
+
+O detalhe inclui até 50 interações internas, da mais recente para a mais antiga. Passe `nextBefore` em `before` para ler mais. Títulos e notas são texto simples. As notas, a resolução corporativa e as atribuições ficam no fluxo administrativo. As solicitações comerciais anteriores conservam as datas conhecidas de criação e resolução. A auditoria guarda ação, decisão, identificadores e correlação. O conteúdo dos chamados e das notas fica fora dos logs de auditoria.
+
+### Diagnóstico
+
+- **Organização.** O estado operacional é separado do estado efetivo da assinatura e da restrição de cobrança. `PAYMENT_ATTENTION` sinaliza atraso ou carência com acesso preservado pela política vigente. A projeção inclui os direitos efetivos, indicadores de confirmação de e-mail e troca de senha do responsável, estágio de provisionamento, operações comerciais abertas e a última observação disponível de assinatura e fatura. Inconsistências usam códigos estáveis e um campo nulo representa evidência indisponível.
+- **Integrações.** Stripe e SES retornam configuração e evidência local em campos próprios. `UNOBSERVED` significa fila ou checkpoint sem registros disponíveis na consulta. Os totais são agrupados por fonte, estado e modo. Uma aceitação pelo SES registra aceite do provedor. O endpoint não testa os provedores durante a consulta.
+- **Operações.** A visão reúne os fluxos de provisionamento, a inbox e os checkpoints Stripe, e as filas de e-mail de identidade e contato. Filtros por organização se aplicam somente a registros com vínculo local explícito. O filtro de modo recorta somente fontes Stripe. A rota de detalhe aceita UUID local ou chave de checkpoint no formato `STRIPE:TEST:EVENTS`. Erros fora da lista segura saem como `UNCLASSIFIED_FAILURE`. A correlação é retornada quando a fonte a registra em formato válido. As datas representam registros locais. O diagnóstico não publica IDs da Stripe, cursores internos, hashes de token, destinatários, links, payloads ou stack traces.
+
+### Retomar provisionamento
+
+Localize o workflow e sua versão em `GET /diagnostics/operations?type=TENANT_PROVISIONING` ou no detalhe da operação. A retomada exige o mesmo principal técnico que criou o workflow, a versão corrente e um motivo explícito entre `DEPENDENCY_RESTORED`, `WORKFLOW_INTERRUPTED` e `RETRY_AFTER_REVIEW`. Os estágios `TENANT_CREATED` e `SUBSCRIPTION_READY` reutilizam as transações e os locks da ADM-03.A. O estágio `RECEIVED` exige o envio original pelo fluxo de provisionamento. A resposta usa `200` quando concluído e `202` quando ainda há etapa pendente. Depois de verificar a causa de um `202`, leia a versão atual antes de abrir uma nova tentativa com outra chave.
+
+Em caso de falha de comunicação, repita a mesma chave. Se o processo cair depois de persistir um estágio e antes de registrar o recibo, leia a versão atual. Os locks e o estado persistido da ADM-03.A protegem a criação da assinatura e a fila de ativação contra duplicação. As filas de Stripe e SES têm diagnóstico nesta versão. A retomada exposta por esta API é a do workflow administrativo. O reenvio de e-mails com rejeição comprovada continua sujeito às verificações e à autoridade humana do painel interno de jobs. O formulário público aparece no diagnóstico como processamento de contato.
+
+A migration `20261127140000_corporate_support` cria a fila, o histórico interno e os recibos, estende os chamados comerciais com prioridade e versão compartilhada e instala políticas RLS específicas. A versão dos chamados legados começa em 1 e a migração preserva os chamados existentes sem reconstituir interações antigas.

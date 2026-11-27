@@ -267,6 +267,24 @@ export class BillingPolicyService {
         where: { status, ...(after ? { id: { lt: after } } : {}) },
         orderBy: { id: 'desc' },
         take: 51,
+        select: {
+          id: true,
+          organizationId: true,
+          subscriptionId: true,
+          requestedBy: true,
+          kind: true,
+          targetPlanCode: true,
+          targetInterval: true,
+          reference: true,
+          status: true,
+          resolvedBy: true,
+          resolvedAt: true,
+          resolution: true,
+          emailSentAt: true,
+          emailAttempts: true,
+          nextEmailAt: true,
+          createdAt: true,
+        },
       });
       const tickets = rows.slice(0, 50);
       return {

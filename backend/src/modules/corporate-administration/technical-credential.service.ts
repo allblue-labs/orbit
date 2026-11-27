@@ -30,7 +30,22 @@ export const ANALYTICS_REVENUE_READ = 'analytics:revenue:read';
 export const ANALYTICS_LIFECYCLE_READ = 'analytics:lifecycle:read';
 export const ANALYTICS_TRIALS_READ = 'analytics:trials:read';
 export const ANALYTICS_DELINQUENCY_READ = 'analytics:delinquency:read';
+export const SUPPORT_TICKETS_READ = 'support:tickets:read';
+export const SUPPORT_TICKETS_CREATE = 'support:tickets:create';
+export const SUPPORT_TICKETS_UPDATE = 'support:tickets:update';
+export const DIAGNOSTICS_ORGANIZATIONS_READ = 'diagnostics:organizations:read';
+export const DIAGNOSTICS_INTEGRATIONS_READ = 'diagnostics:integrations:read';
+export const DIAGNOSTICS_OPERATIONS_READ = 'diagnostics:operations:read';
+export const RECOVERY_PROVISIONING_RESUME = 'recovery:provisioning:resume';
 const CAPABILITIES = [
+  SUPPORT_TICKETS_READ,
+  SUPPORT_TICKETS_CREATE,
+  SUPPORT_TICKETS_UPDATE,
+  DIAGNOSTICS_ORGANIZATIONS_READ,
+  DIAGNOSTICS_INTEGRATIONS_READ,
+  DIAGNOSTICS_OPERATIONS_READ,
+  RECOVERY_PROVISIONING_RESUME,
+
   ANALYTICS_REVENUE_READ,
   ANALYTICS_LIFECYCLE_READ,
   ANALYTICS_TRIALS_READ,

@@ -3856,6 +3856,1309 @@
           }
         }
       }
+    },
+    "/api/v1/corporate-admin/support/tickets": {
+      "get": {
+        "operationId": "corporateAdminSupportTickets",
+        "summary": "Lista chamados corporativos",
+        "description": "Fila administrativa e solicitações comerciais canônicas, ordenadas por criação decrescente e ID. A busca é literal, sem distinção de caixa, por título ou nome da organização, ou pelo ID exato. A listagem omite o texto das interações.",
+        "tags": [
+          "Administração corporativa"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/NexusAdministratorId"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000,
+              "default": 1
+            },
+            "description": "Página iniciada em 1."
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 25
+            },
+            "description": "Tamanho da página."
+          },
+          {
+            "name": "organizationId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Identificador local da organização."
+          },
+          {
+            "name": "assigneeId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Referência do responsável no Nexus."
+          },
+          {
+            "name": "origin",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ADMINISTRATIVE",
+                "BILLING"
+              ]
+            },
+            "description": "Origem do chamado."
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ACCOUNT_ACCESS",
+                "TECHNICAL",
+                "GENERAL",
+                "PLAN_CHANGE",
+                "CANCELLATION",
+                "REFUND_REVIEW"
+              ]
+            },
+            "description": "Categoria do chamado."
+          },
+          {
+            "name": "priority",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "LOW",
+                "NORMAL",
+                "HIGH",
+                "URGENT"
+              ]
+            },
+            "description": "Prioridade interna."
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "OPEN",
+                "RESOLVED"
+              ]
+            },
+            "description": "Estado do chamado."
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 100,
+              "pattern": "\\S"
+            },
+            "description": "Trecho literal ou UUID do chamado."
+          }
+        ],
+        "x-required-capability": "support:tickets:read",
+        "responses": {
+          "200": {
+            "description": "Consulta processada.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorporateSupportTicketPageResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "items": [
+                      {
+                        "id": "01a19fe0-01f1-7ab1-b001-806dca39d229",
+                        "organizationId": "01a19fe0-01f0-7ab1-b001-806dca39d229",
+                        "organizationName": "Empresa sintética",
+                        "origin": "ADMINISTRATIVE",
+                        "category": "TECHNICAL",
+                        "title": "Revisar configuração da conta",
+                        "priority": "HIGH",
+                        "status": "OPEN",
+                        "assigneeId": "beeacd55-fa47-44b8-8880-00c20de9c66a",
+                        "version": 2,
+                        "commercial": null,
+                        "createdAt": "2026-11-27T15:00:00.000Z",
+                        "updatedAt": "2026-11-27T15:00:00.000Z",
+                        "resolvedAt": null
+                      }
+                    ],
+                    "total": 1,
+                    "page": 1,
+                    "pageSize": 25
+                  },
+                  "requestId": "beeacd55-fa47-44b8-8880-00c20de9c66a",
+                  "timestamp": "2026-11-27T15:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/CorporateValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      },
+      "post": {
+        "operationId": "corporateAdminCreateSupportTicket",
+        "summary": "Abre chamado administrativo",
+        "description": "Abre chamado na organização com prioridade NORMAL por padrão. A nota inicial é interna. A resposta reaproveita o recibo quando a mesma chave é repetida.",
+        "tags": [
+          "Administração corporativa"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/RequiredNexusAdministratorId"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]{16,128}$"
+            }
+          }
+        ],
+        "x-required-capability": "support:tickets:create",
+        "responses": {
+          "201": {
+            "description": "Comando processado.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorporateSupportReceiptResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "id": "01a19fe0-01f1-7ab1-b001-806dca39d229",
+                    "status": "OPEN",
+                    "version": 1,
+                    "interactionId": "01a19fe0-01f1-7ab1-b001-806dca39d229",
+                    "replayed": false
+                  },
+                  "requestId": "beeacd55-fa47-44b8-8880-00c20de9c66a",
+                  "timestamp": "2026-11-27T15:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/CorporateValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "409": {
+            "description": "STALE_VERSION, IDEMPOTENCY_MISMATCH, TICKET_ALREADY_RESOLVED ou PROVISIONING_NOT_RESUMABLE, conforme a operação."
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CorporateSupportTicketCreate"
+              },
+              "example": {
+                "organizationId": "01a19fe0-01f0-7ab1-b001-806dca39d229",
+                "title": "Revisar configuração da conta",
+                "category": "TECHNICAL"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/corporate-admin/support/tickets/{id}": {
+      "get": {
+        "operationId": "corporateAdminSupportTicket",
+        "summary": "Consulta chamado e histórico interno",
+        "description": "Traz até 50 interações, da mais recente para a mais antiga. Passe nextBefore na próxima página. Datas de criação e de resolução do chamado continuam disponíveis para registros comerciais anteriores.",
+        "tags": [
+          "Administração corporativa"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/NexusAdministratorId"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Cursor exclusivo das interações mais antigas."
+          }
+        ],
+        "x-required-capability": "support:tickets:read",
+        "responses": {
+          "200": {
+            "description": "Consulta processada.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorporateSupportTicketDetailResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "ticket": {
+                      "id": "01a19fe0-01f1-7ab1-b001-806dca39d229",
+                      "organizationId": "01a19fe0-01f0-7ab1-b001-806dca39d229",
+                      "organizationName": "Empresa sintética",
+                      "origin": "ADMINISTRATIVE",
+                      "category": "TECHNICAL",
+                      "title": "Revisar configuração da conta",
+                      "priority": "HIGH",
+                      "status": "OPEN",
+                      "assigneeId": "beeacd55-fa47-44b8-8880-00c20de9c66a",
+                      "version": 2,
+                      "commercial": null,
+                      "createdAt": "2026-11-27T15:00:00.000Z",
+                      "updatedAt": "2026-11-27T15:00:00.000Z",
+                      "resolvedAt": null
+                    },
+                    "interactions": [
+                      {
+                        "id": "01a19fe0-01f1-7ab1-b001-806dca39d229",
+                        "kind": "INTERNAL_NOTE",
+                        "visibility": "INTERNAL",
+                        "body": "Aguardando nova validação.",
+                        "changes": null,
+                        "administratorId": "beeacd55-fa47-44b8-8880-00c20de9c66a",
+                        "createdAt": "2026-11-27T15:00:00.000Z"
+                      }
+                    ],
+                    "nextBefore": null
+                  },
+                  "requestId": "beeacd55-fa47-44b8-8880-00c20de9c66a",
+                  "timestamp": "2026-11-27T15:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/CorporateValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "corporateAdminUpdateSupportTicket",
+        "summary": "Atribui, prioriza ou encerra chamado",
+        "description": "Use a versão lida. assigneeId nulo remove o responsável. RESOLVED exige uma resolução interna. Encerrar uma solicitação comercial modifica somente o chamado.",
+        "tags": [
+          "Administração corporativa"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/RequiredNexusAdministratorId"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]{16,128}$"
+            }
+          }
+        ],
+        "x-required-capability": "support:tickets:update",
+        "responses": {
+          "200": {
+            "description": "Comando processado.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorporateSupportReceiptResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "id": "01a19fe0-01f1-7ab1-b001-806dca39d229",
+                    "status": "OPEN",
+                    "version": 2,
+                    "interactionId": "01a19fe0-01f1-7ab1-b001-806dca39d229",
+                    "replayed": false
+                  },
+                  "requestId": "beeacd55-fa47-44b8-8880-00c20de9c66a",
+                  "timestamp": "2026-11-27T15:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/CorporateValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "409": {
+            "description": "STALE_VERSION, IDEMPOTENCY_MISMATCH, TICKET_ALREADY_RESOLVED ou PROVISIONING_NOT_RESUMABLE, conforme a operação."
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CorporateSupportTicketUpdate"
+              },
+              "example": {
+                "expectedVersion": 1,
+                "assigneeId": "beeacd55-fa47-44b8-8880-00c20de9c66a"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/corporate-admin/support/tickets/{id}/notes": {
+      "post": {
+        "operationId": "corporateAdminAddSupportNote",
+        "summary": "Registra nota interna",
+        "description": "Anexa nota interna em chamado aberto ou encerrado e incrementa sua versão. A nota não é enviada ao cliente.",
+        "tags": [
+          "Administração corporativa"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/RequiredNexusAdministratorId"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]{16,128}$"
+            }
+          }
+        ],
+        "x-required-capability": "support:tickets:update",
+        "responses": {
+          "201": {
+            "description": "Comando processado.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorporateSupportReceiptResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "id": "01a19fe0-01f1-7ab1-b001-806dca39d229",
+                    "status": "OPEN",
+                    "version": 2,
+                    "interactionId": "01a19fe0-01f1-7ab1-b001-806dca39d229",
+                    "replayed": false
+                  },
+                  "requestId": "beeacd55-fa47-44b8-8880-00c20de9c66a",
+                  "timestamp": "2026-11-27T15:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/CorporateValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "409": {
+            "description": "STALE_VERSION, IDEMPOTENCY_MISMATCH, TICKET_ALREADY_RESOLVED ou PROVISIONING_NOT_RESUMABLE, conforme a operação."
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CorporateSupportNoteCreate"
+              },
+              "example": {
+                "expectedVersion": 1,
+                "body": "Aguardando nova validação."
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/corporate-admin/organizations/{id}/diagnostics": {
+      "get": {
+        "operationId": "corporateAdminOrganizationDiagnostics",
+        "summary": "Diagnostica uma organização",
+        "description": "Consulta situação operacional, assinatura efetiva, acesso financeiro, direitos efetivos, responsável, provisionamento, pendências e observações de reconciliação no escopo da organização.",
+        "tags": [
+          "Administração corporativa"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/NexusAdministratorId"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "x-required-capability": "diagnostics:organizations:read",
+        "responses": {
+          "200": {
+            "description": "Consulta processada.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorporateOrganizationDiagnosticsResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "asOf": "2026-11-27T15:00:00.000Z",
+                    "organization": {
+                      "id": "01a19fe0-01f0-7ab1-b001-806dca39d229",
+                      "displayName": "Empresa sintética",
+                      "operationalStatus": "ACTIVE",
+                      "retention": "NOT_OBSERVED"
+                    },
+                    "owner": {
+                      "status": "ACTIVE",
+                      "emailVerified": false,
+                      "passwordSetupRequired": true
+                    },
+                    "subscription": {
+                      "id": "01a19fe0-01f1-7ab1-b001-806dca39d229",
+                      "persistedStatus": "PENDING_PAYMENT",
+                      "effectiveStatus": "PENDING_PAYMENT",
+                      "persistedPlanCode": "PROFESSIONAL",
+                      "effectivePlanCode": "PROFESSIONAL",
+                      "billingInterval": "MONTHLY",
+                      "currentPeriodEnd": "2026-11-27T15:00:00.000Z",
+                      "accessGranted": false
+                    },
+                    "billingAccess": "BLOCKED",
+                    "entitlements": null,
+                    "provisioning": null,
+                    "pending": {
+                      "scheduledPlanChange": null,
+                      "checkout": 1,
+                      "upgrades": 0,
+                      "refunds": []
+                    },
+                    "openTickets": {
+                      "administrative": 1,
+                      "commercial": 0
+                    },
+                    "lastReconciliation": {
+                      "mode": null,
+                      "subscriptionObservedAt": null,
+                      "invoiceObservedAt": null
+                    },
+                    "inconsistencies": []
+                  },
+                  "requestId": "beeacd55-fa47-44b8-8880-00c20de9c66a",
+                  "timestamp": "2026-11-27T15:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/CorporateValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/corporate-admin/diagnostics/integrations": {
+      "get": {
+        "operationId": "corporateAdminIntegrationDiagnostics",
+        "summary": "Consulta evidência local de integrações",
+        "description": "Informa configuração e contagens por fonte, estado e modo. Evidência ausente é UNOBSERVED. Aceite de e-mail significa aceite pelo provedor, sem confirmação de entrega.",
+        "tags": [
+          "Administração corporativa"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/NexusAdministratorId"
+          }
+        ],
+        "x-required-capability": "diagnostics:integrations:read",
+        "responses": {
+          "200": {
+            "description": "Consulta processada.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorporateIntegrationDiagnosticsResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "asOf": "2026-11-27T15:00:00.000Z",
+                    "integrations": [
+                      {
+                        "integration": "STRIPE",
+                        "configuration": "CONFIGURED",
+                        "mode": "TEST",
+                        "recoveryConfigured": true,
+                        "evidence": "LOCAL_RECORDS",
+                        "streams": [
+                          {
+                            "type": "STRIPE_RECOVERY",
+                            "mode": "TEST",
+                            "status": "RETRYABLE_FAILURE",
+                            "count": 1,
+                            "maxAttempts": 2,
+                            "lastExecutionAt": "2026-11-27T15:00:00.000Z",
+                            "lastCompletedAt": null
+                          }
+                        ]
+                      },
+                      {
+                        "integration": "SES",
+                        "configuration": "CONFIGURED",
+                        "mode": null,
+                        "recoveryConfigured": null,
+                        "evidence": "UNOBSERVED",
+                        "streams": []
+                      }
+                    ]
+                  },
+                  "requestId": "beeacd55-fa47-44b8-8880-00c20de9c66a",
+                  "timestamp": "2026-11-27T15:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/CorporateValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/corporate-admin/diagnostics/operations": {
+      "get": {
+        "operationId": "corporateAdminDiagnosticOperations",
+        "summary": "Lista processamentos administrativos",
+        "description": "Inclui provisionamento, inbox e checkpoints do Stripe e filas de e-mail de identidade e contato. Ordenação por última atualização, tipo e ID.",
+        "tags": [
+          "Administração corporativa"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/NexusAdministratorId"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000,
+              "default": 1
+            },
+            "description": "Página iniciada em 1."
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 25
+            },
+            "description": "Tamanho da página."
+          },
+          {
+            "name": "organizationId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Identificador local da organização."
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "TENANT_PROVISIONING",
+                "STRIPE_WEBHOOK",
+                "STRIPE_RECOVERY",
+                "IDENTITY_EMAIL",
+                "CONTACT_EMAIL"
+              ]
+            },
+            "description": "Tipo da operação."
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "PENDING",
+                "PROCESSING",
+                "SUCCEEDED",
+                "IGNORED",
+                "RETRYABLE_FAILURE",
+                "TERMINAL_FAILURE",
+                "UNCONFIRMED"
+              ]
+            },
+            "description": "Estado de diagnóstico."
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "TEST",
+                "LIVE"
+              ]
+            },
+            "description": "Filtra operações Stripe pelo modo."
+          }
+        ],
+        "x-required-capability": "diagnostics:operations:read",
+        "responses": {
+          "200": {
+            "description": "Consulta processada.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorporateDiagnosticOperationPageResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "items": [
+                      {
+                        "id": "STRIPE:TEST:EVENTS",
+                        "type": "STRIPE_RECOVERY",
+                        "status": "RETRYABLE_FAILURE",
+                        "stage": "READY",
+                        "organizationId": null,
+                        "mode": "TEST",
+                        "attempts": 2,
+                        "version": null,
+                        "lastExecutionAt": "2026-11-27T15:00:00.000Z",
+                        "completedAt": null,
+                        "updatedAt": "2026-11-27T15:00:00.000Z",
+                        "correlationId": null,
+                        "errorCode": "PROVIDER_UNAVAILABLE",
+                        "recovery": null
+                      }
+                    ],
+                    "total": 1,
+                    "page": 1,
+                    "pageSize": 25
+                  },
+                  "requestId": "beeacd55-fa47-44b8-8880-00c20de9c66a",
+                  "timestamp": "2026-11-27T15:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/CorporateValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/corporate-admin/diagnostics/operations/{id}": {
+      "get": {
+        "operationId": "corporateAdminDiagnosticOperation",
+        "summary": "Consulta um processamento",
+        "description": "Aceita UUID local ou chave pública de checkpoint Stripe. CorrelationId é nulo quando a fonte não guarda uma correlação local válida.",
+        "tags": [
+          "Administração corporativa"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/NexusAdministratorId"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(?:[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}|STRIPE:(?:TEST|LIVE):(?:EVENTS|SUBSCRIPTIONS))$"
+            }
+          }
+        ],
+        "x-required-capability": "diagnostics:operations:read",
+        "responses": {
+          "200": {
+            "description": "Consulta processada.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorporateDiagnosticOperationResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "id": "STRIPE:TEST:EVENTS",
+                    "type": "STRIPE_RECOVERY",
+                    "status": "RETRYABLE_FAILURE",
+                    "stage": "READY",
+                    "organizationId": null,
+                    "mode": "TEST",
+                    "attempts": 2,
+                    "version": null,
+                    "lastExecutionAt": "2026-11-27T15:00:00.000Z",
+                    "completedAt": null,
+                    "updatedAt": "2026-11-27T15:00:00.000Z",
+                    "correlationId": null,
+                    "errorCode": "PROVIDER_UNAVAILABLE",
+                    "recovery": null
+                  },
+                  "requestId": "beeacd55-fa47-44b8-8880-00c20de9c66a",
+                  "timestamp": "2026-11-27T15:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/CorporateValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/corporate-admin/diagnostics/provisionings/{id}/resume": {
+      "post": {
+        "operationId": "corporateAdminRecoverProvisioning",
+        "summary": "Retoma provisionamento interrompido",
+        "description": "Exige workflow da mesma credencial técnica, motivo e versão. Retoma os estágios TENANT_CREATED e SUBSCRIPTION_READY por meio da ADM-03.A. Uma repetição com a mesma chave devolve o mesmo recibo.",
+        "tags": [
+          "Administração corporativa"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/RequiredNexusAdministratorId"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]{16,128}$"
+            }
+          }
+        ],
+        "x-required-capability": "recovery:provisioning:resume",
+        "responses": {
+          "200": {
+            "description": "Comando processado.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorporateProvisioningRecoveryReceiptResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "id": "01a19fe0-01f1-7ab1-b001-806dca39d229",
+                    "status": "COMPLETED",
+                    "version": 4,
+                    "attempts": 1,
+                    "complete": true,
+                    "lastErrorCode": null,
+                    "replayed": false
+                  },
+                  "requestId": "beeacd55-fa47-44b8-8880-00c20de9c66a",
+                  "timestamp": "2026-11-27T15:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/CorporateValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "409": {
+            "description": "STALE_VERSION, IDEMPOTENCY_MISMATCH, TICKET_ALREADY_RESOLVED ou PROVISIONING_NOT_RESUMABLE, conforme a operação."
+          },
+          "202": {
+            "description": "O fluxo continua incompleto. Consulte o estado e corrija a causa antes de uma nova tentativa.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorporateProvisioningRecoveryReceiptResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "id": "01a19fe0-01f1-7ab1-b001-806dca39d229",
+                    "status": "SUBSCRIPTION_READY",
+                    "version": 4,
+                    "attempts": 1,
+                    "complete": false,
+                    "lastErrorCode": "OWNER_SETUP_PENDING",
+                    "replayed": false
+                  },
+                  "requestId": "beeacd55-fa47-44b8-8880-00c20de9c66a",
+                  "timestamp": "2026-11-27T15:00:00.000Z"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CorporateProvisioningRecoveryRequest"
+              },
+              "example": {
+                "expectedVersion": 2,
+                "reason": "DEPENDENCY_RESTORED"
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -8113,6 +9416,1623 @@
           },
           "data": {
             "$ref": "#/components/schemas/CorporateAnalyticsDelinquency"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CorporateSupportTicket": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "organizationId",
+          "organizationName",
+          "origin",
+          "category",
+          "title",
+          "priority",
+          "status",
+          "assigneeId",
+          "version",
+          "commercial",
+          "createdAt",
+          "updatedAt",
+          "resolvedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "organizationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "organizationName": {
+            "type": "string"
+          },
+          "origin": {
+            "type": "string",
+            "enum": [
+              "ADMINISTRATIVE",
+              "BILLING"
+            ]
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "ACCOUNT_ACCESS",
+              "TECHNICAL",
+              "GENERAL",
+              "PLAN_CHANGE",
+              "CANCELLATION",
+              "REFUND_REVIEW"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "LOW",
+              "NORMAL",
+              "HIGH",
+              "URGENT"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "OPEN",
+              "RESOLVED"
+            ]
+          },
+          "assigneeId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "commercial": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "subscriptionId",
+                  "targetPlanCode",
+                  "targetInterval"
+                ],
+                "properties": {
+                  "subscriptionId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "targetPlanCode": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "targetInterval": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "resolvedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "CorporateSupportInteraction": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "kind",
+          "visibility",
+          "body",
+          "changes",
+          "administratorId",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "CREATED",
+              "UPDATED",
+              "INTERNAL_NOTE",
+              "RESOLVED"
+            ]
+          },
+          "visibility": {
+            "const": "INTERNAL"
+          },
+          "body": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000,
+                "pattern": "\\S"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "changes": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "before",
+                  "after"
+                ],
+                "properties": {
+                  "before": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "priority",
+                      "status",
+                      "assigneeId"
+                    ],
+                    "properties": {
+                      "priority": {
+                        "type": "string",
+                        "enum": [
+                          "LOW",
+                          "NORMAL",
+                          "HIGH",
+                          "URGENT"
+                        ]
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "OPEN",
+                          "RESOLVED"
+                        ]
+                      },
+                      "assigneeId": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "after": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "priority",
+                      "status",
+                      "assigneeId"
+                    ],
+                    "properties": {
+                      "priority": {
+                        "type": "string",
+                        "enum": [
+                          "LOW",
+                          "NORMAL",
+                          "HIGH",
+                          "URGENT"
+                        ]
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "OPEN",
+                          "RESOLVED"
+                        ]
+                      },
+                      "assigneeId": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "administratorId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CorporateSupportTicketPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "total",
+          "page",
+          "pageSize"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CorporateSupportTicket"
+            },
+            "maxItems": 100
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          "pageSize": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        }
+      },
+      "CorporateSupportTicketDetail": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ticket",
+          "interactions",
+          "nextBefore"
+        ],
+        "properties": {
+          "ticket": {
+            "$ref": "#/components/schemas/CorporateSupportTicket"
+          },
+          "interactions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CorporateSupportInteraction"
+            },
+            "maxItems": 50
+          },
+          "nextBefore": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "CorporateSupportTicketCreate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "organizationId",
+          "title",
+          "category"
+        ],
+        "properties": {
+          "organizationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 160,
+            "pattern": "\\S"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "ACCOUNT_ACCESS",
+              "TECHNICAL",
+              "GENERAL"
+            ]
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "LOW",
+              "NORMAL",
+              "HIGH",
+              "URGENT"
+            ]
+          },
+          "initialNote": {
+            "type": "string",
+            "maxLength": 2000,
+            "pattern": "\\S"
+          }
+        }
+      },
+      "CorporateSupportTicketUpdate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "expectedVersion"
+        ],
+        "properties": {
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483646
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "LOW",
+              "NORMAL",
+              "HIGH",
+              "URGENT"
+            ]
+          },
+          "assigneeId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "const": "RESOLVED"
+          },
+          "resolution": {
+            "type": "string",
+            "maxLength": 2000,
+            "pattern": "\\S"
+          }
+        },
+        "anyOf": [
+          {
+            "required": [
+              "priority"
+            ]
+          },
+          {
+            "required": [
+              "assigneeId"
+            ]
+          },
+          {
+            "required": [
+              "status"
+            ]
+          }
+        ],
+        "dependentRequired": {
+          "status": [
+            "resolution"
+          ],
+          "resolution": [
+            "status"
+          ]
+        }
+      },
+      "CorporateSupportNoteCreate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "expectedVersion",
+          "body"
+        ],
+        "properties": {
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483646
+          },
+          "body": {
+            "type": "string",
+            "maxLength": 2000,
+            "pattern": "\\S"
+          }
+        }
+      },
+      "CorporateSupportReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "version",
+          "status",
+          "interactionId",
+          "replayed"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "OPEN",
+              "RESOLVED"
+            ]
+          },
+          "interactionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "replayed": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CorporateOrganizationDiagnostics": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "asOf",
+          "organization",
+          "owner",
+          "subscription",
+          "billingAccess",
+          "entitlements",
+          "provisioning",
+          "pending",
+          "openTickets",
+          "lastReconciliation",
+          "inconsistencies"
+        ],
+        "properties": {
+          "asOf": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "organization": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "displayName",
+              "operationalStatus",
+              "retention"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "displayName": {
+                "type": "string"
+              },
+              "operationalStatus": {
+                "type": "string"
+              },
+              "retention": {
+                "type": "string",
+                "enum": [
+                  "PURGED",
+                  "PURGE_STARTED",
+                  "NOT_OBSERVED"
+                ]
+              }
+            }
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "status",
+                  "emailVerified",
+                  "passwordSetupRequired"
+                ],
+                "properties": {
+                  "status": {
+                    "type": "string"
+                  },
+                  "emailVerified": {
+                    "type": "boolean"
+                  },
+                  "passwordSetupRequired": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "subscription": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "persistedStatus",
+                  "effectiveStatus",
+                  "persistedPlanCode",
+                  "effectivePlanCode",
+                  "billingInterval",
+                  "currentPeriodEnd",
+                  "accessGranted"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "persistedStatus": {
+                    "type": "string",
+                    "enum": [
+                      "PENDING_PAYMENT",
+                      "TRIALING",
+                      "ACTIVE",
+                      "PAST_DUE",
+                      "GRACE_PERIOD",
+                      "SUSPENDED",
+                      "CANCELED",
+                      "EXPIRED"
+                    ]
+                  },
+                  "effectiveStatus": {
+                    "type": "string",
+                    "enum": [
+                      "PENDING_PAYMENT",
+                      "TRIALING",
+                      "ACTIVE",
+                      "PAST_DUE",
+                      "GRACE_PERIOD",
+                      "SUSPENDED",
+                      "CANCELED",
+                      "EXPIRED"
+                    ]
+                  },
+                  "persistedPlanCode": {
+                    "type": "string"
+                  },
+                  "effectivePlanCode": {
+                    "type": "string"
+                  },
+                  "billingInterval": {
+                    "type": "string"
+                  },
+                  "currentPeriodEnd": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "accessGranted": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "billingAccess": {
+            "type": "string",
+            "enum": [
+              "UNOBSERVED",
+              "BLOCKED",
+              "PAYMENT_ATTENTION",
+              "NO_BLOCK_OBSERVED"
+            ]
+          },
+          "entitlements": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "source",
+                  "planCode",
+                  "accessGranted",
+                  "capabilities",
+                  "allocation",
+                  "usage"
+                ],
+                "properties": {
+                  "source": {
+                    "type": "string",
+                    "enum": [
+                      "SUBSCRIPTION",
+                      "CATALOG",
+                      "CUSTOM",
+                      "LEGACY_UNGOVERNED"
+                    ]
+                  },
+                  "planCode": {
+                    "type": "string"
+                  },
+                  "accessGranted": {
+                    "type": "boolean"
+                  },
+                  "capabilities": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "allocation": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "unlimited",
+                        "value"
+                      ],
+                      "properties": {
+                        "unlimited": {
+                          "type": "boolean"
+                        },
+                        "value": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "usage": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "unlimited",
+                        "value"
+                      ],
+                      "properties": {
+                        "unlimited": {
+                          "type": "boolean"
+                        },
+                        "value": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "provisioning": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "status",
+                  "attempts",
+                  "updatedAt",
+                  "completedAt",
+                  "lastErrorCode"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "RECEIVED",
+                      "TENANT_CREATED",
+                      "SUBSCRIPTION_READY",
+                      "COMPLETED"
+                    ]
+                  },
+                  "attempts": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "updatedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "completedAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "lastErrorCode": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^[A-Z][A-Z0-9_]{2,79}$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pending": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "scheduledPlanChange",
+              "checkout",
+              "upgrades",
+              "refunds"
+            ],
+            "properties": {
+              "scheduledPlanChange": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "planCode",
+                      "effectiveAt"
+                    ],
+                    "properties": {
+                      "planCode": {
+                        "type": "string"
+                      },
+                      "effectiveAt": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "checkout": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "upgrades": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "refunds": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "status",
+                    "count"
+                  ],
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "OPEN",
+                        "SUBMITTED",
+                        "REVIEW"
+                      ]
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "openTickets": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "administrative",
+              "commercial"
+            ],
+            "properties": {
+              "administrative": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "commercial": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "lastReconciliation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "mode",
+              "subscriptionObservedAt",
+              "invoiceObservedAt"
+            ],
+            "properties": {
+              "mode": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "TEST",
+                      "LIVE"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "subscriptionObservedAt": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "invoiceObservedAt": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          },
+          "inconsistencies": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "SUBSCRIPTION_CONFIGURATION_INVALID",
+                "ENTITLEMENTS_CONFIGURATION_INVALID",
+                "STRIPE_BINDING_UNVERIFIED",
+                "SUBSCRIPTION_PROJECTION_DIFFERS",
+                "OWNER_UNAVAILABLE",
+                "PROVISIONING_INCOMPLETE"
+              ]
+            }
+          }
+        }
+      },
+      "CorporateDiagnosticOperation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "type",
+          "status",
+          "stage",
+          "organizationId",
+          "mode",
+          "attempts",
+          "version",
+          "lastExecutionAt",
+          "completedAt",
+          "updatedAt",
+          "correlationId",
+          "errorCode",
+          "recovery"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^(?:[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}|STRIPE:(?:TEST|LIVE):(?:EVENTS|SUBSCRIPTIONS))$"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "TENANT_PROVISIONING",
+              "STRIPE_WEBHOOK",
+              "STRIPE_RECOVERY",
+              "IDENTITY_EMAIL",
+              "CONTACT_EMAIL"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "PROCESSING",
+              "SUCCEEDED",
+              "IGNORED",
+              "RETRYABLE_FAILURE",
+              "TERMINAL_FAILURE",
+              "UNCONFIRMED"
+            ]
+          },
+          "stage": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "TEST",
+                  "LIVE"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "attempts": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lastExecutionAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "completedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "correlationId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errorCode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Z][A-Z0-9_]{2,79}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recovery": {
+            "anyOf": [
+              {
+                "const": "RESUME_PROVISIONING"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "CorporateDiagnosticOperationPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "total",
+          "page",
+          "pageSize"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CorporateDiagnosticOperation"
+            },
+            "maxItems": 100
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          "pageSize": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        }
+      },
+      "CorporateIntegrationDiagnostics": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "asOf",
+          "integrations"
+        ],
+        "properties": {
+          "asOf": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "integrations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "integration",
+                "configuration",
+                "mode",
+                "recoveryConfigured",
+                "evidence",
+                "streams"
+              ],
+              "properties": {
+                "integration": {
+                  "type": "string",
+                  "enum": [
+                    "STRIPE",
+                    "SES"
+                  ]
+                },
+                "configuration": {
+                  "type": "string",
+                  "enum": [
+                    "CONFIGURED",
+                    "DISABLED",
+                    "UNCONFIGURED"
+                  ]
+                },
+                "mode": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "TEST",
+                        "LIVE"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "recoveryConfigured": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "evidence": {
+                  "type": "string",
+                  "enum": [
+                    "UNOBSERVED",
+                    "LOCAL_RECORDS"
+                  ]
+                },
+                "streams": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "type",
+                      "mode",
+                      "status",
+                      "count",
+                      "maxAttempts",
+                      "lastExecutionAt",
+                      "lastCompletedAt"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "TENANT_PROVISIONING",
+                          "STRIPE_WEBHOOK",
+                          "STRIPE_RECOVERY",
+                          "IDENTITY_EMAIL",
+                          "CONTACT_EMAIL"
+                        ]
+                      },
+                      "mode": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "TEST",
+                              "LIVE"
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "PENDING",
+                          "PROCESSING",
+                          "SUCCEEDED",
+                          "IGNORED",
+                          "RETRYABLE_FAILURE",
+                          "TERMINAL_FAILURE",
+                          "UNCONFIRMED"
+                        ]
+                      },
+                      "count": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "maxAttempts": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "lastExecutionAt": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "lastCompletedAt": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "CorporateProvisioningRecoveryRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "expectedVersion",
+          "reason"
+        ],
+        "properties": {
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483646
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "DEPENDENCY_RESTORED",
+              "WORKFLOW_INTERRUPTED",
+              "RETRY_AFTER_REVIEW"
+            ]
+          }
+        }
+      },
+      "CorporateProvisioningRecoveryReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "status",
+          "version",
+          "attempts",
+          "complete",
+          "lastErrorCode",
+          "replayed"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "RECEIVED",
+              "TENANT_CREATED",
+              "SUBSCRIPTION_READY",
+              "COMPLETED"
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "attempts": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "complete": {
+            "type": "boolean"
+          },
+          "lastErrorCode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Z][A-Z0-9_]{2,79}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "replayed": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CorporateSupportTicketPageResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "requestId",
+          "timestamp"
+        ],
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/CorporateSupportTicketPage"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CorporateSupportReceiptResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "requestId",
+          "timestamp"
+        ],
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/CorporateSupportReceipt"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CorporateSupportTicketDetailResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "requestId",
+          "timestamp"
+        ],
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/CorporateSupportTicketDetail"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CorporateOrganizationDiagnosticsResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "requestId",
+          "timestamp"
+        ],
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/CorporateOrganizationDiagnostics"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CorporateIntegrationDiagnosticsResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "requestId",
+          "timestamp"
+        ],
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/CorporateIntegrationDiagnostics"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CorporateDiagnosticOperationPageResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "requestId",
+          "timestamp"
+        ],
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/CorporateDiagnosticOperationPage"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CorporateDiagnosticOperationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "requestId",
+          "timestamp"
+        ],
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/CorporateDiagnosticOperation"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CorporateProvisioningRecoveryReceiptResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "requestId",
+          "timestamp"
+        ],
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/CorporateProvisioningRecoveryReceipt"
           },
           "requestId": {
             "type": "string"
