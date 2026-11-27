@@ -146,7 +146,7 @@ export function legalDocument(slug: LegalDocumentSlug): LegalDocumentReadModel {
         ? 'Termos de Uso do Orbit'
         : 'Política de Privacidade do Orbit',
     version: LEGAL_DOCUMENT_VERSION,
-    effectiveAt: '2026-11-19',
+    effectiveAt: '2026-11-27',
     provider: {
       name: 'Allblue Labs Inova Simples',
       document: '67.312.115/0001-92',

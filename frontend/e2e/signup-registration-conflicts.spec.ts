@@ -168,6 +168,9 @@ test("optional address reaches signup and the wizard waits for confirmation with
     complement: "Sala 6",
     planKey: "PROFESSIONAL",
     billingInterval: "ANNUAL",
+    acceptTerms: true,
+    termsVersion: LEGAL_DOCUMENT_VERSION,
+    privacyVersion: LEGAL_DOCUMENT_VERSION,
   });
   expect(billingCalls).toBe(0);
   await expect(page).toHaveURL(/\/cadastro/);

@@ -366,6 +366,12 @@ export function SignupContent({
     } catch (error) {
       const message = errorCopy(error);
       const code = error instanceof ApiError ? error.code : "";
+      if (code === "LEGAL_DOCUMENT_VERSION_MISMATCH") {
+        setValue("terms", false, {
+          shouldDirty: true,
+          shouldValidate: true,
+        });
+      }
       setRegistrationError({
         message,
         canSignIn: [

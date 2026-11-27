@@ -17,13 +17,13 @@ describe('registration preserves the commercial selection', () => {
     },
     {
       acceptTerms: true,
-      termsVersion: 'old',
+      termsVersion: '2026-11-19.1',
       privacyVersion: LEGAL_DOCUMENT_VERSION,
     },
     {
       acceptTerms: true,
       termsVersion: LEGAL_DOCUMENT_VERSION,
-      privacyVersion: 'old',
+      privacyVersion: '2026-11-19.1',
     },
   ])(
     'rejects absent or stale acceptance before writing an account: %j',
@@ -36,11 +36,13 @@ describe('registration preserves the commercial selection', () => {
         {} as never,
         {} as never,
       );
-      await expect(
-        service.register(acceptance as RegisterOrganizationDto, {
-          client: 'WEB',
-        }),
-      ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+      const input = acceptance as RegisterOrganizationDto;
+      await expect(service.register(input, { client: 'WEB' })).rejects.toMatchObject({
+        code:
+          input.acceptTerms === true
+            ? 'LEGAL_DOCUMENT_VERSION_MISMATCH'
+            : 'VALIDATION_ERROR',
+      });
       expect(repository.register).not.toHaveBeenCalled();
       expect(hashes.hash).not.toHaveBeenCalled();
     },

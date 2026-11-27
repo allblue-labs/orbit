@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
+import { LEGAL_DOCUMENT_VERSION } from "../src/types/contracts/modules/legal/legal.read-models";
 
 async function addressStep(page: Page) {
   await page.route("**/api/auth/session", (route) =>
@@ -78,6 +79,9 @@ test("reading both full documents preserves the signup form and does not accept 
       frame.getByRole("heading", { name: title, exact: true }),
     ).toBeVisible();
     await expect(
+      frame.getByText(`Versão ${LEGAL_DOCUMENT_VERSION}`, { exact: false }),
+    ).toBeVisible();
+    await expect(
       frame.getByText("Allblue Labs Inova Simples", { exact: false }).first(),
     ).toBeVisible();
     await expect(
@@ -99,10 +103,16 @@ for (const slug of ["termos", "privacidade"]) {
     page,
   }) => {
     await page.goto(`/legal/${slug}`);
+    await expect(
+      page.getByText(
+        `Versão ${LEGAL_DOCUMENT_VERSION} · Vigência: 27/11/2026`,
+        { exact: true },
+      ),
+    ).toBeVisible();
     const downloadPromise = page.waitForEvent("download");
     await page.getByRole("link", { name: "Baixar PDF", exact: true }).click();
     const download = await downloadPromise;
-    expect(download.suggestedFilename()).toBe(`orbit-${slug}-2026-11-19.1.pdf`);
+    expect(download.suggestedFilename()).toBe(`orbit-${slug}-2026-11-27.1.pdf`);
     const content = await readFile((await download.path())!);
     expect(content.subarray(0, 5).toString()).toBe("%PDF-");
     expect(content.length).toBeGreaterThan(6000);
@@ -125,6 +135,43 @@ test("legal reading fits a mobile screen", async ({ page }) => {
       () => document.documentElement.scrollWidth <= window.innerWidth,
     ),
   ).toBe(true);
+});
+
+test("documents updated during signup require a new reading and acceptance", async ({
+  page,
+}) => {
+  const message =
+    "Os documentos legais foram atualizados durante o cadastro. Atualize a página, leia a versão vigente e aceite novamente para continuar.";
+  let submitted: Record<string, unknown> | null = null;
+  await page.route("**/api/auth/register", async (route) => {
+    submitted = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({
+      status: 409,
+      json: {
+        success: false,
+        error: { code: "LEGAL_DOCUMENT_VERSION_MISMATCH", message },
+      },
+    });
+  });
+
+  await addressStep(page);
+  await page.getByLabel(/^Cidade(?:\s*\*?\s*\(obrigatório\))?$/).fill("Recife");
+  await page.getByLabel(/^UF(?:\s*\*?\s*\(obrigatório\))?$/).fill("PE");
+  await page
+    .getByLabel(/^Endereço da matriz(?:\s*\*?\s*\(obrigatório\))?$/)
+    .fill("Rua de teste, 100");
+  await page.locator("#terms").check();
+  await page
+    .getByRole("button", { name: "Criar organização", exact: true })
+    .click();
+
+  expect(submitted).toMatchObject({
+    acceptTerms: true,
+    termsVersion: LEGAL_DOCUMENT_VERSION,
+    privacyVersion: LEGAL_DOCUMENT_VERSION,
+  });
+  await expect(page.getByRole("alert")).toContainText(message);
+  await expect(page.locator("#terms")).not.toBeChecked();
 });
 
 test.describe("aceite obrigatório em português", () => {

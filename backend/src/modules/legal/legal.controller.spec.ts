@@ -9,6 +9,7 @@ describe('documentos públicos e aceite do Orbit', () => {
     (slug) => {
       const document = controller.document(slug);
       expect(document.version).toBe(LEGAL_DOCUMENT_VERSION);
+      expect(document.effectiveAt).toBe('2026-11-27');
       expect(document.provider).toEqual({
         name: 'Allblue Labs Inova Simples',
         document: '67.312.115/0001-92',

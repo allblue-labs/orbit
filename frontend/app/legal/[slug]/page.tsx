@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { Download, ArrowLeft, ShieldCheck } from "lucide-react";
 import { backendJson } from "@/server/backend-client";
 import type { LegalDocumentReadModel } from "@/types/contracts/modules/legal/legal.read-models";
+import { formatDate } from "@/lib/formatters";
 import { Button } from "@/components/ui/button";
 export const dynamic = "force-dynamic";
 export default async function LegalPage({
@@ -38,7 +39,7 @@ export default async function LegalPage({
           {document.title}
         </h1>
         <p className="text-sm text-muted-foreground">
-          Versão {document.version} · Vigência: 23/10/2026
+          Versão {document.version} · Vigência: {formatDate(document.effectiveAt)}
         </p>
         <address className="text-sm not-italic leading-relaxed">
           {document.provider.name}

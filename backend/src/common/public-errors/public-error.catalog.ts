@@ -251,6 +251,11 @@ const entries = [
     'Cadastre outras organizações em Configurações > Organização na sua conta existente, conforme os limites da assinatura.',
   ],
   [
+    'LEGAL_DOCUMENT_VERSION_MISMATCH',
+    HttpStatus.CONFLICT,
+    'Os documentos legais foram atualizados durante o cadastro. Atualize a página, leia a versão vigente e aceite novamente para continuar.',
+  ],
+  [
     'BUSINESS_UNIT_NAME_ALREADY_EXISTS',
     HttpStatus.CONFLICT,
     'Já existe uma organização com este nome na sua conta. Informe um nome fantasia diferente para identificá-la; o CPF ou CNPJ pode ser o mesmo.',
