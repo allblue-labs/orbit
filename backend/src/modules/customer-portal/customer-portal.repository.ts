@@ -75,7 +75,6 @@ export class CustomerPortalRepository {
     kind: 'DEVICE' | 'WEBAUTHN';
     label: string;
     deviceId?: string;
-    secretHash?: string;
     webauthnId?: string;
     publicKey?: Uint8Array;
     signCount?: number;
@@ -85,7 +84,7 @@ export class CustomerPortalRepository {
       SELECT app_customer_portal_biometric_register(
         ${input.identityId}::uuid, ${input.sessionId}::uuid, ${input.id}::uuid,
         ${input.kind}, ${input.label}, ${input.deviceId ?? null},
-        ${input.secretHash ?? null}, ${input.webauthnId ?? null},
+        NULL::text, ${input.webauthnId ?? null},
         ${input.publicKey ? Buffer.from(input.publicKey) : null}::bytea,
         ${BigInt(input.signCount ?? 0)}::bigint,
         ${input.transports ?? []}::text[]
@@ -123,7 +122,6 @@ export class CustomerPortalRepository {
     id: string;
     identityId: string;
     kind: string;
-    secretHash: string | null;
     publicKey: Uint8Array | null;
     signCount: bigint;
     transports: string[];
@@ -134,7 +132,6 @@ export class CustomerPortalRepository {
         id: string;
         identityId: string;
         kind: string;
-        secretHash: string | null;
         publicKey: Uint8Array | null;
         signCount: bigint;
         transports: string[];
@@ -147,16 +144,11 @@ export class CustomerPortalRepository {
 
   async useBiometric(
     credentialId: string,
-    change: {
-      expectedSecretHash?: string;
-      newSecretHash?: string;
-      signCount?: number;
-    },
+    change: { signCount?: number },
   ): Promise<boolean> {
     const rows = await this.prisma.$queryRaw<{ ok: boolean }[]>`
       SELECT app_customer_portal_biometric_use(
-        ${credentialId}::uuid, ${change.expectedSecretHash ?? null},
-        ${change.newSecretHash ?? null},
+        ${credentialId}::uuid, NULL::text, NULL::text,
         ${change.signCount === undefined ? null : BigInt(change.signCount)}::bigint
       ) AS ok`;
     return rows[0]?.ok === true;

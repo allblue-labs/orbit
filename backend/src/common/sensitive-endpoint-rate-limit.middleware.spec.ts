@@ -78,6 +78,8 @@ describe('SensitiveEndpointRateLimitMiddleware', () => {
   it.each([
     '/api/v1/identity/biometrics/webauthn/authentication/options',
     '/api/v1/portal/auth/biometrics/webauthn/authentication/options',
+    '/api/v1/identity/biometrics/devices/authentication/options',
+    '/api/v1/portal/auth/biometrics/devices/authentication/options',
   ])(
     'uses one challenge budget for both audiences before database work: %s',
     async (path) => {

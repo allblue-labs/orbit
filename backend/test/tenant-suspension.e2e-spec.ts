@@ -23,7 +23,7 @@ import {
 import type { IHashProvider, UUID } from '../src/contracts';
 import { RlsTransaction } from '../src/database';
 import { Permissions, Surfaces } from '../src/decorators';
-import { HASH_PROVIDER } from '../src/providers';
+import { CRYPTO_PROVIDER, HASH_PROVIDER } from '../src/providers';
 import { BackgroundJobQueue } from '../src/modules/jobs/background-job.queue';
 import { BackgroundJobWorker } from '../src/modules/jobs/background-job.worker';
 import { JobProcessorRegistry } from '../src/modules/jobs/job-processor.registry';
@@ -43,6 +43,7 @@ import {
 } from '../src/modules/storage/storage.config';
 import { uploadGrant } from '../src/modules/storage/upload-grant';
 import { adminPrisma, disconnectAdminPrisma } from './support/admin-prisma';
+import { seedActiveMfa } from './support/active-mfa-fixture';
 
 /** Product probe uses the actual global guards, session resolution and restricted RLS connection. */
 @Controller('nx03-test')
@@ -137,11 +138,15 @@ describe('ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL)',
     users.push(row.id);
     return row;
   }
-  async function login(email: string, client = 'WEB'): Promise<Pair> {
+  async function login(
+    email: string,
+    client = 'WEB',
+    mfaCode?: string,
+  ): Promise<Pair> {
     return data<Pair>(
       await http()
         .post('/api/v1/identity/login')
-        .send({ email, password, client })
+        .send({ email, password, client, mfaCode })
         .expect(200),
     );
   }
@@ -340,7 +345,8 @@ describe('ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL)',
     await admin.platformRoleAssignment.create({
       data: { userId: actor.id, roleId: role.id },
     });
-    globalToken = (await login(actor.email)).accessToken;
+    const mfaCode = await seedActiveMfa(actor.id, app.get(CRYPTO_PROVIDER));
+    globalToken = (await login(actor.email, 'WEB', mfaCode())).accessToken;
   });
   beforeEach(async () => {
     tenant = await fixture();
@@ -880,12 +886,21 @@ describe('ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL)',
     const grant = await admin.platformRoleAssignment.create({
       data: { userId: tenant.ownerId, roleId: platformRoleId },
     });
-    await change(tenant, 'SUSPENDED');
     await auth(
       http().get('/api/v1/platform-admin/overview'),
       tenant.pair.accessToken,
+    ).expect(403);
+    const mfaCode = await seedActiveMfa(
+      tenant.ownerId,
+      app.get(CRYPTO_PROVIDER),
+    );
+    const elevated = await login(tenant.email, 'WEB', mfaCode());
+    await change(tenant, 'SUSPENDED');
+    await auth(
+      http().get('/api/v1/platform-admin/overview'),
+      elevated.accessToken,
     ).expect(200);
-    await auth(http().get('/api/v1/nx03-test'), tenant.pair.accessToken).expect(
+    await auth(http().get('/api/v1/nx03-test'), elevated.accessToken).expect(
       403,
     );
     await admin.platformRoleAssignment.update({
@@ -894,7 +909,7 @@ describe('ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL)',
     });
     await auth(
       http().get('/api/v1/platform-admin/overview'),
-      tenant.pair.accessToken,
+      elevated.accessToken,
     ).expect(403);
     const tokens = app.get(IdentityTokenService),
       claims = await tokens.verifyAccessToken(tenant.pair.accessToken);

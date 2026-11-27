@@ -56,11 +56,15 @@ export const profileService = {
   enableMfa: (
     input: EnableMfaInput,
     headers: Record<string, string>,
-  ): Promise<unknown> =>
-    apiClient.post<unknown>(`${BASE_PATH}/mfa/enable`, input, {
-      headers,
-      retries: 0,
-    }),
+  ): Promise<{ recoveryCodes: string[] }> =>
+    apiClient.post<{ recoveryCodes: string[] }>(
+      `${BASE_PATH}/mfa/enable`,
+      input,
+      {
+        headers,
+        retries: 0,
+      },
+    ),
 
   disableMfa: (headers: Record<string, string>): Promise<void> =>
     apiClient.delete<void>(`${BASE_PATH}/mfa`, { headers, retries: 0 }),

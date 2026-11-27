@@ -18,6 +18,7 @@ export interface AccessTokenClaims {
 export interface AuthenticatedIdentity {
   /** Request-local verified global grants; not serialized into access tokens. */
   platformAuthority?: VerifiedPlatformAuthority;
+  platformMfaRequired?: boolean;
   organizationRoles?: readonly string[];
   id: UUID;
   sessionId: UUID;

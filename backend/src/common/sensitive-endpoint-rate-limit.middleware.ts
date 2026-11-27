@@ -4,12 +4,12 @@ import { AuthRateLimitService } from './auth-rate-limit.service';
 import { requestClientIp } from './trusted-client-origin';
 
 const SENSITIVE_PATH =
-  /^(?:identity\/(?:login|register|refresh|biometrics\/(?:webauthn\/authentication(?:\/options)?|devices\/login)|email\/(?:verify|resend)|password\/(?:forgot|reset(?:\/validate)?)|me\/mfa\/(?:enrollment|enable))|portal\/auth\/(?:login|refresh|biometrics\/(?:webauthn\/authentication(?:\/options)?|devices\/login)|activate|password\/reset-(?:request|confirm))|public\/contact|billing\/(?:checkout-session|portal-session))$/;
+  /^(?:identity\/(?:login|register|refresh|biometrics\/(?:webauthn\/authentication(?:\/options)?|devices\/(?:login|authentication))|email\/(?:verify|resend)|password\/(?:forgot|reset(?:\/validate)?)|me\/(?:mfa\/(?:enrollment|enable)|biometrics\/devices\/options))|portal\/auth\/(?:login|refresh|biometrics\/(?:webauthn\/authentication(?:\/options)?|devices\/(?:login|authentication))|activate|password\/reset-(?:request|confirm))|portal\/me\/biometrics\/devices\/options|public\/contact|billing\/(?:checkout-session|portal-session))$/;
 
 const PUBLIC_QUOTE =
   /^public\/quotes\/proposals\/([^/]+)\/(response|document\/exports)$/i;
 const PASSKEY_CHALLENGE =
-  /^(?:identity\/biometrics|portal\/auth\/biometrics)\/webauthn\/authentication\/options$/;
+  /^(?:identity\/biometrics|portal\/auth\/biometrics)\/(?:webauthn|devices)\/authentication\/options$/;
 
 /** Redis budgets with PostgreSQL fallback for credential and capability routes. */
 @Injectable()

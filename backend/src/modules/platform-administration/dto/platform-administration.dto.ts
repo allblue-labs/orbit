@@ -212,7 +212,7 @@ export class PlatformListQueryDto {
   status?: string;
 }
 
-export class UpdatePlatformOrganizationDto {
+export class PlatformOrganizationMetadataDto {
   @ApiPropertyOptional()
   @ValidateIf((_: unknown, value: unknown) => value !== undefined)
   @Transform(trim)
@@ -228,7 +228,9 @@ export class UpdatePlatformOrganizationDto {
   @MinLength(2)
   @MaxLength(60)
   primarySegment?: string;
+}
 
+export class UpdatePlatformOrganizationDto extends PlatformOrganizationMetadataDto {
   @ApiPropertyOptional({
     type: String,
     format: 'date-time',

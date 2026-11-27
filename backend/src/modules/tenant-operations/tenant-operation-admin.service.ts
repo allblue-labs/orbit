@@ -10,11 +10,24 @@ import {
   ForbiddenException,
   ValidationException,
 } from '../../exceptions';
+import { authorizedCorporateReference } from '../corporate-administration/corporate-request';
+import {
+  operationalCapability,
+  type CorporateCall,
+} from '../corporate-administration/corporate-access.guard';
+import type { PrismaTransactionClient } from '../../database/prisma.types';
 import { OPERATIONAL_DECISION } from './tenant-operation.policy';
 import type { ChangeTenantOperationDto } from './tenant-operation.dto';
 
 const hash = (value: string) =>
   createHash('sha256').update(value).digest('hex');
+type OperationalActor = {
+  userId: string | null;
+  correlationId: string;
+  metadata: Prisma.InputJsonObject;
+  technicalPrincipalId?: string;
+};
+
 @Injectable()
 export class TenantOperationAdminService {
   constructor(
@@ -45,6 +58,60 @@ export class TenantOperationAdminService {
       )
     )
       throw new ForbiddenException('Verified platform authority is required');
+    return this.changeInScope(organizationId, input, key, {
+      userId: context.userId,
+      correlationId: context.requestId.slice(0, 120),
+      metadata: {
+        authoritySource: 'PLATFORM_ROLE_ASSIGNMENT',
+        grantIds: [...authority.assignmentIds],
+      },
+    });
+  }
+
+  changeCorporate(
+    organizationId: string,
+    input: ChangeTenantOperationDto,
+    key: string | undefined,
+    call: CorporateCall,
+    reference: unknown,
+  ) {
+    const corporate = authorizedCorporateReference(
+      call,
+      reference,
+      operationalCapability(input.status),
+      true,
+    );
+    return this.changeInScope(organizationId, input, key, {
+      userId: null,
+      correlationId: corporate.correlationId,
+      technicalPrincipalId: corporate.technicalPrincipalId,
+      metadata: {
+        ...corporate,
+        authoritySource: 'CORPORATE_TECHNICAL_PRINCIPAL',
+      },
+    });
+  }
+
+  private async inOrganization<T>(
+    organizationId: string,
+    actor: OperationalActor,
+    work: (tx: PrismaTransactionClient) => Promise<T>,
+  ) {
+    return this.rls.run(async (tx) => {
+      if (actor.technicalPrincipalId)
+        await tx.$queryRaw`SELECT
+          set_config('app.organization_id', ${organizationId}, true),
+          set_config('app.corporate_operational_principal', ${actor.technicalPrincipalId}, true)`;
+      return work(tx);
+    });
+  }
+
+  private async changeInScope(
+    organizationId: string,
+    input: ChangeTenantOperationDto,
+    key: string | undefined,
+    actor: OperationalActor,
+  ) {
     if (
       !['ACTIVE', 'SUSPENDED'].includes(input.status) ||
       !['SECURITY', 'ABUSE', 'ADMINISTRATIVE', 'RESOLVED'].includes(
@@ -60,8 +127,12 @@ export class TenantOperationAdminService {
       throw new ValidationException(
         'Informe uma chave de idempotência válida.',
       );
-    const correlationId = context.requestId.slice(0, 120);
-    const keyHash = hash(key);
+    const { correlationId } = actor;
+    const keyHash = hash(
+      actor.technicalPrincipalId
+        ? JSON.stringify(['CORPORATE', actor.technicalPrincipalId, key])
+        : key,
+    );
     const fingerprint = hash(
       JSON.stringify({
         status: input.status,
@@ -70,8 +141,7 @@ export class TenantOperationAdminService {
       }),
     );
     const metadata = {
-      authoritySource: 'PLATFORM_ROLE_ASSIGNMENT',
-      grantIds: [...authority.assignmentIds],
+      ...actor.metadata,
       correlationId,
       reason: input.reason,
       requestedStatus: input.status,
@@ -80,7 +150,7 @@ export class TenantOperationAdminService {
       requestFingerprint: fingerprint,
     } satisfies Prisma.InputJsonObject;
     try {
-      return await this.rls.run(async (tx) => {
+      return await this.inOrganization(organizationId, actor, async (tx) => {
         // Serialize decisions on the root. CAS also protects against unrelated administrative edits.
         await tx.$queryRaw`SELECT id FROM organizations WHERE id=${organizationId}::uuid AND deleted_at IS NULL FOR UPDATE`;
         const before = await tx.organization.findFirst({
@@ -182,7 +252,7 @@ export class TenantOperationAdminService {
         const decision = await tx.auditLog.create({
           data: {
             organizationId,
-            userId: context.userId,
+            userId: actor.userId,
             action: OPERATIONAL_DECISION,
             createdAt: changed ? updatedAt : decidedAt,
             entityType: 'ORGANIZATION',
@@ -205,15 +275,15 @@ export class TenantOperationAdminService {
       });
     } catch (error) {
       // A rolled-back transition still leaves a durable rejection, without leaking tenant existence.
-      await this.rls.run(async (tx) => {
+      await this.inOrganization(organizationId, actor, async (tx) => {
         const target = await tx.organization.findFirst({
           where: { id: organizationId },
           select: { id: true, status: true, updatedAt: true },
         });
-        await tx.auditLog.create({
+        await tx.auditLog.createMany({
           data: {
             organizationId: target?.id,
-            userId: context.userId,
+            userId: actor.userId,
             action: 'TENANT_OPERATIONAL_STATUS_REJECTED',
             before: target
               ? {

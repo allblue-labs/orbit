@@ -119,7 +119,6 @@ async function proxyWithOrigin(request: NextRequest): Promise<NextResponse> {
     ? destinationForSession(claims, pathname, {
         isGuest,
         isProtected,
-        isPlatform,
       })
     : destinationForVisitor(pathname, {
         isProtected,
@@ -142,7 +141,6 @@ async function proxyWithOrigin(request: NextRequest): Promise<NextResponse> {
 interface AreaFlags {
   isGuest: boolean;
   isProtected: boolean;
-  isPlatform: boolean;
 }
 
 /** Para onde mandar um usuário autenticado que abriu esta rota. */
@@ -168,9 +166,8 @@ function destinationForSession(
   if (area.isProtected && isPlatformAdmin && !claims?.organizationId) {
     return ROUTES.platform;
   }
-  if (area.isPlatform && !isPlatformAdmin) {
-    return ROUTES.dashboard;
-  }
+  // The platform page reads server-resolved access for administrators who
+  // need MFA setup before obtaining the role in their session.
   return null;
 }
 

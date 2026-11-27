@@ -393,24 +393,29 @@ export class SubscriptionRepository {
     });
   }
 
-  async startPendingTrial(input: {
-    organizationId: string;
-    expectedVersion: number;
-    fingerprint: string;
-    billingInterval: string;
-    planCode: string;
-    startsAt: Date;
-    endsAt: Date;
-    snapshot: Prisma.InputJsonValue;
-    catalogVersion: number;
-  }) {
-    return this.runAsOrganization(input.organizationId, async (tx) => {
+  async startPendingTrial(
+    input: {
+      organizationId: string;
+      expectedVersion: number;
+      fingerprint: string;
+      billingInterval: string;
+      planCode: string;
+      startsAt: Date;
+      endsAt: Date;
+      snapshot: Prisma.InputJsonValue;
+      catalogVersion: number;
+    },
+    local?: { tx: PrismaTransactionClient; subscriptionId: string },
+  ) {
+    const work = async (tx: PrismaTransactionClient) => {
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${input.organizationId}, 0))::text`;
       const current = await this.findCurrent(input.organizationId, tx);
       if (
         !current ||
         current.version !== input.expectedVersion ||
         current.status !== 'PENDING_PAYMENT' ||
+        (local &&
+          (current.id !== local.subscriptionId || current.cancelAtPeriodEnd)) ||
         current.providerSubscriptionId
       ) {
         throw new Error('TRIAL_SUBSCRIPTION_CHANGED');
@@ -486,7 +491,10 @@ export class SubscriptionRepository {
       );
       if (!updated) throw new Error('TRIAL_SUBSCRIPTION_CHANGED');
       return updated;
-    });
+    };
+    return local
+      ? work(local.tx)
+      : this.runAsOrganization(input.organizationId, work);
   }
 
   findTrialGrant(organizationId: string) {

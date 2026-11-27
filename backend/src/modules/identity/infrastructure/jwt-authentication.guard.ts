@@ -10,14 +10,18 @@ import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
 import type { UUID } from '../../../contracts';
 import { PERMISSIONS_KEY, PUBLIC_KEY } from '../../../decorators';
-import { UnauthorizedException } from '../../../exceptions';
+import { ForbiddenException, UnauthorizedException } from '../../../exceptions';
 import { classifyInternalError, isJwtValidationError } from '../../../errors';
 import type { AuthenticatedIdentity } from '../domain/identity.types';
 import { redactSensitivePath } from '../../../common/redact-sensitive-path';
 import { IdentityRepository } from './identity.repository';
 import { IdentityTokenService } from '../application/token.service';
-import { toAuthenticatedIdentity } from '../application/authentication.service';
+import {
+  platformAssignment,
+  toAuthenticatedIdentity,
+} from '../application/authentication.service';
 import { normalizeSurface, surfacesOf } from '../domain/surface-access';
+import { PLATFORM_MFA_SETUP } from '../platform-mfa-setup.decorator';
 import type { VerifiedPlatformAuthority } from '../../../common/verified-platform-authority';
 import {
   HotpathSnapshot,
@@ -64,6 +68,10 @@ interface RequestAccess {
   };
 }
 
+type ActiveSession = NonNullable<
+  Awaited<ReturnType<IdentityRepository['findSessionById']>>
+>;
+
 @Injectable()
 export class JwtAuthenticationGuard implements CanActivate {
   private readonly logger = new Logger(JwtAuthenticationGuard.name);
@@ -100,15 +108,36 @@ export class JwtAuthenticationGuard implements CanActivate {
         ? await hotpath.fence(claims.sid, claims.sub)
         : undefined;
       if (hotpath && !fence) throw new UnauthorizedException();
-      const client =
-        fence?.client ?? (await this.sessionClient(claims.sid, claims.sub));
+      const session = fence
+        ? undefined
+        : await this.activeSession(claims.sid, claims.sub);
+      const client = fence?.client ?? session!.client;
       const { identity, membership, surfaces } = await this.requestAccess(
         claims,
         fence,
+        session,
       );
-      if (!surfaces.includes(normalizeSurface(client))) {
+      const surface = normalizeSurface(client);
+      if (!surfaces.includes(surface)) {
         await this.repository.revokeSession(claims.sid, claims.sub);
         throw new UnauthorizedException('Client surface access was revoked');
+      }
+      const targets = [context.getHandler(), context.getClass()];
+      if (
+        identity.platformMfaRequired &&
+        !identity.allowedSurfaces.includes(surface)
+      ) {
+        if (
+          !this.reflector.getAllAndOverride<boolean>(
+            PLATFORM_MFA_SETUP,
+            targets,
+          )
+        ) {
+          throw new ForbiddenException(
+            'A autenticação em dois fatores é necessária para o acesso administrativo.',
+          );
+        }
+        identity.allowedSurfaces = [...identity.allowedSurfaces, surface];
       }
       if (identity.organizationId) {
         await this.limits?.authenticated(
@@ -140,7 +169,6 @@ export class JwtAuthenticationGuard implements CanActivate {
             )
           : [];
 
-        const targets = [context.getHandler(), context.getClass()];
         const areas = this.reflector.getAllAndOverride<MobileManagementArea[]>(
           MOBILE_MANAGEMENT,
           targets,
@@ -197,7 +225,10 @@ export class JwtAuthenticationGuard implements CanActivate {
     }
   }
 
-  private async sessionClient(sessionId: UUID, userId: UUID): Promise<string> {
+  private async activeSession(
+    sessionId: UUID,
+    userId: UUID,
+  ): Promise<ActiveSession> {
     const session = await this.repository.findSessionById(sessionId, userId);
     if (
       !session ||
@@ -206,12 +237,13 @@ export class JwtAuthenticationGuard implements CanActivate {
       session.expiresAt.getTime() <= Date.now()
     )
       throw new UnauthorizedException();
-    return session.client;
+    return session;
   }
 
   private async requestAccess(
     { sid, sub }: { sid: UUID; sub: UUID },
     fence?: HotpathAccessFence,
+    session?: ActiveSession,
   ): Promise<RequestAccess> {
     const key = fence?.cacheable
       ? `orbit:v1:org:${fence.organizationId}:user:${sub}:access:${fence.accessVersion}`
@@ -240,7 +272,15 @@ export class JwtAuthenticationGuard implements CanActivate {
         'EMAIL_VERIFICATION_REQUIRED',
       );
     }
-    const identity = toAuthenticatedIdentity(user, sid);
+    const assignment = platformAssignment(user);
+    const verifiedSession = assignment
+      ? (session ?? (await this.activeSession(sid, sub)))
+      : undefined;
+    const identity = toAuthenticatedIdentity(
+      user,
+      sid,
+      verifiedSession?.platformMfaFactorId,
+    );
     const membership = user.organizationMemberships.find(
       (item) => item.organizationId === identity.organizationId,
     );
@@ -260,7 +300,7 @@ export class JwtAuthenticationGuard implements CanActivate {
     };
     if (
       key &&
-      !identity.platformAuthority?.assignmentIds.length &&
+      !assignment &&
       identity.organizationId === fence?.organizationId &&
       this.hotpath?.available
     ) {

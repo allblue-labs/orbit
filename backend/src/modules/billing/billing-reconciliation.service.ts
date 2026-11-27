@@ -53,6 +53,7 @@ import {
 const EVENTOS_TRATADOS = new Set([
   'orbit.subscription.recovery',
   'checkout.session.completed',
+  'checkout.session.expired',
   'checkout.session.async_payment_succeeded',
   'customer.subscription.created',
   'customer.subscription.updated',
@@ -138,7 +139,9 @@ export class BillingReconciliationService {
         resumo.ignored += 1;
         continue;
       }
+      const isExpiredCheckout = evento.eventType === 'checkout.session.expired';
       const isCheckout =
+        isExpiredCheckout ||
         evento.eventType === 'checkout.session.completed' ||
         evento.eventType === 'checkout.session.async_payment_succeeded';
       const isInvoicePayment = evento.eventType === 'invoice_payment.paid';
@@ -209,20 +212,26 @@ export class BillingReconciliationService {
                 evento.providerObjectId!,
               );
           }
-          const providerSubscriptionId = isCheckout
-            ? await this.checkoutFulfillment.fulfill(evento.providerObjectId!)
-            : isInvoice
-              ? await this.reconcileProviderInvoice(
-                  providerInvoiceId!,
-                  evento.providerEventId,
-                )
-              : adjustmentType
-                ? await this.reconcileProviderAdjustment(
-                    adjustmentType,
-                    evento.providerObjectId!,
+          if (isExpiredCheckout)
+            await this.checkoutFulfillment.expirePromotion(
+              evento.providerObjectId!,
+            );
+          const providerSubscriptionId = isExpiredCheckout
+            ? null
+            : isCheckout
+              ? await this.checkoutFulfillment.fulfill(evento.providerObjectId!)
+              : isInvoice
+                ? await this.reconcileProviderInvoice(
+                    providerInvoiceId!,
                     evento.providerEventId,
                   )
-                : evento.providerSubscriptionId!;
+                : adjustmentType
+                  ? await this.reconcileProviderAdjustment(
+                      adjustmentType,
+                      evento.providerObjectId!,
+                      evento.providerEventId,
+                    )
+                  : evento.providerSubscriptionId!;
           if (providerSubscriptionId) {
             await this.reconcileProviderSubscription(
               providerSubscriptionId,

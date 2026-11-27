@@ -56,8 +56,11 @@ Com filtro de host disponível, inclua `/api/auth/login`, `/api/auth/register` e
 
 Inclua também os aliases `/api/auth/biometric/options` e
 `/api/portal/auth/biometric/options`. A API usa um orçamento único para
-emitir desafios de passkey de equipe e clientes, de 20 por IP e 300 no
-total em 60 segundos, com Redis e fallback PostgreSQL.
+emitir desafios de passkeys Web e de biometria móvel para equipe e clientes.
+O limite compartilhado é de 20 por IP e 300 no total em 60 segundos, com
+Redis e fallback PostgreSQL. Os endpoints móveis são
+`/api/v1/identity/biometrics/devices/authentication/options` e
+`/api/v1/portal/auth/biometrics/devices/authentication/options`.
 
 ### TLS e origens
 

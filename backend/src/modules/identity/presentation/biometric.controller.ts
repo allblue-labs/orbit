@@ -20,9 +20,11 @@ import {
 } from '../../../common/biometrics/security-confirmation';
 import {
   DeviceBiometricLoginDto,
+  DeviceBiometricOptionsDto,
   EnrollDeviceBiometricDto,
   WebAuthnAuthenticationDto,
   WebAuthnRegistrationDto,
+  deviceBiometricRefused,
 } from '../../../common/biometrics';
 import { Public, Surfaces } from '../../../decorators';
 import { ParseUUIDv7Pipe } from '../../../pipes';
@@ -67,6 +69,21 @@ export class BiometricLoginController {
 
   @Public()
   @Post('devices/login')
+  @Header('Cache-Control', 'no-store')
+  retiredDeviceLogin(): never {
+    throw deviceBiometricRefused();
+  }
+
+  @Public()
+  @Post('devices/authentication/options')
+  @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', 'no-store')
+  deviceLoginOptions(@Body() input: DeviceBiometricOptionsDto) {
+    return this.biometrics.deviceLoginOptions(input.credentialId);
+  }
+
+  @Public()
+  @Post('devices/authentication')
   @HttpCode(HttpStatus.OK)
   @Header('Cache-Control', 'no-store')
   async deviceLogin(
@@ -74,15 +91,10 @@ export class BiometricLoginController {
     @Req() request: IdentityRequest,
   ) {
     const result = await this.biometrics.deviceLogin(input, {
-      client: input.client,
-      deviceId: input.deviceId,
       userAgent: request.header('user-agent'),
       ipAddress: requestClientIp(request),
     });
-    return {
-      ...this.readModels.session(result),
-      deviceSecret: result.deviceSecret,
-    };
+    return this.readModels.session(result);
   }
 }
 
@@ -96,6 +108,14 @@ export class BiometricProfileController {
     private readonly biometrics: BiometricLoginService,
     private readonly confirmation: SecurityConfirmation,
   ) {}
+
+  @TenantRecovery('identity')
+  @Post('devices/options')
+  @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', 'no-store')
+  deviceEnrollmentOptions(@Req() request: IdentityRequest) {
+    return this.biometrics.deviceEnrollmentOptions(request.identity!.sessionId);
+  }
 
   @TenantRecovery('identity')
   @Get()
@@ -145,6 +165,7 @@ export class BiometricProfileController {
     );
     return this.biometrics.enrollDevice(
       request.identity!.id,
+      request.identity!.sessionId,
       input,
       request.header('user-agent'),
     );

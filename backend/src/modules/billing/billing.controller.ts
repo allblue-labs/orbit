@@ -69,6 +69,7 @@ export class BillingController {
       planCode: input.planCode,
       expectedCatalogVersion: input.expectedCatalogVersion,
       billingInterval: input.billingInterval,
+      ...(input.promotionCode ? { promotionCode: input.promotionCode } : {}),
     });
     return {
       url: sessao.url,

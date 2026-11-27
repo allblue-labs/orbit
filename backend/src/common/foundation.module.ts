@@ -53,6 +53,7 @@ import { SecurityConfirmation } from './biometrics/security-confirmation';
     RequestContextModule,
     CommonProvidersModule,
     AuthorizationService,
+    AuthRateLimitService,
     HotpathRedis,
     HotpathRateLimit,
     HotpathSnapshot,

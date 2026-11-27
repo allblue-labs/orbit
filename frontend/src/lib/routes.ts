@@ -190,8 +190,13 @@ export function allowsAuthenticatedGuest(pathname: string): boolean {
 }
 
 /** Destino padrão após autenticar, conforme o tipo de conta. */
-export function homeRouteFor(options: { isPlatformAdmin: boolean }): string {
-  return options.isPlatformAdmin ? ROUTES.platform : ROUTES.dashboard;
+export function homeRouteFor(options: {
+  isPlatformAdmin: boolean;
+  platformMfaRequired?: boolean;
+}): string {
+  return options.isPlatformAdmin || options.platformMfaRequired
+    ? ROUTES.platform
+    : ROUTES.dashboard;
 }
 
 /** Motivo do redirecionamento para o login, exibido na tela. */

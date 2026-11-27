@@ -180,12 +180,13 @@ Referências: [API keys](https://docs.stripe.com/keys),
 
 ## Eventos consumidos
 
-Exatamente estes dezenove, agrupados pela responsabilidade:
+Eventos do Stripe por responsabilidade.
 
 | Evento                                     | Significado normalizado        | Comando no Orbit                             |
 | ------------------------------------------ | ------------------------------ | -------------------------------------------- |
 | `checkout.session.completed`               | contratação concluída          | reconciliar assinatura                       |
 | `checkout.session.async_payment_succeeded` | pagamento assíncrono concluído | concluir contratação e reconciliar           |
+| `checkout.session.expired`                 | checkout expirado              | liberar a reserva promocional confirmada como expirada pelo Stripe |
 | `customer.subscription.created`            | assinatura criada              | reconciliar assinatura                       |
 | `customer.subscription.updated`            | assinatura mudou               | reconciliar assinatura                       |
 | `customer.subscription.pending_update_applied` | upgrade aplicado            | verificar fatura e promover os recursos      |

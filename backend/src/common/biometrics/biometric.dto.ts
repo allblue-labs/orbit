@@ -6,9 +6,11 @@ import {
   IsString,
   IsUUID,
   Length,
+  Matches,
   MaxLength,
 } from 'class-validator';
 import { IsUUIDv7 } from '../../validators';
+import { DEVICE_CHALLENGE_PATTERN } from './device-proof';
 import type {
   AuthenticationResponseJSON,
   RegistrationResponseJSON,
@@ -47,8 +49,25 @@ export class WebAuthnAuthenticationDto {
   client = 'WEB';
 }
 
-/** O app pede uma credencial para este aparelho. */
-export class EnrollDeviceBiometricDto {
+class DeviceBiometricProofDto {
+  @ApiProperty()
+  @IsUUID()
+  challengeId!: string;
+
+  @ApiProperty()
+  @Matches(DEVICE_CHALLENGE_PATTERN)
+  challenge!: string;
+
+  @ApiProperty()
+  @Matches(/^[A-Za-z0-9_-]{11,96}$/)
+  signature!: string;
+}
+
+export class EnrollDeviceBiometricDto extends DeviceBiometricProofDto {
+  @ApiProperty()
+  @Matches(/^[A-Za-z0-9_-]{87}$/)
+  publicKey!: string;
+
   @ApiProperty()
   @IsString()
   @Length(8, 120)
@@ -61,25 +80,14 @@ export class EnrollDeviceBiometricDto {
   label?: string;
 }
 
-/** O app entra com o segredo que a biometria liberou. */
-export class DeviceBiometricLoginDto {
+export class DeviceBiometricOptionsDto {
   @ApiProperty()
   @IsUUIDv7()
   credentialId!: string;
+}
 
+export class DeviceBiometricLoginDto extends DeviceBiometricProofDto {
   @ApiProperty()
-  @IsString()
-  @Length(32, 128)
-  secret!: string;
-
-  @ApiPropertyOptional({ default: 'MOBILE' })
-  @IsOptional()
-  @IsIn(['WEB', 'MOBILE', 'API'])
-  client = 'MOBILE';
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  @MaxLength(160)
-  deviceId?: string;
+  @IsUUIDv7()
+  credentialId!: string;
 }

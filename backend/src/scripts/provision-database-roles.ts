@@ -297,6 +297,8 @@ async function provision(): Promise<void> {
        */
       'billing_webhook_events',
       'platform_tenant_provisionings',
+      'billing_promotions',
+      'corporate_promotion_commands',
       'email_outbound_messages',
       'email_provider_messages',
       'email_feedback_events',
@@ -312,7 +314,7 @@ async function provision(): Promise<void> {
       );
     }
 
-    /** Razão de uso e comprovantes de aceite são somente acrescidos. */
+    /** Razão de uso, aceites e recibos comerciais são somente acrescidos. */
     await admin.query(
       `DO $$
          BEGIN
@@ -321,6 +323,9 @@ async function provision(): Promise<void> {
            END IF;
            IF to_regclass('public.organization_legal_acceptances') IS NOT NULL THEN
              EXECUTE 'REVOKE UPDATE ON TABLE public.organization_legal_acceptances FROM ${role}';
+           END IF;
+           IF to_regclass('public.corporate_commercial_commands') IS NOT NULL THEN
+             EXECUTE 'REVOKE UPDATE, DELETE ON TABLE public.corporate_commercial_commands FROM ${role}';
            END IF;
          END $$`,
     );

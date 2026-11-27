@@ -47,6 +47,7 @@ import { ProductAccessService } from './product-access';
     CommercialPlanService,
     UsageService,
     EntitlementService,
+    EntitlementMapper,
     SubscriptionService,
     SubscriptionMapper,
     SubscriptionReconciliationService,

@@ -209,9 +209,28 @@ do Nginx verificou sintaxe, cadeia de confiança e 429 com `Retry-After`.
 
 No rollout, aplique a migration de confirmação antes de iniciar a API e
 publique Web e backend da mesma revisão. Distribua o app atualizado para
-que usuários possam cadastrar e remover a biometria. As credenciais
-com cadastro concluído continuam válidas para login. A validação de posse
-com chave não exportável continua no backlog de segurança.
+que usuários possam cadastrar e remover a biometria.
+
+## Biometria vinculada ao aparelho
+
+O Android Keystore e o Secure Enclave do iOS geram a chave privada P-256 no
+aparelho. Cada assinatura exige biometria e a chave é invalidada se o
+conjunto de biometrias mudar. A API guarda apenas a chave pública. A
+assinatura autentica um desafio de cinco minutos, com consumo atômico e um
+escopo por credencial e por audiência. O cadastro continua exigindo a
+confirmação de segurança vinculada à sessão. O servidor verifica a prova
+de posse. A origem em hardware é verificada no app, sem atestação remota.
+[Android Keystore](https://developer.android.com/privacy-and-security/keystore) ·
+[Apple Secure Enclave](https://developer.apple.com/documentation/security/protecting-keys-with-the-secure-enclave) ·
+[Apple biometryCurrentSet](https://developer.apple.com/documentation/security/secaccesscontrolcreateflags/biometrycurrentset)
+
+Aplique a migration ao atualizar a API e publique as novas versões do app.
+A migration revoga as credenciais móveis antigas e apaga seus segredos
+armazenados. Passkeys Web e sessões existentes continuam válidas.
+Usuários do app devem entrar com senha e reativar a biometria uma vez.
+Nos aparelhos sem biometria forte ou chave protegida em hardware, a senha
+continua disponível. O login biométrico móvel mantém o nível de acesso de
+uma sessão móvel comum.
 
 ## Política de conteúdo da Web
 
@@ -264,3 +283,28 @@ concorrente, dados adulterados, cache de outro usuário e falha temporária
 de acesso à chave.
 [Armazenamento Apple](https://developer.apple.com/documentation/foundation/using-the-file-system-effectively) ·
 [Cifragem autenticada](https://pub.dev/packages/cryptography/versions/2.9.0)
+
+## MFA para a administração global
+
+As atribuições globais do SaaS só concedem privilégios à sessão que validou
+senha e um segundo fator com o vínculo global já ativo. A API verifica o
+fator e a atribuição no banco a cada requisição administrativa. A renovação
+preserva essa prova durante a sessão. Revogar a atribuição, remover o fator
+ou substituí-lo invalida o acesso global daquela sessão. Sessões antigas,
+abertas somente com senha, por passkey ou por biometria ficam sem acesso
+administrativo. A regra preserva as permissões próprias da organização
+quando a conta também tem vínculo com um cliente do SaaS.
+
+A tela `/plataforma` permite configurar o autenticador em uma sessão sem
+privilégios, exibe os códigos de recuperação na ativação e orienta um novo
+login. Um código de recuperação válido, usado junto com a senha, serve como
+segundo fator e é consumido pelo backend. A prova de posse por chave não
+exportável para o login biométrico geral permanece como pendência separada.
+
+Passaram 77 cenários de integração com PostgreSQL descartável e RLS ativa,
+incluindo revogação de atribuição, remoção do fator, renovação de sessão e
+login biométrico com acesso restrito. No Chromium, o cenário real de
+primeiro acesso concluiu a ativação e confirmou que a API só liberou os
+privilégios após sair e entrar com o código do autenticador.
+[Runbook de produção](production-deployment.md#migrate-e-deploy) ·
+[Orientação OWASP para MFA](https://cheatsheetseries.owasp.org/cheatsheets/Multifactor_Authentication_Cheat_Sheet.html)

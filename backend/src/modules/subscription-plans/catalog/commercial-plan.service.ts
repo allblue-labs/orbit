@@ -51,9 +51,29 @@ export class CommercialPlanService {
   ) {}
 
   async list(tenantId?: string) {
-    const plans = await this.read((tx) =>
+    return (await this.offerRows(tenantId)).map((plan) =>
+      this.toDefinition(plan),
+    );
+  }
+
+  async catalogEntries(
+    tenantId?: string,
+    identifier?: { id: string } | { key: string },
+  ) {
+    return (await this.offerRows(tenantId, identifier)).map((plan) => ({
+      id: plan.id,
+      offer: this.toDefinition(plan),
+    }));
+  }
+
+  private offerRows(
+    tenantId?: string,
+    identifier?: { id: string } | { key: string },
+  ) {
+    return this.read((tx) =>
       tx.plan.findMany({
         where: {
+          ...identifier,
           commercial: { not: Prisma.DbNull },
           OR: [
             { catalogTenantId: null },
@@ -63,7 +83,6 @@ export class CommercialPlanService {
         orderBy: [{ monthlyPrice: 'asc' }, { key: 'asc' }],
       }),
     );
-    return plans.map((plan) => this.toDefinition(plan));
   }
 
   async find(code: string, tx?: Pick<Prisma.TransactionClient, 'plan'>) {

@@ -699,3 +699,334 @@ contractTest(
     );
   },
 );
+
+contractTest(
+  'the corporate administration OpenAPI is scoped, closed and consistent with its examples',
+  () => {
+    const Ajv = require('ajv/dist/2020').default;
+    const addFormats = require('ajv-formats');
+    const api = JSON.parse(
+      fs.readFileSync(
+        path.resolve(
+          __dirname,
+          '../../docs/integrations/nexus/administrative/openapi.json',
+        ),
+      ),
+    );
+    assert.equal(api.openapi, '3.1.0');
+    assert.deepEqual(api.security, [{ TechnicalBearer: [] }]);
+    const resolve = (ref) => {
+      assert.ok(ref.startsWith('#/components/'), ref);
+      return ref
+        .slice(2)
+        .split('/')
+        .reduce((node, key) => node?.[key], api);
+    };
+    function checkReferences(node) {
+      if (!node || typeof node !== 'object') return;
+      if (node.$ref) assert.ok(resolve(node.$ref), node.$ref);
+      Object.values(node).forEach(checkReferences);
+    }
+    checkReferences(api);
+
+    const base = 'https://contracts.example.test/orbit/corporate-admin';
+    const ajv = new Ajv({
+      strict: true,
+      strictTypes: false,
+      strictRequired: false,
+    });
+    addFormats(ajv);
+    const schemaPointer = (ref) =>
+      ref.replace('#/components/schemas/', '#/$defs/');
+    const definitions = JSON.parse(
+      JSON.stringify(api.components.schemas, (key, value) =>
+        key === '$ref' ? schemaPointer(value) : value,
+      ),
+    );
+    ajv.addSchema({ $defs: definitions }, base);
+    const registry = '/api/v1/corporate-admin/organizations';
+    for (const [url, method, scope] of [
+      [registry, 'get', 'organizations:read'],
+      [registry + '/{id}', 'get', 'organizations:read'],
+      [registry + '/{id}', 'patch', 'organizations:write'],
+    ]) {
+      const op = api.paths[url][method];
+      assert.equal(op['x-required-capability'], scope);
+      const parameters = op.parameters.map((p) =>
+        p.$ref ? resolve(p.$ref) : p,
+      );
+      if (url.endsWith('/{id}'))
+        assert.equal(
+          parameters.find((p) => p.in === 'path' && p.name === 'id')?.required,
+          true,
+        );
+      const administrator = parameters.find(
+        (p) => p.name === 'X-Nexus-Administrator-Id',
+      );
+      assert.equal(administrator?.required, method === 'patch');
+      const { schema, example } =
+        op.responses['200'].content['application/json'];
+      const validate = ajv.getSchema(base + schemaPointer(schema.$ref));
+      assert.ok(validate(example), JSON.stringify(validate.errors));
+      const unsafe = structuredClone(example);
+      (unsafe.data.items?.[0] ?? unsafe.data).secretHash = 'synthetic';
+      assert.equal(validate(unsafe), false);
+      if (op.requestBody) {
+        const { schema, example } = op.requestBody.content['application/json'];
+        const validate = ajv.getSchema(base + schemaPointer(schema.$ref));
+        assert.ok(validate(example), JSON.stringify(validate.errors));
+        assert.equal(
+          validate({ expectedUpdatedAt: example.expectedUpdatedAt }),
+          false,
+        );
+        assert.equal(validate({ ...example, planCode: 'ESSENTIAL' }), false);
+      }
+    }
+    const provisioning = '/api/v1/corporate-admin/tenant-provisionings/{id}';
+    for (const [url, method, capability, successes, hasKey] of [
+      [registry, 'post', 'organizations:provision', [201, 202], true],
+      [provisioning, 'get', 'organizations:provisioning:read', [200], false],
+      [
+        provisioning + '/resume',
+        'post',
+        'organizations:provision',
+        [200, 202],
+        false,
+      ],
+      [
+        registry + '/{id}/operational-status',
+        'post',
+        {
+          SUSPENDED: 'organizations:suspend',
+          ACTIVE: 'organizations:reactivate',
+        },
+        [201],
+        true,
+      ],
+    ]) {
+      const op = api.paths[url][method];
+      assert.deepEqual(
+        op['x-required-capability'] ?? op['x-required-capability-by-status'],
+        capability,
+      );
+      const headers = op.parameters.map((p) => (p.$ref ? resolve(p.$ref) : p));
+      assert.equal(
+        headers.find((p) => p.name === 'X-Nexus-Administrator-Id')?.required,
+        method === 'post',
+      );
+      assert.equal(
+        headers.some((p) => p.name === 'Idempotency-Key' && p.required),
+        hasKey,
+      );
+      for (const status of successes) {
+        const { schema, example } =
+          op.responses[status].content['application/json'];
+        const validate = ajv.getSchema(base + schemaPointer(schema.$ref));
+        assert.ok(validate(example), JSON.stringify(validate.errors));
+        assert.equal(
+          validate({
+            ...example,
+            data: { ...example.data, internalToken: 'synthetic' },
+          }),
+          false,
+        );
+      }
+      if (op.requestBody) {
+        const { schema, example } = op.requestBody.content['application/json'];
+        const validate = ajv.getSchema(base + schemaPointer(schema.$ref));
+        assert.ok(validate(example), JSON.stringify(validate.errors));
+        assert.equal(
+          validate({ ...example, subscriptionStatus: 'ACTIVE' }),
+          false,
+        );
+        if (example.owner)
+          assert.equal(
+            validate({
+              ...example,
+              owner: { ...example.owner, password: 'synthetic' },
+            }),
+            false,
+          );
+      }
+    }
+    const commercial = registry + '/{id}/subscription';
+    const trial = registry + '/{id}/trial';
+    const plans = '/api/v1/corporate-admin/plans';
+    for (const [url, method, capability, status] of [
+      [plans, 'get', 'plans:read', 200],
+      [plans + '/{id}', 'get', 'plans:read', 200],
+      [commercial, 'get', 'subscriptions:read', 200],
+      [
+        commercial + '/operations/{operationId}',
+        'get',
+        'subscriptions:read',
+        200,
+      ],
+      [trial, 'get', 'trials:read', 200],
+      [commercial + '/change-plan', 'post', 'subscriptions:change-plan', 202],
+      [commercial + '/keep', 'post', 'subscriptions:keep', 200],
+      [
+        commercial + '/cancel-scheduled-change',
+        'post',
+        'subscriptions:cancel-scheduled-change',
+        200,
+      ],
+      [trial + '/start', 'post', 'trials:manage', 200],
+    ]) {
+      const op = api.paths[url][method];
+      assert.equal(op['x-required-capability'], capability);
+      const parameters = op.parameters.map((p) =>
+        p.$ref ? resolve(p.$ref) : p,
+      );
+      assert.equal(
+        parameters.find((p) => p.name === 'X-Nexus-Administrator-Id')?.required,
+        method === 'post',
+      );
+      assert.equal(
+        parameters.some((p) => p.name === 'Idempotency-Key' && p.required),
+        method === 'post',
+      );
+      const { schema, example } =
+        op.responses[status].content['application/json'];
+      const validate = ajv.getSchema(base + schemaPointer(schema.$ref));
+      assert.ok(validate(example), JSON.stringify(validate.errors));
+      assert.equal(
+        validate({
+          ...example,
+          data: { ...example.data, providerPriceId: 'synthetic' },
+        }),
+        false,
+      );
+      if (op.requestBody) {
+        const { schema, example } = op.requestBody.content['application/json'];
+        const validateBody = ajv.getSchema(base + schemaPointer(schema.$ref));
+        assert.ok(validateBody(example), JSON.stringify(validateBody.errors));
+        assert.equal(
+          validateBody({ ...example, customerConsent: true }),
+          false,
+        );
+        assert.equal(validateBody({ ...example, reason: undefined }), false);
+      }
+    }
+    assert.equal(api.paths[commercial + '/cancel'], undefined);
+    const promotions = '/api/v1/corporate-admin/promotions';
+    for (const [suffix, method, capability, statuses] of [
+      ['', 'get', 'read', [200]],
+      ['/{id}', 'get', 'read', [200]],
+      ['/{id}/redemptions', 'get', 'read', [200]],
+      ['', 'post', 'create', [201]],
+      ['/{id}', 'patch', 'update', [200]],
+      ['/{id}/activate', 'post', 'activate', [200, 202]],
+      ['/{id}/deactivate', 'post', 'deactivate', [200, 202]],
+    ]) {
+      const operation = api.paths[promotions + suffix][method];
+      assert.equal(
+        operation['x-required-capability'],
+        'promotions:' + capability,
+      );
+      const parameters = operation.parameters.map((parameter) =>
+        parameter.$ref ? resolve(parameter.$ref) : parameter,
+      );
+      assert.equal(
+        parameters.find((p) => p.name === 'X-Nexus-Administrator-Id').required,
+        method !== 'get',
+      );
+      assert.equal(
+        parameters.some((p) => p.name === 'Idempotency-Key' && p.required),
+        method !== 'get',
+      );
+      for (const status of statuses) {
+        const { schema, example } =
+          operation.responses[status].content['application/json'];
+        const validate = ajv.getSchema(base + schemaPointer(schema.$ref));
+        assert.ok(validate(example), JSON.stringify(validate.errors));
+        const unsafe = structuredClone(example);
+        (
+          unsafe.data.promotion ??
+          unsafe.data.items?.[0] ??
+          unsafe.data
+        ).providerPromotionId = 'promo_synthetic';
+        assert.equal(validate(unsafe), false);
+      }
+      if (operation.requestBody) {
+        const { schema, example } =
+          operation.requestBody.content['application/json'];
+        const validate = ajv.getSchema(base + schemaPointer(schema.$ref));
+        assert.ok(validate(example), JSON.stringify(validate.errors));
+        assert.equal(
+          validate({ ...example, stripeCouponId: 'coupon_synthetic' }),
+          false,
+        );
+        if (example.terms) {
+          assert.equal(
+            validate({
+              ...example,
+              terms: { ...example.terms, amountOffMinor: 100, currency: 'BRL' },
+            }),
+            false,
+          );
+          assert.ok(
+            validate({
+              ...example,
+              terms: {
+                ...example.terms,
+                percentOff: undefined,
+                amountOffMinor: 100,
+                currency: 'BRL',
+                durationMonths: 3,
+              },
+            }),
+            JSON.stringify(validate.errors),
+          );
+        }
+      }
+    }
+    assert.equal(api.paths[promotions + '/{id}'].delete, undefined);
+
+    const finance = '/api/v1/corporate-admin';
+    const financeGrants = {
+      '/finance/overview': ['overview'],
+      '/finance/invoices': ['invoices'],
+      '/finance/invoices/{id}': ['invoices'],
+      '/finance/payments': ['payments'],
+      '/finance/payments/{id}': ['payments'],
+      '/organizations/{id}/finance': ['organizations'],
+      '/organizations/{id}/finance/invoices': ['organizations', 'invoices'],
+      '/organizations/{id}/finance/payments': ['organizations', 'payments'],
+    };
+    for (const [path, grants] of Object.entries(financeGrants)) {
+      const operations = api.paths[finance + path];
+      assert.deepEqual(Object.keys(operations), ['get']);
+      const operation = operations.get;
+      const required = operation['x-required-capabilities'] ?? [
+        operation['x-required-capability'],
+      ];
+      assert.deepEqual(
+        required,
+        grants.map((grant) => 'finance:' + grant + ':read'),
+      );
+      const query = operation.parameters.map((parameter) =>
+        resolve(parameter.$ref),
+      );
+      assert.deepEqual(
+        query.filter((p) => p.in === 'query' && p.required).map((p) => p.name),
+        /\/finance\/(invoices|payments)\/\{id\}$/.test(path)
+          ? ['mode']
+          : ['mode', 'currency', 'from', 'to'],
+      );
+      const { schema, example } =
+        operation.responses['200'].content['application/json'];
+      const validate = ajv.getSchema(base + schemaPointer(schema.$ref));
+      assert.ok(validate(example), JSON.stringify(validate.errors));
+      const unsafe = structuredClone(example);
+      const payload = unsafe.data;
+      (
+        payload.invoice ??
+        payload.payment ??
+        payload.items?.[0] ??
+        payload
+      ).providerInvoiceId = 'in_synthetic';
+      assert.equal(validate(unsafe), false);
+    }
+  },
+);

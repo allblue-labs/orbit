@@ -368,6 +368,8 @@ model Session {
   /// AES-GCM encrypted canonical response, readable only during the bounded grace.
   rotationResponse         String?   @map("rotation_response") @db.Text
   rotationGraceUntil       DateTime? @map("rotation_grace_until") @db.Timestamptz(3)
+  /// Factor verified at password login for a platform administrator. Rechecked against active factors on each privileged request.
+  platformMfaFactorId      String?   @map("platform_mfa_factor_id") @db.Uuid
   client                   String    @db.VarChar(30)
   deviceId                 String?   @map("device_id") @db.VarChar(160)
   userAgent                String?   @map("user_agent") @db.Text
@@ -467,6 +469,7 @@ model Organization {
   mobilePushDeliveries          MobilePushDelivery[]
   aiAgents                      AiAgent[]
   aiExecutions                  AiExecution[]
+  corporateCommercialCommands   CorporateCommercialCommand[]
   auditLogs                     AuditLog[]
   calendars                     SchedulingCalendar[]
   schedulingEvents              SchedulingEvent[]
@@ -1039,6 +1042,14 @@ model BillingCheckoutAttempt {
   quotedCatalogVersion Int?    @map("quoted_catalog_version")
   quotedEntitlements   Json?   @map("quoted_entitlements") @db.JsonB
 
+  promotionId                String?   @map("promotion_id") @db.Uuid
+  promotionCode              String?   @map("promotion_code") @db.VarChar(32)
+  providerPromotionId        String?   @map("provider_promotion_id") @db.VarChar(255)
+  promotionOriginalMinor     Int?      @map("promotion_original_minor")
+  promotionDiscountMinor     Int?      @map("promotion_discount_minor")
+  promotionCheckoutExpiresAt DateTime? @map("promotion_checkout_expires_at") @db.Timestamptz(3)
+  promotion BillingPromotion? @relation(fields: [promotionId], references: [id], onDelete: Restrict)
+
   /// `CREATING` · `OPEN` · `COMPLETED` · `EXPIRED` · `FAILED`.
   status String @default("CREATING") @db.VarChar(20)
 
@@ -1079,6 +1090,7 @@ model BillingInvoice {
   mode              String  @db.VarChar(10)
   providerInvoiceId String  @map("provider_invoice_id") @db.VarChar(255)
   invoiceNumber     String? @map("invoice_number") @db.VarChar(120)
+  planCodeAtIssue   String? @map("plan_code_at_issue") @db.VarChar(60)
 
   status               String @db.VarChar(30)
   currency             String @db.Char(3)
@@ -5247,7 +5259,8 @@ model QuoteAcceptanceLink {
 /// Durable local administration workflow; not a Nexus command inbox.
 model PlatformTenantProvisioning {
   id                    String              @id @default(uuid(7)) @db.Uuid
-  actorUserId           String              @map("actor_user_id") @db.Uuid
+  actorUserId           String?             @map("actor_user_id") @db.Uuid
+  technicalPrincipalId  String?             @map("technical_principal_id") @db.Uuid
   idempotencyKey        String              @map("idempotency_key") @db.Char(64)
   requestHash           String              @map("request_hash") @db.Char(64)
   correlationId         String              @map("correlation_id") @db.VarChar(128)
@@ -5265,12 +5278,13 @@ model PlatformTenantProvisioning {
   createdAt             DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt             DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
   completedAt           DateTime?           @map("completed_at") @db.Timestamptz(3)
-  actor                 User                @relation("ProvisioningActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  actor                 User?               @relation("ProvisioningActor", fields: [actorUserId], references: [id], onDelete: Restrict)
   owner                 User?               @relation("ProvisioningOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
   organization          Organization?       @relation(fields: [organizationId], references: [id], onDelete: SetNull)
   ownerSetupToken       PasswordResetToken? @relation(fields: [ownerSetupTokenId], references: [id], onDelete: SetNull)
 
   @@unique([actorUserId, idempotencyKey])
+  @@unique([technicalPrincipalId, idempotencyKey], map: "platform_provisioning_technical_key")
   @@index([status, updatedAt])
   @@map("platform_tenant_provisionings")
 }
@@ -5326,6 +5340,23 @@ model TenantDataPurge {
 }
 
 /// Immutable first-owner registration provenance; roles do not confer email eligibility.
+/// Recorded local corporate command with separate machine and human provenance.
+model CorporateCommercialCommand {
+  id                  String   @id @db.Uuid
+  organizationId      String   @map("organization_id") @db.Uuid
+  technicalPrincipalId String  @map("technical_principal_id") @db.Uuid
+  operation           String   @db.VarChar(32)
+  keyHash             String   @map("key_hash") @db.Char(64)
+  requestHash         String   @map("request_hash") @db.Char(64)
+  result              Json     @db.JsonB
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, technicalPrincipalId, operation, keyHash], map: "corporate_commercial_command_key")
+  @@map("corporate_commercial_commands")
+}
+
 model AccountEmailOwner {
   userId                     String   @id @map("user_id") @db.Uuid
   registrationOrganizationId String   @unique @map("registration_organization_id") @db.Uuid
@@ -5454,8 +5485,7 @@ model ProductSale {
   @@map("product_sales")
 }
 
-/// Entrar com a biometria do aparelho — equipe. WEBAUTHN (web: só a chave
-/// pública) ou DEVICE (app: SHA-256 de um segredo trocado a cada uso).
+/// Credenciais biométricas da equipe. O servidor armazena somente chaves públicas.
 model IdentityBiometricCredential {
   id                   String    @id @default(uuid(7)) @db.Uuid
   userId               String    @map("user_id") @db.Uuid
@@ -5501,7 +5531,7 @@ model CustomerPortalBiometricCredential {
   @@map("customer_portal_biometric_credentials")
 }
 
-/// Desafio WebAuthn: um uso, poucos minutos.
+/// Desafio de autenticação de uso único e validade curta.
 model AuthChallenge {
   id         String    @id @default(uuid(7)) @db.Uuid
   purpose    String    @db.VarChar(40)
@@ -5513,4 +5543,51 @@ model AuthChallenge {
 
   @@index([expiresAt], map: "auth_challenges_expiry_idx")
   @@map("auth_challenges")
+}
+
+model BillingPromotion {
+  id                  String    @id @default(uuid(7)) @db.Uuid
+  code                String    @unique @db.VarChar(32)
+  name                String    @db.VarChar(120)
+  description         String?   @db.VarChar(500)
+  percentOff          Int?      @map("percent_off")
+  amountOffMinor      Int?      @map("amount_off_minor")
+  currency            String?   @db.VarChar(3)
+  startsAt            DateTime  @map("starts_at") @db.Timestamptz(3)
+  endsAt              DateTime  @map("ends_at") @db.Timestamptz(3)
+  planCodes           String[]  @map("plan_codes")
+  billingIntervals    String[]  @map("billing_intervals")
+  totalLimit          Int       @map("total_limit")
+  customerLimit       Int       @map("customer_limit")
+  audience            String    @db.VarChar(20)
+  durationMonths      Int?      @map("duration_months")
+  status              String    @db.VarChar(20)
+  mode                String?   @db.VarChar(10)
+  eligiblePrices      Json?     @map("eligible_prices") @db.JsonB
+  providerPromotionId String?   @map("provider_promotion_id") @db.VarChar(255)
+  syncStartedAt       DateTime? @map("sync_started_at") @db.Timestamptz(3)
+  version             Int       @default(1)
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  attempts            BillingCheckoutAttempt[]
+  commands            CorporatePromotionCommand[]
+
+  @@unique([mode, providerPromotionId], map: "billing_promotions_mode_provider_promotion_id_key")
+  @@index([status, createdAt, id], map: "billing_promotions_status_created")
+  @@map("billing_promotions")
+}
+
+model CorporatePromotionCommand {
+  id                   String           @id @default(uuid(7)) @db.Uuid
+  technicalPrincipalId String           @map("technical_principal_id") @db.Uuid
+  promotionId          String           @map("promotion_id") @db.Uuid
+  promotion            BillingPromotion @relation(fields: [promotionId], references: [id], onDelete: Restrict)
+  operation            String           @db.VarChar(12)
+  keyHash              String           @map("key_hash") @db.Char(64)
+  requestHash          String           @map("request_hash") @db.Char(64)
+  result               Json?            @db.JsonB
+  createdAt            DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([technicalPrincipalId, operation, keyHash], map: "corporate_promotion_command_key")
+  @@map("corporate_promotion_commands")
 }

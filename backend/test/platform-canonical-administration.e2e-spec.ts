@@ -19,6 +19,7 @@ import { RegistrationRepository } from '../src/modules/identity/infrastructure/r
 import { SubscriptionProvisioningService } from '../src/modules/subscription-plans/subscriptions/subscription-provisioning.service';
 import { TrialFingerprintService } from '../src/modules/subscription-plans/subscriptions/trial-fingerprint';
 import { adminPrisma, disconnectAdminPrisma } from './support/admin-prisma';
+import { seedActiveMfa } from './support/active-mfa-fixture';
 
 const PASSWORD = 'Orbit#Canonical@2026';
 const unwrap = <T>(response: request.Response) =>
@@ -178,10 +179,11 @@ describe('ORB-NX-02 canonical platform administration (HTTP / restricted Postgre
       },
     });
     actorId = actor.id;
+    const mfaCode = await seedActiveMfa(actor.id, app.get(CRYPTO_PROVIDER));
     token = unwrap<{ accessToken: string }>(
       await http()
         .post('/api/v1/identity/login')
-        .send({ email, password: PASSWORD, client: 'WEB' })
+        .send({ email, password: PASSWORD, client: 'WEB', mfaCode: mfaCode() })
         .expect(200),
     ).accessToken;
   });
@@ -539,7 +541,7 @@ describe('ORB-NX-02 canonical platform administration (HTTP / restricted Postgre
     // A different verified global administrator may resume the canonical first-owner setup.
     const email = `nx02.second-admin.${randomUUID()}@example.test`;
     owners.push(email);
-    await admin.user.create({
+    const secondActor = await admin.user.create({
       data: {
         email,
         normalizedEmail: email,
@@ -557,10 +559,14 @@ describe('ORB-NX-02 canonical platform administration (HTTP / restricted Postgre
         platformRoleAssignments: { create: { roleId: globalRoleId } },
       },
     });
+    const mfaCode = await seedActiveMfa(
+      secondActor.id,
+      app.get(CRYPTO_PROVIDER),
+    );
     const secondToken = unwrap<{ accessToken: string }>(
       await http()
         .post('/api/v1/identity/login')
-        .send({ email, password: PASSWORD, client: 'WEB' })
+        .send({ email, password: PASSWORD, client: 'WEB', mfaCode: mfaCode() })
         .expect(200),
     ).accessToken;
     const result = unwrap<Organization>(

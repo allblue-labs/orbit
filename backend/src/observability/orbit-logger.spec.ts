@@ -45,4 +45,31 @@ describe('redacted operational events', () => {
       sink.mockRestore();
     }
   });
+
+  it('records the technical principal separately from human identity', () => {
+    const lines: string[] = [];
+    const sink = jest
+      .spyOn(process.stdout, 'write')
+      .mockImplementation((line) => {
+        lines.push(String(line));
+        return true;
+      });
+    try {
+      const id = 'ece8e94c-0f19-4d1a-92da-fea921397c63';
+      new OrbitLogger().log({
+        event: 'corporate_admin_access',
+        role: 'TECHNICAL',
+        technicalPrincipalId: id,
+        authorization: 'sensitive-token-canary',
+      });
+      expect(JSON.parse(lines[0]!)).toMatchObject({
+        technicalPrincipalId: id,
+        userId: null,
+        organizationId: null,
+      });
+      expect(lines[0]).not.toContain('sensitive-token-canary');
+    } finally {
+      sink.mockRestore();
+    }
+  });
 });

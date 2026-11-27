@@ -1,33 +1,26 @@
-/// A biometria do aparelho — digital, rosto ou o bloqueio de tela.
-///
-/// O app nunca vê a biometria: o sistema responde só "liberou" ou "não". O que
-/// ela libera é um segredo guardado no armazenamento seguro ([BiometricVault]),
-/// e quem confere o segredo é o servidor.
-library;
-
 import 'package:flutter/services.dart';
-import 'package:local_auth/local_auth.dart';
+
+import '../errors/orbit_exception.dart';
+
+typedef DeviceKey = ({String keyId, String publicKey});
 
 abstract interface class DeviceBiometrics {
-  /// O aparelho tem biometria (ou bloqueio de tela) cadastrada?
   Future<bool> isAvailable();
-
-  /// Pede a biometria. `false` quando a pessoa cancelou ou não passou.
-  Future<bool> authenticate(String reason);
+  Future<DeviceKey> createKey();
+  Future<String?> sign(String keyId, String challenge, String reason);
+  Future<void> deleteKey(String keyId);
 }
 
+/// The OS authorizes the signing operation. Dart holds only a key reference.
 class LocalDeviceBiometrics implements DeviceBiometrics {
-  LocalDeviceBiometrics([LocalAuthentication? auth])
-    : _auth = auth ?? LocalAuthentication();
+  const LocalDeviceBiometrics();
 
-  final LocalAuthentication _auth;
+  static const _channel = MethodChannel('orbit/device_biometrics');
 
   @override
   Future<bool> isAvailable() async {
     try {
-      if (!await _auth.isDeviceSupported()) return false;
-      return await _auth.canCheckBiometrics &&
-          (await _auth.getAvailableBiometrics()).isNotEmpty;
+      return await _channel.invokeMethod<bool>('isAvailable') ?? false;
     } on PlatformException {
       return false;
     } on MissingPluginException {
@@ -36,18 +29,50 @@ class LocalDeviceBiometrics implements DeviceBiometrics {
   }
 
   @override
-  Future<bool> authenticate(String reason) async {
+  Future<DeviceKey> createKey() async {
+    final data = await _invoke<Map<Object?, Object?>>('createKey');
+    final keyId = data?['keyId'];
+    final publicKey = data?['publicKey'];
+    if (keyId is! String || publicKey is! String) {
+      throw _unavailable;
+    }
+    return (keyId: keyId, publicKey: publicKey);
+  }
+
+  @override
+  Future<String?> sign(String keyId, String challenge, String reason) =>
+      _invoke<String>('sign', {
+        'keyId': keyId,
+        'challenge': challenge,
+        'reason': reason,
+      });
+
+  @override
+  Future<void> deleteKey(String keyId) =>
+      _invoke<void>('deleteKey', {'keyId': keyId});
+
+  Future<T?> _invoke<T>(String action, [Map<String, String>? arguments]) async {
     try {
-      return await _auth.authenticate(
-        localizedReason: reason,
-        persistAcrossBackgrounding: true,
-      );
-    } on PlatformException {
-      return false;
-    } on LocalAuthException {
-      return false;
+      return await _channel.invokeMethod<T>(action, arguments);
+    } on PlatformException catch (error) {
+      if (error.code == 'KEY_UNAVAILABLE') {
+        throw const OrbitException(
+          kind: OrbitErrorKind.http,
+          code: 'DEVICE_KEY_UNAVAILABLE',
+          publicMessage:
+              'A biometria deste aparelho precisa ser ativada novamente.',
+        );
+      }
+      throw _unavailable;
     } on MissingPluginException {
-      return false;
+      throw _unavailable;
     }
   }
+
+  static const _unavailable = OrbitException(
+    kind: OrbitErrorKind.http,
+    code: 'DEVICE_BIOMETRICS_UNAVAILABLE',
+    publicMessage:
+        'A biometria segura está indisponível neste aparelho. Você pode entrar com a senha.',
+  );
 }

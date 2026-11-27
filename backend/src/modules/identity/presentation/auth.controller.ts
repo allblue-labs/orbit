@@ -17,6 +17,7 @@ import { PasswordRecoveryService } from '../application/password-recovery.servic
 import { RegistrationService } from '../application/registration.service';
 import type { IdentityRequest } from '../infrastructure/jwt-authentication.guard';
 import { IdentityReadModelMapper } from '../identity.mapper';
+import { PlatformMfaSetup } from '../platform-mfa-setup.decorator';
 import {
   ForgotPasswordDto,
   LoginDto,
@@ -81,6 +82,7 @@ export class AuthController {
   }
 
   @TenantRecovery('identity')
+  @PlatformMfaSetup()
   @Post('logout')
   @Surfaces('WEB', 'MOBILE', 'API')
   @HttpCode(HttpStatus.NO_CONTENT)

@@ -35,9 +35,11 @@ export class ProfileService {
    * Publicar aqui o mesmo endereço que aquele endpoint emite mantém uma fonte
    * só — o arquivo — e faz o campo parar de mentir.
    */
-  async get(userId: string, organizationId: string) {
+  async get(userId: string, organizationId: string | null) {
     const user = await this.requireUser(userId);
-    const avatar = await this.avatars.view({ id: userId, organizationId });
+    const avatar = organizationId
+      ? await this.avatars.view({ id: userId, organizationId })
+      : null;
     return {
       id: user.id,
       email: user.email,
@@ -45,7 +47,7 @@ export class ProfileService {
       lastName: user.lastName,
       displayName: user.displayName,
       phone: user.phone,
-      avatarUrl: avatar.url,
+      avatarUrl: avatar?.url ?? null,
       locale: user.locale,
       timezone: user.timezone,
       status: user.status,

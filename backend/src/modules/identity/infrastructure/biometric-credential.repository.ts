@@ -7,7 +7,7 @@ export interface UserBiometricCredential {
   userId: string;
   kind: 'DEVICE' | 'WEBAUTHN';
   label: string;
-  secretHash: string | null;
+  deviceId: string | null;
   webauthnCredentialId: string | null;
   publicKey: Uint8Array | null;
   signCount: number;
@@ -72,7 +72,7 @@ export class BiometricCredentialRepository {
     userId: string;
     label: string;
     deviceId: string;
-    secretHash: string;
+    publicKey: Uint8Array;
   }): Promise<void> {
     await withIdentity(this.prisma, input.userId, async (tx) => {
       await tx.identityBiometricCredential.updateMany({
@@ -85,21 +85,20 @@ export class BiometricCredentialRepository {
         data: { revokedAt: new Date() },
       });
       await tx.identityBiometricCredential.create({
-        data: { ...input, kind: 'DEVICE' },
+        data: {
+          ...input,
+          publicKey: Buffer.from(input.publicKey),
+          kind: 'DEVICE',
+        },
       });
     });
   }
 
-  /**
-   * Marca o uso. Com `expectedSecretHash`, troca o segredo só se o antigo
-   * ainda for o atual — duas tentativas com o mesmo segredo, uma vence.
-   */
+  /** Anota o uso enquanto a credencial ainda estiver ativa. */
   async markUsed(
     id: string,
     userId: string,
     change: {
-      expectedSecretHash?: string;
-      newSecretHash?: string;
       signCount?: number;
     },
   ): Promise<boolean> {
@@ -109,13 +108,9 @@ export class BiometricCredentialRepository {
           id,
           userId,
           revokedAt: null,
-          ...(change.expectedSecretHash
-            ? { secretHash: change.expectedSecretHash }
-            : {}),
         },
         data: {
           lastUsedAt: new Date(),
-          ...(change.newSecretHash ? { secretHash: change.newSecretHash } : {}),
           ...(change.signCount !== undefined
             ? { signCount: BigInt(change.signCount) }
             : {}),
@@ -140,7 +135,7 @@ export class BiometricCredentialRepository {
     userId: string;
     kind: string;
     label: string;
-    secretHash: string | null;
+    deviceId: string | null;
     webauthnCredentialId: string | null;
     publicKey: Uint8Array | null;
     signCount: bigint;

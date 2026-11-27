@@ -1,15 +1,4 @@
-/// Entrar com a biometria no app — equipe e cliente.
-///
-/// O fluxo inteiro em um lugar:
-///
-/// - **ativar**: a biometria confirma que é a pessoa; o servidor emite uma
-///   credencial para este aparelho; o segredo vai para o cofre seguro;
-/// - **entrar**: a biometria libera o segredo do cofre; o servidor confere,
-///   abre a sessão e devolve o próximo segredo, que substitui o usado;
-/// - **desativar**: confirma a identidade, revoga no servidor e apaga o cofre.
-///
-/// O convite depois do primeiro login com senha também mora aqui: a tela de
-/// login marca, o shell pergunta uma vez, e "Agora não" não pergunta de novo.
+/// Cadastro, entrada e revogação de chaves biométricas protegidas pelo aparelho.
 library;
 
 import 'package:flutter/foundation.dart';
@@ -18,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../app/providers.dart';
 import '../../../core/errors/orbit_exception.dart';
+import '../../../core/network/session_authenticator.dart';
 import '../../../core/security/biometric_vault.dart';
 import '../../../core/security/device_biometrics.dart';
 import '../../../core/security/security_confirmation.dart';
@@ -60,43 +50,59 @@ class BiometricLogin {
   BiometricVault get _vault => _ref.read(biometricVaultProvider);
   SharedPreferences get _prefs => _ref.read(sharedPreferencesProvider);
 
-  /// Ativa neste aparelho. Exige sessão ativa do público pedido.
+  /// Ativa neste aparelho. A assinatura de cadastro também exige biometria.
   Future<BiometricEnableResult> enable(
     BiometricAudience audience,
     SecurityCredentials credentials,
   ) async {
-    if (!await _device.authenticate(
-      'Confirme para entrar com biometria no Orbit',
-    )) {
-      return BiometricEnableResult.cancelled;
-    }
+    final device = _device;
+    final vault = _vault;
+    final team = audience == BiometricAudience.team
+        ? _ref.read(authRepositoryProvider)
+        : null;
+    final portal = audience == BiometricAudience.customer
+        ? _ref.read(portalRepositoryProvider)
+        : null;
+    final auth = team?.authenticator ?? portal!.authenticator;
+    final generation = auth.generation;
+    final previous = await vault.read(audience);
     final deviceId = await deviceInstanceId(_prefs);
     final label = _deviceLabel();
-    final issued = switch (audience) {
-      BiometricAudience.team =>
-        await _ref
-            .read(authRepositoryProvider)
-            .enrollDeviceCredential(
+    final key = await device.createKey();
+    var saved = false;
+    try {
+      if (generation != auth.generation) throw SessionAuthenticator.changed;
+      Future<String?> sign(String challenge) => device.sign(
+        key.keyId,
+        challenge,
+        'Confirme para ativar a biometria no Orbit',
+      );
+      final credentialId = team != null
+          ? await team.enrollDeviceCredential(
               deviceId: deviceId,
               label: label,
+              publicKey: key.publicKey,
+              sign: sign,
               credentials: credentials,
-            ),
-      BiometricAudience.customer =>
-        await _ref
-            .read(portalRepositoryProvider)
-            .enrollDeviceCredential(
+            )
+          : await portal!.enrollDeviceCredential(
               deviceId: deviceId,
               label: label,
+              publicKey: key.publicKey,
+              sign: sign,
               credentials: credentials,
-            ),
-    };
-    await _vault.write(
-      audience,
-      BiometricCredential(
-        credentialId: issued.credentialId,
-        secret: issued.secret,
-      ),
-    );
+            );
+      if (credentialId == null) return BiometricEnableResult.cancelled;
+      if (generation != auth.generation) throw SessionAuthenticator.changed;
+      await vault.write(
+        audience,
+        BiometricCredential(credentialId: credentialId, keyId: key.keyId),
+      );
+      saved = true;
+    } finally {
+      if (!saved) await _discardKey(device, key.keyId);
+    }
+    if (previous != null) await _discardKey(device, previous.keyId);
     _ref.invalidate(biometricEnabledProvider(audience));
     return BiometricEnableResult.enabled;
   }
@@ -107,72 +113,88 @@ class BiometricLogin {
   ) async {
     final stored = await _vault.read(audience);
     if (stored == null) return;
-    switch (audience) {
-      case BiometricAudience.team:
-        await _ref
-            .read(authRepositoryProvider)
-            .revokeDeviceCredential(
-              stored.credentialId,
-              credentials: credentials,
-            );
-      case BiometricAudience.customer:
-        await _ref
-            .read(portalRepositoryProvider)
-            .revokeDeviceCredential(
-              stored.credentialId,
-              credentials: credentials,
-            );
+    try {
+      switch (audience) {
+        case BiometricAudience.team:
+          await _ref
+              .read(authRepositoryProvider)
+              .revokeDeviceCredential(
+                stored.credentialId,
+                credentials: credentials,
+              );
+        case BiometricAudience.customer:
+          await _ref
+              .read(portalRepositoryProvider)
+              .revokeDeviceCredential(
+                stored.credentialId,
+                credentials: credentials,
+              );
+      }
+    } on OrbitException catch (error) {
+      if (error.status != 404) rethrow;
     }
-    await _vault.clear(audience);
-    _ref.invalidate(biometricEnabledProvider(audience));
+    await _clearIfCurrent(audience, stored);
   }
 
-  /// Entra. `false` quando a pessoa cancelou a biometria.
-  ///
-  /// Recusa do servidor (credencial removida, acesso desativado, senha
-  /// trocada) apaga o cofre: o botão some e a pessoa entra com a senha.
+  /// Solicita a assinatura ao sistema. Cancelar mantém a credencial cadastrada.
   Future<bool> signIn(BiometricAudience audience) async {
     final stored = await _vault.read(audience);
     if (stored == null) return false;
-    if (!await _device.authenticate('Entre no Orbit com a sua biometria')) {
-      return false;
-    }
+    final device = _device;
+    Future<String?> sign(String challenge) => device.sign(
+      stored.keyId,
+      challenge,
+      'Entre no Orbit com a sua biometria',
+    );
     try {
-      final next = switch (audience) {
+      return switch (audience) {
         BiometricAudience.team =>
           await _ref
               .read(authControllerProvider.notifier)
               .loginWithDeviceCredential(
                 credentialId: stored.credentialId,
-                secret: stored.secret,
+                sign: sign,
               ),
         BiometricAudience.customer =>
           await _ref
               .read(portalSessionProvider.notifier)
               .loginWithDeviceCredential(
                 credentialId: stored.credentialId,
-                secret: stored.secret,
+                sign: sign,
               ),
       };
-      await _vault.write(
-        audience,
-        BiometricCredential(credentialId: stored.credentialId, secret: next),
-      );
-      return true;
     } on OrbitException catch (error) {
-      if (error.isUnauthorized) {
-        await _vault.clear(audience);
-        _ref.invalidate(biometricEnabledProvider(audience));
+      if (error.code == 'DEVICE_KEY_UNAVAILABLE' ||
+          error.code == 'BIOMETRIC_INVALID') {
+        await _clearIfCurrent(audience, stored);
         throw OrbitException(
           kind: error.kind,
           publicMessage:
-              'A biometria deste aparelho não vale mais. Entre com a senha e '
-              'ative de novo em Configurações.',
+              'A biometria deste aparelho precisa ser ativada novamente. Entre com a senha.',
           code: error.code,
           status: error.status,
         );
       }
       rethrow;
+    }
+  }
+
+  Future<void> _clearIfCurrent(
+    BiometricAudience audience,
+    BiometricCredential stored,
+  ) async {
+    final current = await _vault.read(audience);
+    if (current?.keyId != stored.keyId) return;
+    await _vault.clear(audience);
+    await _discardKey(_device, stored.keyId);
+    _ref.invalidate(biometricEnabledProvider(audience));
+  }
+
+  static Future<void> _discardKey(DeviceBiometrics device, String keyId) async {
+    try {
+      await device.deleteKey(keyId);
+    } on OrbitException {
+      // A credential rejected by the API cannot be restored by leaving its key.
     }
   }
 

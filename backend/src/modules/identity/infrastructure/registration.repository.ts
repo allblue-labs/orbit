@@ -17,6 +17,7 @@ export type TenantProvisioningOptions = {
   /** Definido somente pelo serviço público, nunca recebido do corpo HTTP. */
   publicSignup?: boolean;
   actorUserId?: string;
+  deferOwnerEmailProvenance?: boolean;
   platformAdmin?: boolean;
   organizationStatus?: string;
   subscriptionStatus?: string;
@@ -239,7 +240,11 @@ export class RegistrationRepository {
           },
         });
       }
-      if (options.publicSignup && !options.platformAdmin)
+      if (
+        options.publicSignup &&
+        !options.platformAdmin &&
+        !options.deferOwnerEmailProvenance
+      )
         await transaction.$queryRaw`SELECT app_register_account_email_owner(${userId}::uuid,${organizationId}::uuid)::text`;
       await queueWelcome?.(transaction, userId, organizationId);
       return { userId, organizationId, businessUnitId };

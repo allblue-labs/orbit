@@ -48,6 +48,7 @@ const ids = new Set([
   'userId',
   'jobId',
   'actorId',
+  'technicalPrincipalId',
   'exportId',
   'deliveryId',
 ]);

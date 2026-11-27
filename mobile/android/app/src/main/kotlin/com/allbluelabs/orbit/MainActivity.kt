@@ -10,12 +10,14 @@ import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
-// FlutterFragmentActivity: a biometria do sistema (local_auth) abre num fragmento.
+// O diálogo de biometria usa FragmentActivity.
 class MainActivity : FlutterFragmentActivity() {
     private var permissionResult: MethodChannel.Result? = null
+    private var deviceBiometrics: DeviceBiometricBridge? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        deviceBiometrics = DeviceBiometricBridge(this, flutterEngine.dartExecutor.binaryMessenger)
         OrbitPushBridge.register(flutterEngine.dartExecutor.binaryMessenger)
         OrbitPushBridge.createChannel(this)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "orbit/push").setMethodCallHandler { call, result ->
@@ -59,6 +61,8 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        deviceBiometrics?.detach()
+        deviceBiometrics = null
         OrbitPushBridge.detach()
         permissionResult?.success(false)
         permissionResult = null

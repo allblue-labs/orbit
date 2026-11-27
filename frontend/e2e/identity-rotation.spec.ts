@@ -21,10 +21,74 @@ function totp(secret: string) {
   ).padStart(6, "0");
 }
 
+test("administrador configura MFA e confirma os privilégios em um novo login", async ({
+  page,
+}) => {
+  const email = process.env.ORBIT_E2E_PLATFORM_EMAIL;
+  const password = process.env.ORBIT_E2E_PLATFORM_PASSWORD;
+  test.skip(
+    !email || !password,
+    "Requer a conta do banco descartável de integração",
+  );
+
+  const submit = async () => {
+    await page.getByLabel("E-mail corporativo").fill(email!);
+    await page.getByLabel("Senha", { exact: true }).fill(password!);
+    await page.getByRole("button", { name: "Entrar", exact: true }).click();
+  };
+  await page.goto("/login");
+  await submit();
+  await expect(page).toHaveURL(/\/plataforma$/);
+  await expect(
+    page.getByRole("heading", { name: "Proteja o acesso administrativo" }),
+  ).toBeVisible();
+  expect(
+    (await bff(page, "get", "/api/orbit/platform-admin/overview")).status(),
+  ).toBe(403);
+
+  await page.getByRole("button", { name: "Configurar" }).click();
+  await page.getByText("Não consigo usar a câmera", { exact: true }).click();
+  const secret = (await page.locator("details .font-mono").innerText()).trim();
+  await page.getByLabel("Código do aplicativo").fill(totp(secret));
+  await page.getByRole("button", { name: "Ativar", exact: true }).click();
+  const confirmation = page.getByRole("dialog");
+  await confirmation.getByLabel("Senha atual").fill(password!);
+  await confirmation
+    .getByRole("button", { name: "Confirmar", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Códigos de recuperação" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Guardei os códigos" }).click();
+  expect(
+    (await bff(page, "get", "/api/orbit/platform-admin/overview")).status(),
+  ).toBe(403);
+
+  await page
+    .getByRole("button", { name: "Sair para entrar com o código" })
+    .click();
+  await expect(page).toHaveURL(/\/login(?:\?|$)/);
+  await submit();
+  await page.getByLabel("Código de segurança").fill(totp(secret));
+  await page.getByRole("button", { name: "Entrar", exact: true }).click();
+  await expect(page).toHaveURL(/\/plataforma$/);
+  await expect(
+    page.getByRole("heading", { name: /Olá, Administração Teste/ }),
+  ).toBeVisible();
+  expect(
+    (await bff(page, "get", "/api/orbit/platform-admin/overview")).status(),
+  ).toBe(200);
+});
+
 test("refresh paralelo preserva cookies canônicos e logout invalida o token anterior", async ({
   page,
 }) => {
   await login(page);
+  await page.goto("/plataforma");
+  await expect(page).toHaveURL(/\/dashboard$/);
+  expect(
+    (await bff(page, "get", "/api/orbit/platform-admin/overview")).status(),
+  ).toBe(403);
   const old = (await page.context().cookies()).find(
     (cookie) => cookie.name === "orbit_refresh",
   )!;

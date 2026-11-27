@@ -8,7 +8,8 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 COPY package.json package-lock.json ./
-RUN npm ci
+# npm 10 ignores some version-scoped overrides when it validates the lockfile.
+RUN npm install --global npm@11.18.0 && npm ci
 
 FROM dependencies AS builder
 COPY prisma ./prisma

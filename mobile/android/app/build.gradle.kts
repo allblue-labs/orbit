@@ -108,6 +108,7 @@ if (file("google-services.json").exists()) {
 dependencies {
     implementation(platform("com.google.firebase:firebase-bom:35.1.0"))
     implementation("com.google.firebase:firebase-messaging")
-    // Tema AppCompat: o diálogo de digital do Android 8/9 (local_auth) exige.
+    implementation("androidx.biometric:biometric:1.1.0")
+    // Tema do diálogo de biometria nas versões antigas do Android.
     implementation("androidx.appcompat:appcompat:1.7.0")
 }

@@ -17,17 +17,21 @@ export function normalizeClientIp(value: string | undefined): string | null {
   return null;
 }
 
-/** Only the internal ingress/BFF credential can attest a forwarded address.
- * Published application ports must remain loopback/private. */
-export function requestClientIp(request: Request): string {
+/** Only the internal ingress/BFF credential can attest forwarded metadata. */
+export function isTrustedProxyRequest(request: Request): boolean {
   const secret = process.env.TRUSTED_PROXY_SECRET ?? '';
   const supplied = request.headers?.[PROXY_SECRET_HEADER];
-  if (
+  return (
     secret.length >= 32 &&
     typeof supplied === 'string' &&
     Buffer.byteLength(supplied) === Buffer.byteLength(secret) &&
     timingSafeEqual(Buffer.from(supplied), Buffer.from(secret))
-  ) {
+  );
+}
+
+/** Published application ports must remain loopback/private. */
+export function requestClientIp(request: Request): string {
+  if (isTrustedProxyRequest(request)) {
     const ip = request.headers?.[CLIENT_IP_HEADER];
     if (typeof ip === 'string') {
       const normalized = normalizeClientIp(ip);

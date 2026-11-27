@@ -30,6 +30,7 @@ import { AvatarService } from '../application/avatar.service';
 import { ProfileService } from '../application/profile.service';
 import type { IdentityRequest } from '../infrastructure/jwt-authentication.guard';
 import { IdentityReadModelMapper } from '../identity.mapper';
+import { PlatformMfaSetup } from '../platform-mfa-setup.decorator';
 import {
   ActivateAvatarDto,
   ChangePasswordDto,
@@ -53,18 +54,20 @@ export class ProfileController {
   ) {}
 
   @TenantRecovery('identity')
+  @PlatformMfaSetup()
   @Get()
   async get(@Req() request: IdentityRequest) {
     return this.readModels.profile(
       await this.profiles.get(
         request.identity!.id,
-        request.identity!.organizationId!,
+        request.identity!.organizationId,
       ),
     );
   }
 
   /** Current server-resolved access; no token or credential material. */
   @TenantRecovery('identity')
+  @PlatformMfaSetup()
   @Get('access')
   access(@Req() request: IdentityRequest) {
     const identity = request.identity!;
@@ -72,6 +75,7 @@ export class ProfileController {
       isOwner: identity.isOrganizationOwner,
       roles: identity.roles,
       permissions: identity.permissions,
+      ...(identity.platformMfaRequired ? { platformMfaRequired: true } : {}),
       surfaceAccess: identity.allowedSurfaces,
       unitIds: identity.businessUnitIds,
     };
@@ -149,6 +153,7 @@ export class ProfileController {
    * deve ser expulso da tela.
    */
   @TenantRecovery('identity')
+  @PlatformMfaSetup()
   @Post('password')
   @HttpCode(HttpStatus.NO_CONTENT)
   changePassword(
@@ -163,6 +168,7 @@ export class ProfileController {
   }
 
   @TenantRecovery('identity')
+  @PlatformMfaSetup()
   @Get('sessions')
   async sessions(@Req() request: IdentityRequest) {
     return (await this.authentication.listSessions(request.identity!.id)).map(
@@ -171,6 +177,7 @@ export class ProfileController {
   }
 
   @TenantRecovery('identity')
+  @PlatformMfaSetup()
   @Delete('sessions/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   revokeSession(
@@ -181,6 +188,7 @@ export class ProfileController {
   }
 
   @TenantRecovery('identity')
+  @PlatformMfaSetup()
   @Post('security-confirmation')
   @HttpCode(HttpStatus.OK)
   @Header('Cache-Control', 'no-store')
@@ -207,6 +215,7 @@ export class ProfileController {
   }
 
   @TenantRecovery('identity')
+  @PlatformMfaSetup()
   @Post('mfa/enrollment')
   @Header('Cache-Control', 'no-store')
   beginMfa(@Req() request: IdentityRequest) {
@@ -216,6 +225,7 @@ export class ProfileController {
   }
 
   @TenantRecovery('identity')
+  @PlatformMfaSetup()
   @Post('mfa/enable')
   @Header('Cache-Control', 'no-store')
   async enableMfa(

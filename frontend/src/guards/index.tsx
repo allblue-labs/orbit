@@ -62,14 +62,18 @@ export function RequireAuth({
   children,
   fallback,
   requireOrganization = true,
-}: GuardProps & { requireOrganization?: boolean }) {
+  anonymousRedirectTo = loginUrl(LoginReason.expired),
+}: GuardProps & {
+  requireOrganization?: boolean;
+  anonymousRedirectTo?: string;
+}) {
   const pathname = usePathname();
   return (
     <SessionGate
       fallback={fallback ?? <OrganizationRequired />}
       decide={(session) => {
         if (!session.isAuthenticated) {
-          return { kind: "redirect", to: loginUrl(LoginReason.expired) };
+          return { kind: "redirect", to: anonymousRedirectTo };
         }
         if (session.requiresPasswordChange) {
           return {
@@ -79,7 +83,9 @@ export function RequireAuth({
         }
         if (
           requireOrganization &&
-          session.isPlatformAdmin &&
+          (session.isPlatformAdmin ||
+            (session.session.authenticated &&
+              session.session.platformMfaRequired)) &&
           !session.organization
         ) {
           return { kind: "redirect", to: ROUTES.platform };
@@ -88,6 +94,7 @@ export function RequireAuth({
           return { kind: "block" };
         }
         if (
+          requireOrganization &&
           requiresInitialPayment(session.session) &&
           pathname !== ROUTES.settings &&
           pathname !== ROUTES.profile
@@ -110,7 +117,12 @@ export function RequireGuest({ children }: { children: ReactNode }) {
         session.isAuthenticated
           ? {
               kind: "redirect",
-              to: homeRouteFor({ isPlatformAdmin: session.isPlatformAdmin }),
+              to: homeRouteFor({
+                isPlatformAdmin: session.isPlatformAdmin,
+                platformMfaRequired:
+                  session.session.authenticated &&
+                  session.session.platformMfaRequired,
+              }),
             }
           : ALLOW
       }

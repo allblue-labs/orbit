@@ -73,13 +73,14 @@ const TOKEN_ROUTES: readonly string[] = [
   "/identity/register",
   "/identity/refresh",
   "/identity/logout",
-  /* Biometria: a entrada emite tokens (rota dedicada em /api/auth/biometric),
-     e a credencial de aparelho é um segredo de longa duração que só o app
-     guarda — na web, nem a página nem o proxy o tocam. */
+  /* A entrada WebAuthn usa a rota de cookies. O fluxo de aparelho é nativo. */
   "/identity/biometrics/webauthn/authentication",
   "/identity/biometrics/webauthn/authentication/options",
   "/identity/biometrics/devices/login",
+  "/identity/biometrics/devices/authentication",
+  "/identity/biometrics/devices/authentication/options",
   "/identity/me/biometrics/devices",
+  "/identity/me/biometrics/devices/options",
 ];
 
 /**

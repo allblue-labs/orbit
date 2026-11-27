@@ -11,12 +11,15 @@ import {
   AuthChallengeStore,
   WebAuthnCeremony,
   deviceLabelFrom,
-  deviceSecretMatches,
-  newDeviceSecret,
+  deviceBiometricRefused,
+  issueDeviceChallenge,
   relyingPartyFrom,
   type AuthenticationResponseJSON,
   type RegistrationResponseJSON,
   type StoredPasskey,
+  type DeviceProof,
+  verifyDeviceRegistration,
+  verifyDeviceLogin,
 } from '../../../common/biometrics';
 import type { SessionMetadata, TokenPair } from '../domain/identity.types';
 import {
@@ -37,8 +40,8 @@ export interface BiometricCredentialView {
 /**
  * Entrar com a biometria — equipe e owners.
  *
- * Duas formas, uma regra: a biometria só **libera** uma credencial que o
- * aparelho guarda; quem confere é o servidor, e a sessão que sai é a mesma do
+ * As duas formas provam a posse de uma chave assinando um desafio. O
+ * servidor confere a assinatura e abre uma sessão com as mesmas regras do
  * login com senha (`openVerifiedSession`), com as mesmas recusas.
  */
 @Injectable()
@@ -171,51 +174,78 @@ export class BiometricLoginService {
 
   /* ------------------------------ App (aparelho) --------------------------- */
 
+  deviceEnrollmentOptions(sessionId: string) {
+    return issueDeviceChallenge(
+      this.challenges,
+      'USER_DEVICE_REGISTER',
+      sessionId,
+    );
+  }
+
+  deviceLoginOptions(credentialId: string) {
+    return issueDeviceChallenge(
+      this.challenges,
+      'USER_DEVICE_LOGIN',
+      credentialId,
+    );
+  }
+
   async enrollDevice(
     userId: string,
-    input: { deviceId: string; label?: string },
+    sessionId: string,
+    input: DeviceProof & {
+      deviceId: string;
+      label?: string;
+      publicKey: string;
+    },
     userAgent: string | undefined,
-  ): Promise<{ credentialId: string; secret: string }> {
-    const { secret, hash } = newDeviceSecret();
+  ): Promise<{ credentialId: string }> {
+    const publicKey = await verifyDeviceRegistration(
+      this.challenges,
+      'USER_DEVICE_REGISTER',
+      sessionId,
+      input,
+    );
     const id = this.uuids.generate();
     await this.credentials.replaceDevice({
       id,
       userId,
       deviceId: input.deviceId,
       label: deviceLabelFrom(input.label, userAgent),
-      secretHash: hash,
+      publicKey,
     });
-    return { credentialId: id, secret };
+    return { credentialId: id };
   }
 
-  /** Entra e devolve o segredo trocado — o anterior deixa de valer. */
   async deviceLogin(
-    input: { credentialId: string; secret: string },
-    metadata: SessionMetadata,
-  ): Promise<TokenPair & { deviceSecret: string }> {
+    input: DeviceProof & { credentialId: string },
+    metadata: Omit<SessionMetadata, 'client' | 'deviceId'>,
+  ): Promise<TokenPair> {
     const credential = await this.credentials.findActive({
       id: input.credentialId,
     });
     if (
       !credential ||
       credential.kind !== 'DEVICE' ||
-      !credential.secretHash ||
-      !deviceSecretMatches(input.secret, credential.secretHash)
+      !credential.publicKey ||
+      !credential.deviceId
     )
-      throw refused();
-    const next = newDeviceSecret();
-    if (
-      !(await this.credentials.markUsed(credential.id, credential.userId, {
-        expectedSecretHash: credential.secretHash,
-        newSecretHash: next.hash,
-      }))
-    )
-      throw refused();
-    const pair = await this.authentication.openVerifiedSession(
-      credential.userId,
-      metadata,
+      throw deviceBiometricRefused();
+    await verifyDeviceLogin(
+      this.challenges,
+      'USER_DEVICE_LOGIN',
+      input,
+      credential.publicKey,
     );
-    return { ...pair, deviceSecret: next.secret };
+    if (
+      !(await this.credentials.markUsed(credential.id, credential.userId, {}))
+    )
+      throw deviceBiometricRefused();
+    return this.authentication.openVerifiedSession(credential.userId, {
+      ...metadata,
+      client: 'MOBILE',
+      deviceId: credential.deviceId,
+    });
   }
 
   private ceremony(): WebAuthnCeremony {

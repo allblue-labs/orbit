@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { randomBytes } from "node:crypto";
 import {
   root,
   backend,
@@ -28,6 +29,26 @@ await withIntegrationEnvironment(async ({ env, compiled }) => {
       { cwd: backend, env },
     );
     return;
+  }
+  if (target === "browser") {
+    const email = "platform-mfa@example.test";
+    const password = `Orbit#${randomBytes(24).toString("hex")}A1`;
+    await run(
+      process.execPath,
+      [resolve(compiled, "src/scripts/seed-platform-admin.js")],
+      {
+        cwd: backend,
+        env: {
+          ...env,
+          PLATFORM_ADMIN_EMAIL: email,
+          PLATFORM_ADMIN_PASSWORD: password,
+          PLATFORM_ADMIN_FIRST_NAME: "Administração",
+          PLATFORM_ADMIN_LAST_NAME: "Teste",
+        },
+      },
+    );
+    env.ORBIT_E2E_PLATFORM_EMAIL = email;
+    env.ORBIT_E2E_PLATFORM_PASSWORD = password;
   }
   await withHttpTestStack(
     env,

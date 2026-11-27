@@ -37,16 +37,28 @@ import {
   isReservedRoleKey,
 } from '../../../common/role-namespace';
 
+export function platformAssignment(user: IdentityUser) {
+  const authority = VerifiedPlatformAuthority.forUser(
+    user.platformAuthority,
+    user.id,
+  );
+  return authority?.assignmentIds.length ? authority : undefined;
+}
+
 /** Pure, shared resolution used at issuance and at every authenticated call. */
 export function toAuthenticatedIdentity(
   user: IdentityUser,
   sessionId: UUID,
+  platformMfaFactorId?: string | null,
 ): AuthenticatedIdentity {
   const organization = user.organizationMemberships[0] ?? null;
-  const platformAuthority = VerifiedPlatformAuthority.forUser(
-    user.platformAuthority,
-    user.id,
-  );
+  const assignment = platformAssignment(user);
+  const platformAuthority =
+    user.credential &&
+    !user.credential.mustChangePassword &&
+    user.mfaFactors.some((factor) => factor.id === platformMfaFactorId)
+      ? assignment
+      : undefined;
   const roles = new Set<string>(platformAuthority?.roles ?? []);
   const permissions = new Set<string>(platformAuthority?.permissions ?? []);
   const allowedSurfaces = new Set<string>(
@@ -78,6 +90,7 @@ export function toAuthenticatedIdentity(
   const unitIds = user.effectiveBusinessUnitIds;
   return {
     platformAuthority,
+    ...(assignment && !platformAuthority ? { platformMfaRequired: true } : {}),
     organizationRoles,
     id: user.id as UUID,
     sessionId,
@@ -197,7 +210,15 @@ export class AuthenticationService {
       );
 
     const sessionId = this.uuids.generate();
-    const identity = toAuthenticatedIdentity(user, sessionId);
+    const platformMfaFactorId =
+      !user.credential.mustChangePassword && platformAssignment(user)
+        ? (factor?.id ?? null)
+        : null;
+    const identity = toAuthenticatedIdentity(
+      user,
+      sessionId,
+      platformMfaFactorId,
+    );
     const pair = await this.tokens.issue(identity);
     await this.repository.completeLogin(
       {
@@ -208,6 +229,7 @@ export class AuthenticationService {
         refreshTokenHash: pair.refreshTokenHash,
         expiresAt: pair.expiresAt,
         ...metadata,
+        platformMfaFactorId,
       },
       user.credential.id,
       user.credential.passwordHash,
@@ -267,6 +289,7 @@ export class AuthenticationService {
       refreshTokenHash: pair.refreshTokenHash,
       expiresAt: pair.expiresAt,
       ...metadata,
+      platformMfaFactorId: null,
     });
     return { ...this.publicPair(pair), mustChangePassword: false };
   }
@@ -320,8 +343,15 @@ export class AuthenticationService {
         await this.repository.revokeSession(session.id, session.userId);
         throw new UnauthorizedException('Invalid refresh token');
       }
+      const verifiedSession = platformAssignment(user)
+        ? await this.repository.findSessionById(session.id, session.userId)
+        : null;
       const pair = await this.tokens.issue(
-        toAuthenticatedIdentity(user, session.id as UUID),
+        toAuthenticatedIdentity(
+          user,
+          session.id as UUID,
+          verifiedSession?.platformMfaFactorId,
+        ),
       );
       const publicPair = this.publicPair(pair);
       if (

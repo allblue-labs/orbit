@@ -44,6 +44,9 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "OrbitDeviceBiometrics") {
+      DeviceBiometricBridge.register(with: registrar)
+    }
 
     /// A ponte do push sobe junto com os plugins, e não no
     /// `didFinishLaunching`: ela precisa do `binaryMessenger`, que só existe

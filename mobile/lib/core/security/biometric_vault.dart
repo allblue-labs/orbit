@@ -1,24 +1,14 @@
-/// O cofre da biometria: a credencial deste aparelho para entrar sem senha.
-///
-/// Guarda o id da credencial e o segredo que o servidor emitiu, no mesmo
-/// armazenamento seguro dos tokens (Keychain / EncryptedSharedPreferences),
-/// num lugar próprio por público — equipe e cliente nunca se misturam. O
-/// segredo muda a cada entrada: o servidor devolve o próximo, e o cofre troca.
-library;
+import 'dart:convert';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 enum BiometricAudience { team, customer }
 
 class BiometricCredential {
-  const BiometricCredential({required this.credentialId, required this.secret});
+  const BiometricCredential({required this.credentialId, required this.keyId});
 
   final String credentialId;
-  final String secret;
-
-  /// Nunca imprime o segredo.
-  @override
-  String toString() => 'BiometricCredential($credentialId)';
+  final String keyId;
 }
 
 abstract interface class BiometricVault {
@@ -40,20 +30,33 @@ class SecureBiometricVault implements BiometricVault {
 
   final FlutterSecureStorage _storage;
 
-  String _id(BiometricAudience audience) =>
-      'orbit.biometric.${audience.name}.credential';
-  String _secret(BiometricAudience audience) =>
-      'orbit.biometric.${audience.name}.secret';
+  String _prefix(BiometricAudience audience) =>
+      'orbit.biometric.${audience.name}';
+  String _id(BiometricAudience audience) => '${_prefix(audience)}.deviceKey.v1';
+  final Set<BiometricAudience> _cleaned = {};
+
+  Future<void> _removeLegacy(BiometricAudience audience) async {
+    if (_cleaned.contains(audience)) return;
+    final prefix = _prefix(audience);
+    await _storage.delete(key: '$prefix.secret');
+    await _storage.delete(key: '$prefix.credential');
+    _cleaned.add(audience);
+  }
 
   @override
   Future<BiometricCredential?> read(BiometricAudience audience) async {
     try {
-      final id = await _storage.read(key: _id(audience));
-      final secret = await _storage.read(key: _secret(audience));
-      if (id == null || secret == null || id.isEmpty || secret.isEmpty) {
+      await _removeLegacy(audience);
+      final encoded = await _storage.read(key: _id(audience));
+      if (encoded == null) return null;
+      final result = jsonDecode(encoded);
+      if (result is! Map<String, dynamic>) return null;
+      final id = result['credentialId'];
+      final keyId = result['keyId'];
+      if (id is! String || id.isEmpty || keyId is! String || keyId.isEmpty) {
         return null;
       }
-      return BiometricCredential(credentialId: id, secret: secret);
+      return BiometricCredential(credentialId: id, keyId: keyId);
     } on Object {
       return null;
     }
@@ -64,14 +67,19 @@ class SecureBiometricVault implements BiometricVault {
     BiometricAudience audience,
     BiometricCredential value,
   ) async {
-    await _storage.write(key: _id(audience), value: value.credentialId);
-    await _storage.write(key: _secret(audience), value: value.secret);
+    await _storage.write(
+      key: _id(audience),
+      value: jsonEncode({
+        'credentialId': value.credentialId,
+        'keyId': value.keyId,
+      }),
+    );
   }
 
   @override
   Future<void> clear(BiometricAudience audience) async {
     await _storage.delete(key: _id(audience));
-    await _storage.delete(key: _secret(audience));
+    await _removeLegacy(audience);
   }
 }
 

@@ -202,6 +202,9 @@ export async function buildSessionState(
           ]
         : [],
       isPlatformAdmin,
+      ...(access.platformMfaRequired === true
+        ? { platformMfaRequired: true }
+        : {}),
       /**
        * A mesma conta que o backend faz, e não uma aproximação — ver
        * `assinaturaVigente`. Sem sessão de organização, quem responde é o
