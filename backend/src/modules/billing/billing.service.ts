@@ -1,6 +1,7 @@
 import { CommercialPlanService } from '../subscription-plans/catalog/commercial-plan.service';
 import { snapshotOf } from '../subscription-plans/subscriptions/subscription.snapshot';
 import type { Prisma } from '@prisma/client';
+import type { PrismaTransactionClient } from '../../database/prisma.types';
 /**
  * Os comandos de cobrança, do lado do Orbit.
  *
@@ -52,6 +53,17 @@ import {
   canRefundPurchase,
 } from './billing-policy.service';
 import { BillingInterval } from '../subscription-plans/catalog/plan-catalog.types';
+
+type PlanChangeRequest = {
+  organizationId: string;
+  expectedVersion: number;
+  planCode: PlanCodeType;
+  expectedCatalogVersion?: number;
+  billingInterval?: BillingIntervalType;
+  acknowledgeTrialEnd?: boolean;
+  acknowledgeImmediateCharge?: boolean;
+  requestedBy?: string;
+};
 
 @Injectable()
 export class BillingService {
@@ -439,18 +451,27 @@ export class BillingService {
   async keepSubscription(
     organizationId: string,
     expectedVersion: number,
+    localSubscriptionId?: string,
   ): Promise<void> {
     const assinatura = await this.requireExpected(
       organizationId,
       expectedVersion,
+      localSubscriptionId,
     );
+    if (localSubscriptionId && assinatura.providerSubscriptionId)
+      throw new BillingCommandNotAllowedException(
+        'Provider-linked agreement requires the customer billing flow',
+      );
     if (!assinatura.cancelAtPeriodEnd) {
       throw new BillingCommandNotAllowedException('no scheduled cancellation');
     }
     if (!assinatura.providerSubscriptionId) {
+      if (localSubscriptionId)
+        await this.policies.assertNoPendingPayment(assinatura.id);
       await this.subscriptions.keepSubscription(
         organizationId,
         expectedVersion,
+        ...(localSubscriptionId ? ([localSubscriptionId] as const) : []),
       );
       return;
     }
@@ -486,44 +507,17 @@ export class BillingService {
    * A confirmação hospedada é usada para contratar ou encerrar uma avaliação.
    * Contratos pagos aplicam a política de upgrade, renovação ou análise.
    */
-  async changeSubscriptionPlan(input: {
-    organizationId: string;
-    expectedVersion: number;
-    planCode: PlanCodeType;
-    expectedCatalogVersion?: number;
-    billingInterval?: BillingIntervalType;
-    acknowledgeTrialEnd?: boolean;
-    acknowledgeImmediateCharge?: boolean;
-    requestedBy?: string;
-  }): Promise<
+  async changeSubscriptionPlan(
+    input: PlanChangeRequest,
+  ): Promise<
     | { url: string }
     | { kind: 'TRIAL_STARTED'; endsAt: string }
     | { kind: 'SCHEDULED'; effectiveAt: string }
     | { kind: 'SUPPORT_TICKET'; ticketId: string }
     | { kind: 'UPGRADE_PROCESSING' }
   > {
-    this.assertEnabled();
-    const assinatura = await this.requireExpected(
-      input.organizationId,
-      input.expectedVersion,
-    );
-    const offer = await this.plans.selectable(
-      input.planCode,
-      input.organizationId,
-    );
-    this.assertCatalogVersion(offer.version, input.expectedCatalogVersion);
-    const targetInterval = input.billingInterval ?? assinatura.billingInterval;
-    if (!allowsPlanChange(assinatura.effectiveStatus)) {
-      throw new BillingCommandNotAllowedException(
-        'subscription status does not allow a plan change',
-      );
-    }
-    if (
-      assinatura.planCode === input.planCode &&
-      assinatura.billingInterval === targetInterval
-    ) {
-      throw new BillingCommandNotAllowedException('no change requested');
-    }
+    const { assinatura, offer, targetInterval } =
+      await this.preparePlanChange(input);
     if (
       assinatura.effectiveStatus === SubscriptionStatus.PENDING_PAYMENT &&
       !assinatura.providerSubscriptionId &&
@@ -572,25 +566,11 @@ export class BillingService {
       );
     }
     const sendToSupport = () =>
-      this.policies.ticket({
-        organizationId: input.organizationId,
-        subscriptionId: assinatura.id,
-        requestedBy: input.requestedBy,
-        kind: 'PLAN_CHANGE',
-        targetPlanCode: input.planCode,
-        targetInterval,
-        reference: `${input.planCode}:${targetInterval}`,
-      });
-    if (
-      assinatura.effectiveStatus === SubscriptionStatus.ACTIVE &&
-      (assinatura.billingInterval !== BillingInterval.MONTHLY ||
-        targetInterval !== BillingInterval.MONTHLY)
-    )
+      this.planChangeTicket(input, assinatura.id, targetInterval);
+    if (this.requiresPlanChangeReview(assinatura, targetInterval))
       return sendToSupport();
 
     if (!assinatura.providerSubscriptionId) {
-      if (assinatura.effectiveStatus === SubscriptionStatus.ACTIVE)
-        return sendToSupport();
       return this.createCheckoutSession({
         ...input,
         billingInterval: targetInterval,
@@ -749,18 +729,27 @@ export class BillingService {
   async cancelScheduledPlanChange(
     organizationId: string,
     expectedVersion: number,
+    localSubscriptionId?: string,
   ): Promise<void> {
     const assinatura = await this.requireExpected(
       organizationId,
       expectedVersion,
+      localSubscriptionId,
     );
+    if (localSubscriptionId && assinatura.providerSubscriptionId)
+      throw new BillingCommandNotAllowedException(
+        'Provider-linked agreement requires the customer billing flow',
+      );
     if (!assinatura.pendingPlanCode) {
       throw new BillingCommandNotAllowedException('no scheduled plan change');
     }
     if (!assinatura.providerSubscriptionId) {
+      if (localSubscriptionId)
+        await this.policies.assertNoPendingPayment(assinatura.id);
       await this.subscriptions.cancelScheduledChange(
         organizationId,
         expectedVersion,
+        ...(localSubscriptionId ? ([localSubscriptionId] as const) : []),
       );
       return;
     }
@@ -783,6 +772,118 @@ export class BillingService {
         expectedVersion,
       );
     });
+  }
+
+  /** Corporate review runs only the pre-existing support branch that needs no provider call. */
+  async requestPlanChangeReview(
+    input: PlanChangeRequest,
+    expectedSubscriptionId: string,
+  ) {
+    const { assinatura, targetInterval } = await this.preparePlanChange(
+      input,
+      expectedSubscriptionId,
+    );
+    if (!this.requiresPlanChangeReview(assinatura, targetInterval))
+      throw new BillingCommandNotAllowedException(
+        'Use the customer or provider-authorized plan change flow',
+      );
+    return this.policies.locked(assinatura.id, input.expectedVersion, () =>
+      this.planChangeTicket(input, assinatura.id, targetInterval),
+    );
+  }
+
+  /** Starts only the catalog trial; an existing checkout must be handled by the customer flow. */
+  async startLocalTrial(
+    input: PlanChangeRequest,
+    expectedSubscriptionId: string,
+    tx: PrismaTransactionClient,
+  ) {
+    this.assertEnabled();
+    const current = await this.requireExpected(
+      input.organizationId,
+      input.expectedVersion,
+      expectedSubscriptionId,
+    );
+    if (
+      current.effectiveStatus !== SubscriptionStatus.PENDING_PAYMENT ||
+      current.providerSubscriptionId ||
+      current.cancelAtPeriodEnd
+    ) {
+      throw new BillingCommandNotAllowedException(
+        'No pending local subscription eligible for trial',
+      );
+    }
+    const offer = await this.plans.selectable(
+      input.planCode,
+      input.organizationId,
+      tx,
+    );
+    this.assertCatalogVersion(offer.version, input.expectedCatalogVersion);
+    return this.trials.startPendingTrial(
+      input.organizationId,
+      input.expectedVersion,
+      input.billingInterval ?? current.billingInterval,
+      input.planCode,
+      { tx, subscriptionId: expectedSubscriptionId },
+    );
+  }
+
+  private requiresPlanChangeReview(
+    current: Awaited<ReturnType<SubscriptionService['requireCurrent']>>,
+    target: BillingIntervalType,
+  ) {
+    return (
+      current.effectiveStatus === SubscriptionStatus.ACTIVE &&
+      (!current.providerSubscriptionId ||
+        current.billingInterval !== BillingInterval.MONTHLY ||
+        target !== BillingInterval.MONTHLY)
+    );
+  }
+
+  private planChangeTicket(
+    input: PlanChangeRequest,
+    subscriptionId: string,
+    interval: BillingIntervalType,
+  ) {
+    return this.policies.ticket({
+      organizationId: input.organizationId,
+      subscriptionId,
+      requestedBy: input.requestedBy,
+      kind: 'PLAN_CHANGE',
+      targetPlanCode: input.planCode,
+      targetInterval: interval,
+      reference: `${input.planCode}:${interval}`,
+    });
+  }
+
+  private async preparePlanChange(
+    input: PlanChangeRequest,
+    expectedSubscriptionId?: string,
+  ) {
+    this.assertEnabled();
+    const assinatura = await this.requireExpected(
+      input.organizationId,
+      input.expectedVersion,
+      expectedSubscriptionId,
+    );
+    const offer = await this.plans.selectable(
+      input.planCode,
+      input.organizationId,
+    );
+    this.assertCatalogVersion(offer.version, input.expectedCatalogVersion);
+    const targetInterval = input.billingInterval ?? assinatura.billingInterval;
+    if (!allowsPlanChange(assinatura.effectiveStatus)) {
+      throw new BillingCommandNotAllowedException(
+        'subscription status does not allow a plan change',
+      );
+    }
+    if (
+      assinatura.planCode === input.planCode &&
+      assinatura.billingInterval === targetInterval
+    ) {
+      throw new BillingCommandNotAllowedException('no change requested');
+    }
+    return { assinatura, offer, targetInterval };
   }
 
   /* ---------------------------------------------------------------- */
@@ -829,9 +930,13 @@ export class BillingService {
   private async requireExpected(
     organizationId: string,
     expectedVersion: number,
+    subscriptionId?: string,
   ) {
     const assinatura = await this.subscriptions.requireCurrent(organizationId);
-    if (assinatura.version !== expectedVersion) {
+    if (
+      assinatura.version !== expectedVersion ||
+      (subscriptionId && assinatura.id !== subscriptionId)
+    ) {
       throw new ConflictException(
         'Subscription version is stale',
         'STALE_VERSION',

@@ -9,7 +9,22 @@ export const ORGANIZATIONS_PROVISIONING_READ =
   'organizations:provisioning:read';
 export const ORGANIZATIONS_SUSPEND = 'organizations:suspend';
 export const ORGANIZATIONS_REACTIVATE = 'organizations:reactivate';
+export const PLANS_READ = 'plans:read';
+export const SUBSCRIPTIONS_READ = 'subscriptions:read';
+export const SUBSCRIPTIONS_CHANGE_PLAN = 'subscriptions:change-plan';
+export const SUBSCRIPTIONS_KEEP = 'subscriptions:keep';
+export const SUBSCRIPTIONS_CANCEL_SCHEDULED_CHANGE =
+  'subscriptions:cancel-scheduled-change';
+export const TRIALS_READ = 'trials:read';
+export const TRIALS_MANAGE = 'trials:manage';
 const CAPABILITIES = [
+  PLANS_READ,
+  SUBSCRIPTIONS_READ,
+  SUBSCRIPTIONS_CHANGE_PLAN,
+  SUBSCRIPTIONS_KEEP,
+  SUBSCRIPTIONS_CANCEL_SCHEDULED_CHANGE,
+  TRIALS_READ,
+  TRIALS_MANAGE,
   ORGANIZATIONS_PROVISION,
   ORGANIZATIONS_PROVISIONING_READ,
   ORGANIZATIONS_SUSPEND,

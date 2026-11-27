@@ -1,4 +1,7 @@
 import { Module } from '@nestjs/common';
+import { BillingModule } from '../billing/billing.module';
+import { CorporateCommercialController } from './corporate-commercial.controller';
+import { CorporateCommercialService } from './corporate-commercial.service';
 import { CorporateAdministrationController } from './corporate-administration.controller';
 import { CorporateTenantLifecycleController } from './corporate-tenant-lifecycle.controller';
 import { CorporateOrganizationsController } from './corporate-organizations.controller';
@@ -10,14 +13,16 @@ import {
 import { TechnicalCredentialService } from './technical-credential.service';
 
 @Module({
-  imports: [PlatformAdministrationModule],
+  imports: [PlatformAdministrationModule, BillingModule],
   controllers: [
     CorporateAdministrationController,
     CorporateOrganizationsController,
     CorporateTenantLifecycleController,
+    CorporateCommercialController,
   ],
   providers: [
     TechnicalCredentialService,
+    CorporateCommercialService,
     TechnicalAuthenticationGuard,
     CorporateCapabilityGuard,
   ],

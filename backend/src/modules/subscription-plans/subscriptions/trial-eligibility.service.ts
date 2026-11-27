@@ -120,8 +120,13 @@ export class TrialEligibilityService {
     expectedVersion: number,
     billingInterval: string,
     planCode: string,
+    local?: { tx: PrismaTransactionClient; subscriptionId: string },
   ) {
-    const plan = await this.plans.selectable(planCode, organizationId);
+    const plan = await this.plans.selectable(
+      planCode,
+      organizationId,
+      ...(local ? ([local.tx] as const) : []),
+    );
     if (!plan.trialDays)
       throw new TrialNotEligibleException('plan does not offer trial');
     const candidate = await this.repository.trialCandidate(organizationId);
@@ -129,17 +134,20 @@ export class TrialEligibilityService {
       throw new TrialNotEligibleException('trial unavailable');
     const startsAt = new Date();
     try {
-      return await this.repository.startPendingTrial({
-        organizationId,
-        expectedVersion,
-        billingInterval,
-        planCode,
-        startsAt,
-        endsAt: new Date(startsAt.getTime() + plan.trialDays * DIA_MS),
-        fingerprint: this.fingerprints.fingerprint(candidate.document),
-        snapshot: snapshotOf(plan) as unknown as Prisma.InputJsonValue,
-        catalogVersion: plan.version,
-      });
+      return await this.repository.startPendingTrial(
+        {
+          organizationId,
+          expectedVersion,
+          billingInterval,
+          planCode,
+          startsAt,
+          endsAt: new Date(startsAt.getTime() + plan.trialDays * DIA_MS),
+          fingerprint: this.fingerprints.fingerprint(candidate.document),
+          snapshot: snapshotOf(plan) as unknown as Prisma.InputJsonValue,
+          catalogVersion: plan.version,
+        },
+        ...(local ? ([local] as const) : []),
+      );
     } catch (error) {
       if (error instanceof Error && error.message === 'TRIAL_NOT_AVAILABLE')
         throw new TrialNotEligibleException('trial unavailable');

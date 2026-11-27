@@ -336,23 +336,32 @@ export class SubscriptionService {
   }
 
   /** Desfaz o encerramento agendado, enquanto o período ainda corre. */
-  async keepSubscription(organizationId: string, expectedVersion: number) {
-    return this.comando(organizationId, expectedVersion, (atual) => {
-      if (!atual.cancelAtPeriodEnd) {
-        throw new PlanChangeNotAllowedException('no scheduled cancellation');
-      }
-      if (isTerminal(atual.effectiveStatus)) {
-        throw new SubscriptionInvalidTransitionException(
-          atual.effectiveStatus,
-          SubscriptionStatus.ACTIVE,
-        );
-      }
-      return {
-        cancelAtPeriodEnd: false,
-        canceledAt: null,
-        dataRetentionEndsAt: null,
-      };
-    });
+  async keepSubscription(
+    organizationId: string,
+    expectedVersion: number,
+    localSubscriptionId?: string,
+  ) {
+    return this.comando(
+      organizationId,
+      expectedVersion,
+      (atual) => {
+        if (!atual.cancelAtPeriodEnd) {
+          throw new PlanChangeNotAllowedException('no scheduled cancellation');
+        }
+        if (isTerminal(atual.effectiveStatus)) {
+          throw new SubscriptionInvalidTransitionException(
+            atual.effectiveStatus,
+            SubscriptionStatus.ACTIVE,
+          );
+        }
+        return {
+          cancelAtPeriodEnd: false,
+          canceledAt: null,
+          dataRetentionEndsAt: null,
+        };
+      },
+      localSubscriptionId,
+    );
   }
 
   /**
@@ -430,19 +439,28 @@ export class SubscriptionService {
   }
 
   /** Cancela uma troca ainda não efetivada. */
-  async cancelScheduledChange(organizationId: string, expectedVersion: number) {
-    return this.comando(organizationId, expectedVersion, (atual) => {
-      if (!atual.pendingPlanCode) {
-        throw new PlanChangeNotAllowedException('no scheduled change');
-      }
-      return {
-        pendingPlanCode: null,
-        pendingBillingInterval: null,
-        pendingCatalogVersion: null,
-        pendingEntitlementsSnapshot: Prisma.DbNull,
-        pendingEffectiveAt: null,
-      };
-    });
+  async cancelScheduledChange(
+    organizationId: string,
+    expectedVersion: number,
+    localSubscriptionId?: string,
+  ) {
+    return this.comando(
+      organizationId,
+      expectedVersion,
+      (atual) => {
+        if (!atual.pendingPlanCode) {
+          throw new PlanChangeNotAllowedException('no scheduled change');
+        }
+        return {
+          pendingPlanCode: null,
+          pendingBillingInterval: null,
+          pendingCatalogVersion: null,
+          pendingEntitlementsSnapshot: Prisma.DbNull,
+          pendingEffectiveAt: null,
+        };
+      },
+      localSubscriptionId,
+    );
   }
 
   /**
@@ -838,8 +856,20 @@ export class SubscriptionService {
     ) =>
       | Prisma.OrganizationSubscriptionUpdateInput
       | Promise<Prisma.OrganizationSubscriptionUpdateInput>,
+    localSubscriptionId?: string,
   ): Promise<SubscriptionRow> {
     const atual = await this.requireCurrent(organizationId);
+    if (
+      localSubscriptionId &&
+      (atual.id !== localSubscriptionId ||
+        atual.version !== expectedVersion ||
+        atual.providerSubscriptionId)
+    ) {
+      throw new ConflictException(
+        'Subscription version is stale',
+        'STALE_VERSION',
+      );
+    }
     const atualizada = await this.repository.updateIfVersion(
       atual.id,
       expectedVersion,

@@ -1196,6 +1196,703 @@
           }
         }
       }
+    },
+    "/api/v1/corporate-admin/plans": {
+      "get": {
+        "operationId": "corporateAdminListPlans",
+        "summary": "Lista ofertas do catálogo canônico",
+        "tags": ["Administração corporativa"],
+        "x-required-capability": "plans:read",
+        "parameters": [
+          { "$ref": "#/components/parameters/CorrelationId" },
+          {
+            "$ref": "#/components/parameters/CorporateCommercialOrganizationQuery"
+          },
+          { "$ref": "#/components/parameters/NexusAdministratorId" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operação corporativa concluída.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": { "type": "string" }
+              },
+              "Cache-Control": {
+                "schema": { "type": "string", "const": "private, no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ListPlansResponse" },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "plans": [
+                      {
+                        "id": "e2b06693-0788-43a9-bf10-38af5b94e660",
+                        "organizationId": null,
+                        "code": "ESSENTIAL",
+                        "label": "Essencial",
+                        "description": "Plano de exemplo",
+                        "isActive": true,
+                        "version": 1,
+                        "trialDays": 30,
+                        "promotion": null,
+                        "monthlyPrice": "79.00",
+                        "currency": "BRL",
+                        "prices": {
+                          "MONTHLY": {
+                            "amountMinor": 7900,
+                            "currency": "BRL",
+                            "formatted": "79.00"
+                          }
+                        },
+                        "checkoutIntervals": ["MONTHLY"],
+                        "capabilities": [],
+                        "allocation": {},
+                        "usage": {}
+                      }
+                    ]
+                  },
+                  "requestId": "c935d32a-9ad2-409c-a28c-c922dcc16f2c",
+                  "timestamp": "2026-11-26T16:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/CorporateValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": {
+            "$ref": "#/components/responses/CorporateCommercialNotFound"
+          },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
+      }
+    },
+    "/api/v1/corporate-admin/plans/{id}": {
+      "get": {
+        "operationId": "corporateAdminGetPlan",
+        "summary": "Consulta uma oferta do catálogo",
+        "tags": ["Administração corporativa"],
+        "x-required-capability": "plans:read",
+        "parameters": [
+          { "$ref": "#/components/parameters/CorrelationId" },
+          { "$ref": "#/components/parameters/CorporateCommercialPlanId" },
+          {
+            "$ref": "#/components/parameters/CorporateCommercialOrganizationQuery"
+          },
+          { "$ref": "#/components/parameters/NexusAdministratorId" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operação corporativa concluída.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": { "type": "string" }
+              },
+              "Cache-Control": {
+                "schema": { "type": "string", "const": "private, no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/GetPlanResponse" },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "id": "e2b06693-0788-43a9-bf10-38af5b94e660",
+                    "organizationId": null,
+                    "code": "ESSENTIAL",
+                    "label": "Essencial",
+                    "description": "Plano de exemplo",
+                    "isActive": true,
+                    "version": 1,
+                    "trialDays": 30,
+                    "promotion": null,
+                    "monthlyPrice": "79.00",
+                    "currency": "BRL",
+                    "prices": {
+                      "MONTHLY": {
+                        "amountMinor": 7900,
+                        "currency": "BRL",
+                        "formatted": "79.00"
+                      }
+                    },
+                    "checkoutIntervals": ["MONTHLY"],
+                    "capabilities": [],
+                    "allocation": {},
+                    "usage": {}
+                  },
+                  "requestId": "c935d32a-9ad2-409c-a28c-c922dcc16f2c",
+                  "timestamp": "2026-11-26T16:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/CorporateValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": {
+            "$ref": "#/components/responses/CorporateCommercialNotFound"
+          },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
+      }
+    },
+    "/api/v1/corporate-admin/organizations/{id}/subscription": {
+      "get": {
+        "operationId": "corporateAdminGetSubscription",
+        "summary": "Consulta assinatura, pagamento e entitlements",
+        "tags": ["Administração corporativa"],
+        "x-required-capability": "subscriptions:read",
+        "parameters": [
+          { "$ref": "#/components/parameters/CorrelationId" },
+          { "$ref": "#/components/parameters/OrganizationId" },
+          { "$ref": "#/components/parameters/NexusAdministratorId" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operação corporativa concluída.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": { "type": "string" }
+              },
+              "Cache-Control": {
+                "schema": { "type": "string", "const": "private, no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetSubscriptionResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "organizationId": "018fed15-f0ea-7d7f-aa28-846145f70764",
+                    "subscription": {
+                      "id": "742f7f26-b4eb-42f2-b97e-13350e061d50",
+                      "planCode": "PROFESSIONAL",
+                      "planLabel": "Profissional",
+                      "billingInterval": "MONTHLY",
+                      "status": "ACTIVE",
+                      "version": 7,
+                      "billingPeriod": {
+                        "start": "2026-11-26T16:00:00.000Z",
+                        "end": "2026-12-26T16:00:00.000Z"
+                      },
+                      "usagePeriod": {
+                        "start": "2026-11-26T16:00:00.000Z",
+                        "end": "2026-12-26T16:00:00.000Z"
+                      },
+                      "trial": null,
+                      "cancelAtPeriodEnd": false,
+                      "dataRetentionEndsAt": null,
+                      "dataPurgedAt": null,
+                      "pendingChange": null,
+                      "allowedActions": ["CANCEL_AT_PERIOD_END", "CHANGE_PLAN"],
+                      "persistedStatus": "ACTIVE",
+                      "effectiveStatus": "ACTIVE",
+                      "persistedPlanCode": "PROFESSIONAL",
+                      "persistedBillingInterval": "MONTHLY",
+                      "catalogVersion": 1,
+                      "providerManaged": false,
+                      "current": true
+                    },
+                    "payment": {
+                      "source": "LOCAL_BILLING_RECORDS",
+                      "latestInvoice": null,
+                      "checkout": null,
+                      "upgradePending": false,
+                      "refundStatus": null
+                    },
+                    "customerBilling": {
+                      "configured": true,
+                      "allowedActions": [],
+                      "canCheckout": false,
+                      "canOpenBillingPortal": false
+                    },
+                    "entitlements": {
+                      "source": "SUBSCRIPTION",
+                      "planCode": "PROFESSIONAL",
+                      "label": "Profissional",
+                      "accessGranted": true,
+                      "capabilities": [],
+                      "allocation": {},
+                      "usage": {}
+                    },
+                    "corporateActions": {
+                      "changePlan": "REVIEW_IF_ELIGIBLE",
+                      "cancel": "CUSTOMER_CONFIRMATION_REQUIRED",
+                      "keep": "UNAVAILABLE",
+                      "cancelScheduledChange": "UNAVAILABLE"
+                    }
+                  },
+                  "requestId": "c935d32a-9ad2-409c-a28c-c922dcc16f2c",
+                  "timestamp": "2026-11-26T16:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/CorporateValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": {
+            "$ref": "#/components/responses/CorporateCommercialNotFound"
+          },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
+      }
+    },
+    "/api/v1/corporate-admin/organizations/{id}/trial": {
+      "get": {
+        "operationId": "corporateAdminGetTrial",
+        "summary": "Consulta elegibilidade e histórico de trial",
+        "tags": ["Administração corporativa"],
+        "x-required-capability": "trials:read",
+        "parameters": [
+          { "$ref": "#/components/parameters/CorrelationId" },
+          { "$ref": "#/components/parameters/OrganizationId" },
+          { "$ref": "#/components/parameters/NexusAdministratorId" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operação corporativa concluída.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": { "type": "string" }
+              },
+              "Cache-Control": {
+                "schema": { "type": "string", "const": "private, no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/GetTrialResponse" },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "organizationId": "018fed15-f0ea-7d7f-aa28-846145f70764",
+                    "subscriptionId": "742f7f26-b4eb-42f2-b97e-13350e061d50",
+                    "subscriptionVersion": 7,
+                    "effectiveStatus": "PENDING_PAYMENT",
+                    "currentTrial": null,
+                    "offers": [
+                      {
+                        "planCode": "ESSENTIAL",
+                        "catalogVersion": 1,
+                        "trialDays": 30
+                      }
+                    ],
+                    "canStart": true,
+                    "history": []
+                  },
+                  "requestId": "c935d32a-9ad2-409c-a28c-c922dcc16f2c",
+                  "timestamp": "2026-11-26T16:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/CorporateValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": {
+            "$ref": "#/components/responses/CorporateCommercialNotFound"
+          },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
+      }
+    },
+    "/api/v1/corporate-admin/organizations/{id}/subscription/operations/{operationId}": {
+      "get": {
+        "operationId": "corporateAdminGetCommercialOperation",
+        "summary": "Consulta um recibo e o estado da revisão",
+        "tags": ["Administração corporativa"],
+        "x-required-capability": "subscriptions:read",
+        "parameters": [
+          { "$ref": "#/components/parameters/CorrelationId" },
+          { "$ref": "#/components/parameters/OrganizationId" },
+          { "$ref": "#/components/parameters/CorporateCommercialOperationId" },
+          { "$ref": "#/components/parameters/NexusAdministratorId" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operação corporativa concluída.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": { "type": "string" }
+              },
+              "Cache-Control": {
+                "schema": { "type": "string", "const": "private, no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetCommercialOperationResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "id": "018fed15-f0ea-7ff1-ad52-ddbf8c091b83",
+                    "organizationId": "018fed15-f0ea-7d7f-aa28-846145f70764",
+                    "subscriptionId": "742f7f26-b4eb-42f2-b97e-13350e061d50",
+                    "subscriptionVersion": 7,
+                    "operation": "CHANGE_PLAN",
+                    "result": "AWAITING_REVIEW",
+                    "ticketId": "cab5ce9a-154c-466d-a130-55d7c6331abd",
+                    "trialEndsAt": null,
+                    "createdAt": "2026-11-26T16:00:00.000Z",
+                    "reviewStatus": "OPEN"
+                  },
+                  "requestId": "c935d32a-9ad2-409c-a28c-c922dcc16f2c",
+                  "timestamp": "2026-11-26T16:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/CorporateValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": {
+            "$ref": "#/components/responses/CorporateCommercialNotFound"
+          },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
+      }
+    },
+    "/api/v1/corporate-admin/organizations/{id}/subscription/change-plan": {
+      "post": {
+        "operationId": "corporateAdminRequestPlanChange",
+        "summary": "Solicita revisão administrativa da mudança de plano",
+        "tags": ["Administração corporativa"],
+        "x-required-capability": "subscriptions:change-plan",
+        "parameters": [
+          { "$ref": "#/components/parameters/CorrelationId" },
+          { "$ref": "#/components/parameters/OrganizationId" },
+          { "$ref": "#/components/parameters/RequiredNexusAdministratorId" },
+          { "$ref": "#/components/parameters/OperationalIdempotency" }
+        ],
+        "responses": {
+          "202": {
+            "description": "Solicitação registrada para revisão administrativa.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": { "type": "string" }
+              },
+              "Cache-Control": {
+                "schema": { "type": "string", "const": "private, no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestPlanChangeResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "id": "018fed15-f0ea-7ff1-ad52-ddbf8c091b83",
+                    "organizationId": "018fed15-f0ea-7d7f-aa28-846145f70764",
+                    "subscriptionId": "742f7f26-b4eb-42f2-b97e-13350e061d50",
+                    "subscriptionVersion": 7,
+                    "operation": "CHANGE_PLAN",
+                    "result": "AWAITING_REVIEW",
+                    "ticketId": "cab5ce9a-154c-466d-a130-55d7c6331abd",
+                    "trialEndsAt": null,
+                    "createdAt": "2026-11-26T16:00:00.000Z",
+                    "replayed": false
+                  },
+                  "requestId": "c935d32a-9ad2-409c-a28c-c922dcc16f2c",
+                  "timestamp": "2026-11-26T16:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/CorporateValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": {
+            "$ref": "#/components/responses/CorporateCommercialNotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/CorporateCommercialConflict"
+          },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/CorporateCommercialUnavailable" }
+        },
+        "description": "Apenas para uma contratação vigente que o fluxo canônico encaminharia à análise sem solicitar dados ao provedor. A resposta 202 confirma um ticket de revisão.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CorporatePlanCommand" },
+              "example": {
+                "expectedSubscriptionId": "742f7f26-b4eb-42f2-b97e-13350e061d50",
+                "expectedVersion": 7,
+                "reason": "CUSTOMER_REQUEST",
+                "planCode": "ESSENTIAL",
+                "expectedCatalogVersion": 1,
+                "billingInterval": "MONTHLY"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/corporate-admin/organizations/{id}/subscription/keep": {
+      "post": {
+        "operationId": "corporateAdminKeepSubscription",
+        "summary": "Retira cancelamento agendado de uma assinatura local",
+        "tags": ["Administração corporativa"],
+        "x-required-capability": "subscriptions:keep",
+        "parameters": [
+          { "$ref": "#/components/parameters/CorrelationId" },
+          { "$ref": "#/components/parameters/OrganizationId" },
+          { "$ref": "#/components/parameters/RequiredNexusAdministratorId" },
+          { "$ref": "#/components/parameters/OperationalIdempotency" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operação corporativa concluída.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": { "type": "string" }
+              },
+              "Cache-Control": {
+                "schema": { "type": "string", "const": "private, no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KeepSubscriptionResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "id": "018fed15-f0ea-7ff1-ad52-ddbf8c091b83",
+                    "organizationId": "018fed15-f0ea-7d7f-aa28-846145f70764",
+                    "subscriptionId": "742f7f26-b4eb-42f2-b97e-13350e061d50",
+                    "subscriptionVersion": 8,
+                    "operation": "KEEP",
+                    "result": "APPLIED",
+                    "ticketId": null,
+                    "trialEndsAt": null,
+                    "createdAt": "2026-11-26T16:00:00.000Z",
+                    "replayed": false
+                  },
+                  "requestId": "c935d32a-9ad2-409c-a28c-c922dcc16f2c",
+                  "timestamp": "2026-11-26T16:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/CorporateValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": {
+            "$ref": "#/components/responses/CorporateCommercialNotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/CorporateCommercialConflict"
+          },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/CorporateCommercialUnavailable" }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CorporateSubscriptionCommand"
+              },
+              "example": {
+                "expectedSubscriptionId": "742f7f26-b4eb-42f2-b97e-13350e061d50",
+                "expectedVersion": 7,
+                "reason": "CUSTOMER_REQUEST"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/corporate-admin/organizations/{id}/subscription/cancel-scheduled-change": {
+      "post": {
+        "operationId": "corporateAdminCancelScheduledChange",
+        "summary": "Retira uma mudança local de plano agendada",
+        "tags": ["Administração corporativa"],
+        "x-required-capability": "subscriptions:cancel-scheduled-change",
+        "parameters": [
+          { "$ref": "#/components/parameters/CorrelationId" },
+          { "$ref": "#/components/parameters/OrganizationId" },
+          { "$ref": "#/components/parameters/RequiredNexusAdministratorId" },
+          { "$ref": "#/components/parameters/OperationalIdempotency" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operação corporativa concluída.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": { "type": "string" }
+              },
+              "Cache-Control": {
+                "schema": { "type": "string", "const": "private, no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CancelScheduledChangeResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "id": "018fed15-f0ea-7ff1-ad52-ddbf8c091b83",
+                    "organizationId": "018fed15-f0ea-7d7f-aa28-846145f70764",
+                    "subscriptionId": "742f7f26-b4eb-42f2-b97e-13350e061d50",
+                    "subscriptionVersion": 8,
+                    "operation": "CANCEL_SCHEDULED_CHANGE",
+                    "result": "APPLIED",
+                    "ticketId": null,
+                    "trialEndsAt": null,
+                    "createdAt": "2026-11-26T16:00:00.000Z",
+                    "replayed": false
+                  },
+                  "requestId": "c935d32a-9ad2-409c-a28c-c922dcc16f2c",
+                  "timestamp": "2026-11-26T16:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/CorporateValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": {
+            "$ref": "#/components/responses/CorporateCommercialNotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/CorporateCommercialConflict"
+          },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/CorporateCommercialUnavailable" }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CorporateSubscriptionCommand"
+              },
+              "example": {
+                "expectedSubscriptionId": "742f7f26-b4eb-42f2-b97e-13350e061d50",
+                "expectedVersion": 7,
+                "reason": "CUSTOMER_REQUEST"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/corporate-admin/organizations/{id}/trial/start": {
+      "post": {
+        "operationId": "corporateAdminStartTrial",
+        "summary": "Inicia o trial canônico de uma contratação pendente",
+        "tags": ["Administração corporativa"],
+        "x-required-capability": "trials:manage",
+        "parameters": [
+          { "$ref": "#/components/parameters/CorrelationId" },
+          { "$ref": "#/components/parameters/OrganizationId" },
+          { "$ref": "#/components/parameters/RequiredNexusAdministratorId" },
+          { "$ref": "#/components/parameters/OperationalIdempotency" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operação corporativa concluída.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": { "type": "string" }
+              },
+              "Cache-Control": {
+                "schema": { "type": "string", "const": "private, no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/StartTrialResponse" },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "id": "018fed15-f0ea-7ff1-ad52-ddbf8c091b83",
+                    "organizationId": "018fed15-f0ea-7d7f-aa28-846145f70764",
+                    "subscriptionId": "742f7f26-b4eb-42f2-b97e-13350e061d50",
+                    "subscriptionVersion": 8,
+                    "operation": "START_TRIAL",
+                    "result": "TRIAL_STARTED",
+                    "ticketId": null,
+                    "trialEndsAt": "2026-12-26T16:00:00.000Z",
+                    "createdAt": "2026-11-26T16:00:00.000Z",
+                    "replayed": false
+                  },
+                  "requestId": "c935d32a-9ad2-409c-a28c-c922dcc16f2c",
+                  "timestamp": "2026-11-26T16:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/CorporateValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": {
+            "$ref": "#/components/responses/CorporateCommercialNotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/CorporateCommercialConflict"
+          },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/CorporateCommercialUnavailable" }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CorporatePlanCommand" },
+              "example": {
+                "expectedSubscriptionId": "742f7f26-b4eb-42f2-b97e-13350e061d50",
+                "expectedVersion": 7,
+                "reason": "CUSTOMER_REQUEST",
+                "planCode": "ESSENTIAL",
+                "expectedCatalogVersion": 1,
+                "billingInterval": "MONTHLY"
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1289,6 +1986,31 @@
           "pattern": "^[A-Za-z0-9_-]{16,120}$"
         },
         "example": "6a3508be-21e2-4edc-84a0-0ae87fc6ede8"
+      },
+      "CorporateCommercialPlanId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "description": "Código ou UUID do plano.",
+        "schema": {
+          "anyOf": [
+            { "type": "string", "format": "uuid" },
+            { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,39}$" }
+          ]
+        }
+      },
+      "CorporateCommercialOrganizationQuery": {
+        "name": "organizationId",
+        "in": "query",
+        "required": false,
+        "description": "Inclui ofertas privadas exclusivas da organização indicada.",
+        "schema": { "type": "string", "format": "uuid" }
+      },
+      "CorporateCommercialOperationId": {
+        "name": "operationId",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string", "format": "uuid" }
       }
     },
     "schemas": {
@@ -2482,6 +3204,826 @@
             }
           }
         ]
+      },
+      "CorporateCommercialPeriod": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "start": { "type": "string", "format": "date-time" },
+          "end": { "type": "string", "format": "date-time" }
+        },
+        "required": ["start", "end"]
+      },
+      "CorporateCommercialLimit": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "unlimited": { "type": "boolean" },
+          "value": {
+            "anyOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }]
+          }
+        },
+        "required": ["unlimited", "value"]
+      },
+      "CorporateCommercialPrice": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "amountMinor": { "type": "integer", "minimum": 0 },
+          "listAmountMinor": { "type": "integer", "minimum": 0 },
+          "currency": { "type": "string" },
+          "formatted": { "type": "string" }
+        },
+        "required": ["amountMinor", "currency", "formatted"]
+      },
+      "CorporateCatalogPlan": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "organizationId": {
+            "anyOf": [
+              { "type": "string", "format": "uuid" },
+              { "type": "null" }
+            ]
+          },
+          "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,39}$" },
+          "label": { "type": "string" },
+          "description": { "type": "string" },
+          "isActive": { "type": "boolean" },
+          "version": { "type": "integer", "minimum": 1 },
+          "trialDays": { "type": "integer", "minimum": 0 },
+          "promotion": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+          "monthlyPrice": { "type": "string" },
+          "currency": { "type": "string" },
+          "prices": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "MONTHLY": {
+                "$ref": "#/components/schemas/CorporateCommercialPrice"
+              },
+              "SEMIANNUAL": {
+                "$ref": "#/components/schemas/CorporateCommercialPrice"
+              },
+              "ANNUAL": {
+                "$ref": "#/components/schemas/CorporateCommercialPrice"
+              }
+            },
+            "required": ["MONTHLY"]
+          },
+          "checkoutIntervals": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["MONTHLY", "SEMIANNUAL", "ANNUAL"]
+            }
+          },
+          "capabilities": { "type": "array", "items": { "type": "string" } },
+          "allocation": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/CorporateCommercialLimit"
+            }
+          },
+          "usage": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/CorporateCommercialLimit"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "organizationId",
+          "code",
+          "label",
+          "description",
+          "isActive",
+          "version",
+          "trialDays",
+          "promotion",
+          "monthlyPrice",
+          "currency",
+          "prices",
+          "checkoutIntervals",
+          "capabilities",
+          "allocation",
+          "usage"
+        ]
+      },
+      "CorporateCommercialTrialPeriod": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "eligible": { "type": "boolean" },
+          "trialDays": { "type": "integer", "minimum": 1 },
+          "startsAt": { "type": "string", "format": "date-time" },
+          "endsAt": { "type": "string", "format": "date-time" }
+        },
+        "required": ["eligible", "trialDays", "startsAt", "endsAt"]
+      },
+      "CorporateCommercialSubscription": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "planCode": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,39}$" },
+          "planLabel": { "type": "string" },
+          "billingInterval": {
+            "type": "string",
+            "enum": ["MONTHLY", "SEMIANNUAL", "ANNUAL"]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING_PAYMENT",
+              "TRIALING",
+              "ACTIVE",
+              "PAST_DUE",
+              "GRACE_PERIOD",
+              "SUSPENDED",
+              "CANCELED",
+              "EXPIRED"
+            ]
+          },
+          "version": { "type": "integer", "minimum": 1 },
+          "billingPeriod": {
+            "$ref": "#/components/schemas/CorporateCommercialPeriod"
+          },
+          "usagePeriod": {
+            "$ref": "#/components/schemas/CorporateCommercialPeriod"
+          },
+          "trial": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/CorporateCommercialTrialPeriod" },
+              { "type": "null" }
+            ]
+          },
+          "cancelAtPeriodEnd": { "type": "boolean" },
+          "dataRetentionEndsAt": {
+            "anyOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ]
+          },
+          "dataPurgedAt": {
+            "anyOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ]
+          },
+          "pendingChange": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "planCode": {
+                    "type": "string",
+                    "pattern": "^[A-Z][A-Z0-9_]{1,39}$"
+                  },
+                  "billingInterval": {
+                    "type": "string",
+                    "enum": ["MONTHLY", "SEMIANNUAL", "ANNUAL"]
+                  },
+                  "effectiveAt": { "type": "string", "format": "date-time" }
+                },
+                "required": ["planCode", "billingInterval", "effectiveAt"]
+              },
+              { "type": "null" }
+            ]
+          },
+          "allowedActions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "SUBSCRIBE",
+                "CHANGE_PLAN",
+                "CANCEL_AT_PERIOD_END",
+                "KEEP_SUBSCRIPTION",
+                "CANCEL_SCHEDULED_CHANGE"
+              ]
+            }
+          },
+          "persistedStatus": {
+            "type": "string",
+            "enum": [
+              "PENDING_PAYMENT",
+              "TRIALING",
+              "ACTIVE",
+              "PAST_DUE",
+              "GRACE_PERIOD",
+              "SUSPENDED",
+              "CANCELED",
+              "EXPIRED"
+            ]
+          },
+          "effectiveStatus": {
+            "type": "string",
+            "enum": [
+              "PENDING_PAYMENT",
+              "TRIALING",
+              "ACTIVE",
+              "PAST_DUE",
+              "GRACE_PERIOD",
+              "SUSPENDED",
+              "CANCELED",
+              "EXPIRED"
+            ]
+          },
+          "persistedPlanCode": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]{1,39}$"
+          },
+          "persistedBillingInterval": {
+            "type": "string",
+            "enum": ["MONTHLY", "SEMIANNUAL", "ANNUAL"]
+          },
+          "catalogVersion": { "type": "integer", "minimum": 1 },
+          "providerManaged": { "type": "boolean" },
+          "current": { "type": "boolean" }
+        },
+        "required": [
+          "id",
+          "planCode",
+          "planLabel",
+          "billingInterval",
+          "status",
+          "version",
+          "billingPeriod",
+          "usagePeriod",
+          "trial",
+          "cancelAtPeriodEnd",
+          "dataRetentionEndsAt",
+          "dataPurgedAt",
+          "pendingChange",
+          "allowedActions",
+          "persistedStatus",
+          "effectiveStatus",
+          "persistedPlanCode",
+          "persistedBillingInterval",
+          "catalogVersion",
+          "providerManaged",
+          "current"
+        ]
+      },
+      "CorporateCommercialPayment": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "source": { "type": "string", "const": "LOCAL_BILLING_RECORDS" },
+          "latestInvoice": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "status": { "type": "string" },
+                  "currency": { "type": "string" },
+                  "amountPaidMinor": { "type": "integer" },
+                  "amountRemainingMinor": { "type": "integer" },
+                  "paidAt": {
+                    "anyOf": [
+                      { "type": "string", "format": "date-time" },
+                      { "type": "null" }
+                    ]
+                  },
+                  "periodStart": {
+                    "anyOf": [
+                      { "type": "string", "format": "date-time" },
+                      { "type": "null" }
+                    ]
+                  },
+                  "periodEnd": {
+                    "anyOf": [
+                      { "type": "string", "format": "date-time" },
+                      { "type": "null" }
+                    ]
+                  }
+                },
+                "required": [
+                  "status",
+                  "currency",
+                  "amountPaidMinor",
+                  "amountRemainingMinor",
+                  "paidAt",
+                  "periodStart",
+                  "periodEnd"
+                ]
+              },
+              { "type": "null" }
+            ]
+          },
+          "checkout": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "status": { "type": "string", "enum": ["CREATING", "OPEN"] },
+                  "expiresAt": {
+                    "anyOf": [
+                      { "type": "string", "format": "date-time" },
+                      { "type": "null" }
+                    ]
+                  }
+                },
+                "required": ["status", "expiresAt"]
+              },
+              { "type": "null" }
+            ]
+          },
+          "upgradePending": { "type": "boolean" },
+          "refundStatus": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }]
+          }
+        },
+        "required": [
+          "source",
+          "latestInvoice",
+          "checkout",
+          "upgradePending",
+          "refundStatus"
+        ]
+      },
+      "CorporateCommercialEntitlements": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": ["SUBSCRIPTION", "CATALOG", "CUSTOM", "LEGACY_UNGOVERNED"]
+          },
+          "planCode": { "type": "string" },
+          "label": { "type": "string" },
+          "accessGranted": { "type": "boolean" },
+          "capabilities": { "type": "array", "items": { "type": "string" } },
+          "allocation": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/CorporateCommercialLimit"
+            }
+          },
+          "usage": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/CorporateCommercialLimit"
+            }
+          }
+        },
+        "required": [
+          "source",
+          "planCode",
+          "label",
+          "accessGranted",
+          "capabilities",
+          "allocation",
+          "usage"
+        ]
+      },
+      "CorporateCommercialSubscriptionDetails": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "organizationId": { "type": "string", "format": "uuid" },
+          "subscription": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CorporateCommercialSubscription"
+              },
+              { "type": "null" }
+            ]
+          },
+          "payment": {
+            "$ref": "#/components/schemas/CorporateCommercialPayment"
+          },
+          "customerBilling": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "configured": { "type": "boolean" },
+              "allowedActions": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": ["START_CHECKOUT", "OPEN_BILLING_PORTAL"]
+                }
+              },
+              "canCheckout": { "type": "boolean" },
+              "canOpenBillingPortal": { "type": "boolean" }
+            },
+            "required": [
+              "configured",
+              "allowedActions",
+              "canCheckout",
+              "canOpenBillingPortal"
+            ]
+          },
+          "entitlements": {
+            "$ref": "#/components/schemas/CorporateCommercialEntitlements"
+          },
+          "corporateActions": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "changePlan": {
+                "type": "string",
+                "enum": ["UNAVAILABLE", "REVIEW_IF_ELIGIBLE"]
+              },
+              "cancel": {
+                "type": "string",
+                "const": "CUSTOMER_CONFIRMATION_REQUIRED"
+              },
+              "keep": {
+                "type": "string",
+                "enum": [
+                  "UNAVAILABLE",
+                  "PROVIDER_FLOW_REQUIRED",
+                  "PAYMENT_IN_PROGRESS",
+                  "AVAILABLE"
+                ]
+              },
+              "cancelScheduledChange": {
+                "type": "string",
+                "enum": [
+                  "UNAVAILABLE",
+                  "PROVIDER_FLOW_REQUIRED",
+                  "PAYMENT_IN_PROGRESS",
+                  "AVAILABLE"
+                ]
+              }
+            },
+            "required": [
+              "changePlan",
+              "cancel",
+              "keep",
+              "cancelScheduledChange"
+            ]
+          }
+        },
+        "required": [
+          "organizationId",
+          "subscription",
+          "payment",
+          "customerBilling",
+          "entitlements",
+          "corporateActions"
+        ]
+      },
+      "CorporateTrialDetails": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "organizationId": { "type": "string", "format": "uuid" },
+          "subscriptionId": {
+            "anyOf": [
+              { "type": "string", "format": "uuid" },
+              { "type": "null" }
+            ]
+          },
+          "subscriptionVersion": {
+            "anyOf": [{ "type": "integer", "minimum": 1 }, { "type": "null" }]
+          },
+          "effectiveStatus": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "PENDING_PAYMENT",
+                  "TRIALING",
+                  "ACTIVE",
+                  "PAST_DUE",
+                  "GRACE_PERIOD",
+                  "SUSPENDED",
+                  "CANCELED",
+                  "EXPIRED"
+                ]
+              },
+              { "type": "null" }
+            ]
+          },
+          "currentTrial": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/CorporateCommercialTrialPeriod" },
+              { "type": "null" }
+            ]
+          },
+          "offers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "planCode": {
+                  "type": "string",
+                  "pattern": "^[A-Z][A-Z0-9_]{1,39}$"
+                },
+                "catalogVersion": { "type": "integer", "minimum": 1 },
+                "trialDays": { "type": "integer", "minimum": 1 }
+              },
+              "required": ["planCode", "catalogVersion", "trialDays"]
+            }
+          },
+          "canStart": { "type": "boolean" },
+          "history": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "planCode": {
+                  "type": "string",
+                  "pattern": "^[A-Z][A-Z0-9_]{1,39}$"
+                },
+                "grantedAt": { "type": "string", "format": "date-time" },
+                "startsAt": { "type": "string", "format": "date-time" },
+                "endsAt": { "type": "string", "format": "date-time" },
+                "status": { "type": "string" }
+              },
+              "required": [
+                "planCode",
+                "grantedAt",
+                "startsAt",
+                "endsAt",
+                "status"
+              ]
+            },
+            "maxItems": 25
+          }
+        },
+        "required": [
+          "organizationId",
+          "subscriptionId",
+          "subscriptionVersion",
+          "effectiveStatus",
+          "currentTrial",
+          "offers",
+          "canStart",
+          "history"
+        ]
+      },
+      "CorporateSubscriptionCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "expectedSubscriptionId": { "type": "string", "format": "uuid" },
+          "expectedVersion": { "type": "integer", "minimum": 1 },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "ADMINISTRATIVE",
+              "CUSTOMER_REQUEST",
+              "CONTRACT_REVIEW",
+              "CORRECTION"
+            ]
+          }
+        },
+        "required": ["expectedSubscriptionId", "expectedVersion", "reason"]
+      },
+      "CorporatePlanCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "expectedSubscriptionId": { "type": "string", "format": "uuid" },
+          "expectedVersion": { "type": "integer", "minimum": 1 },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "ADMINISTRATIVE",
+              "CUSTOMER_REQUEST",
+              "CONTRACT_REVIEW",
+              "CORRECTION"
+            ]
+          },
+          "planCode": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,39}$" },
+          "expectedCatalogVersion": { "type": "integer", "minimum": 1 },
+          "billingInterval": {
+            "type": "string",
+            "enum": ["MONTHLY", "SEMIANNUAL", "ANNUAL"]
+          }
+        },
+        "required": [
+          "expectedSubscriptionId",
+          "expectedVersion",
+          "reason",
+          "planCode",
+          "expectedCatalogVersion"
+        ]
+      },
+      "CorporateCommercialReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "organizationId": { "type": "string", "format": "uuid" },
+          "subscriptionId": { "type": "string", "format": "uuid" },
+          "subscriptionVersion": { "type": "integer", "minimum": 1 },
+          "operation": {
+            "type": "string",
+            "enum": [
+              "CHANGE_PLAN",
+              "KEEP",
+              "CANCEL_SCHEDULED_CHANGE",
+              "START_TRIAL"
+            ]
+          },
+          "result": {
+            "type": "string",
+            "enum": ["APPLIED", "AWAITING_REVIEW", "TRIAL_STARTED"]
+          },
+          "ticketId": {
+            "anyOf": [
+              { "type": "string", "format": "uuid" },
+              { "type": "null" }
+            ]
+          },
+          "trialEndsAt": {
+            "anyOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ]
+          },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "replayed": { "type": "boolean" }
+        },
+        "required": [
+          "id",
+          "organizationId",
+          "subscriptionId",
+          "subscriptionVersion",
+          "operation",
+          "result",
+          "ticketId",
+          "trialEndsAt",
+          "createdAt",
+          "replayed"
+        ]
+      },
+      "CorporateCommercialOperation": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "organizationId": { "type": "string", "format": "uuid" },
+          "subscriptionId": { "type": "string", "format": "uuid" },
+          "subscriptionVersion": { "type": "integer", "minimum": 1 },
+          "operation": {
+            "type": "string",
+            "enum": [
+              "CHANGE_PLAN",
+              "KEEP",
+              "CANCEL_SCHEDULED_CHANGE",
+              "START_TRIAL"
+            ]
+          },
+          "result": {
+            "type": "string",
+            "enum": ["APPLIED", "AWAITING_REVIEW", "TRIAL_STARTED"]
+          },
+          "ticketId": {
+            "anyOf": [
+              { "type": "string", "format": "uuid" },
+              { "type": "null" }
+            ]
+          },
+          "trialEndsAt": {
+            "anyOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ]
+          },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "reviewStatus": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }]
+          }
+        },
+        "required": [
+          "id",
+          "organizationId",
+          "subscriptionId",
+          "subscriptionVersion",
+          "operation",
+          "result",
+          "ticketId",
+          "trialEndsAt",
+          "createdAt",
+          "reviewStatus"
+        ]
+      },
+      "ListPlansResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "success": { "type": "boolean", "const": true },
+          "data": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "plans": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/CorporateCatalogPlan" }
+              }
+            },
+            "required": ["plans"]
+          },
+          "requestId": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        },
+        "required": ["success", "data", "requestId", "timestamp"]
+      },
+      "GetPlanResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "success": { "type": "boolean", "const": true },
+          "data": { "$ref": "#/components/schemas/CorporateCatalogPlan" },
+          "requestId": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        },
+        "required": ["success", "data", "requestId", "timestamp"]
+      },
+      "GetSubscriptionResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "success": { "type": "boolean", "const": true },
+          "data": {
+            "$ref": "#/components/schemas/CorporateCommercialSubscriptionDetails"
+          },
+          "requestId": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        },
+        "required": ["success", "data", "requestId", "timestamp"]
+      },
+      "GetTrialResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "success": { "type": "boolean", "const": true },
+          "data": { "$ref": "#/components/schemas/CorporateTrialDetails" },
+          "requestId": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        },
+        "required": ["success", "data", "requestId", "timestamp"]
+      },
+      "GetCommercialOperationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "success": { "type": "boolean", "const": true },
+          "data": {
+            "$ref": "#/components/schemas/CorporateCommercialOperation"
+          },
+          "requestId": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        },
+        "required": ["success", "data", "requestId", "timestamp"]
+      },
+      "RequestPlanChangeResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "success": { "type": "boolean", "const": true },
+          "data": { "$ref": "#/components/schemas/CorporateCommercialReceipt" },
+          "requestId": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        },
+        "required": ["success", "data", "requestId", "timestamp"]
+      },
+      "KeepSubscriptionResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "success": { "type": "boolean", "const": true },
+          "data": { "$ref": "#/components/schemas/CorporateCommercialReceipt" },
+          "requestId": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        },
+        "required": ["success", "data", "requestId", "timestamp"]
+      },
+      "CancelScheduledChangeResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "success": { "type": "boolean", "const": true },
+          "data": { "$ref": "#/components/schemas/CorporateCommercialReceipt" },
+          "requestId": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        },
+        "required": ["success", "data", "requestId", "timestamp"]
+      },
+      "StartTrialResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "success": { "type": "boolean", "const": true },
+          "data": { "$ref": "#/components/schemas/CorporateCommercialReceipt" },
+          "requestId": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        },
+        "required": ["success", "data", "requestId", "timestamp"]
       }
     },
     "responses": {
@@ -2611,6 +4153,33 @@
             "schema": {
               "$ref": "#/components/schemas/ErrorEnvelope"
             }
+          }
+        }
+      },
+      "CorporateCommercialUnavailable": {
+        "description": "Serviço ou assinatura temporariamente indisponível. Repita a mesma requisição com a chave de idempotência original.",
+        "headers": {},
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      },
+      "CorporateCommercialConflict": {
+        "description": "Versão da assinatura ou oferta desatualizada, chave reutilizada com outro conteúdo, trial inelegível ou ação indisponível pelas regras de contratação.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      },
+      "CorporateCommercialNotFound": {
+        "description": "Organização, plano ou recibo indisponível no escopo informado.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
           }
         }
       }

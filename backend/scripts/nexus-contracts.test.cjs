@@ -849,5 +849,65 @@ contractTest(
           );
       }
     }
+    const commercial = registry + '/{id}/subscription';
+    const trial = registry + '/{id}/trial';
+    const plans = '/api/v1/corporate-admin/plans';
+    for (const [url, method, capability, status] of [
+      [plans, 'get', 'plans:read', 200],
+      [plans + '/{id}', 'get', 'plans:read', 200],
+      [commercial, 'get', 'subscriptions:read', 200],
+      [
+        commercial + '/operations/{operationId}',
+        'get',
+        'subscriptions:read',
+        200,
+      ],
+      [trial, 'get', 'trials:read', 200],
+      [commercial + '/change-plan', 'post', 'subscriptions:change-plan', 202],
+      [commercial + '/keep', 'post', 'subscriptions:keep', 200],
+      [
+        commercial + '/cancel-scheduled-change',
+        'post',
+        'subscriptions:cancel-scheduled-change',
+        200,
+      ],
+      [trial + '/start', 'post', 'trials:manage', 200],
+    ]) {
+      const op = api.paths[url][method];
+      assert.equal(op['x-required-capability'], capability);
+      const parameters = op.parameters.map((p) =>
+        p.$ref ? resolve(p.$ref) : p,
+      );
+      assert.equal(
+        parameters.find((p) => p.name === 'X-Nexus-Administrator-Id')?.required,
+        method === 'post',
+      );
+      assert.equal(
+        parameters.some((p) => p.name === 'Idempotency-Key' && p.required),
+        method === 'post',
+      );
+      const { schema, example } =
+        op.responses[status].content['application/json'];
+      const validate = ajv.getSchema(base + schemaPointer(schema.$ref));
+      assert.ok(validate(example), JSON.stringify(validate.errors));
+      assert.equal(
+        validate({
+          ...example,
+          data: { ...example.data, providerPriceId: 'synthetic' },
+        }),
+        false,
+      );
+      if (op.requestBody) {
+        const { schema, example } = op.requestBody.content['application/json'];
+        const validateBody = ajv.getSchema(base + schemaPointer(schema.$ref));
+        assert.ok(validateBody(example), JSON.stringify(validateBody.errors));
+        assert.equal(
+          validateBody({ ...example, customerConsent: true }),
+          false,
+        );
+        assert.equal(validateBody({ ...example, reason: undefined }), false);
+      }
+    }
+    assert.equal(api.paths[commercial + '/cancel'], undefined);
   },
 );

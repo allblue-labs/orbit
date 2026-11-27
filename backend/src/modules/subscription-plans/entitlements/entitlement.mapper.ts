@@ -71,7 +71,7 @@ export class EntitlementMapper {
     };
   }
 
-  private plan(plan: CommercialPlan): PlanCatalogEntryReadModel {
+  plan(plan: CommercialPlan): PlanCatalogEntryReadModel {
     return {
       code: plan.code,
       label: plan.label,
@@ -112,7 +112,7 @@ export class EntitlementMapper {
     );
   }
 
-  private limit(limit: PlanLimit): PlanLimitReadModel {
+  limit(limit: PlanLimit): PlanLimitReadModel {
     return limit.kind === 'UNLIMITED'
       ? { unlimited: true, value: null }
       : { unlimited: false, value: limit.value };

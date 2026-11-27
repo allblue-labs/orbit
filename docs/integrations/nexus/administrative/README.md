@@ -113,3 +113,40 @@ O campo `ownerSetup` separa `QUEUED`, `ACCEPTED_BY_PROVIDER`, falha, expiração
 Envie `status`, `reason` e o `expectedUpdatedAt` da organização. Os motivos válidos são `SECURITY`, `ABUSE`, `ADMINISTRATIVE` e `RESOLVED`. A chave de 16 a 120 caracteres é vinculada ao principal, à organização e ao comando. Para recuperar um recibo após perda da resposta, repita o comando com a mesma chave. Nova versão de cadastro, chave reutilizada com outro conteúdo ou transição bloqueada dão 409. O recibo separa a decisão original do estado atual.
 
 A operação altera o acesso operacional e usa os gates financeiros em vigor. A reativação exige contratação canônica existente e preserva os bloqueios de pagamento, suspensão financeira, cancelamento ou retenção. A auditoria da transição e seus efeitos locais são gravados juntos. Consulte os contratos, códigos HTTP e exemplos sintéticos no [OpenAPI](openapi.json).
+
+## Catálogo, assinaturas e trials · ADM-04.A
+
+| Método | Rota sob `/api/v1/corporate-admin` | Capability | Resultado |
+| --- | --- | --- | --- |
+| GET | `/plans` | `plans:read` | Ofertas do catálogo canônico |
+| GET | `/plans/{id}` | `plans:read` | Oferta por UUID ou código |
+| GET | `/organizations/{id}/subscription` | `subscriptions:read` | Estado da assinatura, pagamentos registrados e entitlements |
+| GET | `/organizations/{id}/trial` | `trials:read` | Elegibilidade e últimas 25 concessões |
+| GET | `/organizations/{id}/subscription/operations/{operationId}` | `subscriptions:read` | Recibo do mesmo principal técnico e estado atual do ticket, quando houver |
+| POST | `/organizations/{id}/subscription/change-plan` | `subscriptions:change-plan` | `202 AWAITING_REVIEW`, com `ticketId` |
+| POST | `/organizations/{id}/subscription/keep` | `subscriptions:keep` | `200 APPLIED` |
+| POST | `/organizations/{id}/subscription/cancel-scheduled-change` | `subscriptions:cancel-scheduled-change` | `200 APPLIED` |
+| POST | `/organizations/{id}/trial/start` | `trials:manage` | `200 TRIAL_STARTED`, com `trialEndsAt` |
+
+Os grants são explícitos e independentes. Credenciais existentes conservam os grants cadastrados. O endpoint legado `/capabilities` conserva o contrato de conexão. A fronteira permanece desabilitada por padrão. A referência `X-Nexus-Administrator-Id` é opcional nas leituras e obrigatória nas escritas. O Orbit autentica o principal técnico e registra a referência declarada em campo separado na auditoria.
+
+### Leituras
+
+- `/plans` inclui ofertas globais ativas e inativas. O parâmetro `organizationId` acrescenta somente as ofertas privadas daquela organização e vale também para a consulta individual. `prices` usa unidades monetárias menores, como centavos. `checkoutIntervals` indica periodicidades com preço integrado no catálogo. O checkout depende também da configuração de cobrança e da elegibilidade da organização. `trialDays` indica a duração da oferta, enquanto `/trial` consulta a elegibilidade da organização. `allocation` e `usage` representam os limites. Valores ilimitados usam `unlimited: true` e `value: null`.
+- `/subscription` retorna a assinatura corrente ou a última encerrada. `subscription` pode ser `null`. Campos `persisted*` vêm da linha canônica e `status`, `effectiveStatus`, `planCode` e `billingInterval` descrevem a projeção na leitura. `billingPeriod`, `cancelAtPeriodEnd` e `pendingChange` indicam o período contratado, a intenção de encerrar no vencimento e a alteração já agendada. `entitlements.accessGranted` e os demais entitlements vêm do resolvedor canônico, incluindo eventuais ajustes.
+- `payment` usa os registros locais de cobrança. `latestInvoice` pode ser `null`, inclusive em uma assinatura `ACTIVE`. O valor recebido vem de `amountPaidMinor`. `checkout`, `upgradePending` e `refundStatus` informam o que está registrado nos respectivos fluxos. `customerBilling` descreve as ações do cliente. `corporateActions` sinaliza condições para as rotas administrativas, sujeitas ao grant e à revalidação no comando. `REVIEW_IF_ELIGIBLE` depende do plano e da periodicidade escolhidos. Nenhuma leitura faz chamadas ao Stripe.
+- `/trial` mostra ofertas ativas com trial, a avaliação registrada e o histórico da própria organização. `canStart` considera o contrato pendente, a elegibilidade canônica por documento e as condições de cobrança. O início revalida todos os requisitos e a versão da oferta.
+
+### Operações e recuperação
+
+`change-plan` registra revisão somente em contratos vigentes cujo fluxo canônico encaminharia o pedido à análise administrativa sem consulta ao Stripe. O recibo `AWAITING_REVIEW` comprova a criação do ticket. A conclusão comercial deve ser consultada em uma nova leitura da assinatura. Upgrades e downgrades que exigem checkout, aceite de cobrança ou mutação no Stripe continuam no fluxo do cliente e do provedor.
+
+`keep` e `cancel-scheduled-change` desfazem agendamentos locais de assinaturas sem vínculo com o provedor e sem contratação ou pagamento em curso. A retirada de cancelamento exige um período vigente. Solicitar um novo cancelamento depende da confirmação do cliente sobre retenção e exclusão de dados. A API corporativa não oferece essa rota.
+
+`trial/start` reutiliza as regras do contrato pendente e a duração da oferta vigente. Exige entrada elegível com documento, ausência de contratação concorrente e disponibilidade da cobrança na aplicação. A concessão é única conforme a política canônica de trial e pagamento. Não há operação de extensão.
+
+Todas as escritas exigem o `expectedSubscriptionId`, o `expectedVersion`, um `reason` enumerado e `Idempotency-Key` com 16 a 120 caracteres do conjunto `A–Z`, `a–z`, `0–9`, `_` e `-`. Mudança de plano e início de trial também exigem `planCode` e `expectedCatalogVersion`; `billingInterval` é opcional. Os motivos são `ADMINISTRATIVE`, `CUSTOMER_REQUEST`, `CONTRACT_REVIEW` e `CORRECTION`. Escolher `CUSTOMER_REQUEST` registra o motivo e não supre consentimento.
+
+O Orbit vincula a chave ao principal, à organização e ao tipo de comando. Após timeout, conexão interrompida ou `5xx`, repita a mesma requisição com a chave original, mesmo que a versão informada tenha ficado antiga. Uma assinatura bloqueada temporariamente por outra transação retorna `503 SERVICE_UNAVAILABLE`. `replayed: true` identifica o recibo já gravado. Quando o ID for conhecido, consulte o recibo em `/operations/{operationId}`. A mesma chave com outro conteúdo retorna `409 IDEMPOTENCY_MISMATCH`. Versão desatualizada retorna `409 STALE_VERSION` ou o conflito canônico de catálogo. Regra comercial impeditiva ou inelegibilidade também retorna 409. Corrija os parâmetros ou aguarde o fluxo do cliente antes de emitir uma nova intenção com outra chave. A API retorna 404 para recursos fora do escopo consultado, 401 para falha de autenticação e 403 para grant insuficiente.
+
+Tentativa, recibo e resultado são correlacionáveis na auditoria. O efeito local, o recibo e o registro terminal confirmado compartilham a transação. A tentativa é registrada separadamente para diagnóstico. O resultado de auditoria `UNCONFIRMED` pede a recuperação pela chave original. Nenhuma escrita corporativa envia comandos ao Stripe. A migration cria apenas o registro de comandos e as políticas RLS necessárias. [OpenAPI](openapi.json)
