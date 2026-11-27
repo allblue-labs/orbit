@@ -184,6 +184,29 @@ describe('StripeBillingProvider subscription commands', () => {
     };
   };
 
+  it('preserves canonical subscription retrieval when an analytics expansion is rejected', async () => {
+    const { provider, subscriptions } = setup();
+    subscriptions.retrieve.mockRejectedValueOnce(
+      new Stripe.errors.StripeInvalidRequestError({
+        type: 'invalid_request_error',
+        param: 'expand[1]',
+        message: 'Property is not expandable',
+      }),
+    );
+
+    const observed = await provider.retrieveSubscription('sub_test_1');
+
+    expect(observed).toMatchObject({
+      providerSubscriptionId: 'sub_test_1',
+      providerPriceId: 'price_old',
+      rawStatus: 'active',
+    });
+    expect(subscriptions.retrieve).toHaveBeenNthCalledWith(1, 'sub_test_1', {
+      expand: ['customer', 'discounts.source.coupon.applies_to'],
+    });
+    expect(subscriptions.retrieve).toHaveBeenNthCalledWith(2, 'sub_test_1');
+  });
+
   const input = {
     providerSubscriptionId: 'sub_test_1',
     organizationId: 'org_1',

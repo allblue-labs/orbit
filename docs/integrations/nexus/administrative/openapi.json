@@ -3380,6 +3380,482 @@
           "503": { "$ref": "#/components/responses/Unavailable" }
         }
       }
+    },
+    "/api/v1/corporate-admin/analytics/recurring-revenue": {
+      "get": {
+        "operationId": "corporateAdminAnalyticsRecurringRevenue",
+        "summary": "Consulta receita recorrente observada",
+        "tags": [
+          "Administração corporativa"
+        ],
+        "description": "Retrato atual do preço contratado e desconto recorrente vigente por moeda, modo, plano e periodicidade. Valores mensais em unidades mínimas multiplicadas por 120000. Com cobertura parcial, os valores representam somente o subconjunto precificado.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/NexusAdministratorId"
+          },
+          {
+            "$ref": "#/components/parameters/FinanceMode"
+          },
+          {
+            "$ref": "#/components/parameters/FinanceCurrency"
+          },
+          {
+            "name": "planCode",
+            "in": "query",
+            "required": false,
+            "description": "Código do plano da assinatura corrente.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,59}$"
+            }
+          }
+        ],
+        "x-required-capability": "analytics:revenue:read",
+        "responses": {
+          "200": {
+            "description": "Consulta comercial concluída.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorporateAnalyticsRecurringRevenueResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "mode": "TEST",
+                    "currency": "BRL",
+                    "asOf": "2026-11-26T16:00:00.000Z",
+                    "planCode": null,
+                    "period": null,
+                    "source": "ORBIT_STRIPE_RECURRING_OBSERVATION",
+                    "scale": 120000,
+                    "totals": {
+                      "grossMonthlyScaledMinor": "1320000000",
+                      "discountMonthlyScaledMinor": "120000000",
+                      "monthlyRecurringScaledMinor": "1200000000",
+                      "eligibleOrganizations": null,
+                      "confirmedEligibleOrganizations": 1,
+                      "coverage": {
+                        "status": "PARTIAL",
+                        "candidateOrganizations": 2,
+                        "unknownTermsOrganizations": 1,
+                        "unverifiedPaymentOrganizations": 0,
+                        "unpricedOrganizations": 0,
+                        "pricedOrganizations": 1,
+                        "oldestObservationAt": "2026-11-26T16:00:00.000Z",
+                        "latestObservationAt": "2026-11-26T16:00:00.000Z"
+                      }
+                    },
+                    "breakdown": [
+                      {
+                        "planCode": "PROFESSIONAL",
+                        "billingInterval": "MONTHLY",
+                        "grossMonthlyScaledMinor": "1320000000",
+                        "discountMonthlyScaledMinor": "120000000",
+                        "monthlyRecurringScaledMinor": "1200000000",
+                        "eligibleOrganizations": null,
+                        "confirmedEligibleOrganizations": 1,
+                        "coverage": {
+                          "status": "PARTIAL",
+                          "candidateOrganizations": 2,
+                          "unknownTermsOrganizations": 1,
+                          "unverifiedPaymentOrganizations": 0,
+                          "unpricedOrganizations": 0,
+                          "pricedOrganizations": 1,
+                          "oldestObservationAt": "2026-11-26T16:00:00.000Z",
+                          "latestObservationAt": "2026-11-26T16:00:00.000Z"
+                        }
+                      }
+                    ]
+                  },
+                  "requestId": "c935d32a-9ad2-409c-a28c-c922dcc16f2c",
+                  "timestamp": "2026-11-26T16:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/CorporateValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/corporate-admin/analytics/customer-lifecycle": {
+      "get": {
+        "operationId": "corporateAdminAnalyticsCustomerLifecycle",
+        "summary": "Consulta os movimentos de clientes comprovados",
+        "tags": [
+          "Administração corporativa"
+        ],
+        "description": "Primeiro recebimento comprovado, cancelamento efetivo registrado e reativação observada pelo primeiro recebimento em outro contrato. As bases pagantes históricas e movimentos de MRR permanecem indisponíveis.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/NexusAdministratorId"
+          },
+          {
+            "$ref": "#/components/parameters/FinanceMode"
+          },
+          {
+            "$ref": "#/components/parameters/FinanceCurrency"
+          },
+          {
+            "$ref": "#/components/parameters/FinanceFrom"
+          },
+          {
+            "$ref": "#/components/parameters/FinanceTo"
+          }
+        ],
+        "x-required-capability": "analytics:lifecycle:read",
+        "responses": {
+          "200": {
+            "description": "Consulta comercial concluída.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorporateAnalyticsCustomerLifecycleResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "mode": "TEST",
+                    "currency": "BRL",
+                    "asOf": "2026-11-26T16:00:00.000Z",
+                    "planCode": null,
+                    "period": {
+                      "from": "2026-09-01",
+                      "to": "2026-10-01"
+                    },
+                    "source": "ORBIT_RECEIPTS_AND_RECORDED_CANCELLATIONS",
+                    "observed": {
+                      "firstObservedPaidOrganizations": 2,
+                      "organizationsWithFirstReceiptForAContract": 3,
+                      "recordedPaidCancellations": 1,
+                      "observedReactivatedOrganizations": 1
+                    },
+                    "openingPaidOrganizations": null,
+                    "closingPaidOrganizations": null,
+                    "lostOpeningOrganizations": null,
+                    "retainedOpeningOrganizations": null,
+                    "openingMrrScaledMinor": null,
+                    "lostOpeningMrrScaledMinor": null,
+                    "expansionMrrScaledMinor": null,
+                    "contractionMrrScaledMinor": null,
+                    "coverage": {
+                      "status": "PARTIAL",
+                      "reason": "EFFECTIVE_PAID_HISTORY_UNAVAILABLE"
+                    }
+                  },
+                  "requestId": "c935d32a-9ad2-409c-a28c-c922dcc16f2c",
+                  "timestamp": "2026-11-26T16:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/CorporateValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/corporate-admin/analytics/trial-conversion": {
+      "get": {
+        "operationId": "corporateAdminAnalyticsTrialConversion",
+        "summary": "Consulta uma coorte de trials",
+        "tags": [
+          "Administração corporativa"
+        ],
+        "description": "Primeira concessão da organização, pelo início no intervalo UTC. A primeira alocação confirmada no escopo comprova conversão entre o início e 30 dias após a data prevista de encerramento. A coorte é local e a comprovação tem escopo Stripe.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/NexusAdministratorId"
+          },
+          {
+            "$ref": "#/components/parameters/FinanceMode"
+          },
+          {
+            "$ref": "#/components/parameters/FinanceCurrency"
+          },
+          {
+            "$ref": "#/components/parameters/FinanceFrom"
+          },
+          {
+            "$ref": "#/components/parameters/FinanceTo"
+          },
+          {
+            "name": "planCode",
+            "in": "query",
+            "required": false,
+            "description": "Código da primeira concessão do trial, independente do plano posteriormente contratado.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,59}$"
+            }
+          }
+        ],
+        "x-required-capability": "analytics:trials:read",
+        "responses": {
+          "200": {
+            "description": "Consulta comercial concluída.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorporateAnalyticsTrialConversionResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "mode": "TEST",
+                    "currency": "BRL",
+                    "asOf": "2026-11-26T16:00:00.000Z",
+                    "planCode": null,
+                    "period": {
+                      "from": "2026-09-01",
+                      "to": "2026-10-01"
+                    },
+                    "source": "ORBIT_TRIAL_GRANTS_AND_RECEIPTS",
+                    "startedOrganizations": 8,
+                    "scheduledInProgressOrganizations": 0,
+                    "scheduledEndedOrganizations": 8,
+                    "confirmedConvertedOrganizations": 3,
+                    "eligibleOrganizations": 8,
+                    "confirmedEligibleConversions": 3,
+                    "observationWindowDays": 30,
+                    "conversionRatePercent": null,
+                    "coverage": {
+                      "status": "PARTIAL",
+                      "reason": "LOCAL_COHORT_SCOPED_RECEIPT_EVIDENCE"
+                    }
+                  },
+                  "requestId": "c935d32a-9ad2-409c-a28c-c922dcc16f2c",
+                  "timestamp": "2026-11-26T16:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/CorporateValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/corporate-admin/analytics/delinquency": {
+      "get": {
+        "operationId": "corporateAdminAnalyticsDelinquency",
+        "summary": "Consulta inadimplência por organização",
+        "tags": [
+          "Administração corporativa"
+        ],
+        "description": "Organizações distintas com ao menos uma fatura positiva emitida no período. Uma organização é inadimplente quando tem fatura em aberto, saldo positivo e vencimento anterior a asOf dentro da mesma população. O percentual observado é nulo sem denominador.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/NexusAdministratorId"
+          },
+          {
+            "$ref": "#/components/parameters/FinanceMode"
+          },
+          {
+            "$ref": "#/components/parameters/FinanceCurrency"
+          },
+          {
+            "$ref": "#/components/parameters/FinanceFrom"
+          },
+          {
+            "$ref": "#/components/parameters/FinanceTo"
+          },
+          {
+            "name": "planCode",
+            "in": "query",
+            "required": false,
+            "description": "Código do plano registrado na emissão. Faturas sem atribuição ficam fora da população com filtro.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,59}$"
+            }
+          }
+        ],
+        "x-required-capability": "analytics:delinquency:read",
+        "responses": {
+          "200": {
+            "description": "Consulta comercial concluída.",
+            "headers": {
+              "X-Correlation-Id": {
+                "description": "Identificador da requisição ou correlação reconhecida pelo Orbit.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorporateAnalyticsDelinquencyResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "mode": "TEST",
+                    "currency": "BRL",
+                    "asOf": "2026-11-26T16:00:00.000Z",
+                    "planCode": null,
+                    "period": {
+                      "from": "2026-09-01",
+                      "to": "2026-10-01"
+                    },
+                    "source": "ORBIT_STRIPE_RECONCILIATION",
+                    "eligibleOrganizations": 10,
+                    "overdueOrganizations": 2,
+                    "observedRatePercent": "20.00",
+                    "eligibility": "ORGANIZATIONS_WITH_POSITIVE_ISSUED_INVOICE",
+                    "coverage": {
+                      "status": "PARTIAL",
+                      "undatedOpenOrganizations": 1,
+                      "unattributedInvoices": 1,
+                      "historicalPlanFilter": false
+                    }
+                  },
+                  "requestId": "c935d32a-9ad2-409c-a28c-c922dcc16f2c",
+                  "timestamp": "2026-11-26T16:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/CorporateValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -6965,6 +7441,686 @@
           },
           "requestId": { "type": "string" },
           "timestamp": { "type": "string", "format": "date-time" }
+        }
+      },
+      "CorporateAnalyticsRevenueCoverage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status",
+          "candidateOrganizations",
+          "unknownTermsOrganizations",
+          "unverifiedPaymentOrganizations",
+          "unpricedOrganizations",
+          "pricedOrganizations",
+          "oldestObservationAt",
+          "latestObservationAt"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "AVAILABLE",
+              "PARTIAL",
+              "UNAVAILABLE"
+            ]
+          },
+          "candidateOrganizations": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "unknownTermsOrganizations": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "unverifiedPaymentOrganizations": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "unpricedOrganizations": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pricedOrganizations": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "oldestObservationAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "latestObservationAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "CorporateAnalyticsRevenueTotal": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "grossMonthlyScaledMinor",
+          "discountMonthlyScaledMinor",
+          "monthlyRecurringScaledMinor",
+          "eligibleOrganizations",
+          "confirmedEligibleOrganizations",
+          "coverage"
+        ],
+        "properties": {
+          "grossMonthlyScaledMinor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9]+$"
+          },
+          "discountMonthlyScaledMinor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9]+$"
+          },
+          "monthlyRecurringScaledMinor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9]+$"
+          },
+          "eligibleOrganizations": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "confirmedEligibleOrganizations": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "coverage": {
+            "$ref": "#/components/schemas/CorporateAnalyticsRevenueCoverage"
+          }
+        }
+      },
+      "CorporateAnalyticsRevenueGroup": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "planCode",
+          "billingInterval",
+          "grossMonthlyScaledMinor",
+          "discountMonthlyScaledMinor",
+          "monthlyRecurringScaledMinor",
+          "eligibleOrganizations",
+          "confirmedEligibleOrganizations",
+          "coverage"
+        ],
+        "properties": {
+          "planCode": {
+            "type": "string"
+          },
+          "billingInterval": {
+            "type": "string",
+            "enum": [
+              "MONTHLY",
+              "SEMIANNUAL",
+              "ANNUAL"
+            ]
+          },
+          "grossMonthlyScaledMinor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9]+$"
+          },
+          "discountMonthlyScaledMinor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9]+$"
+          },
+          "monthlyRecurringScaledMinor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9]+$"
+          },
+          "eligibleOrganizations": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "confirmedEligibleOrganizations": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "coverage": {
+            "$ref": "#/components/schemas/CorporateAnalyticsRevenueCoverage"
+          }
+        }
+      },
+      "CorporateAnalyticsRecurringRevenue": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source",
+          "mode",
+          "currency",
+          "asOf",
+          "planCode",
+          "period",
+          "scale",
+          "totals",
+          "breakdown"
+        ],
+        "properties": {
+          "source": {
+            "const": "ORBIT_STRIPE_RECURRING_OBSERVATION"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "TEST",
+              "LIVE"
+            ]
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$"
+          },
+          "asOf": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "planCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "period": {
+            "type": "null"
+          },
+          "scale": {
+            "const": 120000,
+            "description": "Divisor dos valores mensais em unidades mínimas da moeda."
+          },
+          "totals": {
+            "$ref": "#/components/schemas/CorporateAnalyticsRevenueTotal"
+          },
+          "breakdown": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CorporateAnalyticsRevenueGroup"
+            }
+          }
+        }
+      },
+      "CorporateAnalyticsCustomerLifecycle": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source",
+          "mode",
+          "currency",
+          "asOf",
+          "planCode",
+          "period",
+          "observed",
+          "openingPaidOrganizations",
+          "closingPaidOrganizations",
+          "lostOpeningOrganizations",
+          "retainedOpeningOrganizations",
+          "openingMrrScaledMinor",
+          "lostOpeningMrrScaledMinor",
+          "expansionMrrScaledMinor",
+          "contractionMrrScaledMinor",
+          "coverage"
+        ],
+        "properties": {
+          "source": {
+            "const": "ORBIT_RECEIPTS_AND_RECORDED_CANCELLATIONS"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "TEST",
+              "LIVE"
+            ]
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$"
+          },
+          "asOf": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "planCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "period": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "from",
+              "to"
+            ],
+            "properties": {
+              "from": {
+                "type": "string",
+                "format": "date"
+              },
+              "to": {
+                "type": "string",
+                "format": "date"
+              }
+            }
+          },
+          "observed": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "firstObservedPaidOrganizations",
+              "organizationsWithFirstReceiptForAContract",
+              "recordedPaidCancellations",
+              "observedReactivatedOrganizations"
+            ],
+            "properties": {
+              "firstObservedPaidOrganizations": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "organizationsWithFirstReceiptForAContract": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "recordedPaidCancellations": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "observedReactivatedOrganizations": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "openingPaidOrganizations": {
+            "type": "null"
+          },
+          "closingPaidOrganizations": {
+            "type": "null"
+          },
+          "lostOpeningOrganizations": {
+            "type": "null"
+          },
+          "retainedOpeningOrganizations": {
+            "type": "null"
+          },
+          "openingMrrScaledMinor": {
+            "type": "null"
+          },
+          "lostOpeningMrrScaledMinor": {
+            "type": "null"
+          },
+          "expansionMrrScaledMinor": {
+            "type": "null"
+          },
+          "contractionMrrScaledMinor": {
+            "type": "null"
+          },
+          "coverage": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "status",
+              "reason"
+            ],
+            "properties": {
+              "status": {
+                "const": "PARTIAL"
+              },
+              "reason": {
+                "const": "EFFECTIVE_PAID_HISTORY_UNAVAILABLE"
+              }
+            }
+          }
+        }
+      },
+      "CorporateAnalyticsTrialConversion": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source",
+          "mode",
+          "currency",
+          "asOf",
+          "planCode",
+          "period",
+          "startedOrganizations",
+          "scheduledInProgressOrganizations",
+          "scheduledEndedOrganizations",
+          "confirmedConvertedOrganizations",
+          "eligibleOrganizations",
+          "confirmedEligibleConversions",
+          "observationWindowDays",
+          "conversionRatePercent",
+          "coverage"
+        ],
+        "properties": {
+          "source": {
+            "const": "ORBIT_TRIAL_GRANTS_AND_RECEIPTS"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "TEST",
+              "LIVE"
+            ]
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$"
+          },
+          "asOf": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "planCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "period": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "from",
+              "to"
+            ],
+            "properties": {
+              "from": {
+                "type": "string",
+                "format": "date"
+              },
+              "to": {
+                "type": "string",
+                "format": "date"
+              }
+            }
+          },
+          "startedOrganizations": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "scheduledInProgressOrganizations": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "scheduledEndedOrganizations": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "confirmedConvertedOrganizations": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "eligibleOrganizations": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "confirmedEligibleConversions": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "observationWindowDays": {
+            "const": 30
+          },
+          "conversionRatePercent": {
+            "type": "null"
+          },
+          "coverage": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "status",
+              "reason"
+            ],
+            "properties": {
+              "status": {
+                "const": "PARTIAL"
+              },
+              "reason": {
+                "const": "LOCAL_COHORT_SCOPED_RECEIPT_EVIDENCE"
+              }
+            }
+          }
+        }
+      },
+      "CorporateAnalyticsDelinquency": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source",
+          "mode",
+          "currency",
+          "asOf",
+          "planCode",
+          "period",
+          "eligibleOrganizations",
+          "overdueOrganizations",
+          "observedRatePercent",
+          "eligibility",
+          "coverage"
+        ],
+        "properties": {
+          "source": {
+            "const": "ORBIT_STRIPE_RECONCILIATION"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "TEST",
+              "LIVE"
+            ]
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$"
+          },
+          "asOf": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "planCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "period": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "from",
+              "to"
+            ],
+            "properties": {
+              "from": {
+                "type": "string",
+                "format": "date"
+              },
+              "to": {
+                "type": "string",
+                "format": "date"
+              }
+            }
+          },
+          "eligibleOrganizations": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "overdueOrganizations": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "observedRatePercent": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9]{1,3}\\.[0-9]{2}$"
+          },
+          "eligibility": {
+            "const": "ORGANIZATIONS_WITH_POSITIVE_ISSUED_INVOICE"
+          },
+          "coverage": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "status",
+              "undatedOpenOrganizations",
+              "unattributedInvoices",
+              "historicalPlanFilter"
+            ],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "AVAILABLE",
+                  "PARTIAL"
+                ]
+              },
+              "undatedOpenOrganizations": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "unattributedInvoices": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "historicalPlanFilter": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "CorporateAnalyticsRecurringRevenueResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "requestId",
+          "timestamp"
+        ],
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/CorporateAnalyticsRecurringRevenue"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CorporateAnalyticsCustomerLifecycleResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "requestId",
+          "timestamp"
+        ],
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/CorporateAnalyticsCustomerLifecycle"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CorporateAnalyticsTrialConversionResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "requestId",
+          "timestamp"
+        ],
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/CorporateAnalyticsTrialConversion"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CorporateAnalyticsDelinquencyResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "requestId",
+          "timestamp"
+        ],
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/CorporateAnalyticsDelinquency"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       }
     },

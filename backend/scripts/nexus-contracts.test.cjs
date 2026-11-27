@@ -1028,5 +1028,43 @@ contractTest(
       ).providerInvoiceId = 'in_synthetic';
       assert.equal(validate(unsafe), false);
     }
+
+    const analyticsGrants = {
+      'recurring-revenue': 'revenue',
+      'customer-lifecycle': 'lifecycle',
+      'trial-conversion': 'trials',
+      delinquency: 'delinquency',
+    };
+    for (const [path, grant] of Object.entries(analyticsGrants)) {
+      const operations = api.paths[finance + '/analytics/' + path];
+      assert.deepEqual(Object.keys(operations), ['get']);
+      const operation = operations.get;
+      assert.equal(
+        operation['x-required-capability'],
+        'analytics:' + grant + ':read',
+      );
+      const query = operation.parameters.map((item) =>
+        item.$ref ? resolve(item.$ref) : item,
+      );
+      assert.deepEqual(
+        query
+          .filter((item) => item.in === 'query' && item.required)
+          .map((item) => item.name),
+        grant === 'revenue'
+          ? ['mode', 'currency']
+          : ['mode', 'currency', 'from', 'to'],
+      );
+      assert.equal(
+        operation.responses['200'].headers['Cache-Control'].schema.const,
+        'private, no-store',
+      );
+      const { schema, example } =
+        operation.responses['200'].content['application/json'];
+      const validate = ajv.getSchema(base + schemaPointer(schema.$ref));
+      assert.ok(validate(example), JSON.stringify(validate.errors));
+      const mismatched = structuredClone(example);
+      mismatched.data.organizationId = 'org_synthetic';
+      assert.equal(validate(mismatched), false);
+    }
   },
 );

@@ -921,6 +921,7 @@ model OrganizationSubscription {
   providerLastEventId        String?   @map("provider_last_event_id") @db.VarChar(255)
   providerUpdatedAt          DateTime? @map("provider_updated_at") @db.Timestamptz(3)
   providerObservationVersion BigInt    @default(0) @map("provider_observation_version")
+  recurringObservation       Json?     @map("recurring_observation") @db.JsonB
 
   /// Controle otimista: dois comandos concorrentes não produzem estado torto.
   version   Int      @default(1)
@@ -985,6 +986,7 @@ model SubscriptionTrialGrant {
 
   @@index([organizationId])
   @@index([status, endsAt])
+  @@index([startsAt, organizationId], map: "subscription_trial_grants_analytics_start")
   @@map("subscription_trial_grants")
 }
 

@@ -26,7 +26,15 @@ export const FINANCE_OVERVIEW_READ = 'finance:overview:read';
 export const FINANCE_INVOICES_READ = 'finance:invoices:read';
 export const FINANCE_PAYMENTS_READ = 'finance:payments:read';
 export const FINANCE_ORGANIZATIONS_READ = 'finance:organizations:read';
+export const ANALYTICS_REVENUE_READ = 'analytics:revenue:read';
+export const ANALYTICS_LIFECYCLE_READ = 'analytics:lifecycle:read';
+export const ANALYTICS_TRIALS_READ = 'analytics:trials:read';
+export const ANALYTICS_DELINQUENCY_READ = 'analytics:delinquency:read';
 const CAPABILITIES = [
+  ANALYTICS_REVENUE_READ,
+  ANALYTICS_LIFECYCLE_READ,
+  ANALYTICS_TRIALS_READ,
+  ANALYTICS_DELINQUENCY_READ,
   FINANCE_OVERVIEW_READ,
   FINANCE_INVOICES_READ,
   FINANCE_PAYMENTS_READ,

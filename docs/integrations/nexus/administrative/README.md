@@ -232,3 +232,46 @@ A listagem de pagamentos mostra `RECEIPT/CONFIRMED` quando há evidência e `ATT
 A migration `20261127120000_corporate_finance` acrescenta políticas RLS de leitura, uma política para gravar a auditoria e um índice de período. A aplicação registra `plan_code_at_issue` apenas após observar uma fatura finalizada com linhas de assinatura completas e preços históricos que apontem inequivocamente para o mesmo plano. Faturas legadas ou ambíguas preservam o valor nulo até existir evidência inequívoca. A migration dispensa backfill. Acompanhe o DDL pelo gate normal do banco, pois a criação do índice requer lock na tabela.
 
 As consultas usam somente faturas, evidências, ajustes e transições da cobrança do SaaS. Elas não solicitam dados ao Stripe nem alteram cobranças, assinaturas ou pagamentos. A auditoria grava apenas metadados de acesso. IDs do provedor, URLs privadas, dados de cartão e payloads de reconciliação ficam fora das respostas. Os descontos históricos da ADM-05.A entram pela fatura reconciliada. O valor reservado no checkout é informação gerencial daquele fluxo e fica fora desta soma. [OpenAPI](openapi.json)
+
+## ADM-07.R.A — Indicadores comerciais
+
+As quatro consultas GET usam `/api/v1/corporate-admin/analytics`. Cada rota requer a capability correspondente na credencial técnica. A API corporativa exige ativação explícita e as credenciais anteriores preservam seus grants. A resposta é privada e usa `no-store`. A auditoria registra o principal técnico, a referência administrativa quando informada, a correlação, a operação, o modo e o resultado. [OpenAPI](openapi.json)
+
+| Rota | Capability | Fonte |
+| --- | --- | --- |
+| `/recurring-revenue` | `analytics:revenue:read` | Observação do contrato Stripe registrada na reconciliação |
+| `/customer-lifecycle` | `analytics:lifecycle:read` | Alocações confirmadas de pagamento e encerramentos registrados nas assinaturas |
+| `/trial-conversion` | `analytics:trials:read` | Concessões de trial do Orbit e alocações confirmadas de pagamento |
+| `/delinquency` | `analytics:delinquency:read` | Faturas reconciliadas com os critérios da ADM-06.A |
+
+Todas as rotas exigem `mode=TEST` ou `mode=LIVE` e `currency` de três letras maiúsculas. Três rotas também exigem `from` e `to`, com janela de 1 a 366 dias entre o início inclusivo e o fim exclusivo, à meia-noite UTC. A receita recorrente é um retrato no `asOf` da transação e retorna `period: null`. O filtro opcional `planCode` identifica o plano corrente em receita, o plano da primeira concessão em trials e o plano documentado na emissão em inadimplência. Ciclo de clientes agrega movimentos da organização através de seus vários contratos.
+
+### MRR, ARR e ARPA
+
+A população parte de assinaturas Stripe ativas no período corrente e vinculadas ao customer do modo consultado. A organização pode estar operacionalmente suspensa. A observação deve corresponder ao preço contratado e ao período registrados na assinatura. O pagamento é comprovado por alocações positivas únicas via PaymentIntent na fatura do mesmo customer, assinatura, moeda, preço e período. A soma das alocações válidas deve cobrir integralmente o valor pago registrado, com saldo e créditos zerados. No MRR, o recebimento serve apenas para comprovar elegibilidade. O valor é o preço recorrente contratado que a reconciliação observou no provedor.
+
+Os agregados incluem preço bruto, desconto recorrente e preço líquido, no total e agrupados por plano e periodicidade. Para períodos de 1, 6 ou 12 meses, o valor mensal retornado é `(preço em unidades mínimas × 10.000 − desconto recorrente em unidades mínimas × 10.000) × (12 ÷ meses)`. Os valores são strings inteiras exatas. Divida por `scale = 120000` para obter unidades mínimas mensais. Adie o arredondamento até a apresentação. ARR é MRR × 12. ARPA mensal usa MRR dividido por `coverage.pricedOrganizations` do mesmo recorte e fica indisponível se esse número for zero.
+
+A projeção cobre preço fixo para um item e quantidade unitária, sem imposto inclusivo. Cobre cupom recorrente único vinculado à assinatura, compatível com o produto e a moeda, com percentual de até duas casas ou valor fixo limitado ao preço. Um desconto pontual fica fora do MRR. Desconto com fim conhecido deixa de valer ao alcançar a data efetiva. Descontos acumulados, herdados, por item ou ambíguos ficam sem precificação por esta projeção. [Descontos da Stripe](https://docs.stripe.com/api/discounts/object)
+
+`AVAILABLE` indica cobertura integral da população candidata, incluindo o recorte comprovadamente vazio, com valor `"0"`. `PARTIAL` informa valores exatos do subconjunto precificado. `UNAVAILABLE` indica lacunas sem contratos precificados no recorte, com valores `null`. `eligibleOrganizations` fica `null` se o total pagante não puder ser comprovado. `confirmedEligibleOrganizations` conta o subconjunto confirmado, inclusive casos com desconto desconhecido. `coverage` expõe candidatos, termos desconhecidos, pagamento sem comprovação, contratos elegíveis sem preço líquido, contratos precificados e o intervalo das observações usadas. Contratos que ainda não passaram pela reconciliação com a nova projeção aparecem como lacuna quando pertencem à população candidata.
+
+### Crescimento e retenção
+
+O primeiro recebimento observado conta uma organização uma vez. O primeiro recebimento em qualquer contrato no período também conta organizações distintas, inclusive as que retornaram. Cancelamento comprovado exige assinatura com estado `CANCELED` e `endedAt` posterior à primeira alocação confirmada no mesmo contrato. Uma reativação comprovada exige o primeiro recebimento de outro contrato após esse encerramento. Agendamentos de cancelamento e suspensões operacionais ficam fora das contagens de encerramento.
+
+O endpoint retorna `null` para bases pagantes de abertura e fechamento, perdas, retenção e variações de MRR. Os dados atuais conservam alguns fatos e a última observação do contrato. Para calcular esses indicadores históricos, a reconciliação precisaria preservar as transições efetivas do estado pago e os termos recorrentes vigentes em cada transição, com data efetiva e modo, moeda e preço antes e depois. A menor extensão futura é registrar essas observações nas estruturas de histórico existentes a partir do momento em que forem comprovadas.
+
+### Conversão de trials
+
+A coorte usa a primeira concessão de cada organização, pelo início registrado. Em andamento e encerrado usam a data prevista de término. A janela de conversão começa no início e termina 30 dias de 24 horas após o fim previsto, com o limite superior exclusivo. A primeira alocação positiva confirmada da organização, na moeda e no modo pedidos, deve cair nessa janela. Checkout iniciado, encerramento do trial e liquidação sem alocação ficam fora dos convertidos. A população elegível corresponde a trials cuja janela já fechou. `confirmedEligibleConversions` conta quem converteu dentro desse subconjunto.
+
+A concessão é local e a evidência positiva é específica do modo e da moeda. O percentual sai `null`. Para provar a taxa, as concessões futuras precisam carregar o escopo comercial aplicável à coorte e ter cobertura comprovável de pagamentos durante a janela inteira.
+
+### Inadimplência
+
+Numerador e denominador compartilham as organizações distintas com fatura positiva emitida em `OPEN`, `PAID` ou `UNCOLLECTIBLE` no período e nos filtros informados. O numerador exige fatura `OPEN` com saldo positivo e vencimento anterior a `asOf`. O saldo marcado como incobrável permanece separado pela semântica da ADM-06.A. A data de emissão é `finalizedAt`, com fallback para `createdAt` do provedor. `observedRatePercent` é `100 × inadimplentes ÷ elegíveis`, arredondado a duas casas, ou `null` sem denominador. Faturas abertas sem vencimento permanecem no denominador e sinalizam cobertura parcial. Com filtro por plano, faturas sem atribuição ficam fora da população e aparecem na contagem de lacunas.
+
+### Banco e rollout
+
+A migration `20261127130000_corporate_commercial_analytics` cria uma projeção JSONB opcional em assinaturas, índices para datas de coorte e encerramento, políticas RLS de leitura com escopo por operação e modo, e a permissão restrita de auditoria. Use o gate de migrations habitual. A coluna começa vazia. A reconciliação já existente passa a gravar a observação dos termos em sua transação e versão atuais. As consultas agregam no PostgreSQL e usam somente dados locais. Os indicadores têm um limite de execução por instrução SQL de cinco segundos.
