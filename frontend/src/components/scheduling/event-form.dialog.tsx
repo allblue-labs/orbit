@@ -119,6 +119,15 @@ const PRIORITY_LABELS: Readonly<Record<SchedulingPriority, string>> = {
   CRITICAL: "CRÍTICO",
 };
 
+const RECURRENCE_FREQUENCY_LABELS: Readonly<
+  Record<RecurrenceFrequency, string>
+> = {
+  DAILY: "DIÁRIO",
+  WEEKLY: "SEMANAL",
+  MONTHLY: "MENSAL",
+  CUSTOM: "CUSTOM",
+};
+
 export function EventFormDialog({
   open,
   editing,
@@ -738,7 +747,7 @@ function RecurrenceFields({
                   (frequency) => frequency !== "CUSTOM",
                 ).map((frequency) => (
                   <SelectItem key={frequency} value={frequency}>
-                    {frequency}
+                    {RECURRENCE_FREQUENCY_LABELS[frequency]}
                   </SelectItem>
                 ))}
               </SelectContent>

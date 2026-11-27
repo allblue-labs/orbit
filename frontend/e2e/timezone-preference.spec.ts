@@ -255,6 +255,53 @@ test("novo evento identifica obrigatórios em português e mantém os opcionais 
   );
 });
 
+test("frequências recorrentes traduzidas mantêm o valor interno ao salvar", async ({
+  page,
+}) => {
+  const { writes } = await fixture(page);
+  await page.goto("/agenda");
+
+  const frequencies = [
+    { value: "DAILY", label: "DIÁRIO" },
+    { value: "WEEKLY", label: "SEMANAL" },
+    { value: "MONTHLY", label: "MENSAL" },
+  ] as const;
+
+  for (const { value, label } of frequencies) {
+    await page.getByRole("button", { name: "Novo evento", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Novo evento na agenda" });
+    await dialog.locator("#event-title").fill(`Evento ${label}`);
+    await dialog
+      .getByRole("checkbox", { name: "Evento recorrente", exact: true })
+      .check();
+
+    await dialog.locator("#event-frequency").click();
+    await expect(page.getByRole("option", { name: label, exact: true })).toBeVisible();
+    await page.getByRole("option", { name: label, exact: true }).click();
+    await expect(dialog.locator("#event-frequency")).toContainText(label);
+
+    const saved = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/scheduling/events") &&
+        response.request().method() === "POST",
+    );
+    await dialog
+      .getByRole("button", { name: "Criar evento", exact: true })
+      .click();
+    expect((await saved).ok()).toBeTruthy();
+
+    const payload = writes.find(
+      (write) =>
+        write.path.endsWith("/scheduling/events") &&
+        write.body.title === `Evento ${label}`,
+    )?.body;
+    expect(payload?.recurrence).toMatchObject({
+      frequency: value,
+      interval: 1,
+    });
+  }
+});
+
 test("saving the preference propagates to settings, new calendars and HTTP context", async ({
   page,
 }) => {
