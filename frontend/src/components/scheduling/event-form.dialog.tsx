@@ -47,9 +47,11 @@
  */
 import { useState } from "react";
 import { AlertTriangle } from "lucide-react";
+import { ptBR } from "date-fns/locale";
 
 import { MutationError } from "@/components/artifact-studio/mutation-error";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -61,6 +63,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -104,6 +111,22 @@ const WEEKDAYS = [
   { value: 5, label: "S" },
   { value: 6, label: "S" },
 ];
+
+const PRIORITY_LABELS: Readonly<Record<SchedulingPriority, string>> = {
+  LOW: "BAIXO",
+  NORMAL: "NORMAL",
+  HIGH: "ALTO",
+  CRITICAL: "CRÍTICO",
+};
+
+const RECURRENCE_FREQUENCY_LABELS: Readonly<
+  Record<RecurrenceFrequency, string>
+> = {
+  DAILY: "DIÁRIO",
+  WEEKLY: "SEMANAL",
+  MONTHLY: "MENSAL",
+  CUSTOM: "CUSTOM",
+};
 
 export function EventFormDialog({
   open,
@@ -357,13 +380,12 @@ function EventForm({
           <Label htmlFor="event-start" required>
             Início
           </Label>
-          <Input
+          <DateTimeConfirmField
             id="event-start"
-            required
             aria-required="true"
-            type="datetime-local"
             value={form.startLocal}
-            onChange={(event) => edit({ startLocal: event.target.value })}
+            timeZone={timeZone}
+            onChange={(value) => edit({ startLocal: value })}
           />
         </div>
 
@@ -371,13 +393,12 @@ function EventForm({
           <Label htmlFor="event-end" required>
             Fim
           </Label>
-          <Input
+          <DateTimeConfirmField
             id="event-end"
-            required
             aria-required="true"
-            type="datetime-local"
             value={form.endLocal}
-            onChange={(event) => edit({ endLocal: event.target.value })}
+            timeZone={timeZone}
+            onChange={(value) => edit({ endLocal: value })}
           />
         </div>
 
@@ -416,7 +437,7 @@ function EventForm({
             <SelectContent>
               {SCHEDULING_PRIORITIES.map((priority) => (
                 <SelectItem key={priority} value={priority}>
-                  {priority}
+                  {PRIORITY_LABELS[priority]}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -515,6 +536,178 @@ function EventForm({
   );
 }
 
+function DateTimeConfirmField({
+  id,
+  value,
+  timeZone,
+  onChange,
+  "aria-required": ariaRequired,
+}: {
+  id: string;
+  value: string;
+  timeZone: string;
+  onChange: (value: string) => void;
+  "aria-required": "true";
+}) {
+  const [open, setOpen] = useState(false);
+  const [draftDate, setDraftDate] = useState("");
+  const [draftHour, setDraftHour] = useState("09");
+  const [draftMinute, setDraftMinute] = useState("00");
+
+  const initializeDraft = () => {
+    const parts = parseLocalValue(value);
+    if (parts) {
+      setDraftDate(parts.date);
+      setDraftHour(parts.hour);
+      setDraftMinute(parts.minute);
+      return;
+    }
+
+    const now = zonedParts(new Date(), timeZone);
+    setDraftDate(
+      `${now.year}-${String(now.month).padStart(2, "0")}-${String(now.day).padStart(2, "0")}`,
+    );
+    setDraftHour(String(now.hour).padStart(2, "0"));
+    setDraftMinute(String(now.minute).padStart(2, "0"));
+  };
+
+  const confirm = () => {
+    if (!draftDate) return;
+    onChange(`${draftDate}T${draftHour}:${draftMinute}`);
+    setOpen(false);
+  };
+
+  const clear = () => {
+    onChange("");
+    setDraftDate("");
+    setDraftHour("09");
+    setDraftMinute("00");
+    setOpen(false);
+  };
+
+  const useToday = () => {
+    const now = zonedParts(new Date(), timeZone);
+    setDraftDate(
+      `${now.year}-${String(now.month).padStart(2, "0")}-${String(now.day).padStart(2, "0")}`,
+    );
+  };
+
+  const selectedDate = draftDate ? dateFromKey(draftDate) : undefined;
+  const displayValue = formatDisplayValue(value);
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (nextOpen) initializeDraft();
+      }}
+    >
+      <PopoverTrigger asChild>
+        <Button
+          id={id}
+          type="button"
+          variant="outline"
+          aria-required={ariaRequired}
+          className="w-full justify-start text-left font-normal"
+        >
+          {displayValue || "Selecione data e horário"}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="start">
+        <Calendar
+          mode="single"
+          locale={ptBR}
+          selected={selectedDate}
+          onSelect={(date) => {
+            if (!date) return;
+            setDraftDate(
+              `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`,
+            );
+          }}
+        />
+        <div className="flex items-center gap-2 border-t px-3 py-2">
+          <label className="text-sm" htmlFor={`${id}-hour`}>
+            Hora
+          </label>
+          <select
+            id={`${id}-hour`}
+            value={draftHour}
+            onChange={(event) => setDraftHour(event.target.value)}
+            className="h-9 rounded-md border border-input bg-transparent px-2 text-sm"
+            aria-label="Hora"
+          >
+            {Array.from({ length: 24 }, (_, hour) =>
+              String(hour).padStart(2, "0"),
+            ).map((hour) => (
+              <option key={hour} value={hour}>
+                {hour}
+              </option>
+            ))}
+          </select>
+          <span aria-hidden>:</span>
+          <label className="sr-only" htmlFor={`${id}-minute`}>
+            Minutos
+          </label>
+          <select
+            id={`${id}-minute`}
+            value={draftMinute}
+            onChange={(event) => setDraftMinute(event.target.value)}
+            className="h-9 rounded-md border border-input bg-transparent px-2 text-sm"
+            aria-label="Minutos"
+          >
+            {Array.from({ length: 60 }, (_, minute) =>
+              String(minute).padStart(2, "0"),
+            ).map((minute) => (
+              <option key={minute} value={minute}>
+                {minute}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex justify-between gap-2 border-t p-2">
+          <div className="flex gap-2">
+            <Button type="button" variant="ghost" size="sm" onClick={clear}>
+              Limpar
+            </Button>
+            <Button type="button" variant="ghost" size="sm" onClick={useToday}>
+              Hoje
+            </Button>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            onClick={confirm}
+            disabled={!draftDate}
+          >
+            Confirmar
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function parseLocalValue(
+  value: string,
+): { date: string; hour: string; minute: string } | null {
+  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::\d{2})?$/.exec(value);
+  if (!match) return null;
+  return { date: match[1], hour: match[2], minute: match[3] };
+}
+
+function dateFromKey(key: string): Date {
+  const [year, month, day] = key.split("-").map(Number);
+  return new Date(year, month - 1, day, 12);
+}
+
+function formatDisplayValue(value: string): string {
+  const parts = parseLocalValue(value);
+  if (!parts) return "";
+  const [year, month, day] = parts.date.split("-");
+  return `${day}/${month}/${year} ${parts.hour}:${parts.minute}`;
+}
+
 function RecurrenceFields({
   form,
   onChange,
@@ -554,7 +747,7 @@ function RecurrenceFields({
                   (frequency) => frequency !== "CUSTOM",
                 ).map((frequency) => (
                   <SelectItem key={frequency} value={frequency}>
-                    {frequency}
+                    {RECURRENCE_FREQUENCY_LABELS[frequency]}
                   </SelectItem>
                 ))}
               </SelectContent>
