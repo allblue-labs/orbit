@@ -237,6 +237,11 @@ services:
       VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@orbit.local}
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      # Corporate administrative API used by the Nexus (opt-in, API process only).
+      # The verifier array holds SHA-256 digests, never bearers; see
+      # docs/integrations/nexus/administrative/README.md.
+      ORBIT_CORPORATE_ADMIN_ENABLED: ${ORBIT_CORPORATE_ADMIN_ENABLED:-false}
+      ORBIT_CORPORATE_ADMIN_CREDENTIALS: ${ORBIT_CORPORATE_ADMIN_CREDENTIALS:-}
     ports:
       - "127.0.0.1:${API_PORT:-6001}:5001"
     depends_on:
@@ -272,6 +277,8 @@ services:
     environment:
       <<: *backend-environment
       ORBIT_PROCESS_ROLE: worker
+      ORBIT_CORPORATE_ADMIN_ENABLED: "false"
+      ORBIT_CORPORATE_ADMIN_CREDENTIALS: ""
       DATABASE_URL: postgresql://orbit_worker:${WORKER_DATABASE_PASSWORD}@pgbouncer:6432/${POSTGRES_DB}?pgbouncer=true
       REDIS_HOTPATH_ENABLED: "false"
       REDIS_HOTPATH_PASSWORD: ""
@@ -297,6 +304,8 @@ services:
     environment:
       <<: *backend-environment
       ORBIT_PROCESS_ROLE: documents
+      ORBIT_CORPORATE_ADMIN_ENABLED: "false"
+      ORBIT_CORPORATE_ADMIN_CREDENTIALS: ""
       DATABASE_URL: postgresql://orbit_documents:${DOCUMENTS_DATABASE_PASSWORD}@pgbouncer:6432/${POSTGRES_DB}?pgbouncer=true
       REDIS_HOTPATH_ENABLED: "false"
       REDIS_HOTPATH_PASSWORD: ""
