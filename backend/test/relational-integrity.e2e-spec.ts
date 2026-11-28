@@ -210,6 +210,15 @@ describe('PR-12 — real PostgreSQL relational boundaries and safe upgrade', () 
         'product_sales_receipt_id_fkey',
         'product_sales_receipt_scope',
         'product_sales_unit_scope',
+        // ADM-08 corporate administration (reviewed in ADM-10.A): tenant rows cascade from
+        // organizations; support interactions use composite (ticket, organization) keys; the
+        // promotion links point to global campaigns and keep usage history from being deleted.
+        'billing_checkout_attempts_promotion_id_fkey',
+        'corporate_commercial_commands_organization_id_fkey',
+        'corporate_promotion_commands_promotion_id_fkey',
+        'corporate_support_interaction_administrative_ticket_id_org_fkey',
+        'corporate_support_interaction_billing_ticket_id_organizati_fkey',
+        'corporate_support_tickets_organization_id_fkey',
       ].sort(),
     );
     const contactLink = await db.query<{

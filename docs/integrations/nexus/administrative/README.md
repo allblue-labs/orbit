@@ -57,7 +57,7 @@ writeFileSync('nexus-token.txt', ['orbit-ca1', environment, keyId, secret].join(
 JS
 ```
 
-Injete o conteúdo de `orbit-verifier.json` na variável de credenciais da API local e o de `nexus-token.txt` no cliente técnico. A exceção de HTTP vale apenas em ambiente local, com socket loopback. Ambientes implantados exigem HTTPS atestado; `X-Forwarded-Proto` isolado não satisfaz o guard. As variáveis de habilitação e verificador precisam ser passadas explicitamente ao container de API quando essa fronteira for autorizada. O Compose do produto não o faz por padrão.
+Injete o conteúdo de `orbit-verifier.json` na variável de credenciais da API local e o de `nexus-token.txt` no cliente técnico. A exceção de HTTP vale apenas em ambiente local, com socket loopback. Ambientes implantados exigem HTTPS atestado; `X-Forwarded-Proto` isolado não satisfaz o guard. O Compose do produto encaminha `ORBIT_CORPORATE_ADMIN_ENABLED` (padrão `false`) e `ORBIT_CORPORATE_ADMIN_CREDENTIALS` (padrão vazio) somente ao processo API; `worker` e `documents` recebem a fronteira desabilitada. Defina os valores no `.env` da implantação apenas quando a fronteira for autorizada.
 
 **Rotação.** Provisionar novo segredo com outro `keyId` e o mesmo `principalId`. Carregar os dois verificadores em todas as instâncias, atualizar o cliente e verificar a conexão. Então revogar ou remover o antigo e recarregar todas as instâncias. A revogação de uma credencial vazada exige essa atualização imediata ou a desabilitação da fronteira. A expiração independe de reload. Sem sessão ou token renovável emitido pelo Orbit.
 
