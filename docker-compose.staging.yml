@@ -1,22 +1,25 @@
 services:
   api:
-    environment: &staging-storage
-      ORBIT_DEPLOYMENT: staging
-      STORAGE_PROVIDER: LOCAL
-      STORAGE_LOCAL_DIR: /app/staging-media
-      STORAGE_PUBLIC_API_URL: ${STORAGE_PUBLIC_API_URL:-https://orbit.allblue-labs.com/api/v1}
-      STORAGE_BUCKET: orbit-assets-private
-      STORAGE_LOCAL_BRAND_BUCKET: orbit-assets
-      R2_ACCOUNT_ID: ""
-      R2_ACCESS_KEY_ID: ""
-      R2_SECRET_ACCESS_KEY: ""
-      R2_BUCKET_NAME: ""
-      R2_PRIVATE_BUCKET_NAME: ""
-      R2_ENDPOINT: ""
-      R2_LEGACY_PRIVATE_BUCKETS: ""
-      R2_PUBLIC_URL: ""
-      CLOUDFLARE_CACHE_PURGE_ZONE_ID: ""
-      CLOUDFLARE_CACHE_PURGE_TOKEN: ""
+    environment:
+      <<: &staging-storage
+        ORBIT_DEPLOYMENT: staging
+        STORAGE_PROVIDER: LOCAL
+        STORAGE_LOCAL_DIR: /app/staging-media
+        STORAGE_PUBLIC_API_URL: ${STORAGE_PUBLIC_API_URL:-https://orbit.allblue-labs.com/api/v1}
+        STORAGE_BUCKET: orbit-assets-private
+        STORAGE_LOCAL_BRAND_BUCKET: orbit-assets
+        R2_ACCOUNT_ID: ""
+        R2_ACCESS_KEY_ID: ""
+        R2_SECRET_ACCESS_KEY: ""
+        R2_BUCKET_NAME: ""
+        R2_PRIVATE_BUCKET_NAME: ""
+        R2_ENDPOINT: ""
+        R2_LEGACY_PRIVATE_BUCKETS: ""
+        R2_PUBLIC_URL: ""
+        CLOUDFLARE_CACHE_PURGE_ZONE_ID: ""
+        CLOUDFLARE_CACHE_PURGE_TOKEN: ""
+      ORBIT_CORPORATE_ADMIN_ENABLED: ${ORBIT_CORPORATE_ADMIN_ENABLED:-false}
+      ORBIT_CORPORATE_ADMIN_CREDENTIALS: ${ORBIT_CORPORATE_ADMIN_CREDENTIALS:-}
     volumes: &staging-media
       - staging_media:/app/staging-media
   worker:

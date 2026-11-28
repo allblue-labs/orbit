@@ -29,7 +29,8 @@ if not env.get('DATABASE_URL') or any(env.get(k) for k in ['DIRECT_DATABASE_URL'
     sys.exit('O runtime não pode receber credenciais administrativas.')
 release=json.loads(Path('release.json').read_text())
 commit=release.get('commit', '')
-if release.get('deployment') != 'staging' or not re.fullmatch(r'[a-f0-9]{40}', commit) or release.get('tag') != 'staging-'+commit[:12]:
+if (release.get('deployment') != 'staging' or release.get('sourceBranch') != 'staging'
+        or not re.fullmatch(r'[a-f0-9]{40}', commit) or release.get('tag') != 'staging-'+commit[:12]):
     sys.exit('Revisão de staging inválida em release.json.')
 for service in ('api', 'worker', 'documents', 'migrate', 'frontend', 'pgbouncer'):
     image=x['services'][service]['image']

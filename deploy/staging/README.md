@@ -32,9 +32,9 @@ O lock usa digests completos. Nenhum build ou checkout Git ocorre no Ubuntu.
 
 Depois da implantação, `docker compose up -d` em `/opt/stacks/orbit` usa o
 mesmo lock e o overlay `docker-compose.staging.yml` por meio de `COMPOSE_FILE`. Para conferir, rode
-`docker compose config --images`. Uma nova revisão no Git vira release de
-staging após publicar as três imagens, instalar o lock correspondente e
-executar o deploy. `docker compose down -v` apaga os volumes do projeto,
+`docker compose config --images`. A release de staging parte do tip publicado da branch `staging`. O build
+verifica o checkout e a revisão remota. O manifest registra `sourceBranch=staging`
+e o servidor valida essa origem e os digests ao instalar o lock. `docker compose down -v` apaga os volumes do projeto,
 incluindo o banco. Para recriar somente os contêineres, use
 `docker compose up -d --force-recreate`.
 
@@ -171,6 +171,7 @@ entrega de mensagens nem saída da sandbox.
 Build/push no Mac ou CI, com árvore limpa e login Docker Hub:
 
 ```bash
+git switch staging
 ORBIT_RELEASE_OUTPUT=/private/tmp/orbit-staging-release bash deploy/staging/bin/build-push.sh
 ```
 

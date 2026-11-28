@@ -6,6 +6,13 @@ cd "$(dirname "$0")/../../.."
 sha=$(git rev-parse HEAD)
 deployment=${ORBIT_RELEASE_DEPLOYMENT:-staging}
 case "$deployment" in staging|production) ;; *) echo 'Ambiente de release inválido.' >&2; exit 1 ;; esac
+if [[ $deployment == staging ]]; then
+    branch=$(git symbolic-ref --quiet --short HEAD || true)
+    [[ $branch == staging ]] || { echo 'Use a branch staging.' >&2; exit 1; }
+    remote=${ORBIT_STAGING_GIT_REMOTE:-git@github.com:allblue-labs/orbit.git}
+    published=$(git ls-remote --exit-code "$remote" refs/heads/staging)
+    [[ ${published%%[[:space:]]*} == "$sha" ]] || { echo 'HEAD diverge da staging publicada.' >&2; exit 1; }
+fi
 if [[ -n ${NEXT_PUBLIC_SENTRY_DSN:-} && ${NEXT_PUBLIC_SENTRY_ENVIRONMENT:-} != "$deployment" ]]; then
     echo 'NEXT_PUBLIC_SENTRY_ENVIRONMENT deve corresponder ao ambiente da release.' >&2
     exit 1
@@ -96,6 +103,8 @@ p=pathlib.Path(sys.argv[1]); repository, tag, sha, created, include_backup, depl
 services={'api':'api', 'worker':'api', 'documents':'api', 'migrate':'migrator', 'bootstrap-admin':'migrator', 'storage-migration':'migrator', 'frontend':'frontend', 'pgbouncer':'pgbouncer'}
 lock=['# Referências imutáveis publicadas no Docker Hub privado.', 'services:']
 manifest={'commit': sha, 'created': created, 'tag': tag, 'deployment': deployment, 'images': {}}
+if deployment == 'staging':
+    manifest['sourceBranch']='staging'
 for service, component in services.items():
     digest=json.loads((p/(component+'.json')).read_text())['containerimage.digest']
     if not re.fullmatch(r'sha256:[a-f0-9]{64}',digest): raise SystemExit('Digest inválido.')
