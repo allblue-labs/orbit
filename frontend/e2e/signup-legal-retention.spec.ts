@@ -1,5 +1,13 @@
 import { expect, test, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
+import {
+  LEGAL_DOCUMENT_EFFECTIVE_AT,
+  LEGAL_DOCUMENT_VERSION,
+} from "../src/types/contracts/modules/legal/legal.read-models";
+
+const effectiveDate = LEGAL_DOCUMENT_EFFECTIVE_AT.split("-")
+  .reverse()
+  .join("/");
 
 async function addressStep(page: Page) {
   await page.route("**/api/auth/session", (route) =>
@@ -64,18 +72,36 @@ test("reading both full documents preserves the signup form and does not accept 
   await page
     .getByLabel(/^Cidade(?:\s*\*?\s*\(obrigatório\))?$/)
     .fill("Salvador");
-  for (const [label, title] of [
-    ["Termos de Uso", "Termos de Uso do Orbit"],
-    ["Política de Privacidade", "Política de Privacidade do Orbit"],
+  for (const [slug, label, title] of [
+    ["termos", "Termos de Uso", "Termos de Uso do Orbit"],
+    [
+      "privacidade",
+      "Política de Privacidade",
+      "Política de Privacidade do Orbit",
+    ],
   ]) {
     await page
       .getByRole("button", { name: `Ler ${label}`, exact: true })
       .click();
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
-    const frame = page.frameLocator(`iframe[title="${label}"]`);
+    const iframe = dialog.locator(`iframe[title="${label}"]`);
+    await expect(iframe).toHaveAttribute(
+      "src",
+      `/legal/${slug}/${LEGAL_DOCUMENT_VERSION}`,
+    );
+    await expect(
+      dialog.getByRole("link", { name: "Baixar PDF" }),
+    ).toHaveAttribute(
+      "href",
+      `/api/legal/${slug}/download/${LEGAL_DOCUMENT_VERSION}`,
+    );
+    const frame = iframe.contentFrame();
     await expect(
       frame.getByRole("heading", { name: title, exact: true }),
+    ).toBeVisible();
+    await expect(
+      frame.getByText(`Versão ${LEGAL_DOCUMENT_VERSION}`, { exact: false }),
     ).toBeVisible();
     await expect(
       frame.getByText("Allblue Labs Inova Simples", { exact: false }).first(),
@@ -99,15 +125,50 @@ for (const slug of ["termos", "privacidade"]) {
     page,
   }) => {
     await page.goto(`/legal/${slug}`);
+    await expect(
+      page.getByText(
+        `Versão ${LEGAL_DOCUMENT_VERSION} · Vigência: ${effectiveDate}`,
+        { exact: true },
+      ),
+    ).toBeVisible();
     const downloadPromise = page.waitForEvent("download");
     await page.getByRole("link", { name: "Baixar PDF", exact: true }).click();
     const download = await downloadPromise;
-    expect(download.suggestedFilename()).toBe(`orbit-${slug}-2026-11-19.1.pdf`);
+    expect(download.suggestedFilename()).toBe(
+      `orbit-${slug}-${LEGAL_DOCUMENT_VERSION}.pdf`,
+    );
     const content = await readFile((await download.path())!);
     expect(content.subarray(0, 5).toString()).toBe("%PDF-");
     expect(content.length).toBeGreaterThan(6000);
   });
 }
+
+test("a versioned URL cannot silently display or download a different edition", async ({
+  page,
+  request,
+}) => {
+  const oldVersion = "2026-11-27.2";
+  await page.goto(`/legal/termos/${oldVersion}`);
+  await expect(
+    page
+      .getByRole("alert")
+      .filter({ hasText: "Esta versão do documento está indisponível" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Termos de Uso do Orbit" }),
+  ).toHaveCount(0);
+
+  const response = await request.get(
+    `/api/legal/termos/download/${oldVersion}`,
+  );
+  expect(response.status()).toBe(409);
+  expect(response.headers()["content-type"]).not.toContain("application/pdf");
+  const cacheDirectives = response
+    .headers()
+    ["cache-control"]?.split(",")
+    .map((directive) => directive.trim());
+  expect(cacheDirectives).toContain("no-store");
+});
 
 test("legal reading fits a mobile screen", async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
@@ -125,6 +186,45 @@ test("legal reading fits a mobile screen", async ({ page }) => {
       () => document.documentElement.scrollWidth <= window.innerWidth,
     ),
   ).toBe(true);
+});
+
+test("documents updated during signup require a new reading and acceptance", async ({
+  page,
+}) => {
+  const message =
+    "Os documentos legais foram atualizados durante o cadastro. Atualize a página, leia a versão vigente e aceite novamente para continuar.";
+  let submitted: Record<string, unknown> | null = null;
+  await page.route("**/api/auth/register", async (route) => {
+    submitted = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({
+      status: 409,
+      json: {
+        success: false,
+        error: { code: "LEGAL_DOCUMENT_VERSION_MISMATCH", message },
+      },
+    });
+  });
+
+  await addressStep(page);
+  await page.getByLabel(/^Cidade(?:\s*\*?\s*\(obrigatório\))?$/).fill("Recife");
+  await page.getByLabel(/^UF(?:\s*\*?\s*\(obrigatório\))?$/).fill("PE");
+  await page
+    .getByLabel(/^Endereço da matriz(?:\s*\*?\s*\(obrigatório\))?$/)
+    .fill("Rua de teste, 100");
+  await page.locator("#terms").check();
+  await page
+    .getByRole("button", { name: "Criar organização", exact: true })
+    .click();
+
+  expect(submitted).toMatchObject({
+    acceptTerms: true,
+    termsVersion: LEGAL_DOCUMENT_VERSION,
+    privacyVersion: LEGAL_DOCUMENT_VERSION,
+  });
+  await expect(
+    page.getByRole("alert").filter({ hasText: message }),
+  ).toBeVisible();
+  await expect(page.locator("#terms")).not.toBeChecked();
 });
 
 test.describe("aceite obrigatório em português", () => {

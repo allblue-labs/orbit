@@ -105,14 +105,14 @@ export function SubscriptionExpiredNotice() {
           {session.session.authenticated &&
           session.session.subscription?.dataRetentionEndsAt ? (
             <p className="mt-3 font-medium">
-              Os dados operacionais serão mantidos por 30 dias após o fim do
-              acesso, até{" "}
+              Os dados operacionais ficam preservados por 30 dias após o fim do
+              acesso pago. Sem recontratação, a exclusão pode ocorrer a partir
+              de{" "}
               {dataDeVencimento(
                 session.session.subscription.dataRetentionEndsAt,
                 timeZone,
               )}
-              . Sem recontratação, serão excluídos automaticamente ao final
-              desse prazo.
+              , quando a rotina de exclusão estiver ativa.
             </p>
           ) : null}
         </div>

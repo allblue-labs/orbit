@@ -2,7 +2,7 @@ import type { IdentityRegistrationReadModel } from '../identity.read-models';
 import { LEGAL_DOCUMENT_VERSION } from '../../../contracts/modules/legal/legal.read-models';
 import { Inject, Injectable } from '@nestjs/common';
 import type { IHashProvider } from '../../../contracts';
-import { ValidationException } from '../../../exceptions';
+import { ConflictException, ValidationException } from '../../../exceptions';
 import { registrationConflict } from './registration-conflicts';
 import { normalizeBrazilianDocument } from '../../../utils';
 import { SlugHelper } from '../../../helpers';
@@ -26,13 +26,18 @@ export class RegistrationService {
     input: RegisterOrganizationDto,
     metadata: SessionMetadata,
   ): Promise<IdentityRegistrationReadModel> {
+    if (input.acceptTerms !== true) {
+      throw new ValidationException(
+        'The current Terms of Use and Privacy Policy must be accepted',
+      );
+    }
     if (
-      input.acceptTerms !== true ||
       input.termsVersion !== LEGAL_DOCUMENT_VERSION ||
       input.privacyVersion !== LEGAL_DOCUMENT_VERSION
     ) {
-      throw new ValidationException(
-        'The current Terms of Use and Privacy Policy must be accepted',
+      throw new ConflictException(
+        'Legal documents changed during registration',
+        'LEGAL_DOCUMENT_VERSION_MISMATCH',
       );
     }
     const normalized = {

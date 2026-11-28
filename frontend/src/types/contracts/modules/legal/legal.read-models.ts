@@ -5,7 +5,8 @@
  */
 
 /** Atualizar a versão sempre que houver alteração material no texto. */
-export const LEGAL_DOCUMENT_VERSION = "2026-11-19.1";
+export const LEGAL_DOCUMENT_VERSION = "2026-11-28.1";
+export const LEGAL_DOCUMENT_EFFECTIVE_AT = "2026-11-28";
 export type LegalDocumentSlug = "termos" | "privacidade";
 export interface LegalDocumentReadModel {
   slug: LegalDocumentSlug;

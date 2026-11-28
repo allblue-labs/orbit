@@ -3,18 +3,46 @@ import { notFound } from "next/navigation";
 import { Download, ArrowLeft, ShieldCheck } from "lucide-react";
 import { backendJson } from "@/server/backend-client";
 import type { LegalDocumentReadModel } from "@/types/contracts/modules/legal/legal.read-models";
+import { formatDate } from "@/lib/formatters";
+import { ApiError } from "@/lib/api-error";
+import {
+  isLegalVersionPath,
+  legalDocumentDownloadHref,
+} from "@/lib/legal-document-paths";
 import { Button } from "@/components/ui/button";
 export const dynamic = "force-dynamic";
 export default async function LegalPage({
   params,
 }: {
-  params: Promise<{ slug: string }>;
+  params: Promise<{ slug: string; version?: string[] }>;
 }) {
-  const { slug } = await params;
-  if (slug !== "termos" && slug !== "privacidade") notFound();
+  const { slug, version: segments } = await params;
+  if (
+    (slug !== "termos" && slug !== "privacidade") ||
+    !isLegalVersionPath(segments)
+  ) {
+    notFound();
+  }
+  const version = segments?.[0];
   const document = await backendJson<LegalDocumentReadModel>({
     path: `/legal/documents/${slug}`,
+    query: { version },
+  }).catch((error: unknown) => {
+    if (version && error instanceof ApiError && error.status === 409)
+      return null;
+    throw error;
   });
+  // An older API can ignore the version parameter during a rolling deployment.
+  if (!document || (version && document.version !== version)) {
+    return (
+      <main className="mx-auto max-w-4xl px-6 py-10">
+        <p role="alert">
+          Esta versão do documento está indisponível. Se estiver no cadastro,
+          atualize a página antes de ler e aceitar os documentos.
+        </p>
+      </main>
+    );
+  }
   return (
     <main className="mx-auto max-w-4xl space-y-8 px-6 py-10 sm:px-10">
       <div className="flex flex-wrap items-center justify-between gap-4 print:hidden">
@@ -26,7 +54,7 @@ export default async function LegalPage({
           Orbit
         </Link>
         <Button asChild variant="outline" size="sm">
-          <a href={`/api/legal/${slug}/download`} download>
+          <a href={legalDocumentDownloadHref(slug, document.version)} download>
             <Download />
             Baixar PDF
           </a>
@@ -38,7 +66,8 @@ export default async function LegalPage({
           {document.title}
         </h1>
         <p className="text-sm text-muted-foreground">
-          Versão {document.version} · Vigência: 23/10/2026
+          Versão {document.version} · Vigência:{" "}
+          {formatDate(document.effectiveAt)}
         </p>
         <address className="text-sm not-italic leading-relaxed">
           {document.provider.name}
