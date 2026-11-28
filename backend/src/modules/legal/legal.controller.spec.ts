@@ -1,5 +1,10 @@
+import PDFDocument from 'pdfkit';
+import { ConflictException } from '../../exceptions';
 import { LegalController } from './legal.controller';
-import { LEGAL_DOCUMENT_VERSION } from '../../contracts/modules/legal/legal.read-models';
+import {
+  LEGAL_DOCUMENT_EFFECTIVE_AT,
+  LEGAL_DOCUMENT_VERSION,
+} from '../../contracts/modules/legal/legal.read-models';
 import { LegalAcceptanceController } from './legal-acceptance.controller';
 describe('documentos públicos e aceite do Orbit', () => {
   const controller = new LegalController();
@@ -8,6 +13,7 @@ describe('documentos públicos e aceite do Orbit', () => {
     (slug) => {
       const document = controller.document(slug);
       expect(document.version).toBe(LEGAL_DOCUMENT_VERSION);
+      expect(document.effectiveAt).toBe(LEGAL_DOCUMENT_EFFECTIVE_AT);
       expect(document.provider).toEqual({
         name: 'Allblue Labs Inova Simples',
         document: '67.312.115/0001-92',
@@ -16,20 +22,58 @@ describe('documentos públicos e aceite do Orbit', () => {
       });
       expect(document.sections.length).toBeGreaterThan(6);
       expect(JSON.stringify(document.sections)).toContain('30 dias');
+      expect(JSON.stringify(document.sections)).toContain(
+        'depende de a rotina de retenção estar habilitada e em execução no ambiente operacional',
+      );
     },
   );
   it.each(['termos', 'privacidade'])(
     'gera PDF válido para %s',
     async (slug) => {
-      const result = await controller.download(slug);
+      const result = await controller.download(slug, LEGAL_DOCUMENT_VERSION);
       const stream = result.getStream();
       const chunks: Buffer[] = [];
       for await (const chunk of stream)
         chunks.push(Buffer.from(chunk as Uint8Array));
       expect(Buffer.concat(chunks).subarray(0, 5).toString()).toBe('%PDF-');
-      expect(result.getHeaders().disposition).toContain('attachment');
+      expect(result.getHeaders().disposition).toBe(
+        `attachment; filename="orbit-${slug}-${LEGAL_DOCUMENT_VERSION}.pdf"`,
+      );
     },
   );
+  it.each(['termos', 'privacidade'])(
+    'recusa substituir uma edição anterior de %s no leitor ou no PDF',
+    async (slug) => {
+      expect(controller.document(slug, LEGAL_DOCUMENT_VERSION).version).toBe(
+        LEGAL_DOCUMENT_VERSION,
+      );
+      expect(() => controller.document(slug, '2026-11-27.2')).toThrow(
+        ConflictException,
+      );
+      await expect(
+        controller.download(slug, '2026-11-27.2'),
+      ).rejects.toMatchObject({
+        code: 'LEGAL_DOCUMENT_VERSION_MISMATCH',
+      });
+    },
+  );
+  it('usa a vigência canônica do documento no PDF', async () => {
+    const document = controller.document('termos');
+    const effectiveAt = [
+      document.effectiveAt.slice(8, 10),
+      document.effectiveAt.slice(5, 7),
+      document.effectiveAt.slice(0, 4),
+    ].join('/');
+    const text = jest.spyOn(PDFDocument.prototype, 'text');
+    try {
+      await controller.download('termos');
+      expect(text).toHaveBeenCalledWith(
+        `Versão ${document.version} | Vigência: ${effectiveAt}`,
+      );
+    } finally {
+      text.mockRestore();
+    }
+  });
   it('não aceita nome de arquivo arbitrário', () => {
     expect(() => controller.document('../../.env')).toThrow();
   });

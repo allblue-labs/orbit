@@ -10,9 +10,10 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import {
-  LEGAL_DOCUMENT_VERSION,
-  type LegalDocumentSlug,
-} from "@/types/contracts/modules/legal/legal.read-models";
+  legalDocumentHref,
+  legalDocumentDownloadHref,
+} from "@/lib/legal-document-paths";
+import type { LegalDocumentSlug } from "@/types/contracts/modules/legal/legal.read-models";
 const documents = [
   {
     slug: "termos",
@@ -29,8 +30,10 @@ const documents = [
 ] as const;
 export function LegalDocumentsPanel({
   compact = false,
+  version,
 }: {
   compact?: boolean;
+  version?: string;
 }) {
   const [reading, setReading] = useState<LegalDocumentSlug | null>(null);
   const document = documents.find((d) => d.slug === reading);
@@ -40,8 +43,8 @@ export function LegalDocumentsPanel({
         <header>
           <h2 className="text-lg font-semibold">Termos e privacidade</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Consulte os documentos do Orbit e guarde uma cópia. Versão{" "}
-            {LEGAL_DOCUMENT_VERSION}.
+            Consulte a versão vigente dos documentos do Orbit e guarde uma
+            cópia.
           </p>
         </header>
       ) : null}
@@ -71,7 +74,7 @@ export function LegalDocumentsPanel({
               </Button>
               <a
                 className={buttonVariants({ variant: "ghost", size: "sm" })}
-                href={`/api/legal/${d.slug}/download`}
+                href={legalDocumentDownloadHref(d.slug, version)}
                 download
               >
                 <Download />
@@ -92,31 +95,33 @@ export function LegalDocumentsPanel({
               Leia o documento completo. Fechar a leitura preserva seu cadastro.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex gap-2">
-            <a
-              className={buttonVariants({ variant: "outline", size: "sm" })}
-              href={`/legal/${reading}`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <ExternalLink />
-              Abrir em nova aba
-            </a>
-            <a
-              className={buttonVariants({ variant: "ghost", size: "sm" })}
-              href={`/api/legal/${reading}/download`}
-              download
-            >
-              <Download />
-              Baixar PDF
-            </a>
-          </div>
-          {reading ? (
-            <iframe
-              title={document?.title}
-              src={`/legal/${reading}`}
-              className="min-h-0 w-full flex-1 rounded-lg border bg-background"
-            />
+          {document ? (
+            <>
+              <div className="flex gap-2">
+                <a
+                  className={buttonVariants({ variant: "outline", size: "sm" })}
+                  href={legalDocumentHref(document.slug, version)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <ExternalLink />
+                  Abrir em nova aba
+                </a>
+                <a
+                  className={buttonVariants({ variant: "ghost", size: "sm" })}
+                  href={legalDocumentDownloadHref(document.slug, version)}
+                  download
+                >
+                  <Download />
+                  Baixar PDF
+                </a>
+              </div>
+              <iframe
+                title={document.title}
+                src={legalDocumentHref(document.slug, version)}
+                className="min-h-0 w-full flex-1 rounded-lg border bg-background"
+              />
+            </>
           ) : null}
         </DialogContent>
       </Dialog>

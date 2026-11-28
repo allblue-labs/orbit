@@ -201,7 +201,7 @@ async function fixture(
 }
 
 test("novo evento identifica obrigatórios em português e mantém os opcionais livres", async ({ page }) => {
-  await fixture(page);
+  const { writes } = await fixture(page);
   await page.goto("/agenda");
   await page.getByRole("button", { name: "Novo evento", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Novo evento na agenda" });
@@ -213,10 +213,93 @@ test("novo evento identifica obrigatórios em português e mantém os opcionais 
   await expect(dialog.getByRole("button", { name: "Criar evento", exact: true })).toBeDisabled();
   await expect(dialog.getByRole("status")).toContainText("Preencha os campos obrigatórios");
   await dialog.locator("#event-title").fill("Manutenção agendada");
-  await expect(dialog.getByRole("button", { name: "Criar evento", exact: true })).toBeEnabled();
-  await dialog.getByRole("checkbox", { name: "Evento recorrente", exact: true }).check();
-  await expect(dialog.locator('label[for="event-frequency"]')).toContainText("(obrigatório)");
-  await expect(dialog.locator('label[for="event-count"]')).not.toContainText("obrigatório");
+  await expect(
+    dialog.getByRole("button", { name: "Criar evento", exact: true }),
+  ).toBeEnabled();
+
+  await dialog.locator("#event-start").click();
+  await page.getByRole("button", { name: "Hoje", exact: true }).click();
+  await page.getByLabel("Hora", { exact: true }).selectOption("09");
+  await page.getByLabel("Minutos", { exact: true }).selectOption("15");
+  await page.getByRole("button", { name: "Confirmar", exact: true }).click();
+  await expect(dialog.locator("#event-start")).toContainText(
+    /\d{2}\/\d{2}\/\d{4} 09:15/,
+  );
+
+  await dialog.locator("#event-end").click();
+  await page.getByRole("button", { name: "Hoje", exact: true }).click();
+  await page.getByLabel("Hora", { exact: true }).selectOption("10");
+  await page.getByLabel("Minutos", { exact: true }).selectOption("30");
+  await page.getByRole("button", { name: "Confirmar", exact: true }).click();
+  await expect(dialog.locator("#event-end")).toContainText(
+    /\d{2}\/\d{2}\/\d{4} 10:30/,
+  );
+
+  await dialog.locator("#event-start").click();
+  await page.getByRole("button", { name: "Limpar", exact: true }).click();
+  await expect(dialog.locator("#event-start")).toContainText(
+    "Selecione data e horário",
+  );
+  expect(
+    writes.some((write) => write.path.endsWith("/scheduling/events")),
+  ).toBe(false);
+
+  await dialog
+    .getByRole("checkbox", { name: "Evento recorrente", exact: true })
+    .check();
+  await expect(dialog.locator('label[for="event-frequency"]')).toContainText(
+    "(obrigatório)",
+  );
+  await expect(dialog.locator('label[for="event-count"]')).not.toContainText(
+    "obrigatório",
+  );
+});
+
+test("frequências recorrentes traduzidas mantêm o valor interno ao salvar", async ({
+  page,
+}) => {
+  const { writes } = await fixture(page);
+  await page.goto("/agenda");
+
+  const frequencies = [
+    { value: "DAILY", label: "DIÁRIO" },
+    { value: "WEEKLY", label: "SEMANAL" },
+    { value: "MONTHLY", label: "MENSAL" },
+  ] as const;
+
+  for (const { value, label } of frequencies) {
+    await page.getByRole("button", { name: "Novo evento", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Novo evento na agenda" });
+    await dialog.locator("#event-title").fill(`Evento ${label}`);
+    await dialog
+      .getByRole("checkbox", { name: "Evento recorrente", exact: true })
+      .check();
+
+    await dialog.locator("#event-frequency").click();
+    await expect(page.getByRole("option", { name: label, exact: true })).toBeVisible();
+    await page.getByRole("option", { name: label, exact: true }).click();
+    await expect(dialog.locator("#event-frequency")).toContainText(label);
+
+    const saved = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/scheduling/events") &&
+        response.request().method() === "POST",
+    );
+    await dialog
+      .getByRole("button", { name: "Criar evento", exact: true })
+      .click();
+    expect((await saved).ok()).toBeTruthy();
+
+    const payload = writes.find(
+      (write) =>
+        write.path.endsWith("/scheduling/events") &&
+        write.body.title === `Evento ${label}`,
+    )?.body;
+    expect(payload?.recurrence).toMatchObject({
+      frequency: value,
+      interval: 1,
+    });
+  }
 });
 
 test("saving the preference propagates to settings, new calendars and HTTP context", async ({

@@ -8,9 +8,8 @@ de cancelar a recorrência. O plano atual, os limites e o período pago continua
 até o vencimento. A opção de manter a assinatura reativa a recorrência e remove
 o prazo de exclusão.
 
-O modal explica a retenção e envia `acknowledgeDataDeletion=true`. A data de
-exclusão é o final do acesso mais **30 dias corridos**, nunca a data do clique
-em cancelar. Cancelamentos antigos, sem essa condição apresentada, não recebem
+O modal explica a retenção e envia `acknowledgeDataDeletion=true`. A data a partir da qual a exclusão pode começar é o final do acesso mais **30 dias
+corridos**. Cancelamentos antigos, sem essa condição apresentada, não recebem
 prazo retroativamente. A regra de 48 horas para excesso de cotas é independente
 e continua bloqueando ações sem apagar dados.
 
@@ -22,9 +21,12 @@ na mesma transação. A simples abertura do Checkout não ativa o plano.
 
 ## Exclusão automática
 
-O worker executa ao iniciar e a cada cinco minutos. É controlado pelo existente
-`JOBS_WORKER_ENABLED` (padrão `true`); a exclusão de organizações também exige o
-provedor de cobrança habilitado. Não há nova variável de ambiente.
+O worker de retenção executa ao iniciar e a cada cinco minutos no processo
+de manutenção (`ORBIT_PROCESS_ROLE=worker` ou `combined`). Mantenha
+`JOBS_WORKER_ENABLED` ativo e configure `SUBSCRIPTION_DATA_RETENTION_ENABLED=true`.
+A exclusão de organizações também exige o provedor de cobrança habilitado. Enquanto a
+exclusão estiver pendente, os dados disponíveis continuam consultáveis conforme
+as permissões da conta.
 
 Antes da exclusão, verifica o encerramento no Stripe e as tentativas de
 pagamento. Uma sessão concluída, desconhecida ou ainda em criação impede a
@@ -58,20 +60,26 @@ Arquivos são removidos por uma outbox gravada junto da exclusão dos metadados.
 Falhas do armazenamento são repetidas com backoff; referências não são perdidas.
 Um provedor diferente do configurado mantém o trabalho pendente para correção.
 Backups têm o ciclo e as restrições da infraestrutura e não prometem recuperação
-do conteúdo excluído. Após o prazo, nova compra inicia uma base operacional vazia.
+do conteúdo excluído. Após a exclusão, uma nova compra inicia uma base operacional vazia.
 
 ## Termos, política e aceite
 
-Fonte canônica: `src/modules/legal/legal-documents.ts`; versão atual
-`2026-10-23.1`, com vigência em 23/10/2026. Responsável:
+A fonte do conteúdo é `src/modules/legal/legal-documents.ts`. O contrato legal
+centraliza o identificador `2026-11-28.1` e a vigência de 28/11/2026 usada na
+página e no PDF. Cada versão identifica um conteúdo imutável. Para mudanças
+materiais, publique outro identificador e confirme a data de vigência. A responsável é
 Allblue Labs Inova Simples, CNPJ 67.312.115/0001-92, Paulista, Pernambuco;
 contato@allblue-labs.com.
 
 - Leitura pública: `/legal/termos` e `/legal/privacidade` no frontend.
 - PDF público: `/api/legal/termos/download` e `/api/legal/privacidade/download`.
-- Cadastro: leitura em modal sem perder campos, download e aceite explícito.
+- Cadastro: o formulário obtém a versão vigente da API e usa essa mesma versão
+  no leitor, no PDF e na solicitação de aceite. A leitura em modal preserva os campos.
 - Configurações: aba **Termos e privacidade**, inclusive quando o pagamento está pendente.
 - API: `/api/v1/legal/documents/:slug` e `/:slug/download`, sem autenticação.
+  As duas rotas aceitam `?version=<versão>` e retornam `409` se a versão
+  pedida divergir da publicada. O leitor versionado fica em
+  `/legal/:slug/:version` e o PDF em `/api/legal/:slug/download/:version`.
 - API autenticada: `/api/v1/legal/acceptance`, somente aceite do usuário e tenant da sessão.
 
 O cadastro público exige as versões atuais e `acceptTerms=true`; versões
@@ -81,9 +89,15 @@ metadados de acesso e cópia exata dos dois textos. Runtime não pode alterar ou
 excluir esse comprovante. A UF começa vazia e a busca por CEP preenche a UF real.
 
 Os documentos são uma redação inicial para o produto e devem passar por revisão
-jurídica antes de publicação comercial. Referências de elaboração:
+jurídica antes de publicação comercial. Confirme os destinos efetivos, prazos
+e instrumentos contratuais das transferências internacionais da instalação publicada.
+A integração SES está documentada em Ohio e o aditivo do Stripe prevê cláusulas
+brasileiras para os fluxos a que se aplica. Referências de elaboração:
 [LGPD](https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2018/lei/l13709.htm) e
-[Marco Civil da Internet](https://www.planalto.gov.br/ccivil_03/_ato2011-2014/2014/lei/l12965.htm).
+[Marco Civil da Internet](https://www.planalto.gov.br/ccivil_03/_ato2011-2014/2014/lei/l12965.htm),
+[Resolução CD/ANPD nº 19/2024](https://www.gov.br/anpd/pt-br/acesso-a-informacao/institucional/atos-normativos/regulamentacoes_anpd/resolucao-cd-anpd-no-19-de-23-de-agosto-de-2024),
+[regiões do SES](https://docs.aws.amazon.com/general/latest/gr/ses.html) e
+[aditivo de transferências do Stripe](https://stripe.com/legal/dta).
 
 ## Publicação
 
