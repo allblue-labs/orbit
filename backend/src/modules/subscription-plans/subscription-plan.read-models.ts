@@ -17,6 +17,7 @@ export type PlanLimitReadModel =
 /** Preço de uma periodicidade. `amountMinor` é a autoridade; o texto é vitrine. */
 export interface PlanPriceReadModel {
   amountMinor: number;
+  listAmountMinor?: number;
   currency: string;
   formatted: string;
 }
@@ -26,6 +27,10 @@ export interface PlanCatalogEntryReadModel {
   code: string;
   label: string;
   description: string;
+  isActive: boolean;
+  version: number;
+  trialDays: number;
+  promotion: string | null;
   monthlyPrice: string;
   currency: string;
   /** `MONTHLY`, `SEMIANNUAL` e `ANNUAL`. Mesmos direitos, preços diferentes. */

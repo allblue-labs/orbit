@@ -87,4 +87,40 @@ void main() {
 
     expect(pedidos.single.host, 'bucket.s3.amazonaws.com');
   });
+  test(
+    'o envio R2 usa multipart com nome e MIME, sem token da sessão',
+    () async {
+      late RequestOptions captured;
+      Future<ResponseBody> handler(RequestOptions options) async {
+        captured = options;
+        return ResponseBody.fromString('', 200);
+      }
+
+      final dio = Dio()..httpClientAdapter = ScriptedAdapter(handler);
+      final client = OrbitApiClient.create(
+        environment: OrbitEnvironment.fromDefines(),
+        storage: InMemoryTokenStorage(),
+        logger: const OrbitLogger(isProduction: true),
+        dio: dio,
+        retryDio: Dio()..httpClientAdapter = ScriptedAdapter(handler),
+      );
+      await client.putBytes(
+        url: Uri.parse(
+          'https://orbit.allblue-labs.com/api/v1/storage/objects?signature=abc',
+        ),
+        bytes: const [1, 2, 3],
+        headers: const {
+          'content-type': 'image/png',
+          'x-orbit-upload-mode': 'multipart',
+        },
+      );
+      final form = captured.data as FormData;
+      expect(form.files.single.key, 'file');
+      expect(form.files.single.value.filename, 'arquivo.png');
+      expect(form.files.single.value.contentType.toString(), 'image/png');
+      expect(captured.headers['Authorization'], isNull);
+      expect(captured.headers['x-orbit-upload-mode'], isNull);
+      expect(captured.contentType, contains('multipart/form-data'));
+    },
+  );
 }

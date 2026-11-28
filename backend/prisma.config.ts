@@ -12,5 +12,11 @@ export default defineConfig({
   migrations: {
     path: 'prisma/migrations',
   },
-  datasource: { url: process.env['DATABASE_URL'] },
+  datasource: {
+    url:
+      process.env.DIRECT_DATABASE_URL ||
+      (process.env.NODE_ENV !== 'production'
+        ? process.env.DATABASE_URL
+        : undefined),
+  },
 });

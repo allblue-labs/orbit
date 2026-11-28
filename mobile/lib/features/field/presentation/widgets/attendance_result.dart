@@ -57,8 +57,8 @@ class AttendanceResult extends StatelessWidget {
                       : finishing
                       ? 'Estamos salvando a conclusão do atendimento…'
                       : error == null
-                      ? 'A conclusão está aguardando sincronização. O relatório ficará disponível após a confirmação do servidor.'
-                      : 'A confirmação do cliente foi salva. Falta concluir o atendimento no servidor.',
+                      ? 'A conclusão está aguardando envio. O relatório fica disponível assim que ela chegar ao Orbit.'
+                      : 'A confirmação do cliente foi salva. Falta enviar a conclusão do atendimento.',
                 ),
               ),
             ],
@@ -121,7 +121,11 @@ class AttendanceTechnicalSummary extends ConsumerWidget {
                 if (value.customerName != null)
                   Text('Cliente: ${value.customerName}'),
                 for (final equipment in value.equipment)
-                  Text('${equipment.name} · ${equipment.code}'),
+                  Text(
+                    equipment.code.isEmpty || equipment.code == equipment.id
+                        ? equipment.name
+                        : '${equipment.name} · ${equipment.code}',
+                  ),
                 const SizedBox(height: OrbitSpacing.sm),
                 Text(value.serviceSummary, style: const TextStyle(height: 1.5)),
               ],

@@ -30,6 +30,7 @@ describe('perfil de técnico de campo no cadastro', () => {
   const cadastrar = async (fieldTechnicianEnabled: boolean) => {
     const tx = {
       $queryRawUnsafe: jest.fn().mockResolvedValue([]),
+      $queryRaw: jest.fn().mockResolvedValue([]),
       user: {
         findUnique: jest.fn().mockResolvedValue(null),
         create: jest.fn().mockResolvedValue({ id: 'user-novo' }),
@@ -121,6 +122,7 @@ describe('perfil de técnico de campo no cadastro', () => {
   it('não escreve nada quando o e-mail já existe', async () => {
     const tx = {
       $queryRawUnsafe: jest.fn().mockResolvedValue([]),
+      $queryRaw: jest.fn().mockResolvedValue([{ id: 'ja-existe' }]),
       user: {
         findUnique: jest.fn().mockResolvedValue({ id: 'ja-existe' }),
         create: jest.fn(),

@@ -11,7 +11,67 @@ export interface PublicErrorDefinition {
 }
 
 const entries = [
+  [
+    'EMAIL_VERIFICATION_REQUIRED',
+    HttpStatus.UNAUTHORIZED,
+    'Confirme seu e-mail para liberar o acesso ao Orbit. Abra o link recebido ou solicite um novo e-mail de confirmação.',
+  ],
+  [
+    'ORGANIZATION_REACTIVATION_REQUIRES_SUBSCRIPTION',
+    HttpStatus.CONFLICT,
+    'Regularize a contratação da organização antes de reativá-la.',
+  ],
+  [
+    'ORGANIZATION_SUSPENDED',
+    HttpStatus.FORBIDDEN,
+    'A organização está suspensa. Entre em contato com o responsável.',
+  ],
+  [
+    'ORGANIZATION_UNAVAILABLE',
+    HttpStatus.FORBIDDEN,
+    'A organização não está disponível para operações. Entre em contato com o responsável.',
+  ],
   ['VALIDATION_ERROR', HttpStatus.BAD_REQUEST, 'Revise os campos informados.'],
+  [
+    'SALE_STOCK_INSUFFICIENT',
+    HttpStatus.CONFLICT,
+    'O estoque de um dos produtos mudou. Confira as quantidades disponíveis nesta unidade e tente novamente.',
+  ],
+  [
+    'SALE_PAYMENT_TOTAL_MISMATCH',
+    HttpStatus.BAD_REQUEST,
+    'A soma dos pagamentos deve ser igual ao total da venda.',
+  ],
+  [
+    'SALE_CONFIRMATION_CHANGED',
+    HttpStatus.CONFLICT,
+    'A confirmação já foi usada com outros dados. Feche o formulário e consulte a lista de vendas.',
+  ],
+  [
+    'SALE_RECEIPT_DATE_INVALID',
+    HttpStatus.BAD_REQUEST,
+    'A data do recebimento deve ser hoje ou uma data anterior.',
+  ],
+  [
+    'PUBLIC_CONTACT_CONFLICT',
+    HttpStatus.CONFLICT,
+    'A mensagem foi alterada durante uma tentativa anterior. Recarregue o formulário e envie novamente.',
+  ],
+  [
+    'PUBLIC_CONTACT_UNAVAILABLE',
+    HttpStatus.SERVICE_UNAVAILABLE,
+    'O formulário está temporariamente indisponível. Tente novamente mais tarde.',
+  ],
+  [
+    'PASSWORD_RESET_INVALID',
+    HttpStatus.BAD_REQUEST,
+    'Este link de recuperação é inválido, expirou ou já foi utilizado. Solicite um novo link.',
+  ],
+  [
+    'MOBILE_PUSH_UPGRADE_REQUIRED',
+    HttpStatus.BAD_REQUEST,
+    'Atualize o Orbit para ativar os avisos neste aparelho.',
+  ],
   [
     'UNAUTHORIZED',
     HttpStatus.UNAUTHORIZED,
@@ -67,9 +127,64 @@ const entries = [
     'O código do autenticador não confere. Tente o próximo código.',
   ],
   [
+    'BIOMETRIC_INVALID',
+    HttpStatus.UNAUTHORIZED,
+    'Biometria não reconhecida. Entre com a senha.',
+  ],
+  [
+    'BIOMETRIC_CHALLENGE_EXPIRED',
+    HttpStatus.UNAUTHORIZED,
+    'A confirmação expirou. Tente de novo.',
+  ],
+  [
+    'BIOMETRIC_REGISTRATION_INVALID',
+    HttpStatus.BAD_REQUEST,
+    'Não foi possível confirmar a biometria deste aparelho.',
+  ],
+  [
     'FORBIDDEN',
     HttpStatus.FORBIDDEN,
     'Você não tem permissão para realizar esta ação.',
+  ],
+  [
+    'SECURITY_CONFIRMATION_REQUIRED',
+    HttpStatus.FORBIDDEN,
+    'Confirme sua identidade para concluir esta ação.',
+  ],
+  [
+    'SECURITY_PASSWORD_INVALID',
+    HttpStatus.FORBIDDEN,
+    'Confira a senha atual e tente novamente.',
+  ],
+  [
+    'SECURITY_MFA_INVALID',
+    HttpStatus.FORBIDDEN,
+    'Informe um código válido do aplicativo autenticador.',
+  ],
+  [
+    'ATTENDANCE_NOT_ASSIGNED',
+    HttpStatus.FORBIDDEN,
+    'Esta ação é reservada ao técnico atribuído ao atendimento. Se precisar executá-la, peça ao responsável pela organização para conferir a atribuição.',
+  ],
+  [
+    'PMOC_ACTION_FORBIDDEN',
+    HttpStatus.FORBIDDEN,
+    'Seu acesso não permite esta ação no PMOC. Se precisar realizá-la, peça ao responsável pela organização para revisar suas permissões.',
+  ],
+  [
+    'PMOC_ATTENDANCE_UNAVAILABLE',
+    HttpStatus.CONFLICT,
+    'Não é possível iniciar este atendimento. Atualize a página e confira se o PMOC está ativo e o ciclo está em aberto.',
+  ],
+  [
+    'PMOC_EQUIPMENT_INACTIVE',
+    HttpStatus.CONFLICT,
+    'O equipamento está inativo. Peça ao responsável pela organização para revisar o cadastro antes de iniciar.',
+  ],
+  [
+    'PMOC_TECHNICAL_RESPONSIBLE_REQUIRED',
+    HttpStatus.BAD_REQUEST,
+    'Defina um Responsável Técnico habilitado na unidade deste PMOC. Confira o cadastro em Equipe e edite o plano.',
   ],
   /**
    * A credencial está certa; o lugar é que não.
@@ -116,6 +231,11 @@ const entries = [
     'Os dados foram alterados. Atualize e tente novamente.',
   ],
   [
+    'OPERATION_COMPLETED_RESCHEDULE',
+    HttpStatus.CONFLICT,
+    'Uma operação concluída não pode ser reagendada. O proprietário pode reabri-la em Alterar status.',
+  ],
+  [
     'SCHEDULING_CONFLICT',
     HttpStatus.CONFLICT,
     'Há um conflito na agenda da equipe ou dos recursos selecionados. Verifique também os intervalos de até 10 minutos e confirme se deseja agendar mesmo assim.',
@@ -158,7 +278,7 @@ const entries = [
   [
     'IDEMPOTENCY_MISMATCH',
     HttpStatus.CONFLICT,
-    'Esta chave de idempotência já foi usada com dados diferentes.',
+    'Esta ação já foi enviada com outros dados. Atualize a tela e tente novamente.',
   ],
   [
     'BUSINESS_RULE_VIOLATION',
@@ -214,6 +334,36 @@ const entries = [
     'PORTAL_RESET_INVALID',
     HttpStatus.CONFLICT,
     'O link de recuperação não é válido ou expirou.',
+  ],
+  [
+    'SERVICE_REQUEST_NOT_EDITABLE',
+    HttpStatus.UNPROCESSABLE_ENTITY,
+    'Este chamado já foi analisado pela equipe e não pode mais ser editado. Envie uma mensagem no chamado.',
+  ],
+  [
+    'SERVICE_REQUEST_CLOSED',
+    HttpStatus.UNPROCESSABLE_ENTITY,
+    'Este chamado está encerrado. Abra um novo chamado se precisar.',
+  ],
+  [
+    'PORTAL_ACCESS_EXISTS',
+    HttpStatus.CONFLICT,
+    'Este cliente já tem um acesso. Gere uma nova senha ou desative o acesso atual.',
+  ],
+  [
+    'PORTAL_EMAIL_TAKEN',
+    HttpStatus.CONFLICT,
+    'Este endereço já está em uso por outro cliente ou por alguém da equipe. Escolha outro nome de acesso.',
+  ],
+  [
+    'PORTAL_ACCESS_LOCAL_PART_INVALID',
+    HttpStatus.BAD_REQUEST,
+    'Informe um nome de acesso com letras ou números.',
+  ],
+  [
+    'PORTAL_EMAIL_DELIVERY_UNAVAILABLE',
+    HttpStatus.CONFLICT,
+    'O envio de e-mail do portal não está disponível. O acesso do cliente é criado pelo responsável, com senha temporária.',
   ],
   [
     'ARTIFACT_EXECUTION_INCOMPLETE',

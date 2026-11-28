@@ -1,0 +1,141 @@
+{
+  "pr": "PR-12",
+  "date": "2026-11-16",
+  "baseCommit": "7e5edf3bd622d9e2a1eaad2281d02c9fd7d7ec71",
+  "implementationCommit": "60f51a92e09bae93869cafbba5ff3c7f851c2ee1",
+  "finding": "F12",
+  "qualification": "Locally implemented and tested. No push, merge, deployment, production database operation or customer-data cleanup. Overall production qualification still depends on remaining PRs and external gates.",
+  "migration": "20261117100000_relational_tenant_integrity",
+  "newDependencies": false,
+  "newEnvironmentSecrets": false,
+  "ormClientContractChanged": false,
+  "inventory": {
+    "baselineForeignKeys": 455,
+    "baselineScopedForeignKeys": 208,
+    "newCompositeForeignKeys": 185,
+    "existingCompositeForeignKeysPreserved": 10,
+    "unitTupleForeignKeys": 31,
+    "globalOrTenantGuards": 10,
+    "indirectJunctionGuards": 4,
+    "continuousPreflightRules": 199,
+    "newIndexesOnBaseline": 111,
+    "manifest": "backend/src/database/relational-integrity/rules.json",
+    "frozenVersion": 1
+  },
+  "controls": {
+    "continuous": "Composite tenant FKs, optional hierarchy unit tuple, immutable referenced-object tenant, existence checked separately from NULL/global parent.",
+    "rvtAssociation": "Customer/unit checked at reference insert/change, including equipment arrays and equipment evidence; historical snapshots deliberately not reinterpreted against current asset ownership.",
+    "preflight": "READ ONLY REPEATABLE READ, administrative visibility required, row_security=off, counts/rule IDs only, no implicit dotenv, exit 0/2/1.",
+    "migration": "Transactional, preflight before DDL, NOT VALID followed by VALIDATE for every new FK, trigger-rule recheck after locks, no data updates/deletes, lock_timeout 10s and per-statement timeout 10min.",
+    "optionalDeletion": "SET NULL restricted to reference ID; child organization preserved.",
+    "indexes": "Reuses compatible unique/lookup indexes instead of blindly duplicating every FK index.",
+    "privileges": "Trigger-only definer functions have fixed search_path and no direct EXECUTE for runtime/PUBLIC; provisioning publishes function grants/revocations atomically."
+  },
+  "exceptions": {
+    "identityRls": [
+      "sessions",
+      "identity_invitations"
+    ],
+    "globalIdentity": "Users remain global and may belong to multiple organizations. Global templates/roles retain their existing authorization/provenance rules.",
+    "pushInstallation": "Historical mobile_push_deliveries reference a physical installation that is deliberately rebound across accounts/tenants; current sender verifies installation/user/tenant and skips obsolete deliveries.",
+    "nullableUnit": "Organization-wide calendars/media/catalog and aggregate/history links retain existing sharing semantics; RLS/application authorization still required.",
+    "mutableAssetHistory": "Current unit/customer of an asset can change within its tenant without rewriting past snapshots; association-time RVT guards reject invalid new links."
+  },
+  "ancillaryCorrection": "Cold recovery checkpoint initializes next_run_at using date_trunc(milliseconds,now()) so timestamptz(3) rounding cannot make it later than the same transaction now(). No payment values, periods or idempotency rules changed.",
+  "checks": {
+    "backendFull": {
+      "command": "npm test -- --runInBand --watchman=false",
+      "suites": 272,
+      "passed": 2275,
+      "failed": 0,
+      "seconds": 56.055
+    },
+    "backendE2EFull": {
+      "runner": "withIntegrationEnvironment({postgresTmpfs:true}); test:e2e:jest --runInBand --watchman=false",
+      "suites": 51,
+      "passed": 657,
+      "failed": 0,
+      "seconds": 576.806,
+      "migrationsApplied": 123,
+      "tablesGranted": 149,
+      "runtimeRole": "orbit_app",
+      "rolsuper": false,
+      "rolbypassrls": false,
+      "postgresImage": "postgres:17.11-alpine3.24@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0",
+      "newIntegrityCases": 10,
+      "coverage": [
+        "audited cross-tenant RVT customer write denied with SQLSTATE 23503",
+        "cross-tenant asset/customer relation denied",
+        "same-tenant wrong customer/unit equipment rejected",
+        "hierarchy unit equality even when both units are in RLS context",
+        "foreign equipment UUID array rejected",
+        "global template accepted, foreign/missing template rejected in guard",
+        "optional SET NULL preserves child organization",
+        "dirty legacy upgrade rolls back without deleting conflicting row",
+        "explicit fixture repair then successful upgrade preserves row",
+        "canonical multi-organization, login, billing, inventory, quotes, PMOC/RVT, customer portal and RLS regressions",
+        "pending old-account push delivery remains historical and is skipped after rebind"
+      ]
+    },
+    "preflightCompiled": {
+      "rules": 199,
+      "findings": [],
+      "exitCode": 0
+    },
+    "provisioningSmoke": {
+      "freshDatabaseMigration": "passed",
+      "atomicFunctionPermissions": "passed",
+      "scope_rpc": false,
+      "asset_rpc": false,
+      "ddl": false,
+      "newIndexes": 111
+    },
+    "affectedFullSuiteScenarios": {
+      "suites": 4,
+      "passed": 130,
+      "failed": 0,
+      "seconds": 144.499
+    },
+    "backendBuild": "passed",
+    "fullTypeScript": "passed",
+    "changedTypeScriptLint": "passed",
+    "contractBoundaries": "passed",
+    "publicErrorCodes": 75,
+    "diffCheck": "passed",
+    "localNode": "25.1.0",
+    "newNode22LinuxImage": false,
+    "frontendOrNativeBuild": false,
+    "dependencyLockChanges": false
+  },
+  "intermediateFailures": [
+    "First direct foreign-unit assertion was intercepted by RLS; the test now grants both unit IDs in context and still requires the FK rejection, without changing production RLS.",
+    "Rebindable mobile installation identified as a temporal identity exception rather than freezing/reparenting historical deliveries.",
+    "Initial full E2E: 652 passed, five failed; PMOC fixture exceeded ingress quota, cold recovery timestamp precision, ambiguous legacy fixture, two guard fixtures with nonexistent tenants. All addressed without weakening assertions; final full E2E passed.",
+    "Repeated units exposed an implicit-listener routing fixture; stabilized loopback listener and complete unit rerun passed."
+  ],
+  "deploymentRequirements": [
+    "Administrative backup and representative-copy rehearsal before applying migration.",
+    "Run preflight on PR-11 baseline; review and correct conflicts explicitly with data owner, never silently reassign/delete.",
+    "Pause writes and reserve DDL/index lock window; failure must be rolled back and confirmed before retry/Prisma migration resolution.",
+    "Provision updated restricted runtime permissions, deploy and rerun preflight/critical journeys.",
+    "No operational server step performed by this PR."
+  ],
+  "sourceSha256": {
+    "backend/package.json": "cd4918f5e80ac549469bcf2b162d80d2c68eef0791b48d019fc13d9c6fb72ea0",
+    "backend/src/modules/billing/billing-recovery.service.ts": "1bedd212338a1107e3873d5f84a635f7955f5a44f4e909b73814f822ed4d079f",
+    "backend/src/modules/operations/operations-routing.spec.ts": "9ae6564bec810ec937d22053eefd378fff088fc9e6fda7221e716c2f27a6cefc",
+    "backend/src/scripts/provision-database-roles.ts": "3e969915b81082a1150088157151f753b442e5c9e3ea7ec3e20a3711b8030dce",
+    "backend/test/app.e2e-spec.ts": "b14fa503f85637f1b5a465dc536cfcfe237cc451a3c2ffb0e60d9395b259697c",
+    "backend/test/mobile-push-device.e2e-spec.ts": "14221866bc67b42d07fe61581fa80c73a28c89ec84552d3d59475244117e6e62",
+    "backend/test/plans-entitlements.e2e-spec.ts": "cb980411707866860241825380bd566e5b43e369360222c7f0a65ca55b68ec9b",
+    "backend/test/pmoc.e2e-spec.ts": "6eec7791a87e7421af6bdaf4d5aba94b65c30e4dfb37dca21c4066f2d31b6eff",
+    "backend/prisma/migrations/20261117100000_relational_tenant_integrity/migration.sql": "1ffadddbd5db7e45c0f3fb16d41affa02241c8cd1c7a4f6cf87428980645bee4",
+    "backend/scripts/generate-relational-integrity.ts": "98ebac96de4bce23ac2d5fddbb6e351dee7f606663914b91fcd11b29621b9d96",
+    "backend/src/database/relational-integrity/contract.spec.ts": "254444c7892785a8d4e5dd2b9d483795429731d12c5611e85ca77fc6353e618a",
+    "backend/src/database/relational-integrity/contract.ts": "39a368caa06005117602f59d22b25c194ecf6938ad2972dfc4cdce2aef05c231",
+    "backend/src/database/relational-integrity/rules.json": "d1a14e25d51ccd095c2b90add7299391c53d88b531271173d38e7698aa57d998",
+    "backend/src/database/relational-integrity/rvt-guards.ts": "3dff62949320c5a8423adb71687127d59856b915363a307f06642da274fc0c91",
+    "backend/src/scripts/check-relational-integrity.ts": "8d9df0d39fe6c9772905164166b484f3116c7224e8b59ba522efb2914f07d503",
+    "backend/test/relational-integrity.e2e-spec.ts": "f542cea3d3e75b7335d719f91d1b9d29a4b6d6cd93e503745335b86e3d9a88f5"
+  }
+}

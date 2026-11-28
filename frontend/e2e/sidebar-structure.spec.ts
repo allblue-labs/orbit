@@ -27,6 +27,7 @@ const EXPECTED_MENU = [
   "/operacoes",
   "/relatorios",
   "/clientes",
+  "/chamados",
   "/catalogo",
   "/financeiro",
   "/catalogos",

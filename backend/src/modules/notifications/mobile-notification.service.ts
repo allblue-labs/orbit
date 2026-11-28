@@ -40,6 +40,7 @@ export class MobileNotificationService {
           factId: intent.factId,
           resourceId: intent.resourceId,
           ...(intent.workItemId ? { workItemId: intent.workItemId } : {}),
+          ...(intent.message ? { message: intent.message } : {}),
         },
         ...scopeFor(intent.businessUnitId, context.businessUnitIds),
       });

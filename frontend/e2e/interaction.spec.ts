@@ -9,7 +9,9 @@
 import { expect, test } from "@playwright/test";
 import { assertClean, login, record, settled } from "./support";
 
-test("o shell inteiro é alcançável por teclado, com foco visível", async ({ page }) => {
+test("o shell inteiro é alcançável por teclado, com foco visível", async ({
+  page,
+}) => {
   const recorder = record(page);
   await login(page);
   await page.goto("/operacoes");
@@ -37,7 +39,9 @@ test("o shell inteiro é alcançável por teclado, com foco visível", async ({ 
     });
     if (focused) reached.push(`${focused.tag}:${focused.label}`);
     if (focused && !focused.visible) {
-      throw new Error(`controle sem foco visível: ${focused.tag} "${focused.label}"`);
+      throw new Error(
+        `controle sem foco visível: ${focused.tag} "${focused.label}"`,
+      );
     }
   }
 
@@ -54,7 +58,9 @@ test("o diálogo prende o foco, fecha no Escape e devolve o foco ao gatilho", as
   await page.goto("/operacoes");
   await settled(page);
 
-  const trigger = page.getByRole("button", { name: /Ações da operação/i }).first();
+  const trigger = page
+    .getByRole("button", { name: /Ações da operação/i })
+    .first();
   await trigger.click();
   await page.getByRole("menuitem", { name: /Alterar status/i }).click();
 
@@ -129,7 +135,9 @@ test("busca não dispara uma requisição por tecla", async ({ page }) => {
     if (request.url().includes("/api/orbit/operations")) requests += 1;
   });
 
-  const search = page.getByLabel("Buscar", { exact: true }).first();
+  const search = page
+    .getByLabel(/^Buscar(?:\s*\*?\s*\(obrigatório\))?$/)
+    .first();
   await search.fill("");
   await search.pressSequentially("manutencao", { delay: 40 });
   await settled(page);
@@ -154,14 +162,18 @@ test("recarregar e voltar não quebram a listagem", async ({ page }) => {
    */
   await page.reload();
   await settled(page);
-  await expect(page.getByLabel("Buscar", { exact: true }).first()).toBeVisible();
+  await expect(
+    page.getByLabel(/^Buscar(?:\s*\*?\s*\(obrigatório\))?$/).first(),
+  ).toBeVisible();
 
   await page.goto("/clientes");
   await settled(page);
   await page.goBack();
   await settled(page);
   await expect(page).toHaveURL(/\/operacoes/);
-  await expect(page.getByLabel("Buscar", { exact: true }).first()).toBeVisible();
+  await expect(
+    page.getByLabel(/^Buscar(?:\s*\*?\s*\(obrigatório\))?$/).first(),
+  ).toBeVisible();
 
   await page.goForward();
   await settled(page);
@@ -213,7 +225,13 @@ test("nenhum enum cru nem termo técnico na interface", async ({ page }) => {
   ];
   const found: string[] = [];
 
-  for (const route of ["/dashboard", "/operacoes", "/clientes", "/financeiro", "/equipe"]) {
+  for (const route of [
+    "/dashboard",
+    "/operacoes",
+    "/clientes",
+    "/financeiro",
+    "/equipe",
+  ]) {
     await page.goto(route);
     await settled(page);
     const body = await page.evaluate(() => document.body.innerText);

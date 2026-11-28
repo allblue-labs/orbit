@@ -1,0 +1,5 @@
+// Use com um perfil de provisionamento que inclua Associated Domains.
+ORBIT_SIGNING_ENTITLEMENTS = Runner/Runner.AppLinks.entitlements
+
+// Para combinar com Push.local.xcconfig, use este arquivo em vez do anterior:
+// ORBIT_SIGNING_ENTITLEMENTS = Runner/Runner.PushAndAppLinks.entitlements

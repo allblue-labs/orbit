@@ -40,6 +40,7 @@ function fixture() {
     { get: () => ({}) } as never,
     {} as never,
     {} as never,
+    undefined as never, // Operational policy is not exercised by this unit fixture.
   );
   const input = {
     organizationId: 'org-1',

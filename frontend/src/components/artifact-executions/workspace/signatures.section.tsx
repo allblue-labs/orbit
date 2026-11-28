@@ -21,6 +21,7 @@
  * (`POST /:id/signatures`), exige `signatureData` e produz um hash SHA-256 no
  * servidor; coletar assinatura com validade jurídica é um módulo próprio.
  */
+import { signerRoleLabel } from "@/lib/signer-role";
 import { CircleDashed, Lock, PenLine, ShieldOff } from "lucide-react";
 
 import { PanelFrame } from "@/components/panels";
@@ -91,7 +92,7 @@ export function SignaturesSection({
                   <StateIcon state={state} />
                   <span className="text-sm font-medium">{slot.label}</span>
                   <Badge variant="secondary" className="text-[10px]">
-                    {slot.signerRole}
+                    {signerRoleLabel(slot.signerRole)}
                   </Badge>
                   {slot.required ? (
                     <span className="text-xs text-destructive">

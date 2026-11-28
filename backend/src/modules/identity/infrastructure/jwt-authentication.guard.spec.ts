@@ -10,7 +10,6 @@ describe('JwtAuthenticationGuard error semantics', () => {
   const tokens = { verifyAccessToken: jest.fn() };
   const repository = {
     findSessionById: jest.fn(),
-    hasActivePlatformRole: jest.fn(),
     revokeSession: jest.fn(),
   };
   const request = {

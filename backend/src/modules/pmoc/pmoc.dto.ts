@@ -7,6 +7,7 @@ import {
   IsBoolean,
   IsIn,
   IsInt,
+  IsDefined,
   IsOptional,
   IsObject,
   IsString,
@@ -237,10 +238,12 @@ export class CreatePmocPlanDto {
   @IsUUIDv7()
   technicianUserId?: string;
 
-  @ApiPropertyOptional({ description: 'PR-27 eligible technical responsible' })
-  @IsOptional()
+  @ApiProperty({
+    description: 'Responsável Técnico habilitado na unidade do PMOC',
+  })
+  @IsDefined({ message: 'Selecione o Responsável Técnico do PMOC.' })
   @IsUUIDv7()
-  technicalResponsibleUserId?: string;
+  technicalResponsibleUserId!: string;
 
   @ApiPropertyOptional({ type: Object })
   @IsOptional()
@@ -391,6 +394,52 @@ export class StartPmocEquipmentExecutionDto {
   @IsArray()
   @IsUUIDv7({ each: true })
   auxiliaryTechnicianIds?: string[];
+}
+
+export class UpdatePmocEquipmentScheduleDto {
+  @ApiProperty()
+  @IsString()
+  @MaxLength(80)
+  expectedVersion!: string;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsUUIDv7()
+  responsibleFieldTechnicianId?: string | null;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsUUIDv7({ each: true })
+  auxiliaryTechnicianIds?: string[];
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  scheduledFor?: Date | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(1000)
+  notes?: string;
+}
+
+export class CancelPmocEquipmentScheduleDto {
+  @ApiProperty()
+  @IsString()
+  @MaxLength(80)
+  expectedVersion!: string;
+
+  @ApiProperty()
+  @Transform(trim)
+  @IsString()
+  @MinLength(3)
+  @MaxLength(1000)
+  reason!: string;
 }
 
 export class SavePmocEquipmentWorkDto {

@@ -2,6 +2,7 @@ import java.util.Properties
 
 plugins {
     id("com.android.application")
+    id("org.jetbrains.kotlin.android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
@@ -40,7 +41,7 @@ tasks.configureEach {
 }
 
 android {
-    namespace = "com.allbluelabs.orbit_operator"
+    namespace = "com.allbluelabs.orbit"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -50,7 +51,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.allbluelabs.orbit_operator"
+        applicationId = "com.allbluelabs.orbit"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
@@ -87,6 +88,18 @@ flutter {
     source = "../.."
 }
 
+// The same validator is invoked by Xcode. No credentials are printed.
+val validatePush = tasks.register<Exec>("validateOrbitPush") {
+    commandLine("python3", "../../tool/check_push_config.py", "--platform", "android")
+    environment("CONFIGURATION", "Release")
+    environment("DART_DEFINES", project.findProperty("dart-defines")?.toString() ?: "")
+}
+tasks.configureEach {
+    if (name == "preReleaseBuild" || name == "processReleaseGoogleServices") {
+        dependsOn(validatePush)
+    }
+}
+
 // The Firebase client configuration is supplied by each deployment.
 if (file("google-services.json").exists()) {
     apply(plugin = "com.google.gms.google-services")
@@ -95,4 +108,7 @@ if (file("google-services.json").exists()) {
 dependencies {
     implementation(platform("com.google.firebase:firebase-bom:35.1.0"))
     implementation("com.google.firebase:firebase-messaging")
+    implementation("androidx.biometric:biometric:1.1.0")
+    // Tema do diálogo de biometria nas versões antigas do Android.
+    implementation("androidx.appcompat:appcompat:1.7.0")
 }

@@ -1,3 +1,5 @@
+import { registerVerifiedOwner } from './support/verified-owner-fixture';
+import { paidSubscriptionFixture } from './support/paid-subscription-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
  * Cadastro de pessoas da equipe, senha temporária e recuperação de senha.
@@ -9,7 +11,7 @@ import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
  * - o link de definição vale uma vez, e o dono da organização não recebe um;
  * - `POST /identity/password/forgot` responde igual exista a conta ou não —
  *   antes ele era um oráculo de enumeração: 202 para inexistente, 500 para
- *   existente quando o SMTP estava fora;
+ *   existente quando o serviço de e-mail estava fora;
  * - desligar tira o acesso agora, inclusive das sessões já abertas.
  */
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
@@ -95,24 +97,21 @@ describe('Team members, temporary password and recovery (e2e)', () => {
   async function register(label: string) {
     const suffix = randomUUID().slice(0, 8);
     const email = `team.${label}.${suffix}@orbit.local`;
-    const response = await http()
-      .post('/api/v1/identity/register')
-      .send({
-        ...REGISTRATION_LEGAL_ACCEPTANCE,
-        email,
-        firstName: 'Team',
-        lastName: label,
-        password: PASSWORD,
-        organizationName: `Team ${label} ${suffix}`,
-        legalName: `Team ${label} ${suffix} LTDA`,
-        documentType: 'CNPJ',
-        documentNumber: cnpj(),
-        city: 'Recife',
-        street: 'Rua do Sol',
-        stateCode: 'PE',
-        planKey: 'ENTERPRISE_UNLIMITED',
-      })
-      .expect(201);
+    const response = await registerVerifiedOwner(app, {
+      ...REGISTRATION_LEGAL_ACCEPTANCE,
+      email,
+      firstName: 'Team',
+      lastName: label,
+      password: PASSWORD,
+      organizationName: `Team ${label} ${suffix}`,
+      legalName: `Team ${label} ${suffix} LTDA`,
+      documentType: 'CNPJ',
+      documentNumber: cnpj(),
+      city: 'Recife',
+      street: 'Rua do Sol',
+      stateCode: 'PE',
+      planKey: 'ENTERPRISE_UNLIMITED',
+    });
     return {
       email,
       token: (response.body as Envelope<{ accessToken: string }>).data
@@ -161,8 +160,11 @@ describe('Team members, temporary password and recovery (e2e)', () => {
     http = () => request(app.getHttpServer());
 
     const owner = await register('owner');
+    await paidSubscriptionFixture(app, prisma, owner.email);
     ownerToken = owner.token;
-    neighbourToken = (await register('neighbour')).token;
+    const neighbour = await register('neighbour');
+    await paidSubscriptionFixture(app, prisma, neighbour.email);
+    neighbourToken = neighbour.token;
     ownerUserId = (
       await prisma.user.findUniqueOrThrow({
         where: { email: owner.email },
@@ -475,9 +477,11 @@ describe('Team members, temporary password and recovery (e2e)', () => {
       ),
     ).expect(201);
     const link = (emitido.body as Envelope<{ link: string }>).data.link;
-    expect(link).toContain('/redefinir-senha?token=');
+    expect(link).toContain('/redefinir-senha#token=');
 
-    const token = new URL(link).searchParams.get('token')!;
+    const token = new URLSearchParams(new URL(link).hash.slice(1)).get(
+      'token',
+    )!;
     const senha = 'Tecnico#PeloLink@2026';
     await http()
       .post('/api/v1/identity/password/reset')
@@ -526,7 +530,7 @@ describe('Team members, temporary password and recovery (e2e)', () => {
     /**
      * A regressão que este teste tranca.
      *
-     * Sem SMTP configurado, o envio estourava e o endpoint devolvia 500 —
+     * Sem o transporte de e-mail configurado, o envio estourava e o endpoint devolvia 500 —
      * **só** para e-mail existente, porque o inexistente saía antes do envio.
      * Comparar os dois códigos dizia se uma pessoa tem conta no Orbit.
      */
@@ -606,6 +610,149 @@ describe('Team members, temporary password and recovery (e2e)', () => {
       const papel = lista.find((item) => item.key === chave)!;
       expect(papel.allowedSurfaces).toEqual(['MOBILE']);
     }
+  });
+
+  it('delegates individual mobile management areas and revokes existing sessions immediately', async () => {
+    const created = await criarMembro();
+    const loginMobile = async (email: string, password: string) => {
+      const response = await http()
+        .post('/api/v1/identity/login')
+        .send({ email, password, client: 'MOBILE' })
+        .expect(200);
+      return (response.body as Envelope<{ accessToken: string }>).data
+        .accessToken;
+    };
+    const technician = await loginMobile(
+      created.data.member.email,
+      created.data.temporaryPassword,
+    );
+    const owner = await prisma.user.findUniqueOrThrow({
+      where: { id: ownerUserId },
+      select: { email: true },
+    });
+    const mobileOwner = await loginMobile(owner.email, PASSWORD);
+    const delegationPath = `/api/v1/mobile/owner/members/${created.data.member.userId}/delegations`;
+    const management = (test: request.Test, token: string) =>
+      auth(test, token).set('x-orbit-mobile-management', '1');
+    const access = (token: string) =>
+      management(http().get('/api/v1/mobile/owner/access'), token);
+
+    const initial = await access(technician).expect(200);
+    expect((initial.body as Envelope<{ areas: string[] }>).data.areas).toEqual(
+      [],
+    );
+    const ownerAccess = await access(mobileOwner).expect(200);
+    expect(
+      (ownerAccess.body as Envelope<{ areas: string[] }>).data.areas,
+    ).toEqual(expect.arrayContaining(['operations', 'team']));
+
+    await management(http().get('/api/v1/customers'), technician).expect(403);
+    await auth(http().get('/api/v1/mobile/owner/customers'), technician).expect(
+      403,
+    );
+    await management(http().patch(delegationPath), technician)
+      .send({ areas: ['customers'] })
+      .expect(403);
+    await management(http().patch(delegationPath), mobileOwner)
+      .send({ areas: ['team'] })
+      .expect(400);
+
+    const neighbour = await prisma.organizationMembership.findFirstOrThrow({
+      where: {
+        organizationId: { not: ownerOrganizationId },
+        role: { key: 'OWNER' },
+      },
+      select: { userId: true, organizationId: true },
+    });
+    await management(
+      http().patch(
+        `/api/v1/mobile/owner/members/${neighbour.userId}/delegations`,
+      ),
+      mobileOwner,
+    )
+      .send({ areas: ['customers'] })
+      .expect(404);
+
+    await management(http().patch(delegationPath), mobileOwner)
+      .send({ areas: ['customers', 'quotes'] })
+      .expect(200);
+    const granted = await access(technician).expect(200);
+    expect((granted.body as Envelope<{ areas: string[] }>).data.areas).toEqual([
+      'quotes',
+      'customers',
+    ]);
+
+    const prefix = `Seleção ${randomUUID().slice(0, 8)}`;
+    const document = cnpj();
+    await prisma.customer.createMany({
+      data: [
+        ...Array.from({ length: 61 }, (_, index) => ({
+          organizationId: ownerOrganizationId,
+          legalName: `${prefix} ${String(index).padStart(2, '0')}`,
+          ...(index === 60
+            ? { documentType: 'CNPJ', documentNumber: document }
+            : {}),
+        })),
+        { organizationId: neighbour.organizationId, legalName: `${prefix} 61` },
+      ],
+    });
+    const customerOptions = (token: string, search: string, page: number) =>
+      management(http().get('/api/v1/mobile/owner/customers'), token)
+        .query({ search, page })
+        .expect(200);
+    type CustomerOptions = Envelope<{
+      data: { legalName: string; documentNumber?: string }[];
+      hasNextPage: boolean;
+    }>;
+    const firstPage = (await customerOptions(mobileOwner, prefix, 1))
+      .body as CustomerOptions;
+    expect(firstPage.data.data).toHaveLength(60);
+    expect(firstPage.data.hasNextPage).toBe(true);
+    const secondPage = (await customerOptions(mobileOwner, prefix, 2))
+      .body as CustomerOptions;
+    expect(secondPage.data.data).toEqual([
+      expect.objectContaining({
+        legalName: `${prefix} 60`,
+        documentNumber: document,
+      }),
+    ]);
+    expect(secondPage.data.hasNextPage).toBe(false);
+    const limited = (await customerOptions(technician, document, 1))
+      .body as CustomerOptions;
+    expect(limited.data.data).toHaveLength(1);
+    expect(limited.data.data[0]).not.toHaveProperty('documentNumber');
+
+    const record = await management(
+      http().post('/api/v1/customers'),
+      technician,
+    )
+      .send({ type: 'INDIVIDUAL', legalName: 'Cliente criado por delegação' })
+      .expect(201);
+    await management(
+      http().get(
+        `/api/v1/customers/${(record.body as Envelope<{ id: string }>).data.id}`,
+      ),
+      technician,
+    ).expect(200);
+    await management(
+      http().get('/api/v1/financial/entries'),
+      technician,
+    ).expect(403);
+    await management(
+      http().get('/api/v1/organizations/current/members'),
+      technician,
+    ).expect(403);
+    await auth(http().get('/api/v1/customers'), technician).expect(200);
+    await auth(http().get('/api/v1/assets'), technician).expect(403);
+
+    await management(http().patch(delegationPath), mobileOwner)
+      .send({ areas: [] })
+      .expect(200);
+    const revoked = await access(technician).expect(200);
+    expect((revoked.body as Envelope<{ areas: string[] }>).data.areas).toEqual(
+      [],
+    );
+    await management(http().get('/api/v1/customers'), technician).expect(403);
   });
 
   it('o técnico entra no aplicativo e é recusado no painel web', async () => {

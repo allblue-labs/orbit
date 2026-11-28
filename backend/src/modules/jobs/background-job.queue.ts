@@ -1,3 +1,4 @@
+import { TENANT_DEFER_MS } from '../tenant-operations/tenant-operation.policy';
 /**
  * Fila sobre Postgres.
  *
@@ -45,16 +46,29 @@ import type {
   EnqueueJobInput,
   JobQueue,
 } from './background-job.types';
+import {
+  backoffDelay,
+  groupOf,
+  type BackoffPolicy,
+  type QueueGroupConfig,
+} from './queue-groups';
 
 /** Backoff exponencial com teto — 5s, 10s, 20s, 40s… até 5 minutos. */
 export const BACKOFF_BASE_MS = 5_000;
 export const BACKOFF_CEILING_MS = 300_000;
 
-export function backoffFor(attempts: number): number {
-  return Math.min(
-    BACKOFF_BASE_MS * 2 ** Math.max(0, attempts - 1),
-    BACKOFF_CEILING_MS,
-  );
+/**
+ * O backoff padrão, também usado pelos outboxes de e-mail. As filas usam a
+ * política do próprio grupo (`queue-groups.ts`).
+ */
+export function backoffFor(
+  attempts: number,
+  policy: BackoffPolicy = {
+    baseMs: BACKOFF_BASE_MS,
+    ceilingMs: BACKOFF_CEILING_MS,
+  },
+): number {
+  return backoffDelay(attempts, policy);
 }
 
 interface JobRow {
@@ -72,6 +86,7 @@ interface JobRow {
   correlation_id: string;
   actor_user_id: string | null;
   last_error: string | null;
+  locked_by: string | null;
   available_at: Date;
   created_at: Date;
 }
@@ -80,7 +95,7 @@ interface JobRow {
 const JOB_COLUMNS = Prisma.sql`
   id, queue, job_key, organization_id, business_unit_id, scope,
   business_unit_ids, payload, status, attempts, max_attempts,
-  correlation_id, actor_user_id, last_error, available_at, created_at
+  correlation_id, actor_user_id, last_error, locked_by, available_at, created_at
 `;
 
 @Injectable()
@@ -186,7 +201,7 @@ export class BackgroundJobQueue {
         ${JSON.stringify(input.payload)}::jsonb,
         ${input.correlationId},
         ${input.actorUserId ?? null}::uuid,
-        ${input.maxAttempts ?? 3},
+        ${input.maxAttempts ?? groupOf(input.queue).maxAttempts},
         COALESCE(${input.availableAt ?? null}::timestamptz, now()),
         now()
       )
@@ -197,12 +212,20 @@ export class BackgroundJobQueue {
     const row = inserted[0];
     if (row) return this.fromRow(row);
 
+    /*
+     * Idempotência permanente (grupo fiscal): a chave colide também com um job
+     * já concluído, e é ele que volta — a nota emitida não é pedida de novo.
+     */
+    const permanent = groupOf(input.queue).idempotency === 'permanent';
     const existing = await client.backgroundJob.findFirst({
       where: {
         queue: input.queue,
         jobKey: input.jobKey,
-        status: { in: ['PENDING', 'RUNNING'] },
+        ...(permanent
+          ? { organizationId: input.organizationId, status: { not: 'DEAD' } }
+          : { status: { in: ['PENDING', 'RUNNING'] } }),
       },
+      orderBy: { createdAt: 'desc' },
     });
     if (!existing) {
       throw new Error(
@@ -212,29 +235,88 @@ export class BackgroundJobQueue {
     return this.toRecord(existing);
   }
 
-  /** Reivindica um job elegível, ou `null` quando não há trabalho. */
+  /**
+   * Reivindica o próximo job de um grupo, com justiça entre organizações.
+   *
+   * ## A ordem
+   *
+   * Entre os pendentes elegíveis das filas do grupo, vence o da organização
+   * com **menos jobs rodando** no grupo; empatadas, a ordem de chegada. Uma
+   * organização com trezentos relatórios na fila disputa a próxima vaga com a
+   * vizinha que pediu um — e perde enquanto já tiver um rodando.
+   *
+   * ## O teto
+   *
+   * Uma organização com `perOrganizationLimit` jobs rodando no grupo não
+   * reivindica mais nenhum, somando todas as réplicas. Os jobs dela esperam
+   * na fila; os das outras passam.
+   *
+   * ## Por que a trava consultiva
+   *
+   * Sem ela, duas réplicas leem "1 rodando" no mesmo instante e as duas
+   * reivindicam — o teto de 2 vira 3. `pg_advisory_xact_lock` por grupo
+   * serializa só o instante do claim (milissegundos), não a execução, e sai
+   * com o commit.
+   *
+   * ## Limite de taxa (grupo `ai`)
+   *
+   * Conta os jobs que **começaram** na janela, por organização e no total.
+   * Nos grupos com limite de taxa, `started_at` é renovado a cada tentativa:
+   * repetir uma chamada ao provedor também gasta a cota.
+   */
   async claim(
-    queue: JobQueue,
+    group: QueueGroupConfig,
+    queues: readonly JobQueue[],
     worker: string,
   ): Promise<BackgroundJobRecord | null> {
+    if (!queues.length) return null;
+    const rate = group.rateLimit;
     const row = await this.asWorker(async (tx) => {
+      /* `$executeRaw`: a função devolve `void`, que `$queryRaw` não lê. */
+      await tx.$executeRaw`
+        SELECT pg_advisory_xact_lock(hashtextextended(${'orbit:jobs:claim:' + group.name}, 0))
+      `;
+      const rateFilter = rate
+        ? Prisma.sql`
+            AND COALESCE(s.n, 0) < ${rate.perOrganization.max}
+            AND (SELECT COALESCE(sum(n), 0) FROM started) < ${rate.global.max}`
+        : Prisma.empty;
       const rows = await tx.$queryRaw<JobRow[]>`
+        WITH running AS (
+          SELECT organization_id, count(*)::int AS n
+            FROM background_jobs
+           WHERE queue IN (${Prisma.join(queues)}) AND status = 'RUNNING'
+           GROUP BY organization_id
+        ), started AS (
+          SELECT organization_id, count(*)::int AS n
+            FROM background_jobs
+           WHERE queue IN (${Prisma.join(queues)})
+             AND started_at > now() - ${rate?.perOrganization.windowMs ?? 0} * interval '1 millisecond'
+             AND ${rate ? Prisma.sql`true` : Prisma.sql`false`}
+           GROUP BY organization_id
+        ), candidate AS (
+          SELECT j.id
+            FROM background_jobs j
+            LEFT JOIN running r ON r.organization_id = j.organization_id
+            LEFT JOIN started s ON s.organization_id = j.organization_id
+           WHERE j.queue IN (${Prisma.join(queues)})
+             AND j.status = 'PENDING'
+             AND j.available_at <= now()
+             AND COALESCE(r.n, 0) < ${group.perOrganizationLimit}
+             ${rateFilter}
+           ORDER BY COALESCE(r.n, 0) ASC, j.available_at ASC, j.created_at ASC
+           FOR UPDATE OF j SKIP LOCKED
+           LIMIT 1
+        )
         UPDATE background_jobs
            SET status = 'RUNNING',
                attempts = attempts + 1,
                locked_at = now(),
                locked_by = ${worker},
-               started_at = COALESCE(started_at, now()),
+               started_at = CASE WHEN ${rate ? Prisma.sql`true` : Prisma.sql`false`}
+                                 THEN now() ELSE COALESCE(started_at, now()) END,
                updated_at = now()
-         WHERE id = (
-           SELECT id FROM background_jobs
-            WHERE queue = ${queue}
-              AND status = 'PENDING'
-              AND available_at <= now()
-            ORDER BY available_at ASC, created_at ASC
-            FOR UPDATE SKIP LOCKED
-            LIMIT 1
-         )
+         WHERE id = (SELECT id FROM candidate)
          RETURNING ${JOB_COLUMNS}
       `;
       return rows[0] ?? null;
@@ -243,10 +325,56 @@ export class BackgroundJobQueue {
     return row ? this.fromRow(row) : null;
   }
 
-  async succeed(id: string): Promise<void> {
+  /** Deliberate policy deferral does not consume a processor attempt or dead-letter the job. */
+  async defer(
+    job: BackgroundJobRecord,
+    reason:
+      | 'ORGANIZATION_SUSPENDED'
+      | 'ORGANIZATION_UNAVAILABLE'
+      | 'SUBSCRIPTION_NOT_ACTIVE',
+  ): Promise<void> {
     await this.asWorker((tx) =>
-      tx.backgroundJob.update({
-        where: { id },
+      tx.backgroundJob.updateMany({
+        where: this.lease(job),
+        data: {
+          status: 'PENDING',
+          attempts: { decrement: 1 },
+          availableAt: new Date(Date.now() + TENANT_DEFER_MS),
+          lockedAt: null,
+          lockedBy: null,
+          lastError: reason,
+        },
+      }),
+    );
+    this.logger.log(
+      JSON.stringify({
+        jobId: job.id,
+        organizationId: job.organizationId,
+        correlationId: job.correlationId,
+        outcome: 'DEFERRED',
+        reason,
+      }),
+    );
+  }
+
+  private lease(job: BackgroundJobRecord) {
+    if (!job.lockedBy) throw new Error('Job lease is missing');
+    return { id: job.id, status: 'RUNNING', lockedBy: job.lockedBy };
+  }
+
+  async heartbeat(job: BackgroundJobRecord): Promise<void> {
+    await this.asWorker((tx) =>
+      tx.backgroundJob.updateMany({
+        where: this.lease(job),
+        data: { lockedAt: new Date() },
+      }),
+    );
+  }
+
+  async succeed(job: BackgroundJobRecord): Promise<boolean> {
+    const result = await this.asWorker((tx) =>
+      tx.backgroundJob.updateMany({
+        where: this.lease(job),
         data: {
           status: 'SUCCEEDED',
           finishedAt: new Date(),
@@ -256,6 +384,7 @@ export class BackgroundJobQueue {
         },
       }),
     );
+    return result.count === 1;
   }
 
   /**
@@ -270,16 +399,16 @@ export class BackgroundJobQueue {
     job: BackgroundJobRecord,
     failureCode: string,
     permanent = false,
-  ): Promise<'RETRY' | 'DEAD'> {
+  ): Promise<'RETRY' | 'DEAD' | 'LEASE_LOST'> {
     const exhausted = permanent || job.attempts >= job.maxAttempts;
-    const delay = backoffFor(job.attempts);
+    const delay = backoffFor(job.attempts, groupOf(job.queue).backoff);
     const safeFailureCode = /^[A-Z0-9_.:-]{1,160}$/.test(failureCode)
       ? failureCode
       : 'UNCLASSIFIED_FAILURE';
 
-    await this.asWorker((tx) =>
-      tx.backgroundJob.update({
-        where: { id: job.id },
+    const result = await this.asWorker((tx) =>
+      tx.backgroundJob.updateMany({
+        where: this.lease(job),
         data: {
           status: exhausted ? 'DEAD' : 'PENDING',
           availableAt: exhausted ? undefined : new Date(Date.now() + delay),
@@ -293,6 +422,8 @@ export class BackgroundJobQueue {
         },
       }),
     );
+
+    if (result.count !== 1) return 'LEASE_LOST';
 
     this.logger.warn(
       JSON.stringify({
@@ -318,19 +449,109 @@ export class BackgroundJobQueue {
    * todo processador precisa ser idempotente.
    */
   async requeueStalled(queue: JobQueue, olderThanMs: number): Promise<number> {
-    const threshold = new Date(Date.now() - olderThanMs);
-    const result = await this.asWorker((tx) =>
-      tx.backgroundJob.updateMany({
-        where: { queue, status: 'RUNNING', lockedAt: { lt: threshold } },
-        data: { status: 'PENDING', lockedAt: null, lockedBy: null },
+    const count = await this.asWorker(
+      (tx) => tx.$executeRaw`
+      UPDATE background_jobs
+         SET status = CASE WHEN attempts >= max_attempts THEN 'DEAD' ELSE 'PENDING' END,
+             finished_at = CASE WHEN attempts >= max_attempts THEN now() ELSE NULL END,
+             available_at = now(), locked_at = NULL, locked_by = NULL,
+             last_error = 'JOB_LEASE_EXPIRED', updated_at = now()
+       WHERE id IN (
+         SELECT id FROM background_jobs
+          WHERE queue = ${queue} AND status = 'RUNNING'
+            AND locked_at < now() - ${olderThanMs} * interval '1 millisecond'
+          ORDER BY locked_at LIMIT 50 FOR UPDATE SKIP LOCKED
+       )
+    `,
+    );
+    if (count)
+      this.logger.warn(
+        JSON.stringify({ event: 'job_leases_expired', queue, count }),
+      );
+    return count;
+  }
+
+  snapshot(queues: readonly JobQueue[]) {
+    if (!queues.length) return Promise.resolve([]);
+    return this.asWorker(
+      (tx) => tx.$queryRaw<
+        {
+          queue: string;
+          ready: number;
+          pending: number;
+          average_ready_ms: number;
+          running: number;
+          dead: number;
+          oldest_ready_ms: number;
+        }[]
+      >`
+      SELECT queue,
+             count(*) FILTER (WHERE status = 'PENDING')::int AS pending,
+             COALESCE(avg(extract(epoch FROM now() - available_at) * 1000)
+               FILTER (WHERE status='PENDING' AND available_at <= now()), 0)::double precision AS average_ready_ms,
+             count(*) FILTER (WHERE status = 'PENDING' AND available_at <= now())::int AS ready,
+             count(*) FILTER (WHERE status = 'RUNNING')::int AS running,
+             count(*) FILTER (WHERE status = 'DEAD')::int AS dead,
+             COALESCE(extract(epoch FROM now() - min(available_at)
+               FILTER (WHERE status = 'PENDING' AND available_at <= now())) * 1000, 0)::double precision AS oldest_ready_ms
+        FROM background_jobs
+       WHERE queue IN (${Prisma.join(queues)})
+         AND status IN ('PENDING', 'RUNNING', 'DEAD')
+       GROUP BY queue
+    `,
+    );
+  }
+
+  deadLetters(queue: JobQueue) {
+    return this.asWorker((tx) =>
+      tx.backgroundJob.findMany({
+        where: { status: 'DEAD', queue },
+        select: {
+          id: true,
+          queue: true,
+          attempts: true,
+          lastError: true,
+          finishedAt: true,
+        },
+        orderBy: { finishedAt: 'desc' },
+        take: 100,
       }),
     );
-    if (result.count > 0) {
-      this.logger.warn(
-        `[jobs] ${result.count} job(s) presos em ${queue} devolvidos à fila`,
+  }
+
+  /** Preserve original scope, identity, failure code and attempt history. */
+  async replayDead(id: string, queue: JobQueue): Promise<boolean> {
+    // Only processors with durable reconciliation are eligible for manual replay.
+    if (queue !== 'artifact.render' && queue !== 'management-report.generate')
+      return false;
+    try {
+      const count = await this.asWorker(
+        (tx) => tx.$executeRaw`
+        UPDATE background_jobs dead
+           SET status = 'PENDING', available_at = now(), max_attempts = dead.attempts + 1,
+               locked_at = NULL, locked_by = NULL, finished_at = NULL, updated_at = now()
+         WHERE dead.id = ${id}::uuid AND dead.queue = ${queue} AND dead.status = 'DEAD'
+           AND (dead.last_error = 'JOB_LEASE_EXPIRED' OR dead.last_error = 'INTERNAL_ERROR:INFRASTRUCTURE_ERROR' OR
+                split_part(dead.last_error, ':', 1) IN ('DATABASE_UNAVAILABLE', 'DATABASE_TIMEOUT', 'CONNECTION_FAILURE'))
+           AND NOT EXISTS (
+             SELECT 1 FROM background_jobs other
+              WHERE other.queue = dead.queue AND other.job_key = dead.job_key
+                AND other.id <> dead.id
+                AND (other.status IN ('PENDING','RUNNING') OR other.created_at >= dead.created_at)
+           )
+      `,
       );
+      return count === 1;
+    } catch (error) {
+      // Concurrent enqueue or replay is protected by the active job unique index.
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2010' &&
+        error.meta?.code === '23505'
+      )
+        return false;
+      throw error;
     }
-    return result.count;
   }
 
   find(id: string) {
@@ -354,6 +575,7 @@ export class BackgroundJobQueue {
     correlationId: string;
     actorUserId: string | null;
     lastError: string | null;
+    lockedBy: string | null;
     availableAt: Date;
     createdAt: Date;
   }): BackgroundJobRecord {
@@ -372,6 +594,7 @@ export class BackgroundJobQueue {
       correlationId: job.correlationId,
       actorUserId: job.actorUserId,
       lastError: job.lastError,
+      lockedBy: job.lockedBy,
       availableAt: job.availableAt,
       createdAt: job.createdAt,
     };
@@ -393,6 +616,7 @@ export class BackgroundJobQueue {
       correlationId: row.correlation_id,
       actorUserId: row.actor_user_id,
       lastError: row.last_error,
+      lockedBy: row.locked_by,
       availableAt: row.available_at,
       createdAt: row.created_at,
     };

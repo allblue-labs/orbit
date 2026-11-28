@@ -9,9 +9,11 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_operator/core/errors/orbit_exception.dart';
 import 'package:orbit_operator/core/observability/orbit_logger.dart';
+import 'package:orbit_operator/core/storage/offline_data.dart';
 import 'package:orbit_operator/core/uploads/upload_queue.dart';
 import 'package:orbit_operator/core/uploads/upload_queue_store.dart';
 import 'package:orbit_operator/core/uploads/upload_task.dart';
@@ -59,6 +61,7 @@ UploadTask buildTask({
 
 void main() {
   setUp(() {
+    FlutterSecureStorage.setMockInitialValues({});
     _tempDir = Directory.systemTemp.createTempSync('orbit_uploads_test');
   });
 
@@ -78,7 +81,7 @@ void main() {
       await file.writeAsString(original);
       final store = FileUploadQueueStore(directory: _tempDir);
       expect((await store.load()).single.id, task.id);
-      expect(await file.readAsString(), original);
+      expect(await file.readAsBytes(), isNot(utf8.encode(original)));
       await store.save([task.copyWith(attempts: 1)]);
       final reopened = FileUploadQueueStore(directory: _tempDir);
       expect((await reopened.load()).single.attempts, 1);
@@ -88,7 +91,15 @@ void main() {
           .where((f) => f.path.contains('.recovery.'))
           .toList();
       expect(archives, hasLength(1));
-      expect(await archives.single.readAsString(), original);
+      expect(
+        utf8.decode(
+          (await OfflineDataFile(
+            archives.single,
+            scope: 'upload-recovery',
+          ).read())!,
+        ),
+        original,
+      );
       expect(File(task.filePath).existsSync(), isTrue);
     },
   );
@@ -107,7 +118,15 @@ void main() {
           .whereType<File>()
           .where((f) => f.path.contains('.recovery.'))
           .toList();
-      expect(await archives.single.readAsString(), original);
+      expect(
+        utf8.decode(
+          (await OfflineDataFile(
+            archives.single,
+            scope: 'upload-recovery',
+          ).read())!,
+        ),
+        original,
+      );
     },
   );
 

@@ -5,6 +5,9 @@ como um job de fundo reabre o contexto correto.
 
 Resolve os achados **A-01** e **A-02** da revisão arquitetural PR-26.5.
 
+O documento registra a arquitetura da PR-26.6. As credenciais, permissões e
+políticas atuais estão no [runbook da Etapa 03](../../docs/release/rls-pgbouncer.md).
+
 ---
 
 ## O problema, em uma frase cada

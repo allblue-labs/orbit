@@ -16,10 +16,14 @@ it.each([
         .mockResolvedValue({}),
     };
     const create = jest.fn().mockResolvedValue({ id: 'role' });
+    const seedCatalogs = jest.fn().mockResolvedValue(1);
     const tx = {
       $queryRawUnsafe: jest.fn(),
+      $executeRaw: seedCatalogs,
       plan: {
-        findFirst: jest.fn().mockResolvedValue({ id: 'plan', key: planKey }),
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ id: 'plan', key: planKey, commercial: {} }),
       },
       organization,
       user: { create },
@@ -57,10 +61,26 @@ it.each([
       {},
       { client: 'WEB', ipAddress: '192.0.2.1', userAgent: 'Orbit test' },
     );
+    /* O catálogo de climatização nasce com a organização, na mesma transação. */
+    expect(seedCatalogs).toHaveBeenCalledTimes(1);
+    const [sql, organizationId] = seedCatalogs.mock.calls[0] as [
+      TemplateStringsArray,
+      string,
+    ];
+    expect(sql.join('?')).toContain('app_seed_hvac_catalogs');
+    expect(organizationId).toBe(organization.create.mock.calls[0]?.[0].data.id);
     expect(organization.create.mock.calls[0]?.[0].data).toMatchObject({
       subscriptionStatus: 'PENDING_PAYMENT',
       currentPeriodEnd: null,
     });
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          email: input.email,
+          emailVerifiedAt: null,
+        }) as unknown,
+      }),
+    );
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({

@@ -159,14 +159,15 @@ export const EQUIPMENT_EXECUTION_STATUS: Readonly<
  * genérico.
  */
 export const EXECUTION_BLOCKED_REASONS: Readonly<Record<string, string>> = {
+  EXECUTION_CANCELLED: "O atendimento deste equipamento foi cancelado.",
   PLAN_NOT_ACTIVE:
     "O plano não está ativo. Reative-o para executar manutenções.",
   CYCLE_NOT_PENDING: "Este ciclo já foi encerrado.",
   EQUIPMENT_INACTIVE: "O equipamento está inativo no cadastro.",
   TECHNICAL_RESPONSIBLE_MISSING:
-    "O plano não tem Responsável Técnico definido.",
+    "Edite o plano e selecione um Responsável Técnico.",
   TECHNICAL_RESPONSIBLE_INELIGIBLE:
-    "O Responsável Técnico do plano não está elegível para assinar o PMOC.",
+    "Confira o perfil e a assinatura do Responsável Técnico em Equipe.",
 };
 
 /* ------------------------------------------------------------------ */
@@ -216,6 +217,24 @@ export const cycleStatus = (value: string | null | undefined) =>
   lookup(CYCLE_STATUS, value);
 export const equipmentExecutionStatus = (value: string | null | undefined) =>
   lookup(EQUIPMENT_EXECUTION_STATUS, value);
+
+/**
+ * A situação de um equipamento **no ciclo** — inclusive antes de existir execução.
+ *
+ * A linha do ciclo começa em `NOT_STARTED`, que não é estado de execução (não há
+ * execução ainda). Por isso o mapa acima não o conhecia, e a tela o desenhava à
+ * parte, como texto cinza solto, enquanto os outros três estados viravam selo.
+ * Quem olhava a lista lia três selos e uma frase, e a frase parecia nota de
+ * rodapé — justamente no equipamento que ainda falta atender.
+ */
+export const CYCLE_EQUIPMENT_STATUS: Readonly<Record<string, PmocPresentation>> =
+  {
+    NOT_STARTED: { label: "A executar", tone: "warning" },
+    ...EQUIPMENT_EXECUTION_STATUS,
+  };
+
+export const cycleEquipmentStatus = (value: string | null | undefined) =>
+  lookup(CYCLE_EQUIPMENT_STATUS, value);
 export const documentStatus = (value: string | null | undefined) =>
   lookup(DOCUMENT_STATUS, value);
 
@@ -232,6 +251,6 @@ export function executionBlockedLabel(
   return (
     EXECUTION_BLOCKED_REASONS[reason] ??
     professionalFallback(reason) ??
-    "Execução indisponível no momento."
+    "Atualize o PMOC. Se o atendimento continuar indisponível, peça a quem gerencia a manutenção para revisar o plano."
   );
 }

@@ -7,6 +7,7 @@ library;
 
 import 'dart:io';
 
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_operator/core/observability/orbit_logger.dart';
 import 'package:orbit_operator/core/uploads/evidence_capture.dart';
@@ -50,6 +51,7 @@ void main() {
   late Directory appDir;
 
   setUp(() {
+    FlutterSecureStorage.setMockInitialValues({});
     tempDir = Directory.systemTemp.createTempSync('orbit_evidence_origem');
     appDir = Directory.systemTemp.createTempSync('orbit_evidence_app');
   });

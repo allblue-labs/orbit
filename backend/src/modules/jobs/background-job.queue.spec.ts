@@ -45,6 +45,7 @@ describe('BackgroundJobQueue.fail', () => {
     businessUnitIds: ['019f-unit'],
     payload: {},
     status: 'RUNNING',
+    lockedBy: 'lease-probe',
     attempts: 1,
     maxAttempts: 3,
     correlationId: '019f-corr',
@@ -69,9 +70,9 @@ describe('BackgroundJobQueue.fail', () => {
         return Promise.resolve([]);
       },
       backgroundJob: {
-        update: (args: { data: Record<string, unknown> }) => {
+        updateMany: (args: { data: Record<string, unknown> }) => {
           updates.push(args.data);
-          return Promise.resolve({});
+          return Promise.resolve({ count: 1 });
         },
       },
     };

@@ -1,4 +1,6 @@
+import type { EmailSendResult } from '../../email/email.types';
 import type { UUID } from '../../../contracts';
+import type { VerifiedPlatformAuthority } from '../../../common/verified-platform-authority';
 
 export interface AccessTokenClaims {
   sub: UUID;
@@ -14,6 +16,10 @@ export interface AccessTokenClaims {
 }
 
 export interface AuthenticatedIdentity {
+  /** Request-local verified global grants; not serialized into access tokens. */
+  platformAuthority?: VerifiedPlatformAuthority;
+  platformMfaRequired?: boolean;
+  organizationRoles?: readonly string[];
   id: UUID;
   sessionId: UUID;
   organizationId: UUID | null;
@@ -53,6 +59,7 @@ export interface TokenPair {
 }
 
 export const IdentityTokenPurpose = {
+  EMAIL_VERIFICATION: 'EMAIL_VERIFICATION',
   INVITATION: 'INVITATION',
   PASSWORD_RESET: 'PASSWORD_RESET',
 } as const;
@@ -64,7 +71,9 @@ export interface IIdentityTokenDelivery {
     purpose: IdentityTokenPurpose,
     recipient: string,
     token: string,
-  ): Promise<void>;
+    identityDeliveryId?: string,
+    template?: 'WELCOME',
+  ): Promise<EmailSendResult>;
 }
 
 export const IDENTITY_TOKEN_DELIVERY = Symbol('IDENTITY_TOKEN_DELIVERY');

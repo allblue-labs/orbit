@@ -202,6 +202,7 @@ function PlanCard({
         /* O vigente ganha moldura e anel: num painel de quatro cartões iguais,
            a borda sozinha não chama o olho o bastante. */
         atual && "border-primary bg-primary/5 ring-1 ring-primary/30",
+        plano.isActive === false && "bg-muted/50 text-muted-foreground",
       )}
       aria-label={plano.label}
     >
@@ -231,6 +232,11 @@ function PlanCard({
         {preco ? (
           <>
             <p className="font-display text-xl font-bold tabular-nums">
+              {preco.listAmountMinor !== undefined ? (
+                <del className="mr-2 text-sm font-normal text-muted-foreground">
+                  {formatCentavos(preco.listAmountMinor)}
+                </del>
+              ) : null}
               {formatCentavos(preco.amountMinor)}
             </p>
             <p className="text-xs text-muted-foreground">
@@ -246,6 +252,14 @@ function PlanCard({
         )}
       </div>
 
+      {plano.promotion ? (
+        <p className="text-xs text-muted-foreground">{plano.promotion}</p>
+      ) : null}
+      {(plano.trialDays ?? 0) > 0 && plano.isActive !== false ? (
+        <p className="text-xs text-success">
+          {plano.trialDays} dias grátis para contas elegíveis
+        </p>
+      ) : null}
       <ul className="space-y-1.5 text-sm">
         {DESTAQUES.map((recurso) => (
           <li
@@ -294,7 +308,11 @@ function PlanCard({
       </p>
 
       <div className="mt-auto pt-1">
-        {atual && mesmaPeriodicidade && podeContratar ? (
+        {plano.isActive === false ? (
+          <Button disabled variant="outline" size="sm" className="w-full">
+            Indisponível
+          </Button>
+        ) : atual && mesmaPeriodicidade && podeContratar ? (
           <Button
             size="sm"
             className="w-full"

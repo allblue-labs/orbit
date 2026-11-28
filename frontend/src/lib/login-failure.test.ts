@@ -16,6 +16,18 @@ function recusa(code: string, message: string): ApiError {
 }
 
 describe("loginFailure", () => {
+  it("explains email confirmation instead of expired session for a pending owner", () => {
+    expect(
+      loginFailure(
+        recusa("EMAIL_VERIFICATION_REQUIRED", "Confirme seu e-mail."),
+      ),
+    ).toEqual({
+      revealMfa: false,
+      title: "Confirme seu e-mail",
+      description: "Confirme seu e-mail.",
+    });
+  });
+
   it("abre o campo do código quando o servidor diz que ele falta", () => {
     const acao = loginFailure(
       recusa("MFA_REQUIRED", "Informe o código do seu autenticador."),

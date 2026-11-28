@@ -1,4 +1,7 @@
+import { OutboundModule } from '../../network/outbound.module';
 import { Module } from '@nestjs/common';
+import { FieldAssignmentOutbox } from './field-assignment-outbox';
+import { EmailModule } from '../email/email.module';
 import { IdentityModule } from '../identity/identity.module';
 import {
   EmailNotificationProvider,
@@ -6,7 +9,6 @@ import {
 } from './notification-delivery.providers';
 import { NotificationController } from './notification.controller';
 import { NotificationPreferencesController } from './notification-preferences.controller';
-import { NotificationGateway } from './notification.gateway';
 import { NotificationRepository } from './notification.repository';
 import { NotificationService } from './notification.service';
 import { MobileDeviceController } from './mobile-device.controller';
@@ -22,18 +24,19 @@ import {
   mobilePushProviderFactory,
 } from './mobile-push.provider';
 import { MobilePushRepository } from './mobile-push.repository';
+import { PushNotificationService } from './push-notification.service';
 
 @Module({
-  imports: [IdentityModule],
+  imports: [OutboundModule, IdentityModule, EmailModule],
   controllers: [
     NotificationPreferencesController,
     NotificationController,
     MobileDeviceController,
   ],
   providers: [
+    FieldAssignmentOutbox,
     NotificationRepository,
     NotificationService,
-    NotificationGateway,
     EmailNotificationProvider,
     PushNotificationProvider,
     MobileDeviceRepository,
@@ -44,12 +47,14 @@ import { MobilePushRepository } from './mobile-push.repository';
     MobilePushRepository,
     MobilePushProcessor,
     MobilePushMetrics,
+    PushNotificationService,
     { provide: MOBILE_PUSH_PROVIDER, useFactory: mobilePushProviderFactory },
   ],
   exports: [
+    FieldAssignmentOutbox,
     NotificationService,
-    NotificationGateway,
     MobileNotificationService,
+    PushNotificationService,
   ],
 })
 export class NotificationsModule {}

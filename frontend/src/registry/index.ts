@@ -53,6 +53,8 @@ export {
   cycleStatus,
   documentStatus,
   equipmentExecutionStatus,
+  cycleEquipmentStatus,
+  CYCLE_EQUIPMENT_STATUS,
   executionBlockedLabel,
   planStatus,
   type PmocPresentation,

@@ -73,6 +73,10 @@ export class MobileEvidenceController {
       organizationId: identity.organizationId,
       businessUnitIds: identity.businessUnitIds,
       permissions: identity.permissions,
+      /* Sem isto o dono era tratado como qualquer técnico por esta porta — e as
+         isenções que já existem para ele (autorização prévia, perfil de campo)
+         não valiam quando o comando chegava por aqui. */
+      isOrganizationOwner: identity.isOrganizationOwner,
     };
   }
 }

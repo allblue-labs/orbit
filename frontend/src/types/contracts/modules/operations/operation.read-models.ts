@@ -184,7 +184,23 @@ export interface OperationListItemReadModel {
   users: readonly OperationAssignmentReadModel[];
   attachments: readonly OperationAttachmentReadModel[];
   checklistExecutions: readonly OperationChecklistReadModel[];
+  /**
+   * O documento emitido mais recente desta operação, quando há.
+   *
+   * Existe para que a linha ofereça "baixar" e "compartilhar" sem uma consulta
+   * por operação. `null` é o caso normal de quem ainda não concluiu.
+   */
+  document: OperationDocumentReadModel | null;
   allowedActions: readonly OperationAllowedAction[];
+}
+
+export interface OperationDocumentReadModel {
+  executionId: string;
+  code: string;
+  title: string;
+  renderStatus: string;
+  /** O tipo do documento: OS, RVT, PMOC… */
+  artifactType: string;
 }
 
 /** A lista permanece compacta; somente o detalhe publica ações autoritativas. */

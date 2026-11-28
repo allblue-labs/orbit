@@ -29,6 +29,8 @@ const requestInclude = {
 
 const listInclude = {
   asset: { select: { id: true, name: true, identifier: true } },
+  customer: { select: { id: true, legalName: true, tradeName: true } },
+  assignedTo: { select: { id: true, displayName: true } },
 } satisfies Prisma.CustomerServiceRequestInclude;
 
 @Injectable()
@@ -152,6 +154,8 @@ export class CustomerServiceRequestRepository {
       subject: string;
       description: string;
       assetId?: string;
+      urgency?: string;
+      details?: object;
     },
     idempotencyKey: string,
     payloadHash: string,
@@ -177,20 +181,11 @@ export class CustomerServiceRequestRepository {
         return previous;
       }
 
-      let businessUnitId: string | null = null;
-      if (input.assetId) {
-        const asset = await tx.asset.findFirst({
-          where: {
-            id: input.assetId,
-            organizationId: actor.organizationId,
-            customerId: actor.customerId,
-            deletedAt: null,
-          },
-          select: { businessUnitId: true },
-        });
-        if (!asset) throw new EntityNotFoundException('Asset', input.assetId);
-        businessUnitId = asset.businessUnitId;
-      }
+      const businessUnitId = await this.portalAssetUnit(
+        tx,
+        actor,
+        input.assetId,
+      );
 
       const identity = await tx.customerPortalIdentity.findFirst({
         where: {
@@ -218,6 +213,8 @@ export class CustomerServiceRequestRepository {
           category: input.category,
           subject: input.subject,
           description: input.description,
+          urgency: input.urgency ?? 'NORMAL',
+          details: input.details ?? {},
           createIdempotencyKey: idempotencyKey,
           createPayloadHash: payloadHash,
           events: {
@@ -239,6 +236,164 @@ export class CustomerServiceRequestRepository {
         customerId: created.customerId,
       });
       return created;
+    });
+  }
+
+  /** A unidade do equipamento do próprio cliente — ou `null` sem equipamento. */
+  private async portalAssetUnit(
+    tx: PrismaTransactionClient,
+    actor: CustomerPortalActor,
+    assetId: string | undefined | null,
+  ): Promise<string | null> {
+    if (!assetId) return null;
+    const asset = await tx.asset.findFirst({
+      where: {
+        id: assetId,
+        organizationId: actor.organizationId,
+        customerId: actor.customerId,
+        deletedAt: null,
+      },
+      select: { businessUnitId: true },
+    });
+    if (!asset) throw new EntityNotFoundException('Asset', assetId);
+    return asset.businessUnitId;
+  }
+
+  private async portalCurrent(
+    tx: PrismaTransactionClient,
+    actor: CustomerPortalActor,
+    id: string,
+  ) {
+    const current = await tx.customerServiceRequest.findFirst({
+      where: {
+        id,
+        organizationId: actor.organizationId,
+        customerId: actor.customerId,
+        createdByPortalIdentityId: actor.identityId,
+      },
+      include: { createdByPortalIdentity: { select: { displayName: true } } },
+    });
+    if (!current)
+      throw new EntityNotFoundException('Customer service request', id);
+    return current;
+  }
+
+  /**
+   * O cliente corrige o próprio chamado antes de alguém lê-lo.
+   *
+   * O evento guarda o que mudou de campo, não os valores: a linha do tempo diz
+   * "o cliente atualizou o chamado", e o conteúdo atual está no próprio chamado.
+   */
+  updatePortal(
+    actor: CustomerPortalActor,
+    id: string,
+    input: {
+      expectedVersion: number;
+      category: string;
+      subject: string;
+      description: string;
+      assetId?: string;
+      urgency?: string;
+      details?: object;
+    },
+  ) {
+    return this.rls.run(async (tx) => {
+      await this.lock(tx, `csr:${id}`);
+      const current = await this.portalCurrent(tx, actor, id);
+      this.policy.assertVersion(current.version, input.expectedVersion);
+      this.policy.assertPortalEdit(
+        current.status as CustomerServiceRequestStatus,
+        Boolean(current.convertedOperationId),
+      );
+      const businessUnitId = await this.portalAssetUnit(
+        tx,
+        actor,
+        input.assetId,
+      );
+      const novo = {
+        category: input.category,
+        subject: input.subject,
+        description: input.description,
+        assetId: input.assetId ?? null,
+        businessUnitId,
+        urgency: input.urgency ?? 'NORMAL',
+        details: (input.details ?? {}) as Prisma.InputJsonObject,
+      };
+      const campos = (
+        ['category', 'subject', 'description', 'assetId', 'urgency'] as const
+      ).filter((campo) => (current[campo] ?? null) !== (novo[campo] ?? null));
+      if (JSON.stringify(current.details) !== JSON.stringify(novo.details))
+        campos.push('details' as never);
+      const updated = await tx.customerServiceRequest.update({
+        where: { id },
+        data: { ...novo, version: { increment: 1 } },
+      });
+      await this.event(tx, updated, {
+        visibility: 'PORTAL',
+        type: 'CUSTOMER_UPDATED',
+        actorType: 'CUSTOMER_PORTAL',
+        portalIdentityId: actor.identityId,
+        actorDisplayName: current.createdByPortalIdentity.displayName,
+        metadata: { fields: campos },
+      });
+      await this.audit(
+        tx,
+        updated,
+        null,
+        'customer_service_request.customer_updated',
+        { fields: campos },
+      );
+      return this.getWithin(tx, id, actor.organizationId);
+    });
+  }
+
+  /**
+   * O cliente responde na conversa do chamado.
+   *
+   * Se a equipe esperava por ele (`WAITING_CUSTOMER`), a resposta devolve o
+   * chamado para `IN_PROGRESS` — sem isso ele ficaria parado, com a resposta
+   * dada, esperando alguém lembrar de olhar.
+   */
+  replyPortal(
+    actor: CustomerPortalActor,
+    id: string,
+    input: { expectedVersion: number; message: string },
+  ) {
+    return this.rls.run(async (tx) => {
+      await this.lock(tx, `csr:${id}`);
+      const current = await this.portalCurrent(tx, actor, id);
+      this.policy.assertVersion(current.version, input.expectedVersion);
+      this.policy.assertPortalReply(
+        current.status as CustomerServiceRequestStatus,
+        Boolean(current.convertedOperationId),
+      );
+      const devolve = current.status === 'WAITING_CUSTOMER';
+      const updated = await tx.customerServiceRequest.update({
+        where: { id },
+        data: {
+          version: { increment: 1 },
+          ...(devolve ? { status: 'IN_PROGRESS' } : {}),
+        },
+      });
+      await this.event(tx, updated, {
+        visibility: 'PORTAL',
+        type: 'CUSTOMER_MESSAGE',
+        actorType: 'CUSTOMER_PORTAL',
+        portalIdentityId: actor.identityId,
+        actorDisplayName: current.createdByPortalIdentity.displayName,
+        message: input.message,
+        ...(devolve
+          ? { fromStatus: 'WAITING_CUSTOMER', toStatus: 'IN_PROGRESS' }
+          : {}),
+      });
+      await this.audit(
+        tx,
+        updated,
+        null,
+        'customer_service_request.customer_message',
+        { statusChanged: devolve },
+      );
+      return this.getWithin(tx, id, actor.organizationId);
     });
   }
 

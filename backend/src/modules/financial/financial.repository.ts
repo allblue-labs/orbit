@@ -441,10 +441,15 @@ export class FinancialRepository {
     );
   }
 
-  /** Vencidos: `PENDING` com vencimento anterior a hoje, no recorte. */
+  /**
+   * Vencidos: `PENDING` com vencimento anterior a hoje, no recorte — por tipo.
+   * Receita vencida é dinheiro a cobrar; despesa vencida, conta atrasada.
+   * Somar as duas num número só não dizia nenhuma das coisas.
+   */
   overdue(scope: AnalyticsScope, reference: Date) {
     return this.rls.run((tx) =>
-      tx.financialEntry.aggregate({
+      tx.financialEntry.groupBy({
+        by: ['type'],
         where: {
           ...this.scopeWhere(scope),
           status: 'PENDING',
@@ -479,7 +484,8 @@ export class FinancialRepository {
    * lançamentos do período para a memória do processo, e um ano de operação
    * são milhares de linhas para produzir doze números.
    */
-  timeline(scope: AnalyticsScope) {
+  timeline(scope: AnalyticsScope, granularity: 'DAY' | 'MONTH' = 'MONTH') {
+    const unit = granularity === 'DAY' ? 'day' : 'month';
     return this.rls.run(
       (tx) =>
         tx.$queryRaw<
@@ -490,7 +496,7 @@ export class FinancialRepository {
             total: Prisma.Decimal;
           }[]
         >`
-        SELECT date_trunc('month', competence_date)::date AS month,
+        SELECT date_trunc(${unit}, competence_date)::date AS month,
                type,
                status,
                SUM(amount) AS total

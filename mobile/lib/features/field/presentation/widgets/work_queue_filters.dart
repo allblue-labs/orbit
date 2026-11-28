@@ -28,10 +28,18 @@ import '../../../../core/widgets/section_states.dart';
 import '../../application/field_providers.dart';
 import '../../data/field_repository.dart';
 
+/// Os recortes, na ordem em que o técnico procura.
+///
+/// "Não atendidos" e "Concluídos" vêm logo depois de "Tudo" porque são as duas
+/// perguntas mais frequentes de quem está em campo: o que ficou para trás, e o
+/// que eu já fiz. "Atrasados" virou "Não atendidos" — é o mesmo recorte, no nome
+/// que a equipe usa. "Concluídos" não existia: a fila só listava o que falta, e o
+/// que foi feito ficava escondido em cinco linhas da home.
 const _rotulosDeRecorte = <WorkQueueView, String>{
   WorkQueueView.all: 'Tudo',
+  WorkQueueView.overdue: 'Não atendidos',
+  WorkQueueView.completed: 'Concluídos',
   WorkQueueView.inProgress: 'Em andamento',
-  WorkQueueView.overdue: 'Atrasados',
   WorkQueueView.today: 'Hoje',
   WorkQueueView.upcoming: 'Próximos',
 };

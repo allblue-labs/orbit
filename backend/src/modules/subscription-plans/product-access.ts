@@ -1,3 +1,4 @@
+import { requestClientIp } from '../../common/trusted-client-origin';
 import {
   type CanActivate,
   type ExecutionContext,
@@ -140,7 +141,7 @@ export class ProductCapabilityGuard
         permissions: identity.permissions,
         allowedSurfaces: identity.allowedSurfaces,
         isOrganizationOwner: identity.isOrganizationOwner,
-        ip: request.ip ?? null,
+        ip: requestClientIp(request),
         userAgent: request.header('user-agent') ?? null,
         locale: request.acceptsLanguages()[0] ?? 'pt-BR',
       }),

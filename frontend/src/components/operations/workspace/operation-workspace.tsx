@@ -125,7 +125,11 @@ export function OperationWorkspace({ operationId }: { operationId: string }) {
           <DetailsSection query={operationQuery} />
           <TimelineSection query={toPanelQuery(timeline)} />
           <ChecklistsSection query={toPanelQuery(checklists)} />
-          <OperationArtifactExecutionsSection operationId={operationId} />
+          <OperationArtifactExecutionsSection
+            key={operationId}
+            operationId={operationId}
+            completed={operation.data?.status === "COMPLETED"}
+          />
           {/*
             Materiais utilizados: baixa de estoque vinculada a esta operação.
             Fica na coluna principal, ao lado de checklists — as duas respondem

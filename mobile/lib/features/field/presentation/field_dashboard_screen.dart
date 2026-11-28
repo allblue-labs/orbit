@@ -50,8 +50,10 @@ import '../../documents/presentation/documents_screen.dart'
 import '../../operations/data/operations_repository.dart' show CachedResult;
 import '../../notifications/application/notification_providers.dart';
 import '../../notifications/domain/deep_link.dart';
+import '../../owner/data/owner_repository.dart';
 import '../../profile/presentation/my_avatar.dart';
 import '../application/field_providers.dart';
+import '../../pmoc/presentation/pmoc_entry.dart';
 import 'widgets/work_item_row.dart';
 
 class FieldDashboardScreen extends ConsumerStatefulWidget {
@@ -111,6 +113,7 @@ class _FieldDashboardScreenState extends ConsumerState<FieldDashboardScreen>
     ref.invalidate(fieldHomeProvider);
     ref.invalidate(fieldDashboardProvider);
     ref.invalidate(notificationsProvider);
+    ref.invalidate(ownerAccessProvider);
   }
 
   @override
@@ -129,6 +132,13 @@ class _FieldDashboardScreenState extends ConsumerState<FieldDashboardScreen>
   Widget build(BuildContext context) {
     final home = ref.watch(fieldHomeProvider);
     final session = ref.watch(sessionProvider);
+    final showOwnerArea = ref
+        .watch(ownerAccessProvider)
+        .when(
+          data: (access) => access.areas.isNotEmpty,
+          loading: () => false,
+          error: (_, _) => false,
+        );
 
     return Scaffold(
       backgroundColor: context.orbit.background,
@@ -137,6 +147,7 @@ class _FieldDashboardScreenState extends ConsumerState<FieldDashboardScreen>
         child: RefreshIndicator(
           onRefresh: () async {
             ref.invalidate(notificationsProvider);
+            ref.invalidate(ownerAccessProvider);
             try {
               ref.invalidate(fieldHomeProvider);
               await ref.read(fieldHomeProvider.future);
@@ -154,7 +165,13 @@ class _FieldDashboardScreenState extends ConsumerState<FieldDashboardScreen>
           ///
           /// Com dado em mãos, a falha vira um aviso. Sem dado, aí sim a tela
           /// é o erro: não há o que preservar.
-          child: _corpo(ref, home, session, now: widget.now),
+          child: _corpo(
+            ref,
+            home,
+            session,
+            showOwnerArea: showOwnerArea,
+            now: widget.now,
+          ),
         ),
       ),
     );
@@ -169,6 +186,7 @@ Widget _corpo(
   WidgetRef ref,
   AsyncValue<CachedResult<MobileFieldHomeContract>> home,
   OrbitSession? session, {
+  required bool showOwnerArea,
   DateTime? now,
 }) {
   final dados = home.valueOrNull;
@@ -180,6 +198,7 @@ Widget _corpo(
       avatarUrl: session?.user.avatarUrl,
       unitName: session?.businessUnit?.name,
       currentUserId: session?.user.id,
+      showOwnerArea: showOwnerArea,
       now: now,
       refreshFailed: home.hasError,
     );
@@ -191,6 +210,7 @@ Widget _corpo(
     return ListView(
       padding: const EdgeInsets.all(OrbitSpacing.gutter),
       children: [
+        if (showOwnerArea) const _OwnerAreaButton(),
         SectionError(
           error: home.error!,
           onRetry: () => ref.invalidate(fieldHomeProvider),
@@ -205,6 +225,21 @@ Widget _corpo(
   );
 }
 
+class _OwnerAreaButton extends StatelessWidget {
+  const _OwnerAreaButton();
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: OrbitSpacing.md),
+    child: OutlinedButton.icon(
+      key: const Key('home.owner-area.action'),
+      onPressed: () => context.push(OrbitRoutes.ownerArea),
+      icon: const Icon(Icons.admin_panel_settings_outlined),
+      label: const Text('Área do proprietário'),
+    ),
+  );
+}
+
 class _Home extends ConsumerWidget {
   const _Home({
     required this.home,
@@ -213,6 +248,7 @@ class _Home extends ConsumerWidget {
     this.avatarUrl,
     this.unitName,
     required this.currentUserId,
+    required this.showOwnerArea,
     this.now,
     this.refreshFailed = false,
   });
@@ -223,6 +259,7 @@ class _Home extends ConsumerWidget {
   final String? avatarUrl;
   final String? unitName;
   final String? currentUserId;
+  final bool showOwnerArea;
   final DateTime? now;
 
   /// A última atualização não veio. Os dados abaixo continuam sendo os
@@ -269,6 +306,8 @@ class _Home extends ConsumerWidget {
           now: now,
           unread: avisos?.unread ?? 0,
         ),
+
+        if (showOwnerArea) const _OwnerAreaButton(),
 
         if (cachedAt != null)
           Padding(
@@ -682,6 +721,10 @@ class _RecentWork extends StatefulWidget {
 
 class _RecentWorkState extends State<_RecentWork> {
   _RecentTab _aba = _RecentTab.abertos;
+  static const _rowPadding = EdgeInsets.symmetric(
+    horizontal: OrbitSpacing.md,
+    vertical: OrbitSpacing.ms,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -755,58 +798,93 @@ class _RecentWorkState extends State<_RecentWork> {
         ),
         const SizedBox(height: OrbitSpacing.ms),
 
-        OrbitCard(
-          padding: EdgeInsets.zero,
-          child: switch (_aba) {
-            _RecentTab.abertos => _listaDeItens(abertosUnicos, 'aberto'),
-            _RecentTab.proximos => _listaDeItens(proximos, 'programado'),
-            _RecentTab.concluidos => _listaDeConcluidos(concluidos),
-          },
-        ),
+        switch (_aba) {
+          _RecentTab.abertos => _listaDeItens(abertosUnicos, 'aberto'),
+          _RecentTab.proximos => _listaDeItens(proximos, 'programado'),
+          _RecentTab.concluidos => _listaDeConcluidos(concluidos),
+        },
       ],
     );
   }
 
   Widget _listaDeItens(List<MobileWorkItemContract> itens, String vazio) {
     if (itens.isEmpty) return _vazio('Nenhum atendimento $vazio agora.');
-    return _Rows(
+    return _cartoes(
       children: [
         for (final item in itens)
           WorkItemRow(
             key: ValueKey(item.id),
             item: item,
             currentUserId: widget.currentUserId,
+            padding: _rowPadding,
             onOpen: () => context.push(OrbitRoutes.workItemDetail(item.id)),
           ),
       ],
     );
   }
 
+  /// Os concluídos, no mesmo desenho dos abertos.
+  ///
+  /// ## O que estava quebrado
+  ///
+  /// A coluna da esquerda tem 48 pixels e foi feita para "09:30". Esta aba
+  /// mandava para ela "quinta-feira, 20 de novembro" — a data quebrava em quatro
+  /// linhas, empurrava o título, e cada cartão saía com uma altura diferente.
+  ///
+  /// Agora a coluna recebe o dia curto ("20/11"), que cabe onde cabe um
+  /// horário, e a hora vai para a linha de contexto, junto com o código.
+  ///
+  /// ## PMOC volta para a tela de PMOC
+  ///
+  /// O PMOC concluído aparece aqui como a operação atrás da execução, e o toque
+  /// o abria na tela genérica de operação — sem o roteiro do plano e sem o
+  /// relatório do equipamento. Com o endereço do PMOC na resposta, ele volta
+  /// para onde foi atendido.
   Widget _listaDeConcluidos(List<MobileCompletedWorkContract> itens) {
     if (itens.isEmpty) return _vazio('Nenhum atendimento concluído ainda.');
-    return _Rows(
+    final formato = OrbitFormat.of(context);
+    return _cartoes(
       children: [
         for (final item in itens)
           OrbitListRow(
             key: ValueKey(item.id),
-            leading: OrbitFormat.of(context).weekdayAndDay(item.completedAt),
+            padding: _rowPadding,
+            leading: formato.dayShortOf(item.completedAt),
+            tone: OrbitTone.success,
             title: item.customerName ?? item.title,
             subtitle: item.customerName == null ? null : item.title,
             detail: [
               item.code,
               if (item.equipmentName != null) item.equipmentName!,
+              'concluído às ${formato.hourOf(item.completedAt)}',
             ].join(' · '),
             trailing: const OrbitStatusBadge(
               label: 'Concluído',
               tone: OrbitTone.success,
             ),
-            onTap: () => context.push(OrbitRoutes.operationExecution(item.id)),
+            onTap: () {
+              if (item.pmoc case final PmocAddressContract endereco
+                  when endereco.isComplete) {
+                enterPmocAttendance(context, endereco, start: false);
+                return;
+              }
+              context.push(OrbitRoutes.operationExecution(item.id));
+            },
           ),
       ],
     );
   }
 
-  Widget _vazio(String mensagem) => Padding(
+  Widget _cartoes({required List<Widget> children}) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    spacing: OrbitSpacing.sm,
+    children: [
+      for (final row in children)
+        OrbitCard(padding: const EdgeInsets.all(1), child: row),
+    ],
+  );
+
+  Widget _vazio(String mensagem) => OrbitCard(
     padding: const EdgeInsets.symmetric(
       horizontal: OrbitSpacing.ml,
       vertical: OrbitSpacing.lg,

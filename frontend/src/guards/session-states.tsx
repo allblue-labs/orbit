@@ -7,6 +7,7 @@
  * `EmptyState`, `Button`). Nenhum componente, token ou estilo novo é criado
  * aqui — só o arranjo dos que já existem.
  */
+import { SUBSCRIPTION_STATUS_LABELS } from "@/types/billing";
 import Link from "next/link";
 import { Lock, ShieldAlert, Sparkles, TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
@@ -94,7 +95,7 @@ export function SubscriptionBlocked({
         title="Assinatura inativa"
         description={
           status
-            ? `A assinatura da organização está com status ${status}. Regularize o pagamento para voltar a usar a plataforma.`
+            ? `A assinatura da organização está com a situação "${(SUBSCRIPTION_STATUS_LABELS[status] ?? "inativa").toLowerCase()}". Regularize o pagamento para voltar a usar a plataforma.`
             : "A assinatura da organização não está ativa. Regularize o pagamento para voltar a usar a plataforma."
         }
         action={

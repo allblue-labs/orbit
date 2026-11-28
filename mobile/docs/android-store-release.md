@@ -1,6 +1,6 @@
 # Primeira publicação Android
 
-O pacote é `com.allbluelabs.orbit_operator`. Confirme esse identificador antes da primeira publicação: ele identifica permanentemente o app no Google Play. A chave de upload local assina o AAB; a Assinatura de apps do Google Play mantém a chave que assina os APKs entregues aos usuários.
+O pacote cadastrado no Google Play é `com.allbluelabs.orbit`. O `applicationId`, o `namespace` e os pacotes Kotlin da Activity e do serviço de notificações usam esse mesmo identificador. Ao configurar o Android no Firebase, use também esse pacote no `google-services.json`. A chave de upload local assina o AAB; a Assinatura de apps do Google Play mantém a chave que assina os APKs entregues aos usuários.
 
 ## 1. Criar a chave de upload
 
@@ -39,6 +39,8 @@ make build-android-prod
 
 Resultado: `build/app/outputs/bundle/release/app-release.aab`. A versão vem de `version:` em `pubspec.yaml`; o número após `+` precisa aumentar a cada novo upload. Alterar de uma instalação debug para uma instalação assinada com outra chave pode exigir desinstalar a versão de teste; sincronize o trabalho pendente antes.
 
+O comando usa release, remoção de código não utilizado, ofuscação Dart e símbolos separados em `build/symbols/android`. Para guardar os símbolos por versão, defina `ANDROID_SYMBOLS_DIR`, por exemplo: `make build-android-prod ANDROID_SYMBOLS_DIR=build/symbols/android/0.1.0+1`. Preserve esses símbolos junto da versão publicada para interpretar rastros de erro; eles são gerados localmente e não devem ser versionados no Git.
+
 ## 3. Google Play Console
 
 1. Crie o app no Console, com nome Orbit e idioma português do Brasil.
@@ -55,3 +57,11 @@ O app usa os seletores do sistema para anexar imagens/arquivos. O manifesto remo
 - [Assinatura de apps do Google Play](https://support.google.com/googleplay/android-developer/answer/9842756?hl=pt-BR)
 - [Conteúdo do app e política de privacidade](https://support.google.com/googleplay/android-developer/answer/9859455?hl=pt-BR)
 - [Política de permissões de fotos e vídeos](https://support.google.com/googleplay/android-developer/answer/15800983?hl=pt-BR)
+
+## Configuração Firebase exigida a partir da PR-06
+
+Além da chave de upload, a build Release precisa do `android/app/google-services.json`
+do projeto selecionado e dos defines `ORBIT_FLAVOR` e `ORBIT_FIREBASE_PROJECT_ID`.
+Preparar `config/production.json` conforme o [guia de push](firebase-push-release.md)
+e usar `flutter build appbundle --release --dart-define-from-file=config/production.json`.
+O comando antigo com somente ORBIT_API_URL não atende mais à barreira de push.

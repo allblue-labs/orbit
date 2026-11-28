@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import type { MobileNotificationType } from './mobile-device.read-models';
+import {
+  transactionalPushMessage,
+  type TransactionalPushMessage,
+} from './push-message';
 
 export interface MobileNotificationIntent {
   organizationId: string;
@@ -10,6 +14,7 @@ export interface MobileNotificationIntent {
   resourceId: string;
   workItemId?: string;
   correlationId: string;
+  message?: TransactionalPushMessage;
 }
 
 export interface ResolvedMobileNotification {
@@ -17,6 +22,7 @@ export interface ResolvedMobileNotification {
   title: string;
   body: string;
   deepLink: string;
+  data?: Record<string, string>;
 }
 
 @Injectable()
@@ -24,6 +30,18 @@ export class MobileNotificationPolicy {
   resolve(intent: MobileNotificationIntent): ResolvedMobileNotification {
     const base = `${intent.type}:${intent.factId}:${intent.recipientUserId}`;
     switch (intent.type) {
+      case 'TRANSACTIONAL': {
+        const message = transactionalPushMessage(
+          intent.message?.title,
+          intent.message?.body,
+          intent.message?.data,
+        );
+        return {
+          dedupeKey: base,
+          ...message,
+          deepLink: message.data.deepLink ?? '',
+        };
+      }
       case 'WORK_ASSIGNED':
         return {
           dedupeKey: base,

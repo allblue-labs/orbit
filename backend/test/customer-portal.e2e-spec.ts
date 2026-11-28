@@ -1,3 +1,5 @@
+import { paidSubscriptionFixture } from './support/paid-subscription-fixture';
+import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument */
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
@@ -72,6 +74,15 @@ describe('Customer Portal identity & security boundary (e2e)', () => {
     test.set('Authorization', `Bearer ${internalToken}`);
   const portal = (test: request.Test, token = portalAccessToken) =>
     test.set('Authorization', `Bearer ${token}`);
+  const freshCustomer = async (): Promise<string> => {
+    const response = await internal(api().post('/api/v1/customers'))
+      .send({
+        type: 'COMPANY',
+        legalName: `Customer ${randomUUID().slice(0, 8)}`,
+      })
+      .expect(201);
+    return (response.body as Envelope<{ id: string }>).data.id;
+  };
 
   beforeAll(async () => {
     const module = await Test.createTestingModule({ imports: [AppModule] })
@@ -95,23 +106,22 @@ describe('Customer Portal identity & security boundary (e2e)', () => {
 
     const suffix = randomUUID().slice(0, 8);
     email = `portal.e2e.${suffix}@orbit.local`;
-    const registration = await api()
-      .post('/api/v1/identity/register')
-      .send({
-        ...REGISTRATION_LEGAL_ACCEPTANCE,
-        email,
-        firstName: 'Portal',
-        lastName: 'Owner',
-        password: INTERNAL_PASSWORD,
-        organizationName: `Portal E2E ${suffix}`,
-        legalName: `Portal E2E ${suffix} LTDA`,
-        documentType: 'CNPJ',
-        documentNumber: cnpj(),
-        city: 'Recife',
-        street: 'Rua Portal',
-        stateCode: 'PE',
-      })
-      .expect(201);
+    const registration = await registerVerifiedOwner(app, {
+      ...REGISTRATION_LEGAL_ACCEPTANCE,
+      email,
+      firstName: 'Portal',
+      lastName: 'Owner',
+      password: INTERNAL_PASSWORD,
+      organizationName: `Portal E2E ${suffix}`,
+      legalName: `Portal E2E ${suffix} LTDA`,
+      documentType: 'CNPJ',
+      documentNumber: cnpj(),
+      city: 'Recife',
+      street: 'Rua Portal',
+      stateCode: 'PE',
+      planKey: 'ENTERPRISE_UNLIMITED',
+    });
+    await paidSubscriptionFixture(app, prisma, email);
     internalToken = (registration.body as Envelope<{ accessToken: string }>)
       .data.accessToken;
     const organization = await internal(
@@ -163,14 +173,16 @@ describe('Customer Portal identity & security boundary (e2e)', () => {
 
   it('revokes the previous invitation on reinvite and rejects expiration', async () => {
     const inviteEmail = `portal.e2e.reinvite.${randomUUID()}@orbit.local`;
+    /* Um acesso por cliente: cada convite deste teste é de um cliente próprio. */
+    const reinviteCustomerId = await freshCustomer();
     const first = await internal(
-      api().post(`/api/v1/customers/${customerId}/portal/invitations`),
+      api().post(`/api/v1/customers/${reinviteCustomerId}/portal/invitations`),
     )
       .send({ email: inviteEmail, displayName: 'Reinvited Person' })
       .expect(201);
     const firstToken = delivery.latest('INVITATION', inviteEmail);
     const second = await internal(
-      api().post(`/api/v1/customers/${customerId}/portal/invitations`),
+      api().post(`/api/v1/customers/${reinviteCustomerId}/portal/invitations`),
     )
       .send({ email: inviteEmail, displayName: 'Reinvited Person' })
       .expect(201);
@@ -199,23 +211,22 @@ describe('Customer Portal identity & security boundary (e2e)', () => {
   it('allows the same portal email in another organization without merging actors', async () => {
     const suffix = randomUUID().slice(0, 8);
     const ownerEmail = `portal.e2e.ownerb.${suffix}@orbit.local`;
-    const registration = await api()
-      .post('/api/v1/identity/register')
-      .send({
-        ...REGISTRATION_LEGAL_ACCEPTANCE,
-        email: ownerEmail,
-        firstName: 'Portal',
-        lastName: 'Owner B',
-        password: INTERNAL_PASSWORD,
-        organizationName: `Portal E2E B ${suffix}`,
-        legalName: `Portal E2E B ${suffix} LTDA`,
-        documentType: 'CNPJ',
-        documentNumber: cnpj(),
-        city: 'Recife',
-        street: 'Rua Portal B',
-        stateCode: 'PE',
-      })
-      .expect(201);
+    const registration = await registerVerifiedOwner(app, {
+      ...REGISTRATION_LEGAL_ACCEPTANCE,
+      email: ownerEmail,
+      firstName: 'Portal',
+      lastName: 'Owner B',
+      password: INTERNAL_PASSWORD,
+      organizationName: `Portal E2E B ${suffix}`,
+      legalName: `Portal E2E B ${suffix} LTDA`,
+      documentType: 'CNPJ',
+      documentNumber: cnpj(),
+      city: 'Recife',
+      street: 'Rua Portal B',
+      stateCode: 'PE',
+      planKey: 'ENTERPRISE_UNLIMITED',
+    });
+    await paidSubscriptionFixture(app, prisma, ownerEmail);
     const tokenB = (registration.body as Envelope<{ accessToken: string }>).data
       .accessToken;
     const customerB = await api()
@@ -271,8 +282,12 @@ describe('Customer Portal identity & security boundary (e2e)', () => {
 
   it('allows exactly one winner under concurrent invitation activation', async () => {
     const concurrentEmail = `portal.e2e.concurrent.${randomUUID()}@orbit.local`;
+    /* Um acesso por cliente: cada convite deste teste é de um cliente próprio. */
+    const concurrentCustomerId = await freshCustomer();
     const invitation = await internal(
-      api().post(`/api/v1/customers/${customerId}/portal/invitations`),
+      api().post(
+        `/api/v1/customers/${concurrentCustomerId}/portal/invitations`,
+      ),
     )
       .send({ email: concurrentEmail, displayName: 'Concurrent Portal Person' })
       .expect(201);
@@ -391,8 +406,10 @@ describe('Customer Portal identity & security boundary (e2e)', () => {
 
   it('locks an identity after five invalid passwords and records the aggregate audit', async () => {
     const lockEmail = `portal.e2e.lock.${randomUUID()}@orbit.local`;
+    /* Um acesso por cliente: cada convite deste teste é de um cliente próprio. */
+    const lockCustomerId = await freshCustomer();
     const invitation = await internal(
-      api().post(`/api/v1/customers/${customerId}/portal/invitations`),
+      api().post(`/api/v1/customers/${lockCustomerId}/portal/invitations`),
     )
       .send({ email: lockEmail, displayName: 'Locked Portal Person' })
       .expect(201);
@@ -483,8 +500,10 @@ describe('Customer Portal identity & security boundary (e2e)', () => {
 
   it('changes password and revokes other sessions while preserving the current one', async () => {
     const changeEmail = `portal.e2e.change.${randomUUID()}@orbit.local`;
+    /* Um acesso por cliente: cada convite deste teste é de um cliente próprio. */
+    const changeCustomerId = await freshCustomer();
     await internal(
-      api().post(`/api/v1/customers/${customerId}/portal/invitations`),
+      api().post(`/api/v1/customers/${changeCustomerId}/portal/invitations`),
     )
       .send({ email: changeEmail, displayName: 'Password Change Person' })
       .expect(201);

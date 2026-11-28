@@ -1,0 +1,57 @@
+{
+  "pr": "PR-16",
+  "date": "2026-11-17",
+  "baseCommit": "5a22434b130c4323cbb93d5ad7639267451fc741",
+  "database": "Disposable PostgreSQL, read under orbit_app with RLS",
+  "migrationsApplied": 127,
+  "benchmark": {
+    "event": "pr16_analytics_benchmark",
+    "history": {
+      "closed": 100000,
+      "oldOpen": 8000,
+      "recent": 4000
+    },
+    "dataQueries": 5,
+    "legacy": {
+      "rows": 12000,
+      "elapsedMs": 731.693758999987,
+      "heapDeltaBytes": 51517952,
+      "resultBytes": 2952001
+    },
+    "aggregated": {
+      "elapsedMs": 1018.3734460000123,
+      "heapDeltaBytes": 1787504,
+      "resultBytes": 958
+    },
+    "indexes": [
+      "operations_org_created_at_idx",
+      "operations_org_created_at_idx",
+      "operations_org_completed_at_idx",
+      "operations_org_completed_at_idx",
+      "operations_analytics_open_idx"
+    ],
+    "databaseExecutionMs": 327.379,
+    "sharedHitBlocks": 447,
+    "sharedReadBlocks": 0
+  },
+  "measurementNotes": [
+    "The baseline measures only the legacy operation row query. The new measurement includes all five reads in the analytics snapshot.",
+    "Result bytes measure serialized in-process data, not HTTP response size or wire protocol overhead.",
+    "Heap deltas are single-run observations after GC. The regression gate bounds row materialization and response bytes, not latency or heap peaks."
+  ],
+  "checks": {
+    "backendUnitTests": 19,
+    "backendE2eTests": 9,
+    "frontendUnitTests": 44,
+    "changedFilesEslint": "PASS",
+    "typescript": "PASS",
+    "productionNextBuild": "PASS",
+    "chromiumTests": 8,
+    "browserAnalyticsCalls": {
+      "panel": 1,
+      "radarKpis": 2,
+      "legacyDashboardHealthIntelligence": 0
+    }
+  },
+  "implementationCommit": "8346bc34725d0ed0c2222a0e2ca3e40094b7b7e3"
+}

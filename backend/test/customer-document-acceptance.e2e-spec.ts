@@ -1,3 +1,5 @@
+import { TenantOperationPolicy } from '../src/modules/tenant-operations/tenant-operation.policy';
+import { brandImageStub } from './support/brand-image.stub';
 import { PrismaClient } from '@prisma/client';
 import { PDFDocument } from 'pdf-lib';
 import { QuoteAcceptedDocumentService } from '../src/modules/quotes/quote-accepted-document.service';
@@ -32,6 +34,7 @@ import {
   ConflictException,
   EntityNotFoundException,
   ValidationException,
+  ForbiddenException,
 } from '../src/exceptions';
 import { HashHelper } from '../src/helpers';
 import { PmocRepository } from '../src/modules/pmoc/pmoc.repository';
@@ -41,6 +44,8 @@ import { NotificationRepository } from '../src/modules/notifications/notificatio
 import { NotificationQueryDto } from '../src/modules/notifications/notification.dto';
 import { ParseUUIDv7Pipe } from '../src/pipes';
 
+import { MobileQuoteService } from '../src/modules/quotes/mobile-quote.service';
+import type { AuthenticatedIdentity } from '../src/modules/identity/domain/identity.types';
 // Banco, RLS, transições, arquivo registrado e outbox reais. Apenas o bucket é
 // em memória: nenhuma credencial ou infraestrutura de produção é utilizada.
 describe('aceite público de propostas com RLS real', () => {
@@ -69,6 +74,10 @@ describe('aceite público de propostas com RLS real', () => {
     put: jest.fn(({ objectKey, body }: PutObjectInput) => {
       objects.set(objectKey, body);
       return Promise.resolve({ sizeBytes: body.length });
+    }),
+    remove: jest.fn(({ objectKey }: StorageObjectRef) => {
+      objects.delete(objectKey);
+      return Promise.resolve();
     }),
     get: jest.fn(({ objectKey }: StorageObjectRef) => {
       const bytes = objects.get(objectKey);
@@ -162,10 +171,31 @@ describe('aceite público de propostas com RLS real', () => {
         customerId: customer.id,
       });
     }
+    const local = tenants[0]!;
+    const fieldRole = await admin.role.create({
+      data: {
+        key: 'FIELD_QUOTE_TEST',
+        name: 'Campo',
+        organizationId: local.organizationId,
+        permissions: ['operations.walk_in.create'],
+      },
+    });
+    await admin.organizationMembership.createMany({
+      data: [userId, otherUserId].map((memberId) => ({
+        organizationId: local.organizationId,
+        userId: memberId,
+        roleId: fieldRole.id,
+      })),
+    });
     const contextService = new RequestContextService(contexts);
     rls = new RlsTransaction(
       runtime as PrismaService,
       new RlsContextProvider(contextService),
+    );
+    const operational = new TenantOperationPolicy(
+      rls,
+      contextService,
+      contexts,
     );
     inbox = new NotificationRepository(rls);
     const jobs = new BackgroundJobQueue(runtime as PrismaService, rls);
@@ -178,7 +208,8 @@ describe('aceite público de propostas com RLS real', () => {
       repository,
       new QuoteDocumentService(),
       storage as unknown as StorageProvider,
-      undefined as never, // Este cenário não converte orçamentos em operações.
+      undefined as never,
+      brandImageStub(), // Este cenário não converte orçamentos em operações.
     );
     const files = new FileObjectService(
       storage as unknown as StorageProvider,
@@ -194,12 +225,14 @@ describe('aceite público de propostas com RLS real', () => {
       new QuoteMapper(),
       files,
       new QuoteAcceptedDocumentService(),
+      operational,
     );
     pmocRepository = new PmocRepository(
       rls,
       contextService,
       new DomainEventEmitter(jobs, contextService),
       runtime as PrismaService,
+      operational,
     );
     pmoc = new PmocService(
       pmocRepository,
@@ -209,6 +242,8 @@ describe('aceite público de propostas com RLS real', () => {
       undefined as never,
       new PmocPlanDocumentService(),
       storage as unknown as StorageProvider,
+      undefined,
+      brandImageStub(),
     );
     signatureBase64 = (
       await sharp({
@@ -302,6 +337,41 @@ describe('aceite público de propostas com RLS real', () => {
     return rows[0]!;
   }
 
+  it('ORB-NX-03 blocks a suspended tenant from accepting a pre-issued public proposal without losing its read-only document', async () => {
+    const { link, quote } = await proposal();
+    const token = link.token;
+    const organizationId = tenants[0]!.organizationId;
+    const original = await admin.organization.findUniqueOrThrow({
+      where: { id: organizationId },
+    });
+    await admin.organization.update({
+      where: { id: organizationId },
+      data: { status: 'SUSPENDED' },
+    });
+    try {
+      await expect(acceptance.read(token)).resolves.toBeDefined();
+      await expect(
+        acceptance.respond(token, approve(), {}),
+      ).rejects.toMatchObject({ code: 'ORGANIZATION_SUSPENDED' });
+      expect(
+        (await admin.quote.findUniqueOrThrow({ where: { id: quote.id } }))
+          .status,
+      ).toBe('SENT');
+      expect(
+        (
+          await admin.quoteAcceptanceLink.findFirstOrThrow({
+            where: { quoteId: quote.id },
+          })
+        ).respondedAt,
+      ).toBeNull();
+    } finally {
+      await admin.organization.update({
+        where: { id: organizationId },
+        data: { status: original.status },
+      });
+    }
+  });
+
   it('envia rascunho, congela resumo/PDF e guarda somente o hash do segredo', async () => {
     const { quote, link } = await proposal();
     expect(link.token).toHaveLength(64);
@@ -393,7 +463,7 @@ describe('aceite público de propostas com RLS real', () => {
     expect((await acceptance.read(link.token)).response?.signerName).toBe(
       'Cliente Teste',
     );
-  });
+  }, 30_000);
   it.each(['REJECT', 'REQUEST_CHANGES'] as const)(
     'registra %s e aplica a transição correspondente sem evento de aprovação',
     async (decision) => {
@@ -703,6 +773,26 @@ describe('aceite público de propostas com RLS real', () => {
         signature: Buffer.from(signatureBase64, 'base64'),
         mimeType: 'image/png',
       });
+    const originalOrganization = await admin.organization.findUniqueOrThrow({
+      where: { id: tenant.organizationId },
+    });
+    await admin.organization.update({
+      where: { id: tenant.organizationId },
+      data: { status: 'SUSPENDED' },
+    });
+    try {
+      await expect(
+        pmoc.publicContractDocument(link.token),
+      ).resolves.toBeDefined();
+      await expect(sign()).rejects.toMatchObject({
+        code: 'ORGANIZATION_SUSPENDED',
+      });
+    } finally {
+      await admin.organization.update({
+        where: { id: tenant.organizationId },
+        data: { status: originalOrganization.status },
+      });
+    }
     const replies = await Promise.all([sign(), sign()]);
     expect(replies.map((r) => r.state).sort()).toEqual([
       'JA_ASSINADO',
@@ -776,5 +866,208 @@ describe('aceite público de propostas com RLS real', () => {
       ).state,
     ).toBe('REVOGADO');
     expect(await notices(plan.id)).toHaveLength(1);
+  });
+
+  describe('orçamentos criados em campo', () => {
+    let mobile: MobileQuoteService;
+    let actor: AuthenticatedIdentity;
+    const inField = <T>(work: () => Promise<T>) =>
+      contexts.run(
+        new RequestContext({
+          requestId: randomUUID(),
+          actorType: 'INTERNAL_USER',
+          userId: otherUserId as UUID,
+          organizationId: actor.organizationId,
+          businessUnitId: actor.businessUnitId,
+          businessUnitIds: actor.businessUnitIds,
+          roles: actor.roles,
+          permissions: actor.permissions,
+          ip: null,
+          userAgent: null,
+          locale: 'pt-BR',
+        }),
+        work,
+      );
+    const input = (extra: Record<string, unknown> = {}) => ({
+      requestId: randomUUID(),
+      customerId: tenants[0]!.customerId,
+      title: 'Manutenção proposta em campo',
+      responsibleUserId: userId,
+      businessUnitId: tenants[0]!.unitId,
+      validUntil: new Date('2099-12-31'),
+      items: [{ description: 'Manutenção', quantity: 2, unitPrice: 150 }],
+      ...extra,
+    });
+    beforeAll(async () => {
+      const tenant = tenants[0]!;
+      actor = {
+        id: otherUserId as UUID,
+        sessionId: otherUserId as UUID,
+        organizationId: tenant.organizationId as UUID,
+        businessUnitId: tenant.unitId as UUID,
+        businessUnitIds: [tenant.unitId as UUID],
+        roles: ['FIELD_TECHNICIAN'],
+        permissions: ['operations.walk_in.create'],
+        allowedSurfaces: ['MOBILE'],
+        isOrganizationOwner: false,
+      };
+      mobile = new MobileQuoteService(
+        rls,
+        quotes,
+        new QuoteMapper(),
+        acceptance,
+        {} as never,
+      );
+    });
+
+    it('mobile: operador cria uma proposta completa, preserva os totais e o owner acompanha pela web', async () => {
+      const data = input({ discount: 30 });
+      const quote = await inField(() => mobile.create(actor, data));
+      expect(quote).toMatchObject({
+        status: 'SENT',
+        subtotal: '300.00',
+        discount: '30.00',
+        total: '270.00',
+        responsible: { id: userId },
+      });
+      expect(quote.items).toHaveLength(1);
+      const visible = await owner(() =>
+        quotes.get(quote.id, tenants[0]!.organizationId),
+      );
+      expect(visible.id).toBe(quote.id);
+    });
+
+    it('mobile: tentativas simultâneas geram um orçamento; alterar o conteúdo com a mesma chave é recusado', async () => {
+      const data = input();
+      const [first, second] = await Promise.all([
+        inField(() => mobile.create(actor, data)),
+        inField(() => mobile.create(actor, data)),
+      ]);
+      expect(first.id).toBe(second.id);
+      await expect(
+        inField(() =>
+          mobile.create(actor, { ...data, title: 'Outro orçamento' }),
+        ),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(
+        await admin.quote.count({
+          where: {
+            organizationId: tenants[0]!.organizationId,
+            metadata: { path: ['mobileRequestId'], equals: data.requestId },
+          },
+        }),
+      ).toBe(1);
+    });
+
+    it('mobile: falha de um item desfaz proposta, linhas e auditoria', async () => {
+      const data = input({
+        items: [
+          { description: 'Item válido', quantity: 1, unitPrice: 200 },
+          { description: 'Sem valor', quantity: 1 },
+        ],
+      });
+      const before = await admin.quote.count();
+      await expect(
+        inField(() => mobile.create(actor, data)),
+      ).rejects.toBeInstanceOf(ValidationException);
+      expect(await admin.quote.count()).toBe(before);
+      expect(
+        await admin.quoteItem.count({ where: { description: 'Item válido' } }),
+      ).toBe(0);
+    });
+
+    it('mobile: isola tenant, autoria e unidade e recusa auxiliar sem permissão de criação', async () => {
+      const quote = await inField(() => mobile.create(actor, input()));
+      await expect(
+        owner(() =>
+          mobile.document({ ...actor, id: userId as UUID }, quote.id),
+        ),
+      ).rejects.toBeInstanceOf(EntityNotFoundException);
+      await expect(
+        inField(() => mobile.options(actor, tenants[1]!.customerId)),
+      ).rejects.toBeInstanceOf(EntityNotFoundException);
+      await expect(
+        inField(() =>
+          mobile.create(actor, input({ businessUnitId: tenants[1]!.unitId })),
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(
+        inField(() =>
+          mobile.options(
+            { ...actor, permissions: ['customers.read'] },
+            tenants[0]!.customerId,
+          ),
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      // RLS itself also filters the other tenant, beyond the service filters.
+      expect(
+        await inField(() =>
+          rls.run((tx) =>
+            tx.quote.count({
+              where: { organizationId: tenants[1]!.organizationId },
+            }),
+          ),
+        ),
+      ).toBe(0);
+    });
+
+    it('mobile: lista opções do cliente e rejeita equipamento pertencente a outro cliente', async () => {
+      const tenant = tenants[0]!;
+      const otherCustomer = await admin.customer.create({
+        data: {
+          organizationId: tenant.organizationId,
+          legalName: 'Outro cliente',
+        },
+      });
+      const equipment = await admin.asset.create({
+        data: {
+          organizationId: tenant.organizationId,
+          businessUnitId: tenant.unitId,
+          customerId: otherCustomer.id,
+          category: 'HVAC',
+          name: 'Equipamento de outro cliente',
+        },
+      });
+      const options = await inField(() =>
+        mobile.options(actor, tenant.customerId),
+      );
+      expect(options.responsibles.map((person) => person.id)).toEqual(
+        expect.arrayContaining([userId, otherUserId]),
+      );
+      expect(options.equipment.map((item) => item.id)).not.toContain(
+        equipment.id,
+      );
+      await expect(
+        inField(() =>
+          mobile.create(actor, input({ assetIds: [equipment.id] })),
+        ),
+      ).rejects.toBeInstanceOf(ValidationException);
+    });
+
+    it('mobile: aceite reutiliza assinatura, PDF e notificação ao owner do fluxo comercial', async () => {
+      const quote = await inField(() => mobile.create(actor, input()));
+      // The operator reads a document only after the owner grants mobile visibility.
+      await admin.quote.update({
+        where: { id: quote.id },
+        data: { mobileVisible: true },
+      });
+      const unsigned = await inField(() => mobile.document(actor, quote.id));
+      const link = await inField(() => mobile.link(actor, quote.id));
+      await acceptance.respond(link.token, approve(), {
+        ip: '127.0.0.1',
+        userAgent: 'Orbit Mobile Test',
+      });
+      const signed = await inField(() => mobile.document(actor, quote.id));
+      expect(signed.bytes.subarray(0, 4).toString()).toBe('%PDF');
+      expect(signed.bytes.equals(unsigned.bytes)).toBe(false);
+      expect(
+        (await owner(() => quotes.get(quote.id, tenants[0]!.organizationId)))
+          .status,
+      ).toBe('APPROVED');
+      const notifications = await notices(quote.id);
+      expect(
+        notifications.some((item) => item.recipientUserId === userId),
+      ).toBe(true);
+    });
   });
 });

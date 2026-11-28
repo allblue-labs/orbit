@@ -222,7 +222,7 @@ void main() {
     /// Os bytes já subiram; a evidência ainda não existe. É o estado que
     /// separa "o arquivo chegou" de "o servidor aceitou".
     expect(find.text('Finalizando'), findsOneWidget);
-    expect(find.text('O servidor está conferindo o arquivo.'), findsOneWidget);
+    expect(find.text('O Orbit está conferindo o arquivo.'), findsOneWidget);
     expect(find.text('Confirmada'), findsNothing);
   });
 

@@ -47,8 +47,19 @@ export type ProviderBillingState =
   (typeof ProviderBillingState)[keyof typeof ProviderBillingState];
 
 /** O retrato normalizado de uma assinatura no provedor. */
+export interface ProviderRecurringTerms {
+  currency: string;
+  intervalMonths: 1 | 6 | 12;
+  grossPeriodMinor: number;
+  discount: { scaledMinor: number; endsAt: string | null } | null;
+}
+
 export interface ProviderSubscription {
+  readonly mode?: BillingMode;
+  readonly recurringTerms?: ProviderRecurringTerms | null;
   readonly latestInvoiceId?: string | null;
+  readonly upgradeRequestId?: string | null;
+  readonly hasPendingUpdate?: boolean;
   readonly providerSubscriptionId: string;
   readonly providerCustomerId: string;
   readonly providerPriceId: string | null;
@@ -92,6 +103,16 @@ export type ProviderInvoiceStatus =
 
 /** Fatura normalizada; deliberadamente sem PII ou dados do meio de pagamento. */
 export interface ProviderInvoice {
+  readonly observationVersion?: bigint;
+  readonly mode?: BillingMode;
+  /** Cash evidence is independent of invoice PAID; IDs support durable export dedupe. */
+  readonly paymentEvidence?: readonly {
+    invoicePaymentId: string;
+    paymentIntentId: string;
+    amountMinor: number;
+    currency: string;
+    confirmedAt: string;
+  }[];
   readonly providerInvoiceId: string;
   readonly providerSubscriptionId: string | null;
   readonly providerCustomerId: string;
@@ -112,6 +133,7 @@ export interface ProviderInvoice {
   readonly collectionMethod: string;
   readonly hostedInvoiceUrl: string | null;
   readonly invoicePdfUrl: string | null;
+  readonly subscriptionLinesComplete?: boolean;
   readonly subscriptionLines?: readonly {
     priceId: string | null;
     subscriptionId: string | null;
@@ -138,6 +160,8 @@ export type ProviderFinancialAdjustmentType =
   (typeof ProviderFinancialAdjustmentType)[keyof typeof ProviderFinancialAdjustmentType];
 
 export interface ProviderFinancialAdjustment {
+  readonly refundRequestId?: string;
+  readonly observationVersion?: bigint;
   readonly type: ProviderFinancialAdjustmentType;
   readonly providerObjectId: string;
   readonly providerInvoiceId: string;
@@ -149,8 +173,29 @@ export interface ProviderFinancialAdjustment {
   readonly providerObservedAt: Date;
 }
 
+export interface PromotionPrice {
+  planCode: string;
+  billingInterval: BillingInterval;
+  priceId: string;
+  amountMinor: number;
+}
+
+export interface ProviderPromotionTerms {
+  id: string;
+  mode: string;
+  percentOff: number | null;
+  amountOffMinor: number | null;
+  durationMonths: number | null;
+  totalLimit: number;
+  endsAt: Date;
+  prices: readonly PromotionPrice[];
+  recoverOnly: boolean;
+}
+
 export interface CheckoutSessionRequest {
   readonly checkoutAttemptId: string;
+  readonly promotion?: { providerId: string; expiresAt: Date };
+  readonly priceId?: string;
   readonly organizationId: string;
   readonly providerCustomerId: string;
   readonly planCode: PlanCode;
@@ -183,6 +228,13 @@ export interface ProviderCheckoutSession {
   readonly state: ProviderCheckoutState;
   readonly rawStatus: string;
   readonly paymentStatus: string;
+  readonly promotionEvidence?: {
+    providerId: string | null;
+    originalMinor: number | null;
+    discountMinor: number | null;
+    totalMinor: number | null;
+    currency: string | null;
+  };
   readonly providerCustomerId: string | null;
   readonly providerSubscriptionId: string | null;
   readonly providerPriceId: string | null;
@@ -202,6 +254,7 @@ export interface BillingPortalSession {
 }
 
 export interface ProviderEvent {
+  readonly mode?: BillingMode;
   readonly providerEventId: string;
   readonly type: string;
   readonly apiVersion: string | null;
@@ -230,6 +283,11 @@ export interface BillingProvider {
     idempotencyKey: string;
   }): Promise<{ providerCustomerId: string }>;
 
+  activatePromotion?(terms: ProviderPromotionTerms): Promise<string>;
+  deactivatePromotion?(
+    terms: ProviderPromotionTerms,
+    providerId: string,
+  ): Promise<void>;
   createCheckoutSession(
     request: CheckoutSessionRequest,
   ): Promise<CheckoutSession>;
@@ -241,6 +299,7 @@ export interface BillingProvider {
   expireCheckoutSession(providerSessionId: string): Promise<void>;
 
   createPlanChangeSession(input: {
+    organizationId: string;
     providerCustomerId: string;
     providerSubscriptionId: string;
     planCode: PlanCode;
@@ -256,6 +315,9 @@ export interface BillingProvider {
   ): Promise<ProviderSubscription>;
 
   retrieveInvoice(providerInvoiceId: string): Promise<ProviderInvoice>;
+  retrieveInvoicePaymentInvoice?(
+    providerInvoicePaymentId: string,
+  ): Promise<string>;
 
   retrieveFinancialAdjustment(
     type: ProviderFinancialAdjustmentType,
@@ -264,6 +326,7 @@ export interface BillingProvider {
 
   /** Troca o preço da assinatura. O provedor calcula o dinheiro, não o Orbit. */
   changePlan(input: {
+    priceId?: string;
     providerSubscriptionId: string;
     organizationId: string;
     subscriptionId: string;
@@ -273,6 +336,29 @@ export interface BillingProvider {
     timing: 'IMMEDIATE' | 'PERIOD_END';
     idempotencyKey: string;
   }): Promise<ProviderPlanChange>;
+
+  beginMonthlyUpgrade?(input: {
+    requestId: string;
+    requestedAt: Date;
+    providerSubscriptionId: string;
+    providerCustomerId: string;
+    currentPriceId: string;
+    currentPeriodStart: Date;
+    currentPeriodEnd: Date;
+    priceId: string;
+    planCode: PlanCode;
+    organizationId: string;
+    subscriptionId: string;
+  }): Promise<{ invoice: ProviderInvoice; subscription: ProviderSubscription }>;
+
+  refundAndCancel?(input: {
+    requestId: string;
+    providerSubscriptionId: string;
+    providerCustomerId: string;
+    invoiceId: string;
+    paymentIntentId: string;
+    amountMinor: number;
+  }): Promise<{ refundId: string; status: string }>;
 
   cancelScheduledPlanChange(input: {
     providerSubscriptionId: string;
@@ -292,6 +378,14 @@ export interface BillingProvider {
 
   /** Valida o catálogo de preços contra o do Orbit. */
   verifyPriceCatalog(): Promise<readonly PriceVerification[]>;
+
+  /** Stripe retains events for a limited window. No account mutations. */
+  listRecoveryEvents?(input: {
+    from: Date;
+    through: Date;
+    after?: string;
+    limit: number;
+  }): Promise<{ events: readonly ProviderEvent[]; hasMore: boolean }>;
 }
 
 export interface PriceVerification {

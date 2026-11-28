@@ -456,7 +456,7 @@ export class AiService {
       await this.notifications.create(organizationId, {
         recipientUserId: userId,
         type: 'SYSTEM',
-        channels: ['IN_APP', 'REALTIME'],
+        channels: ['IN_APP'],
         title: succeeded ? 'Execução de IA concluída' : 'Execução de IA falhou',
         body: succeeded
           ? 'O resultado da execução está disponível.'

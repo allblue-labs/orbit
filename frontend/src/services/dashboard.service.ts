@@ -19,7 +19,10 @@ import { apiClient } from "@/api/client";
 import { queryKeys, type QueryKey } from "@/api/query-keys";
 import type { QueryParams, RequestOptions } from "@/types/api";
 import type {
+  DashboardFeed,
+  DashboardFeedQuery,
   AnalyticsDashboardReadModel,
+  AnalyticsPanelReadModel,
   AnalyticsHealthReadModel,
   AnalyticsQuery,
   AnalyticsTrendReadModel,
@@ -47,10 +50,34 @@ export const dashboardService = {
       query: asParams(query),
     }),
 
+  /** O que aconteceu nos últimos 30 dias. */
+  activity: (
+    query?: DashboardFeedQuery,
+    options?: RequestOptions,
+  ): Promise<DashboardFeed> =>
+    apiClient.get<DashboardFeed>("/dashboard/activity", {
+      ...options,
+      query: asParams(query),
+    }),
+
+  /** Atendimentos, visitas de RVT e vencimentos de PMOC à frente. */
+  upcoming: (
+    query?: DashboardFeedQuery,
+    options?: RequestOptions,
+  ): Promise<DashboardFeed> =>
+    apiClient.get<DashboardFeed>("/dashboard/upcoming", {
+      ...options,
+      query: asParams(query),
+    }),
+
   keys: {
     module: (): QueryKey => queryKeys.module(DASHBOARD_RESOURCE),
     layout: (query?: DashboardQuery): QueryKey =>
       queryKeys.query(DASHBOARD_RESOURCE, "layout", asParams(query)),
+    activity: (query?: DashboardFeedQuery): QueryKey =>
+      queryKeys.query(DASHBOARD_RESOURCE, "activity", asParams(query)),
+    upcoming: (query?: DashboardFeedQuery): QueryKey =>
+      queryKeys.query(DASHBOARD_RESOURCE, "upcoming", asParams(query)),
   },
 } as const;
 
@@ -61,6 +88,12 @@ export const analyticsService = {
     options?: RequestOptions,
   ): Promise<AnalyticsDashboardReadModel> =>
     apiClient.get<AnalyticsDashboardReadModel>("/analytics/dashboard", {
+      ...options,
+      query: asParams(query),
+    }),
+
+  panel: (query: AnalyticsQuery, options?: RequestOptions) =>
+    apiClient.get<AnalyticsPanelReadModel>("/analytics/panel", {
       ...options,
       query: asParams(query),
     }),
@@ -126,6 +159,8 @@ export const analyticsService = {
     module: (): QueryKey => queryKeys.module(ANALYTICS_RESOURCE),
     dashboard: (query?: AnalyticsQuery): QueryKey =>
       queryKeys.query(ANALYTICS_RESOURCE, "dashboard", asParams(query)),
+    panel: (query: AnalyticsQuery): QueryKey =>
+      queryKeys.query(ANALYTICS_RESOURCE, "panel", asParams(query)),
     kpis: (query?: AnalyticsQuery): QueryKey =>
       queryKeys.query(ANALYTICS_RESOURCE, "kpis", asParams(query)),
     trends: (query?: AnalyticsQuery): QueryKey =>

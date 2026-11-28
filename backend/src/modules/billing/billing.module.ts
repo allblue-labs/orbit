@@ -9,8 +9,17 @@
  */
 import { SubscriptionDataRetentionService } from './retention/subscription-data-retention.service';
 import { SubscriptionDataRetentionWorker } from './retention/subscription-data-retention.worker';
+import { CommercialPlanController } from '../subscription-plans/catalog/commercial-plan.controller';
 import { Module } from '@nestjs/common';
+import { EmailModule } from '../email/email.module';
+import { BillingPolicyService } from './billing-policy.service';
+import { BillingPolicyWorker } from './billing-policy.worker';
+import { BillingSupportController } from './billing-support.controller';
 import { SubscriptionPlansModule } from '../subscription-plans/subscription-plans.module';
+import {
+  BillingRecoveryService,
+  BillingRecoveryWorker,
+} from './billing-recovery.service';
 import { BillingConfig } from './billing.config';
 import { BillingCheckoutFulfillmentService } from './billing-checkout-fulfillment.service';
 import { BillingController } from './billing.controller';
@@ -25,10 +34,17 @@ import { StripeBillingProvider } from './stripe/stripe-billing.provider';
 import { SubscriptionBillingController } from './subscription-billing.controller';
 
 @Module({
-  imports: [SubscriptionPlansModule],
-  controllers: [BillingController, SubscriptionBillingController],
+  imports: [SubscriptionPlansModule, EmailModule],
+  controllers: [
+    BillingController,
+    SubscriptionBillingController,
+    CommercialPlanController,
+    BillingSupportController,
+  ],
   providers: [
     BillingConfig,
+    BillingRecoveryService,
+    BillingRecoveryWorker,
     SubscriptionDataRetentionService,
     SubscriptionDataRetentionWorker,
     BillingRepository,
@@ -37,11 +53,14 @@ import { SubscriptionBillingController } from './subscription-billing.controller
     StripeBillingProvider,
     { provide: BILLING_PROVIDER, useExisting: StripeBillingProvider },
     BillingService,
+    BillingPolicyService,
+    BillingPolicyWorker,
     BillingWebhookService,
     BillingReconciliationService,
     BillingReadService,
   ],
   exports: [
+    BillingRecoveryService,
     BillingService,
     BillingReconciliationService,
     BillingReadService,

@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService, RlsTransaction } from '../../../database';
+import { resolveIdentityUser } from '../../../database/rls/identity-scope';
+import { generateUuidV7 } from '../../../utils';
 import type { PrismaTransactionClient } from '../../../database/prisma.types';
 
 /**
@@ -43,6 +45,10 @@ export class TeamRepository {
       fieldTechnicianEnabled: boolean;
     },
     assertQuota: (transaction: PrismaTransactionClient) => Promise<void>,
+    queueWelcome?: (
+      tx: PrismaTransactionClient,
+      userId: string,
+    ) => Promise<void>,
   ) {
     return this.prisma.$transaction(async (transaction) => {
       await this.setLocal(
@@ -56,28 +62,27 @@ export class TeamRepository {
         input.businessUnitIds.join(','),
       );
 
-      const existente = await transaction.user.findUnique({
-        where: { normalizedEmail: input.normalizedEmail },
-        select: { id: true },
-      });
+      const existente = await resolveIdentityUser(
+        transaction,
+        input.normalizedEmail,
+      );
       if (existente) return { conflict: 'EMAIL_TAKEN' as const };
 
       await assertQuota(transaction);
 
+      const userId = generateUuidV7();
+      await this.setLocal(transaction, 'app.user_id', userId);
       const user = await transaction.user.create({
         data: {
+          id: userId,
           email: input.email,
           normalizedEmail: input.normalizedEmail,
           firstName: input.firstName,
           lastName: input.lastName,
           displayName: `${input.firstName} ${input.lastName}`.trim(),
           status: 'ACTIVE',
-          /**
-           * Verificado na criação: quem cadastra é o dono da organização, que
-           * já conhece a pessoa. Exigir confirmação por e-mail travaria o
-           * técnico sem e-mail — o caso que motivou a senha temporária.
-           */
-          emailVerifiedAt: new Date(),
+          // Verification records possession of the mailbox, independently of mobile access.
+          emailVerifiedAt: null,
           credential: {
             create: {
               passwordHash: input.passwordHash,
@@ -147,6 +152,7 @@ export class TeamRepository {
         },
       });
 
+      await queueWelcome?.(transaction, user.id);
       return { userId: user.id };
     });
   }
@@ -164,6 +170,7 @@ export class TeamRepository {
           usesCustomAccess: true,
           customPermissions: true,
           customAllowedSurfaces: true,
+          mobileDelegations: true,
           user: {
             select: {
               id: true,
@@ -235,16 +242,17 @@ export class TeamRepository {
         input.normalizedEmail &&
         input.normalizedEmail !== atual.normalizedEmail
       ) {
-        const existente = await transaction.user.findUnique({
-          where: { normalizedEmail: input.normalizedEmail },
-          select: { id: true },
-        });
+        const existente = await resolveIdentityUser(
+          transaction,
+          input.normalizedEmail,
+        );
         if (existente) return { conflict: 'EMAIL_TAKEN' as const };
       }
 
       const firstName = input.firstName ?? atual.firstName;
       const lastName = input.lastName ?? atual.lastName;
 
+      await this.setLocal(transaction, 'app.user_id', input.userId);
       await transaction.user.update({
         where: { id: input.userId },
         data: {
@@ -293,7 +301,7 @@ export class TeamRepository {
       const agora = new Date();
       await transaction.organizationMembership.updateMany({
         where: { organizationId, userId, deletedAt: null },
-        data: { status: 'INACTIVE', deletedAt: agora },
+        data: { status: 'INACTIVE', deletedAt: agora, mobileDelegations: [] },
       });
       await transaction.businessUnitMembership.updateMany({
         where: { organizationId, userId, deletedAt: null },
@@ -306,6 +314,7 @@ export class TeamRepository {
        * na mão até ele expirar — e o motivo de desligar alguém costuma ser
        * exatamente não querer isso.
        */
+      await this.setLocal(transaction, 'app.user_id', userId);
       await transaction.session.updateMany({
         where: { userId, revokedAt: null },
         data: { revokedAt: agora },

@@ -1,54 +1,76 @@
 import { Injectable, type NestMiddleware } from '@nestjs/common';
 import type { NextFunction, Request, Response } from 'express';
-import { RateLimitException } from '../exceptions';
-
-type Counter = { count: number; resetAt: number };
+import { AuthRateLimitService } from './auth-rate-limit.service';
+import { requestClientIp } from './trusted-client-origin';
 
 const SENSITIVE_PATH =
-  /^\/(?:api\/v1\/)?(?:identity\/(?:login|register|refresh|password\/(?:forgot|reset))|portal\/auth\/(?:login|refresh|activate|password\/reset-(?:request|confirm))|billing\/(?:checkout|portal-session))$/;
-const MAX_KEYS = 10_000;
+  /^(?:identity\/(?:login|register|refresh|biometrics\/(?:webauthn\/authentication(?:\/options)?|devices\/(?:login|authentication))|email\/(?:verify|resend)|password\/(?:forgot|reset(?:\/validate)?)|me\/(?:mfa\/(?:enrollment|enable)|biometrics\/devices\/options))|portal\/auth\/(?:login|refresh|biometrics\/(?:webauthn\/authentication(?:\/options)?|devices\/(?:login|authentication))|activate|password\/reset-(?:request|confirm))|portal\/me\/biometrics\/devices\/options|public\/contact|billing\/(?:checkout-session|portal-session))$/;
 
-/** Per-process abuse brake for public and money-moving entry points. */
+const PUBLIC_QUOTE =
+  /^public\/quotes\/proposals\/([^/]+)\/(response|document\/exports)$/i;
+const PASSKEY_CHALLENGE =
+  /^(?:identity\/biometrics|portal\/auth\/biometrics)\/(?:webauthn|devices)\/authentication\/options$/;
+
+/** Redis budgets with PostgreSQL fallback for credential and capability routes. */
 @Injectable()
 export class SensitiveEndpointRateLimitMiddleware implements NestMiddleware {
-  private readonly counters = new Map<string, Counter>();
+  constructor(private readonly limits: AuthRateLimitService) {}
 
-  use(request: Request, _response: Response, next: NextFunction): void {
-    if (process.env.NODE_ENV === 'test' || !SENSITIVE_PATH.test(request.path)) {
-      next();
-      return;
-    }
-
-    const windowMs = this.positiveInt('AUTH_RATE_LIMIT_WINDOW_MS', 60_000);
-    const maximum = this.positiveInt('AUTH_RATE_LIMIT_MAX', 20);
-    const now = Date.now();
-    const key = `${request.ip}:${request.method}:${request.path}`;
-    let counter = this.counters.get(key);
-    if (!counter || counter.resetAt <= now) {
-      this.prune(now);
-      counter = { count: 0, resetAt: now + windowMs };
-      this.counters.set(key, counter);
-    }
-    counter.count += 1;
-    if (counter.count > maximum) {
-      throw new RateLimitException(
-        Math.max(1, Math.ceil((counter.resetAt - now) / 1_000)),
-      );
-    }
-    next();
-  }
-
-  private positiveInt(key: string, fallback: number): number {
-    const value = Number(process.env[key] ?? fallback);
-    return Number.isSafeInteger(value) && value > 0 ? value : fallback;
-  }
-
-  private prune(now: number): void {
-    for (const [key, counter] of this.counters) {
-      if (counter.resetAt <= now || this.counters.size >= MAX_KEYS) {
-        this.counters.delete(key);
+  async use(
+    request: Request,
+    _response: Response,
+    next: NextFunction,
+  ): Promise<void> {
+    const rawPath = request.path
+      .replace(/^\/(?:api\/v1\/)?/i, '')
+      .replace(/\/+$/, '');
+    if (request.method !== 'POST') return next();
+    const quote = PUBLIC_QUOTE.exec(rawPath);
+    if (quote) {
+      let token: string | undefined;
+      try {
+        const decoded = decodeURIComponent(quote[1]!);
+        if (/^[A-Za-z0-9_-]{64}$/.test(decoded)) token = `token:${decoded}`;
+      } catch {
+        // Even malformed paths consume their IP budget.
       }
-      if (this.counters.size < MAX_KEYS) break;
+      await this.limits.check(
+        `public/quotes/${quote[2]!.toLowerCase()}`,
+        requestClientIp(request),
+        token,
+      );
+      return next();
     }
+    const path = rawPath.toLowerCase();
+    if (PASSKEY_CHALLENGE.test(path)) {
+      await this.limits.check('passkey-challenge', requestClientIp(request));
+      return next();
+    }
+    if (!SENSITIVE_PATH.test(path)) return next();
+    const body = request.body as Record<string, unknown> | undefined;
+    const email =
+      typeof body?.email === 'string'
+        ? body.email.trim().toLowerCase().slice(0, 320)
+        : null;
+    const token =
+      typeof body?.refreshToken === 'string'
+        ? body.refreshToken
+        : typeof body?.token === 'string'
+          ? body.token
+          : null;
+    const bearer = request.headers.authorization;
+    const tenant =
+      path.startsWith('portal/') && typeof body?.organizationSlug === 'string'
+        ? body.organizationSlug.trim().toLowerCase().slice(0, 100)
+        : '';
+    const account = email
+      ? `email:${tenant}:${email}`
+      : token
+        ? `token:${token.slice(0, 2048)}`
+        : bearer
+          ? `bearer:${bearer.slice(0, 8192)}`
+          : undefined;
+    await this.limits.check(path, requestClientIp(request), account);
+    next();
   }
 }

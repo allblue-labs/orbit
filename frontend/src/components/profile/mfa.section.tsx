@@ -7,7 +7,7 @@
  *
  * `POST /identity/me/mfa/enrollment` devolve `factorId`, `secret` e uma URI
  * `otpauth://`; `POST /mfa/enable` confirma com o código; `DELETE /mfa`
- * desativa. Esta PR apenas passou a consumi-los — nenhum contrato foi criado.
+ * desativa. Ativação e desativação exigem confirmação recente da identidade.
  *
  * ## O segredo aparece uma vez
  *
@@ -43,6 +43,8 @@ import {
   useEnableMfa,
 } from "@/hooks/profile/use-profile";
 import type { MfaEnrollment } from "@/types/settings";
+import { SecurityConfirmationDialog } from "@/components/auth/security-confirmation-dialog";
+import { securityHeaders } from "@/lib/biometrics/security-confirmation";
 
 /** O número do passo, num disco — a lista fica legível sem depender da ordem. */
 function Passo({ numero }: { numero: number }) {
@@ -53,13 +55,47 @@ function Passo({ numero }: { numero: number }) {
   );
 }
 
-export function MfaSection({ enabled }: { enabled: boolean }) {
+export function MfaSection({
+  enabled,
+  allowDisable = true,
+}: {
+  enabled: boolean;
+  allowDisable?: boolean;
+}) {
   const begin = useBeginMfaEnrollment();
   const enable = useEnableMfa();
   const disable = useDisableMfa();
 
   const [enrollment, setEnrollment] = useState<MfaEnrollment | null>(null);
   const [code, setCode] = useState("");
+  const [confirming, setConfirming] = useState(false);
+  const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
+
+  if (recoveryCodes.length) {
+    return (
+      <section className="glass-panel space-y-4 rounded-xl p-5">
+        <h2 className="text-sm font-medium">Códigos de recuperação</h2>
+        <p className="text-sm text-muted-foreground">
+          Guarde estes códigos em um local seguro. Você pode usar cada código
+          uma vez para entrar se perder acesso ao aplicativo autenticador.
+        </p>
+        <ul className="grid gap-2 font-mono text-sm sm:grid-cols-2">
+          {recoveryCodes.map((code) => (
+            <li key={code} className="select-all">
+              {code}
+            </li>
+          ))}
+        </ul>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setRecoveryCodes([])}
+        >
+          Guardei os códigos
+        </Button>
+      </section>
+    );
+  }
 
   if (enabled) {
     return (
@@ -76,14 +112,29 @@ export function MfaSection({ enabled }: { enabled: boolean }) {
 
         <MutationError error={disable.error} />
 
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={disable.isPending}
-          onClick={() => disable.mutate()}
-        >
-          {disable.isPending ? "Desativando…" : "Desativar"}
-        </Button>
+        {allowDisable && (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={disable.isPending}
+            onClick={() => setConfirming(true)}
+          >
+            {disable.isPending ? "Desativando…" : "Desativar"}
+          </Button>
+        )}
+        {confirming && (
+          <SecurityConfirmationDialog
+            title="Desativar a autenticação em dois fatores"
+            askForMfa
+            onClose={() => setConfirming(false)}
+            onConfirm={async (credentials) => {
+              await disable.mutateAsync(
+                await securityHeaders("team", "MFA_DISABLE", credentials),
+              );
+              return true;
+            }}
+          />
+        )}
       </section>
     );
   }
@@ -161,15 +212,7 @@ export function MfaSection({ enabled }: { enabled: boolean }) {
           <form
             onSubmit={(event) => {
               event.preventDefault();
-              enable.mutate(
-                { factorId: enrollment.factorId, code: code.trim() },
-                {
-                  onSuccess: () => {
-                    setEnrollment(null);
-                    setCode("");
-                  },
-                },
-              );
+              if (code.trim()) setConfirming(true);
             }}
             className="flex flex-wrap items-end gap-3"
           >
@@ -203,6 +246,29 @@ export function MfaSection({ enabled }: { enabled: boolean }) {
           </form>
 
           <MutationError error={enable.error} />
+          {confirming && (
+            <SecurityConfirmationDialog
+              title="Ativar a autenticação em dois fatores"
+              askForMfa
+              onClose={() => setConfirming(false)}
+              onConfirm={async (credentials) => {
+                const headers = await securityHeaders(
+                  "team",
+                  "MFA_ENABLE",
+                  credentials,
+                );
+                const result = await enable.mutateAsync({
+                  input: { factorId: enrollment.factorId, code: code.trim() },
+                  headers,
+                });
+                setRecoveryCodes(result.recoveryCodes);
+                enable.reset();
+                setEnrollment(null);
+                setCode("");
+                return true;
+              }}
+            />
+          )}
         </div>
       ) : (
         <>

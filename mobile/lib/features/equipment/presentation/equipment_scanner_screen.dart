@@ -371,6 +371,28 @@ class _EquipmentManualEntrySheetState
   }
 }
 
+/// Detalhes abertos por uma etiqueta lida fora do aplicativo.
+class EquipmentDetailsScreen extends StatelessWidget {
+  const EquipmentDetailsScreen({
+    super.key,
+    required this.token,
+    required this.onScanAnother,
+  });
+
+  final String token;
+  final VoidCallback onScanAnother;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Equipamento')),
+    body: _Resultado(
+      key: ValueKey(token),
+      token: token,
+      onFechar: onScanAnother,
+    ),
+  );
+}
+
 /// O equipamento que a etiqueta identificou.
 /// Abre o equipamento lido numa folha, por cima de onde a pessoa estava.
 ///
@@ -893,10 +915,10 @@ class _AttendanceCard extends StatelessWidget {
           item.title,
           style: OrbitType.itemTitle.copyWith(color: context.orbit.ink),
         ),
-        if (item.code.isNotEmpty) ...[
+        if (item.serviceOrderCode != null || item.code.isNotEmpty) ...[
           const SizedBox(height: OrbitSpacing.xs),
           Text(
-            item.code,
+            item.serviceOrderCode ?? item.code,
             style: OrbitType.caption.copyWith(color: context.orbit.inkSubtle),
           ),
         ],

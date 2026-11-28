@@ -1,3 +1,4 @@
+import { brandImageStub } from '../../../test/support/brand-image.stub';
 /**
  * A amostra de modelo não é emissão, e imprime o timbre de quem pergunta.
  *
@@ -78,6 +79,7 @@ function montar() {
     inputs as never,
     documentContext as never,
     quotes,
+    brandImageStub(),
   );
 
   return {

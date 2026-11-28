@@ -1,3 +1,4 @@
+import { TenantRecovery } from '../tenant-operations/tenant-operation.policy';
 import {
   Body,
   Controller,
@@ -41,6 +42,7 @@ export class MobileDeviceController {
   }
 
   @Get()
+  @TenantRecovery('identity')
   @ApiOperation({
     summary: 'Lista somente as instalações ativas do usuário atual',
   })
@@ -49,6 +51,7 @@ export class MobileDeviceController {
   }
 
   @Delete(':deviceInstanceId')
+  @TenantRecovery('identity')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Remove o binding da instalação no logout' })
   revoke(

@@ -537,6 +537,20 @@ export class FinancialService {
 
     const income = bucket(FinancialEntryType.INCOME);
     const expense = bucket(FinancialEntryType.EXPENSE);
+    const late = (type?: string): FinancialTotalsReadModel => {
+      const rows = overdue.filter((row) => !type || row.type === type);
+      return {
+        confirmed: '0.00',
+        pending: this.mapper.money(
+          rows.reduce(
+            (total, row) => total.plus(row._sum.amount ?? 0),
+            new Prisma.Decimal(0),
+          ),
+        ),
+        cancelled: '0.00',
+        count: rows.reduce((total, row) => total + row._count._all, 0),
+      };
+    };
 
     return {
       period: {
@@ -548,12 +562,9 @@ export class FinancialService {
       expense,
       netConfirmed: this.subtract(income.confirmed, expense.confirmed),
       netPending: this.subtract(income.pending, expense.pending),
-      overdue: {
-        confirmed: '0.00',
-        pending: this.mapper.money(overdue._sum.amount ?? 0),
-        cancelled: '0.00',
-        count: overdue._count._all,
-      },
+      overdue: late(),
+      overdueIncome: late(FinancialEntryType.INCOME),
+      overdueExpense: late(FinancialEntryType.EXPENSE),
     };
   }
 
@@ -606,14 +617,18 @@ export class FinancialService {
     query: FinancialAnalyticsQueryDto,
   ): Promise<FinancialTimelinePointReadModel[]> {
     const scope = this.scope(organizationId, query);
-    const rows = await this.repository.timeline(scope);
+    const daily = query.granularity === 'DAY';
+    const rows = await this.repository.timeline(scope, daily ? 'DAY' : 'MONTH');
 
     const months = new Map<string, FinancialTimelinePointReadModel>();
     for (const row of rows) {
-      const month = this.mapper.day(row.month).slice(0, 7);
+      const day = this.mapper.day(row.month);
+      const period = daily ? day : day.slice(0, 7);
+      const month = day.slice(0, 7);
       const current =
-        months.get(month) ??
+        months.get(period) ??
         ({
+          period,
           month,
           incomeConfirmed: '0.00',
           incomePending: '0.00',
@@ -647,7 +662,7 @@ export class FinancialService {
         netConfirmed: current.netConfirmed,
       };
 
-      months.set(month, {
+      months.set(period, {
         ...next,
         netConfirmed: this.subtract(
           next.incomeConfirmed,
@@ -656,7 +671,9 @@ export class FinancialService {
       });
     }
 
-    return [...months.values()].sort((a, b) => a.month.localeCompare(b.month));
+    return [...months.values()].sort((a, b) =>
+      a.period.localeCompare(b.period),
+    );
   }
 
   /* ---------------------------------------------------------------- */

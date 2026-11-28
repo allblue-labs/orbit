@@ -1,4 +1,8 @@
 import { Injectable } from '@nestjs/common';
+import {
+  documentCategoryLabel,
+  documentCategoryOf,
+} from './customer-portal-document-category';
 import { evaluateCompliance, frequencyLabel } from '../pmoc/pmoc.domain';
 import type {
   CustomerPortalDocumentAccessReadModel,
@@ -61,6 +65,15 @@ type RvtDetailsRecord = Omit<RvtSummaryRecord, 'occurrences'> & {
   documentExecutionIds: ReadonlySet<string>;
 };
 
+/** A categoria como o cliente lê; códigos novos caem no texto humanizado. */
+const ASSET_CATEGORY_LABELS: Readonly<Record<string, string>> = {
+  EQUIPMENT: 'Equipamento',
+  VEHICLE: 'Veículo',
+  TOOL: 'Ferramenta',
+  FACILITY: 'Instalação',
+  OTHER: 'Outro',
+};
+
 @Injectable()
 export class CustomerPortalReadMapper {
   page<T, U>(
@@ -100,7 +113,10 @@ export class CustomerPortalReadMapper {
         ? { displayName: value.responsibleFieldTechnician.displayName }
         : null,
       location: this.location(value.location),
-      documentAvailable: value._count.artifactExecutions > 0,
+      documentAvailable: value.artifactExecutions.some(
+        (execution) => execution.manifests.length > 0,
+      ),
+      documentId: value.artifactExecutions[0]?.manifests[0]?.id ?? null,
     };
   }
 
@@ -119,7 +135,8 @@ export class CustomerPortalReadMapper {
     return {
       id: value.id,
       displayName: value.name,
-      category: this.humanize(value.category),
+      category:
+        ASSET_CATEGORY_LABELS[value.category] ?? this.humanize(value.category),
       manufacturer: value.manufacturer,
       model: value.model,
       serialNumber: value.serialNumber,
@@ -234,9 +251,15 @@ export class CustomerPortalReadMapper {
     if (!value.file || !value.issuedAt) {
       throw new TypeError('Portal document query returned an unavailable file');
     }
+    const category = documentCategoryOf(value.execution.snapshot.artifactType);
     return {
       id: value.id,
       fileName: value.file.fileName,
+      title: value.execution.title,
+      code: value.execution.code,
+      category,
+      categoryLabel: documentCategoryLabel(category),
+      operationId: value.execution.operationId,
       type: this.humanize(value.execution.snapshot.artifactType),
       source: value.execution.snapshot.templateName || value.execution.title,
       issuedAt: value.issuedAt.toISOString(),

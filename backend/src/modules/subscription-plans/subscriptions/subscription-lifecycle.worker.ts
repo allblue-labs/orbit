@@ -1,3 +1,4 @@
+import { runsMaintenance } from '../../../runtime/process-role';
 /**
  * Faz o tempo passar nas assinaturas.
  *
@@ -57,8 +58,7 @@ export class SubscriptionLifecycleWorker
   ) {}
 
   onModuleInit(): void {
-    const globalmente =
-      (process.env.JOBS_WORKER_ENABLED ?? 'true').trim() !== 'false';
+    const globalmente = runsMaintenance();
     const proprio =
       (process.env.SUBSCRIPTION_LIFECYCLE_WORKER_ENABLED ?? 'true').trim() !==
       'false';

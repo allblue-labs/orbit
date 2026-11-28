@@ -10,12 +10,15 @@ import { Global, Module } from '@nestjs/common';
 import { PrismaModule } from '../../database/prisma.module';
 import { RequestContextModule } from '../../context';
 import { BackgroundJobQueue } from './background-job.queue';
+import { AdminJobsController } from './admin-jobs.controller';
+import { AdminJobsService } from './admin-jobs.service';
 import { JobProcessorRegistry } from './job-processor.registry';
 
 @Global()
 @Module({
   imports: [PrismaModule, RequestContextModule],
-  providers: [BackgroundJobQueue, JobProcessorRegistry],
+  controllers: [AdminJobsController],
+  providers: [BackgroundJobQueue, JobProcessorRegistry, AdminJobsService],
   exports: [BackgroundJobQueue, JobProcessorRegistry],
 })
 export class JobsModule {}

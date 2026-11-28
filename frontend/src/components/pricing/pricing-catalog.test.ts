@@ -9,8 +9,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   INTELLIGENCE_CAPABILITY,
-  TRIAL_DAYS,
-  TRIAL_PLAN_CODE,
   ofereceAvaliacao,
   ordenarPlanos,
   temInteligencia,
@@ -73,14 +71,20 @@ describe("catálogo público", () => {
     expect(ordenado[1].code).toBe("PLANO_NOVO");
   });
 
-  it("só o Essencial anuncia avaliação gratuita", () => {
-    expect(ofereceAvaliacao(plano(TRIAL_PLAN_CODE, 5_990))).toBe(true);
-    expect(ofereceAvaliacao(plano("PROFESSIONAL", 14_990))).toBe(false);
-    expect(ofereceAvaliacao(plano("ENTERPRISE_UNLIMITED", 69_990))).toBe(false);
-  });
-
-  it("a avaliação é de trinta dias", () => {
-    expect(TRIAL_DAYS).toBe(30);
+  it("usa a avaliação cadastrada apenas enquanto o plano está disponível", () => {
+    expect(ofereceAvaliacao({ ...plano("NOVO", 5990), trialDays: 45 })).toBe(
+      true,
+    );
+    expect(
+      ofereceAvaliacao({ ...plano("ESSENTIAL", 5990), trialDays: 0 }),
+    ).toBe(false);
+    expect(
+      ofereceAvaliacao({
+        ...plano("NOVO", 5990),
+        trialDays: 45,
+        isActive: false,
+      }),
+    ).toBe(false);
   });
 
   it("inteligência vem da capacidade publicada, não do nome do plano", () => {

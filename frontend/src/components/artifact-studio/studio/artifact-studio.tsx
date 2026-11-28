@@ -519,8 +519,8 @@ function ReadOnlyNotice({
         {platformOwned
           ? "Este é um modelo da plataforma e não pode ser alterado. Duplique-o para criar uma versão sua."
           : !canManage
-            ? "Sua conta não tem permissão ou plano para alterar templates. A estrutura fica disponível para consulta."
-            : "Template em modo de leitura."}
+            ? "Sua conta não tem permissão ou plano para alterar modelos. A estrutura fica disponível para consulta."
+            : "Modelo em modo de leitura."}
       </span>
       {platformOwned ? (
         <Button variant="outline" size="sm" onClick={onDuplicate}>

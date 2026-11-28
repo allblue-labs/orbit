@@ -7,8 +7,11 @@ import type { RegisterOrganizationDto } from '../presentation/dto/identity.dto';
 describe('public signup document reservation', () => {
   it('stops before creating a user when the atomic reservation is refused', async () => {
     const tx = {
-      plan: { findFirst: jest.fn().mockResolvedValue({ id: 'plan' }) },
+      plan: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'plan', commercial: {} }),
+      },
       $queryRaw: jest.fn().mockResolvedValue([{ reserved: false }]),
+      $queryRawUnsafe: jest.fn().mockResolvedValue([]),
       user: { create: jest.fn() },
     };
     const prisma = {
@@ -43,9 +46,9 @@ describe('public signup document reservation', () => {
       subscriptions = { provision: jest.fn() };
     const service = new RegistrationService(
       repository as never,
-      authentication as never,
       { hash: jest.fn().mockResolvedValue('hash') } as never,
       subscriptions as never,
+      { queueWelcomeIn: jest.fn() } as never,
     );
     await expect(
       service.register(
@@ -67,6 +70,7 @@ describe('public signup document reservation', () => {
       'empresa',
       { publicSignup: true },
       { client: 'WEB' },
+      expect.any(Function),
     );
     expect(subscriptions.provision).not.toHaveBeenCalled();
     expect(authentication.login).not.toHaveBeenCalled();

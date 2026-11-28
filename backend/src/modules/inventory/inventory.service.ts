@@ -138,6 +138,22 @@ export class InventoryService {
     });
   }
 
+  sale(
+    organizationId: string,
+    businessUnitId: string,
+    actorId: string,
+    input: Pick<
+      InventoryConsumptionDto,
+      'catalogItemId' | 'quantity' | 'sourceEntityId'
+    >,
+  ) {
+    return this.move(organizationId, businessUnitId, actorId, {
+      ...input,
+      type: InventoryMovementType.SALE,
+      reason: 'Venda de produto',
+    });
+  }
+
   async return(
     organizationId: string,
     fallbackUnitId: string | null,
@@ -292,7 +308,7 @@ export class InventoryService {
       outOfStockItems: Number(row?.out ?? 0),
       movements: {
         entries: pick(['ENTRY', 'RETURN', 'ADJUSTMENT_IN', 'TRANSFER_IN']),
-        exits: pick(['CONSUMPTION', 'ADJUSTMENT_OUT', 'TRANSFER_OUT']),
+        exits: pick(['CONSUMPTION', 'SALE', 'ADJUSTMENT_OUT', 'TRANSFER_OUT']),
         consumption: pick(['CONSUMPTION']),
         /**
          * Transferência conta **um** movimento por par, não dois.

@@ -18,6 +18,7 @@
  * escapar (uma inclusão feita por outra pessoa entre a abertura do diálogo e a
  * escolha, por exemplo).
  */
+import { ASSET_CATEGORY_LABELS } from "@/entities";
 import { useState } from "react";
 import { Package } from "lucide-react";
 
@@ -140,7 +141,8 @@ export function EquipmentSelectorDialog({
                           asset.model,
                         ]
                           .filter(Boolean)
-                          .join(" · ") || asset.category}
+                          .join(" · ") ||
+                          (ASSET_CATEGORY_LABELS[asset.category] ?? asset.category)}
                       </span>
                     </button>
                   </li>

@@ -6,10 +6,13 @@
 /// permissão `operations.attachments.create`.
 library;
 
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 
 import '../errors/orbit_exception.dart';
 import '../network/orbit_api_client.dart';
+import '../storage/offline_data.dart';
 import 'upload_queue.dart';
 
 /// Limite do backend. Validado antes de enviar para não gastar rede até o 413.
@@ -34,9 +37,12 @@ UploadExecutor createAttachmentUploadExecutor(OrbitApiClient client) {
     final cancelToken = CancelToken();
     cancellation.onCancel(cancelToken.cancel);
 
+    final file = OfflineDataFile(File(task.filePath), scope: 'legacy-evidence');
+    final bytes = await file.read();
+    if (bytes == null) throw const FileSystemException('Arquivo indisponível.');
     await client.upload<Map<String, dynamic>>(
       '/operations/${task.operationId}/attachments',
-      filePath: task.filePath,
+      bytes: bytes,
       fileName: task.fileName,
       mimeType: task.mimeType,
       cancelToken: cancelToken,

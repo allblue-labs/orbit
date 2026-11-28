@@ -1,0 +1,108 @@
+{
+  "task": "ORB-NX-05.R",
+  "status": "PENDING_BILATERAL_APPROVAL",
+  "approved": false,
+  "ratified": false,
+  "runtimeEnabled": false,
+  "productId": "orbit-v2",
+  "aggregateKind": "TENANT",
+  "orbitToNexus": [
+    "tenant.created",
+    "tenant.updated",
+    "tenant.suspended",
+    "tenant.reactivated"
+  ],
+  "nexusToOrbit": [
+    "ACK",
+    "ERROR"
+  ],
+  "synchronization": "DESIGN_ONLY",
+  "wireRecommendation": "ORBIT_SOURCE_WITH_PINNED_NEXUS_ADAPTER",
+  "orbit": {
+    "version": "1.0.0",
+    "schemas": [
+      {
+        "path": "docs/integrations/nexus/federation/1.0.0/schemas/common.schema.json",
+        "sha256": "c14bfd8292714b9a6be20c743482c8b4b9b0ed9d477145d44d835517a394d0e0",
+        "id": "https://contracts.allblue-labs.com/federation/1.0.0/common.schema.json"
+      },
+      {
+        "path": "docs/integrations/nexus/federation/1.0.0/schemas/event.schema.json",
+        "sha256": "e7f86e30e90e93cdadfa6c4a27eced8cf5c2c2902515e605c1a6cb6faec56ccf",
+        "id": "https://contracts.allblue-labs.com/federation/1.0.0/event.schema.json"
+      },
+      {
+        "path": "docs/integrations/nexus/federation/1.0.0/schemas/ack.schema.json",
+        "sha256": "1f1fcfd7b14727c79cabe95b7391cbf049ab02ffbdcff332b76d77d563b83712",
+        "id": "https://contracts.allblue-labs.com/federation/1.0.0/ack.schema.json"
+      },
+      {
+        "path": "docs/integrations/nexus/federation/1.0.0/schemas/error.schema.json",
+        "sha256": "767cd33fbe24bce29e45391ccb8c4f4fd6cc052bd84ff92a5acbd6a66c8b2744",
+        "id": "https://contracts.allblue-labs.com/federation/1.0.0/error.schema.json"
+      }
+    ],
+    "lock": {
+      "path": "docs/integrations/nexus/federation/1.0.0/compatibility-lock.json",
+      "sha256": "8676cd2fd1588e9c7e8682dd323cbb646cab264941332bcfb6c783d9093ea828"
+    }
+  },
+  "nexus": {
+    "coreVersion": "1.0.0-draft.nexus04",
+    "profileVersion": "1.0.0-proposed.nexus04",
+    "schemas": [
+      {
+        "path": "contracts/core/1.0.0-draft.nexus04/common.schema.json",
+        "sha256": "4b5d69ebd7826a55bfa8920a2b02b688604ba5b94915a0440de284e88e9745ea",
+        "id": "https://contracts.allblue-labs.com/acp/1.0.0-draft.nexus04/common.schema.json"
+      },
+      {
+        "path": "contracts/core/1.0.0-draft.nexus04/event.schema.json",
+        "sha256": "ba192ef916bd4fe595fec22738af4144208e465df09f487bc17ac10ba1c5e306",
+        "id": "https://contracts.allblue-labs.com/acp/1.0.0-draft.nexus04/event.schema.json"
+      },
+      {
+        "path": "contracts/core/1.0.0-draft.nexus04/ack.schema.json",
+        "sha256": "b701cc8c52595d146c4bef99c5fe175512a0728af3f57a44c1aee1ab6d20c9e2",
+        "id": "https://contracts.allblue-labs.com/acp/1.0.0-draft.nexus04/ack.schema.json"
+      },
+      {
+        "path": "contracts/core/1.0.0-draft.nexus04/error.schema.json",
+        "sha256": "5d0d8c0ec7489e6cfbdaeb28694d302ad9699621dbc095a3ce6fc7543fefea30",
+        "id": "https://contracts.allblue-labs.com/acp/1.0.0-draft.nexus04/error.schema.json"
+      },
+      {
+        "path": "contracts/core/1.0.0-draft.nexus04/freshness.schema.json",
+        "sha256": "478b35e23cfa048b1e39783b343daa0d88dc1681c16589d616c0e6c97b1d976e",
+        "id": "https://contracts.allblue-labs.com/acp/1.0.0-draft.nexus04/freshness.schema.json"
+      },
+      {
+        "path": "contracts/profiles/orbit-v2/1.0.0-proposed.nexus04/common.schema.json",
+        "sha256": "50f684d6ec37ec12bb8af356a63f4b61de6f8092ce01109dafad8385a8b02e42",
+        "id": "https://contracts.allblue-labs.com/profiles/orbit-v2/1.0.0-proposed.nexus04/common.schema.json"
+      },
+      {
+        "path": "contracts/profiles/orbit-v2/1.0.0-proposed.nexus04/event.schema.json",
+        "sha256": "3a598ba367efe8413565dc3e99bc07e1bc9ddcd909b4bcd35a542c02b616accb",
+        "id": "https://contracts.allblue-labs.com/profiles/orbit-v2/1.0.0-proposed.nexus04/event.schema.json"
+      }
+    ],
+    "lock": {
+      "path": "compatibility-lock.json",
+      "sha256": "78efbfb8ec7526fa04898ab82b650ad19bccf3f5a0e64596c29be5338f675923"
+    },
+    "profileCapabilities": {
+      "path": "contracts/profiles/orbit-v2/1.0.0-proposed.nexus04/capabilities.json",
+      "sha256": "d105afe3fab08d13082683d64a1f7450de2df1e25585f9b51ce1ccbdb7e69b5e"
+    },
+    "adapterVersion": "1.0.0-nexus04c",
+    "adapterLock": {
+      "path": "compatibility/orbit-v2/1.0.0-nexus04c/adapter-lock.json",
+      "sha256": "4e9df1e6cf094286262cd99c0d844db1105d747f6af18ea0d5b76f96362f60b2"
+    },
+    "adapterSourceManifest": {
+      "path": "compatibility/orbit-v2/1.0.0-nexus04c/source-manifest.json",
+      "sha256": "e430588054c2553b9721f69271a7f70c19b63ffcd4fd3c7875672f843dc4c4e3"
+    }
+  }
+}

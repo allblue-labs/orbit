@@ -18,6 +18,7 @@
  * fingir um histórico a partir da linha do tempo, que responderia "quando" mas
  * nunca "por quem".
  */
+import { signerRoleLabel } from "@/lib/signer-role";
 import { useMemo } from "react";
 import {
   Archive,
@@ -142,7 +143,7 @@ function buildTimeline(execution: ArtifactExecution): readonly TimelineEntry[] {
       signature.signedAt,
       "Assinatura coletada",
       PenLine,
-      `${signature.signerRole} · ${signature.signerName}`,
+      `${signerRoleLabel(signature.signerRole)} · ${signature.signerName}`,
     );
     push(signature.revokedAt, "Assinatura revogada", PenLine, signature.slotId);
   }

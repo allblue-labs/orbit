@@ -1,3 +1,7 @@
+import { ImageOptimizationService } from '../storage/image-optimization.service';
+import { QuoteAcceptedDocumentService } from '../quotes/quote-accepted-document.service';
+import { BrandImageService } from '../storage/brand-image.service';
+import { pdfImage } from '../storage/pdf-image';
 /**
  * Regras do domínio PMOC.
  *
@@ -79,6 +83,8 @@ import type {
   StartPmocEquipmentExecutionDto,
   UpdatePmocPlanDto,
   UpdatePmocUnitDto,
+  UpdatePmocEquipmentScheduleDto,
+  CancelPmocEquipmentScheduleDto,
 } from './pmoc.dto';
 import { PmocMapper } from './pmoc.mapper';
 import type {
@@ -246,7 +252,9 @@ export class PmocService {
        contrato — a mesma dependência que o orçamento usa, pelo mesmo motivo. */
     @Inject(STORAGE_PROVIDER) private readonly storage: StorageProvider,
     @Optional()
-    private readonly mobileNotifications?: MobileNotificationService,
+    private readonly mobileNotifications: MobileNotificationService | undefined,
+    private readonly brands: BrandImageService,
+    private readonly images: ImageOptimizationService = new ImageOptimizationService(),
   ) {}
 
   /* ---------------------------------------------------------------- */
@@ -286,7 +294,7 @@ export class PmocService {
 
     const token = randomBytes(48).toString('base64url');
     const document = await this.document(id, actor);
-    const documentObjectKey = `pmoc-contract-documents/${generateUuidV7()}.pdf`;
+    const documentObjectKey = `pmoc-contract-documents/${actor.organizationId}/${Date.now()}-${generateUuidV7()}.pdf`;
     await this.storage.put({
       bucket: this.storage.defaultBucket,
       objectKey: documentObjectKey,
@@ -301,6 +309,7 @@ export class PmocService {
       createdById: actor.actorId,
       expectedVersion: plan.updatedAt,
       documentBucket: this.storage.defaultBucket,
+      documentProvider: this.storage.name,
       documentObjectKey,
       documentSha256: createHash('sha256').update(document.bytes).digest('hex'),
       publicSummary: {
@@ -367,24 +376,68 @@ export class PmocService {
     };
   }
 
+  /**
+   * O PDF que o link entrega.
+   *
+   * Antes de assinar, o contrato congelado no envio. Depois, **o mesmo PDF com a
+   * página de aceite**: nome e documento de quem assinou, data e a imagem da
+   * assinatura, mais o hash do original. Antes o link servia sempre a versão sem
+   * assinatura, e o contratante só via o próprio aceite se pedisse ao owner.
+   *
+   * O congelado continua intacto — o aceite é acrescentado, não redesenhado —,
+   * então o que se assinou é exatamente o que foi lido.
+   */
   async publicContractDocument(token: string) {
-    const file = await this.repository.publicSignatureDocument(
-      HashHelper.sha256(token),
-    );
+    const tokenHash = HashHelper.sha256(token);
+    const file = await this.repository.publicSignatureDocument(tokenHash);
     if (!file) throw new EntityNotFoundException('Contrato');
-    const bytes = await this.storage.get({
+    const original = await this.storage.get({
       bucket: file.bucket,
       objectKey: file.object_key,
     });
-    if (createHash('sha256').update(bytes).digest('hex') !== file.sha256)
+    if (createHash('sha256').update(original).digest('hex') !== file.sha256)
       throw new ConflictException(
         'Não foi possível conferir o documento do contrato.',
       );
-    return {
-      bytes,
-      fileName: `contrato-${file.plan_code.replace(/[^A-Za-z0-9_-]/g, '_')}.pdf`,
-    };
+    const nome = file.plan_code.replace(/[^A-Za-z0-9_-]/g, '_');
+
+    const aceite = await this.repository.signatureAcceptance(tokenHash);
+    if (!aceite) return { bytes: original, fileName: `contrato-${nome}.pdf` };
+
+    const assinatura = await this.storage.get({
+      bucket: aceite.signature_bucket,
+      objectKey: aceite.signature_object_key,
+    });
+    if (
+      aceite.signature_sha256 &&
+      createHash('sha256').update(assinatura).digest('hex') !==
+        aceite.signature_sha256
+    )
+      throw new ConflictException(
+        'Não foi possível conferir a assinatura do contrato.',
+      );
+    const bytes = await this.acceptedDocuments.render(original, {
+      code: file.plan_code,
+      signerName: aceite.signer_name,
+      signerDocument: aceite.signer_document,
+      signedAt: aceite.signed_at,
+      originalSha256: file.sha256,
+      signature: assinatura,
+      labels: {
+        title: `Assinatura do contrato ${file.plan_code}`,
+        statement:
+          'O contratante conferiu o plano de manutenção, a cobertura e as condições descritas nas páginas anteriores e aceitou o contrato por meio da assinatura abaixo.',
+        roleLabel: 'Contratante · Aceite do contrato de PMOC',
+        integrityTitle: 'Integridade do contrato assinado',
+        integrityLead:
+          'Esta assinatura corresponde ao PDF do contrato enviado ao contratante.',
+      },
+    });
+    return { bytes, fileName: `contrato-${nome}-assinado.pdf` };
   }
+
+  /** A página de aceite sobre o PDF congelado — a mesma do orçamento. */
+  private readonly acceptedDocuments = new QuoteAcceptedDocumentService();
 
   /**
    * Registra a assinatura do contratante.
@@ -425,17 +478,21 @@ export class PmocService {
       return { state: estadoAtual, reason: MOTIVO_DO_ESTADO[estadoAtual] };
     }
 
-    const sha256 = createHash('sha256').update(input.signature).digest('hex');
+    const organizationId =
+      await this.repository.signatureUploadScope(tokenHash);
+    if (!organizationId) throw new EntityNotFoundException('PmocContract');
+    const body = await this.images.optimize(input.signature, input.mimeType);
+    const sha256 = createHash('sha256').update(body).digest('hex');
     /* A chave carrega o hash do token, e não o id do plano: ela não pode revelar
        qual contrato é, porque o bucket é compartilhado pela organização. */
-    const objectKey = `pmoc-contract-signatures/${tokenHash}/${generateUuidV7()}.png`;
+    const objectKey = `pmoc-contract-signatures/${organizationId}/${Date.now()}-${generateUuidV7()}.webp`;
     const bucket = this.storage.defaultBucket;
 
     await this.storage.put({
       bucket,
       objectKey,
-      body: input.signature,
-      mimeType: input.mimeType,
+      body,
+      mimeType: 'image/webp',
       metadata: { source: 'PMOC_CONTRACT_SIGNATURE' },
     });
 
@@ -448,8 +505,9 @@ export class PmocService {
       userAgent: input.userAgent,
       bucket,
       objectKey,
-      mimeType: input.mimeType,
-      sizeBytes: input.signature.byteLength,
+      mimeType: 'image/webp',
+      sizeBytes: body.byteLength,
+      provider: this.storage.name,
       sha256,
     });
 
@@ -462,6 +520,7 @@ export class PmocService {
      * `?? null` produzia `{ reason: null }`, que é **o sinal de sucesso**: a página
      * diria "contrato assinado" sem nada ter sido gravado.
      */
+    if (!resultado.signed) await this.storage.remove({ bucket, objectKey });
     if (resultado.state === 'INEXISTENTE') {
       throw new EntityNotFoundException('PmocContract');
     }
@@ -509,11 +568,13 @@ export class PmocService {
 
     try {
       return {
-        bytes: await this.storage.get({
-          bucket: coletada.signatureFile.bucket,
-          objectKey: coletada.signatureFile.objectKey,
-        }),
-        mimeType: coletada.signatureFile.mimeType,
+        ...(await pdfImage(
+          await this.storage.get({
+            bucket: coletada.signatureFile.bucket,
+            objectKey: coletada.signatureFile.objectKey,
+          }),
+          coletada.signatureFile.mimeType,
+        )),
         signerName: coletada.signerName,
         signedAtLabel: assinadoEm ? `Assinado em ${assinadoEm}` : undefined,
       };
@@ -555,11 +616,13 @@ export class PmocService {
     if (!assinatura) return {};
     try {
       return {
-        bytes: await this.storage.get({
-          bucket: assinatura.storageObject.bucket,
-          objectKey: assinatura.storageObject.objectKey,
-        }),
-        mimeType: assinatura.storageObject.mimeType,
+        ...(await pdfImage(
+          await this.storage.get({
+            bucket: assinatura.storageObject.bucket,
+            objectKey: assinatura.storageObject.objectKey,
+          }),
+          assinatura.storageObject.mimeType,
+        )),
       };
     } catch {
       return {};
@@ -599,13 +662,11 @@ export class PmocService {
         );
       }
     }
-    if (input.technicalResponsibleUserId) {
-      await this.assertTechnicalResponsible(
-        input.technicalResponsibleUserId,
-        actor,
-        input.businessUnitId,
-      );
-    }
+    await this.assertPlanTechnicalResponsible(
+      input.technicalResponsibleUserId,
+      actor,
+      input.businessUnitId,
+    );
 
     this.assertValidity(input.startsOn, input.endsOn ?? null);
 
@@ -717,7 +778,7 @@ export class PmocService {
           frequencyUnit: input.frequencyUnit,
           dueSoonDays: input.dueSoonDays ?? 15,
           technicianUserId: input.technicianUserId ?? null,
-          technicalResponsibleUserId: input.technicalResponsibleUserId ?? null,
+          technicalResponsibleUserId: input.technicalResponsibleUserId,
           serviceLocation: input.serviceLocation as never,
           scope: input.scope as never,
           serviceTypes: input.serviceTypes ?? [],
@@ -992,13 +1053,13 @@ export class PmocService {
         );
       }
     }
-    if (input.technicalResponsibleUserId) {
-      await this.assertTechnicalResponsible(
-        input.technicalResponsibleUserId,
-        actor,
-        plan.businessUnit.id,
-      );
-    }
+    await this.assertPlanTechnicalResponsible(
+      input.technicalResponsibleUserId === undefined
+        ? plan.technicalResponsibleUserId
+        : input.technicalResponsibleUserId,
+      actor,
+      plan.businessUnit.id,
+    );
 
     const updated = await this.repository.update(
       id,
@@ -1088,7 +1149,11 @@ export class PmocService {
     const bytes = await this.planDocument.render({
       timezone: fuso,
       emitter: {
-        ...logoDoEmissor(plan.businessUnit),
+        ...logoDoEmissor({
+          organization: null,
+          logoUrl: (await this.brands.read(issuerLogo(plan.businessUnit)))
+            ?.dataUrl,
+        }),
         tradeName: plan.businessUnit?.tradeName ?? undefined,
         legalName: plan.businessUnit?.legalName ?? undefined,
         document: documentoFormatado(
@@ -1204,6 +1269,11 @@ export class PmocService {
    */
   async activate(id: string, actor: PmocActor) {
     const plan = await this.plan(id, actor);
+    await this.assertPlanTechnicalResponsible(
+      plan.technicalResponsibleUserId,
+      actor,
+      plan.businessUnit.id,
+    );
     if (plan._count.coverages === 0) {
       throw new ConflictException(
         'A PMOC plan needs at least one covered equipment before activation',
@@ -1657,7 +1727,9 @@ export class PmocService {
       throw new EntityNotFoundException('Execução PMOC', cycleId);
     const assigned = data.existing
       ? data.existing.responsibleFieldTechnician.id === actor.actorId
-      : data.plan.technicianUserId === actor.actorId;
+      : (data.schedule
+          ? data.schedule.responsibleFieldTechnicianId
+          : data.plan.technicianUserId) === actor.actorId;
     if (
       !actor.isOrganizationOwner &&
       !assigned &&
@@ -1667,6 +1739,7 @@ export class PmocService {
     )
       throw new ForbiddenException(
         'Este atendimento de PMOC não está atribuído a você.',
+        'ATTENDANCE_NOT_ASSIGNED',
       );
 
     const technicalResponsibleEligibility = data.plan.technicalResponsibleUserId
@@ -1752,7 +1825,13 @@ export class PmocService {
         dueOn: toDateOnly(data.cycle.dueOn),
         timezone: 'America/Recife',
       },
-      eligibility,
+      schedule: this.equipmentScheduleView(data.schedule),
+      plannedFieldTechnicianId: data.schedule
+        ? data.schedule.responsibleFieldTechnicianId
+        : data.plan.technicianUserId,
+      eligibility: data.schedule?.cancelledAt
+        ? { ready: false, blockedReasons: ['EXECUTION_CANCELLED'] }
+        : eligibility,
       existingExecution: data.existing
         ? this.mapper.equipmentExecution(data.existing)
         : null,
@@ -1763,12 +1842,14 @@ export class PmocService {
             ? ['COMPLETE', 'ADD_EVIDENCE']
             : ['VIEW']
           : ['VIEW']
-        : blockedReasons.length
+        : blockedReasons.length || data.schedule?.cancelledAt
           ? []
           : actor.isOrganizationOwner ||
               actor.permissions.includes('*') ||
               actor.permissions.includes('pmoc.manage') ||
-              data.plan.technicianUserId === actor.actorId
+              (data.schedule
+                ? data.schedule.responsibleFieldTechnicianId
+                : data.plan.technicianUserId) === actor.actorId
             ? ['START']
             : [],
     };
@@ -1817,7 +1898,28 @@ export class PmocService {
       execution: row.equipmentExecutions[0]
         ? this.mapper.equipmentExecution(row.equipmentExecutions[0])
         : null,
-      status: row.equipmentExecutions[0]?.status ?? 'NOT_STARTED',
+      status: row.schedules?.[0]?.cancelledAt
+        ? 'CANCELLED'
+        : (row.equipmentExecutions[0]?.status ?? 'NOT_STARTED'),
+      schedule: this.equipmentScheduleView(row.schedules?.[0]),
+      plannedFieldTechnician: row.schedules?.[0]
+        ? row.schedules[0].responsibleFieldTechnician
+        : plan.technician,
+      management: {
+        version:
+          row.equipmentExecutions[0]?.updatedAt.toISOString() ??
+          row.schedules?.[0]?.updatedAt.toISOString() ??
+          'unplanned',
+        allowedActions:
+          managesRecurringAssignments(actor, 'PMOC') &&
+          plan.status === 'ACTIVE' &&
+          cycle.status === 'PENDING' &&
+          !row.schedules?.[0]?.cancelledAt &&
+          (!row.equipmentExecutions[0] ||
+            row.equipmentExecutions[0].status === 'IN_PROGRESS')
+            ? ['EDIT', 'ASSIGN', 'CANCEL']
+            : [],
+      },
       eligibility: executionEligibility({
         planStatus: plan.status,
         cycleStatus: cycle.status,
@@ -1826,6 +1928,169 @@ export class PmocService {
         technicalResponsible,
       }),
     }));
+  }
+
+  private equipmentScheduleView(
+    schedule:
+      | {
+          id: string;
+          updatedAt: Date;
+          responsibleFieldTechnician: {
+            id: string;
+            displayName: string;
+          } | null;
+          auxiliaryTechnicianIds: string[];
+          scheduledFor: Date | null;
+          notes: string | null;
+          cancelledAt: Date | null;
+          cancellationReason: string | null;
+        }
+      | null
+      | undefined,
+  ) {
+    return schedule
+      ? {
+          id: schedule.id,
+          version: schedule.updatedAt.toISOString(),
+          responsibleFieldTechnician: schedule.responsibleFieldTechnician,
+          auxiliaryTechnicianIds: schedule.auxiliaryTechnicianIds,
+          scheduledFor: schedule.scheduledFor?.toISOString() ?? null,
+          notes: schedule.notes,
+          cancelledAt: schedule.cancelledAt?.toISOString() ?? null,
+          cancellationReason: schedule.cancellationReason,
+        }
+      : null;
+  }
+
+  async manageEquipmentSchedule(
+    planId: string,
+    cycleId: string,
+    assetId: string,
+    actor: PmocActor,
+    input: UpdatePmocEquipmentScheduleDto | CancelPmocEquipmentScheduleDto,
+  ) {
+    this.assertPermission(
+      actor,
+      'pmoc.manage',
+      'Você não pode gerenciar execuções de PMOC.',
+    );
+    const data = await this.repository.executionPreparation(
+      actor.organizationId,
+      planId,
+      cycleId,
+      assetId,
+    );
+    if (!data) throw new EntityNotFoundException('Execução PMOC');
+    this.assertUnitInScope(actor, data.plan.businessUnitId);
+    const cancelling = 'reason' in input;
+    const update: UpdatePmocEquipmentScheduleDto = cancelling
+      ? { expectedVersion: input.expectedVersion }
+      : input;
+    const previousTechnician =
+      data.existing?.responsibleFieldTechnician.id ??
+      (data.schedule
+        ? data.schedule.responsibleFieldTechnicianId
+        : data.plan.technicianUserId);
+    const technician =
+      update.responsibleFieldTechnicianId === undefined
+        ? previousTechnician
+        : update.responsibleFieldTechnicianId;
+    const auxiliaries = [
+      ...new Set(
+        update.auxiliaryTechnicianIds ??
+          data.existing?.operation?.auxiliaryTechnicians.map(
+            (item) => item.user.id,
+          ) ??
+          data.schedule?.auxiliaryTechnicianIds ??
+          [],
+      ),
+    ].filter((id) => id !== technician);
+    if (!cancelling) {
+      const [field, assistants] = await Promise.all([
+        this.workforce.listPmocFieldTechnicians(
+          actor.organizationId,
+          data.plan.businessUnitId,
+        ),
+        this.workforce.listFieldAssistantCandidates(
+          actor.organizationId,
+          data.plan.businessUnitId,
+        ),
+      ]);
+      if (technician && !field.some((person) => person.id === technician))
+        throw new ValidationException(
+          'Escolha um técnico em campo ativo e habilitado nesta unidade.',
+        );
+      if (
+        auxiliaries.some((id) => !assistants.some((person) => person.id === id))
+      )
+        throw new ValidationException(
+          'Escolha auxiliares técnicos ativos nesta unidade.',
+        );
+    }
+    const schedule = await this.repository.manageEquipmentSchedule({
+      organizationId: actor.organizationId,
+      businessUnitId: data.plan.businessUnitId,
+      planId,
+      cycleId,
+      coverageId: data.coverage.id,
+      actorId: actor.actorId,
+      expectedVersion: input.expectedVersion,
+      responsibleFieldTechnicianId: technician ?? null,
+      auxiliaryTechnicianIds: auxiliaries,
+      scheduledFor:
+        update.scheduledFor === undefined
+          ? (data.schedule?.scheduledFor ?? null)
+          : update.scheduledFor,
+      notes:
+        update.notes === undefined
+          ? (data.existing?.notes ?? data.schedule?.notes ?? null)
+          : update.notes.trim() || null,
+      cancellationReason: cancelling ? input.reason : undefined,
+    });
+    // Authorization is not granted by assigning a technician. The existing cycle gate remains authoritative.
+    if (
+      !cancelling &&
+      technician &&
+      technician !== previousTechnician &&
+      (!data.assignmentAuthorizationRequired || data.cycle.authorizedAt)
+    ) {
+      await this.notifyEquipmentAssignment(
+        actor,
+        data.plan.businessUnitId,
+        technician,
+        cycleId,
+        assetId,
+        schedule.id,
+      );
+    }
+    return { saved: true };
+  }
+
+  private async notifyEquipmentAssignment(
+    actor: PmocActor,
+    businessUnitId: string,
+    recipientUserId: string,
+    cycleId: string,
+    assetId: string,
+    factId: string,
+  ) {
+    if (!this.mobileNotifications || recipientUserId === actor.actorId) return;
+    try {
+      await this.mobileNotifications.materialize({
+        organizationId: actor.organizationId,
+        businessUnitId,
+        recipientUserId,
+        type: 'WORK_ASSIGNED',
+        factId,
+        resourceId: factId,
+        workItemId: `PMOC:${cycleId}:${assetId}`,
+        correlationId: generateUuidV7(),
+      });
+    } catch {
+      this.logger.warn(
+        JSON.stringify({ event: 'pmoc_assignment_notification_failed' }),
+      );
+    }
   }
 
   /**
@@ -1882,7 +2147,9 @@ export class PmocService {
       throw new EntityNotFoundException('Execução PMOC', cycleId);
     const assignedTo =
       preparation.existing?.responsibleFieldTechnician.id ??
-      preparation.plan.technicianUserId;
+      (preparation.schedule
+        ? preparation.schedule.responsibleFieldTechnicianId
+        : preparation.plan.technicianUserId);
     if (!actor.isOrganizationOwner && assignedTo !== actor.actorId) {
       throw new ForbiddenException(
         'Este PMOC não está atribuído a você. Só o técnico atribuído — ou o dono da organização — pode atendê-lo.',
@@ -1898,6 +2165,7 @@ export class PmocService {
     return this.startEquipmentExecution(planId, cycleId, assetId, actor, {
       /* Abre para si mesmo. É o que distingue esta porta da outra. */
       responsibleFieldTechnicianId: actor.actorId,
+      auxiliaryTechnicianIds: preparation.schedule?.auxiliaryTechnicianIds,
     });
   }
 
@@ -1917,17 +2185,29 @@ export class PmocService {
     if (!preparation)
       throw new EntityNotFoundException('PmocEquipmentCoverage', assetId);
     this.assertUnitInScope(actor, preparation.plan.businessUnitId);
+    if (preparation.schedule?.cancelledAt)
+      throw new ConflictException(
+        'O atendimento deste equipamento foi cancelado.',
+      );
     if (
       preparation.plan.status !== 'ACTIVE' ||
       preparation.cycle.status !== 'PENDING'
     )
       throw new ConflictException(
-        'PMOC plan and cycle must be active and pending',
+        'O PMOC deve estar ativo e o ciclo deve estar em aberto para iniciar o atendimento.',
+        'PMOC_ATTENDANCE_UNAVAILABLE',
       );
     if (preparation.coverage.asset.status !== 'ACTIVE')
-      throw new ConflictException('Equipment is inactive');
+      throw new ConflictException(
+        'O equipamento está inativo no cadastro.',
+        'PMOC_EQUIPMENT_INACTIVE',
+      );
     if (!preparation.plan.technicalResponsibleUserId)
-      throw new ValidationException('TECHNICAL_RESPONSIBLE_MISSING');
+      throw new ValidationException(
+        'Defina o Responsável Técnico antes de iniciar este atendimento.',
+        undefined,
+        'PMOC_TECHNICAL_RESPONSIBLE_REQUIRED',
+      );
     await this.assertTechnicalResponsible(
       preparation.plan.technicalResponsibleUserId,
       actor,
@@ -1947,7 +2227,7 @@ export class PmocService {
     const eligible = new Set(professionals.map((item) => item.id));
     if (!eligible.has(input.responsibleFieldTechnicianId))
       throw new ValidationException(
-        'Responsible field technician is not eligible for this business unit',
+        'Selecione um técnico de campo habilitado nesta unidade.',
       );
     const auxiliaries = [...new Set(input.auxiliaryTechnicianIds ?? [])].filter(
       (id) => id !== input.responsibleFieldTechnicianId,
@@ -1957,7 +2237,7 @@ export class PmocService {
     );
     if (auxiliaries.some((id) => !eligibleAssistants.has(id)))
       throw new ValidationException(
-        'One or more auxiliary technicians are not eligible for this business unit',
+        'Selecione auxiliares habilitados nesta unidade.',
       );
     const result = await this.repository.startEquipmentExecution({
       organizationId: actor.organizationId,
@@ -1987,8 +2267,16 @@ export class PmocService {
       ),
       title: `${preparation.plan.name} — ${preparation.coverage.asset.name}`,
       authorizationBypass: managesRecurringAssignments(actor, 'PMOC'),
+      restrictToTechnicianId: managesRecurringAssignments(actor, 'PMOC')
+        ? undefined
+        : actor.actorId,
     });
-    if (result.created && this.mobileNotifications) {
+    if (
+      result.created &&
+      this.mobileNotifications &&
+      (!preparation.assignmentAuthorizationRequired ||
+        preparation.cycle.authorizedAt)
+    ) {
       for (const recipientUserId of [
         input.responsibleFieldTechnicianId,
         ...auxiliaries,
@@ -2043,7 +2331,8 @@ export class PmocService {
       );
     if (result.limitReached)
       throw new ConflictException(
-        'A PMOC equipment execution accepts at most 6 evidence files',
+        'O atendimento aceita até 6 arquivos de evidência.',
+        'EVIDENCE_LIMIT_REACHED',
       );
     return { id: result.evidence.id };
   }
@@ -2121,6 +2410,7 @@ export class PmocService {
          não que o documento falhou. */
       throw new ForbiddenException(
         'Só o técnico escalado para esta execução — ou o dono da organização — pode emitir o relatório dela.',
+        'ATTENDANCE_NOT_ASSIGNED',
       );
     }
     if (
@@ -2209,10 +2499,14 @@ export class PmocService {
          procurar o estado errado. */
       throw new ForbiddenException(
         'Só o técnico escalado para esta execução — ou o dono da organização — pode concluí-la.',
+        'ATTENDANCE_NOT_ASSIGNED',
       );
     }
     if (result.refused === 'NOT_IN_PROGRESS') {
-      throw new ConflictException('Equipment execution is not in progress');
+      throw new ConflictException(
+        'Este atendimento já saiu de andamento. Atualize para ver a situação.',
+        'RESOURCE_VERSION_CONFLICT',
+      );
     }
     if (result.allResolved) {
       const refreshed = await this.plan(planId, actor);
@@ -2526,6 +2820,20 @@ export class PmocService {
     }
   }
 
+  private async assertPlanTechnicalResponsible(
+    userId: string | null | undefined,
+    actor: PmocActor,
+    businessUnitId: string,
+  ): Promise<void> {
+    if (!userId)
+      throw new ValidationException(
+        'Defina um Responsável Técnico para este PMOC antes de salvar ou ativar o plano.',
+        undefined,
+        'PMOC_TECHNICAL_RESPONSIBLE_REQUIRED',
+      );
+    await this.assertTechnicalResponsible(userId, actor, businessUnitId);
+  }
+
   private async assertTechnicalResponsible(
     userId: string,
     actor: PmocActor,
@@ -2543,7 +2851,13 @@ export class PmocService {
       (requireSignature && !professional.signatureAvailable)
     ) {
       throw new ValidationException(
-        `Technical responsible is not eligible for PMOC: ${professional ? 'SIGNATURE_MISSING' : 'PROFESSIONAL_ROLE_OR_SCOPE_MISSING'}`,
+        professional
+          ? 'O Responsável Técnico precisa cadastrar uma assinatura ativa antes de iniciar a execução do PMOC.'
+          : 'Selecione um Responsável Técnico ativo e habilitado na unidade deste PMOC. Confira o perfil profissional em Equipe.',
+        undefined,
+        professional
+          ? 'SIGNATURE_MISSING'
+          : 'PMOC_TECHNICAL_RESPONSIBLE_REQUIRED',
       );
     }
   }
@@ -2572,7 +2886,10 @@ export class PmocService {
       actor.businessUnitIds.length > 0 &&
       !actor.businessUnitIds.includes(businessUnitId)
     ) {
-      throw new ForbiddenException('This business unit is out of your scope');
+      throw new ForbiddenException(
+        'Seu acesso não inclui esta unidade.',
+        'PMOC_ACTION_FORBIDDEN',
+      );
     }
   }
 
@@ -2583,7 +2900,7 @@ export class PmocService {
   ): void {
     const granted = new Set(actor.permissions);
     if (!granted.has('*') && !granted.has(permission)) {
-      throw new ForbiddenException(message);
+      throw new ForbiddenException(message, 'PMOC_ACTION_FORBIDDEN');
     }
   }
 

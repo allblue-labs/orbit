@@ -1,0 +1,242 @@
+{
+  "pr": "PR-02",
+  "reviewDate": "2026-11-12",
+  "baseCommit": "5b922b8f0d6223eb92c228120500d47039377fd2",
+  "lockfile": "frontend/package-lock.json",
+  "lockfileSha256": "ed900ae05688b334d0c653860483afc02a477e65ed21cc932a2aa5d2b55c7b07",
+  "updatedPackages": [
+    {
+      "name": "next",
+      "before": "16.3.4",
+      "after": "16.4.6"
+    },
+    {
+      "name": "react",
+      "before": "19.2.8",
+      "after": "19.3.1"
+    },
+    {
+      "name": "react-dom",
+      "before": "19.2.8",
+      "after": "19.3.1"
+    },
+    {
+      "name": "sharp",
+      "before": "0.35.4",
+      "after": "0.35.5"
+    },
+    {
+      "name": "source-map-js",
+      "before": "1.2.1",
+      "after": "1.2.2"
+    },
+    {
+      "name": "zod",
+      "before": "3.25.76",
+      "after": "4.6.7"
+    },
+    {
+      "name": "eslint-config-next",
+      "before": "16.3.4",
+      "after": "16.4.6"
+    },
+    {
+      "name": "vitest",
+      "before": "3.2.7",
+      "after": "4.1.12"
+    },
+    {
+      "name": "vite",
+      "before": "7.3.6",
+      "after": "8.3.8"
+    },
+    {
+      "name": "typescript-eslint",
+      "before": "8.65.0",
+      "after": "8.72.2"
+    },
+    {
+      "name": "brace-expansion",
+      "before": "1.1.18",
+      "after": "1.1.22"
+    }
+  ],
+  "productionAudit": {
+    "command": "npm audit --omit=dev --json",
+    "before": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 3,
+      "critical": 1,
+      "total": 4
+    },
+    "afterLocal": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    },
+    "afterLinuxNode22": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    },
+    "exitCodeAfterLocal": 0,
+    "exitCodeAfterLinux": 0
+  },
+  "developmentAudit": {
+    "local": {
+      "info": 0,
+      "low": 0,
+      "moderate": 7,
+      "high": 0,
+      "critical": 0,
+      "total": 7
+    },
+    "linuxNpm10": {
+      "info": 0,
+      "low": 0,
+      "moderate": 8,
+      "high": 0,
+      "critical": 0,
+      "total": 8
+    },
+    "remainingLocalPackages": [
+      {
+        "name": "@typescript-eslint/eslint-plugin",
+        "severity": "moderate"
+      },
+      {
+        "name": "@typescript-eslint/parser",
+        "severity": "moderate"
+      },
+      {
+        "name": "@typescript-eslint/type-utils",
+        "severity": "moderate"
+      },
+      {
+        "name": "@typescript-eslint/typescript-estree",
+        "severity": "moderate"
+      },
+      {
+        "name": "@typescript-eslint/utils",
+        "severity": "moderate"
+      },
+      {
+        "name": "minimatch",
+        "severity": "moderate"
+      },
+      {
+        "name": "typescript-eslint",
+        "severity": "moderate"
+      }
+    ],
+    "remainingLinuxPackages": [
+      {
+        "name": "@typescript-eslint/eslint-plugin",
+        "severity": "moderate"
+      },
+      {
+        "name": "@typescript-eslint/parser",
+        "severity": "moderate"
+      },
+      {
+        "name": "@typescript-eslint/type-utils",
+        "severity": "moderate"
+      },
+      {
+        "name": "@typescript-eslint/typescript-estree",
+        "severity": "moderate"
+      },
+      {
+        "name": "@typescript-eslint/utils",
+        "severity": "moderate"
+      },
+      {
+        "name": "eslint-config-next",
+        "severity": "moderate"
+      },
+      {
+        "name": "minimatch",
+        "severity": "moderate"
+      },
+      {
+        "name": "typescript-eslint",
+        "severity": "moderate"
+      }
+    ],
+    "note": "npm 10 additionally propagates the same Minimatch advisory to eslint-config-next; no downgrade of the Next preset was forced",
+    "followUp": "PR-03"
+  },
+  "checks": {
+    "cleanInstall": {
+      "command": "npm ci --no-audit",
+      "passed": true
+    },
+    "unit": {
+      "command": "npm test",
+      "filesPassed": 67,
+      "testsPassed": 668,
+      "newSignupSchemaAndResolverTests": 12,
+      "failed": 0
+    },
+    "typecheck": {
+      "command": "npm run typecheck",
+      "passed": true
+    },
+    "changedFilesEslint": {
+      "passed": true
+    },
+    "completeLint": {
+      "command": "npm run lint",
+      "eslintPassed": true,
+      "languageCheckPassed": false,
+      "preexistingLanguageOccurrences": 8,
+      "followUp": "PR-03"
+    }
+  },
+  "standalone": {
+    "buildCommand": "docker build --target runner --tag orbit-pr02-frontend:review --file frontend/Dockerfile frontend",
+    "buildPassed": true,
+    "bundler": "Turbopack (default)",
+    "imageId": "sha256:4a29653baca2f207609285e860e1fad424854ed5ff42512a92a45175f89c481e",
+    "runtime": {
+      "node": "v22.23.5",
+      "platform": "linux",
+      "arch": "x64",
+      "uid": 1001,
+      "next": "16.4.6",
+      "sharp": "0.35.5"
+    }
+  },
+  "browserSmoke": {
+    "command": "npm run test:dependencies",
+    "browser": "Chromium",
+    "passed": 5,
+    "failed": 0,
+    "target": "Standalone Node 22 image, loopback HTTP, synthetic upstream",
+    "coverage": [
+      "plan-to-signup navigation and hydration",
+      "optimized PNG/WebP image response",
+      "BFF session, Secure/HttpOnly/SameSite cookies, logout and untrusted-origin refusal",
+      "public proposal signature collection and response rendering",
+      "mandatory Portuguese consent via click and Enter, including English browser and mobile viewport"
+    ],
+    "fullDatabaseE2eQualified": false,
+    "realTlsCookiePersistenceQualified": false,
+    "backendSignatureOrPdfValidityQualified": false
+  },
+  "limits": [
+    "Full real-tenant browser E2E remains for PR-03/PR-19",
+    "Synthetic upstream does not validate backend authorization or real signature/PDF issuance",
+    "No production database, AWS SES, Firebase push or Stripe calls",
+    "Initial Docker-network and HTTP-harness setup errors were corrected before the final five passing smokes",
+    "Development advisories and eight existing language findings remain explicitly assigned to PR-03"
+  ]
+}

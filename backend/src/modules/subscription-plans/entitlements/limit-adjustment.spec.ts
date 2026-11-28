@@ -61,6 +61,7 @@ describe('adequação de limites após a renovação', () => {
       {} as never,
       {} as never,
       new EntitlementMetrics(),
+      {} as never,
       new EntitlementMapper(),
     );
     const before = await service.describe('org');

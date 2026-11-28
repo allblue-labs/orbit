@@ -104,9 +104,9 @@ export function JsonField({
         )}
       >
         {draft.invalid
-          ? "JSON inválido — o último valor válido continua guardado."
+          ? "Conteúdo em formato inválido — o último valor válido continua guardado."
           : (description ??
-            "JSON livre, interpretado pelo consumidor do artefato.")}
+            "Configuração avançada do campo.")}
       </p>
     </div>
   );

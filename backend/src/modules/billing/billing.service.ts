@@ -1,3 +1,7 @@
+import { CommercialPlanService } from '../subscription-plans/catalog/commercial-plan.service';
+import { snapshotOf } from '../subscription-plans/subscriptions/subscription.snapshot';
+import type { Prisma } from '@prisma/client';
+import type { PrismaTransactionClient } from '../../database/prisma.types';
 /**
  * Os comandos de cobrança, do lado do Orbit.
  *
@@ -20,13 +24,11 @@ import { generateUuidV7 } from '../../utils';
 import { TrialEligibilityService } from '../subscription-plans/subscriptions/trial-eligibility.service';
 import { SubscriptionService } from '../subscription-plans/subscriptions/subscription.service';
 import {
-  TRIAL_DAYS,
   allowsPlanChange,
   allowsInitialCheckout,
   SubscriptionStatus,
 } from '../subscription-plans/subscriptions/subscription.types';
 import {
-  PlanCode,
   type BillingInterval as BillingIntervalType,
   type PlanCode as PlanCodeType,
 } from '../subscription-plans/catalog/plan-catalog.types';
@@ -42,9 +44,26 @@ import {
 import {
   BILLING_PROVIDER,
   ProviderCheckoutState,
+  ProviderInvoiceStatus,
   type BillingProvider,
   type CheckoutSession,
 } from './billing.types';
+import {
+  BillingPolicyService,
+  canRefundPurchase,
+} from './billing-policy.service';
+import { BillingInterval } from '../subscription-plans/catalog/plan-catalog.types';
+
+type PlanChangeRequest = {
+  organizationId: string;
+  expectedVersion: number;
+  planCode: PlanCodeType;
+  expectedCatalogVersion?: number;
+  billingInterval?: BillingIntervalType;
+  acknowledgeTrialEnd?: boolean;
+  acknowledgeImmediateCharge?: boolean;
+  requestedBy?: string;
+};
 
 @Injectable()
 export class BillingService {
@@ -53,6 +72,8 @@ export class BillingService {
     private readonly repository: BillingRepository,
     private readonly subscriptions: SubscriptionService,
     private readonly trials: TrialEligibilityService,
+    private readonly plans: CommercialPlanService,
+    private readonly policies: BillingPolicyService,
   ) {}
 
   isEnabled(): boolean {
@@ -102,12 +123,27 @@ export class BillingService {
   async createCheckoutSession(input: {
     organizationId: string;
     planCode: PlanCodeType;
+    expectedCatalogVersion?: number;
     billingInterval: BillingIntervalType;
+    promotionCode?: string;
     /** Somente o comando autenticado de troca autoriza um destino diferente. */
     changePlan?: boolean;
     acknowledgeTrialEnd?: boolean;
+    acknowledgeImmediateCharge?: boolean;
+    requestedBy?: string;
   }): Promise<CheckoutSession> {
     this.assertEnabled();
+    const promotionCode = input.promotionCode?.toUpperCase();
+    const offer = await this.plans.selectable(
+      input.planCode,
+      input.organizationId,
+    );
+    this.assertCatalogVersion(offer.version, input.expectedCatalogVersion);
+    const quotedPriceId = offer.prices[input.billingInterval]?.stripePriceId;
+    if (!quotedPriceId)
+      throw new BillingCheckoutNotAllowedException(
+        'no price published for this offer',
+      );
     const existing = await this.subscriptions.currentOrNull(
       input.organizationId,
     );
@@ -144,12 +180,20 @@ export class BillingService {
 
     const endsTrial =
       assinatura.effectiveStatus === SubscriptionStatus.TRIALING &&
-      (input.planCode !== PlanCode.ESSENTIAL || input.changePlan === true);
+      (input.planCode !== assinatura.planCode || input.changePlan === true);
     if (endsTrial && input.acknowledgeTrialEnd !== true) {
       throw new BillingCommandNotAllowedException(
         'trial termination must be acknowledged before checkout',
       );
     }
+
+    if (
+      promotionCode &&
+      assinatura.effectiveStatus !== SubscriptionStatus.PENDING_PAYMENT
+    )
+      throw new BillingCheckoutNotAllowedException(
+        'promotion requires a paid checkout without trial',
+      );
 
     const customer = await this.ensureCustomer(input.organizationId);
 
@@ -167,6 +211,12 @@ export class BillingService {
         idempotencyKey: this.chave('checkout-attempt', attemptId),
         subscriptionVersion: assinatura.version,
         endsTrial,
+        quotedPriceId,
+        ...(promotionCode ? { promotionCode } : {}),
+        quotedCatalogVersion: offer.version,
+        quotedEntitlements: snapshotOf(
+          offer,
+        ) as unknown as Prisma.InputJsonValue,
       });
 
       // Uma sessão expirada pode ser substituída, inclusive por outro plano.
@@ -196,6 +246,9 @@ export class BillingService {
           (attempt.subscriptionVersion == null ||
             attempt.subscriptionVersion === assinatura.version) &&
           attempt.endsTrial === endsTrial &&
+          (attempt.promotionCode ?? undefined) === promotionCode &&
+          (attempt.quotedPriceId === null ||
+            attempt.quotedPriceId === quotedPriceId) &&
           currentSession.url
         ) {
           return {
@@ -217,7 +270,8 @@ export class BillingService {
         attempt.billingCustomerId !== customer.id ||
         (attempt.subscriptionVersion != null &&
           attempt.subscriptionVersion !== assinatura.version) ||
-        attempt.endsTrial !== endsTrial
+        attempt.endsTrial !== endsTrial ||
+        (attempt.promotionCode ?? undefined) !== promotionCode
       ) {
         throw new BillingCheckoutNotAllowedException(
           'another checkout is being created',
@@ -229,15 +283,29 @@ export class BillingService {
        * responder, a mesma chave recupera a mesma sessão sem criar cobrança
        * paralela.
        */
+      if (
+        attempt.promotionCheckoutExpiresAt &&
+        attempt.promotionCheckoutExpiresAt.getTime() <= Date.now()
+      )
+        throw new BillingCheckoutNotAllowedException(
+          'unconfirmed promotional checkout requires reconciliation',
+        );
       const session = await this.provider.createCheckoutSession({
         checkoutAttemptId: attempt.id,
+        ...(attempt.providerPromotionId && attempt.promotionCheckoutExpiresAt
+          ? {
+              promotion: {
+                providerId: attempt.providerPromotionId,
+                expiresAt: attempt.promotionCheckoutExpiresAt,
+              },
+            }
+          : {}),
+        priceId: attempt.quotedPriceId ?? quotedPriceId,
         organizationId: input.organizationId,
         providerCustomerId: customer.providerCustomerId,
         planCode: input.planCode,
         billingInterval: input.billingInterval,
-        trialDays: endsTrial
-          ? null
-          : this.diasDeAvaliacao(assinatura, input.planCode),
+        trialDays: endsTrial ? null : this.diasDeAvaliacao(assinatura),
         subscriptionId: assinatura.id,
         idempotencyKey: attempt.idempotencyKey,
       });
@@ -264,30 +332,118 @@ export class BillingService {
     });
   }
 
-  /** Agenda o fim no provedor antes de refletir qualquer estado local. */
+  /** O estorno elegível é registrado antes que o worker escreva no Stripe. */
   async cancelSubscription(
     organizationId: string,
     expectedVersion: number,
     acknowledgeDataDeletion = false,
-  ): Promise<void> {
+    requestedBy?: string,
+  ) {
+    const requestedAt = new Date();
     const assinatura = await this.requireExpected(
       organizationId,
       expectedVersion,
     );
+    if (!acknowledgeDataDeletion) {
+      throw new BillingCommandNotAllowedException(
+        'Confirme o prazo de retenção antes de cancelar.',
+      );
+    }
     if (!assinatura.providerSubscriptionId) {
       await this.subscriptions.cancelAtPeriodEnd(
         organizationId,
         expectedVersion,
         acknowledgeDataDeletion,
       );
-      return;
+      return { kind: 'SCHEDULED' as const };
     }
-
     this.assertEnabled();
     await this.assertProviderTarget(assinatura);
+    const ticket = {
+      organizationId,
+      subscriptionId: assinatura.id,
+      requestedBy,
+    };
+    if (assinatura.status !== SubscriptionStatus.TRIALING) {
+      const previous = await this.policies.refundRequest(assinatura.id);
+      if (previous && previous.status !== 'REVIEW')
+        return { kind: 'REFUND_REQUESTED' as const };
+      if (previous?.status === 'REVIEW')
+        return this.policies.ticket({
+          ...ticket,
+          kind: 'REFUND_REVIEW',
+          reference: previous.invoiceId,
+        });
+      const invoiceId = await this.policies.purchaseInvoiceId(
+        assinatura.id,
+        assinatura.billingAnchorAt,
+      );
+      if (invoiceId && this.provider.refundAndCancel) {
+        const invoice = await this.provider.retrieveInvoice(invoiceId);
+        const payment = invoice.paymentEvidence?.[0];
+        if (invoice.paidAt && canRefundPurchase(invoice.paidAt, requestedAt)) {
+          if (
+            invoice.providerCustomerId !== assinatura.providerCustomerId ||
+            invoice.providerSubscriptionId !==
+              assinatura.providerSubscriptionId ||
+            invoice.status !== ProviderInvoiceStatus.PAID ||
+            invoice.amountRemainingMinor !== 0 ||
+            invoice.creditNotesMinor !== 0 ||
+            !invoice.subscriptionLines?.some(
+              (line) =>
+                line.subscriptionId === assinatura.providerSubscriptionId &&
+                line.priceId === assinatura.providerPriceId &&
+                line.periodStart.getTime() ===
+                  assinatura.billingAnchorAt.getTime(),
+            ) ||
+            invoice.paymentEvidence?.length !== 1 ||
+            !payment ||
+            payment.amountMinor !== invoice.amountPaidMinor ||
+            payment.currency !== invoice.currency
+          ) {
+            return this.policies.ticket({
+              ...ticket,
+              kind: 'REFUND_REVIEW',
+              reference: invoiceId,
+            });
+          }
+          await this.policies.reserveRefund({
+            ...ticket,
+            subscriptionVersion: expectedVersion,
+            invoiceId,
+            paymentIntentId: payment.paymentIntentId,
+            amountMinor: payment.amountMinor,
+            requestedAt,
+          });
+          return { kind: 'REFUND_REQUESTED' as const };
+        }
+      }
+      // Preserva o acesso comprado, impede a próxima cobrança e registra a análise.
+      return this.policies.locked(assinatura.id, expectedVersion, async () => {
+        const result = await this.policies.ticket({
+          ...ticket,
+          kind: 'CANCELLATION',
+          reference: invoiceId ?? '',
+        });
+        await this.scheduleCancellation(assinatura, acknowledgeDataDeletion);
+        return result;
+      });
+    }
+    await this.policies.locked(assinatura.id, expectedVersion, () =>
+      this.scheduleCancellation(assinatura, acknowledgeDataDeletion),
+    );
+    return { kind: 'SCHEDULED' as const };
+  }
+
+  private async scheduleCancellation(
+    assinatura: Awaited<ReturnType<SubscriptionService['requireCurrent']>>,
+    acknowledgeDataDeletion: boolean,
+  ): Promise<void> {
+    const { organizationId, version: expectedVersion } = assinatura;
+    if (assinatura.cancelAtPeriodEnd) return;
     if (assinatura.pendingPlanCode) {
       const released = await this.provider.cancelScheduledPlanChange({
-        providerSubscriptionId: assinatura.providerSubscriptionId,
+        providerSubscriptionId: assinatura.providerSubscriptionId!,
         organizationId,
         subscriptionId: assinatura.id,
         idempotencyKey: this.chave(
@@ -298,7 +454,7 @@ export class BillingService {
       this.assertProviderOwnership(assinatura, released);
     }
     const provedor = await this.provider.setCancelAtPeriodEnd({
-      providerSubscriptionId: assinatura.providerSubscriptionId,
+      providerSubscriptionId: assinatura.providerSubscriptionId!,
       cancelAtPeriodEnd: true,
       idempotencyKey: this.chave(
         'cancel-subscription',
@@ -323,83 +479,77 @@ export class BillingService {
   async keepSubscription(
     organizationId: string,
     expectedVersion: number,
+    localSubscriptionId?: string,
   ): Promise<void> {
     const assinatura = await this.requireExpected(
       organizationId,
       expectedVersion,
+      localSubscriptionId,
     );
+    if (localSubscriptionId && assinatura.providerSubscriptionId)
+      throw new BillingCommandNotAllowedException(
+        'Provider-linked agreement requires the customer billing flow',
+      );
     if (!assinatura.cancelAtPeriodEnd) {
       throw new BillingCommandNotAllowedException('no scheduled cancellation');
     }
     if (!assinatura.providerSubscriptionId) {
+      if (localSubscriptionId)
+        await this.policies.assertNoPendingPayment(assinatura.id);
       await this.subscriptions.keepSubscription(
         organizationId,
         expectedVersion,
+        ...(localSubscriptionId ? ([localSubscriptionId] as const) : []),
       );
       return;
     }
 
-    this.assertEnabled();
-    await this.assertProviderTarget(assinatura);
-    const provedor = await this.provider.setCancelAtPeriodEnd({
-      providerSubscriptionId: assinatura.providerSubscriptionId,
-      cancelAtPeriodEnd: false,
-      idempotencyKey: this.chave(
-        'keep-subscription',
-        `${assinatura.id}:${expectedVersion}`,
-      ),
-    });
-    this.assertProviderOwnership(assinatura, provedor);
-    if (provedor.cancelAtPeriodEnd) {
-      throw new BillingCommandNotAllowedException(
-        'provider kept cancellation scheduled',
+    await this.policies.locked(assinatura.id, expectedVersion, async () => {
+      this.assertEnabled();
+      await this.assertProviderTarget(assinatura);
+      const provedor = await this.provider.setCancelAtPeriodEnd({
+        providerSubscriptionId: assinatura.providerSubscriptionId!,
+        cancelAtPeriodEnd: false,
+        idempotencyKey: this.chave(
+          'keep-subscription',
+          `${assinatura.id}:${expectedVersion}`,
+        ),
+      });
+      this.assertProviderOwnership(assinatura, provedor);
+      if (provedor.cancelAtPeriodEnd) {
+        throw new BillingCommandNotAllowedException(
+          'provider kept cancellation scheduled',
+        );
+      }
+      await this.subscriptions.applyProviderCancellation(
+        organizationId,
+        expectedVersion,
+        false,
       );
-    }
-    await this.subscriptions.applyProviderCancellation(
-      organizationId,
-      expectedVersion,
-      false,
-    );
+    });
   }
 
   /**
    * Troca comercial com autoridade financeira externa.
    *
-   * Teste inédito começa localmente; planos pagos são agendados na renovação.
    * A confirmação hospedada é usada para contratar ou encerrar uma avaliação.
+   * Contratos pagos aplicam a política de upgrade, renovação ou análise.
    */
-  async changeSubscriptionPlan(input: {
-    organizationId: string;
-    expectedVersion: number;
-    planCode: PlanCodeType;
-    billingInterval?: BillingIntervalType;
-    acknowledgeTrialEnd?: boolean;
-  }): Promise<
+  async changeSubscriptionPlan(
+    input: PlanChangeRequest,
+  ): Promise<
     | { url: string }
     | { kind: 'TRIAL_STARTED'; endsAt: string }
     | { kind: 'SCHEDULED'; effectiveAt: string }
+    | { kind: 'SUPPORT_TICKET'; ticketId: string }
+    | { kind: 'UPGRADE_PROCESSING' }
   > {
-    this.assertEnabled();
-    const assinatura = await this.requireExpected(
-      input.organizationId,
-      input.expectedVersion,
-    );
-    const targetInterval = input.billingInterval ?? assinatura.billingInterval;
-    if (!allowsPlanChange(assinatura.effectiveStatus)) {
-      throw new BillingCommandNotAllowedException(
-        'subscription status does not allow a plan change',
-      );
-    }
-    if (
-      assinatura.planCode === input.planCode &&
-      assinatura.billingInterval === targetInterval
-    ) {
-      throw new BillingCommandNotAllowedException('no change requested');
-    }
+    const { assinatura, offer, targetInterval } =
+      await this.preparePlanChange(input);
     if (
       assinatura.effectiveStatus === SubscriptionStatus.PENDING_PAYMENT &&
       !assinatura.providerSubscriptionId &&
-      input.planCode === PlanCode.ESSENTIAL &&
+      (await this.trials.offersTrial(input.planCode, input.organizationId)) &&
       (await this.trials.canStartPendingTrial(input.organizationId))
     ) {
       const attempt = await this.repository.activeCheckout(
@@ -429,6 +579,7 @@ export class BillingService {
         input.organizationId,
         input.expectedVersion,
         targetInterval,
+        input.planCode,
       );
       return {
         kind: 'TRIAL_STARTED',
@@ -442,6 +593,13 @@ export class BillingService {
         'trial termination must be acknowledged',
       );
     }
+    const sendToSupport = () =>
+      this.policies.ticket(
+        this.planChangeTicketInput(input, assinatura.id, targetInterval),
+      );
+    if (this.requiresPlanChangeReview(assinatura, targetInterval))
+      return sendToSupport();
+
     if (!assinatura.providerSubscriptionId) {
       return this.createCheckoutSession({
         ...input,
@@ -449,44 +607,148 @@ export class BillingService {
         changePlan: true,
       });
     }
+    const priceId = offer.prices[targetInterval]?.stripePriceId;
+    if (!priceId)
+      throw new BillingCheckoutNotAllowedException(
+        'no price published for this offer',
+      );
     await this.assertProviderTarget(assinatura);
     if (assinatura.effectiveStatus === SubscriptionStatus.ACTIVE) {
       if (assinatura.cancelAtPeriodEnd)
         throw new BillingCommandNotAllowedException(
           'resume renewal before scheduling a change',
         );
-      const change = await this.provider.changePlan({
-        providerSubscriptionId: assinatura.providerSubscriptionId,
-        organizationId: input.organizationId,
-        subscriptionId: assinatura.id,
-        planCode: input.planCode,
-        billingInterval: targetInterval,
-        timing: 'PERIOD_END',
-        idempotencyKey: this.chave(
-          'schedule-plan-change',
-          `${assinatura.id}:${input.expectedVersion}:${input.planCode}:${targetInterval}`,
-        ),
-      });
-      this.assertProviderOwnership(assinatura, change.subscription);
-      if (!change.scheduled || !change.effectiveAt)
-        throw new BillingCommandNotAllowedException(
-          'provider did not schedule the change',
+      const currentPriceId = assinatura.providerPriceId;
+      const currentPrice = currentPriceId
+        ? await this.plans.stripePrice(currentPriceId)
+        : null;
+      const nextPrice = offer.prices[BillingInterval.MONTHLY];
+      if (!currentPrice || !currentPriceId || !nextPrice)
+        return sendToSupport();
+      if (nextPrice.amountMinor > currentPrice.amountMinor) {
+        if (input.acknowledgeImmediateCharge !== true)
+          throw new BillingCommandNotAllowedException(
+            'Confirme a cobrança proporcional e o início de um novo ciclo.',
+          );
+        if (assinatura.pendingPlanCode)
+          throw new BillingCommandNotAllowedException(
+            'Desfaça a troca agendada antes de confirmar um upgrade.',
+          );
+        if (!this.provider.beginMonthlyUpgrade) return sendToSupport();
+        const existing = await this.policies.pendingUpgrade(assinatura.id);
+        if (existing?.invoiceId) {
+          const invoice = await this.provider.retrieveInvoice(
+            existing.invoiceId,
+          );
+          if (
+            invoice.status === ProviderInvoiceStatus.VOID ||
+            invoice.status === ProviderInvoiceStatus.UNCOLLECTIBLE
+          )
+            await this.policies.finishUpgrade(existing.id, 'EXPIRED');
+          else if (
+            existing.priceId === priceId &&
+            existing.catalogVersion === offer.version
+          ) {
+            if (
+              invoice.status === ProviderInvoiceStatus.OPEN &&
+              invoice.hostedInvoiceUrl
+            )
+              return { url: invoice.hostedInvoiceUrl };
+            return { kind: 'UPGRADE_PROCESSING' };
+          }
+        }
+        const request = await this.policies.reserveUpgrade({
+          organizationId: input.organizationId,
+          subscriptionId: assinatura.id,
+          subscriptionVersion: input.expectedVersion,
+          requestedBy: input.requestedBy,
+          previousPeriodStart: assinatura.currentPeriodStart,
+          previousPeriodEnd: assinatura.currentPeriodEnd,
+          priceId,
+          catalogVersion: offer.version,
+          entitlements: snapshotOf(offer) as unknown as Prisma.InputJsonValue,
+        });
+        const { invoice, subscription } = await this.provider
+          .beginMonthlyUpgrade({
+            requestId: request.id,
+            requestedAt: request.createdAt,
+            providerSubscriptionId: assinatura.providerSubscriptionId,
+            providerCustomerId: assinatura.providerCustomerId!,
+            currentPriceId,
+            currentPeriodStart: request.previousPeriodStart,
+            currentPeriodEnd: request.previousPeriodEnd,
+            priceId,
+            planCode: input.planCode,
+            organizationId: input.organizationId,
+            subscriptionId: assinatura.id,
+          })
+          .catch(async (error: unknown) => {
+            if (error instanceof BillingCommandNotAllowedException)
+              await this.policies.finishUpgrade(request.id, 'EXPIRED');
+            throw error;
+          });
+        this.assertProviderOwnership(assinatura, subscription);
+        if (
+          invoice.providerCustomerId !== assinatura.providerCustomerId ||
+          invoice.providerSubscriptionId !==
+            assinatura.providerSubscriptionId ||
+          invoice.billingReason !== 'subscription_update'
+        )
+          throw new BillingCommandNotAllowedException(
+            'Fatura da troca não reconhecida.',
+          );
+        await this.policies.attachUpgradeInvoice(
+          request.id,
+          invoice.providerInvoiceId,
         );
-      await this.subscriptions.scheduleProviderPlanChange(
-        input.organizationId,
+        if (
+          invoice.status === ProviderInvoiceStatus.OPEN &&
+          invoice.hostedInvoiceUrl
+        )
+          return { url: invoice.hostedInvoiceUrl };
+        return { kind: 'UPGRADE_PROCESSING' };
+      }
+      return this.policies.locked(
+        assinatura.id,
         input.expectedVersion,
-        input.planCode,
-        targetInterval,
-        change.effectiveAt,
+        async () => {
+          const change = await this.provider.changePlan({
+            providerSubscriptionId: assinatura.providerSubscriptionId!,
+            organizationId: input.organizationId,
+            subscriptionId: assinatura.id,
+            planCode: input.planCode,
+            billingInterval: targetInterval,
+            priceId,
+            timing: 'PERIOD_END',
+            idempotencyKey: this.chave(
+              'schedule-plan-change',
+              `${assinatura.id}:${input.expectedVersion}:${input.planCode}:${targetInterval}`,
+            ),
+          });
+          this.assertProviderOwnership(assinatura, change.subscription);
+          if (!change.scheduled || !change.effectiveAt)
+            throw new BillingCommandNotAllowedException(
+              'provider did not schedule the change',
+            );
+          await this.subscriptions.scheduleProviderPlanChange(
+            input.organizationId,
+            input.expectedVersion,
+            input.planCode,
+            targetInterval,
+            change.effectiveAt,
+            offer,
+          );
+          return {
+            kind: 'SCHEDULED' as const,
+            effectiveAt: change.effectiveAt.toISOString(),
+          };
+        },
       );
-      return {
-        kind: 'SCHEDULED',
-        effectiveAt: change.effectiveAt.toISOString(),
-      };
     }
     // Apenas abre a confirmação hospedada. O webhook verifica o pagamento
     // antes de aplicar qualquer mudança aos direitos da organização.
     return this.provider.createPlanChangeSession({
+      organizationId: input.organizationId,
       providerCustomerId: assinatura.providerCustomerId!,
       providerSubscriptionId: assinatura.providerSubscriptionId,
       planCode: input.planCode,
@@ -497,38 +759,163 @@ export class BillingService {
   async cancelScheduledPlanChange(
     organizationId: string,
     expectedVersion: number,
+    localSubscriptionId?: string,
   ): Promise<void> {
     const assinatura = await this.requireExpected(
       organizationId,
       expectedVersion,
+      localSubscriptionId,
     );
+    if (localSubscriptionId && assinatura.providerSubscriptionId)
+      throw new BillingCommandNotAllowedException(
+        'Provider-linked agreement requires the customer billing flow',
+      );
     if (!assinatura.pendingPlanCode) {
       throw new BillingCommandNotAllowedException('no scheduled plan change');
     }
     if (!assinatura.providerSubscriptionId) {
+      if (localSubscriptionId)
+        await this.policies.assertNoPendingPayment(assinatura.id);
       await this.subscriptions.cancelScheduledChange(
         organizationId,
         expectedVersion,
+        ...(localSubscriptionId ? ([localSubscriptionId] as const) : []),
       );
       return;
     }
 
-    this.assertEnabled();
-    await this.assertProviderTarget(assinatura);
-    const provedor = await this.provider.cancelScheduledPlanChange({
-      providerSubscriptionId: assinatura.providerSubscriptionId,
-      organizationId,
-      subscriptionId: assinatura.id,
-      idempotencyKey: this.chave(
-        'cancel-plan-change',
-        `${assinatura.id}:${expectedVersion}`,
-      ),
+    await this.policies.locked(assinatura.id, expectedVersion, async () => {
+      this.assertEnabled();
+      await this.assertProviderTarget(assinatura);
+      const provedor = await this.provider.cancelScheduledPlanChange({
+        providerSubscriptionId: assinatura.providerSubscriptionId!,
+        organizationId,
+        subscriptionId: assinatura.id,
+        idempotencyKey: this.chave(
+          'cancel-plan-change',
+          `${assinatura.id}:${expectedVersion}`,
+        ),
+      });
+      this.assertProviderOwnership(assinatura, provedor);
+      await this.subscriptions.cancelScheduledChange(
+        organizationId,
+        expectedVersion,
+      );
     });
-    this.assertProviderOwnership(assinatura, provedor);
-    await this.subscriptions.cancelScheduledChange(
-      organizationId,
-      expectedVersion,
+  }
+
+  /** Corporate review runs only the pre-existing support branch that needs no provider call. */
+  async requestPlanChangeReview(
+    input: PlanChangeRequest,
+    expectedSubscriptionId: string,
+  ) {
+    const { assinatura, targetInterval } = await this.preparePlanChange(
+      input,
+      expectedSubscriptionId,
     );
+    if (!this.requiresPlanChangeReview(assinatura, targetInterval))
+      throw new BillingCommandNotAllowedException(
+        'Use the customer or provider-authorized plan change flow',
+      );
+    return this.policies.locked(assinatura.id, input.expectedVersion, () =>
+      this.policies.ticketWithOrigin(
+        this.planChangeTicketInput(input, assinatura.id, targetInterval),
+      ),
+    );
+  }
+
+  /** Starts only the catalog trial; an existing checkout must be handled by the customer flow. */
+  async startLocalTrial(
+    input: PlanChangeRequest,
+    expectedSubscriptionId: string,
+    tx: PrismaTransactionClient,
+  ) {
+    this.assertEnabled();
+    const current = await this.requireExpected(
+      input.organizationId,
+      input.expectedVersion,
+      expectedSubscriptionId,
+    );
+    if (
+      current.effectiveStatus !== SubscriptionStatus.PENDING_PAYMENT ||
+      current.providerSubscriptionId ||
+      current.cancelAtPeriodEnd
+    ) {
+      throw new BillingCommandNotAllowedException(
+        'No pending local subscription eligible for trial',
+      );
+    }
+    const offer = await this.plans.selectable(
+      input.planCode,
+      input.organizationId,
+      tx,
+    );
+    this.assertCatalogVersion(offer.version, input.expectedCatalogVersion);
+    return this.trials.startPendingTrial(
+      input.organizationId,
+      input.expectedVersion,
+      input.billingInterval ?? current.billingInterval,
+      input.planCode,
+      { tx, subscriptionId: expectedSubscriptionId },
+    );
+  }
+
+  private requiresPlanChangeReview(
+    current: Awaited<ReturnType<SubscriptionService['requireCurrent']>>,
+    target: BillingIntervalType,
+  ) {
+    return (
+      current.effectiveStatus === SubscriptionStatus.ACTIVE &&
+      (!current.providerSubscriptionId ||
+        current.billingInterval !== BillingInterval.MONTHLY ||
+        target !== BillingInterval.MONTHLY)
+    );
+  }
+
+  private planChangeTicketInput(
+    input: PlanChangeRequest,
+    subscriptionId: string,
+    interval: BillingIntervalType,
+  ) {
+    return {
+      organizationId: input.organizationId,
+      subscriptionId,
+      requestedBy: input.requestedBy,
+      kind: 'PLAN_CHANGE' as const,
+      targetPlanCode: input.planCode,
+      targetInterval: interval,
+      reference: `${input.planCode}:${interval}`,
+    };
+  }
+
+  private async preparePlanChange(
+    input: PlanChangeRequest,
+    expectedSubscriptionId?: string,
+  ) {
+    this.assertEnabled();
+    const assinatura = await this.requireExpected(
+      input.organizationId,
+      input.expectedVersion,
+      expectedSubscriptionId,
+    );
+    const offer = await this.plans.selectable(
+      input.planCode,
+      input.organizationId,
+    );
+    this.assertCatalogVersion(offer.version, input.expectedCatalogVersion);
+    const targetInterval = input.billingInterval ?? assinatura.billingInterval;
+    if (!allowsPlanChange(assinatura.effectiveStatus)) {
+      throw new BillingCommandNotAllowedException(
+        'subscription status does not allow a plan change',
+      );
+    }
+    if (
+      assinatura.planCode === input.planCode &&
+      assinatura.billingInterval === targetInterval
+    ) {
+      throw new BillingCommandNotAllowedException('no change requested');
+    }
+    return { assinatura, offer, targetInterval };
   }
 
   /* ---------------------------------------------------------------- */
@@ -542,14 +929,17 @@ export class BillingService {
    * elegibilidade no momento do checkout: se decidisse aqui, abrir dez sessões
    * seria dez chances de conseguir trinta dias.
    */
-  private diasDeAvaliacao(
-    assinatura: {
-      effectiveStatus: SubscriptionStatus;
-      trialEndsAt: Date | null;
-    },
-    planCode: PlanCodeType,
-  ): number | null {
-    if (planCode !== PlanCode.ESSENTIAL) return null;
+  private assertCatalogVersion(current: number, expected?: number) {
+    if (expected !== undefined && expected !== current)
+      throw new BillingCommandNotAllowedException(
+        'As condições do plano mudaram. Atualize a página e revise a oferta.',
+      );
+  }
+
+  private diasDeAvaliacao(assinatura: {
+    effectiveStatus: SubscriptionStatus;
+    trialEndsAt: Date | null;
+  }): number | null {
     if (assinatura.effectiveStatus !== SubscriptionStatus.TRIALING) {
       return null;
     }
@@ -558,7 +948,7 @@ export class BillingService {
       (assinatura.trialEndsAt.getTime() - Date.now()) / 86_400_000,
     );
     if (restantes <= 0) return null;
-    return Math.min(restantes, TRIAL_DAYS);
+    return restantes;
   }
 
   /** Chave estável: mesmo comando, mesma chave, qualquer que seja a hora. */
@@ -572,9 +962,13 @@ export class BillingService {
   private async requireExpected(
     organizationId: string,
     expectedVersion: number,
+    subscriptionId?: string,
   ) {
     const assinatura = await this.subscriptions.requireCurrent(organizationId);
-    if (assinatura.version !== expectedVersion) {
+    if (
+      assinatura.version !== expectedVersion ||
+      (subscriptionId && assinatura.id !== subscriptionId)
+    ) {
       throw new ConflictException(
         'Subscription version is stale',
         'STALE_VERSION',

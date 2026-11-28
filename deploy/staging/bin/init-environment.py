@@ -1,0 +1,49 @@
+#!/usr/bin/env python3
+"""Cria .env 0600 uma única vez; não lê nem copia credenciais de produção."""
+import base64
+import os
+from pathlib import Path
+import secrets
+
+target = Path('/opt/stacks/orbit/.env')
+template = target.with_name('.env.example')
+settings = {
+    'POSTGRES_USER': 'orbit_admin',
+    'POSTGRES_DB': 'orbit_staging',
+    'POSTGRES_PASSWORD': secrets.token_hex(32),
+    'APP_DATABASE_PASSWORD': secrets.token_hex(32),
+    'JWT_ACCESS_SECRET': secrets.token_hex(48),
+    'TRIAL_FINGERPRINT_SECRET': secrets.token_hex(48),
+    'TRUSTED_PROXY_SECRET': secrets.token_hex(32),
+    'AUTH_RATE_LIMIT_SECRET': secrets.token_hex(32),
+    'ENCRYPTION_KEY': base64.b64encode(secrets.token_bytes(32)).decode(),
+    'EMAIL_SUPPRESSION_HASH_KEY': base64.b64encode(secrets.token_bytes(32)).decode(),
+    'FRONTEND_ORIGIN': 'https://orbit.allblue-labs.com',
+    'IDENTITY_PUBLIC_WEB_URL': 'https://orbit.allblue-labs.com',
+    'STORAGE_PUBLIC_API_URL': 'https://orbit.allblue-labs.com/api/v1',
+    'AWS_REGION': 'us-east-2',
+    'AWS_SES_FROM_EMAIL': '',
+    'AWS_SES_FROM_TRANSACTIONAL_EMAIL': '',
+    'AWS_SES_FROM_INFORMATIONAL_EMAIL': '',
+    'AWS_SES_FROM_SUPPORT_EMAIL': '',
+    'AWS_SES_SUPPORT_REPLY_TO_EMAIL': 'contato@allblue-labs.com',
+    'ORBIT_SUPPORT_TO_EMAIL': 'contato@allblue-labs.com',
+    'PUBLIC_CONTACT_ENABLED': 'true',
+    'PUBLIC_CONTACT_DELIVERY_ENABLED': 'true',
+    'AWS_SES_FEEDBACK_SENDER_IDENTITIES': '',
+    'PLATFORM_ADMIN_EMAIL': '',
+    'PLATFORM_ADMIN_PASSWORD': '',
+    'PUSH_PROVIDER': 'disabled',
+    'STRIPE_ENABLED': 'false',
+}
+lines = ['COMPOSE_FILE=docker-compose.yml:docker-compose.lock.yml:docker-compose.staging.yml']
+for line in template.read_text().splitlines():
+    key = line.partition('=')[0]
+    if key.startswith(('R2_', 'CLOUDFLARE_CACHE_PURGE_', 'ORBIT_BACKUP_')):
+        continue
+    lines.append(f'{key}={settings[key]}' if key in settings else line)
+fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+with os.fdopen(fd, 'w') as out:
+    out.write('\n'.join(lines) + '\n')
+print('Arquivo criado com segredos exclusivos do staging:', target)
+print('Preencha as variáveis AWS_* sem enviar credenciais pelo chat.')

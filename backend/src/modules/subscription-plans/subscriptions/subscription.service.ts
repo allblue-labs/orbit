@@ -25,10 +25,12 @@ import type { PrismaTransactionClient } from '../../../database/prisma.types';
 import {
   BILLING_INTERVAL_MONTHS,
   BillingInterval,
-  CATALOG_VERSION,
   type PlanCode,
 } from '../catalog/plan-catalog.types';
-import { planDefinition } from '../catalog/plan-registry';
+import {
+  CommercialPlanService,
+  type CommercialPlan,
+} from '../catalog/commercial-plan.service';
 import { anchoredPeriod } from '../entitlements/anchored-period';
 import { fromSubscription } from '../entitlements/effective-entitlements';
 import { isReduction } from '../entitlements/limit-adjustment';
@@ -76,7 +78,10 @@ export interface CreateSubscriptionInput {
 export class SubscriptionService {
   private readonly logger = new Logger(SubscriptionService.name);
 
-  constructor(private readonly repository: SubscriptionRepository) {}
+  constructor(
+    private readonly repository: SubscriptionRepository,
+    private readonly plans: CommercialPlanService,
+  ) {}
 
   /* ---------------------------------------------------------------- */
   /* Leitura                                                           */
@@ -249,7 +254,7 @@ export class SubscriptionService {
         'CONFLICT',
       );
     }
-    const plano = planDefinition(input.planCode);
+    const plano = await this.plans.require(input.planCode, transaction);
     const inicio = input.startsAt ?? new Date();
     const periodo = anchoredPeriod(
       inicio,
@@ -260,7 +265,7 @@ export class SubscriptionService {
       {
         organizationId: input.organizationId,
         planCode: plano.code,
-        catalogVersion: CATALOG_VERSION,
+        catalogVersion: plano.version,
         entitlementsSnapshot: snapshotOf(plano) as unknown as Prisma.JsonValue,
         billingInterval: input.billingInterval,
         status:
@@ -268,8 +273,10 @@ export class SubscriptionService {
             ? SubscriptionStatus.TRIALING
             : SubscriptionStatus.PENDING_PAYMENT,
         billingAnchorAt: inicio,
-        currentPeriodStart: periodo.start,
-        currentPeriodEnd: periodo.end,
+        currentPeriodStart:
+          input.access.kind === 'TRIAL' ? input.access.startsAt : periodo.start,
+        currentPeriodEnd:
+          input.access.kind === 'TRIAL' ? input.access.endsAt : periodo.end,
         trialStartsAt:
           input.access.kind === 'TRIAL' ? input.access.startsAt : null,
         trialEndsAt: input.access.kind === 'TRIAL' ? input.access.endsAt : null,
@@ -329,23 +336,32 @@ export class SubscriptionService {
   }
 
   /** Desfaz o encerramento agendado, enquanto o período ainda corre. */
-  async keepSubscription(organizationId: string, expectedVersion: number) {
-    return this.comando(organizationId, expectedVersion, (atual) => {
-      if (!atual.cancelAtPeriodEnd) {
-        throw new PlanChangeNotAllowedException('no scheduled cancellation');
-      }
-      if (isTerminal(atual.effectiveStatus)) {
-        throw new SubscriptionInvalidTransitionException(
-          atual.effectiveStatus,
-          SubscriptionStatus.ACTIVE,
-        );
-      }
-      return {
-        cancelAtPeriodEnd: false,
-        canceledAt: null,
-        dataRetentionEndsAt: null,
-      };
-    });
+  async keepSubscription(
+    organizationId: string,
+    expectedVersion: number,
+    localSubscriptionId?: string,
+  ) {
+    return this.comando(
+      organizationId,
+      expectedVersion,
+      (atual) => {
+        if (!atual.cancelAtPeriodEnd) {
+          throw new PlanChangeNotAllowedException('no scheduled cancellation');
+        }
+        if (isTerminal(atual.effectiveStatus)) {
+          throw new SubscriptionInvalidTransitionException(
+            atual.effectiveStatus,
+            SubscriptionStatus.ACTIVE,
+          );
+        }
+        return {
+          cancelAtPeriodEnd: false,
+          canceledAt: null,
+          dataRetentionEndsAt: null,
+        };
+      },
+      localSubscriptionId,
+    );
   }
 
   /**
@@ -359,17 +375,16 @@ export class SubscriptionService {
     planCode: PlanCode,
     billingInterval?: BillingInterval,
   ) {
-    return this.comando(organizationId, expectedVersion, (atual) => {
+    return this.comando(organizationId, expectedVersion, async (atual) => {
       if (!allowsPlanChange(atual.effectiveStatus)) {
         throw new PlanChangeNotAllowedException(
           `status ${atual.effectiveStatus}`,
         );
       }
-      const destino = planDefinition(planCode);
-      const origem = planDefinition(atual.planCode);
+      const destino = await this.plans.selectable(planCode, organizationId);
       const intervalo = billingInterval ?? atual.billingInterval;
 
-      const mesmoPlano = destino.code === origem.code;
+      const mesmoPlano = destino.code === atual.planCode;
       const mesmoIntervalo = intervalo === atual.billingInterval;
       if (mesmoPlano && mesmoIntervalo) {
         throw new PlanChangeNotAllowedException('no change requested');
@@ -395,7 +410,7 @@ export class SubscriptionService {
         return {
           pendingPlanCode: destino.code,
           pendingBillingInterval: intervalo,
-          pendingCatalogVersion: CATALOG_VERSION,
+          pendingCatalogVersion: destino.version,
           pendingEntitlementsSnapshot: snapshotOf(
             destino,
           ) as unknown as Prisma.InputJsonValue,
@@ -414,7 +429,7 @@ export class SubscriptionService {
       return {
         pendingPlanCode: destino.code,
         pendingBillingInterval: intervalo,
-        pendingCatalogVersion: CATALOG_VERSION,
+        pendingCatalogVersion: destino.version,
         pendingEntitlementsSnapshot: snapshotOf(
           destino,
         ) as unknown as Prisma.InputJsonValue,
@@ -424,19 +439,28 @@ export class SubscriptionService {
   }
 
   /** Cancela uma troca ainda não efetivada. */
-  async cancelScheduledChange(organizationId: string, expectedVersion: number) {
-    return this.comando(organizationId, expectedVersion, (atual) => {
-      if (!atual.pendingPlanCode) {
-        throw new PlanChangeNotAllowedException('no scheduled change');
-      }
-      return {
-        pendingPlanCode: null,
-        pendingBillingInterval: null,
-        pendingCatalogVersion: null,
-        pendingEntitlementsSnapshot: Prisma.DbNull,
-        pendingEffectiveAt: null,
-      };
-    });
+  async cancelScheduledChange(
+    organizationId: string,
+    expectedVersion: number,
+    localSubscriptionId?: string,
+  ) {
+    return this.comando(
+      organizationId,
+      expectedVersion,
+      (atual) => {
+        if (!atual.pendingPlanCode) {
+          throw new PlanChangeNotAllowedException('no scheduled change');
+        }
+        return {
+          pendingPlanCode: null,
+          pendingBillingInterval: null,
+          pendingCatalogVersion: null,
+          pendingEntitlementsSnapshot: Prisma.DbNull,
+          pendingEffectiveAt: null,
+        };
+      },
+      localSubscriptionId,
+    );
   }
 
   /**
@@ -451,6 +475,7 @@ export class SubscriptionService {
     planCode: PlanCode,
     billingInterval: BillingInterval,
     effectiveAt: Date,
+    offer: CommercialPlan,
   ) {
     return this.comando(organizationId, expectedVersion, (atual) => {
       if (!allowsPlanChange(atual.effectiveStatus)) {
@@ -464,13 +489,19 @@ export class SubscriptionService {
           'INVALID_PROVIDER_PERIOD',
         );
       }
-      const destino = planDefinition(planCode);
+      if (
+        offer.code !== planCode ||
+        (offer.tenantId !== null && offer.tenantId !== organizationId)
+      )
+        throw new PlanChangeNotAllowedException(
+          'offer does not match the selected plan or organization',
+        );
       return {
-        pendingPlanCode: destino.code,
+        pendingPlanCode: offer.code,
         pendingBillingInterval: billingInterval,
-        pendingCatalogVersion: CATALOG_VERSION,
+        pendingCatalogVersion: offer.version,
         pendingEntitlementsSnapshot: snapshotOf(
-          destino,
+          offer,
         ) as unknown as Prisma.InputJsonValue,
         pendingEffectiveAt: effectiveAt,
       };
@@ -541,10 +572,12 @@ export class SubscriptionService {
       billingInterval: BillingInterval;
       period: { start: Date; end: Date };
       activate: boolean;
+      terms?: { version: number; snapshot: Prisma.JsonValue };
+      allowPaidMonthlyUpgrade?: boolean;
       cancelAtPeriodEnd: boolean;
     },
   ) {
-    return this.comando(organizationId, expectedVersion, (atual) => {
+    return this.comando(organizationId, expectedVersion, async (atual) => {
       if (input.period.start >= input.period.end) {
         throw new ConflictException(
           'Provider billing period is invalid',
@@ -562,14 +595,24 @@ export class SubscriptionService {
         );
       }
 
-      const destino = planDefinition(input.planCode);
+      const destino = await this.plans.require(input.planCode);
+      if (destino.tenantId !== null && destino.tenantId !== organizationId)
+        throw new PlanChangeNotAllowedException(
+          'private offer belongs to another organization',
+        );
       const contractedChanged =
         atual.planCode !== destino.code ||
         atual.billingInterval !== input.billingInterval;
       if (
         contractedChanged &&
         atual.effectiveStatus === SubscriptionStatus.ACTIVE &&
-        input.period.start < atual.currentPeriodEnd
+        input.period.start < atual.currentPeriodEnd &&
+        !(
+          input.allowPaidMonthlyUpgrade &&
+          input.activate &&
+          atual.billingInterval === 'MONTHLY' &&
+          input.billingInterval === 'MONTHLY'
+        )
       ) {
         throw new PlanChangeNotAllowedException(
           'paid plan changes take effect only at renewal',
@@ -581,10 +624,29 @@ export class SubscriptionService {
         atual.entitlementsSnapshot,
         true,
       );
+      const scheduledTerms =
+        atual.pendingPlanCode === destino.code &&
+        atual.pendingBillingInterval === input.billingInterval &&
+        atual.pendingCatalogVersion !== null &&
+        atual.pendingEntitlementsSnapshot &&
+        atual.pendingEffectiveAt &&
+        atual.pendingEffectiveAt <= input.period.start
+          ? {
+              version: atual.pendingCatalogVersion,
+              snapshot: atual.pendingEntitlementsSnapshot,
+            }
+          : undefined;
+      const terms = scheduledTerms ?? input.terms;
+      const snapshot = terms?.snapshot ?? snapshotOf(destino);
+      const writesTerms =
+        contractedChanged ||
+        (input.activate &&
+          atual.effectiveStatus === SubscriptionStatus.PENDING_PAYMENT &&
+          !!terms);
       const next = fromSubscription(
         destino.code,
         destino.label,
-        snapshotOf(destino),
+        snapshot,
         true,
       );
       const reduced = contractedChanged && isReduction(previous, next);
@@ -597,16 +659,19 @@ export class SubscriptionService {
                 : Prisma.DbNull,
             }
           : {}),
-        ...(contractedChanged
+        ...(writesTerms
           ? {
               planCode: destino.code,
-              catalogVersion: CATALOG_VERSION,
-              entitlementsSnapshot: snapshotOf(
-                destino,
-              ) as unknown as Prisma.InputJsonValue,
+              catalogVersion: terms?.version ?? destino.version,
+              entitlementsSnapshot:
+                snapshot as unknown as Prisma.InputJsonValue,
               billingInterval: input.billingInterval,
-              billingAnchorAt: input.period.start,
             }
+          : {}),
+        ...(writesTerms ||
+        (input.activate &&
+          atual.effectiveStatus === SubscriptionStatus.TRIALING)
+          ? { billingAnchorAt: input.period.start }
           : {}),
         ...(input.activate
           ? {
@@ -690,7 +755,11 @@ export class SubscriptionService {
   }
 
   /** O provedor encerrou a assinatura. O acesso termina sem renovação local. */
-  async reportProviderEnded(organizationId: string, expectedVersion: number) {
+  async reportProviderEnded(
+    organizationId: string,
+    expectedVersion: number,
+    refunded = false,
+  ) {
     return this.comando(organizationId, expectedVersion, (atual) => {
       this.assertTransicao(atual.effectiveStatus, SubscriptionStatus.CANCELED);
       const agora = new Date();
@@ -699,6 +768,7 @@ export class SubscriptionService {
         cancelAtPeriodEnd: false,
         canceledAt: atual.canceledAt ?? agora,
         endedAt: agora,
+        ...(refunded ? { dataRetentionEndsAt: retentionDeadline(agora) } : {}),
         graceStartsAt: null,
         graceEndsAt: null,
         pendingPlanCode: null,
@@ -783,13 +853,27 @@ export class SubscriptionService {
     expectedVersion: number,
     decidir: (
       atual: SubscriptionRow & { effectiveStatus: SubscriptionStatus },
-    ) => Prisma.OrganizationSubscriptionUpdateInput,
+    ) =>
+      | Prisma.OrganizationSubscriptionUpdateInput
+      | Promise<Prisma.OrganizationSubscriptionUpdateInput>,
+    localSubscriptionId?: string,
   ): Promise<SubscriptionRow> {
     const atual = await this.requireCurrent(organizationId);
+    if (
+      localSubscriptionId &&
+      (atual.id !== localSubscriptionId ||
+        atual.version !== expectedVersion ||
+        atual.providerSubscriptionId)
+    ) {
+      throw new ConflictException(
+        'Subscription version is stale',
+        'STALE_VERSION',
+      );
+    }
     const atualizada = await this.repository.updateIfVersion(
       atual.id,
       expectedVersion,
-      decidir(atual),
+      await decidir(atual),
     );
     if (!atualizada) {
       throw new ConflictException(

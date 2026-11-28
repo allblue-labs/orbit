@@ -48,6 +48,16 @@ describe('BillingReconciliationService durable inbox', () => {
       retrieveFinancialAdjustment: jest.fn(),
     } as unknown as BillingProvider;
     const repository = {
+      withClaim: jest.fn((_claim: unknown, work: () => Promise<unknown>) =>
+        work(),
+      ),
+      atomic: jest.fn((work: () => Promise<unknown>) => work()),
+      noteDivergence: jest.fn(),
+      nextObservation: jest.fn().mockResolvedValue(1n),
+      completeObservation: jest.fn().mockResolvedValue(undefined),
+      completedCheckoutTerms: jest.fn().mockResolvedValue(undefined),
+      assertBinding: jest.fn().mockResolvedValue(undefined),
+      lockContract: jest.fn().mockResolvedValue(undefined),
       claimNextEvent: jest
         .fn()
         .mockResolvedValueOnce(claimed)
@@ -59,7 +69,7 @@ describe('BillingReconciliationService durable inbox', () => {
       recordInvoice: jest.fn().mockResolvedValue(undefined),
       recordFinancialAdjustment: jest.fn().mockResolvedValue(undefined),
     };
-    const checkout = { fulfill: jest.fn() };
+    const checkout = { fulfill: jest.fn(), expirePromotion: jest.fn() };
     const subscriptions = {
       currentOrNull: jest.fn(),
       applyProviderPlan: jest.fn().mockResolvedValue(undefined),
@@ -69,6 +79,12 @@ describe('BillingReconciliationService durable inbox', () => {
       enabled: catalogEntry !== null,
       catalogEntryForPrice: jest.fn().mockReturnValue(catalogEntry),
     };
+    const policies = {
+      pendingUpgrade: jest.fn().mockResolvedValue(null),
+      attachUpgradeInvoice: jest.fn(),
+      finishUpgrade: jest.fn(),
+      refundRequest: jest.fn(),
+    };
     const service = new BillingReconciliationService(
       provider,
       repository as never,
@@ -76,8 +92,17 @@ describe('BillingReconciliationService durable inbox', () => {
       subscriptions as never,
       config as never,
       new RequestContextStorage(),
+      policies as never,
     );
-    return { service, provider, repository, checkout, subscriptions, config };
+    return {
+      service,
+      provider,
+      repository,
+      checkout,
+      subscriptions,
+      config,
+      policies,
+    };
   };
 
   it('arquiva evento suportado por assinatura, mas sem consumidor', async () => {
@@ -119,6 +144,29 @@ describe('BillingReconciliationService durable inbox', () => {
     expect(repository.finishClaimedEvent).not.toHaveBeenCalled();
   });
 
+  it('releases an expired checkout reservation without reconciling a subscription', async () => {
+    const claimed = event({
+      eventType: 'checkout.session.expired',
+      providerObjectId: 'cs_test_expired',
+      providerSubscriptionId: null,
+    });
+    const { service, repository, checkout } = setup(claimed);
+    checkout.expirePromotion.mockResolvedValue(undefined);
+
+    await expect(service.drainInbox()).resolves.toMatchObject({
+      processed: 1,
+      failed: 0,
+    });
+    expect(checkout.expirePromotion).toHaveBeenCalledWith('cs_test_expired');
+    expect(checkout.fulfill).not.toHaveBeenCalled();
+    expect(repository.findSubscriptionByProviderId).not.toHaveBeenCalled();
+    expect(repository.finishClaimedEvent).toHaveBeenCalledWith({
+      id: claimed.id,
+      processingToken: claimed.processingToken,
+      status: 'PROCESSED',
+    });
+  });
+
   it('does not apply an old subscription event to a new purchase', async () => {
     const { service, provider, repository, subscriptions } = setup();
     (provider.retrieveSubscription as jest.Mock).mockResolvedValue({
@@ -129,6 +177,7 @@ describe('BillingReconciliationService durable inbox', () => {
       id: 'old_subscription',
       organizationId: 'org_1',
       providerCustomerId: 'cus_test_1',
+      version: 4,
     });
     subscriptions.currentOrNull.mockResolvedValue({
       id: 'new_subscription',
@@ -172,7 +221,7 @@ describe('BillingReconciliationService durable inbox', () => {
 
     expect(repository.retryClaimedEvent).toHaveBeenCalledWith(
       expect.objectContaining({
-        errorCode: 'RETRY_EXHAUSTED',
+        errorCode: 'Error',
         deadLetter: true,
       }),
     );
@@ -206,6 +255,7 @@ describe('BillingReconciliationService durable inbox', () => {
       id: '01900000-0000-7000-8000-000000000098',
       organizationId: '01900000-0000-7000-8000-000000000099',
       providerCustomerId: 'cus_test_1',
+      version: 4,
     });
     subscriptions.currentOrNull.mockResolvedValue({
       id: '01900000-0000-7000-8000-000000000098',
@@ -248,6 +298,106 @@ describe('BillingReconciliationService durable inbox', () => {
     );
   });
 
+  it.each([true, false])(
+    'só aplica upgrade no meio do ciclo com pagamento comprovado (%s)',
+    async (hasPayment) => {
+      const target = {
+        planCode: PlanCode.PROFESSIONAL_INTELLIGENCE,
+        billingInterval: BillingInterval.MONTHLY,
+      };
+      const { service, provider, repository, subscriptions, policies } = setup(
+        event(),
+        target,
+      );
+      const organizationId = '01900000-0000-7000-8000-000000000009';
+      const id = '01900000-0000-7000-8000-000000000010';
+      const previousPeriodStart = new Date('2026-11-01T12:00:00Z');
+      const previousPeriodEnd = new Date('2026-12-01T12:00:00Z');
+      const start = new Date('2026-11-19T14:35:00Z');
+      const end = new Date('2026-12-19T14:35:00Z');
+      const providerSubscriptionId = 'sub_upgrade';
+      const providerCustomerId = 'cus_upgrade';
+      const providerPriceId = 'price_upgrade';
+      const latestInvoiceId = 'in_upgrade';
+      const terms = { someContractedTerms: true };
+      const local = { id, organizationId, version: 4, providerCustomerId };
+      repository.findSubscriptionByProviderId.mockResolvedValue(local);
+      subscriptions.currentOrNull.mockResolvedValue({
+        ...local,
+        effectiveStatus: SubscriptionStatus.ACTIVE,
+        planCode: PlanCode.PROFESSIONAL,
+        billingInterval: BillingInterval.MONTHLY,
+        currentPeriodStart: previousPeriodStart,
+        currentPeriodEnd: previousPeriodEnd,
+        cancelAtPeriodEnd: false,
+      });
+      (provider.retrieveSubscription as jest.Mock).mockResolvedValue({
+        providerSubscriptionId,
+        providerCustomerId,
+        providerPriceId,
+        latestInvoiceId,
+        state: ProviderBillingState.ACTIVE,
+        currentPeriodStart: start,
+        currentPeriodEnd: end,
+      });
+      (provider.retrieveInvoice as jest.Mock).mockResolvedValue({
+        providerInvoiceId: latestInvoiceId,
+        providerSubscriptionId,
+        providerCustomerId,
+        billingReason: 'subscription_update',
+        status: ProviderInvoiceStatus.PAID,
+        amountRemainingMinor: 0,
+        amountPaidMinor: 16000,
+        currency: 'brl',
+        paymentEvidence: hasPayment
+          ? [{ amountMinor: 16000, currency: 'brl' }]
+          : [],
+        subscriptionLines: [
+          {
+            subscriptionId: providerSubscriptionId,
+            priceId: providerPriceId,
+            periodStart: start,
+            periodEnd: end,
+          },
+        ],
+      });
+      policies.pendingUpgrade.mockResolvedValue({
+        id: 'request-upgrade',
+        invoiceId: latestInvoiceId,
+        priceId: providerPriceId,
+        catalogVersion: 3,
+        entitlements: terms,
+        previousPeriodStart,
+        previousPeriodEnd,
+      });
+      const reconciled = service.reconcileProviderSubscription(
+        providerSubscriptionId,
+        'evt_upgrade',
+      );
+      if (!hasPayment) {
+        await expect(reconciled).rejects.toThrow(
+          'BILLING_EARLY_PLAN_CHANGE_NOT_AUTHORIZED',
+        );
+        expect(subscriptions.applyProviderPlan).not.toHaveBeenCalled();
+        return;
+      }
+      await expect(reconciled).resolves.toBeUndefined();
+      expect(subscriptions.applyProviderPlan).toHaveBeenCalledWith(
+        organizationId,
+        4,
+        expect.objectContaining({
+          allowPaidMonthlyUpgrade: true,
+          terms: { version: 3, snapshot: terms },
+          period: { start, end },
+        }),
+      );
+      expect(policies.finishUpgrade).toHaveBeenCalledWith(
+        'request-upgrade',
+        'APPLIED',
+      );
+    },
+  );
+
   it.each(['OPEN', 'WRONG_CUSTOMER', 'NO_INVOICE'])(
     'não libera plano alterado sem pagamento comprovado: %s',
     async (scenario) => {
@@ -277,6 +427,7 @@ describe('BillingReconciliationService durable inbox', () => {
         id: 'local_1',
         organizationId: 'org_1',
         providerCustomerId: 'cus_test_1',
+        version: 3,
       });
       subscriptions.currentOrNull.mockResolvedValue({
         id: 'local_1',
@@ -285,6 +436,8 @@ describe('BillingReconciliationService durable inbox', () => {
         effectiveStatus: SubscriptionStatus.ACTIVE,
         planCode: PlanCode.ESSENTIAL,
         billingInterval: BillingInterval.MONTHLY,
+        currentPeriodStart: new Date('2026-11-01'),
+        currentPeriodEnd: new Date('2026-12-01'),
       });
       await expect(
         service.reconcileProviderSubscription('sub_test_1', 'evt_1'),
@@ -344,7 +497,7 @@ describe('BillingReconciliationService durable inbox', () => {
       provider: BillingProviderName.STRIPE,
       mode: BillingMode.TEST,
       providerEventId: 'evt_invoice_1',
-      invoice,
+      invoice: { ...invoice, observationVersion: 1n },
     });
   });
 
@@ -415,14 +568,14 @@ describe('BillingReconciliationService durable inbox', () => {
       expect.objectContaining({
         organizationId: '01900000-0000-7000-8000-000000000099',
         providerEventId: 'evt_refund_1',
-        invoice,
+        invoice: { ...invoice, observationVersion: 1n },
       }),
     );
     expect(repository.recordFinancialAdjustment).toHaveBeenCalledWith({
       organizationId: '01900000-0000-7000-8000-000000000099',
       provider: BillingProviderName.STRIPE,
       providerEventId: 'evt_refund_1',
-      adjustment,
+      adjustment: { ...adjustment, observationVersion: 1n },
     });
   });
 });

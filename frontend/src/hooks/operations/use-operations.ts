@@ -146,11 +146,11 @@ export function useOperationChecklists(operationId: string) {
  * Não confundir com `useOperationChecklists`: `ChecklistExecution` é outro
  * conceito, com contrato próprio, e continua na sua seção.
  */
-export function useOperationArtifactExecutions(operationId: string) {
+export function useOperationArtifactExecutions(operationId: string, page = 1) {
   const query = {
     operationId,
     limit: OPERATION_RELATED_PAGE_SIZE,
-    page: 1,
+    page,
   } as const;
   return useApiQuery(
     artifactExecutionsService.keys.list(query),
@@ -180,6 +180,7 @@ function affectedKeys(id: string) {
     operationsService.keys.timeline(id),
     operationsService.keys.history(id),
     queryKeys.module("operations"),
+    queryKeys.module("scheduling"),
   ];
 }
 
@@ -191,7 +192,7 @@ function affectedKeys(id: string) {
  * Nada além disso — invalidar tudo derrubaria caches que a troca não tocou.
  */
 function assignmentKeys(id: string) {
-  return [...affectedKeys(id), queryKeys.module("scheduling")];
+  return affectedKeys(id);
 }
 
 export function useCreateOperation() {
@@ -199,7 +200,10 @@ export function useCreateOperation() {
   return useApiMutation(
     (input: CreateOperationInput) => operationsService.create(input),
     {
-      invalidate: [queryKeys.module("operations")],
+      invalidate: [
+        queryKeys.module("operations"),
+        queryKeys.module("scheduling"),
+      ],
       notify: "Atendimento criado",
       onSuccess: async (_operation, input) => {
         if (input.customerId) {
@@ -226,7 +230,10 @@ export function useUpdateOperation(id: string) {
 
 export function useRemoveOperation() {
   return useApiMutation((id: string) => operationsService.remove(id), {
-    invalidate: [queryKeys.module("operations")],
+    invalidate: [
+      queryKeys.module("operations"),
+      queryKeys.module("scheduling"),
+    ],
     notify: "Atendimento removido",
   });
 }
@@ -236,7 +243,7 @@ export function useChangeOperationStatus(id: string) {
     (input: ChangeOperationStatusInput) =>
       operationsService.changeStatus(id, input),
     {
-      invalidate: affectedKeys(id),
+      invalidate: [...affectedKeys(id), queryKeys.module("assets")],
       notify: "Situação do atendimento atualizada",
     },
   );

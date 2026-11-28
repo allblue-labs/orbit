@@ -1,3 +1,4 @@
+import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument */
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
@@ -394,23 +395,20 @@ describe('Mobile Field Artifacts & Final Reports (e2e)', () => {
   ): Promise<{ token: string; email: string }> {
     const suffix = randomUUID().slice(0, 8);
     const email = `artifact.${label}.${suffix}@orbit.local`;
-    const response = await api()
-      .post('/api/v1/identity/register')
-      .send({
-        ...REGISTRATION_LEGAL_ACCEPTANCE,
-        email,
-        firstName: 'Artifact',
-        lastName: label,
-        password: PASSWORD,
-        organizationName: `Artifact ${label} ${suffix}`,
-        legalName: `Artifact ${label} ${suffix} LTDA`,
-        documentType: 'CNPJ',
-        documentNumber: cnpj(),
-        city: 'Recife',
-        street: 'Rua Artifact',
-        stateCode: 'PE',
-      })
-      .expect(201);
+    const response = await registerVerifiedOwner(app, {
+      ...REGISTRATION_LEGAL_ACCEPTANCE,
+      email,
+      firstName: 'Artifact',
+      lastName: label,
+      password: PASSWORD,
+      organizationName: `Artifact ${label} ${suffix}`,
+      legalName: `Artifact ${label} ${suffix} LTDA`,
+      documentType: 'CNPJ',
+      documentNumber: cnpj(),
+      city: 'Recife',
+      street: 'Rua Artifact',
+      stateCode: 'PE',
+    });
     return { email, token: (response.body as Envelope<any>).data.accessToken };
   }
 });

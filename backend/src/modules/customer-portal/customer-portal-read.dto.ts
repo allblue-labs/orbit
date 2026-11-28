@@ -1,5 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { IsUUIDv7 } from '../../validators';
+import { PORTAL_DOCUMENT_CATEGORIES } from './customer-portal-document-category';
 import {
   IsIn,
   IsInt,
@@ -56,6 +58,12 @@ export class CustomerPortalOperationListQueryDto extends CustomerPortalListQuery
   @IsOptional()
   @IsIn(['open', 'scheduled', 'inProgress', 'paused', 'completed', 'cancelled'])
   status?: string;
+
+  /** O histórico de um equipamento: só os atendimentos que o incluem. */
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUIDv7()
+  assetId?: string;
 }
 
 export class CustomerPortalAssetListQueryDto extends CustomerPortalListQueryDto {
@@ -105,4 +113,21 @@ export class CustomerPortalDocumentListQueryDto extends CustomerPortalListQueryD
   @IsOptional()
   @IsIn(['issuedAt', 'fileName'])
   sortBy: 'issuedAt' | 'fileName' = 'issuedAt';
+
+  @ApiPropertyOptional({ enum: PORTAL_DOCUMENT_CATEGORIES })
+  @IsOptional()
+  @IsIn(PORTAL_DOCUMENT_CATEGORIES)
+  category?: (typeof PORTAL_DOCUMENT_CATEGORIES)[number];
+
+  /** Os documentos de um atendimento. */
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUIDv7()
+  operationId?: string;
+
+  /** Os documentos de um equipamento — dele ou dos atendimentos que o incluem. */
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUIDv7()
+  assetId?: string;
 }

@@ -1,3 +1,4 @@
+import type { IdentityRegistrationReadModel } from '../identity.read-models';
 import { LEGAL_DOCUMENT_VERSION } from '../../../contracts/modules/legal/legal.read-models';
 import { Inject, Injectable } from '@nestjs/common';
 import type { IHashProvider } from '../../../contracts';
@@ -6,22 +7,25 @@ import { registrationConflict } from './registration-conflicts';
 import { normalizeBrazilianDocument } from '../../../utils';
 import { SlugHelper } from '../../../helpers';
 import { HASH_PROVIDER } from '../../../providers';
-import { AuthenticationService } from './authentication.service';
 import { RegistrationRepository } from '../infrastructure/registration.repository';
 import type { RegisterOrganizationDto } from '../presentation/dto/identity.dto';
 import type { SessionMetadata } from '../domain/identity.types';
 import { SubscriptionProvisioningService } from '../../subscription-plans/subscriptions/subscription-provisioning.service';
+import { EmailVerificationService } from './email-verification.service';
 
 @Injectable()
 export class RegistrationService {
   constructor(
     private readonly repository: RegistrationRepository,
-    private readonly authentication: AuthenticationService,
     @Inject(HASH_PROVIDER) private readonly hashes: IHashProvider,
     private readonly subscriptions: SubscriptionProvisioningService,
+    private readonly verification: EmailVerificationService,
   ) {}
 
-  async register(input: RegisterOrganizationDto, metadata: SessionMetadata) {
+  async register(
+    input: RegisterOrganizationDto,
+    metadata: SessionMetadata,
+  ): Promise<IdentityRegistrationReadModel> {
     if (
       input.acceptTerms !== true ||
       input.termsVersion !== LEGAL_DOCUMENT_VERSION ||
@@ -46,27 +50,21 @@ export class RegistrationService {
         slug,
         { publicSignup: true },
         metadata,
+        async (tx, userId, organizationId) => {
+          await this.subscriptions.provisionIn(tx, {
+            organizationId,
+            planKey: normalized.planKey,
+            billingInterval: normalized.billingInterval,
+            legalDocument: normalized.documentNumber,
+          });
+          await this.verification.queueWelcomeIn(tx, userId, normalized.email);
+        },
       );
       if (!created) throw new ValidationException('Invalid plan');
-      /**
-       * A assinatura nasce junto com a organização.
-       *
-       * Depois do cadastro, e não dentro dele: a transação de registro é longa
-       * o bastante, e uma recusa de avaliação não pode desfazer uma empresa
-       * que acabou de se cadastrar corretamente.
-       */
-      await this.subscriptions.provision({
-        organizationId: created.organizationId,
-        planKey: normalized.planKey,
-        billingInterval: normalized.billingInterval,
-        legalDocument: normalized.documentNumber,
-      });
-      return this.authentication.login(
-        normalized.email,
-        input.password,
-        undefined,
-        metadata,
-      );
+      return {
+        status: 'EMAIL_VERIFICATION_REQUIRED' as const,
+        email: normalized.email,
+      };
     } catch (error) {
       if (error instanceof ValidationException) throw error;
       const conflict = registrationConflict(error);

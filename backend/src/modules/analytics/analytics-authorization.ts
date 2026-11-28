@@ -8,6 +8,7 @@ export const ANALYTICS_DOMAIN_CAPABILITIES: Readonly<
 > = {
   OPERATIONS: ['operations.read'],
   PMOC: ['pmoc.read'],
+  RVT: ['rvt.read'],
   EQUIPMENT: ['assets.read'],
   TECHNICIANS: ['operations.read', 'workforce.read'],
   CONTRACTS: ['customers.read'],

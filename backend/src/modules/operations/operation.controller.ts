@@ -1,4 +1,9 @@
 import {
+  MobileManagement,
+  MobileManagementShared,
+} from '../../common/mobile-management';
+import { UploadLimitsInterceptor } from '../storage/upload-limits.interceptor';
+import {
   Body,
   Controller,
   Delete,
@@ -51,6 +56,8 @@ export class OperationController {
   ) {}
 
   @Get()
+  @MobileManagementShared()
+  @MobileManagement('operations')
   @Capabilities('operations.read')
   @Permissions('operations.read')
   async list(
@@ -64,6 +71,7 @@ export class OperationController {
   }
 
   @Patch(':id/responsible-field-technician')
+  @MobileManagement('operations')
   @Capabilities('operations.manage')
   @Permissions('operations.assign')
   async replaceResponsibleFieldTechnician(
@@ -119,6 +127,8 @@ export class OperationController {
   }
 
   @Get(':id')
+  @MobileManagementShared()
+  @MobileManagement('operations')
   @Capabilities('operations.read')
   @Permissions('operations.read')
   async get(
@@ -132,6 +142,7 @@ export class OperationController {
   }
 
   @Post()
+  @MobileManagement('operations')
   @Capabilities('operations.manage')
   @Permissions('operations.create')
   async create(
@@ -158,6 +169,7 @@ export class OperationController {
   }
 
   @Patch(':id')
+  @MobileManagement('operations')
   @Capabilities('operations.manage')
   @Permissions('operations.update')
   async update(
@@ -177,6 +189,8 @@ export class OperationController {
   }
 
   @Patch(':id/status')
+  @MobileManagementShared()
+  @MobileManagement('operations')
   @Capabilities('operations.manage')
   @Permissions('operations.status.update')
   async changeStatus(
@@ -191,6 +205,7 @@ export class OperationController {
         request.identity!.id,
         input,
         request.identity!.permissions,
+        request.identity!.isOrganizationOwner,
       ),
       this.actor(request),
     );
@@ -247,39 +262,49 @@ export class OperationController {
   }
 
   @Post(':id/authorization')
+  @MobileManagement('authorization')
   @Capabilities('operations.manage')
   @Permissions('operations.assign')
   async authorize(
     @Param('id', ParseUUIDv7Pipe) id: string,
     @Req() request: IdentityRequest,
   ) {
-    return this.readModels.details(
-      await this.operations.setAuthorization(
-        id,
-        this.organizationId(request),
-        request.identity!.id,
-        true,
-      ),
-      this.actor(request),
+    const result = await this.operations.setAuthorization(
+      id,
+      this.organizationId(request),
+      request.identity!.id,
+      true,
     );
+    return this.authorizationResult(result, request);
   }
 
   @Delete(':id/authorization')
+  @MobileManagement('authorization')
   @Capabilities('operations.manage')
   @Permissions('operations.assign')
   async revokeAuthorization(
     @Param('id', ParseUUIDv7Pipe) id: string,
     @Req() request: IdentityRequest,
   ) {
-    return this.readModels.details(
-      await this.operations.setAuthorization(
-        id,
-        this.organizationId(request),
-        request.identity!.id,
-        false,
-      ),
-      this.actor(request),
+    const result = await this.operations.setAuthorization(
+      id,
+      this.organizationId(request),
+      request.identity!.id,
+      false,
     );
+    return this.authorizationResult(result, request);
+  }
+
+  private authorizationResult(
+    result: Awaited<ReturnType<OperationService['setAuthorization']>>,
+    request: IdentityRequest,
+  ) {
+    if (request.mobileManagementAllowed)
+      return {
+        id: result.id,
+        authorizedAt: result.authorizedAt?.toISOString() ?? null,
+      };
+    return this.readModels.details(result, this.actor(request));
   }
 
   @Delete(':id/assignments/:userId')
@@ -312,6 +337,8 @@ export class OperationController {
   }
 
   @Get(':id/timeline')
+  @MobileManagementShared()
+  @MobileManagement('operations')
   @Capabilities('operations.read')
   @Permissions('operations.history.read')
   async timeline(
@@ -328,9 +355,17 @@ export class OperationController {
   @Permissions('operations.attachments.create')
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(
+    UploadLimitsInterceptor,
     FileInterceptor('file', {
       storage: memoryStorage(),
-      limits: { fileSize: 20 * 1024 * 1024, files: 1 },
+      limits: {
+        fileSize: 20 * 1024 * 1024,
+        files: 1,
+        fields: 0,
+        parts: 2,
+        headerPairs: 30,
+        fieldNameSize: 100,
+      },
     }),
   )
   async attach(
@@ -407,6 +442,7 @@ export class OperationController {
   }
 
   @Delete(':id')
+  @MobileManagement('operations')
   @Capabilities('operations.manage')
   @Permissions('operations.delete')
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -430,6 +466,7 @@ export class OperationController {
   private actor(request: IdentityRequest) {
     return {
       id: request.identity!.id,
+      isOrganizationOwner: request.identity!.isOrganizationOwner,
       permissions: request.identity!.permissions,
     };
   }

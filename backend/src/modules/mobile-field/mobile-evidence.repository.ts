@@ -1,3 +1,7 @@
+import {
+  currentMemberPermissions,
+  memberPermissionSelection,
+} from './current-member-permissions';
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { RlsTransaction } from '../../database';
@@ -141,6 +145,19 @@ export class MobileEvidenceRepository {
       return {
         context: target,
         readable,
+        /*
+         * O dono dispensa o perfil de campo — mas **não** a atribuição.
+         *
+         * A isenção de perfil existia aqui e nunca valeu: o controller de
+         * evidência montava o ator sem `isOrganizationOwner`, e a condição lia
+         * `undefined`. Agora a flag chega.
+         *
+         * A atribuição continua exigida de propósito (ver
+         * `mobile-evidence-authority.spec`): a foto é prova do que **aquela**
+         * pessoa viu, e o documento a imprime sob o nome do técnico responsável.
+         * O dono que cobre a execução de outro técnico conclui e colhe o aceite,
+         * mas não anexa foto em nome dele.
+         */
         denied:
           (!profile && actor.isOrganizationOwner !== true) ||
           !membership ||
@@ -470,26 +487,19 @@ export class MobileEvidenceRepository {
     tx: Prisma.TransactionClient,
     organizationId: string,
     actorId: string,
-    businessUnitIds: readonly string[],
+    _businessUnitIds: readonly string[],
   ): Promise<string[]> {
-    const organization = await tx.organizationMembership.findFirst({
-      where: { organizationId, userId: actorId, status: 'ACTIVE' },
-      select: { role: { select: { permissions: true } } },
-    });
-    const units = await tx.businessUnitMembership.findMany({
+    void _businessUnitIds;
+    const membership = await tx.organizationMembership.findFirst({
       where: {
         organizationId,
         userId: actorId,
-        businessUnitId: { in: [...businessUnitIds] },
         status: 'ACTIVE',
         deletedAt: null,
       },
-      select: { role: { select: { permissions: true } } },
+      select: memberPermissionSelection,
     });
-    return [
-      ...(organization?.role.permissions ?? []),
-      ...units.flatMap((item) => item.role.permissions),
-    ];
+    return currentMemberPermissions(membership, actorId);
   }
 
   private async target(

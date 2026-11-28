@@ -131,7 +131,7 @@ export function PmocPlanActions({ plan }: { plan: PmocPlan }) {
           ) : (
             <FileDown className="size-3.5" />
           )}
-          Baixar contrato
+          {document.isPending ? "Gerando documento…" : "Baixar contrato"}
         </Button>
 
         {canManage && plan.coveredEquipment > 0 ? (

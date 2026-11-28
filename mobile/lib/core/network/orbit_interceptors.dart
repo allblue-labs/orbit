@@ -8,6 +8,7 @@
 /// 4. [ErrorMappingInterceptor] — traduz falhas para [OrbitException].
 library;
 
+import 'dart:async';
 import 'dart:math';
 
 import 'package:dio/dio.dart';
@@ -24,10 +25,12 @@ import 'session_authenticator.dart';
 const publicRequestKey = 'orbit.public';
 const sessionGenerationKey = 'orbit.sessionGeneration';
 const sessionLeaseKey = 'orbit.sessionLease';
+final _refreshCorrelation = Object();
 
 /// Cabeçalhos de contexto — os mesmos nomes usados pela aplicação web.
 abstract final class ContextHeaders {
   static const requestId = 'x-request-id';
+  static const correlationId = 'x-correlation-id';
   static const locale = 'accept-language';
   static const timezone = 'x-timezone';
   static const client = 'x-orbit-client';
@@ -52,7 +55,13 @@ class RequestContextInterceptor extends Interceptor {
 
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
-    options.headers[ContextHeaders.requestId] ??= newRequestId();
+    final id =
+        options.headers[ContextHeaders.correlationId] ??
+        options.headers[ContextHeaders.requestId] ??
+        Zone.current[_refreshCorrelation] ??
+        newRequestId();
+    options.headers[ContextHeaders.correlationId] = id;
+    options.headers[ContextHeaders.requestId] = id;
     options.headers[ContextHeaders.locale] ??= locale;
     options.headers[ContextHeaders.timezone] ??=
         timezoneProvider?.call() ?? timezone;
@@ -145,7 +154,17 @@ class AuthInterceptor extends QueuedInterceptor {
     if (!_current(options)) return handler.next(_changed(options));
     if (tokens == null) return handler.next(err);
 
-    final renewed = await _authenticator.refresh(tokens.refreshToken);
+    TokenPair? renewed;
+    try {
+      renewed = await runZoned(
+        () => _authenticator.refresh(tokens.refreshToken),
+        zoneValues: {
+          _refreshCorrelation: options.headers[ContextHeaders.correlationId],
+        },
+      );
+    } on OrbitException catch (error) {
+      return handler.next(DioException(requestOptions: options, error: error));
+    }
     if (!_current(options)) return handler.next(_changed(options));
     if (renewed == null) return handler.next(err);
 
@@ -272,7 +291,9 @@ class ErrorMappingInterceptor extends Interceptor {
   /// verificado caso a caso. Exercitá-la através de `onError` exigiria fabricar
   /// um handler do Dio, e o teste passaria a medir o handler.
   OrbitException map(DioException err) {
+    if (err.error case final OrbitException known) return known;
     final requestId =
+        err.response?.headers.value(ContextHeaders.correlationId) ??
         err.response?.headers.value(ContextHeaders.requestId) ??
         err.requestOptions.headers[ContextHeaders.requestId] as String?;
 

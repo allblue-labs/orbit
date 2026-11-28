@@ -54,6 +54,7 @@ export class QuoteMapper {
       number: source.number,
       code: source.code,
       status: source.status,
+      mobileVisible: source.mobileVisible,
       title: source.title,
       notes: source.notes,
       introText: source.introText,
@@ -100,6 +101,14 @@ export class QuoteMapper {
             id: source.operation.id,
             code: source.operation.code,
             title: source.operation.title,
+          }
+        : null,
+      document: source.issuedDocument
+        ? {
+            executionId: source.issuedDocument.id,
+            code: source.issuedDocument.code,
+            title: source.issuedDocument.title,
+            renderStatus: source.issuedDocument.renderStatus,
           }
         : null,
       convertedAt: source.convertedAt?.toISOString() ?? null,

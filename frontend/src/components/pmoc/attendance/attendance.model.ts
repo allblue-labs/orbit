@@ -145,7 +145,7 @@ export function stepIssues(
        */
       if (!preparation.existingExecution && !preparation.eligibility.ready) {
         issues.push(
-          "O servidor não liberou esta execução — veja os motivos acima.",
+          "Não é possível iniciar esta execução. Confira os motivos acima.",
         );
       }
       break;

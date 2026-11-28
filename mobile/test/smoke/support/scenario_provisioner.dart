@@ -32,6 +32,7 @@ import 'package:orbit_operator/features/field/application/execution_controller.d
     show newCommandId;
 
 import 'smoke_environment.dart';
+import '../../support/image_fixture.dart';
 
 class _MemoryTokenStorage implements TokenStorage {
   TokenPair? _pair;
@@ -191,6 +192,35 @@ class ScenarioProvisioner {
       organizationId: organizationId,
       businessUnitId: businessUnitId,
       userId: userId,
+    );
+  }
+
+  Future<void> ensureProfessionalSignature() async {
+    assertProvisioningAllowed();
+    final current = await client.get<Map<String, dynamic>>(
+      '/mobile/field/me/signature',
+    );
+    if (current['signatureAvailable'] == true) return;
+    final png = signaturePng();
+    final reservation = await client.post<Map<String, dynamic>>(
+      '/mobile/field/me/signature/uploads',
+      body: {
+        'fileName': 'assinatura.png',
+        'mimeType': 'image/png',
+        'sizeBytes': png.length,
+      },
+    );
+    final upload = reservation['upload']! as Map<String, dynamic>;
+    await client.putBytes(
+      url: Uri.parse(upload['url']! as String),
+      bytes: png,
+      headers: (upload['requiredHeaders'] as Map<Object?, Object?>).map(
+        (key, value) => MapEntry('$key', '$value'),
+      ),
+    );
+    await client.post<Map<String, dynamic>>(
+      '/mobile/field/me/signature',
+      body: {'storageObjectId': reservation['fileId']},
     );
   }
 

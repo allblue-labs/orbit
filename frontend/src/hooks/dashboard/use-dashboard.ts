@@ -14,6 +14,10 @@
 import { useMemo } from "react";
 
 import { buildMonthComparison } from "@/lib/analytics/month-comparison";
+import { recentPeriodStart } from "@/lib/analytics/recent-period";
+import { zonedDateKey } from "@/lib/scheduling";
+import { useTimeZone } from "@/hooks/use-timezone";
+import { useSession } from "@/providers/session-provider";
 import { useActiveScope } from "@/providers/use-active-scope";
 import {
   analyticsService,
@@ -23,10 +27,11 @@ import {
 import type {
   AgendaQuery,
   AnalyticsQuery,
+  DashboardFeedQuery,
   DashboardRangeKey,
 } from "@/types/dashboard";
 import { DASHBOARD_RANGE_DAYS } from "@/types/dashboard";
-import { useApiQuery, type ApiQueryOptions } from "@/hooks/api/use-api-query";
+import { useApiQuery } from "@/hooks/api/use-api-query";
 import { CACHE, MINUTE, every } from "@/hooks/api/cache-policy";
 
 /**
@@ -40,8 +45,6 @@ export const REFRESH_POLICY = {
   layout: CACHE.catalog,
   /** KPIs e séries operacionais. */
   analytics: every(CACHE.stable, 2 * MINUTE),
-  /** Health Score deriva dos KPIs; acompanha um pouco mais devagar. */
-  health: every(CACHE.stable, 5 * MINUTE),
   /** Projeções e leitura de IA: caras e pouco voláteis. */
   intelligence: CACHE.catalog,
   /** Clima e impacto ambiental. */
@@ -53,22 +56,21 @@ export const REFRESH_POLICY = {
 /**
  * Janela analítica derivada da faixa escolhida.
  *
- * `from` é quantizado no início do dia (UTC) para manter a query key estável
+ * `from` é quantizado no início do dia no fuso do usuário para manter a query key estável
  * entre renders — sem isso, cada render geraria uma key nova e um refetch. `to`
  * é omitido: o backend usa "agora" por padrão.
  */
 export function useAnalyticsQuery(range: DashboardRangeKey): AnalyticsQuery {
   const { businessUnitId } = useActiveScope();
+  const { timeZone } = useTimeZone();
+  const day = zonedDateKey(new Date(), timeZone);
 
   return useMemo(() => {
-    const from = new Date();
-    from.setUTCHours(0, 0, 0, 0);
-    from.setUTCDate(from.getUTCDate() - DASHBOARD_RANGE_DAYS[range]);
     return {
-      from: from.toISOString(),
+      from: recentPeriodStart(day, DASHBOARD_RANGE_DAYS[range], timeZone),
       businessUnitId: businessUnitId ?? undefined,
     };
-  }, [businessUnitId, range]);
+  }, [businessUnitId, range, day, timeZone]);
 }
 
 /** Layout resolvido pelo backend: quais widgets este tenant enxerga. */
@@ -81,25 +83,29 @@ export function useDashboardLayout(range: DashboardRangeKey) {
   );
 }
 
-/** KPIs, séries, projeções e indicadores ambientais em uma única leitura. */
-export function useAnalyticsDashboard(
-  query: AnalyticsQuery,
-  options?: ApiQueryOptions<
-    Awaited<ReturnType<typeof analyticsService.dashboard>>
-  >,
-) {
-  return useApiQuery(
-    analyticsService.keys.dashboard(query),
-    ({ signal }) => analyticsService.dashboard(query, { signal }),
-    { ...REFRESH_POLICY.analytics, refetchOnWindowFocus: true, ...options },
-  );
+/** Authorization changes also invalidate browser reuse within the same unit. */
+function useAnalyticsAccessKey() {
+  const session = useSession();
+  const { organizationId, businessUnitId } = useActiveScope();
+  return {
+    user: session.user?.id,
+    organization: organizationId,
+    businessUnit: businessUnitId,
+    units: [...session.scope.businessUnitIds].sort(),
+    roles: [...session.roles].sort(),
+    permissions: [...session.permissions].sort(),
+    productCapabilities: [...session.productCapabilities].sort(),
+    isOwner: session.isOwner,
+    isPlatformAdmin: session.isPlatformAdmin,
+  };
 }
 
-export function useAnalyticsHealth(query: AnalyticsQuery) {
+export function useAnalyticsPanel(query: AnalyticsQuery) {
+  const access = useAnalyticsAccessKey();
   return useApiQuery(
-    analyticsService.keys.health(query),
-    ({ signal }) => analyticsService.health(query, { signal }),
-    REFRESH_POLICY.health,
+    [...analyticsService.keys.panel(query), access],
+    ({ signal }) => analyticsService.panel(query, { signal }),
+    { ...REFRESH_POLICY.analytics, refetchOnWindowFocus: true },
   );
 }
 
@@ -110,16 +116,16 @@ export function useAnalyticsHealth(query: AnalyticsQuery) {
  * quem conta e classifica cada indicador em cada período; aqui só se escolhe
  * o recorte e se guarda o rótulo de cada janela.
  *
- * A referência é quantizada no dia — sem isso, cada render produziria uma
+ * A referência é quantizada no minuto — sem isso, cada render produziria uma
  * query key nova e um refetch.
  */
 export function useMonthComparison(timeZone: string) {
   const { businessUnitId } = useActiveScope();
-  const today = new Date().toISOString().slice(0, 10);
+  const minute = new Date().toISOString().slice(0, 16);
 
   const windows = useMemo(
-    () => buildMonthComparison(new Date(`${today}T12:00:00Z`), timeZone),
-    [today, timeZone],
+    () => buildMonthComparison(new Date(`${minute}:59Z`), timeZone, true),
+    [minute, timeZone],
   );
 
   const currentQuery = useMemo<AnalyticsQuery>(
@@ -150,8 +156,9 @@ export function useMonthComparison(timeZone: string) {
 }
 
 export function useAnalyticsKpis(query: AnalyticsQuery) {
+  const access = useAnalyticsAccessKey();
   return useApiQuery(
-    analyticsService.keys.kpis(query),
+    [...analyticsService.keys.kpis(query), access],
     ({ signal }) => analyticsService.kpis(query, { signal }),
     REFRESH_POLICY.analytics,
   );
@@ -181,14 +188,6 @@ export function useEnvironmentalImpact() {
   );
 }
 
-export function useOrbitIntelligence(query: AnalyticsQuery, enabled = true) {
-  return useApiQuery(
-    analyticsService.keys.intelligence(query),
-    ({ signal }) => analyticsService.intelligence(query, { signal }),
-    { ...REFRESH_POLICY.intelligence, enabled },
-  );
-}
-
 /**
  * Agenda da semana corrente.
  *
@@ -209,6 +208,34 @@ export function useAgenda() {
   return useApiQuery(
     schedulingService.keys.agenda(query),
     ({ signal }) => schedulingService.agenda(query, { signal }),
+    { ...REFRESH_POLICY.agenda, refetchOnWindowFocus: true },
+  );
+}
+
+/** Atividades recentes da unidade ativa. */
+export function useDashboardActivity() {
+  const { businessUnitId } = useActiveScope();
+  const query = useMemo<DashboardFeedQuery>(
+    () => ({ businessUnitId: businessUnitId ?? undefined, limit: 50 }),
+    [businessUnitId],
+  );
+  return useApiQuery(
+    dashboardService.keys.activity(query),
+    ({ signal }) => dashboardService.activity(query, { signal }),
+    { ...REFRESH_POLICY.agenda, refetchOnWindowFocus: true },
+  );
+}
+
+/** Próximos compromissos dos próximos 14 dias. */
+export function useDashboardUpcoming() {
+  const { businessUnitId } = useActiveScope();
+  const query = useMemo<DashboardFeedQuery>(
+    () => ({ businessUnitId: businessUnitId ?? undefined, days: 14, limit: 12 }),
+    [businessUnitId],
+  );
+  return useApiQuery(
+    dashboardService.keys.upcoming(query),
+    ({ signal }) => dashboardService.upcoming(query, { signal }),
     { ...REFRESH_POLICY.agenda, refetchOnWindowFocus: true },
   );
 }

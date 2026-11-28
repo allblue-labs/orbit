@@ -156,7 +156,7 @@ async function setup(page: Page) {
     .click();
   const dialog = page.getByRole("dialog");
   await dialog
-    .getByLabel("Nome do atendimento *", { exact: true })
+    .getByLabel(/^Nome do atendimento \*(?:\s*\*?\s*\(obrigatório\))?$/)
     .fill("Visita preventiva");
   return {
     queries,
@@ -182,7 +182,9 @@ for (const [term, label, id] of [
     await dialog
       .getByRole("combobox", { name: "Cliente *", exact: true })
       .click();
-    await page.getByLabel("Buscar cliente", { exact: true }).fill(term);
+    await page
+      .getByLabel(/^Buscar cliente(?:\s*\*?\s*\(obrigatório\))?$/)
+      .fill(term);
     await expect
       .poll(() => state.queries.some((query) => query.get("search") === term))
       .toBe(true);
@@ -209,14 +211,26 @@ test("RVT permite escolher clientes além dos primeiros 100 e preserva a escolha
     .getByRole("combobox", { name: "Cliente *", exact: true })
     .click();
   const results = page.getByRole("group", { name: "Clientes encontrados" });
-  await expect(async () => {
+  // Observe each real page transition before scrolling again; no fixed sleep
+  // or assertion-retry backoff should determine how many pages get loaded.
+  for (let next = 2; next <= 7; next++) {
+    await expect(results.getByRole("button")).toHaveCount((next - 1) * 20);
     await results.evaluate((element) => {
       element.scrollTop = element.scrollHeight;
     });
-    await expect(
-      page.getByRole("button", { name: new RegExp(NAME) }),
-    ).toBeVisible({ timeout: 1000 });
-  }).toPass({ timeout: 20000 });
+    await expect
+      .poll(() =>
+        state.queries.some((query) => Number(query.get("page")) === next),
+      )
+      .toBe(true);
+  }
+  await expect(results.getByRole("button")).toHaveCount(122);
+  await results.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  await expect(
+    page.getByRole("button", { name: new RegExp(NAME) }),
+  ).toBeVisible();
   await page.getByRole("button", { name: new RegExp(NAME) }).click();
   expect(state.queries.some((query) => Number(query.get("page")) > 5)).toBe(
     true,
@@ -235,7 +249,7 @@ test("RVT permite escolher clientes além dos primeiros 100 e preserva a escolha
   ).toHaveText(NAME);
   await dialog.getByRole("button", { name: "Continuar", exact: true }).click();
   await expect(
-    dialog.getByLabel("Rua / logradouro *", { exact: true }),
+    dialog.getByLabel(/^Rua \/ logradouro \*(?:\s*\*?\s*\(obrigatório\))?$/),
   ).toHaveValue("Rua do Sol");
 });
 

@@ -245,6 +245,7 @@ class EquipmentServiceHistoryItem {
     required this.title,
     required this.type,
     required this.observations,
+    this.serviceOrderCode,
     this.completedAt,
     this.technicianName,
     this.description,
@@ -254,6 +255,7 @@ class EquipmentServiceHistoryItem {
       EquipmentServiceHistoryItem(
         id: json['id'] as String,
         code: json['code'] as String? ?? '',
+        serviceOrderCode: json['serviceOrderCode'] as String?,
         title: json['title'] as String? ?? 'Atendimento',
         type: json['type'] as String? ?? '',
         completedAt: DateTime.tryParse(json['completedAt'] as String? ?? ''),
@@ -266,6 +268,7 @@ class EquipmentServiceHistoryItem {
 
   final String id;
   final String code;
+  final String? serviceOrderCode;
   final String title;
   final String type;
   final DateTime? completedAt;

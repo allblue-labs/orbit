@@ -122,7 +122,7 @@ class _OperationExecutionScreenState
       body: _preparing
           ? const OrbitLoadingState(
               title: 'Preparando atendimento',
-              message: 'Confirmando o início no servidor. Aguarde um instante.',
+              message: 'Confirmando o início do atendimento. Aguarde um instante.',
             )
           : switch (state.phase) {
               ExecutionPhase.loading => const OrbitLoadingState(
@@ -147,7 +147,7 @@ class _OperationExecutionScreenState
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'O início precisa ser confirmado pelo servidor antes de preencher e concluir o atendimento. Confira sua conexão.',
+                            'O início precisa ser confirmado antes de preencher e concluir o atendimento. Confira sua conexão.',
                           ),
                           const SizedBox(height: OrbitSpacing.md),
                           FilledButton(

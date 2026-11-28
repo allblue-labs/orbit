@@ -1,4 +1,7 @@
+import { PublicContactModule } from './modules/public-contact/public-contact.module';
 import './configure-environment';
+import { TenantOperationsModule } from './modules/tenant-operations/tenant-operations.module';
+import { TenantOperationGuard } from './modules/tenant-operations/tenant-operation.guard';
 import { Module } from '@nestjs/common';
 import { LegalModule } from './modules/legal/legal.module';
 import { APP_GUARD } from '@nestjs/core';
@@ -15,6 +18,7 @@ import { CommissionsModule } from './modules/commissions/commissions.module';
 import { FinancialModule } from './modules/financial/financial.module';
 import { QuotesModule } from './modules/quotes/quotes.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
+import { SalesModule } from './modules/sales/sales.module';
 import { AutomationsModule } from './modules/automations/automations.module';
 import { ManagementReportsModule } from './modules/management-reports/management-reports.module';
 import { PmocModule } from './modules/pmoc/pmoc.module';
@@ -27,9 +31,11 @@ import { DashboardModule } from './modules/dashboards/dashboard.module';
 import { SchedulingModule } from './modules/scheduling/scheduling.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { PlatformAdministrationModule } from './modules/platform-administration/platform-administration.module';
+import { CorporateAdministrationModule } from './modules/corporate-administration/corporate-administration.module';
 import { ArtifactTemplateModule } from './modules/artifact-templates/artifact-template.module';
 import { ArtifactRenderingModule } from './modules/artifact-rendering/artifact-rendering.module';
 import { JobsModule } from './modules/jobs/jobs.module';
+import { DocumentExportModule } from './modules/document-exports/document-export.module';
 import { ArtifactManifestModule } from './modules/artifact-manifests/artifact-manifest.module';
 import { StorageModule } from './modules/storage/storage.module';
 import { ArtifactExecutionModule } from './modules/artifact-executions/artifact-execution.module';
@@ -55,6 +61,7 @@ import {
 @Module({
   imports: [
     LegalModule,
+    PublicContactModule,
     FoundationModule,
     PrismaModule,
     IdentityModule,
@@ -65,6 +72,7 @@ import {
     FinancialModule,
     QuotesModule,
     InventoryModule,
+    SalesModule,
     AutomationsModule,
     ManagementReportsModule,
     PmocModule,
@@ -78,12 +86,15 @@ import {
     SchedulingModule,
     AnalyticsModule,
     PlatformAdministrationModule,
+    CorporateAdministrationModule,
     ArtifactTemplateModule,
     ArtifactExecutionModule,
     IssuedDocumentModule,
     StorageModule,
     ArtifactManifestModule,
     JobsModule,
+    DocumentExportModule,
+    TenantOperationsModule,
     ArtifactRenderingModule,
     RvtModule,
     MobileFieldModule,
@@ -104,6 +115,7 @@ import {
      * entitlements podem consultar o contexto estabelecido pelo JWT.
      */
     { provide: APP_GUARD, useClass: JwtAuthenticationGuard },
+    { provide: APP_GUARD, useClass: TenantOperationGuard },
     { provide: APP_GUARD, useClass: SurfaceGuard },
     { provide: APP_GUARD, useClass: PermissionGuard },
     { provide: APP_GUARD, useClass: RoleGuard },

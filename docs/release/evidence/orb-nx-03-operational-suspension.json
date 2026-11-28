@@ -1,0 +1,1970 @@
+{
+  "schemaVersion": 1,
+  "delivery": "ORB-NX-03",
+  "localValidationDate": "2026-11-15",
+  "clientTimezone": "America/Recife",
+  "status": "LOCALLY_VALIDATED",
+  "productionApproval": false,
+  "git": {
+    "workspace": "/Users/ds_/Documents/Devs/AllBlueLabs/Applications/Orbit",
+    "branch": "feat/features-and-backlogs",
+    "initialHead": "03efc9d51a95221b1cbb7f9636019ce596b20896",
+    "finalHead": "03efc9d51a95221b1cbb7f9636019ce596b20896",
+    "initialWorktreeClean": true,
+    "initialStagedFiles": [],
+    "finalStagedFiles": [],
+    "newCommitCreated": false,
+    "push": false,
+    "merge": false,
+    "deploy": false,
+    "priorCheckpoints": {
+      "PR-00.C": "7e8fec077fd9fbbb1f80f31ed1ebe7a6137b6e77",
+      "ORB-NX-01": "deaba1ea1e008613296f506cb4de9f015414b64f",
+      "ORB-NX-02": "03efc9d51a95221b1cbb7f9636019ce596b20896"
+    },
+    "finalChangedSources": [
+      "backend/prisma/migrations/20261115120000_orbnx03_operational_decisions/migration.sql",
+      "backend/src/app.module.ts",
+      "backend/src/common/public-errors/public-error.catalog.ts",
+      "backend/src/common/public-errors/public-error.read-models.ts",
+      "backend/src/modules/billing/billing.controller.ts",
+      "backend/src/modules/billing/subscription-billing.controller.ts",
+      "backend/src/modules/customer-portal/customer-portal.controller.ts",
+      "backend/src/modules/customer-portal/customer-portal.guard.spec.ts",
+      "backend/src/modules/customer-portal/customer-portal.guard.ts",
+      "backend/src/modules/identity/presentation/auth.controller.ts",
+      "backend/src/modules/identity/presentation/profile.controller.ts",
+      "backend/src/modules/jobs/background-job.queue.ts",
+      "backend/src/modules/jobs/background-job.worker.spec.ts",
+      "backend/src/modules/jobs/background-job.worker.ts",
+      "backend/src/modules/legal/legal-acceptance.controller.ts",
+      "backend/src/modules/notifications/mobile-device.controller.ts",
+      "backend/src/modules/notifications/notification.gateway.ts",
+      "backend/src/modules/notifications/notification.service.ts",
+      "backend/src/modules/organizations/organization.controller.ts",
+      "backend/src/modules/platform-administration/platform-administration.controller.ts",
+      "backend/src/modules/pmoc/pmoc-artifact-authority.spec.ts",
+      "backend/src/modules/pmoc/pmoc-equipment-schedule.spec.ts",
+      "backend/src/modules/pmoc/pmoc-web-evidence.spec.ts",
+      "backend/src/modules/pmoc/pmoc-work-record.spec.ts",
+      "backend/src/modules/pmoc/pmoc.repository.ts",
+      "backend/src/modules/quotes/quote-acceptance.service.ts",
+      "backend/src/modules/storage/storage-upload.guard.ts",
+      "backend/src/modules/subscription-plans/subscription-plan.controller.ts",
+      "backend/src/modules/tenant-operations/tenant-operation-admin.service.ts",
+      "backend/src/modules/tenant-operations/tenant-operation.controller.ts",
+      "backend/src/modules/tenant-operations/tenant-operation.dto.ts",
+      "backend/src/modules/tenant-operations/tenant-operation.guard.ts",
+      "backend/src/modules/tenant-operations/tenant-operation.policy.spec.ts",
+      "backend/src/modules/tenant-operations/tenant-operation.policy.ts",
+      "backend/src/modules/tenant-operations/tenant-operations.module.ts",
+      "backend/test/customer-document-acceptance.e2e-spec.ts",
+      "backend/test/tenant-suspension.e2e-spec.ts",
+      "frontend/src/lib/error-copy.test.ts",
+      "frontend/src/server/bff/allowlist.test.ts",
+      "frontend/src/types/contracts/common/public-errors/public-error.read-models.ts",
+      "mobile/test/core/orbit_api_client_test.dart"
+    ],
+    "newDocumentation": [
+      "docs/release/orb-nx-03-operational-suspension.md",
+      "docs/release/evidence/orb-nx-03-operational-suspension.json"
+    ],
+    "snapshotPhase": "technical_validation_before_subsequent_user_authorized_commit"
+  },
+  "preservedPreviousArtifacts": [
+    {
+      "path": "docs/integrations/nexus/orbit-v2-admin-capabilities.md",
+      "sha256": "897abdb778b4aac383f01bd94d3f7249dede4a51d4321a69dd9776de9b55486e",
+      "unchanged": true
+    },
+    {
+      "path": "docs/integrations/nexus/orbit-v2-current-state-audit.md",
+      "sha256": "10245b8d522e5603078ff006ec2f5915afd0190ee2f1c9e1fe5e49aff28517f3",
+      "unchanged": true
+    },
+    {
+      "path": "docs/integrations/nexus/orbit-v2-integration-gap-analysis.md",
+      "sha256": "6a7af5f81331ccde11a3a48eacb1f0693fbaeb2e3fa9dae527e9e8a616969894",
+      "unchanged": true
+    },
+    {
+      "path": "docs/integrations/nexus/orbit-v2-integration-roadmap.md",
+      "sha256": "2e68068ffc639a11e035abb930414866ae18a6b4754964d5cf78911e1e14ad29",
+      "unchanged": true
+    },
+    {
+      "path": "docs/integrations/nexus/orbit-v2-nexus-integration-contracts.md",
+      "sha256": "6b502be698c1b7173ba974526107577212103bc5a4ff76ada8e0ddf504b7d245",
+      "unchanged": true
+    },
+    {
+      "path": "docs/integrations/nexus/orbit-v2-stripe-and-billing-audit.md",
+      "sha256": "b5f497e135e0a19bcdc1a1b132b5021990c43f0d0c8a562224b385b1777ef4d1",
+      "unchanged": true
+    },
+    {
+      "path": "docs/release/orb-nx-01-global-privilege-provenance.md",
+      "sha256": "91809bbf1267c12b365805f27aa3818003bc63d568fc8224f34d265cfa778940",
+      "unchanged": true
+    },
+    {
+      "path": "docs/release/orb-nx-02-canonical-administration.md",
+      "sha256": "9eb485a5bf3d258df990ff5bdda5040427382a2002d19454a7f69565794a4270",
+      "unchanged": true
+    },
+    {
+      "path": "docs/release/evidence/orb-nx-01-global-privilege-provenance.json",
+      "sha256": "bfbc95037d5110340c7fa00430887f560db3ca4e3c2219db4bc3de09c4785edf",
+      "unchanged": true
+    },
+    {
+      "path": "docs/release/evidence/orb-nx-02-canonical-administration.json",
+      "sha256": "e1f695e3b26a260b8fbd9e7ee432f78804e448ab3672443a44fce62c79ac6bc6",
+      "unchanged": true
+    }
+  ],
+  "implementation": {
+    "operationalStates": [
+      "ACTIVE",
+      "ONBOARDING"
+    ],
+    "blockedStates": [
+      "SUSPENDED",
+      "CANCELLED",
+      "UNAVAILABLE",
+      "unknown",
+      "data purge in progress/completed"
+    ],
+    "decisionEndpoint": "POST /api/v1/platform-admin/organizations/:id/operational-status",
+    "statusEndpoint": "GET /api/v1/organizations/current/operational-access",
+    "versionPrecondition": "Organization.updatedAt",
+    "idempotency": "tenant + sha256(header); immutable audited receipt; mismatched body is conflict",
+    "expiration": "manual only; no automatic expiry/reactivation",
+    "financialMutation": false,
+    "requiresCanonicalContractForNewReactivation": true,
+    "deferredAttemptConsumed": false,
+    "deferredRecheckMs": 300000,
+    "recoveryDoesNotBypass": [
+      "authentication",
+      "surface access",
+      "permissions",
+      "verified global authority",
+      "RLS",
+      "canonical financial gates"
+    ],
+    "newMigration": "20261115120000_orbnx03_operational_decisions"
+  },
+  "validation": {
+    "backendUnit": {
+      "suites": 18,
+      "tests": 119,
+      "failed": 0,
+      "results": [
+        {
+          "file": "backend/src/common/role-namespace.spec.ts",
+          "passed": 9,
+          "failed": 0,
+          "cases": [
+            {
+              "name": "ORB-NX-01 tenant role namespace rejects creation and rename for PLATFORM_ADMIN",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 tenant role namespace rejects creation and rename for platform admin",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 tenant role namespace rejects creation and rename for  Plátform---Admín ",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 tenant role namespace rejects creation and rename for PlatformAdmin",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 tenant role namespace rejects creation and rename for platform.supervisor",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 tenant role namespace rejects creation and rename for GLOBAL_ADMIN",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 tenant role namespace rejects creation and rename for Corporate Admin",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 tenant role namespace rejects creation and rename for nexus.admin",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 tenant role namespace preserves ordinary tenant role normalization",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/modules/pmoc/pmoc-equipment-schedule.spec.ts",
+          "passed": 13,
+          "failed": 0,
+          "cases": [
+            {
+              "name": "gerenciamento de execução PMOC por equipamento atribui e agenda sem criar uma execução ou iniciar uma operação",
+              "status": "passed"
+            },
+            {
+              "name": "gerenciamento de execução PMOC por equipamento sincroniza a substituição da equipe na execução e na operação vinculada",
+              "status": "passed"
+            },
+            {
+              "name": "gerenciamento de execução PMOC por equipamento não altera equipamento encerrado (COMPLETED)",
+              "status": "passed"
+            },
+            {
+              "name": "gerenciamento de execução PMOC por equipamento não altera equipamento encerrado (CANCELLED)",
+              "status": "passed"
+            },
+            {
+              "name": "gerenciamento de execução PMOC por equipamento recusa uma versão antiga, sem sobrescrever a atribuição atual",
+              "status": "passed"
+            },
+            {
+              "name": "gerenciamento de execução PMOC por equipamento não permite atravessar organização, plano ou unidade",
+              "status": "passed"
+            },
+            {
+              "name": "gerenciamento de execução PMOC por equipamento cancela somente o equipamento escolhido e guarda o motivo, sem apagar registros",
+              "status": "passed"
+            },
+            {
+              "name": "gerenciamento de execução PMOC por equipamento encerramento por cancelamento não inventa manutenção realizada e mantém a próxima previsão",
+              "status": "passed"
+            },
+            {
+              "name": "autoridade e liberação da atribuição PMOC exige gestão para atribuir e cancelar, mesmo sendo o técnico previsto",
+              "status": "passed"
+            },
+            {
+              "name": "autoridade e liberação da atribuição PMOC recusa técnicos e auxiliares de fora da unidade",
+              "status": "passed"
+            },
+            {
+              "name": "autoridade e liberação da atribuição PMOC atribui sem liberar indevidamente nem avisar antes da autorização (false/false)",
+              "status": "passed"
+            },
+            {
+              "name": "autoridade e liberação da atribuição PMOC atribui sem liberar indevidamente nem avisar antes da autorização (true/false)",
+              "status": "passed"
+            },
+            {
+              "name": "autoridade e liberação da atribuição PMOC atribui sem liberar indevidamente nem avisar antes da autorização (true/true)",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/modules/pmoc/pmoc-web-evidence.spec.ts",
+          "passed": 5,
+          "failed": 0,
+          "cases": [
+            {
+              "name": "upload de imagens PMOC na web confere bytes e grava arquivo/evidência na mesma transação e unidade",
+              "status": "passed"
+            },
+            {
+              "name": "upload de imagens PMOC na web não envia arquivo quando a execução está ausente/fechada: null",
+              "status": "passed"
+            },
+            {
+              "name": "upload de imagens PMOC na web não envia arquivo quando a execução está ausente/fechada: COMPLETED",
+              "status": "passed"
+            },
+            {
+              "name": "upload de imagens PMOC na web considera também as fotos mobile no limite antes de armazenar outra",
+              "status": "passed"
+            },
+            {
+              "name": "upload de imagens PMOC na web recusa arquivo que só foi renomeado como imagem",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/modules/identity/infrastructure/jwt-authentication.guard.spec.ts",
+          "passed": 6,
+          "failed": 0,
+          "cases": [
+            {
+              "name": "JwtAuthenticationGuard error semantics returns 401 for an invalid token",
+              "status": "passed"
+            },
+            {
+              "name": "JwtAuthenticationGuard error semantics returns 401 for an expired token",
+              "status": "passed"
+            },
+            {
+              "name": "JwtAuthenticationGuard error semantics returns 401 for a revoked session",
+              "status": "passed"
+            },
+            {
+              "name": "JwtAuthenticationGuard error semantics rethrows infrastructure code ECONNRESET instead of converting it to 401",
+              "status": "passed"
+            },
+            {
+              "name": "JwtAuthenticationGuard error semantics rethrows infrastructure code ETIMEDOUT instead of converting it to 401",
+              "status": "passed"
+            },
+            {
+              "name": "JwtAuthenticationGuard error semantics does not classify a token provider infrastructure failure as invalid credentials",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/modules/tenant-operations/tenant-operation.policy.spec.ts",
+          "passed": 9,
+          "failed": 0,
+          "cases": [
+            {
+              "name": "Operational policy is separate from financial eligibility permits operational status ACTIVE independently of legacy billing flags",
+              "status": "passed"
+            },
+            {
+              "name": "Operational policy is separate from financial eligibility permits operational status ONBOARDING independently of legacy billing flags",
+              "status": "passed"
+            },
+            {
+              "name": "Operational policy is separate from financial eligibility fails closed for SUSPENDED even when a role name says PLATFORM_ADMIN",
+              "status": "passed"
+            },
+            {
+              "name": "Operational policy is separate from financial eligibility fails closed for CANCELLED even when a role name says PLATFORM_ADMIN",
+              "status": "passed"
+            },
+            {
+              "name": "Operational policy is separate from financial eligibility fails closed for UNKNOWN even when a role name says PLATFORM_ADMIN",
+              "status": "passed"
+            },
+            {
+              "name": "Operational policy is separate from financial eligibility fails closed for active even when a role name says PLATFORM_ADMIN",
+              "status": "passed"
+            },
+            {
+              "name": "Operational policy is separate from financial eligibility does not resume data already purging or no longer visible",
+              "status": "passed"
+            },
+            {
+              "name": "Operational policy is separate from financial eligibility does not memoize status across decisions or successive requests",
+              "status": "passed"
+            },
+            {
+              "name": "Operational policy is separate from financial eligibility rejects role strings and serialized authority before opening an administrative transaction",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/modules/platform-administration/platform-administration.service.spec.ts",
+          "passed": 3,
+          "failed": 0,
+          "cases": [
+            {
+              "name": "PlatformAdministrationService canonical boundary does not accept a tenant role string or structural owner as global authority",
+              "status": "passed"
+            },
+            {
+              "name": "PlatformAdministrationService canonical boundary audits rejected legacy billing writes without turning them into canonical commands",
+              "status": "passed"
+            },
+            {
+              "name": "PlatformAdministrationService canonical boundary exposes optimistic concurrency conflicts explicitly",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/modules/customer-portal/customer-portal.guard.spec.ts",
+          "passed": 3,
+          "failed": 0,
+          "cases": [
+            {
+              "name": "CustomerPortalGuard establishes a portal-only actor without creating an internal user",
+              "status": "passed"
+            },
+            {
+              "name": "CustomerPortalGuard rejects tokens whose session/customer binding cannot be revalidated",
+              "status": "passed"
+            },
+            {
+              "name": "CustomerPortalGuard rejects a token without the explicit portal actor/type",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/guards/foundation.guards.spec.ts",
+          "passed": 3,
+          "failed": 0,
+          "cases": [
+            {
+              "name": "SurfaceGuard treats authenticated product APIs as WEB/API by default",
+              "status": "passed"
+            },
+            {
+              "name": "SurfaceGuard allows MOBILE only when the endpoint declares it",
+              "status": "passed"
+            },
+            {
+              "name": "SurfaceGuard does not apply a product surface to public endpoints",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/common/verified-platform-authority.spec.ts",
+          "passed": 9,
+          "failed": 0,
+          "cases": [
+            {
+              "name": "ORB-NX-01 verified global authority rejects role strings, tenant wildcard and structural owner as platform proof",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 verified global authority accepts a real request-local proof but rejects clones and cross-user reuse",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 verified global authority rejects invalid persisted assignment provenance: {\"revokedAt\":\"2026-11-15T12:00:26.384Z\"}",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 verified global authority rejects invalid persisted assignment provenance: {\"userId\":\"other\"}",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 verified global authority rejects invalid persisted assignment provenance: {\"roleId\":\"other\"}",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 verified global authority rejects invalid persisted assignment provenance: {\"role\":{\"id\":\"role\",\"organizationId\":\"tenant\",\"deletedAt\":null,\"key\":\"PLATFORM_ADMIN\",\"permissions\":[\"platform.admin\"],\"allowedSurfaces\":[\"WEB\"]}}",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 verified global authority rejects invalid persisted assignment provenance: {\"role\":{\"id\":\"role\",\"organizationId\":null,\"deletedAt\":\"2026-11-15T12:00:26.384Z\",\"key\":\"PLATFORM_ADMIN\",\"permissions\":[\"platform.admin\"],\"allowedSurfaces\":[\"WEB\"]}}",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 verified global authority legacy tenant role and platform permission never become global grants",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 verified global authority RLS requires verified provenance, matching user and internal actor",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/modules/jobs/background-job.worker.spec.ts",
+          "passed": 1,
+          "failed": 0,
+          "cases": [
+            {
+              "name": "BackgroundJobWorker lifecycle stops new claims and waits for the in-flight tick before shutdown",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/modules/subscription-plans/plan-access.spec.ts",
+          "passed": 17,
+          "failed": 0,
+          "cases": [
+            {
+              "name": "CapabilityGuard error semantics keeps a policy denial as 403",
+              "status": "passed"
+            },
+            {
+              "name": "CapabilityGuard error semantics rethrows capability lookup infrastructure failures",
+              "status": "passed"
+            },
+            {
+              "name": "CapabilityGuard error semantics memoizes only inside one request object",
+              "status": "passed"
+            },
+            {
+              "name": "ActivePlanGuard initial payment pending subscription blocks GET in product routes",
+              "status": "passed"
+            },
+            {
+              "name": "ActivePlanGuard initial payment pending subscription blocks HEAD in product routes",
+              "status": "passed"
+            },
+            {
+              "name": "ActivePlanGuard initial payment pending subscription blocks POST in product routes",
+              "status": "passed"
+            },
+            {
+              "name": "ActivePlanGuard initial payment pending subscription blocks PATCH in product routes",
+              "status": "passed"
+            },
+            {
+              "name": "ActivePlanGuard initial payment pending subscription blocks DELETE in product routes",
+              "status": "passed"
+            },
+            {
+              "name": "ActivePlanGuard initial payment keeps billing and profile routes reachable without product access metadata",
+              "status": "passed"
+            },
+            {
+              "name": "ActivePlanGuard initial payment keeps read access to the history of an expired subscription",
+              "status": "passed"
+            },
+            {
+              "name": "ActivePlanGuard adequação sem remoção de dados mantém GET disponível para consulta e adequação",
+              "status": "passed"
+            },
+            {
+              "name": "ActivePlanGuard adequação sem remoção de dados mantém HEAD disponível para consulta e adequação",
+              "status": "passed"
+            },
+            {
+              "name": "ActivePlanGuard adequação sem remoção de dados mantém DELETE disponível para consulta e adequação",
+              "status": "passed"
+            },
+            {
+              "name": "ActivePlanGuard adequação sem remoção de dados preserva atualização cadastral e desativação de clientes para regularizar",
+              "status": "passed"
+            },
+            {
+              "name": "ActivePlanGuard adequação sem remoção de dados bloqueia POST operacional com excedente após o prazo",
+              "status": "passed"
+            },
+            {
+              "name": "ActivePlanGuard adequação sem remoção de dados bloqueia PATCH operacional com excedente após o prazo",
+              "status": "passed"
+            },
+            {
+              "name": "ActivePlanGuard adequação sem remoção de dados inclui comandos mobile que não declaram capabilities legadas",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/modules/pmoc/pmoc-work-record.spec.ts",
+          "passed": 5,
+          "failed": 0,
+          "cases": [
+            {
+              "name": "registro do roteiro de PMOC impede gravação direta enquanto o ciclo aguarda aprovação",
+              "status": "passed"
+            },
+            {
+              "name": "registro do roteiro de PMOC impede conclusão direta enquanto o ciclo aguarda aprovação",
+              "status": "passed"
+            },
+            {
+              "name": "registro do roteiro de PMOC salva itens não realizados, notas e preserva os demais dados da operação",
+              "status": "passed"
+            },
+            {
+              "name": "registro do roteiro de PMOC recusa outra pessoa sem gravar dados",
+              "status": "passed"
+            },
+            {
+              "name": "registro do roteiro de PMOC recusa uma revisão antiga e chaves não declaradas no roteiro",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/modules/pmoc/pmoc-artifact-authority.spec.ts",
+          "passed": 5,
+          "failed": 0,
+          "cases": [
+            {
+              "name": "emissão do relatório de uma execução de equipamento recusa quem não é o técnico escalado",
+              "status": "passed"
+            },
+            {
+              "name": "emissão do relatório de uma execução de equipamento não devolve o documento de outra pessoa nem quando ele já existe",
+              "status": "passed"
+            },
+            {
+              "name": "emissão do relatório de uma execução de equipamento o escalado emite",
+              "status": "passed"
+            },
+            {
+              "name": "emissão do relatório de uma execução de equipamento sem restrição, qualquer escala passa — é como o dono emite",
+              "status": "passed"
+            },
+            {
+              "name": "emissão do relatório de uma execução de equipamento execução sem técnico registrado não passa por restrição",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/common/public-errors/public-error.catalog.spec.ts",
+          "passed": 3,
+          "failed": 0,
+          "cases": [
+            {
+              "name": "Public error catalog has one deterministic definition for every public code",
+              "status": "passed"
+            },
+            {
+              "name": "Public error catalog contains only product copy and no technical disclosure",
+              "status": "passed"
+            },
+            {
+              "name": "Public error catalog has a safe generic fallback",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/modules/jobs/background-job.queue.spec.ts",
+          "passed": 9,
+          "failed": 0,
+          "cases": [
+            {
+              "name": "backoffFor dobra a cada tentativa",
+              "status": "passed"
+            },
+            {
+              "name": "backoffFor para de crescer no teto — espera não vira abandono",
+              "status": "passed"
+            },
+            {
+              "name": "backoffFor trata tentativa zero como a primeira",
+              "status": "passed"
+            },
+            {
+              "name": "BackgroundJobQueue.fail fecha o job pela transação que declara o worker",
+              "status": "passed"
+            },
+            {
+              "name": "BackgroundJobQueue.fail devolve o job à fila enquanto restam tentativas",
+              "status": "passed"
+            },
+            {
+              "name": "BackgroundJobQueue.fail enterra quando as tentativas se esgotam",
+              "status": "passed"
+            },
+            {
+              "name": "BackgroundJobQueue.fail erro permanente não gasta as tentativas restantes",
+              "status": "passed"
+            },
+            {
+              "name": "BackgroundJobQueue.fail never persists an arbitrary failure message",
+              "status": "passed"
+            },
+            {
+              "name": "BackgroundJobQueue.fail libera a trava para outra réplica poder pegar",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/common/public-errors/public-error.mapper.spec.ts",
+          "passed": 10,
+          "failed": 0,
+          "cases": [
+            {
+              "name": "PublicErrorMapper maps ValidationPipe messages to safe field issues",
+              "status": "passed"
+            },
+            {
+              "name": "PublicErrorMapper does not expose identifiers from hidden absence errors",
+              "status": "passed"
+            },
+            {
+              "name": "PublicErrorMapper maps registered domain codes without exposing their internal messages",
+              "status": "passed"
+            },
+            {
+              "name": "PublicErrorMapper falls back by HTTP semantics for an unregistered application code",
+              "status": "passed"
+            },
+            {
+              "name": "PublicErrorMapper preserves bounded retry metadata and no implementation detail",
+              "status": "passed"
+            },
+            {
+              "name": "PublicErrorMapper maps built-in authorization and infrastructure errors safely",
+              "status": "passed"
+            },
+            {
+              "name": "PublicErrorMapper maps unexpected errors to a safe fallback",
+              "status": "passed"
+            },
+            {
+              "name": "erro de fora do Nest que declara status traduz corpo grande demais para 413 com mensagem de tamanho",
+              "status": "passed"
+            },
+            {
+              "name": "erro de fora do Nest que declara status ignora status pendurado em erro que não é para mostrar",
+              "status": "passed"
+            },
+            {
+              "name": "erro de fora do Nest que declara status ignora status de servidor pendurado em erro exposto",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/common/authorization.service.spec.ts",
+          "passed": 4,
+          "failed": 0,
+          "cases": [
+            {
+              "name": "AuthorizationService derives tenant-owner authority structurally",
+              "status": "passed"
+            },
+            {
+              "name": "AuthorizationService requires an exact permission and unit for a normal actor",
+              "status": "passed"
+            },
+            {
+              "name": "AuthorizationService prevents privilege and surface escalation during delegation",
+              "status": "passed"
+            },
+            {
+              "name": "AuthorizationService only the structural owner can grant mobile quote-document access",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/src/modules/platform-administration/platform-subscription.projection.spec.ts",
+          "passed": 5,
+          "failed": 0,
+          "cases": [
+            {
+              "name": "canonical administrative subscription projection never infers active access from missing canonical subscription",
+              "status": "passed"
+            },
+            {
+              "name": "canonical administrative subscription projection shows unpaid subscriptions as pending without access",
+              "status": "passed"
+            },
+            {
+              "name": "canonical administrative subscription projection uses the canonical clock for valid and expired trials",
+              "status": "passed"
+            },
+            {
+              "name": "canonical administrative subscription projection keeps provider-scheduled changes and cancellations separate from the effective plan",
+              "status": "passed"
+            },
+            {
+              "name": "canonical administrative subscription projection does not present already ended contracts as scheduled cancellations or changes",
+              "status": "passed"
+            }
+          ]
+        }
+      ]
+    },
+    "httpRestrictedPostgreSQL": {
+      "suites": 9,
+      "tests": 175,
+      "failed": 0,
+      "results": [
+        {
+          "file": "backend/test/customer-document-acceptance.e2e-spec.ts",
+          "passed": 18,
+          "failed": 0,
+          "cases": [
+            {
+              "name": "aceite público de propostas com RLS real ORB-NX-03 blocks a suspended tenant from accepting a pre-issued public proposal without losing its read-only document",
+              "status": "passed"
+            },
+            {
+              "name": "aceite público de propostas com RLS real envia rascunho, congela resumo/PDF e guarda somente o hash do segredo",
+              "status": "passed"
+            },
+            {
+              "name": "aceite público de propostas com RLS real aprova uma única vez mesmo com respostas simultâneas; preserva assinatura, auditoria e outbox",
+              "status": "passed"
+            },
+            {
+              "name": "aceite público de propostas com RLS real registra REJECT e aplica a transição correspondente sem evento de aprovação",
+              "status": "passed"
+            },
+            {
+              "name": "aceite público de propostas com RLS real registra REQUEST_CHANGES e aplica a transição correspondente sem evento de aprovação",
+              "status": "passed"
+            },
+            {
+              "name": "aceite público de propostas com RLS real recusa falta de consentimento/assinatura/motivo sem alterar proposta ou registrar arquivo",
+              "status": "passed"
+            },
+            {
+              "name": "aceite público de propostas com RLS real desfaz status, auditoria, arquivo e outbox se a persistência da resposta falhar",
+              "status": "passed"
+            },
+            {
+              "name": "aceite público de propostas com RLS real não confirma aprovação sem o aviso persistido e permite tentar novamente após falha da base",
+              "status": "passed"
+            },
+            {
+              "name": "aceite público de propostas com RLS real revoga link pendente anterior e impede aceite/download de links expirados ou alterados",
+              "status": "passed"
+            },
+            {
+              "name": "aceite público de propostas com RLS real não permite ao outro tenant gerar/ler respostas; acesso sem token não enxerga tabela; não vaza contexto público",
+              "status": "passed"
+            },
+            {
+              "name": "aceite público de propostas com RLS real avisa o owner mesmo se outra pessoa criou a proposta; lista no sino/central e marca lida sem vazar para outro usuário ou tenant",
+              "status": "passed"
+            },
+            {
+              "name": "aceite público de propostas com RLS real congela e baixa contrato PMOC, coleta aceite opcional e conserva a prova anterior após alteração",
+              "status": "passed"
+            },
+            {
+              "name": "aceite público de propostas com RLS real orçamentos criados em campo mobile: operador cria uma proposta completa, preserva os totais e o owner acompanha pela web",
+              "status": "passed"
+            },
+            {
+              "name": "aceite público de propostas com RLS real orçamentos criados em campo mobile: tentativas simultâneas geram um orçamento; alterar o conteúdo com a mesma chave é recusado",
+              "status": "passed"
+            },
+            {
+              "name": "aceite público de propostas com RLS real orçamentos criados em campo mobile: falha de um item desfaz proposta, linhas e auditoria",
+              "status": "passed"
+            },
+            {
+              "name": "aceite público de propostas com RLS real orçamentos criados em campo mobile: isola tenant, autoria e unidade e recusa auxiliar sem permissão de criação",
+              "status": "passed"
+            },
+            {
+              "name": "aceite público de propostas com RLS real orçamentos criados em campo mobile: lista opções do cliente e rejeita equipamento pertencente a outro cliente",
+              "status": "passed"
+            },
+            {
+              "name": "aceite público de propostas com RLS real orçamentos criados em campo mobile: aceite reutiliza assinatura, PDF e notificação ao owner do fluxo comercial",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/test/billing-stripe.e2e-spec.ts",
+          "passed": 33,
+          "failed": 0,
+          "cases": [
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) autenticidade do webhook aceita evento com assinatura válida sobre o corpo cru",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) autenticidade do webhook recusa sem o cabeçalho de assinatura",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) autenticidade do webhook recusa assinatura inválida",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) autenticidade do webhook recusa corpo adulterado depois de assinado",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) autenticidade do webhook recusa assinatura feita com outro segredo",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) autenticidade do webhook evento recusado não entra na caixa de entrada",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) entrega repetida o mesmo evento dez vezes grava uma linha",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) entrega repetida quatro entregas simultâneas produzem uma linha só",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) reconciliação pagamento confirmado mantém a assinatura ativa",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) reconciliação falha de pagamento leva à carência da PR-PL-02",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) reconciliação evento antigo de falha não derruba assinatura já paga",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) reconciliação estado desconhecido do provedor não vira acesso",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) reconciliação encerramento no provedor encerra o acesso local",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) reconciliação evento sem consumidor é reconhecido e arquivado",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) reconciliação processar duas vezes não muda o resultado",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) provedor indisponível tempo esgotado não suspende ninguém, e o evento fica para depois",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) provedor indisponível a varredura periódica corrige entrega perdida",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) o cliente não decide preço, valor, avaliação nem organização aceita apenas plano e periodicidade",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) o cliente não decide preço, valor, avaliação nem organização recusa o corpo que tenta enviar amount",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) o cliente não decide preço, valor, avaliação nem organização recusa o corpo que tenta enviar currency",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) o cliente não decide preço, valor, avaliação nem organização recusa o corpo que tenta enviar stripePriceId",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) o cliente não decide preço, valor, avaliação nem organização recusa o corpo que tenta enviar priceId",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) o cliente não decide preço, valor, avaliação nem organização recusa o corpo que tenta enviar trialDays",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) o cliente não decide preço, valor, avaliação nem organização recusa o corpo que tenta enviar organizationId",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) o cliente não decide preço, valor, avaliação nem organização recusa o corpo que tenta enviar customerId",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) o cliente não decide preço, valor, avaliação nem organização recusa periodicidade inventada",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) o cliente não decide preço, valor, avaliação nem organização exige sessão autenticada",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) o cliente não decide preço, valor, avaliação nem organização não abre uma segunda assinatura para contrato já ativo",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) prontidão da cobrança publica o que dá para fazer, sem segredo nem identificador do provedor",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) prontidão da cobrança a visão consolidada traz catálogo, assinatura, uso e prontidão",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) prontidão da cobrança desligada, a tela recebe indisponibilidade e não erro técnico",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) prontidão da cobrança desligada, o webhook não aceita evento nenhum",
+              "status": "passed"
+            },
+            {
+              "name": "Stripe billing integration and webhook reconciliation (e2e) as demais rotas continuam recebendo JSON uma rota comum segue interpretando o corpo normalmente",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/test/tenant-suspension.e2e-spec.ts",
+          "passed": 28,
+          "failed": 0,
+          "cases": [
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) runs with forced RLS and no SUPERUSER/BYPASSRLS",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) operational ACTIVE / canonical ACTIVE preserves independent read and write gates",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) operational SUSPENDED / canonical ACTIVE preserves independent read and write gates",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) operational SUSPENDED / canonical TRIALING preserves independent read and write gates",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) operational ACTIVE / canonical EXPIRED preserves independent read and write gates",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) operational ACTIVE / canonical PENDING_PAYMENT preserves independent read and write gates",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) blocks an existing WEB session on the next operational request without trusting old JWT claims",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) blocks an existing MOBILE session on the next operational request without trusting old JWT claims",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) blocks an existing API session on the next operational request without trusting old JWT claims",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) keeps identity, recovery, billing and own restriction status available without granting operational access",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) reactivates a valid contract without touching any canonical financial field or Stripe link",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) does not restore permissions revoked while operationally suspended",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) does not revive the legacy financial fallback when there is no canonical contract",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) reactivation of an ended contract does not grant writes, trial or paid rights",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) serializes opposite decisions and rejects a stale administrative version",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) persists one receipt for concurrent duplicates, rejects payload reuse and records an explicit no-op",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) enforces tenant/unit isolation and refuses unauthorized target selection, including nonexistent targets",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) grants administrative recovery only with current persisted global authority, never a product bypass",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) defers already queued operational work without exhausting attempts and wakes the same job after reactivation",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) keeps financial/security/cleanup queue artifact.manifest.issued running while suspended",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) keeps financial/security/cleanup queue quote.status.changed running while suspended",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) keeps financial/security/cleanup queue mobile.sync.cleanup running while suspended",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) keeps financial/security/cleanup queue mobile.evidence.cleanup running while suspended",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) reactivation cannot execute operational jobs for an ineligible canonical subscription",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) allows a job admitted before suspension to finish and blocks subsequent admissions",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) checks a pre-issued signed upload after signature authentication and before accepting data",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) does not emit realtime tenant data into sockets established before suspension",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-03 operational suspension (real HTTP / restricted PostgreSQL) does not reactivate retained, canceled or purging organizations",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/test/subscriptions.e2e-spec.ts",
+          "passed": 27,
+          "failed": 0,
+          "cases": [
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) preços por periodicidade publica os três preços congelados de cada plano",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) preços por periodicidade preço é inteiro em centavos, nunca ponto flutuante",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) preços por periodicidade não antecipa Stripe nem checkout",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) avaliação gratuita a primeira empresa recebe trinta dias no Essencial",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) avaliação gratuita recusa um novo cadastro com CNPJ já utilizado antes de conceder outra avaliação",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) avaliação gratuita usuário novo não gera avaliação nova",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) avaliação gratuita mudar de endereço não burla, porque o documento é o mesmo",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) avaliação gratuita documento diferente no mesmo endereço continua elegível",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) avaliação gratuita PROFESSIONAL não oferece avaliação",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) avaliação gratuita PROFESSIONAL_INTELLIGENCE não oferece avaliação",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) avaliação gratuita ENTERPRISE_UNLIMITED não oferece avaliação",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) avaliação gratuita quatro pedidos concorrentes com o mesmo documento concedem um só",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) avaliação gratuita a recusa não conta o motivo nem devolve a impressão",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) fronteira do registro antifraude uma organização não lista a concessão de outra",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) cobrança e uso são períodos diferentes com cobrança MONTHLY, o acesso dura 1 mês(es) e a cota continua mensal",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) cobrança e uso são períodos diferentes com cobrança SEMIANNUAL, o acesso dura 6 mês(es) e a cota continua mensal",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) cobrança e uso são períodos diferentes com cobrança ANNUAL, o acesso dura 12 mês(es) e a cota continua mensal",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) cobrança e uso são períodos diferentes o limite mensal não muda com a periodicidade",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) troca de plano subir é programado e não libera inteligência antes do vencimento",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) troca de plano descer é programado e não muda nada agora",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) troca de plano dois comandos concorrentes: um passa, o outro encontra versão vencida",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) cancelamento mantém o acesso até o fim do período e pode ser desfeito",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) carência e suspensão falha de pagamento dá sete dias, e o acesso continua",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) carência e suspensão carência vencida suspende, e a suspensão nega o produto sem apagar dados",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) reconciliação põe o banco em dia e rodar de novo não muda nada",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) leitura da assinatura publica períodos e ações sem vazar antifraude",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription lifecycle, billing periods and trial (e2e) leitura da assinatura organização sem assinatura recebe o código previsto",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/test/rls.e2e-spec.ts",
+          "passed": 19,
+          "failed": 0,
+          "cases": [
+            {
+              "name": "Row Level Security (e2e) 1 · a aplicação conecta com papel que não contorna RLS",
+              "status": "passed"
+            },
+            {
+              "name": "Row Level Security (e2e) 1.1 · sem contexto nenhum, nada é visível",
+              "status": "passed"
+            },
+            {
+              "name": "Row Level Security (e2e) 2 · o contexto de A não enxerga uma linha de B",
+              "status": "passed"
+            },
+            {
+              "name": "Row Level Security (e2e) 2.1 · e enxerga o próprio cliente pelo mesmo caminho",
+              "status": "passed"
+            },
+            {
+              "name": "Row Level Security (e2e) 3 · contexto limitado a A1 não enxerga a ordem de A2",
+              "status": "passed"
+            },
+            {
+              "name": "Row Level Security (e2e) 3.1 · a mesma organização com as duas unidades enxerga as três",
+              "status": "passed"
+            },
+            {
+              "name": "Row Level Security (e2e) 3.5 · o contexto vale da primeira à última consulta da transação",
+              "status": "passed"
+            },
+            {
+              "name": "Row Level Security (e2e) 3.6 · duas transações concorrentes não compartilham contexto",
+              "status": "passed"
+            },
+            {
+              "name": "Row Level Security (e2e) 3.7 · o contexto não sobrevive ao fim da transação",
+              "status": "passed"
+            },
+            {
+              "name": "Row Level Security (e2e) 3.2 · lista de unidades vazia devolve zero, não tudo",
+              "status": "passed"
+            },
+            {
+              "name": "Row Level Security (e2e) 4 · o escopo organizacional de A continua cego para B",
+              "status": "passed"
+            },
+            {
+              "name": "Row Level Security (e2e) 4.1 · declarar a unidade de B no contexto de A não abre nada",
+              "status": "passed"
+            },
+            {
+              "name": "Row Level Security (e2e) 5 · escrever para outra organização é recusado pelo banco",
+              "status": "passed"
+            },
+            {
+              "name": "Row Level Security (e2e) 5.1 · escrever para unidade fora do escopo também é recusado",
+              "status": "passed"
+            },
+            {
+              "name": "Row Level Security (e2e) 6 · `app.job_worker` abre a fila e nada mais",
+              "status": "passed"
+            },
+            {
+              "name": "Row Level Security (e2e) 7 · relatório sem filial nasce com escopo ORGANIZATION resolvido",
+              "status": "passed"
+            },
+            {
+              "name": "Row Level Security (e2e) 7.1 · e o snapshot cobre as duas filiais, sem zerar",
+              "status": "passed"
+            },
+            {
+              "name": "Row Level Security (e2e) 7.2 · e a organização vizinha não aparece no retrato",
+              "status": "passed"
+            },
+            {
+              "name": "Row Level Security (e2e) 8 · job organizacional sem escopo resolvido é enterrado, não executado",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/test/platform-canonical-administration.e2e-spec.ts",
+          "passed": 15,
+          "failed": 0,
+          "cases": [
+            {
+              "name": "ORB-NX-02 canonical platform administration (HTTP / restricted PostgreSQL) paid provisioning creates canonical pending access, owner bindings and setup outbox without an owner password",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-02 canonical platform administration (HTTP / restricted PostgreSQL) essential uses canonical 30-day eligibility and exposes trial separately from active paid contracts",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-02 canonical platform administration (HTTP / restricted PostgreSQL) creation rejects legacy financial activation and malformed nested owner input",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-02 canonical platform administration (HTTP / restricted PostgreSQL) consumed legal-document trial is not granted again by administrative creation",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-02 canonical platform administration (HTTP / restricted PostgreSQL) canonical transaction failure preserves tenant, rolls back trial and resumes without duplicating either",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-02 canonical platform administration (HTTP / restricted PostgreSQL) a failed initial transaction leaves a durable retry record without orphan owner or tenant",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-02 canonical platform administration (HTTP / restricted PostgreSQL) setup enqueue failure preserves canonical access state and resumes the existing operation",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-02 canonical platform administration (HTTP / restricted PostgreSQL) same request is idempotent under concurrent callers, and a changed body conflicts",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-02 canonical platform administration (HTTP / restricted PostgreSQL) legacy clients can omit the idempotency header and provide a password without bypassing billing",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-02 canonical platform administration (HTTP / restricted PostgreSQL) PATCH cannot modify effective billing through legacy fields: {\"subscriptionStatus\":\"ACTIVE\"}",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-02 canonical platform administration (HTTP / restricted PostgreSQL) PATCH cannot modify effective billing through legacy fields: {\"planKey\":\"ESSENTIAL\"}",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-02 canonical platform administration (HTTP / restricted PostgreSQL) PATCH cannot modify effective billing through legacy fields: {\"currentPeriodEnd\":\"2099-01-01T00:00:00Z\"}",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-02 canonical platform administration (HTTP / restricted PostgreSQL) administrative metadata updates require version and do not change billing; suspension is not added",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-02 canonical platform administration (HTTP / restricted PostgreSQL) projections ignore false legacy ACTIVE and distinguish scheduled, ended and unknown contracts",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-02 canonical platform administration (HTTP / restricted PostgreSQL) keeps ORB-NX-01 authority/RLS and records verified operator, intent, correlation and confirmed/pending results",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/test/customer-portal.e2e-spec.ts",
+          "passed": 16,
+          "failed": 0,
+          "cases": [
+            {
+              "name": "Customer Portal identity & security boundary (e2e) creates only through authorized invite and supports the same internal/portal email",
+              "status": "passed"
+            },
+            {
+              "name": "Customer Portal identity & security boundary (e2e) revokes the previous invitation on reinvite and rejects expiration",
+              "status": "passed"
+            },
+            {
+              "name": "Customer Portal identity & security boundary (e2e) allows the same portal email in another organization without merging actors",
+              "status": "passed"
+            },
+            {
+              "name": "Customer Portal identity & security boundary (e2e) activates atomically, rejects replay and issues a distinct Portal session",
+              "status": "passed"
+            },
+            {
+              "name": "Customer Portal identity & security boundary (e2e) allows exactly one winner under concurrent invitation activation",
+              "status": "passed"
+            },
+            {
+              "name": "Customer Portal identity & security boundary (e2e) denies token substitution in both directions",
+              "status": "passed"
+            },
+            {
+              "name": "Customer Portal identity & security boundary (e2e) rejects client-controlled tenant/customer authorities",
+              "status": "passed"
+            },
+            {
+              "name": "Customer Portal identity & security boundary (e2e) rotates refresh with compare-and-swap and logout revokes only Portal session",
+              "status": "passed"
+            },
+            {
+              "name": "Customer Portal identity & security boundary (e2e) uses generic login errors and distributed rate limiting",
+              "status": "passed"
+            },
+            {
+              "name": "Customer Portal identity & security boundary (e2e) locks an identity after five invalid passwords and records the aggregate audit",
+              "status": "passed"
+            },
+            {
+              "name": "Customer Portal identity & security boundary (e2e) resets password single-use and revokes all previous sessions",
+              "status": "passed"
+            },
+            {
+              "name": "Customer Portal identity & security boundary (e2e) changes password and revokes other sessions while preserving the current one",
+              "status": "passed"
+            },
+            {
+              "name": "Customer Portal identity & security boundary (e2e) fails RLS closed for missing/wrong context and does not leak via pooled connection",
+              "status": "passed"
+            },
+            {
+              "name": "Customer Portal identity & security boundary (e2e) invalidates active sessions when Customer or Organization becomes ineligible",
+              "status": "passed"
+            },
+            {
+              "name": "Customer Portal identity & security boundary (e2e) disables active identity and immediately invalidates its session",
+              "status": "passed"
+            },
+            {
+              "name": "Customer Portal identity & security boundary (e2e) leaves no cleartext password/token in persistence or portal audit metadata",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/test/global-privilege-provenance.e2e-spec.ts",
+          "passed": 12,
+          "failed": 0,
+          "cases": [
+            {
+              "name": "ORB-NX-01 global privilege provenance (real HTTP / restricted PostgreSQL) runtime really enforces RLS and has no superuser/BYPASSRLS",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 global privilege provenance (real HTTP / restricted PostgreSQL) rejects reserved create/rename through HTTP and restricted SQL: PLATFORM_ADMIN",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 global privilege provenance (real HTTP / restricted PostgreSQL) rejects reserved create/rename through HTTP and restricted SQL: platform admin",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 global privilege provenance (real HTTP / restricted PostgreSQL) rejects reserved create/rename through HTTP and restricted SQL: Plátform---Admín",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 global privilege provenance (real HTTP / restricted PostgreSQL) rejects reserved create/rename through HTTP and restricted SQL: PlatformAdmin",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 global privilege provenance (real HTTP / restricted PostgreSQL) rejects reserved create/rename through HTTP and restricted SQL: nexus.admin",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 global privilege provenance (real HTTP / restricted PostgreSQL) legacy rename cannot elevate a session issued before OR after the rename, including refresh/mobile",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 global privilege provenance (real HTTP / restricted PostgreSQL) rejects stale signed platform claims with no persisted assignment",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 global privilege provenance (real HTTP / restricted PostgreSQL) keeps owner tenant administration without granting platform authority",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 global privilege provenance (real HTTP / restricted PostgreSQL) global grant is effective even on an older token, and revocation removes it without waiting for token expiry",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 global privilege provenance (real HTTP / restricted PostgreSQL) supports global administrators without tenant membership and revokes global-only sessions",
+              "status": "passed"
+            },
+            {
+              "name": "ORB-NX-01 global privilege provenance (real HTTP / restricted PostgreSQL) rejects binding tenant roles as global grants and moving assigned global roles into a tenant",
+              "status": "passed"
+            }
+          ]
+        },
+        {
+          "file": "backend/test/subscription-expiry.e2e-spec.ts",
+          "passed": 7,
+          "failed": 0,
+          "cases": [
+            {
+              "name": "Subscription expiry (e2e) enquanto vale, ler e escrever funcionam",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription expiry (e2e) com a assinatura vencida continua lendo o que a organização já tem",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription expiry (e2e) com a assinatura vencida e recusa qualquer escrita, com 402 e não 403",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription expiry (e2e) com a assinatura vencida nem alterar, nem apagar",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription expiry (e2e) com a assinatura vencida o que já foi emitido continua podendo ser baixado",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription expiry (e2e) com a assinatura vencida mas emitir um documento novo, não",
+              "status": "passed"
+            },
+            {
+              "name": "Subscription expiry (e2e) renovada, a escrita volta sem que ninguém precise reentrar",
+              "status": "passed"
+            }
+          ]
+        }
+      ],
+      "newNx03Tests": 28,
+      "migrationsApplied": 118,
+      "tablesProvisioned": 143,
+      "runtimeRole": "orbit_app",
+      "superuser": false,
+      "bypassRls": false,
+      "forcedRlsProven": true,
+      "database": "new disposable database for each run",
+      "administrativeConnection": "fixture preparation/inspection only",
+      "stripe": "synthetic fixtures/mocked provider only",
+      "externalProductionCalls": false
+    },
+    "web": {
+      "suites": 3,
+      "tests": 47,
+      "failed": 0,
+      "typecheck": "passed",
+      "build": "passed",
+      "targetedLint": "passed"
+    },
+    "mobile": {
+      "tests": 29,
+      "failed": 0,
+      "testCommand": "flutter test --no-pub test/core/orbit_api_client_test.dart --reporter expanded",
+      "testResultCapture": "successful execution tool response",
+      "staticAnalysis": "passed; no issues",
+      "staticAnalysisCommand": "flutter analyze --no-pub test/core/orbit_api_client_test.dart"
+    },
+    "backendBuild": "passed",
+    "backendTypecheck": "passed",
+    "backendTargetedLint": {
+      "status": "passed",
+      "typescriptFiles": 36
+    },
+    "contractBoundary": "passed",
+    "publicErrorContract": {
+      "status": "passed",
+      "codes": 75
+    },
+    "totalFinalTests": 370,
+    "whitespace": "passed"
+  },
+  "qualificationFindings": {
+    "initialExpiredFixtures": "Three initial failures were invalid fixture periods. Corrected currentPeriodStart/billingAnchorAt while preserving the database period constraint.",
+    "preexistingMobileVisibilityFixture": {
+      "baselineHead": "03efc9d51a95221b1cbb7f9636019ce596b20896",
+      "isolatedSnapshot": true,
+      "disposableDatabase": true,
+      "failed": 1,
+      "skipped": 16,
+      "failures": [
+        {
+          "name": "aceite público de propostas com RLS real orçamentos criados em campo mobile: aceite reutiliza assinatura, PDF e notificação ao owner do fluxo comercial",
+          "failureClass": "EntityNotFoundException",
+          "origin": "MobileQuoteService.assertDocumentRead"
+        }
+      ],
+      "fix": "Test fixture explicitly grants mobileVisible before operator download. Production authorization service unchanged.",
+      "productionServiceMatchesHead": true
+    }
+  },
+  "commands": [
+    {
+      "cwd": "/Users/ds_/Documents/Devs/AllBlueLabs/Applications/Orbit",
+      "command": "node scripts/verify-integrations.mjs backend --testPathPatterns='tenant-suspension|global-privilege-provenance|platform-canonical-administration|customer-document-acceptance|subscriptions.e2e|subscription-expiry|billing-stripe|rls.e2e|customer-portal.e2e' --json --outputFile=/private/tmp/orbit-nx03/postgres-final-results.json",
+      "exitCode": 0
+    },
+    {
+      "cwd": "/Users/ds_/Documents/Devs/AllBlueLabs/Applications/Orbit/backend",
+      "command": "npm test -- --runInBand --watchman=false --testPathPatterns='tenant-operation|plan-access|authorization.service|foundation.guards|jwt-authentication.guard|verified-platform-authority|role-namespace|platform-administration.service|platform-subscription.projection|customer-portal.guard|background-job|pmoc-artifact-authority|pmoc-equipment-schedule|pmoc-work-record|pmoc-web-evidence|public-error'",
+      "exitCode": 0
+    },
+    {
+      "cwd": "/Users/ds_/Documents/Devs/AllBlueLabs/Applications/Orbit/backend",
+      "command": "npm run typecheck",
+      "exitCode": 0
+    },
+    {
+      "cwd": "/Users/ds_/Documents/Devs/AllBlueLabs/Applications/Orbit/backend",
+      "command": "npm run build",
+      "exitCode": 0
+    },
+    {
+      "cwd": "/Users/ds_/Documents/Devs/AllBlueLabs/Applications/Orbit/backend",
+      "command": "npm run contracts:guard",
+      "exitCode": 0
+    },
+    {
+      "cwd": "/Users/ds_/Documents/Devs/AllBlueLabs/Applications/Orbit/backend",
+      "command": "npm run lint:public-errors",
+      "exitCode": 0
+    },
+    {
+      "cwd": "/Users/ds_/Documents/Devs/AllBlueLabs/Applications/Orbit/frontend",
+      "command": "npm test -- src/lib/error-copy.test.ts src/lib/api-error.test.ts src/server/bff/allowlist.test.ts",
+      "exitCode": 0
+    },
+    {
+      "cwd": "/Users/ds_/Documents/Devs/AllBlueLabs/Applications/Orbit/frontend",
+      "command": "npm run typecheck",
+      "exitCode": 0
+    },
+    {
+      "cwd": "/Users/ds_/Documents/Devs/AllBlueLabs/Applications/Orbit/frontend",
+      "command": "npm run build",
+      "exitCode": 0
+    },
+    {
+      "cwd": "/Users/ds_/Documents/Devs/AllBlueLabs/Applications/Orbit/mobile",
+      "command": "flutter test --no-pub test/core/orbit_api_client_test.dart --reporter expanded",
+      "exitCode": 0
+    },
+    {
+      "cwd": "/Users/ds_/Documents/Devs/AllBlueLabs/Applications/Orbit/mobile",
+      "command": "flutter analyze --no-pub test/core/orbit_api_client_test.dart",
+      "exitCode": 0
+    },
+    {
+      "cwd": "/Users/ds_/Documents/Devs/AllBlueLabs/Applications/Orbit/backend",
+      "argv": [
+        "node_modules/.bin/eslint",
+        "src/app.module.ts",
+        "src/common/public-errors/public-error.catalog.ts",
+        "src/common/public-errors/public-error.read-models.ts",
+        "src/modules/billing/billing.controller.ts",
+        "src/modules/billing/subscription-billing.controller.ts",
+        "src/modules/customer-portal/customer-portal.controller.ts",
+        "src/modules/customer-portal/customer-portal.guard.spec.ts",
+        "src/modules/customer-portal/customer-portal.guard.ts",
+        "src/modules/identity/presentation/auth.controller.ts",
+        "src/modules/identity/presentation/profile.controller.ts",
+        "src/modules/jobs/background-job.queue.ts",
+        "src/modules/jobs/background-job.worker.spec.ts",
+        "src/modules/jobs/background-job.worker.ts",
+        "src/modules/legal/legal-acceptance.controller.ts",
+        "src/modules/notifications/mobile-device.controller.ts",
+        "src/modules/notifications/notification.gateway.ts",
+        "src/modules/notifications/notification.service.ts",
+        "src/modules/organizations/organization.controller.ts",
+        "src/modules/platform-administration/platform-administration.controller.ts",
+        "src/modules/pmoc/pmoc-artifact-authority.spec.ts",
+        "src/modules/pmoc/pmoc-equipment-schedule.spec.ts",
+        "src/modules/pmoc/pmoc-web-evidence.spec.ts",
+        "src/modules/pmoc/pmoc-work-record.spec.ts",
+        "src/modules/pmoc/pmoc.repository.ts",
+        "src/modules/quotes/quote-acceptance.service.ts",
+        "src/modules/storage/storage-upload.guard.ts",
+        "src/modules/subscription-plans/subscription-plan.controller.ts",
+        "src/modules/tenant-operations/tenant-operation-admin.service.ts",
+        "src/modules/tenant-operations/tenant-operation.controller.ts",
+        "src/modules/tenant-operations/tenant-operation.dto.ts",
+        "src/modules/tenant-operations/tenant-operation.guard.ts",
+        "src/modules/tenant-operations/tenant-operation.policy.spec.ts",
+        "src/modules/tenant-operations/tenant-operation.policy.ts",
+        "src/modules/tenant-operations/tenant-operations.module.ts",
+        "test/customer-document-acceptance.e2e-spec.ts",
+        "test/tenant-suspension.e2e-spec.ts"
+      ],
+      "exitCode": 0
+    },
+    {
+      "cwd": "/Users/ds_/Documents/Devs/AllBlueLabs/Applications/Orbit/frontend",
+      "argv": [
+        "node_modules/.bin/eslint",
+        "src/lib/error-copy.test.ts",
+        "src/server/bff/allowlist.test.ts"
+      ],
+      "exitCode": 0
+    },
+    {
+      "cwd": "/private/tmp/orbit-nx03/baseline",
+      "command": "node scripts/verify-integrations.mjs backend --testPathPatterns=customer-document-acceptance --testNamePattern='mobile: aceite reutiliza' --json --outputFile=/private/tmp/orbit-nx03/baseline-results.json",
+      "exitCode": 1,
+      "purpose": "Intentional baseline diagnosis, reproduced before the fixture correction; not a final qualification failure."
+    }
+  ],
+  "temporaryLogs": [
+    {
+      "path": "/private/tmp/orbit-nx03/postgres-final.log",
+      "sha256": "a1946116b65ff7fe5316bc88a785fa39df251c2e5851416263fc30473d917c17"
+    },
+    {
+      "path": "/private/tmp/orbit-nx03/backend-final-typecheck.log",
+      "sha256": "2e7e00819655840671fe81ecc31c20f985e49e337d20a48c99eac1d1910fa1d2"
+    },
+    {
+      "path": "/private/tmp/orbit-nx03/backend-final-build.log",
+      "sha256": "0de4692e4208e8b05bf233ccc10cde3bb2f3a7a6e1e6fe4bdbff027b1b647179"
+    },
+    {
+      "path": "/private/tmp/orbit-nx03/backend-final-contracts.log",
+      "sha256": "c4a830e604c9353d68966c533c961db9f2e3cba860292885e2663761e28994f6"
+    },
+    {
+      "path": "/private/tmp/orbit-nx03/backend-final-public-errors.log",
+      "sha256": "f226892f1313d4a88c16832c3ab0f1fcad1537780bbd442c05961fe6b2464fd8"
+    },
+    {
+      "path": "/private/tmp/orbit-nx03/backend-final-lint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/private/tmp/orbit-nx03/unit-final.log",
+      "sha256": "a31c4f6f43d4b56eea2de995ca999d17e2089c68e5d1fcb1c777e953b5e6dc68"
+    },
+    {
+      "path": "/private/tmp/orbit-nx03/frontend-final-tests.log",
+      "sha256": "9ea5a1151b5e7a2592162eb77df43b84fcdc71da3c5b23c6ca38126c253e1096"
+    },
+    {
+      "path": "/private/tmp/orbit-nx03/frontend-final-typecheck.log",
+      "sha256": "23257c28d3fdcf836dfbe67815122f587ab0a77ec9a2531c3aee19a066a796bc"
+    },
+    {
+      "path": "/private/tmp/orbit-nx03/frontend-final-build.log",
+      "sha256": "8413d873709972bc205035ff2247405d6b5811eeb600e3bcc613f678ce18d9f1"
+    },
+    {
+      "path": "/private/tmp/orbit-nx03/frontend-final-lint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/private/tmp/orbit-nx03/mobile-final-analyze.log",
+      "sha256": "f0735b88db3c7affa94a512351d298591bef9bfd7a91e0dc8d1d5dcfdd0e98fb"
+    },
+    {
+      "path": "/private/tmp/orbit-nx03/baseline.log",
+      "sha256": "409252313f2786833f04adb96f55ccd2158c0b6bae18ed504d9d4ee3375344ca"
+    }
+  ],
+  "sourceManifest": [
+    {
+      "path": "backend/prisma/migrations/20261115120000_orbnx03_operational_decisions/migration.sql",
+      "sha256": "3e83a3ee5f966a994481ccbc8d0d509b6ab8e204e0bebcaa79988c8400f20ea1"
+    },
+    {
+      "path": "backend/src/app.module.ts",
+      "sha256": "8a8a3a724bfe79e38e5b84e3af57c12a621a5a1ee8e59a41555edb78ee0502ef"
+    },
+    {
+      "path": "backend/src/common/public-errors/public-error.catalog.ts",
+      "sha256": "4d1cdad6259c56f8e79417d27aa132bc7017eebf3fb2abfdb24408982ace877f"
+    },
+    {
+      "path": "backend/src/common/public-errors/public-error.read-models.ts",
+      "sha256": "b0bd16c73375558393ba857cf6025e2aad05dbd5c753dc9724ba8fd9de9113a9"
+    },
+    {
+      "path": "backend/src/modules/billing/billing.controller.ts",
+      "sha256": "d97a90188ed76b449548fa10131ade9d88d61145169a1e3e307f93693a76c172"
+    },
+    {
+      "path": "backend/src/modules/billing/subscription-billing.controller.ts",
+      "sha256": "3bf699d66cd03f748768f2aa8c7400a9211c5114d0421ee41ce14afe7d1f0d83"
+    },
+    {
+      "path": "backend/src/modules/customer-portal/customer-portal.controller.ts",
+      "sha256": "e5630d9d3f3508a56560ef9c80677ff34405e3db0e0474191257d18fa34e3e08"
+    },
+    {
+      "path": "backend/src/modules/customer-portal/customer-portal.guard.spec.ts",
+      "sha256": "54c77d3936ce56fb0268d4df489a16e454dd6321c4e6c4dedc2c20a97c242e64"
+    },
+    {
+      "path": "backend/src/modules/customer-portal/customer-portal.guard.ts",
+      "sha256": "1d61d74a173aef481f5709bf47a2f1d957db81e9aa5eafb19b71734bfcdc6d3d"
+    },
+    {
+      "path": "backend/src/modules/identity/presentation/auth.controller.ts",
+      "sha256": "b72990ed62e4808cea9dba3048854e2dc1eaa416d124b2fca6aae3c195992337"
+    },
+    {
+      "path": "backend/src/modules/identity/presentation/profile.controller.ts",
+      "sha256": "87c7778dd35559600c08b5e45c0a42234624ea74e70ed9bb5f48fdfd28097a28"
+    },
+    {
+      "path": "backend/src/modules/jobs/background-job.queue.ts",
+      "sha256": "ffd49eb3de37ab1e111ef70b128b23ed67394b0e239e95d883cadc4b68b71a56"
+    },
+    {
+      "path": "backend/src/modules/jobs/background-job.worker.spec.ts",
+      "sha256": "8f44d942dd4621d2b0c6c3e6532fe4b37a9e98ebefef2665fa5129b0a4e88263"
+    },
+    {
+      "path": "backend/src/modules/jobs/background-job.worker.ts",
+      "sha256": "9d8110762b7a96d51f871292f2d5b86c5b5a8f01437861ea6d94b1cac73cbf6c"
+    },
+    {
+      "path": "backend/src/modules/legal/legal-acceptance.controller.ts",
+      "sha256": "26cde35280e33ab507e31f8f057d4a19ef39fbd71063a10cc6b3d1c4a3c58ddc"
+    },
+    {
+      "path": "backend/src/modules/notifications/mobile-device.controller.ts",
+      "sha256": "b87c3dce5e90d4078130bec64812f72ca4d350e12a5daff3f8959cc0e19e8f6b"
+    },
+    {
+      "path": "backend/src/modules/notifications/notification.gateway.ts",
+      "sha256": "0ad0e37c70d182a178eb04b4fd71a7ddaec1c7b9b2d53ffde54d9850f23c8f19"
+    },
+    {
+      "path": "backend/src/modules/notifications/notification.service.ts",
+      "sha256": "18e87105be5ae7fc4d79f8976890262d804c7ad2ef8ab3047dae9303486b0167"
+    },
+    {
+      "path": "backend/src/modules/organizations/organization.controller.ts",
+      "sha256": "2a1df51f72384e1730844727976dcdaf34c91054554f267763876cfa67755502"
+    },
+    {
+      "path": "backend/src/modules/platform-administration/platform-administration.controller.ts",
+      "sha256": "90a64625a6a1bd2ca8d59f668f92e3af73db897370afb4a8cacd64cb96f92981"
+    },
+    {
+      "path": "backend/src/modules/pmoc/pmoc-artifact-authority.spec.ts",
+      "sha256": "2d572f8bd21accfabb2ea3cbd2ddb9b4e95b513741661aa1346372b11fa89921"
+    },
+    {
+      "path": "backend/src/modules/pmoc/pmoc-equipment-schedule.spec.ts",
+      "sha256": "dcea58feeefbea565f9b504719732aa048350adc7ae70f461b8a07a1a8fa305f"
+    },
+    {
+      "path": "backend/src/modules/pmoc/pmoc-web-evidence.spec.ts",
+      "sha256": "b6a7894cabd213e389e6184ff17f12fcbccc3e74711646c535313c1c38db8664"
+    },
+    {
+      "path": "backend/src/modules/pmoc/pmoc-work-record.spec.ts",
+      "sha256": "111ee3f2ff7985626c5b2e47754c58734f092a13278fb1fbb8f0938ffa67ef2a"
+    },
+    {
+      "path": "backend/src/modules/pmoc/pmoc.repository.ts",
+      "sha256": "5b1d12b0da1f5ae7ea6edcc654a28b59f4b8c91f95ed43a62c1c9a599a302635"
+    },
+    {
+      "path": "backend/src/modules/quotes/quote-acceptance.service.ts",
+      "sha256": "a321b90ae152b25cd6b7f6a874f9949c79eacbee65206bcbfe39a33160017026"
+    },
+    {
+      "path": "backend/src/modules/storage/storage-upload.guard.ts",
+      "sha256": "79191292e44cf712f74f9617f82a3c2a08a64ce345959c6a1dafce402ecb478e"
+    },
+    {
+      "path": "backend/src/modules/subscription-plans/subscription-plan.controller.ts",
+      "sha256": "5beac9de1fa976dea2a008247258ce823bbccf1cb990eca35f5ece3bf1cf2bc8"
+    },
+    {
+      "path": "backend/src/modules/tenant-operations/tenant-operation-admin.service.ts",
+      "sha256": "4c094b56ac99e2ffa25637d8d496cdb3f22d4c3635cfeeb4ce197880f3889432"
+    },
+    {
+      "path": "backend/src/modules/tenant-operations/tenant-operation.controller.ts",
+      "sha256": "7f5c6d68fffbe89d2e05e15378a5131190be58e015288e7d32be10b1ea792cde"
+    },
+    {
+      "path": "backend/src/modules/tenant-operations/tenant-operation.dto.ts",
+      "sha256": "8cb3e6dc94eaf677fefacd51162a79c9f8c834db890ca1420816f86ff6e153eb"
+    },
+    {
+      "path": "backend/src/modules/tenant-operations/tenant-operation.guard.ts",
+      "sha256": "40dbae0c3a260b317aed5a28cce585ba6da36166f43f6459fb067c5b3255e56b"
+    },
+    {
+      "path": "backend/src/modules/tenant-operations/tenant-operation.policy.spec.ts",
+      "sha256": "08ac65aafa82f9923e2f52071f5a2acc94a3d73e5206fbe09e93342aadbb6833"
+    },
+    {
+      "path": "backend/src/modules/tenant-operations/tenant-operation.policy.ts",
+      "sha256": "799b8fc060535288c2e834d78d86dae3ca8843a22bdfbefab87ef901f3d2f882"
+    },
+    {
+      "path": "backend/src/modules/tenant-operations/tenant-operations.module.ts",
+      "sha256": "7e0b2b69c5d7047871ac003acb7b06c44ded6b5bfed53c36aaaa503ced860a41"
+    },
+    {
+      "path": "backend/test/customer-document-acceptance.e2e-spec.ts",
+      "sha256": "f83947e8ec6bfb83b5a7300775d082c928524cbb932db443e34726b0e3ed29e3"
+    },
+    {
+      "path": "backend/test/tenant-suspension.e2e-spec.ts",
+      "sha256": "9dbc9fbdf5fa43c054c678c779a19b1172a6f36e6f73dfbab1aa58e8c870f144"
+    },
+    {
+      "path": "frontend/src/lib/error-copy.test.ts",
+      "sha256": "76b9da9bbb0c2148d10bc518a87aac77317e0384a8277979aba3285f6b5f4760"
+    },
+    {
+      "path": "frontend/src/server/bff/allowlist.test.ts",
+      "sha256": "e93ce0e048d48023f49af3c65476d45ac9215f25b0c558b20949dfc758f8ee66"
+    },
+    {
+      "path": "frontend/src/types/contracts/common/public-errors/public-error.read-models.ts",
+      "sha256": "a40687d7203adac79c684248120d322035c5dba95d1b3ba5f7e1d2cd4d540783"
+    },
+    {
+      "path": "mobile/test/core/orbit_api_client_test.dart",
+      "sha256": "0b9e2acce309023097bd1efcb6e3b54bb11e9697270dec972f4d4de17efe6920"
+    }
+  ],
+  "report": {
+    "path": "docs/release/orb-nx-03-operational-suspension.md",
+    "sha256": "5fc65896da0e3957f38baccc1dfd307857f2a5f730b7bc4b054a3e57ef75f998"
+  },
+  "limits": [
+    "Admission boundary; already admitted work can finish.",
+    "Previously issued direct cloud signed URLs retain provider expiry; domain activation remains guarded.",
+    "Legacy ACTIVE financial compatibility is preserved; new reactivation without canonical contract is refused.",
+    "Existing contractual retention continues; suspension neither extends it nor creates purge.",
+    "No release/deploy/production/Stripe live/Nexus integration or next PR started.",
+    "Local Node 25.1.0; declared Node 22 release matrix remains a CI obligation."
+  ],
+  "temporaryResultFiles": [
+    {
+      "path": "/private/tmp/orbit-nx03/postgres-final-results.json",
+      "sha256": "5753fbe7206dfc77b6a3a873367a0fc0757da617780c9df67a6eab72bb1441d2"
+    },
+    {
+      "path": "/private/tmp/orbit-nx03/unit-final-results.json",
+      "sha256": "a92c1a08486b2576cbab86a9bc90c49cd3835a9c3b066dcce80d162a95e1cdb6"
+    },
+    {
+      "path": "/private/tmp/orbit-nx03/baseline-results.json",
+      "sha256": "8d19388a74473edd9bad99051a6c5d67d37415a4bb1806cb4d7a7e977b2fc75d"
+    }
+  ],
+  "postValidationAuthorization": {
+    "action": "create local ORB-NX-03 checkpoint",
+    "authority": "explicit user instruction after technical validation",
+    "checkpoint": "the commit containing this report and evidence",
+    "scope": "ORB-NX-03 exclusively",
+    "testedSourceHashesRechecked": 41,
+    "sourceBehaviorChanged": false,
+    "previousArtifactsPreserved": 10,
+    "push": false,
+    "merge": false,
+    "deploy": false
+  }
+}

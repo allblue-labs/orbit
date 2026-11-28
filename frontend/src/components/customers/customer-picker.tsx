@@ -58,6 +58,7 @@ export function CustomerPicker({
   anyLabel,
   disabled = false,
   required = false,
+  activeOnly = false,
 }: {
   id: string;
   value: string | undefined;
@@ -67,6 +68,7 @@ export function CustomerPicker({
   anyLabel?: string;
   disabled?: boolean;
   required?: boolean;
+  activeOnly?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [term, setTerm] = useState("");
@@ -79,7 +81,7 @@ export function CustomerPicker({
     return () => clearTimeout(timer);
   }, [term]);
 
-  const query = useInfiniteCustomers(search || undefined, open);
+  const query = useInfiniteCustomers(search || undefined, open, activeOnly);
   /* `useInfiniteApiQuery` já entrega as páginas achatadas em um array — `data`
      é `PaginatedResult[]`, não o `InfiniteData` cru do React Query. */
   const customers = useMemo(

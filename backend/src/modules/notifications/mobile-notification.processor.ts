@@ -11,6 +11,10 @@ import {
   type MobileNotificationIntent,
 } from './mobile-notification.policy';
 import { MobilePushRepository } from './mobile-push.repository';
+import {
+  transactionalPushMessage,
+  type TransactionalPushMessage,
+} from './push-message';
 
 @Injectable()
 export class MobileNotificationProcessor implements JobProcessor, OnModuleInit {
@@ -35,10 +39,28 @@ export class MobileNotificationProcessor implements JobProcessor, OnModuleInit {
         'WORK_ASSIGNED',
         'ARTIFACT_AVAILABLE',
         'SYNC_ATTENTION_REQUIRED',
+        'TRANSACTIONAL',
       ].includes(String(type)) ||
       (workItemId !== undefined && typeof workItemId !== 'string')
     )
       throw new PermanentJobError('Mobile notification intent is invalid');
+    let message: TransactionalPushMessage | undefined;
+    if (type === 'TRANSACTIONAL') {
+      const value = job.payload.message;
+      if (
+        typeof value !== 'object' ||
+        value === null ||
+        !('title' in value) ||
+        !('body' in value) ||
+        !('data' in value)
+      )
+        throw new PermanentJobError('Transactional push message is invalid');
+      try {
+        message = transactionalPushMessage(value.title, value.body, value.data);
+      } catch {
+        throw new PermanentJobError('Transactional push message is invalid');
+      }
+    }
     const intent: MobileNotificationIntent = {
       organizationId: job.organizationId,
       businessUnitId: job.businessUnitId,
@@ -48,6 +70,7 @@ export class MobileNotificationProcessor implements JobProcessor, OnModuleInit {
       resourceId,
       workItemId,
       correlationId: job.correlationId,
+      ...(message ? { message } : {}),
     };
     await this.repository.materialize(intent, this.policy.resolve(intent));
   }

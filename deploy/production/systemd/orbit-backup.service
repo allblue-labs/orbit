@@ -1,0 +1,13 @@
+[Unit]
+Description=Backup criptografado do PostgreSQL do Orbit para R2
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/orbit-backup
+UMask=0077
+TimeoutStartSec=2h
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

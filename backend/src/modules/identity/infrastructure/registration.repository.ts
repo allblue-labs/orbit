@@ -10,7 +10,6 @@ import {
   OWNER_ROLE_KEY,
 } from '../../organizations/team-roles';
 import { RVT_MAINTENANCE_TYPE_SEEDS } from '../../rvt/rvt-maintenance-types.seed';
-import { isKnownPlan } from '../../subscription-plans/catalog/plan-registry';
 import { ConflictException } from '../../../exceptions';
 import { normalizeBrazilianDocument } from '../../../utils';
 
@@ -18,6 +17,7 @@ export type TenantProvisioningOptions = {
   /** Definido somente pelo serviço público, nunca recebido do corpo HTTP. */
   publicSignup?: boolean;
   actorUserId?: string;
+  deferOwnerEmailProvenance?: boolean;
   platformAdmin?: boolean;
   organizationStatus?: string;
   subscriptionStatus?: string;
@@ -31,12 +31,19 @@ export type TenantProvisioningOptions = {
 export class RegistrationRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  /** Optional local transaction keeps administrative workflow and owner atomic. */
   register(
     input: RegisterOrganizationDto,
     passwordHash: string,
     slug: string,
     options: TenantProvisioningOptions = {},
     metadata?: SessionMetadata,
+    queueWelcome?: (
+      tx: Prisma.TransactionClient,
+      userId: string,
+      organizationId: string,
+    ) => Promise<void>,
+    existingTransaction?: Prisma.TransactionClient,
   ) {
     const userId = generateUuidV7();
     const organizationId = generateUuidV7();
@@ -45,13 +52,14 @@ export class RegistrationRepository {
     const trialEndsAt = new Date(now);
     trialEndsAt.setUTCDate(trialEndsAt.getUTCDate() + 14);
 
-    return this.prisma.$transaction(async (transaction) => {
+    const work = async (transaction: Prisma.TransactionClient) => {
       const plan = await transaction.plan.findFirst({
-        where: { key: input.planKey, isActive: true },
+        where: { key: input.planKey, isActive: true, catalogTenantId: null },
       });
-      if (!plan) return null;
+      if (!plan || (options.publicSignup && !plan.commercial)) return null;
 
       if (options.publicSignup) {
+        await this.setLocal(transaction, 'app.organization_id', organizationId);
         const document = normalizeBrazilianDocument(input.documentNumber);
         const [reservation] = await transaction.$queryRaw<
           { reserved: boolean }[]
@@ -82,12 +90,12 @@ export class RegistrationRepository {
         data: {
           id: userId,
           email: input.email,
-          normalizedEmail: input.email,
+          normalizedEmail: input.email.trim().toLowerCase(),
           firstName: input.firstName.trim(),
           lastName: input.lastName.trim(),
           displayName: `${input.firstName} ${input.lastName}`.trim(),
           status: 'ACTIVE',
-          emailVerifiedAt: now,
+          emailVerifiedAt: null,
           credential: { create: { passwordHash } },
         },
       });
@@ -102,12 +110,11 @@ export class RegistrationRepository {
           status: options.organizationStatus ?? 'ACTIVE',
           subscriptionStatus:
             options.subscriptionStatus ??
-            (isKnownPlan(plan.key) ? 'PENDING_PAYMENT' : 'TRIALING'),
+            (plan.commercial ? 'PENDING_PAYMENT' : 'TRIALING'),
           subscriptionStartedAt: now,
           currentPeriodStart: now,
           currentPeriodEnd:
-            options.currentPeriodEnd ??
-            (isKnownPlan(plan.key) ? null : trialEndsAt),
+            options.currentPeriodEnd ?? (plan.commercial ? null : trialEndsAt),
           externalCustomerId: options.externalCustomerId,
           externalSubscriptionId: options.externalSubscriptionId,
         },
@@ -166,6 +173,14 @@ export class RegistrationRepository {
         })),
       });
 
+      /**
+       * O catálogo de refrigeração e climatização: roteiros de atendimento,
+       * unidades do PMOC e o roteiro das visitas de RVT. Ponto de partida
+       * editável — a mesma função que a migration aplicou às organizações
+       * que já existiam (`app_seed_hvac_catalogs`).
+       */
+      await transaction.$executeRaw`SELECT app_seed_hvac_catalogs(${organizationId}::uuid)`;
+
       await transaction.role.createMany({
         data: ASSIGNABLE_TEAM_ROLES.map((papel) => ({
           organizationId,
@@ -191,6 +206,8 @@ export class RegistrationRepository {
           city: input.city.trim(),
           street: input.street.trim(),
           stateCode: input.stateCode.toUpperCase(),
+          number: input.number?.trim() || null,
+          complement: input.complement?.trim() || null,
         },
       });
       await transaction.organizationMembership.create({
@@ -218,13 +235,23 @@ export class RegistrationRepository {
               status: options.organizationStatus ?? 'ACTIVE',
               subscriptionStatus:
                 options.subscriptionStatus ??
-                (isKnownPlan(plan.key) ? 'PENDING_PAYMENT' : 'TRIALING'),
+                (plan.commercial ? 'PENDING_PAYMENT' : 'TRIALING'),
             },
           },
         });
       }
+      if (
+        options.publicSignup &&
+        !options.platformAdmin &&
+        !options.deferOwnerEmailProvenance
+      )
+        await transaction.$queryRaw`SELECT app_register_account_email_owner(${userId}::uuid,${organizationId}::uuid)::text`;
+      await queueWelcome?.(transaction, userId, organizationId);
       return { userId, organizationId, businessUnitId };
-    });
+    };
+    return existingTransaction
+      ? work(existingTransaction)
+      : this.prisma.$transaction(work);
   }
 
   private setLocal(

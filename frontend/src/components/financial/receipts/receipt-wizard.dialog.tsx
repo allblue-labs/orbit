@@ -38,9 +38,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useApiQuery } from "@/hooks/api/use-api-query";
 import { useCreateReceipt } from "@/hooks/financial/use-financial";
 import { useOperationsList } from "@/hooks/operations/use-operations";
-import { documentsService } from "@/services/documents.service";
+import type { ReceiptSource } from "@/types/financial";
 import { financialService } from "@/services/financial.service";
 import { ROUTES } from "@/lib/routes";
 import { cn } from "@/lib/utils";
@@ -63,7 +64,9 @@ import {
 export function ReceiptWizardDialog({
   open,
   onOpenChange,
+  operationId,
 }: {
+  operationId?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -74,19 +77,67 @@ export function ReceiptWizardDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-2xl">
-        <Body onOpenChange={onOpenChange} />
+        {operationId ? (
+          <OperationReceiptBody
+            key={operationId}
+            operationId={operationId}
+            onOpenChange={onOpenChange}
+          />
+        ) : (
+          <Body onOpenChange={onOpenChange} />
+        )}
       </DialogContent>
     </Dialog>
   );
 }
 
-function Body({ onOpenChange }: { onOpenChange: (open: boolean) => void }) {
+function OperationReceiptBody({
+  operationId,
+  onOpenChange,
+}: {
+  operationId: string;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const source = useApiQuery(
+    financialService.keys.receiptSource(operationId),
+    ({ signal }) => financialService.receiptSource(operationId, { signal }),
+    { staleTime: 0 },
+  );
+  if (source.isPending || source.isError) {
+    return (
+      <DialogHeader>
+        <DialogTitle>Novo recibo</DialogTitle>
+        <DialogDescription>
+          {source.isPending
+            ? "Carregando dados do atendimento…"
+            : "Confira a situação do atendimento para emitir o recibo."}
+        </DialogDescription>
+        {source.error ? <MutationError error={source.error} /> : null}
+        {source.isError ? (
+          <Button variant="outline" onClick={() => void source.refetch()}>
+            Tentar novamente
+          </Button>
+        ) : null}
+      </DialogHeader>
+    );
+  }
+  return <Body onOpenChange={onOpenChange} source={source.data} />;
+}
+
+function Body({
+  onOpenChange,
+  source,
+}: {
+  onOpenChange: (open: boolean) => void;
+  source?: ReceiptSource;
+}) {
   const { timeZone } = useTimeZone();
   const router = useRouter();
-  const [index, setIndex] = useState(0);
-  const [draft, setDraft] = useState<ReceiptDraft>(() =>
-    emptyDraft(new Date(), timeZone),
-  );
+  const [index, setIndex] = useState(source ? 1 : 0);
+  const [draft, setDraft] = useState<ReceiptDraft>(() => {
+    const initial = emptyDraft(new Date(), timeZone);
+    return source ? fromOperation(initial, source) : initial;
+  });
 
   const create = useCreateReceipt();
   const step = RECEIPT_STEPS[index]!;
@@ -110,7 +161,7 @@ function Body({ onOpenChange }: { onOpenChange: (open: boolean) => void }) {
     create.mutate(createPayload(draft), {
       onSuccess: async (execution) => {
         try {
-          await documentsService.requestRender(execution.id, {});
+          await financialService.renderReceipt(execution.id);
         } catch {
           /* O documento é pedido de novo na tela da execução, que mostra o estado
              real da renderização. Falhar aqui não pode esconder o recibo criado. */
@@ -129,7 +180,12 @@ function Body({ onOpenChange }: { onOpenChange: (open: boolean) => void }) {
         </DialogDescription>
       </DialogHeader>
 
-      <Progress current={index} draft={draft} onJump={setIndex} />
+      <Progress
+        current={index}
+        draft={draft}
+        onJump={setIndex}
+        minimum={source ? 1 : 0}
+      />
 
       <div className="py-4">
         {step === "origem" ? (
@@ -157,7 +213,7 @@ function Body({ onOpenChange }: { onOpenChange: (open: boolean) => void }) {
         <Button
           type="button"
           variant="ghost"
-          disabled={index === 0 || create.isPending}
+          disabled={index === (source ? 1 : 0) || create.isPending}
           onClick={() => setIndex((value) => value - 1)}
         >
           <ArrowLeft className="size-4" />
@@ -208,7 +264,9 @@ function Progress({
   current,
   draft,
   onJump,
+  minimum,
 }: {
+  minimum: number;
   current: number;
   draft: ReceiptDraft;
   onJump: (index: number) => void;
@@ -223,7 +281,7 @@ function Progress({
               type="button"
               /* Só para trás: pular adiante levaria a um passo cujas condições o
                  anterior ainda não cumpriu. */
-              disabled={index > current}
+              disabled={index > current || index < minimum}
               onClick={() => onJump(index)}
               className={cn(
                 "rounded-md px-2.5 py-1 text-xs transition-colors",

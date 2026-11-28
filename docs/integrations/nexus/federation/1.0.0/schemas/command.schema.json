@@ -1,0 +1,408 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.allblue-labs.com/federation/1.0.0/command.schema.json",
+  "title": "PROPOSED / PENDING_NEXUS_DECISION — command.schema.json",
+  "type": "object",
+  "properties": {
+    "protocolVersion": {
+      "const": "1.0.0"
+    },
+    "commandId": {
+      "$ref": "common.schema.json#/$defs/uuid"
+    },
+    "type": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "issuer": {
+      "type": "string",
+      "format": "uri"
+    },
+    "connectorClientId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "target": {
+      "$ref": "common.schema.json#/$defs/optionalTenantTarget"
+    },
+    "linkId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "grantId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "delegationRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "approvalRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "correlationId": {
+      "$ref": "common.schema.json#/$defs/uuid"
+    },
+    "issuedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "expiresAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "reasonCode": {
+      "enum": [
+        "CUSTOMER_REQUEST",
+        "SECURITY",
+        "ABUSE",
+        "ADMINISTRATIVE",
+        "RESOLVED"
+      ]
+    },
+    "precondition": {
+      "$ref": "common.schema.json#/$defs/precondition"
+    },
+    "parameters": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "protocolVersion",
+    "commandId",
+    "type",
+    "issuer",
+    "connectorClientId",
+    "target",
+    "linkId",
+    "grantId",
+    "delegationRef",
+    "correlationId",
+    "issuedAt",
+    "expiresAt",
+    "reasonCode",
+    "precondition",
+    "parameters"
+  ],
+  "additionalProperties": false,
+  "oneOf": [
+    {
+      "properties": {
+        "type": {
+          "const": "tenant.provision.v1"
+        },
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "registrationIntentRef": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+            },
+            "planCode": {
+              "$ref": "common.schema.json#/$defs/planCode"
+            },
+            "billingInterval": {
+              "$ref": "common.schema.json#/$defs/billingInterval"
+            }
+          },
+          "required": [
+            "registrationIntentRef",
+            "planCode",
+            "billingInterval"
+          ],
+          "additionalProperties": false
+        },
+        "precondition": {
+          "properties": {
+            "aggregate": {
+              "const": "LINK"
+            }
+          },
+          "required": [
+            "aggregate"
+          ]
+        },
+        "target": {
+          "$ref": "common.schema.json#/$defs/deployment"
+        }
+      },
+      "required": [
+        "type",
+        "parameters",
+        "precondition",
+        "target"
+      ]
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "tenant.update.v1"
+        },
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "displayName": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 180
+            },
+            "primarySegment": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 60
+            }
+          },
+          "required": [],
+          "additionalProperties": false,
+          "minProperties": 1
+        },
+        "precondition": {
+          "properties": {
+            "aggregate": {
+              "const": "TENANT"
+            }
+          },
+          "required": [
+            "aggregate"
+          ]
+        },
+        "target": {
+          "$ref": "common.schema.json#/$defs/target"
+        }
+      },
+      "required": [
+        "type",
+        "parameters",
+        "precondition",
+        "target"
+      ]
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "subscription.request_plan_change.v1"
+        },
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "planCode": {
+              "$ref": "common.schema.json#/$defs/planCode"
+            },
+            "billingInterval": {
+              "$ref": "common.schema.json#/$defs/billingInterval"
+            }
+          },
+          "required": [
+            "planCode",
+            "billingInterval"
+          ],
+          "additionalProperties": false
+        },
+        "precondition": {
+          "properties": {
+            "aggregate": {
+              "const": "SUBSCRIPTION"
+            }
+          },
+          "required": [
+            "aggregate"
+          ]
+        },
+        "target": {
+          "$ref": "common.schema.json#/$defs/target"
+        }
+      },
+      "required": [
+        "type",
+        "parameters",
+        "precondition",
+        "target"
+      ]
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "subscription.request_cancel.v1"
+        },
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "retentionPolicyRef": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+            },
+            "customerConsentRef": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+            }
+          },
+          "required": [
+            "retentionPolicyRef",
+            "customerConsentRef"
+          ],
+          "additionalProperties": false
+        },
+        "precondition": {
+          "properties": {
+            "aggregate": {
+              "const": "SUBSCRIPTION"
+            }
+          },
+          "required": [
+            "aggregate"
+          ]
+        },
+        "target": {
+          "$ref": "common.schema.json#/$defs/target"
+        }
+      },
+      "required": [
+        "type",
+        "parameters",
+        "precondition",
+        "target"
+      ]
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "subscription.request_keep.v1"
+        },
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "customerConsentRef": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+            }
+          },
+          "required": [
+            "customerConsentRef"
+          ],
+          "additionalProperties": false
+        },
+        "precondition": {
+          "properties": {
+            "aggregate": {
+              "const": "SUBSCRIPTION"
+            }
+          },
+          "required": [
+            "aggregate"
+          ]
+        },
+        "target": {
+          "$ref": "common.schema.json#/$defs/target"
+        }
+      },
+      "required": [
+        "type",
+        "parameters",
+        "precondition",
+        "target"
+      ]
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "tenant.request_suspend.v1"
+        },
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "reasonCode": {
+              "enum": [
+                "SECURITY",
+                "ABUSE",
+                "ADMINISTRATIVE"
+              ]
+            }
+          },
+          "required": [
+            "reasonCode"
+          ],
+          "additionalProperties": false
+        },
+        "precondition": {
+          "properties": {
+            "aggregate": {
+              "const": "TENANT"
+            }
+          },
+          "required": [
+            "aggregate"
+          ]
+        },
+        "target": {
+          "$ref": "common.schema.json#/$defs/target"
+        }
+      },
+      "required": [
+        "type",
+        "parameters",
+        "precondition",
+        "target"
+      ]
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "tenant.request_reactivate.v1"
+        },
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "reasonCode": {
+              "const": "RESOLVED"
+            }
+          },
+          "required": [
+            "reasonCode"
+          ],
+          "additionalProperties": false
+        },
+        "precondition": {
+          "properties": {
+            "aggregate": {
+              "const": "TENANT"
+            }
+          },
+          "required": [
+            "aggregate"
+          ]
+        },
+        "target": {
+          "$ref": "common.schema.json#/$defs/target"
+        }
+      },
+      "required": [
+        "type",
+        "parameters",
+        "precondition",
+        "target"
+      ]
+    }
+  ]
+}

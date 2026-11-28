@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.allblue-labs.com/federation/1.0.0/error.schema.json",
+  "title": "PROPOSED / PENDING_NEXUS_DECISION — error.schema.json",
+  "type": "object",
+  "properties": {
+    "protocolVersion": {
+      "const": "1.0.0"
+    },
+    "code": {
+      "enum": [
+        "INVALID_SCHEMA",
+        "UNSUPPORTED_VERSION",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "STALE_VERSION",
+        "IDEMPOTENCY_MISMATCH",
+        "MESSAGE_ID_COLLISION",
+        "APPROVAL_REQUIRED",
+        "APPROVAL_EXPIRED",
+        "GRANT_REVOKED",
+        "PRECONDITION_FAILED",
+        "COMMAND_EXPIRED",
+        "DEPENDENCY_UNAVAILABLE",
+        "RECONCILIATION_REQUIRED",
+        "CURSOR_EXPIRED",
+        "HISTORY_GAP",
+        "RATE_LIMITED"
+      ]
+    },
+    "correlationId": {
+      "$ref": "common.schema.json#/$defs/uuid"
+    },
+    "retryable": {
+      "type": "boolean"
+    },
+    "message": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240
+    }
+  },
+  "required": [
+    "protocolVersion",
+    "code",
+    "correlationId",
+    "retryable",
+    "message"
+  ],
+  "additionalProperties": false
+}

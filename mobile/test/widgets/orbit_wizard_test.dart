@@ -321,6 +321,39 @@ void main() {
       expect(find.text('Etapa 2 de 2'), findsOneWidget);
     });
 
+    /**
+     * "On success" é literal.
+     *
+     * O roteiro seguia para a próxima etapa sempre que a ação terminava —
+     * inclusive recusada. No PMOC, o técnico tocava em "Iniciar atendimento",
+     * o servidor recusava, e ele caía numa etapa travada dizendo "abra o
+     * atendimento antes", sem a recusa à vista.
+     */
+    testWidgets('a ação que falha não avança', (tester) async {
+      await tester.pumpWidget(
+        host([
+          OrbitWizardStep(
+            title: 'Preparação',
+            child: const Text('conteúdo'),
+            forward: OrbitWizardForward(
+              label: 'Iniciar atendimento',
+              advanceOnSuccess: true,
+              onPressed: () async => throw StateError('recusado'),
+            ),
+          ),
+          step('Execução'),
+        ]),
+      );
+
+      await tester.tap(find.text('Iniciar atendimento'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Etapa 1 de 2'), findsOneWidget);
+      /* Quem declara a ação mostra o erro dela; o roteiro só não avança — e
+         não deixa a exceção escapar para a árvore. */
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('sem avançar quando a etapa não pede', (tester) async {
       await tester.pumpWidget(
         host([

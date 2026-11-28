@@ -7,11 +7,6 @@ import {
   ValidationException,
 } from '../../../exceptions';
 import {
-  IDENTITY_TOKEN_DELIVERY,
-  IdentityTokenPurpose,
-  type IIdentityTokenDelivery,
-} from '../domain/identity.types';
-import {
   AllocationResource,
   EntitlementService,
 } from '../../subscription-plans/entitlements';
@@ -26,8 +21,6 @@ export class InvitationService {
     private readonly repository: IdentityRepository,
     private readonly tokens: IdentityTokenService,
     @Inject(HASH_PROVIDER) private readonly hashes: IHashProvider,
-    @Inject(IDENTITY_TOKEN_DELIVERY)
-    private readonly delivery: IIdentityTokenDelivery,
     private readonly entitlements: EntitlementService,
     private readonly authorization: AuthorizationService,
   ) {}
@@ -91,24 +84,29 @@ export class InvitationService {
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60_000);
     let invitation: Awaited<ReturnType<IdentityRepository['createInvitation']>>;
     try {
-      invitation = await this.repository.createInvitation({
-        organizationId: input.organizationId,
-        businessUnitId: input.businessUnitId,
-        roleId: input.roleId,
-        invitedById: input.invitedById,
-        email: input.email.trim(),
-        normalizedEmail: input.email.trim().toLowerCase(),
-        tokenHash: this.tokens.hashOpaqueToken(token),
-        expiresAt,
-      });
-    } catch {
+      invitation = await this.repository.createInvitation(
+        {
+          organizationId: input.organizationId,
+          businessUnitId: input.businessUnitId,
+          roleId: input.roleId,
+          invitedById: input.invitedById,
+          email: input.email.trim(),
+          normalizedEmail: input.email.trim().toLowerCase(),
+          tokenHash: this.tokens.hashOpaqueToken(token),
+          expiresAt,
+        },
+        token,
+      );
+    } catch (error) {
+      if (!(
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        error.code === 'P2002'
+      ))
+        throw error;
       throw new ConflictException('A pending invitation already exists');
     }
-    await this.delivery.deliver(
-      IdentityTokenPurpose.INVITATION,
-      invitation.email,
-      token,
-    );
     return { id: invitation.id, expiresAt };
   }
 
@@ -148,13 +146,13 @@ export class InvitationService {
     const token = this.tokens.generateOpaqueToken();
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60_000);
 
-    await this.repository.refreshInvitation(invitation.id, organizationId, {
-      tokenHash: this.tokens.hashOpaqueToken(token),
-      expiresAt,
-    });
-    await this.delivery.deliver(
-      IdentityTokenPurpose.INVITATION,
-      invitation.email,
+    await this.repository.refreshInvitation(
+      invitation.id,
+      organizationId,
+      {
+        tokenHash: this.tokens.hashOpaqueToken(token),
+        expiresAt,
+      },
       token,
     );
     return { id: invitation.id, expiresAt };

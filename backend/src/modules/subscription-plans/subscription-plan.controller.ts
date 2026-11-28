@@ -1,3 +1,4 @@
+import { TenantRecovery } from '../tenant-operations/tenant-operation.policy';
 import { Body, Controller, Get, Param, Patch, Post, Req } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Permissions, Public, Roles, Surfaces } from '../../decorators';
@@ -35,27 +36,24 @@ export class SubscriptionPlanController {
     return this.plans.listPlans();
   }
 
-  /**
-   * O catálogo comercial congelado.
-   *
-   * Vem do código, não do banco: é o mesmo catálogo que decide acesso, e
-   * publicar uma segunda cópia editável abriria espaço para as duas
-   * divergirem. Só informação comercial — nada de cobrança (§99).
-   */
   @Public()
   @Get('plans/catalog')
   planCatalog() {
     return this.entitlements.catalog();
   }
 
+  @TenantRecovery('platform')
   @Post('plans')
   @Roles('PLATFORM_ADMIN')
+  @Permissions('platform.admin')
   createPlan(@Body() input: CreatePlanDto) {
     return this.plans.createPlan(input);
   }
 
+  @TenantRecovery('platform')
   @Patch('plans/:id')
   @Roles('PLATFORM_ADMIN')
+  @Permissions('platform.admin')
   updatePlan(
     @Param('id', ParseUUIDv7Pipe) id: string,
     @Body() input: UpdatePlanDto,
@@ -63,6 +61,7 @@ export class SubscriptionPlanController {
     return this.plans.updatePlan(id, input);
   }
 
+  @TenantRecovery('billing')
   @Get('organizations/current/subscription')
   @Surfaces('WEB', 'MOBILE', 'API')
   getSubscription(@Req() request: IdentityRequest) {
@@ -76,6 +75,7 @@ export class SubscriptionPlanController {
    * e nunca recalcula teto (§95, §96). O razão de uso não aparece — só o
    * agregado que interessa a quem está olhando a tela.
    */
+  @TenantRecovery('billing')
   @Get('organizations/current/entitlements')
   @Permissions('usage.read')
   currentEntitlements(@Req() request: IdentityRequest) {
@@ -83,6 +83,7 @@ export class SubscriptionPlanController {
   }
 
   /** Product contract for clients; separate from route capabilities/RBAC. */
+  @TenantRecovery('billing')
   @Get('organizations/current/product-access')
   @Surfaces('WEB', 'MOBILE', 'API')
   productAccessState(@Req() request: IdentityRequest) {
@@ -96,6 +97,7 @@ export class SubscriptionPlanController {
    * controle otimista que impede cancelar e trocar de plano ao mesmo tempo de
    * produzir um estado que ninguém pediu.
    */
+  @TenantRecovery('billing')
   @Get('organizations/current/subscription-details')
   @Permissions('usage.read')
   async currentSubscription(@Req() request: IdentityRequest) {

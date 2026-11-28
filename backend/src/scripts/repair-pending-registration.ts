@@ -1,4 +1,5 @@
 /** Targeted recovery after organization creation succeeded but provisioning failed. */
+import { directDatabaseUrl } from './direct-database-url';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient, type Prisma } from '@prisma/client';
 import { config } from 'dotenv';
@@ -34,9 +35,8 @@ async function main() {
       'Use --organization-id UUID ou --owner-email EMAIL, opcionalmente --billing-interval MONTHLY|SEMIANNUAL|ANNUAL e --apply. Sem --apply, somente consulta.',
     );
   }
-  if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL é obrigatória.');
   const prisma = new PrismaClient({
-    adapter: new PrismaPg(process.env.DATABASE_URL),
+    adapter: new PrismaPg(directDatabaseUrl()),
   });
   try {
     await prisma.$transaction(async (tx) => {

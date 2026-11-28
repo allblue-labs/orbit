@@ -1,0 +1,67 @@
+import 'reflect-metadata';
+import { config as loadEnv } from 'dotenv';
+import { resolve } from 'node:path';
+import {
+  createSesEmailClient,
+  emailConfiguration,
+} from '../modules/email/email.config';
+import {
+  sesPreflight,
+  validateSesConfiguration,
+  sesPreflightFailureCode,
+  resolveSesIdentity,
+} from '../modules/email/ses-preflight';
+import {
+  emailSuppressionHashKey,
+  sesFeedbackConfiguration,
+} from '../modules/email/ses-feedback.config';
+
+loadEnv({ path: resolve(process.cwd(), '.env'), quiet: true });
+loadEnv({ path: resolve(process.cwd(), '../.env'), quiet: true });
+
+async function main() {
+  const config = emailConfiguration();
+  validateSesConfiguration(config);
+  emailSuppressionHashKey(process.env.EMAIL_SUPPRESSION_HASH_KEY);
+  const feedback = sesFeedbackConfiguration();
+  if (!process.argv.includes('--remote')) {
+    console.log(
+      'Configuração local válida. Para consultar identidade, envio, sandbox e quotas na AWS, acrescente --remote. Nenhum e-mail será enviado.',
+    );
+    return;
+  }
+  const client = createSesEmailClient(config);
+  if (!client) throw new Error('SES_PREFLIGHT_UNAVAILABLE');
+  try {
+    const report = await sesPreflight(client, config);
+    if (feedback.enabled) {
+      for (const [from, expected] of Object.entries(
+        feedback.senderIdentities ?? { [feedback.from]: feedback.identityArn },
+      )) {
+        const resolved = await resolveSesIdentity(client, { ...config, from });
+        const actual = resolved?.details.VerifiedForSendingStatus
+          ? `arn:aws:ses:${config.region}:${feedback.accountId}:identity/${resolved.name}`
+          : null;
+        if (actual !== expected)
+          throw new Error('SES_SENDER_FEEDBACK_IDENTITY_MISMATCH');
+      }
+    }
+    console.log(JSON.stringify(report, null, 2));
+    if (report.status !== 'READY') process.exitCode = 2;
+  } finally {
+    client.destroy();
+  }
+}
+void main().catch((error: unknown) => {
+  // Do not echo SDK errors or env values: AWS can include identities/credentials.
+  console.error(
+    JSON.stringify({
+      event: 'ses_preflight_failed',
+      code: sesPreflightFailureCode(error),
+    }),
+  );
+  console.error(
+    'Não foi possível validar o SES. Confira AWS_REGION, AWS_SES_FROM_EMAIL, EMAIL_SUPPRESSION_HASH_KEY, as credenciais e a configuração SNS quando habilitada; a consulta remota exige ses:GetAccount e ses:GetEmailIdentity na região selecionada.',
+  );
+  process.exitCode = 1;
+});

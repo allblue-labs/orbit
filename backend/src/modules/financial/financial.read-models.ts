@@ -139,8 +139,12 @@ export interface FinancialSummaryReadModel {
   netConfirmed: string;
   /** `income.pending - expense.pending`. Somente previsto. */
   netPending: string;
-  /** `PENDING` com vencimento anterior a hoje. */
+  /** `PENDING` com vencimento anterior a hoje — entradas e saídas juntas. */
   overdue: FinancialTotalsReadModel;
+  /** Entradas vencidas: a cobrar. */
+  overdueIncome: FinancialTotalsReadModel;
+  /** Saídas vencidas: contas atrasadas. */
+  overdueExpense: FinancialTotalsReadModel;
 }
 
 export interface FinancialCategoryBreakdownReadModel {
@@ -154,8 +158,12 @@ export interface FinancialCategoryBreakdownReadModel {
   count: number;
 }
 
-/** Um mês da série. `month` é `YYYY-MM`. */
+/**
+ * Um ponto da série. `period` é `YYYY-MM` (mensal) ou `YYYY-MM-DD` (diária);
+ * `month` é sempre o mês do ponto.
+ */
 export interface FinancialTimelinePointReadModel {
+  period: string;
   month: string;
   incomeConfirmed: string;
   incomePending: string;

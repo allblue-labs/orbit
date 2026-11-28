@@ -6,7 +6,9 @@ export type PortalMetric =
   | 'login.failure'
   | 'invite.activation'
   | 'password.reset'
-  | 'session.active';
+  | 'session.active'
+  | 'access.created'
+  | 'access.password_reset';
 
 @Injectable()
 export class CustomerPortalMetrics {
@@ -24,6 +26,8 @@ export class CustomerPortalMetrics {
       'invite.activation': this.counters.get('invite.activation') ?? 0,
       'password.reset': this.counters.get('password.reset') ?? 0,
       'session.active': this.counters.get('session.active') ?? 0,
+      'access.created': this.counters.get('access.created') ?? 0,
+      'access.password_reset': this.counters.get('access.password_reset') ?? 0,
     });
   }
 }

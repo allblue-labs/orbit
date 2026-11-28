@@ -1,41 +1,15 @@
 "use client";
 
 /**
- * Radar comparativo — mês corrente contra o mês anterior.
+ * Radar comparativo — este mês × mesmo trecho do mês anterior.
  *
- * ## De onde vêm os números
- *
- * De **duas leituras de `GET /analytics/kpis`**, uma por janela. Nenhum valor
- * é calculado, normalizado ou interpolado aqui: o backend conta e classifica
- * cada indicador para o período que recebeu, e o gráfico desenha o que voltou.
- *
- * Não se usa o `changePercent` do próprio contrato para reconstruir o mês
- * anterior — isso seria o frontend inferindo um número que ninguém publicou.
- * Perguntar duas vezes custa uma requisição e devolve a verdade.
- *
- * ## Quais eixos entram
- *
- * Só indicadores **percentuais e comparáveis** (`comparable` no Metric
- * Registry). Duas razões:
- *
- * 1. um radar exige eixos na mesma escala — misturar "12 operações" com "87%"
- *    desenharia uma forma sem significado;
- * 2. nem todo indicador do Analytics responde ao período. Disponibilidade dos
- *    equipamentos e contratos ativos são contados sem recorte de data, então
- *    apareceriam idênticos nos dois meses e sugeririam estabilidade medida.
- *
- * As contagens comparáveis aparecem embaixo, como números — não como eixo.
- *
- * ## O que o backend não publica
- *
- * Ordens de serviço, visitas técnicas e PMOCs **por tipo de operação** não são
- * indicadores do Analytics: o `KpiEngine` não segmenta por `OperationKind`.
- * Produtividade por técnico também não — é a mesma ausência que já deixa o
- * widget "Desempenho da Equipe" sem fonte. Ausências declaradas no rodapé.
+ * O desenho mostra a forma (onde a operação está mais fraca, e se o polígono
+ * cresceu ou encolheu); a leitura ao lado diz os números — valor, base e
+ * variação em pontos. Regras em `comparative-radar.model`.
  */
 import { useMemo } from "react";
+import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
 import {
-  Legend,
   PolarAngleAxis,
   PolarGrid,
   PolarRadiusAxis,
@@ -46,226 +20,194 @@ import {
 } from "recharts";
 
 import {
-  PanelChartFrame,
   PanelEmpty,
   PanelError,
+  PanelFrame,
   PanelLoading,
 } from "@/components/panels";
-import { getMetric, resolveMetric } from "@/metrics";
-import type { AnalyticsKpi } from "@/types/dashboard";
+import { cn } from "@/lib/utils";
+import {
+  radarDeltaText,
+  radarRows,
+  radarShape,
+  radarSummary,
+  type RadarRow,
+  type RadarTrend,
+} from "./comparative-radar.model";
 import type { WidgetProps } from "./widget-registry";
 
 const CURRENT_COLOR = "var(--color-chart-1)";
-const PREVIOUS_COLOR = "var(--color-chart-4)";
+const PREVIOUS_COLOR = "var(--color-muted-foreground)";
 
-/** Keep perimeter labels short; the tooltip retains the full metric name. */
-const AXIS_LABELS: Readonly<Record<string, string>> = {
-  "operations.completion_rate": "Conclusão",
-  "operations.sla_compliance": "Prazo",
-  "technicians.assignment_coverage": "Equipe",
+const TOM: Record<RadarTrend, string> = {
+  better: "bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-900",
+  worse: "bg-rose-50 text-rose-700 ring-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:ring-rose-900",
+  same: "bg-muted text-muted-foreground ring-border",
+  none: "bg-muted text-muted-foreground ring-border",
 };
-
-/** Indicadores pedidos no painel que o Analytics não publica. */
-const NOT_PUBLISHED = [
-  "ordens de serviço por tipo",
-  "visitas técnicas",
-  "produtividade por técnico",
-];
-
-interface RadarRow {
-  readonly axis: string;
-  readonly label: string;
-  readonly current: number;
-  readonly previous: number;
-}
-
-/** Indicador percentual e comparável, na ordem do Metric Registry. */
-function comparableAxes(
-  current: readonly AnalyticsKpi[],
-  previous: readonly AnalyticsKpi[],
-): readonly RadarRow[] {
-  const before = new Map(previous.map((kpi) => [kpi.id, kpi.value]));
-
-  return current
-    .filter((kpi) => getMetric(kpi.id)?.comparable && kpi.unit === "%")
-    .map((kpi) => {
-      const label = resolveMetric(kpi).label;
-      return {
-        axis: AXIS_LABELS[kpi.id] ?? label,
-        label,
-        current: kpi.value,
-        previous: before.get(kpi.id) ?? 0,
-      };
-    });
-}
-
-/** Contagens comparáveis — mostradas como número, nunca como eixo do radar. */
-function comparableCounts(
-  current: readonly AnalyticsKpi[],
-  previous: readonly AnalyticsKpi[],
-): ReadonlyArray<{
-  id: string;
-  label: string;
-  current: string;
-  previous: string;
-}> {
-  const before = new Map(previous.map((kpi) => [kpi.id, kpi.value]));
-
-  return current
-    .filter((kpi) => getMetric(kpi.id)?.comparable && kpi.unit !== "%")
-    .map((kpi) => {
-      const metric = resolveMetric(kpi);
-      return {
-        id: kpi.id,
-        label: metric.label,
-        current: metric.format(kpi.value),
-        previous: metric.format(before.get(kpi.id) ?? 0),
-      };
-    });
-}
 
 export function ComparativeRadarWidget({ widget, comparison }: WidgetProps) {
   const { current, previous, windows } = comparison;
-
   const rows = useMemo(
     () =>
       current.data && previous.data
-        ? comparableAxes(current.data.indicators, previous.data.indicators)
+        ? radarRows(current.data.indicators, previous.data.indicators)
         : [],
     [current.data, previous.data],
   );
-
-  const counts = useMemo(
-    () =>
-      current.data && previous.data
-        ? comparableCounts(current.data.indicators, previous.data.indicators)
-        : [],
-    [current.data, previous.data],
-  );
+  const shape = radarShape(rows);
+  const resumo = radarSummary(rows);
 
   return (
-    <PanelChartFrame
+    <PanelFrame
       panelId={widget.id}
       title={widget.title}
-      description={`${windows.thisMonth.label} · ${windows.lastMonth.label}`}
-      height={340}
+      description={`${windows.thisMonth.label} contra ${windows.lastMonth.label}. Quanto mais para fora, melhor.`}
     >
-      <ComparisonState current={current} previous={previous} rows={rows}>
-        <div className="flex h-full flex-col">
-          <div className="min-h-0 min-w-0 flex-1">
-            <ResponsiveContainer width="100%" height="100%">
-              <RadarChart data={[...rows]} outerRadius="72%">
-                <PolarGrid stroke="var(--color-border)" />
-                <PolarAngleAxis
-                  dataKey="axis"
-                  tickSize={4}
-                  tick={{
-                    fontSize: 11,
-                    fill: "var(--color-muted-foreground)",
-                  }}
-                />
-                <PolarRadiusAxis
-                  domain={[0, 100]}
-                  tick={{
-                    fontSize: 10,
-                    fill: "var(--color-muted-foreground)",
-                  }}
-                  axisLine={false}
-                />
-                <Radar
-                  name={windows.lastMonth.label}
-                  dataKey="previous"
-                  stroke={PREVIOUS_COLOR}
-                  fill={PREVIOUS_COLOR}
-                  fillOpacity={0.15}
-                />
-                <Radar
-                  name={windows.thisMonth.label}
-                  dataKey="current"
-                  stroke={CURRENT_COLOR}
-                  fill={CURRENT_COLOR}
-                  fillOpacity={0.3}
-                />
-                <Legend wrapperStyle={{ fontSize: "0.7rem" }} />
-                <Tooltip
-                  labelFormatter={(label) =>
-                    rows.find((row) => row.axis === label)?.label ?? label
-                  }
-                  formatter={(value: number | string) => `${value}%`}
-                  contentStyle={{
-                    background: "var(--color-popover)",
-                    border: "1px solid var(--color-border)",
-                    borderRadius: "0.75rem",
-                    fontSize: "0.8125rem",
-                  }}
-                />
-              </RadarChart>
-            </ResponsiveContainer>
-          </div>
-
-          {counts.length > 0 ? (
-            <ul className="flex flex-wrap gap-x-4 gap-y-1 border-t border-border pt-2 text-xs">
-              {counts.map((count) => (
-                <li key={count.id} className="flex items-center gap-1.5">
-                  <span className="text-muted-foreground">{count.label}</span>
-                  <span className="font-medium tabular-nums">
-                    {count.current}
+      {current.isPending || previous.isPending ? (
+        <PanelLoading rows={5} />
+      ) : current.error || previous.error ? (
+        <PanelError
+          error={(current.error ?? previous.error)!}
+          onRetry={() => {
+            current.refetch();
+            previous.refetch();
+          }}
+        />
+      ) : rows.length === 0 ? (
+        <PanelEmpty message="Ainda não há atendimentos nem manutenções nestes dois períodos para comparar." />
+      ) : (
+        <div className="space-y-3">
+          {resumo ? <p className="text-sm font-medium">{resumo}</p> : null}
+          <div className="space-y-3">
+            {shape.axes.length > 0 ? (
+              <div className="space-y-2">
+                <div className="mx-auto h-[260px] w-full max-w-[420px] min-w-0">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RadarChart data={shape.axes} outerRadius="66%" margin={{ top: 12, right: 48, bottom: 12, left: 48 }}>
+                      <PolarGrid stroke="var(--color-border)" />
+                      <PolarAngleAxis dataKey="axis" tick={<AxisTick rows={shape.axes} />} />
+                      <PolarRadiusAxis domain={[0, 100]} tickCount={5} tick={false} axisLine={false} />
+                      {shape.drawPrevious ? (
+                        <Radar
+                          name={windows.lastMonth.label}
+                          dataKey="previous"
+                          stroke={PREVIOUS_COLOR}
+                          strokeDasharray="4 3"
+                          strokeWidth={1.5}
+                          fill={PREVIOUS_COLOR}
+                          fillOpacity={0.08}
+                          isAnimationActive={false}
+                        />
+                      ) : null}
+                      <Radar
+                        name={windows.thisMonth.label}
+                        dataKey="current"
+                        stroke={CURRENT_COLOR}
+                        strokeWidth={2}
+                        fill={CURRENT_COLOR}
+                        fillOpacity={0.22}
+                        dot={{ r: 3, fill: CURRENT_COLOR, strokeWidth: 0 }}
+                        isAnimationActive={false}
+                      />
+                      <Tooltip
+                        labelFormatter={(label) =>
+                          shape.axes.find((row) => row.axis === label)?.label ?? label
+                        }
+                        formatter={(value) =>
+                          value == null ? "Sem base" : `${value}%`
+                        }
+                        contentStyle={{
+                          background: "var(--color-popover)",
+                          border: "1px solid var(--color-border)",
+                          borderRadius: "0.75rem",
+                          fontSize: "0.8125rem",
+                        }}
+                      />
+                    </RadarChart>
+                  </ResponsiveContainer>
+                </div>
+                <p className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-0.5 w-4 rounded-full" style={{ background: CURRENT_COLOR }} aria-hidden />
+                    {windows.thisMonth.label}
                   </span>
-                  <span className="text-muted-foreground tabular-nums">
-                    ({count.previous})
-                  </span>
-                </li>
+                  {shape.drawPrevious ? (
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-4 border-t-2 border-dashed border-muted-foreground" aria-hidden />
+                      {windows.lastMonth.label}
+                    </span>
+                  ) : (
+                    <span>Mês anterior sem base em todos os eixos.</span>
+                  )}
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                O desenho precisa de ao menos três indicadores com base neste
+                mês. A leitura abaixo mostra o que já dá para comparar.
+              </p>
+            )}
+            <ul className="divide-y divide-border border-t border-border">
+              {rows.map((row) => (
+                <Reading key={row.id} row={row} />
               ))}
             </ul>
-          ) : null}
-
-          <p className="pt-1.5 text-[11px] text-muted-foreground">
-            Sem eixo para {NOT_PUBLISHED.join(", ")} — o Analytics não os
-            publica.
-          </p>
+          </div>
         </div>
-      </ComparisonState>
-    </PanelChartFrame>
+      )}
+    </PanelFrame>
   );
 }
 
-/**
- * Estado combinado das duas leituras.
- *
- * Uma falha em qualquer janela invalida a comparação inteira: meio radar
- * mostraria o mês corrente contra zero.
- */
-function ComparisonState({
-  current,
-  previous,
-  rows,
-  children,
-}: {
-  current: WidgetProps["comparison"]["current"];
-  previous: WidgetProps["comparison"]["previous"];
+function Reading({ row }: { row: RadarRow }) {
+  const Icone =
+    row.trend === "better" ? ArrowUpRight : row.trend === "worse" ? ArrowDownRight : Minus;
+  return (
+    <li className="flex items-center justify-between gap-3 py-2">
+      <span className="min-w-0">
+        <span className="block truncate text-sm leading-tight">{row.label}</span>
+        <span className="block text-[11px] text-muted-foreground tabular-nums">
+          {row.currentBasis ? `${row.currentBasis} neste mês` : row.current === null ? "sem base neste mês" : ""}
+          {row.previous !== null ? ` · antes ${row.previous}%` : ""}
+        </span>
+      </span>
+      <span className="flex shrink-0 items-center gap-2">
+        <span className="font-display text-base font-semibold tabular-nums">
+          {row.current === null ? "—" : `${row.current}%`}
+        </span>
+        <span
+          className={cn(
+            "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[11px] font-medium whitespace-nowrap ring-1 ring-inset",
+            TOM[row.trend],
+          )}
+        >
+          <Icone className="size-3" aria-hidden />
+          {radarDeltaText(row)}
+        </span>
+      </span>
+    </li>
+  );
+}
+
+/** Rótulo do eixo com o valor deste mês embaixo: o desenho já diz o número. */
+function AxisTick(props: {
   rows: readonly RadarRow[];
-  children: React.ReactNode;
+  x?: number;
+  y?: number;
+  textAnchor?: "start" | "middle" | "end";
+  payload?: { value: string };
 }) {
-  if (current.isPending || previous.isPending) return <PanelLoading rows={5} />;
-
-  const error = current.error ?? previous.error;
-  if (error) {
-    return (
-      <PanelError
-        error={error}
-        onRetry={() => {
-          current.refetch();
-          previous.refetch();
-        }}
-      />
-    );
-  }
-
-  if (rows.length === 0) {
-    return (
-      <PanelEmpty message="Nenhum indicador percentual comparável no período." />
-    );
-  }
-
-  return <>{children}</>;
+  const { x = 0, y = 0, textAnchor = "middle", payload, rows } = props;
+  const row = rows.find((item) => item.axis === payload?.value);
+  return (
+    <text x={x} y={y} textAnchor={textAnchor} dominantBaseline="central" fontSize={11}>
+      <tspan x={x} dy="-0.45em" fill="var(--color-muted-foreground)">
+        {payload?.value}
+      </tspan>
+      <tspan x={x} dy="1.2em" fill="var(--color-foreground)" fontWeight={600}>
+        {row?.current == null ? "—" : `${row.current}%`}
+      </tspan>
+    </text>
+  );
 }

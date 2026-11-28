@@ -23,6 +23,7 @@
  */
 import { ForbiddenException } from '../../../exceptions';
 import type { IdentityUser } from '../infrastructure/identity.repository';
+import { VerifiedPlatformAuthority } from '../../../common/verified-platform-authority';
 
 /** O que o cliente declara ao entrar. Desconhecido é tratado como `WEB`. */
 export function normalizeSurface(client: string | undefined): string {
@@ -38,10 +39,12 @@ export function normalizeSurface(client: string | undefined): string {
 export function surfacesOf(user: IdentityUser): ReadonlySet<string> {
   if (user.isOrganizationOwner) return new Set(['WEB', 'MOBILE', 'API']);
   const superficies = new Set<string>();
-  for (const papel of [...user.platformRoleAssignments.map((a) => a.role)]) {
-    for (const superficie of papel?.allowedSurfaces ?? []) {
-      superficies.add(superficie.toUpperCase());
-    }
+  const authority = VerifiedPlatformAuthority.forUser(
+    user.platformAuthority,
+    user.id,
+  );
+  for (const superficie of authority?.allowedSurfaces ?? []) {
+    superficies.add(superficie.toUpperCase());
   }
   for (const membership of user.organizationMemberships) {
     const granted = membership.usesCustomAccess

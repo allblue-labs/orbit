@@ -1,0 +1,242 @@
+[
+  {
+    "file": "valid/command.json",
+    "schema": "command.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/receipt.json",
+    "schema": "receipt.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/link.json",
+    "schema": "link.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/read.json",
+    "schema": "read.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/ack.json",
+    "schema": "ack.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/authority.json",
+    "schema": "authority-context.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/event-tenant.created.json",
+    "schema": "event.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/event-tenant.updated.json",
+    "schema": "event.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/event-tenant.suspended.json",
+    "schema": "event.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/event-tenant.reactivated.json",
+    "schema": "event.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/event-subscription.created.json",
+    "schema": "event.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/event-subscription.changed.json",
+    "schema": "event.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/event-subscription.change_scheduled.json",
+    "schema": "event.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/event-subscription.cancellation_scheduled.json",
+    "schema": "event.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/event-subscription.canceled.json",
+    "schema": "event.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/event-billing.invoice_settled.json",
+    "schema": "event.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/event-billing.payment_succeeded.json",
+    "schema": "event.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/event-billing.payment_failed.json",
+    "schema": "event.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/event-billing.adjustment_updated.json",
+    "schema": "event.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/event-billing.refund_completed.json",
+    "schema": "event.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/event-usage.metrics_recorded.json",
+    "schema": "event.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/command-tenant.provision.json",
+    "schema": "command.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/command-tenant.update.json",
+    "schema": "command.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/command-subscription.request_cancel.json",
+    "schema": "command.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/command-subscription.request_keep.json",
+    "schema": "command.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/command-tenant.request_suspend.json",
+    "schema": "command.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/command-tenant.request_reactivate.json",
+    "schema": "command.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/directory.json",
+    "schema": "directory.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/event-page.json",
+    "schema": "event-page.schema.json",
+    "valid": true
+  },
+  {
+    "file": "invalid/paid-forged-active.json",
+    "schema": "command.schema.json",
+    "valid": false
+  },
+  {
+    "file": "invalid/hvac-pii.json",
+    "schema": "event.schema.json",
+    "valid": false
+  },
+  {
+    "file": "invalid/unsupported-version.json",
+    "schema": "command.schema.json",
+    "valid": false
+  },
+  {
+    "file": "invalid/future-as-applied.json",
+    "schema": "receipt.schema.json",
+    "valid": false
+  },
+  {
+    "file": "invalid/refund-not-confirmed.json",
+    "schema": "event.schema.json",
+    "valid": false
+  },
+  {
+    "file": "invalid/unknown-time-invented.json",
+    "schema": "event.schema.json",
+    "valid": false
+  },
+  {
+    "file": "invalid/false-durable-ack.json",
+    "schema": "ack.schema.json",
+    "valid": false
+  },
+  {
+    "file": "valid/receipt-accepted.json",
+    "schema": "receipt.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/receipt-awaiting_approval.json",
+    "schema": "receipt.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/receipt-executing.json",
+    "schema": "receipt.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/receipt-awaiting_customer_action.json",
+    "schema": "receipt.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/receipt-rejected.json",
+    "schema": "receipt.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/receipt-failed.json",
+    "schema": "receipt.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/receipt-expired.json",
+    "schema": "receipt.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/error.json",
+    "schema": "error.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/read-unknown-subscription.json",
+    "schema": "read.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/read-billing-out-of-band.json",
+    "schema": "read.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/read-usage-future.json",
+    "schema": "read.schema.json",
+    "valid": true
+  },
+  {
+    "file": "valid/receipt-provisioned-pending-payment.json",
+    "schema": "receipt.schema.json",
+    "valid": true
+  }
+]

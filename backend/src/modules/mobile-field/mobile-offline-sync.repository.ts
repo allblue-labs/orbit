@@ -1,3 +1,7 @@
+import {
+  currentMemberPermissions,
+  memberPermissionSelection,
+} from './current-member-permissions';
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { ConflictException } from '../../exceptions';
@@ -38,27 +42,20 @@ export class MobileOfflineSyncRepository {
   currentPermissions(
     organizationId: string,
     actorId: string,
-    businessUnitIds: readonly string[],
+    _businessUnitIds: readonly string[],
   ) {
+    void _businessUnitIds;
     return this.rls.run(async (tx) => {
-      const organizationMembership = await tx.organizationMembership.findFirst({
-        where: { organizationId, userId: actorId, status: 'ACTIVE' },
-        select: { role: { select: { permissions: true } } },
-      });
-      const unitMemberships = await tx.businessUnitMembership.findMany({
+      const membership = await tx.organizationMembership.findFirst({
         where: {
           organizationId,
           userId: actorId,
-          businessUnitId: { in: [...businessUnitIds] },
           status: 'ACTIVE',
           deletedAt: null,
         },
-        select: { role: { select: { permissions: true } } },
+        select: memberPermissionSelection,
       });
-      return [
-        ...(organizationMembership?.role.permissions ?? []),
-        ...unitMemberships.flatMap((membership) => membership.role.permissions),
-      ];
+      return currentMemberPermissions(membership, actorId);
     });
   }
 

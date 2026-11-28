@@ -43,6 +43,47 @@ PmocPlanCycleView view(String? technicianId) => PmocPlanCycleView(
 
 void main() {
   test(
+    'atribuição planejada por equipamento permite atender antes de existir execução',
+    () {
+      final original = view('plan-technician');
+      final assigned = PmocCycleEquipmentContract.fromJson({
+        'status': 'NOT_STARTED',
+        'equipment': {'id': 'asset', 'name': 'Split'},
+        'schedule': {
+          'responsibleFieldTechnician': {'id': 'field'},
+        },
+      });
+      final data = PmocPlanCycleView(
+        plan: original.plan,
+        cycle: original.cycle,
+        equipment: [assigned],
+      );
+      expect(data.canAttend(actorId: 'field', isOwner: false), isTrue);
+      expect(
+        data.canAttendEquipment(assigned, actorId: 'field', isOwner: false),
+        isTrue,
+      );
+      expect(
+        data.canAttendEquipment(
+          assigned,
+          actorId: 'plan-technician',
+          isOwner: false,
+        ),
+        isFalse,
+      );
+      final cancelled = PmocCycleEquipmentContract.fromJson({
+        'status': 'CANCELLED',
+        'schedule': {
+          'responsibleFieldTechnician': {'id': 'field'},
+        },
+      });
+      expect(
+        data.canAttendEquipment(cancelled, actorId: 'owner', isOwner: true),
+        isFalse,
+      );
+    },
+  );
+  test(
     'atribuição na execução libera o atendente sem liberar outros equipamentos do plano',
     () {
       final original = view('plan-technician');
@@ -142,10 +183,15 @@ void main() {
       );
     });
 
-    test('código desconhecido aparece como veio', () {
-      /// Um texto genérico apagaria a única pista de quem for investigar — e o
-      /// backend pode publicar um motivo novo antes desta tela conhecê-lo.
-      expect(pmocBlockedReasonLabel('MOTIVO_NOVO'), 'MOTIVO_NOVO');
+    test('um bloqueio novo orienta a atualizar e revisar o plano', () {
+      final label = pmocBlockedReasonLabel('MOTIVO_NOVO');
+      expect(label, contains('Atualize o PMOC'));
+      expect(label, isNot(contains('MOTIVO_NOVO')));
+      expect(
+        pmocEquipmentStatus('SITUACAO_NOVA').label,
+        'Situação indisponível',
+      );
+      expect(pmocCycleStatus('SITUACAO_NOVA').label, 'Situação indisponível');
     });
   });
 

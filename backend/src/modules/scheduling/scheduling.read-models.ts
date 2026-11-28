@@ -1,7 +1,7 @@
 export type SchedulingOccurrenceReadModel = {
   occurrenceId: string;
   eventId: string;
-  calendarId: string;
+  calendarId: string | null;
   title: string;
   description: string | null;
   type: string;

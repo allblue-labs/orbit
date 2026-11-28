@@ -1,7 +1,8 @@
 "use client";
+import { ConfirmEmail } from "@/components/auth/confirm-email";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AnimatePresence, motion } from "motion/react";
 import {
@@ -19,7 +20,6 @@ import {
 } from "lucide-react";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
-import { z } from "zod";
 
 import { OrbitLogo } from "@/components/brand/orbit-logo";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -37,7 +37,6 @@ import {
   rotuloDoRecurso,
 } from "@/components/billing/billing-format";
 import {
-  TRIAL_DAYS,
   ofereceAvaliacao,
   ordenarPlanos,
 } from "@/components/pricing/pricing-catalog";
@@ -52,7 +51,6 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   detectBrazilianDocumentType,
   formatBrazilianDocument,
-  isValidBrazilianDocument,
   normalizeBrazilianDocument,
 } from "@/lib/brazilian-document";
 import type { PostalAddress } from "@/lib/postal-code";
@@ -60,43 +58,14 @@ import { cn } from "@/lib/utils";
 
 import { ApiError } from "@/lib/api-error";
 import { errorCopy } from "@/lib/error-copy";
-import { passwordPolicyIssues } from "@/lib/password-policy";
 import { PasswordRequirements } from "./password-requirements";
+import {
+  signupSchema,
+  TERMS_ACCEPTANCE_MESSAGE,
+  type SignupFormValues as FormValues,
+} from "./signup-schema";
 
-const TERMS_ACCEPTANCE_MESSAGE =
-  "Para continuar, aceite os Termos de Uso e confirme a leitura da Política de Privacidade.";
 const TERMS_TOAST_ID = "signup-terms-required";
-
-const schema = z
-  .object({
-    firstName: z.string().min(2, "Informe seu nome"),
-    lastName: z.string().min(2, "Informe seu sobrenome"),
-    email: z.string().email("Informe um e-mail válido"),
-    password: z.string().superRefine((password, context) => {
-      for (const issue of passwordPolicyIssues(password)) {
-        context.addIssue({ code: "custom", message: issue });
-      }
-    }),
-    confirmPassword: z.string(),
-    organizationName: z.string().min(2, "Informe o nome da organização"),
-    legalName: z.string().min(2, "Informe a razão social"),
-    documentNumber: z
-      .string()
-      .refine(isValidBrazilianDocument, "Informe um CPF ou CNPJ válido"),
-    primarySegment: z.string().min(2, "Informe o segmento"),
-    city: z.string().min(2, "Informe a cidade"),
-    street: z.string().min(2, "Informe o endereço"),
-    stateCode: z.string().length(2, "Use a sigla do estado"),
-    planKey: z.string().min(1, "Escolha um plano para continuar"),
-    billingInterval: z.enum(BILLING_INTERVALS),
-    terms: z.boolean().refine(Boolean, TERMS_ACCEPTANCE_MESSAGE),
-  })
-  .refine((data) => data.password === data.confirmPassword, {
-    path: ["confirmPassword"],
-    message: "As senhas não coincidem",
-  });
-
-type FormValues = z.infer<typeof schema>;
 const registrationConflicts: Readonly<
   Record<string, { field: keyof FormValues; step: number }>
 > = {
@@ -114,10 +83,14 @@ const steps = [
     description: "Defina o plano da assinatura",
     icon: Sparkles,
   },
-  { title: "Sua conta", description: "Você será o owner", icon: UserRound },
+  {
+    title: "Sua conta",
+    description: "Acesso de proprietário",
+    icon: UserRound,
+  },
   {
     title: "Organização",
-    description: "Identidade do workspace",
+    description: "Dados da empresa",
     icon: Building2,
   },
   {
@@ -133,7 +106,7 @@ const fieldsByStep: (keyof FormValues)[][] = [
   ["planKey", "billingInterval"],
   ["firstName", "lastName", "email", "password", "confirmPassword"],
   ["organizationName", "legalName", "documentNumber", "primarySegment"],
-  ["city", "street", "stateCode", "terms"],
+  ["city", "street", "number", "complement", "stateCode", "terms"],
 ];
 
 /**
@@ -150,28 +123,14 @@ const LIMITES_EM_DESTAQUE = [
   "ACTIVE_CUSTOMERS",
 ] as const;
 
-function FieldError({ message }: { message?: string }) {
-  return message ? <p className="text-xs text-destructive">{message}</p> : null;
+function FieldError({ message, id }: { message?: string; id?: string }) {
+  return message ? (
+    <p id={id} className="text-xs text-destructive">
+      {message}
+    </p>
+  ) : null;
 }
 
-/**
- * Escolha do plano — primeira etapa do onboarding público.
- *
- * ## De onde vêm os planos
- *
- * Do catálogo comercial (`GET /plans/catalog`), lido no servidor e entregue
- * pronto. Antes vinham de `GET /plans`, que é a tabela: as suítes de direitos
- * criam planos ali ("Sem financeiro", "Catálogo sem estoque") e os internos
- * moram no mesmo lugar, então quem abria a conta escolhia entre dez cartões,
- * metade a R$ 0,00.
- *
- * ## "Gratuito" era a palavra errada
- *
- * O `STARTER` custa zero na tabela e o cartão dizia **Gratuito/mês** — que lê
- * como um plano permanentemente grátis. Não é: o que existe é a avaliação de
- * 30 dias do Essencial. O preço mostrado agora é sempre o preço real do plano,
- * e a avaliação aparece como o que é — um período, anunciado à parte.
- */
 function PlanStep({
   catalog,
   selected,
@@ -227,11 +186,6 @@ function PlanStep({
           />
         ))}
       </div>
-      <p className="text-xs text-muted-foreground">
-        O Essencial oferece avaliação para empresas elegíveis. Os demais planos
-        exigem pagamento para liberar o acesso. Você pode trocar de plano pela
-        área de assinatura.
-      </p>
       <FieldError message={error} />
     </div>
   );
@@ -255,9 +209,12 @@ function PlanCard({
     <button
       type="button"
       onClick={onSelect}
+      disabled={plano.isActive === false}
       aria-pressed={ativo}
       className={cn(
         "rounded-xl border border-border p-5 text-left transition-colors",
+        plano.isActive === false &&
+          "cursor-not-allowed bg-muted/50 text-muted-foreground",
         ativo
           ? "border-primary bg-secondary"
           : "hover:border-primary/40 hover:bg-muted/40",
@@ -270,10 +227,19 @@ function PlanCard({
             {plano.description}
           </p>
         </div>
-        {ativo ? <Check className="size-4 shrink-0 text-primary" /> : null}
+        {plano.isActive === false ? (
+          <span className="text-xs text-muted-foreground">Indisponível</span>
+        ) : ativo ? (
+          <Check className="size-4 shrink-0 text-primary" />
+        ) : null}
       </div>
 
       <p className="mt-4 font-display text-2xl font-bold">
+        {preco?.listAmountMinor !== undefined ? (
+          <del className="mr-2 text-sm font-normal text-muted-foreground">
+            {formatCentavos(preco.listAmountMinor)}
+          </del>
+        ) : null}
         {preco ? formatCentavos(preco.amountMinor) : "Sob consulta"}
         <span className="ml-1 text-xs font-normal text-muted-foreground">
           {billingInterval === "MONTHLY"
@@ -284,17 +250,14 @@ function PlanCard({
         </span>
       </p>
 
-      {/*
-        A avaliação é um período, não um preço.
-
-        Dizer "Gratuito" no lugar do valor fazia o plano parecer sempre grátis.
-        O valor fica onde sempre esteve, e a avaliação vira o que é: trinta
-        dias antes da primeira cobrança.
-      */}
       {comAvaliacao ? (
         <p className="mt-2 inline-flex rounded-md bg-success/12 px-2 py-1 text-[11px] font-medium text-success">
-          {TRIAL_DAYS} dias grátis antes da primeira cobrança
+          {plano.trialDays} dias grátis antes da primeira cobrança
         </p>
+      ) : null}
+
+      {plano.promotion ? (
+        <p className="mt-2 text-xs text-muted-foreground">{plano.promotion}</p>
       ) : null}
 
       <dl className="mt-4 space-y-1 border-t border-border/70 pt-3">
@@ -325,6 +288,7 @@ export function SignupContent({
   initialSelection?: { planKey: string; billingInterval: BillingIntervalCode };
 }) {
   const createAccount = useRegister();
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
   const [registrationError, setRegistrationError] = useState<{
     message: string;
     canSignIn: boolean;
@@ -343,10 +307,12 @@ export function SignupContent({
     control,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(signupSchema),
     defaultValues: {
       primarySegment: "Serviços",
       stateCode: "",
+      number: "",
+      complement: "",
       planKey: initialSelection.planKey,
       billingInterval: initialSelection.billingInterval,
       terms: false,
@@ -356,8 +322,15 @@ export function SignupContent({
   const billingInterval = useWatch({ control, name: "billingInterval" });
   const plan = catalog.plans.find((entry) => entry.code === selectedPlan);
   const documentNumber = useWatch({ control, name: "documentNumber" });
-  const termsAccepted = useWatch({ control, name: "terms" });
   const password = useWatch({ control, name: "password" }) ?? "";
+  const focusStep = useCallback((heading: HTMLHeadingElement | null) => {
+    heading?.focus();
+  }, []);
+  function fieldAccessibility(name: keyof FormValues) {
+    return errors[name]
+      ? { "aria-invalid": true, "aria-describedby": `cadastro-${name}-erro` }
+      : {};
+  }
 
   async function next() {
     // O retorno do servidor pertence à tentativa anterior. Revalide os campos
@@ -365,7 +338,7 @@ export function SignupContent({
     for (const field of fieldsByStep[step]) {
       if (errors[field]?.type === "server") clearErrors(field);
     }
-    if (await trigger(fieldsByStep[step])) {
+    if (await trigger(fieldsByStep[step], { shouldFocus: true })) {
       setRegistrationError(null);
       setStep((current) =>
         current === step ? Math.min(current + 1, LAST_STEP) : current,
@@ -377,7 +350,7 @@ export function SignupContent({
     setRegistrationError(null);
     const { confirmPassword: _, terms: __, ...payload } = values;
     try {
-      await createAccount.mutateAsync({
+      const pending = await createAccount.mutateAsync({
         ...payload,
         acceptTerms: values.terms,
         termsVersion: LEGAL_DOCUMENT_VERSION,
@@ -388,7 +361,8 @@ export function SignupContent({
         client: "WEB",
         businessUnitType: "HEADQUARTERS",
       });
-      toast.success("Cadastro concluído");
+      setPendingEmail(pending.email);
+      toast.success("Confirme seu e-mail para continuar");
     } catch (error) {
       const message = errorCopy(error);
       const code = error instanceof ApiError ? error.code : "";
@@ -407,6 +381,8 @@ export function SignupContent({
       }
     }
   }
+
+  if (pendingEmail) return <ConfirmEmail initialEmail={pendingEmail} />;
 
   return (
     <main className="grid min-h-dvh bg-background lg:grid-cols-[22rem_1fr]">
@@ -435,8 +411,8 @@ export function SignupContent({
             Sua operação começa com uma base segura.
           </h1>
           <p className="mt-3 text-sm leading-relaxed text-primary-foreground/75">
-            Configure a organização em poucos passos. Você entra como owner e
-            pode convidar o time depois.
+            Configure a organização em poucos passos. Você entra como
+            proprietário e pode convidar a equipe depois.
           </p>
           <ol className="mt-10 space-y-2">
             {steps.map((item, index) => {
@@ -552,18 +528,17 @@ export function SignupContent({
                 transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
               >
                 <div className="mb-8">
-                  {/*
-                    O número vem da mesma constante que o catálogo usa.
-
-                    O crachá dizia "14 dias para explorar" enquanto a avaliação
-                    é de 30 — dois números diferentes na mesma tela, e o menor
-                    deles era o que a pessoa levava para a decisão.
-                  */}
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1 text-xs font-medium text-secondary-foreground">
-                    <Sparkles className="size-3.5 text-primary" />
-                    {TRIAL_DAYS} dias grátis no Essencial
-                  </span>
-                  <h2 className="mt-4 font-display text-3xl font-bold tracking-tight">
+                  {plan && ofereceAvaliacao(plan) ? (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1 text-xs font-medium text-secondary-foreground">
+                      <Sparkles className="size-3.5 text-primary" />
+                      {plan.trialDays} dias grátis em {plan.label}
+                    </span>
+                  ) : null}
+                  <h2
+                    ref={focusStep}
+                    tabIndex={-1}
+                    className="mt-4 font-display text-3xl font-bold tracking-tight"
+                  >
                     {steps[step].title}
                   </h2>
                   <p className="mt-2 text-sm text-muted-foreground">
@@ -638,18 +613,26 @@ export function SignupContent({
                       <Input
                         id="firstName"
                         autoComplete="given-name"
+                        {...fieldAccessibility("firstName")}
                         {...register("firstName")}
                       />
-                      <FieldError message={errors.firstName?.message} />
+                      <FieldError
+                        id="cadastro-firstName-erro"
+                        message={errors.firstName?.message}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="lastName">Sobrenome</Label>
                       <Input
                         id="lastName"
                         autoComplete="family-name"
+                        {...fieldAccessibility("lastName")}
                         {...register("lastName")}
                       />
-                      <FieldError message={errors.lastName?.message} />
+                      <FieldError
+                        id="cadastro-lastName-erro"
+                        message={errors.lastName?.message}
+                      />
                     </div>
                     <div className="space-y-2 sm:col-span-2">
                       <Label htmlFor="email">E-mail corporativo</Label>
@@ -657,9 +640,13 @@ export function SignupContent({
                         id="email"
                         type="email"
                         autoComplete="email"
+                        {...fieldAccessibility("email")}
                         {...register("email")}
                       />
-                      <FieldError message={errors.email?.message} />
+                      <FieldError
+                        id="cadastro-email-erro"
+                        message={errors.email?.message}
+                      />
                     </div>
                     {(["password", "confirmPassword"] as const).map((name) => (
                       <div key={name} className="space-y-2">
@@ -672,6 +659,7 @@ export function SignupContent({
                             type={showPassword ? "text" : "password"}
                             autoComplete="new-password"
                             className="pr-10"
+                            {...fieldAccessibility(name)}
                             {...register(name)}
                           />
                           <button
@@ -690,7 +678,10 @@ export function SignupContent({
                         {name === "password" ? (
                           <PasswordRequirements password={password} />
                         ) : null}
-                        <FieldError message={errors[name]?.message} />
+                        <FieldError
+                          id={`cadastro-${name}-erro`}
+                          message={errors[name]?.message}
+                        />
                       </div>
                     ))}
                   </div>
@@ -705,14 +696,25 @@ export function SignupContent({
                       <Input
                         id="organizationName"
                         placeholder="Como sua equipe conhece a empresa"
+                        {...fieldAccessibility("organizationName")}
                         {...register("organizationName")}
                       />
-                      <FieldError message={errors.organizationName?.message} />
+                      <FieldError
+                        id="cadastro-organizationName-erro"
+                        message={errors.organizationName?.message}
+                      />
                     </div>
                     <div className="space-y-2 sm:col-span-2">
                       <Label htmlFor="legalName">Razão social</Label>
-                      <Input id="legalName" {...register("legalName")} />
-                      <FieldError message={errors.legalName?.message} />
+                      <Input
+                        id="legalName"
+                        {...fieldAccessibility("legalName")}
+                        {...register("legalName")}
+                      />
+                      <FieldError
+                        id="cadastro-legalName-erro"
+                        message={errors.legalName?.message}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="documentNumber">
@@ -727,6 +729,7 @@ export function SignupContent({
                         autoComplete="off"
                         placeholder="000.000.000-00 ou 00.000.000/0000-00"
                         maxLength={18}
+                        {...fieldAccessibility("documentNumber")}
                         {...register("documentNumber", {
                           onChange: (event) => {
                             setValue(
@@ -737,15 +740,22 @@ export function SignupContent({
                           },
                         })}
                       />
-                      <FieldError message={errors.documentNumber?.message} />
+                      <FieldError
+                        id="cadastro-documentNumber-erro"
+                        message={errors.documentNumber?.message}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="primarySegment">Segmento principal</Label>
                       <Input
                         id="primarySegment"
+                        {...fieldAccessibility("primarySegment")}
                         {...register("primarySegment")}
                       />
-                      <FieldError message={errors.primarySegment?.message} />
+                      <FieldError
+                        id="cadastro-primarySegment-erro"
+                        message={errors.primarySegment?.message}
+                      />
                     </div>
                   </div>
                 )}
@@ -780,8 +790,15 @@ export function SignupContent({
 
                     <div className="space-y-2">
                       <Label htmlFor="city">Cidade</Label>
-                      <Input id="city" {...register("city")} />
-                      <FieldError message={errors.city?.message} />
+                      <Input
+                        id="city"
+                        {...fieldAccessibility("city")}
+                        {...register("city")}
+                      />
+                      <FieldError
+                        id="cadastro-city-erro"
+                        message={errors.city?.message}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="stateCode">UF</Label>
@@ -789,14 +806,66 @@ export function SignupContent({
                         id="stateCode"
                         maxLength={2}
                         className="uppercase"
+                        {...fieldAccessibility("stateCode")}
                         {...register("stateCode")}
                       />
-                      <FieldError message={errors.stateCode?.message} />
+                      <FieldError
+                        id="cadastro-stateCode-erro"
+                        message={errors.stateCode?.message}
+                      />
                     </div>
                     <div className="space-y-2 sm:col-span-2">
                       <Label htmlFor="street">Endereço da matriz</Label>
-                      <Input id="street" {...register("street")} />
-                      <FieldError message={errors.street?.message} />
+                      <Input
+                        id="street"
+                        {...fieldAccessibility("street")}
+                        {...register("street")}
+                      />
+                      <FieldError
+                        id="cadastro-street-erro"
+                        message={errors.street?.message}
+                      />
+                    </div>
+                    <div className="grid gap-5 sm:col-span-2 sm:grid-cols-[8rem_1fr]">
+                      <div className="min-w-0 space-y-2">
+                        <Label htmlFor="number">
+                          Número{" "}
+                          <span className="font-normal text-muted-foreground">
+                            (opcional)
+                          </span>
+                        </Label>
+                        <Input
+                          id="number"
+                          maxLength={30}
+                          placeholder="Ex.: 120 ou s/n"
+                          {...fieldAccessibility("number")}
+                          {...register("number")}
+                        />
+                        <FieldError
+                          id="cadastro-number-erro"
+                          message={errors.number?.message}
+                        />
+                      </div>
+                      <div className="min-w-0 space-y-2">
+                        <Label htmlFor="complement">
+                          Complemento{" "}
+                          <span className="font-normal text-muted-foreground">
+                            (opcional)
+                          </span>
+                        </Label>
+                        <Input
+                          id="complement"
+                          autoComplete="address-line2"
+                          maxLength={160}
+                          placeholder="Apartamento, sala, bloco…"
+                          {...fieldAccessibility("complement")}
+                          {...register("complement")}
+                        />
+                        <FieldError
+                          id="cadastro-complement-erro"
+                          message={errors.complement?.message}
+                        />
+                      </div>
                     </div>
                     <div className="sm:col-span-2">
                       <LegalDocumentsPanel compact />

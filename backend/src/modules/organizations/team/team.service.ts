@@ -1,4 +1,5 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { PASSWORD_RESET_TTL_MS } from '../../identity/domain/password-reset.policy';
+import { Inject, Injectable } from '@nestjs/common';
 import type { IHashProvider } from '../../../contracts';
 import { HASH_PROVIDER } from '../../../providers';
 import {
@@ -8,11 +9,7 @@ import {
   ValidationException,
 } from '../../../exceptions';
 import { identityTokenLink } from '../../identity/domain/identity-links';
-import {
-  IDENTITY_TOKEN_DELIVERY,
-  IdentityTokenPurpose,
-  type IIdentityTokenDelivery,
-} from '../../identity/domain/identity.types';
+import { IdentityTokenPurpose } from '../../identity/domain/identity.types';
 import { IdentityRepository } from '../../identity/infrastructure/identity.repository';
 import { IdentityTokenService } from '../../identity/application/token.service';
 import {
@@ -25,9 +22,9 @@ import { generateTemporaryPassword } from './temporary-password';
 import { AuthorizationService } from '../../../common';
 import { isKnownPermission, ROLE_SURFACES } from '../team-roles';
 import { executesFieldWork } from '../../workforce/field-eligibility';
+import { EmailVerificationService } from '../../identity/application/email-verification.service';
 
 /** Quanto tempo o link de definição de senha vale. */
-const VALIDADE_DO_LINK_MS = 24 * 60 * 60_000;
 
 export interface TeamActor {
   organizationId: string;
@@ -40,8 +37,6 @@ export interface TeamActor {
 
 @Injectable()
 export class TeamService {
-  private readonly logger = new Logger(TeamService.name);
-
   constructor(
     private readonly team: TeamRepository,
     private readonly organizations: OrganizationRepository,
@@ -50,8 +45,7 @@ export class TeamService {
     private readonly entitlements: EntitlementService,
     private readonly authorization: AuthorizationService,
     @Inject(HASH_PROVIDER) private readonly hashes: IHashProvider,
-    @Inject(IDENTITY_TOKEN_DELIVERY)
-    private readonly delivery: IIdentityTokenDelivery,
+    private readonly verification?: EmailVerificationService,
   ) {}
 
   /**
@@ -158,6 +152,10 @@ export class TeamService {
           actor.organizationId,
           AllocationResource.PLATFORM_USERS,
         ),
+      this.verification
+        ? (tx, userId) =>
+            this.verification!.queueWelcomeIn(tx, userId, input.email)
+        : undefined,
     );
 
     if ('conflict' in resultado) {
@@ -193,12 +191,14 @@ export class TeamService {
    * trocar o papel dela, desligá-la, ver o que ela faz — e passar o link por
    * WhatsApp não lhe dá poder que ele já não tenha.
    *
-   * O e-mail também é disparado quando há SMTP: os dois caminhos levam ao mesmo
+   * O e-mail também é disparado pelo Amazon SES: os dois caminhos levam ao mesmo
    * endereço, e o owner usa o que funcionar para aquela pessoa.
    */
   async issuePasswordLink(actor: TeamActor, userId: string) {
     const membro = await this.team.findMember(actor.organizationId, userId);
     if (!membro) throw new EntityNotFoundException('Member', userId);
+    if (!actor.isOrganizationOwner && membro.mobileDelegations?.length)
+      throw new ForbiddenException('O proprietário administra este acesso.');
     await this.assertMemberInActorScope(actor, userId);
 
     const organizacao = await this.organizations.findCurrent(
@@ -218,37 +218,19 @@ export class TeamService {
     }
 
     const token = this.tokens.generateOpaqueToken();
-    const expiresAt = new Date(Date.now() + VALIDADE_DO_LINK_MS);
+    const expiresAt = new Date(Date.now() + PASSWORD_RESET_TTL_MS);
     await this.identity.createPasswordReset(
       userId,
       this.tokens.hashOpaqueToken(token),
       expiresAt,
+      token,
     );
-
-    /**
-     * O e-mail sai também, e a falha dele não derruba a resposta.
-     *
-     * O link é o entregável desta rota — o owner o repassa por onde conseguir.
-     * Tentar o e-mail é conveniência para quem tem caixa postal; se o SMTP não
-     * estiver configurado, o owner ainda tem o link na mão, e `emailSent` diz a
-     * ele que precisa usá-lo.
-     */
-    let emailSent = false;
-    try {
-      await this.delivery.deliver(
-        IdentityTokenPurpose.PASSWORD_RESET,
-        membro.user.email,
-        token,
-      );
-      emailSent = true;
-    } catch {
-      this.logger.warn('Team password link e-mail delivery failed');
-    }
 
     return {
       link: identityTokenLink(IdentityTokenPurpose.PASSWORD_RESET, token),
       expiresAt,
-      emailSent,
+      emailSent: false,
+      emailQueued: false,
       member: membro,
     };
   }
@@ -286,6 +268,8 @@ export class TeamService {
 
     const membro = await this.team.findMember(actor.organizationId, userId);
     if (!membro) throw new EntityNotFoundException('Member', userId);
+    if (!actor.isOrganizationOwner && membro.mobileDelegations?.length)
+      throw new ForbiddenException('O proprietário administra este acesso.');
     await this.assertMemberInActorScope(actor, userId);
 
     const organizacao = await this.organizations.findCurrent(
@@ -343,6 +327,8 @@ export class TeamService {
     }
     const membro = await this.team.findMember(actor.organizationId, userId);
     if (!membro) throw new EntityNotFoundException('Member', userId);
+    if (!actor.isOrganizationOwner && membro.mobileDelegations?.length)
+      throw new ForbiddenException('O proprietário administra este acesso.');
     await this.assertMemberInActorScope(actor, userId);
 
     await this.team.removeMember(actor.organizationId, userId);

@@ -1,3 +1,5 @@
+import type { TrendPoint } from './analytics.read-models';
+
 export type AnalyticsGranularity = 'DAY' | 'WEEK' | 'MONTH';
 export type AnalyticsRange = {
   from: Date;
@@ -8,22 +10,42 @@ export type AnalyticsRange = {
   businessUnitId?: string;
 };
 
-export type AnalyticsOperation = {
-  id: string;
-  status: string;
-  scheduledEnd: Date | null;
-  startedAt: Date | null;
-  completedAt: Date | null;
-  createdAt: Date;
-  users: Array<{ user: { id: string; displayName: string } }>;
+export type OperationCounts = {
+  cohort: number;
+  scheduled: number;
+  assigned: number;
+  delivered: number;
+  withDeadline: number;
+  onTime: number;
 };
 
+export type OperationBacklog = {
+  open: number;
+  overdue: number;
+  openWithDeadline: number;
+  unassigned: number;
+  unscheduled: number;
+};
+
+export type CommitmentCounts = {
+  total: number;
+  overdue: number;
+  onTime: number;
+};
+export type PeriodCounts<T> = { current: T; previous: T };
 export type AnalyticsSnapshot = {
-  organization: { id: string; segment: string };
   range: AnalyticsRange;
-  operations: AnalyticsOperation[];
-  previousOperations: AnalyticsOperation[];
-  pmocs: Array<{ status: string; createdAt: Date; finalizedAt: Date | null }>;
-  assets: Array<{ status: string }>;
-  customers: Array<{ status: string }>;
+  operations: PeriodCounts<OperationCounts> &
+    OperationBacklog & {
+      completedCohort: number;
+      activeTechnicians: number;
+    };
+  pmoc: PeriodCounts<CommitmentCounts>;
+  rvt: PeriodCounts<CommitmentCounts>;
+  equipmentRegistered: number;
+  trends: {
+    created: TrendPoint[];
+    completed: TrendPoint[];
+    pmoc: TrendPoint[];
+  };
 };

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { RequestContextService } from '../../context';
+import { VerifiedPlatformAuthority } from '../../common/verified-platform-authority';
 
 export interface RlsContext {
   actorType: string;
@@ -30,7 +31,14 @@ export class RlsContextProvider {
       businessUnitIds: context.businessUnitIds.join(','),
       roles: context.roles.join(','),
       permissions: context.permissions.join(','),
-      isPlatformAdmin: String(context.roles.includes('PLATFORM_ADMIN')),
+      isPlatformAdmin: String(
+        context.actorType === 'INTERNAL_USER' &&
+          VerifiedPlatformAuthority.hasRole(
+            context.platformAuthority,
+            context.userId,
+            'PLATFORM_ADMIN',
+          ),
+      ),
     };
   }
 }

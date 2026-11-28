@@ -55,7 +55,10 @@ class PmocPlanCycleView {
           (plan.technicianId == actorId ||
               equipment.any(
                 (item) =>
-                    item.execution?.responsibleFieldTechnicianId == actorId,
+                    (item.execution?.responsibleFieldTechnicianId ??
+                            item.scheduledTechnicianId) ==
+                        actorId &&
+                    item.status != 'CANCELLED',
               )));
 
   bool canAttendEquipment(
@@ -63,11 +66,15 @@ class PmocPlanCycleView {
     required String? actorId,
     required bool isOwner,
   }) =>
-      isOwner ||
-      (actorId != null &&
-          (item.execution != null
-              ? item.execution!.responsibleFieldTechnicianId == actorId
-              : plan.technicianId == actorId));
+      item.status != 'CANCELLED' &&
+      (isOwner ||
+          (actorId != null &&
+              (item.execution != null
+                  ? item.execution!.responsibleFieldTechnicianId == actorId
+                  : (item.hasSchedule
+                            ? item.scheduledTechnicianId
+                            : plan.technicianId) ==
+                        actorId)));
 }
 
 final pmocPlanProvider = FutureProvider.family<PmocPlanDetailContract, String>(

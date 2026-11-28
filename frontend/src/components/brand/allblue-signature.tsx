@@ -1,6 +1,8 @@
 "use client";
 
 import Image from "next/image";
+import mark from "../../../public/allblue_mark.png";
+import markReverse from "../../../public/allblue_mark_reverse.png";
 
 /**
  * A assinatura da AllBlue Labs, a empresa que faz o Orbit.
@@ -23,19 +25,17 @@ export function AllblueSignature() {
     >
       <span className="inline-flex size-6 shrink-0 items-center justify-center">
         <Image
-          src="/allblue_mark.png"
+          src={mark}
           alt=""
           aria-hidden
-          width={256}
-          height={256}
+          unoptimized
           className="h-full w-full object-contain dark:hidden"
         />
         <Image
-          src="/allblue_mark_reverse.png"
+          src={markReverse}
           alt=""
           aria-hidden
-          width={256}
-          height={256}
+          unoptimized
           className="hidden h-full w-full object-contain dark:block"
         />
       </span>

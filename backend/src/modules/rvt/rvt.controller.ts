@@ -1,3 +1,4 @@
+import { MobileManagement } from '../../common/mobile-management';
 import {
   Body,
   Controller,
@@ -52,6 +53,7 @@ export class RvtController {
   /* ---------------------------------------------------------------- */
 
   @Get('maintenance-types')
+  @MobileManagement('rvt')
   @Capabilities('rvt.read')
   @Permissions('rvt.read')
   @ApiOperation({ summary: 'Tipos de manutenção, com o roteiro de cada um' })
@@ -98,6 +100,7 @@ export class RvtController {
   }
 
   @Post('configurations')
+  @MobileManagement('rvt')
   @Capabilities('rvt.manage')
   @Permissions('rvt.manage')
   @ApiOperation({ summary: 'Create RVT configuration and planned occurrences' })
@@ -105,18 +108,21 @@ export class RvtController {
     return this.rvt.create(this.actor(r), i);
   }
   @Get('configurations')
+  @MobileManagement('rvt')
   @Capabilities('rvt.read')
   @Permissions('rvt.read')
   list(@Req() r: IdentityRequest, @Query() q: RvtConfigurationQueryDto) {
     return this.rvt.list(this.actor(r), q);
   }
   @Get('configurations/:id')
+  @MobileManagement('rvt')
   @Capabilities('rvt.read')
   @Permissions('rvt.read')
   get(@Req() r: IdentityRequest, @Param('id', ParseUUIDv7Pipe) id: string) {
     return this.rvt.get(id, this.actor(r));
   }
   @Patch('configurations/:id')
+  @MobileManagement('rvt')
   @Capabilities('rvt.manage')
   @Permissions('rvt.manage')
   updateConfiguration(
@@ -126,6 +132,17 @@ export class RvtController {
   ) {
     return this.rvt.update(id, this.actor(r), i);
   }
+  @Delete('configurations/:id')
+  @MobileManagement('rvt')
+  @Capabilities('rvt.manage')
+  @Permissions('rvt.manage')
+  cancelConfiguration(
+    @Req() request: IdentityRequest,
+    @Param('id', ParseUUIDv7Pipe) id: string,
+  ) {
+    return this.rvt.cancelConfiguration(id, this.actor(request));
+  }
+
   @Get('configurations/:id/timeline')
   @Capabilities('rvt.read')
   @Permissions('rvt.read')
@@ -137,6 +154,7 @@ export class RvtController {
     return this.rvt.timeline(id, this.actor(r), q);
   }
   @Post('configurations/:id/occurrences')
+  @MobileManagement('rvt')
   @Capabilities('rvt.manage')
   @Permissions('rvt.manage')
   createOccurrence(
@@ -148,6 +166,7 @@ export class RvtController {
   }
 
   @Patch('configurations/:id/occurrences/:occurrenceId')
+  @MobileManagement('rvt')
   @Capabilities('rvt.manage')
   @Permissions('rvt.manage')
   updateOccurrence(
@@ -160,6 +179,7 @@ export class RvtController {
   }
 
   @Delete('configurations/:id/occurrences/:occurrenceId')
+  @MobileManagement('rvt')
   @Capabilities('rvt.manage')
   @Permissions('rvt.manage')
   removeOccurrence(
@@ -171,6 +191,7 @@ export class RvtController {
   }
 
   @Get('occurrences')
+  @MobileManagement('rvt')
   @Capabilities('rvt.read')
   @Permissions('rvt.read')
   occurrences(@Req() r: IdentityRequest, @Query() q: RvtOccurrenceQueryDto) {

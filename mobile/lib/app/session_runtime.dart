@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../features/customer_portal/application/portal_session.dart';
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
@@ -28,6 +29,7 @@ class SessionRuntime {
   }) {
     final environment = root.read(environmentProvider);
     final preferences = root.read(sharedPreferencesProvider);
+    final projection = root.read(syncProjectionProvider);
     scopeKey = sha256
         .convert(
           utf8.encode(
@@ -42,7 +44,11 @@ class SessionRuntime {
         .toString();
     final client = root.read(apiClientProvider).scoped();
     if (session == null) client.closeScope();
-    final cache = PreferencesReadCache(preferences, namespace: scopeKey);
+    final cache = PreferencesReadCache(
+      preferences,
+      namespace: scopeKey,
+      cipher: root.read(offlineDataCipherProvider),
+    );
     if (session == null) cache.close();
     final files = TemporaryDocumentFileStore(scopeKey: scopeKey);
     if (session == null) files.close();
@@ -58,8 +64,7 @@ class SessionRuntime {
           session.businessUnitId ?? 'sem-unidade',
         ].join('.');
         unawaited(
-          root
-              .read(syncProjectionProvider)
+          projection
               .resetScope(projectionScope)
               .then<void>((_) {})
               .catchError((Object _) {}),
@@ -84,9 +89,7 @@ class SessionRuntime {
         commandJournalProvider.overrideWithValue(
           root.read(commandJournalProvider),
         ),
-        syncProjectionProvider.overrideWithValue(
-          root.read(syncProjectionProvider),
-        ),
+        syncProjectionProvider.overrideWithValue(projection),
         mediaQueueProvider.overrideWithValue(root.read(mediaQueueProvider)),
         authRepositoryProvider.overrideWithValue(
           root.read(authRepositoryProvider),
@@ -94,6 +97,22 @@ class SessionRuntime {
         authControllerProvider.overrideWith(
           (ref) =>
               AuthController.mirror(root.read(authControllerProvider.notifier)),
+        ),
+        /* A sessão do cliente vive na raiz, como a da equipe: o runtime só a
+           observa, e usa o mesmo cliente HTTP — o do cliente, não o da equipe. */
+        portalTokenStorageProvider.overrideWithValue(
+          root.read(portalTokenStorageProvider),
+        ),
+        portalApiClientProvider.overrideWithValue(
+          root.read(portalApiClientProvider),
+        ),
+        portalRepositoryProvider.overrideWithValue(
+          root.read(portalRepositoryProvider),
+        ),
+        portalSessionProvider.overrideWith(
+          (ref) => PortalSessionController.mirror(
+            root.read(portalSessionProvider.notifier),
+          ),
         ),
         documentFileStoreProvider.overrideWithValue(files),
         pushTokenSourceProvider.overrideWithValue(

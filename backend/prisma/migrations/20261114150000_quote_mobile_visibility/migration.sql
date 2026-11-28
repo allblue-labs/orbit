@@ -1,0 +1,1 @@
+ALTER TABLE quotes ADD COLUMN mobile_visible BOOLEAN NOT NULL DEFAULT false;

@@ -22,7 +22,7 @@
  * passo no navegador duplicaria a cópia que o backend já faz, e as duas
  * divergiriam. Então esse caminho pula direto para a proposta criada.
  */
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { ArrowLeft, ArrowRight, Check, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -71,12 +71,24 @@ export function QuoteWizardDialog({
   /** Cliente já decidido — quando o wizard abre de dentro do cliente. */
   customerId,
   onCreated,
+  initial,
+  startAt,
+  context,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   customerId?: string;
   /** Embedded creation stays with the caller; standalone creation opens the quote. */
   onCreated?: (quoteId: string) => void;
+  /**
+   * Rascunho inicial — quando o orçamento nasce de outra coisa (um chamado),
+   * os dados que ela já tem entram preenchidos e continuam editáveis.
+   */
+  initial?: Partial<QuoteDraft>;
+  /** Por onde começar; com rascunho inicial, a origem já está decidida. */
+  startAt?: (typeof WIZARD_STEPS)[number];
+  /** Uma faixa acima dos passos dizendo de onde os dados vieram. */
+  context?: ReactNode;
 }) {
   /* Desmontar ao fechar zera o rascunho: reabrir depois de desistir deve
      começar do começo, não continuar um formulário que a pessoa abandonou. */
@@ -89,6 +101,9 @@ export function QuoteWizardDialog({
           onOpenChange={onOpenChange}
           fixedCustomerId={customerId}
           onCreated={onCreated}
+          initial={initial}
+          startAt={startAt}
+          context={context}
         />
       </DialogContent>
     </Dialog>
@@ -99,18 +114,27 @@ function Body({
   onOpenChange,
   fixedCustomerId,
   onCreated,
+  initial,
+  startAt,
+  context,
 }: {
   onOpenChange: (open: boolean) => void;
   fixedCustomerId?: string;
   onCreated?: (quoteId: string) => void;
+  initial?: Partial<QuoteDraft>;
+  startAt?: (typeof WIZARD_STEPS)[number];
+  context?: ReactNode;
 }) {
   const session = useSession();
   const router = useRouter();
 
-  const [index, setIndex] = useState(0);
+  const [index, setIndex] = useState(() =>
+    startAt ? Math.max(0, WIZARD_STEPS.indexOf(startAt)) : 0,
+  );
   const [draft, setDraft] = useState<QuoteDraft>(() => ({
     ...emptyDraft(session.user?.id ?? null),
-    customerId: fixedCustomerId ?? null,
+    ...initial,
+    customerId: fixedCustomerId ?? initial?.customerId ?? null,
   }));
 
   /*
@@ -209,6 +233,8 @@ function Body({
           {index + 1} de {WIZARD_STEPS.length} · {STEP_TITLES[step]}
         </DialogDescription>
       </DialogHeader>
+
+      {context}
 
       <Progress current={index} onJump={setIndex} draft={draft} />
 

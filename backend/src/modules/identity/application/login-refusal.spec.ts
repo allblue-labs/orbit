@@ -62,6 +62,7 @@ function montar(
     { verifyFactor: jest.fn() } as never,
     hashes as never,
     { generate: () => 'session-1' } as never,
+    {} as never,
   );
 
   return { service, repository };

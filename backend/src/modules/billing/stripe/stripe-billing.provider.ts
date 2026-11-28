@@ -18,17 +18,18 @@
  * `SubscriptionItem`, e não da `Subscription` — verificado nos tipos do SDK
  * instalado, não presumido.
  */
+import { stripeRecurringTerms } from './stripe-recurring-terms';
 import { Injectable, Logger } from '@nestjs/common';
+import { BillingWorkBudget } from '../billing-work-budget';
 import Stripe from 'stripe';
 import { InfrastructureException } from '../../../exceptions';
 import {
   BILLING_INTERVAL_MONTHS,
   BillingInterval,
-  PlanCode,
   type BillingInterval as BillingIntervalType,
   type PlanCode as PlanCodeType,
 } from '../../subscription-plans/catalog/plan-catalog.types';
-import { planDefinition } from '../../subscription-plans/catalog/plan-registry';
+import { CommercialPlanService } from '../../subscription-plans/catalog/commercial-plan.service';
 import { BillingConfig, STRIPE_API_VERSION } from '../billing.config';
 import {
   BillingProviderName,
@@ -45,6 +46,7 @@ import {
   ProviderCheckoutState,
   type ProviderCheckoutSession,
   type ProviderPlanChange,
+  type ProviderPromotionTerms,
   type ProviderSubscription,
 } from '../billing.types';
 import {
@@ -55,6 +57,10 @@ import {
   BillingProviderUnavailableException,
   BillingWebhookInvalidException,
 } from '../billing.errors';
+import {
+  activateStripePromotion,
+  deactivateStripePromotion,
+} from './stripe-promotions';
 import { toProviderBillingState } from './stripe-status.mapper';
 
 /** Um provedor lento não pode prender uma requisição do produto. */
@@ -67,9 +73,21 @@ export class StripeBillingProvider implements BillingProvider {
 
   private readonly logger = new Logger(StripeBillingProvider.name);
   private readonly client: Stripe | null;
+  private readonly recoveryClient: Stripe | null;
   private accountPortalConfiguration: Promise<string> | null = null;
 
-  constructor(private readonly config: BillingConfig) {
+  constructor(
+    private readonly config: BillingConfig,
+    private readonly plans: CommercialPlanService,
+  ) {
+    this.recoveryClient = config.enabled
+      ? new Stripe(config.secretKey, {
+          apiVersion: STRIPE_API_VERSION,
+          timeout: 5_000,
+          maxNetworkRetries: 0,
+          telemetry: false,
+        })
+      : null;
     this.client = config.enabled
       ? new Stripe(config.secretKey, {
           apiVersion: STRIPE_API_VERSION,
@@ -113,11 +131,29 @@ export class StripeBillingProvider implements BillingProvider {
     return { providerCustomerId: customer.id };
   }
 
+  activatePromotion(terms: ProviderPromotionTerms) {
+    return this.chamar('activatePromotion', () =>
+      activateStripePromotion(this.require(), terms),
+    );
+  }
+
+  deactivatePromotion(terms: ProviderPromotionTerms, providerId: string) {
+    return this.chamar('deactivatePromotion', () =>
+      deactivateStripePromotion(this.require(), terms, providerId),
+    );
+  }
+
   async createCheckoutSession(
     request: CheckoutSessionRequest,
   ): Promise<CheckoutSession> {
     const stripe = this.require();
-    const priceId = this.priceOrFail(request.planCode, request.billingInterval);
+    const priceId =
+      request.priceId ??
+      (await this.priceOrFail(
+        request.planCode,
+        request.billingInterval,
+        request.organizationId,
+      ));
     await this.assertPrice(request.planCode, request.billingInterval, priceId);
 
     const session = await this.chamar('createCheckoutSession', () =>
@@ -126,6 +162,14 @@ export class StripeBillingProvider implements BillingProvider {
           mode: 'subscription',
           customer: request.providerCustomerId,
           line_items: [{ price: priceId, quantity: 1 }],
+          ...(request.promotion
+            ? {
+                discounts: [{ promotion_code: request.promotion.providerId }],
+                expires_at: Math.floor(
+                  request.promotion.expiresAt.getTime() / 1000,
+                ),
+              }
+            : {}),
           /** URLs do servidor. O cliente não escolhe para onde voltar. */
           success_url: this.config.checkoutSuccessUrl,
           cancel_url: this.config.checkoutCancelUrl,
@@ -201,6 +245,20 @@ export class StripeBillingProvider implements BillingProvider {
               : ProviderCheckoutState.UNKNOWN,
       rawStatus: session.status ?? 'unknown',
       paymentStatus: session.payment_status,
+      ...(session.discounts?.length
+        ? {
+            promotionEvidence: {
+              providerId:
+                session.discounts.length === 1
+                  ? this.idDoObjeto(session.discounts[0]?.promotion_code)
+                  : null,
+              originalMinor: session.amount_subtotal,
+              discountMinor: session.total_details?.amount_discount ?? null,
+              totalMinor: session.amount_total,
+              currency: session.currency,
+            },
+          }
+        : {}),
       providerCustomerId: this.idDoObjeto(session.customer),
       providerSubscriptionId: this.idDoObjeto(session.subscription),
       providerPriceId: this.idDoObjeto(price),
@@ -282,13 +340,18 @@ export class StripeBillingProvider implements BillingProvider {
   }
 
   async createPlanChangeSession(input: {
+    organizationId: string;
     providerCustomerId: string;
     providerSubscriptionId: string;
     planCode: PlanCodeType;
     billingInterval: BillingIntervalType;
   }): Promise<BillingPortalSession> {
     const stripe = this.require();
-    const priceId = this.priceOrFail(input.planCode, input.billingInterval);
+    const priceId = await this.priceOrFail(
+      input.planCode,
+      input.billingInterval,
+      input.organizationId,
+    );
     await this.assertPrice(input.planCode, input.billingInterval, priceId);
     const subscription = await this.chamar('retrieveSubscription', () =>
       stripe.subscriptions.retrieve(input.providerSubscriptionId),
@@ -362,21 +425,100 @@ export class StripeBillingProvider implements BillingProvider {
   ): Promise<ProviderSubscription> {
     const stripe = this.require();
     return this.normalizar(
-      await this.chamar('retrieveSubscription', () =>
-        stripe.subscriptions.retrieve(providerSubscriptionId),
-      ),
+      await this.chamar('retrieveSubscription', async () => {
+        try {
+          return await stripe.subscriptions.retrieve(providerSubscriptionId, {
+            expand: ['customer', 'discounts.source.coupon.applies_to'],
+          });
+        } catch (error) {
+          // Optional analytics expansions cannot block billing reconciliation.
+          const expansionRejected =
+            error instanceof Stripe.errors.StripeInvalidRequestError &&
+            (error.param?.startsWith('expand') ||
+              error.code === 'property_not_expandable');
+          if (
+            !expansionRejected &&
+            !(error instanceof Stripe.errors.StripePermissionError)
+          )
+            throw error;
+          return stripe.subscriptions.retrieve(providerSubscriptionId);
+        }
+      }),
     );
   }
 
   async retrieveInvoice(providerInvoiceId: string): Promise<ProviderInvoice> {
     const stripe = this.require();
+    const observedAt = new Date();
     const invoice = await this.chamar('retrieveInvoice', () =>
       stripe.invoices.retrieve(providerInvoiceId),
     );
     if ('deleted' in invoice && invoice.deleted) {
       throw new BillingProviderUnavailableException('invoice was deleted');
     }
-    return this.normalizarFatura(invoice);
+    const normalized = {
+      ...this.normalizarFatura(invoice),
+      providerObservedAt: observedAt,
+    };
+    // A paid invoice can be zero, credited or marked out of band. Only a
+    // correlated successful PaymentIntent is a confirmed Stripe payment fact.
+    const paymentEvidence: NonNullable<
+      ProviderInvoice['paymentEvidence']
+    >[number][] = [];
+    let after: string | undefined;
+    for (let page = 0; page < 3; page++) {
+      const payments = await this.chamar('invoicePayments', () =>
+        stripe.invoicePayments.list({
+          invoice: invoice.id,
+          limit: 20,
+          starting_after: after,
+          expand: ['data.payment.payment_intent'],
+        }),
+      );
+      for (const payment of payments.data) {
+        this.assertMode(payment.livemode);
+        const intent = payment.payment.payment_intent;
+        if (
+          payment.status === 'paid' &&
+          payment.amount_paid &&
+          payment.status_transitions.paid_at &&
+          intent &&
+          typeof intent !== 'string' &&
+          intent.status === 'succeeded' &&
+          intent.currency === invoice.currency &&
+          payment.currency === invoice.currency &&
+          this.idDoObjeto(intent.customer) === normalized.providerCustomerId &&
+          this.idDoObjeto(payment.invoice) === invoice.id &&
+          payment.amount_paid <= intent.amount_received
+        ) {
+          this.assertMode(intent.livemode);
+          paymentEvidence.push({
+            invoicePaymentId: payment.id,
+            paymentIntentId: intent.id,
+            amountMinor: payment.amount_paid,
+            currency: payment.currency,
+            confirmedAt: new Date(
+              payment.status_transitions.paid_at * 1000,
+            ).toISOString(),
+          });
+        }
+      }
+      if (!payments.has_more) return { ...normalized, paymentEvidence };
+      after = payments.data.at(-1)?.id;
+    }
+    throw new Error('BILLING_PAYMENT_PAGE_LIMIT');
+  }
+
+  async retrieveInvoicePaymentInvoice(
+    providerInvoicePaymentId: string,
+  ): Promise<string> {
+    const payment = await this.chamar('retrieveInvoicePayment', () =>
+      this.require().invoicePayments.retrieve(providerInvoicePaymentId),
+    );
+    this.assertMode(payment.livemode);
+    const invoice = this.idDoObjeto(payment.invoice);
+    if (!invoice) throw new Error('BILLING_PAYMENT_INVOICE_MISSING');
+    return invoice;
   }
 
   async retrieveFinancialAdjustment(
@@ -384,6 +526,7 @@ export class StripeBillingProvider implements BillingProvider {
     providerObjectId: string,
   ): Promise<ProviderFinancialAdjustment> {
     const stripe = this.require();
+    const observedAt = new Date();
     let paymentIntentId: string | null;
     let rawStatus: string;
     let reason: string | null;
@@ -391,10 +534,12 @@ export class StripeBillingProvider implements BillingProvider {
     let currency: string;
     let occurredAt: Date;
     let canonicalObjectId: string;
+    let refundRequestId: string | undefined;
     if (type === ProviderFinancialAdjustmentType.REFUND) {
       const refund = await this.chamar('retrieveRefund', () =>
         stripe.refunds.retrieve(providerObjectId),
       );
+      refundRequestId = refund.metadata?.['orbitRefundRequestId'];
       paymentIntentId = this.idDoObjeto(refund.payment_intent);
       rawStatus = refund.status ?? 'unknown';
       reason =
@@ -407,6 +552,7 @@ export class StripeBillingProvider implements BillingProvider {
       const dispute = await this.chamar('retrieveDispute', () =>
         stripe.disputes.retrieve(providerObjectId),
       );
+      this.assertMode(dispute.livemode);
       paymentIntentId = this.idDoObjeto(dispute.payment_intent);
       rawStatus = dispute.status;
       reason = dispute.reason;
@@ -431,6 +577,7 @@ export class StripeBillingProvider implements BillingProvider {
         'financial adjustment invoice correlation is ambiguous',
       );
     }
+    this.assertMode(payments.data[0]!.livemode);
     const providerInvoiceId = this.idDoObjeto(payments.data[0]!.invoice);
     if (!providerInvoiceId) {
       throw new BillingProviderUnavailableException(
@@ -441,6 +588,7 @@ export class StripeBillingProvider implements BillingProvider {
     return {
       type,
       providerObjectId: canonicalObjectId,
+      ...(refundRequestId ? { refundRequestId } : {}),
       providerInvoiceId,
       status: rawStatus
         .toUpperCase()
@@ -450,11 +598,234 @@ export class StripeBillingProvider implements BillingProvider {
       currency: currency.toLowerCase(),
       reason: reason?.slice(0, 80) ?? null,
       occurredAt,
-      providerObservedAt: new Date(),
+      providerObservedAt: observedAt,
     };
   }
 
+  async beginMonthlyUpgrade(
+    input: Parameters<NonNullable<BillingProvider['beginMonthlyUpgrade']>>[0],
+  ) {
+    const stripe = this.require();
+    await this.assertPrice(
+      input.planCode,
+      BillingInterval.MONTHLY,
+      input.priceId,
+    );
+    const current = await this.chamar('retrieveUpgradeSubscription', () =>
+      stripe.subscriptions.retrieve(input.providerSubscriptionId),
+    );
+    const normalized = this.normalizar(current);
+    if (normalized.providerCustomerId !== input.providerCustomerId)
+      throw new BillingCommandNotAllowedException(
+        'Assinatura vinculada a outro cliente.',
+      );
+
+    const item = current.items.data[0];
+    const prorationDate = Math.floor(input.requestedAt.getTime() / 1000);
+    const idempotencyKey = `orbit:monthly-upgrade:${input.requestId}`;
+    if (
+      normalized.upgradeRequestId === input.requestId &&
+      normalized.latestInvoiceId
+    ) {
+      return {
+        invoice: await this.retrieveInvoice(normalized.latestInvoiceId),
+        subscription: normalized,
+      };
+    }
+    if (
+      !item ||
+      current.items.data.length !== 1 ||
+      current.items.has_more ||
+      current.status !== 'active' ||
+      current.collection_method !== 'charge_automatically' ||
+      current.cancel_at ||
+      current.schedule ||
+      item.price.id !== input.currentPriceId ||
+      item.current_period_start * 1000 !== input.currentPeriodStart.getTime() ||
+      item.current_period_end * 1000 !== input.currentPeriodEnd.getTime() ||
+      item.current_period_end <= Math.floor(Date.now() / 1000) ||
+      prorationDate < item.current_period_start ||
+      !normalized.latestInvoiceId
+    ) {
+      throw new BillingCommandNotAllowedException(
+        'A assinatura precisa ter um ciclo mensal pago e estar disponível para alteração.',
+      );
+    }
+    // Stripe pode descartar chaves de idempotência após 24h.
+    if (Date.now() - input.requestedAt.getTime() > 12 * 60 * 60_000)
+      throw new BillingProviderUnavailableException(
+        'upgrade requires reconciliation',
+      );
+    // A repetição da atualização deve usar os mesmos parâmetros e chave,
+    // inclusive quando a primeira resposta se perdeu durante a autenticação.
+    if (!current.pending_update) {
+      const coversCurrentCycle = (invoice: ProviderInvoice) =>
+        invoice.status === ProviderInvoiceStatus.PAID &&
+        invoice.providerCustomerId === input.providerCustomerId &&
+        invoice.providerSubscriptionId === input.providerSubscriptionId &&
+        invoice.subscriptionLines?.some(
+          (line) =>
+            line.priceId === input.currentPriceId &&
+            line.subscriptionId === input.providerSubscriptionId &&
+            line.periodStart.getTime() === input.currentPeriodStart.getTime() &&
+            line.periodEnd.getTime() === input.currentPeriodEnd.getTime(),
+        );
+      let previous = await this.retrieveInvoice(normalized.latestInvoiceId);
+      if (previous.status === ProviderInvoiceStatus.VOID) {
+        const paid = await this.chamar('findCurrentPaidInvoice', () =>
+          stripe.invoices.list({
+            subscription: current.id,
+            status: 'paid',
+            limit: 10,
+          }),
+        );
+        const candidate = paid.data.find((invoice) =>
+          coversCurrentCycle(this.normalizarFatura(invoice)),
+        );
+        if (candidate) previous = await this.retrieveInvoice(candidate.id);
+      }
+      if (
+        !coversCurrentCycle(previous) ||
+        previous.creditNotesMinor !== 0 ||
+        !previous.paymentEvidence?.length
+      ) {
+        throw new BillingCommandNotAllowedException(
+          'O pagamento do ciclo atual precisa estar confirmado antes da troca.',
+        );
+      }
+      const preview = await this.chamar('previewMonthlyUpgrade', () =>
+        stripe.invoices.createPreview({
+          subscription: current.id,
+          subscription_details: {
+            items: [{ id: item.id, price: input.priceId }],
+            billing_cycle_anchor: 'now',
+            proration_behavior: 'always_invoice',
+            proration_date: prorationDate,
+          },
+        }),
+      );
+      const targetLine = preview.lines.data.find(
+        (line) =>
+          line.amount > 0 &&
+          this.idDoObjeto(line.pricing?.price_details?.price) ===
+            input.priceId &&
+          !line.parent?.subscription_item_details?.proration,
+      );
+      const remaining =
+        input.currentPeriodEnd.getTime() - input.requestedAt.getTime();
+      const credit = preview.lines.data.find(
+        (line) =>
+          line.amount < 0 &&
+          this.idDoObjeto(line.pricing?.price_details?.price) ===
+            input.currentPriceId &&
+          line.parent?.subscription_item_details?.proration,
+      );
+      const unsupportedLine = preview.lines.data.some(
+        (line) => line.amount !== 0 && line !== targetLine && line !== credit,
+      );
+      if (
+        preview.amount_due <= 0 ||
+        preview.lines.has_more ||
+        !targetLine ||
+        unsupportedLine ||
+        (!credit &&
+          Math.floor(
+            (previous.amountPaidMinor * remaining) /
+              (input.currentPeriodEnd.getTime() -
+                input.currentPeriodStart.getTime()),
+          ) > 0)
+      ) {
+        throw new BillingCommandNotAllowedException(
+          'A prévia da troca precisa de revisão pelo suporte.',
+        );
+      }
+    }
+    const updated = await this.chamar('beginMonthlyUpgrade', () =>
+      stripe.subscriptions.update(
+        current.id,
+        {
+          items: [{ id: item.id, price: input.priceId }],
+          billing_cycle_anchor: 'now',
+          proration_behavior: 'always_invoice',
+          proration_date: prorationDate,
+          payment_behavior: 'pending_if_incomplete',
+          metadata: { orbitMonthlyUpgradeId: input.requestId },
+        },
+        { idempotencyKey },
+      ),
+    );
+    const subscription = this.normalizar(updated);
+    const invoiceId = subscription.latestInvoiceId;
+    if (!invoiceId)
+      throw new BillingProviderUnavailableException('upgrade invoice missing');
+    return { subscription, invoice: await this.retrieveInvoice(invoiceId) };
+  }
+
+  async refundAndCancel(
+    input: Parameters<NonNullable<BillingProvider['refundAndCancel']>>[0],
+  ) {
+    const stripe = this.require();
+    const [invoice, subscription] = await Promise.all([
+      this.retrieveInvoice(input.invoiceId),
+      this.retrieveSubscription(input.providerSubscriptionId),
+    ]);
+    if (
+      subscription.providerCustomerId !== input.providerCustomerId ||
+      invoice.providerCustomerId !== input.providerCustomerId ||
+      invoice.providerSubscriptionId !== input.providerSubscriptionId ||
+      invoice.status !== ProviderInvoiceStatus.PAID ||
+      invoice.paymentEvidence?.length !== 1 ||
+      !invoice.paymentEvidence.some(
+        (payment) =>
+          payment.paymentIntentId === input.paymentIntentId &&
+          payment.amountMinor === input.amountMinor &&
+          payment.currency === invoice.currency,
+      ) ||
+      invoice.creditNotesMinor > 0 ||
+      invoice.amountPaidMinor !== input.amountMinor
+    ) {
+      throw new BillingCommandNotAllowedException(
+        'Pagamento indisponível para estorno automático.',
+      );
+    }
+    const refund = await this.chamar('refundPurchase', () =>
+      stripe.refunds.create(
+        {
+          payment_intent: input.paymentIntentId,
+          amount: input.amountMinor,
+          reason: 'requested_by_customer',
+          metadata: { orbitRefundRequestId: input.requestId },
+        },
+        { idempotencyKey: `orbit:refund:${input.requestId}` },
+      ),
+    );
+    if (
+      refund.status === 'failed' ||
+      refund.status === 'canceled' ||
+      !refund.status
+    )
+      return { refundId: refund.id, status: refund.status ?? 'unknown' };
+    if (subscription.rawStatus !== 'canceled') {
+      const ended = await this.chamar('cancelRefundedSubscription', () =>
+        stripe.subscriptions.cancel(
+          input.providerSubscriptionId,
+          {
+            invoice_now: false,
+            prorate: false,
+          },
+          { idempotencyKey: `orbit:refund-cancel:${input.requestId}` },
+        ),
+      );
+      if (this.normalizar(ended).rawStatus !== 'canceled')
+        throw new BillingProviderUnavailableException(
+          'refunded subscription remains active',
+        );
+    }
+    return { refundId: refund.id, status: refund.status };
+  }
+
   async changePlan(input: {
+    priceId?: string;
     providerSubscriptionId: string;
     organizationId: string;
     subscriptionId: string;
@@ -464,7 +835,13 @@ export class StripeBillingProvider implements BillingProvider {
     idempotencyKey: string;
   }): Promise<ProviderPlanChange> {
     const stripe = this.require();
-    const priceId = this.priceOrFail(input.planCode, input.billingInterval);
+    const priceId =
+      input.priceId ??
+      (await this.priceOrFail(
+        input.planCode,
+        input.billingInterval,
+        input.organizationId,
+      ));
     await this.assertPrice(input.planCode, input.billingInterval, priceId);
     const atual = await this.chamar('retrieveSubscription', () =>
       stripe.subscriptions.retrieve(input.providerSubscriptionId),
@@ -729,8 +1106,11 @@ export class StripeBillingProvider implements BillingProvider {
       throw new BillingWebhookInvalidException('signature verification failed');
     }
 
+    if (evento.livemode !== (this.mode === 'LIVE'))
+      throw new BillingWebhookInvalidException('mode mismatch');
     const objeto = evento.data.object as unknown as { id?: unknown };
     return {
+      mode: this.mode,
       providerEventId: evento.id,
       type: evento.type,
       apiVersion: evento.api_version ?? null,
@@ -746,14 +1126,44 @@ export class StripeBillingProvider implements BillingProvider {
    * Não corrige o painel do provedor: se lá diz 699,90 e aqui diz 599,00, quem
    * está errado é uma configuração, e adivinhar qual seria pior do que recusar.
    */
+  async validateOfferPrices(
+    prices: Readonly<
+      Record<string, { amountMinor: number; stripePriceId?: string }>
+    >,
+  ): Promise<void> {
+    const stripe = this.require();
+    for (const interval of Object.values(BillingInterval)) {
+      const offer = prices[interval];
+      if (!offer?.stripePriceId)
+        throw new BillingConfigurationInvalidException(
+          `Configure o preço Stripe para ${interval}.`,
+        );
+      const id = offer.stripePriceId;
+      const price = await this.chamar('retrievePrice', () =>
+        stripe.prices.retrieve(id),
+      );
+      const problem = this.problemaDePreco(
+        price,
+        offer.amountMinor,
+        BILLING_INTERVAL_MONTHS[interval]!,
+      );
+      if (problem)
+        throw new BillingConfigurationInvalidException(
+          `Preço inválido para ${interval}: ${problem}`,
+        );
+    }
+  }
+
   async verifyPriceCatalog(): Promise<readonly PriceVerification[]> {
     const stripe = this.require();
     const resultados: PriceVerification[] = [];
 
-    for (const planCode of Object.values(PlanCode)) {
-      const plano = planDefinition(planCode);
+    for (const plano of (await this.plans.list()).filter(
+      (plan) => plan.isActive,
+    )) {
+      const planCode = plano.code;
       for (const interval of Object.values(BillingInterval)) {
-        const priceId = this.config.priceId(planCode, interval);
+        const priceId = plano.prices[interval]?.stripePriceId;
         if (!priceId) {
           resultados.push({
             planCode,
@@ -834,13 +1244,15 @@ export class StripeBillingProvider implements BillingProvider {
     const allowed = new Set(
       updates.products?.flatMap((product) => product.prices) ?? [],
     );
-    for (const plan of Object.values(PlanCode)) {
+    for (const plan of (await this.plans.list()).filter(
+      (entry) => entry.isActive,
+    )) {
       for (const interval of Object.values(BillingInterval)) {
-        const price = this.config.priceId(plan, interval);
+        const price = plan.prices[interval]?.stripePriceId;
         if (!price || !allowed.has(price)) {
           return {
             valid: false,
-            problem: `Publique o preço de ${plan}/${interval} no portal padrão.`,
+            problem: `Publique o preço de ${plan.code}/${interval} no portal padrão.`,
           };
         }
       }
@@ -860,9 +1272,18 @@ export class StripeBillingProvider implements BillingProvider {
     const price = await this.chamar('retrievePrice', () =>
       this.require().prices.retrieve(priceId),
     );
+    const mapping = await this.config.catalogEntryForPrice(priceId);
+    if (
+      !mapping ||
+      mapping.planCode !== planCode ||
+      mapping.billingInterval !== interval
+    )
+      throw new BillingConfigurationInvalidException(
+        'Stripe Price is not registered for this offer',
+      );
     const problem = this.problemaDePreco(
       price,
-      planDefinition(planCode).prices[interval]!.amountMinor,
+      mapping.amountMinor,
       BILLING_INTERVAL_MONTHS[interval] ?? 1,
     );
     if (problem)
@@ -898,9 +1319,14 @@ export class StripeBillingProvider implements BillingProvider {
   }
 
   private normalizar(assinatura: Stripe.Subscription): ProviderSubscription {
+    this.assertMode(assinatura.livemode);
     const item = assinatura.items.data[0];
     return {
+      mode: this.mode,
+      recurringTerms: stripeRecurringTerms(assinatura),
       latestInvoiceId: this.idDoObjeto(assinatura.latest_invoice),
+      upgradeRequestId: assinatura.metadata?.['orbitMonthlyUpgradeId'] ?? null,
+      hasPendingUpdate: !!assinatura.pending_update,
       providerSubscriptionId: assinatura.id,
       providerCustomerId:
         typeof assinatura.customer === 'string'
@@ -924,6 +1350,7 @@ export class StripeBillingProvider implements BillingProvider {
   }
 
   private normalizarFatura(invoice: Stripe.Invoice): ProviderInvoice {
+    this.assertMode(invoice.livemode);
     const providerCustomerId = this.idDoObjeto(invoice.customer);
     if (!providerCustomerId) {
       throw new BillingProviderUnavailableException('invoice without customer');
@@ -945,6 +1372,7 @@ export class StripeBillingProvider implements BillingProvider {
     const at = (seconds: number | null): Date | null =>
       seconds === null ? null : new Date(seconds * 1000);
     return {
+      mode: this.mode,
       providerInvoiceId: invoice.id,
       providerSubscriptionId,
       providerCustomerId,
@@ -972,6 +1400,7 @@ export class StripeBillingProvider implements BillingProvider {
       collectionMethod: invoice.collection_method,
       hostedInvoiceUrl: this.providerUrl(invoice.hosted_invoice_url ?? null),
       invoicePdfUrl: this.providerUrl(invoice.invoice_pdf ?? null),
+      subscriptionLinesComplete: invoice.lines?.has_more === false,
       subscriptionLines: (invoice.lines?.data ?? []).map((line) => ({
         priceId: this.idDoObjeto(line.pricing?.price_details?.price),
         subscriptionId:
@@ -1042,11 +1471,13 @@ export class StripeBillingProvider implements BillingProvider {
     return null;
   }
 
-  private priceOrFail(
+  private async priceOrFail(
     planCode: PlanCodeType,
     interval: BillingIntervalType,
-  ): string {
-    const priceId = this.config.priceId(planCode, interval);
+    organizationId: string,
+  ): Promise<string> {
+    const plan = await this.plans.selectable(planCode, organizationId);
+    const priceId = plan.prices[interval]?.stripePriceId;
     if (!priceId) {
       throw new BillingConfigurationInvalidException(
         `no configured price for ${planCode}/${interval}`,
@@ -1057,7 +1488,7 @@ export class StripeBillingProvider implements BillingProvider {
 
   private require(): Stripe {
     if (!this.client) throw new BillingNotConfiguredException();
-    return this.client;
+    return BillingWorkBudget.active() ? this.recoveryClient! : this.client;
   }
 
   /**
@@ -1068,10 +1499,48 @@ export class StripeBillingProvider implements BillingProvider {
    * E indisponibilidade **não** é pagamento recusado — confundir os dois
    * suspenderia clientes em dia num dia ruim do fornecedor.
    */
+  private assertMode(live: boolean): void {
+    if (live !== (this.mode === 'LIVE'))
+      throw new Error('BILLING_MODE_MISMATCH');
+  }
+
+  async listRecoveryEvents(input: {
+    from: Date;
+    through: Date;
+    after?: string;
+    limit: number;
+  }) {
+    const page = await this.chamar('recoveryEvents', () =>
+      this.require().events.list({
+        created: {
+          gte: Math.floor(input.from.getTime() / 1000),
+          lte: Math.floor(input.through.getTime() / 1000),
+        },
+        starting_after: input.after,
+        limit: Math.min(100, Math.max(1, input.limit)),
+      }),
+    );
+    const events: ProviderEvent[] = page.data.map((event) => {
+      this.assertMode(event.livemode);
+      const object = event.data.object as { id?: string };
+      return {
+        mode: this.mode,
+        providerEventId: event.id,
+        type: event.type,
+        apiVersion: event.api_version ?? null,
+        createdAt: new Date(event.created * 1000),
+        objectId: object.id ?? null,
+        subscriptionId: this.assinaturaDoEvento(event),
+      };
+    });
+    return { events, hasMore: page.has_more };
+  }
+
   private async chamar<T>(
     operacao: string,
     work: () => Promise<T>,
   ): Promise<T> {
+    BillingWorkBudget.consume();
     try {
       return await work();
     } catch (error) {

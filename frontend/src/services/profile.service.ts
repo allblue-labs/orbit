@@ -47,18 +47,27 @@ export const profileService = {
     apiClient.get<DeviceSession[]>(`${BASE_PATH}/sessions`, options),
 
   revokeSession: (id: string): Promise<void> =>
-    apiClient.delete<void>(
-      `${BASE_PATH}/sessions/${encodeURIComponent(id)}`,
-    ),
+    apiClient.delete<void>(`${BASE_PATH}/sessions/${encodeURIComponent(id)}`),
 
   /** Começa o cadastro de MFA: devolve segredo e `otpauth://` para o QR. */
   beginMfaEnrollment: (): Promise<MfaEnrollment> =>
     apiClient.post<MfaEnrollment>(`${BASE_PATH}/mfa/enrollment`, {}),
 
-  enableMfa: (input: EnableMfaInput): Promise<unknown> =>
-    apiClient.post<unknown>(`${BASE_PATH}/mfa/enable`, input),
+  enableMfa: (
+    input: EnableMfaInput,
+    headers: Record<string, string>,
+  ): Promise<{ recoveryCodes: string[] }> =>
+    apiClient.post<{ recoveryCodes: string[] }>(
+      `${BASE_PATH}/mfa/enable`,
+      input,
+      {
+        headers,
+        retries: 0,
+      },
+    ),
 
-  disableMfa: (): Promise<void> => apiClient.delete<void>(`${BASE_PATH}/mfa`),
+  disableMfa: (headers: Record<string, string>): Promise<void> =>
+    apiClient.delete<void>(`${BASE_PATH}/mfa`, { headers, retries: 0 }),
 
   keys: {
     module: (): QueryKey => queryKeys.module(RESOURCE),

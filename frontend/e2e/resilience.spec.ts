@@ -22,17 +22,23 @@ test("sessão inválida leva ao login, sem laço e sem toast infinito", async ({
   await page.goto("/operacoes");
   await page.waitForURL(/\/login/, { timeout: 30_000 });
 
-  await expect(page.getByRole("button", { name: "Entrar", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Entrar", exact: true }),
+  ).toBeVisible();
 
   /** Um único destino: sem ping-pong entre rota protegida e login. */
   await page.waitForTimeout(2_000);
   await expect(page).toHaveURL(/\/login/);
 
   expect(recorder.pageErrors, "exceções durante a expiração").toEqual([]);
-  expect(recorder.reactWarnings, "avisos de React durante a expiração").toEqual([]);
+  expect(recorder.reactWarnings, "avisos de React durante a expiração").toEqual(
+    [],
+  );
 });
 
-test("recurso inexistente é ausência neutra, não erro técnico", async ({ page }) => {
+test("recurso inexistente é ausência neutra, não erro técnico", async ({
+  page,
+}) => {
   const recorder = record(page);
   await login(page);
 
@@ -42,14 +48,19 @@ test("recurso inexistente é ausência neutra, não erro técnico", async ({ pag
 
   const body = await page.evaluate(() => document.body.innerText);
   expect(body).not.toMatch(/EntityNotFound|Exception|Prisma|P2\d{3}/);
-  expect(body).toMatch(/não está disponível|não encontrad|indisponív|sem acesso/i);
+  expect(body).toMatch(
+    /não está disponível|não encontrad|indisponív|sem acesso/i,
+  );
 
   /** Nem o nome interno da entidade nem o identificador voltam para a tela. */
   expect(body).not.toContain("01a00000-0000-7000-8000-000000000000");
   expect(body).not.toMatch(/was not found|with identifier/i);
 
   expect(recorder.pageErrors, "exceções no recurso inexistente").toEqual([]);
-  expect(recorder.reactWarnings, "avisos de React no recurso inexistente").toEqual([]);
+  expect(
+    recorder.reactWarnings,
+    "avisos de React no recurso inexistente",
+  ).toEqual([]);
 });
 
 test("API fora do ar mostra erro com nova tentativa e código de referência", async ({
@@ -105,19 +116,27 @@ test("API fora do ar mostra erro com nova tentativa e código de referência", a
   /** Mensagem de negócio, nunca a classe de exceção. */
   expect(body).not.toMatch(/Exception|PrismaClient|stack|at Object\./);
   expect(body).toMatch(/não foi possível/i);
-  expect(body, "referência de suporte visível").toContain("01a0-referencia-de-teste");
+  expect(body, "referência de suporte visível").toContain(
+    "01a0-referencia-de-teste",
+  );
 
   expect(recorder.pageErrors, "exceções no estado de erro").toEqual([]);
-  expect(recorder.reactWarnings, "avisos de React no estado de erro").toEqual([]);
+  expect(recorder.reactWarnings, "avisos de React no estado de erro").toEqual(
+    [],
+  );
 });
 
-test("lista sem resultado explica em português e não fica em branco", async ({ page }) => {
+test("lista sem resultado explica em português e não fica em branco", async ({
+  page,
+}) => {
   const recorder = record(page);
   await login(page);
   await page.goto("/operacoes");
   await settled(page);
 
-  const search = page.getByLabel("Buscar", { exact: true }).first();
+  const search = page
+    .getByLabel(/^Buscar(?:\s*\*?\s*\(obrigatório\))?$/)
+    .first();
   await search.fill("zzz-nada-encontra-isto-zzz");
   /** A busca é debounced: esperar o ciclo antes de afirmar o que apareceu. */
   await page.waitForTimeout(2_000);
@@ -132,7 +151,9 @@ test("lista sem resultado explica em português e não fica em branco", async ({
   assertClean(recorder, "estado vazio");
 });
 
-test("texto do usuário é renderizado como texto, nunca executado", async ({ page }) => {
+test("texto do usuário é renderizado como texto, nunca executado", async ({
+  page,
+}) => {
   const recorder = record(page);
   let alerted = false;
   page.on("dialog", async (dialog) => {
@@ -145,14 +166,19 @@ test("texto do usuário é renderizado como texto, nunca executado", async ({ pa
   await settled(page);
 
   const payload = '<img src=x onerror="window.__xss=1">';
-  await page.getByLabel("Buscar", { exact: true }).first().fill(payload);
+  await page
+    .getByLabel(/^Buscar(?:\s*\*?\s*\(obrigatório\))?$/)
+    .first()
+    .fill(payload);
   await settled(page);
 
   const executed = await page.evaluate(
     () => (window as unknown as { __xss?: number }).__xss === 1,
   );
   expect(executed, "HTML do usuário executado").toBe(false);
-  expect(alerted, "diálogo nativo disparado por conteúdo do usuário").toBe(false);
+  expect(alerted, "diálogo nativo disparado por conteúdo do usuário").toBe(
+    false,
+  );
 
   assertClean(recorder, "sanidade de XSS");
 });

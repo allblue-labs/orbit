@@ -1,0 +1,23 @@
+{
+  "protocolVersion": "1.0.0",
+  "issuer": "https://idp.example.invalid",
+  "audience": "urn:allblue:orbit-v2:staging:orbit-staging-01:corporate",
+  "connectorClientId": "nexus-orbit-staging",
+  "corporateSubject": "subject-demo",
+  "grantId": "grant-demo",
+  "target": {
+    "productId": "orbit-v2",
+    "environment": "staging",
+    "instanceId": "orbit-staging-01",
+    "tenantId": "00000000-0000-7000-8000-000000000001"
+  },
+  "purpose": "CUSTOMER_REQUEST",
+  "actions": [
+    "subscription.request_plan_change.v1"
+  ],
+  "issuedAt": "2026-11-15T12:00:00Z",
+  "expiresAt": "2026-11-15T12:05:00Z",
+  "delegationProofRef": "proof-demo",
+  "approvalProofRef": "approval-demo",
+  "authenticationContext": "mfa-stepup-demo"
+}

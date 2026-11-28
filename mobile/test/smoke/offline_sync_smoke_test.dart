@@ -4,6 +4,7 @@
 /// produz dois efeitos, que uma versão velha é recusada, que autorização e
 /// designação são revalidadas no replay, e que um item fora de escopo volta
 /// como tombstone.
+@Tags(['integration'])
 library;
 
 import 'dart:convert';

@@ -1,0 +1,131 @@
+{
+  "pr": "PR-10",
+  "date": "2026-11-16",
+  "baseCommit": "495e223a64ab88028c1abf1053211301d8ad98e3",
+  "implementationCommit": "f23cb8d6048c9b8485d01eba4aae4167d56aae21",
+  "finding": "F06",
+  "qualification": "Local gates on final source. No push, merge, deploy, real Firebase/SES call or production database. Final consolidated Node 22/Linux qualification and external FCM/SES gates remain separate.",
+  "decision": "Remove unsupported Socket.IO gateway from runtime and source; retain authenticated HTTP inbox and native FCM.",
+  "migration": "20261116210000_retire_notification_realtime",
+  "migrationScope": "Only two channel defaults; no historical rewrite, row deletion or RLS policy change.",
+  "newRuntimeDependencies": false,
+  "newEnvironmentSecrets": false,
+  "compatibility": {
+    "legacyRequestChannel": "REALTIME aliases to IN_APP on create/preference read/write",
+    "legacyPendingDelivery": "SKIPPED, provider realtime-retired; no invented socket receipt",
+    "historicalSentRows": "Preserved",
+    "installedMobile": "Legacy REALTIME still accepted; native push unchanged"
+  },
+  "authority": {
+    "http": "Existing guards resolve current session/user/membership/role/surface/permission/plan/tenant each request",
+    "roleDeletion": "Deleted organization roles excluded after establishing RLS tenant; owner fallback requires an eligible membership",
+    "mobileRoutes": "Only inbox list/get/read/read-all become explicit shared surface; management and web-push routes retain WEB/API",
+    "tenantSelection": "Existing current server membership, not a new per-tab or JWT-pinned tenant model",
+    "replicas": "PostgreSQL inbox and read state; no per-instance socket rooms or volatile delivery"
+  },
+  "checks": {
+    "backendFull": {
+      "command": "npm test -- --runInBand --watchman=false",
+      "suites": 266,
+      "passed": 2170,
+      "failed": 0,
+      "seconds": 274.581
+    },
+    "integration": {
+      "runner": "withIntegrationEnvironment({postgresTmpfs:true}); test:e2e:jest --runInBand --watchman=false --runTestsByPath",
+      "files": [
+        "test/notification-isolation.e2e-spec.ts",
+        "test/tenant-suspension.e2e-spec.ts",
+        "test/identity-concurrency.e2e-spec.ts"
+      ],
+      "suites": 3,
+      "passed": 51,
+      "failed": 0,
+      "seconds": 49.659,
+      "migrations": 122,
+      "tablesGranted": 149,
+      "runtimeRole": "orbit_app",
+      "rolsuper": false,
+      "rolbypassrls": false,
+      "replicas": 2,
+      "disposable": true,
+      "mockedIdentityGuardsOrPersistence": false,
+      "coverage": [
+        "recipient/tenant read and mutation isolation",
+        "same user, changed current membership, old token",
+        "logout and session expiry",
+        "deleted role, permission/surface/membership/user revocation",
+        "tenant suspension",
+        "cross-replica read receipt",
+        "direct Engine.IO polling 404 and WebSocket upgrade 404 before/after logout",
+        "legacy REALTIME compatibility and historical delivery status",
+        "Prisma channel default"
+      ]
+    },
+    "frontend": {
+      "suites": 72,
+      "passed": 693,
+      "failed": 0,
+      "seconds": 14.79,
+      "typecheck": "passed",
+      "lintAndProductLanguage": "passed",
+      "newProductionBuild": false
+    },
+    "mobile": {
+      "files": [
+        "test/features/profile_test.dart",
+        "test/features/foreground_notification_monitor_test.dart",
+        "test/widgets/foreground_notifications_test.dart",
+        "test/core/session_transition_test.dart"
+      ],
+      "passed": 18,
+      "failed": 0,
+      "analysis": "3 changed files passed",
+      "format": "passed",
+      "nativeBuild": false,
+      "realFcmDelivery": false
+    },
+    "backendBuild": "passed",
+    "backendTypecheck": "passed",
+    "changedTypescriptLint": "passed",
+    "prismaSchema": "passed",
+    "contractBoundary": "passed",
+    "publicErrorContract": {
+      "passed": true,
+      "codes": 75
+    },
+    "diffCheck": "passed",
+    "localNode": "25.1.0"
+  },
+  "intermediateFailures": [
+    "First integration joined role before RLS tenant setup; corrected ordering, no bypass.",
+    "Second integration exposed default WEB/API surface on inbox and stale locally generated Prisma default; shared read routes delimited and Prisma regenerated.",
+    "Full TypeScript found two test array accesses; explicit presence assertions added, full TypeScript and final test lint passed."
+  ],
+  "deploymentRequirements": [
+    "Apply migration and generate Prisma in build.",
+    "Replace and terminate every old API process and its established connections; never retain legacy sockets indefinitely while draining.",
+    "Keep Nginx /socket.io 404 and verify API 404.",
+    "Owner controls push; no deployment performed."
+  ],
+  "sourceSha256": {
+    "backend/prisma/schema.prisma": "7f68c29edcd4d44e2d1cc9a4d4139bdbf968433b623e4a508c3976ba73e0636e",
+    "backend/src/modules/ai-panel/ai.service.ts": "1e9c04a281e86b856866c7c333c758ae4d2c06172bc5d787d6945929d1c3e4b3",
+    "backend/src/modules/identity/infrastructure/identity.repository.ts": "d434d00b5548baf074d553772b2d89c0f46fdaa15732efdb83a8c870289ba406",
+    "backend/src/modules/notifications/notification-preferences.controller.spec.ts": "6c2c12058a7428b9e4da9e7f9e6f6f49f5b79c78e2d383d26ccb0165b9e44145",
+    "backend/src/modules/notifications/notification.controller.ts": "61ababc6d53fc0ceeb28884c23df9ef423113b518e4c0a21b5b733eb84eb343b",
+    "backend/src/modules/notifications/notification.dto.ts": "996f66545cd8de8f6f10ad88dfbc5c3afef0a88ba1b2a7489cf9f4a7413eae53",
+    "backend/src/modules/notifications/notification.service.spec.ts": "fd871a144dde22a029420c5267bdc3868bee1c869b389b21b7bff2ef872a27aa",
+    "backend/src/modules/notifications/notification.service.ts": "2daa03a465e172bb0e5463f8992b24a83a3823b4d6b723b767c9e457993a887a",
+    "backend/src/modules/notifications/notifications.module.ts": "1f099bdc0baf9377b2650b6d6b0dbde10face5f59b95f3f60f0f4df39baa185e",
+    "backend/test/tenant-suspension.e2e-spec.ts": "2a07e83ccf609db26d6cd154d5f98fdc55417d080de9e52493d1049542b1a7f5",
+    "frontend/src/components/settings/tabs/notifications.tab.tsx": "20fe358406010b2a578a8d65d53ca1e722610ead156c47eb8042c1b18225d22f",
+    "frontend/src/hooks/notifications/use-notifications.ts": "871a4603f0671edfca7d3fd276b59db09d4ef4f7733b66da1633160fc5ac2d0c",
+    "frontend/src/types/settings.ts": "c3c8b8dee3b93581d1b82036e02ad3b334d0581e7a35aa51bae4ae73f75e12e6",
+    "mobile/lib/features/profile/application/notification_settings_providers.dart": "be0d98c64e0324dfb31ccf1ede7d55fb5e83cc1a732ba984b64ddaed295872b9",
+    "mobile/lib/features/profile/data/notification_preferences_repository.dart": "82366e352c9a2a7f1bad6563bd4731d0f9a668c227cf80ec00c8460d8afea553",
+    "mobile/test/features/profile_test.dart": "39956603cc3e13b4c24bd242806da3c01911989151cb07c2d3a49f0736c22616",
+    "backend/test/notification-isolation.e2e-spec.ts": "8ed3ba356eacebbf73ca31571470d197363b1ebcf33d3adbd5abe46bb7c91406",
+    "backend/prisma/migrations/20261116210000_retire_notification_realtime/migration.sql": "cf565a3e4c5188100f58590ef91c15ddf36a0db7305f9cb2c9b5204c53a5d440"
+  }
+}

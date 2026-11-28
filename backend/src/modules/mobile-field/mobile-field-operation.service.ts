@@ -216,6 +216,7 @@ export class MobileFieldOperationService {
       operationId,
       organizationId: actor.organizationId,
       actorId: actor.id,
+      actorIsOwner: actor.isOrganizationOwner === true,
       expectedVersion: input.expectedVersion,
       idempotencyKey: input.idempotencyKey,
       payloadHash: this.hash(input),
@@ -240,6 +241,7 @@ export class MobileFieldOperationService {
       operationId,
       organizationId: actor.organizationId,
       actorId: actor.id,
+      actorIsOwner: actor.isOrganizationOwner === true,
       expectedVersion: input.expectedVersion,
       idempotencyKey: input.idempotencyKey,
       payloadHash: this.hash(input),
@@ -264,6 +266,7 @@ export class MobileFieldOperationService {
       operationId,
       organizationId: actor.organizationId,
       actorId: actor.id,
+      actorIsOwner: actor.isOrganizationOwner === true,
       expectedVersion: input.expectedVersion,
       idempotencyKey: input.idempotencyKey,
       payloadHash: this.hash(input),
@@ -285,6 +288,7 @@ export class MobileFieldOperationService {
       checklistId,
       organizationId: actor.organizationId,
       actorId: actor.id,
+      actorIsOwner: actor.isOrganizationOwner === true,
       expectedVersion: input.expectedVersion,
       idempotencyKey: input.idempotencyKey,
       payloadHash: this.hash(input),
@@ -528,7 +532,11 @@ export class MobileFieldOperationService {
       !source.authorizedAt
     )
       throw new EntityNotFoundException('Operation', operationId);
+    /* O dono vê o atendimento de qualquer técnico: é ele quem cobre quando o
+       escalado faltou, e o PMOC já o deixava abrir e concluir — era esta porta
+       que o recusava logo depois. */
     const assigned =
+      actor.isOrganizationOwner === true ||
       source.responsibleFieldTechnicianId === actor.id ||
       source.auxiliaryTechnicians.some(
         (item: any) => item.user.id === actor.id,

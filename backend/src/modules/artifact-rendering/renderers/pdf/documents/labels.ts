@@ -5,11 +5,13 @@
  * fiscal, o síndico. `TECHNICAL_RESPONSIBLE` no lugar de "Responsável técnico"
  * é o tipo de vazamento que faz um documento parecer rascunho de programador.
  *
- * O que não se reconhece sai como veio: inventar uma tradução seria pior que
- * mostrar o código, porque uma tradução errada não dá para desconfiar.
+ * Um código que não se reconhece não é traduzido no chute (uma tradução
+ * errada não dá para desconfiar) — e também não sai impresso: some.
  */
 const PAPEIS: Readonly<Record<string, string>> = {
   TECHNICAL_RESPONSIBLE: 'Responsável técnico',
+  /* Quem assina laudo e relatório de qualidade do ar pelo catálogo oficial. */
+  TECHNICAL_MANAGER: 'Responsável técnico',
   FIELD_TECHNICIAN: 'Técnico em campo',
   ASSISTANT_TECHNICIAN: 'Técnico auxiliar',
   CUSTOMER: 'Cliente',
@@ -24,9 +26,16 @@ const PAPEIS: Readonly<Record<string, string>> = {
   WITNESS: 'Testemunha',
 };
 
+/**
+ * Papel conhecido em palavras; código desconhecido (`ALGUM_PAPEL`) some da
+ * linha da assinatura em vez de sair impresso — o nome de quem assinou já
+ * identifica. Texto livre digitado pela organização ("Síndico") passa.
+ */
 export function roleLabel(code?: string): string | undefined {
   if (!code) return undefined;
-  return PAPEIS[code.toUpperCase()] ?? code;
+  const known = PAPEIS[code.toUpperCase()];
+  if (known) return known;
+  return /^[A-Z0-9]+(_[A-Z0-9]+)+$/.test(code) ? undefined : code;
 }
 
 /**

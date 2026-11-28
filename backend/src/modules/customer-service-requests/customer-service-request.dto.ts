@@ -3,6 +3,8 @@ import { Transform, Type } from 'class-transformer';
 import {
   IsIn,
   IsInt,
+  IsObject,
+  ValidateNested,
   IsOptional,
   IsString,
   Max,
@@ -14,13 +16,56 @@ import { OperationKind } from '../../contracts';
 import { IsUUIDv7 } from '../../validators';
 import {
   CUSTOMER_SERVICE_REQUEST_CATEGORIES,
+  CUSTOMER_SERVICE_REQUEST_EQUIPMENT_CONDITIONS,
   CUSTOMER_SERVICE_REQUEST_STATUSES,
+  CUSTOMER_SERVICE_REQUEST_URGENCIES,
   type CustomerServiceRequestCategory,
+  type CustomerServiceRequestEquipmentCondition,
   type CustomerServiceRequestStatus,
+  type CustomerServiceRequestUrgency,
 } from './customer-service-request.types';
 
 const trim = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.trim() : value;
+
+/**
+ * O que o técnico precisa saber antes de sair. Tudo opcional: o cliente que
+ * não sabe dizer não fica preso no formulário.
+ */
+export class CustomerServiceRequestDetailsDto {
+  @ApiPropertyOptional({ enum: CUSTOMER_SERVICE_REQUEST_EQUIPMENT_CONDITIONS })
+  @IsOptional()
+  @IsIn(CUSTOMER_SERVICE_REQUEST_EQUIPMENT_CONDITIONS)
+  equipmentCondition?: CustomerServiceRequestEquipmentCondition;
+
+  @ApiPropertyOptional({ description: 'Onde fica, no local do cliente' })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(180)
+  siteLocation?: string;
+
+  @ApiPropertyOptional({ description: 'Melhor dia e horário para a visita' })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(300)
+  availability?: string;
+
+  @ApiPropertyOptional({ description: 'Quem recebe o técnico' })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(120)
+  contactName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(40)
+  contactPhone?: string;
+}
 
 export class CreateCustomerServiceRequestDto {
   @ApiProperty({ enum: CUSTOMER_SERVICE_REQUEST_CATEGORIES })
@@ -47,6 +92,29 @@ export class CreateCustomerServiceRequestDto {
   @IsOptional()
   @IsUUIDv7()
   assetId?: string;
+
+  @ApiPropertyOptional({ enum: CUSTOMER_SERVICE_REQUEST_URGENCIES })
+  @IsOptional()
+  @IsIn(CUSTOMER_SERVICE_REQUEST_URGENCIES)
+  urgency?: CustomerServiceRequestUrgency;
+
+  @ApiPropertyOptional({ type: CustomerServiceRequestDetailsDto })
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => CustomerServiceRequestDetailsDto)
+  details?: CustomerServiceRequestDetailsDto;
+}
+
+/**
+ * Edição pelo cliente, antes da triagem. Substitui o conteúdo inteiro — o
+ * mesmo formulário da abertura —, com a versão que ele estava vendo.
+ */
+export class UpdateCustomerServiceRequestDto extends CreateCustomerServiceRequestDto {
+  @ApiProperty()
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
 }
 
 export class CustomerServiceRequestPortalQueryDto {
@@ -176,4 +244,19 @@ export class ConvertCustomerServiceRequestDto extends ExpectedVersionDto {
   @IsString()
   @MaxLength(5000)
   description?: string;
+}
+
+/** Resposta do cliente na conversa do chamado. */
+export class ReplyCustomerServiceRequestDto {
+  @ApiProperty()
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
+
+  @ApiProperty()
+  @Transform(trim)
+  @IsString()
+  @MinLength(1)
+  @MaxLength(4000)
+  message!: string;
 }

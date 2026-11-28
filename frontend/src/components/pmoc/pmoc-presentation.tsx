@@ -15,6 +15,7 @@ import {
   cycleStatus,
   documentStatus,
   equipmentExecutionStatus,
+  cycleEquipmentStatus,
   planStatus,
   type PmocPresentation,
   type PmocTone,
@@ -61,6 +62,11 @@ export const CycleStatusBadge = ({ status }: { status: string }) => (
 
 export const ExecutionStatusBadge = ({ status }: { status: string }) => (
   <Chip presentation={equipmentExecutionStatus(status)} />
+);
+
+/** O selo do equipamento no ciclo — com "A executar" no mesmo desenho dos outros. */
+export const CycleEquipmentStatusBadge = ({ status }: { status: string }) => (
+  <Chip presentation={cycleEquipmentStatus(status)} />
 );
 
 export const DocumentStatusBadge = ({ status }: { status: string }) => (

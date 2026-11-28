@@ -8,11 +8,13 @@
  * transação daquela operação.
  */
 import { Injectable } from '@nestjs/common';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { Prisma } from '@prisma/client';
 import { PrismaService, RlsTransaction } from '../../database';
 import type { PrismaTransactionClient } from '../../database/prisma.types';
 import { ConflictException } from '../../exceptions';
 import { generateUuidV7 } from '../../utils';
+import { BillingCheckoutNotAllowedException } from './billing.errors';
 import type {
   BillingMode,
   BillingProviderName,
@@ -29,6 +31,10 @@ export interface BillingCustomerRow {
 }
 
 export interface BillingCheckoutAttemptRow {
+  quotedPriceId: string | null;
+  promotionCode?: string | null;
+  providerPromotionId?: string | null;
+  promotionCheckoutExpiresAt?: Date | null;
   id: string;
   organizationId: string;
   subscriptionId: string;
@@ -52,6 +58,7 @@ export interface BillingCheckoutAttemptRow {
 }
 
 export interface ClaimedBillingEvent {
+  mode?: string | null;
   id: string;
   provider: string;
   providerEventId: string;
@@ -101,6 +108,72 @@ export interface BillingFinancialAdjustmentRow {
 
 @Injectable()
 export class BillingRepository {
+  private readonly claimed = new AsyncLocalStorage<{
+    id: string;
+    processingToken: string;
+    eventType?: string;
+    providerCreatedAt?: Date;
+    divergence?: boolean;
+  }>();
+  withClaim<T>(
+    claim: {
+      id: string;
+      processingToken: string;
+      eventType?: string;
+      providerCreatedAt?: Date;
+    },
+    work: () => Promise<T>,
+  ): Promise<T> {
+    return this.claimed.run(claim, work);
+  }
+  nextObservation(): Promise<bigint> {
+    return this.prisma.$queryRaw<
+      { version: bigint }[]
+    >`SELECT nextval('billing_observation_sequence') AS version`.then(
+      (rows) => rows[0]!.version,
+    );
+  }
+  async completeObservation(
+    subscriptionId: string,
+    version: bigint,
+    recurringObservation: Prisma.InputJsonObject | null,
+  ): Promise<void> {
+    await this.rls.run(async (tx) => {
+      await tx.$executeRaw`
+        UPDATE organization_subscriptions
+        SET provider_observation_version = ${version}, recurring_observation = ${recurringObservation === null ? null : JSON.stringify(recurringObservation)}::jsonb
+        WHERE id = ${subscriptionId}::uuid`;
+    });
+  }
+  noteDivergence(): void {
+    const claim = this.claimed.getStore();
+    if (claim) claim.divergence = true;
+  }
+  async atomic<T>(work: () => Promise<T>): Promise<T> {
+    return this.rls.runAmbient(async (tx) => {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(current_setting('app.organization_id', true), 0))::text
+        WHERE nullif(current_setting('app.organization_id', true), '') IS NOT NULL`;
+      const claim = this.claimed.getStore();
+      if (claim)
+        await tx.$queryRaw`SELECT billing_assert_event_lease(${claim.id}::uuid, ${claim.processingToken}::uuid)::text`;
+      return work();
+    });
+  }
+  async lockContract(id: string): Promise<void> {
+    await this.rls.run(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM organization_subscriptions WHERE id=${id}::uuid FOR UPDATE`;
+    });
+  }
+  async assertBinding(
+    organizationId: string,
+    customerId: string,
+    mode: BillingMode,
+  ): Promise<void> {
+    const customer = await this.findCustomer(organizationId, 'STRIPE', mode);
+    if (customer?.providerCustomerId !== customerId)
+      throw new Error('BILLING_MODE_OR_CUSTOMER_MISMATCH');
+  }
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly rls: RlsTransaction,
@@ -200,6 +273,10 @@ export class BillingRepository {
     billingInterval: string;
     subscriptionVersion: number;
     endsTrial: boolean;
+    quotedPriceId: string;
+    quotedCatalogVersion: number;
+    promotionCode?: string;
+    quotedEntitlements: Prisma.InputJsonValue;
     idempotencyKey: string;
   }): Promise<{ attempt: BillingCheckoutAttemptRow; created: boolean }> {
     return this.rls.run(async (tx) => {
@@ -237,11 +314,45 @@ export class BillingRepository {
         },
       });
       if (existing) return { attempt: existing, created: false };
+      const reservation = input.promotionCode
+        ? await this.reservePromotion(tx, input)
+        : undefined;
       const attempt = await tx.billingCheckoutAttempt.create({
-        data: { ...input, status: 'CREATING' },
+        data: { ...input, ...reservation, status: 'CREATING' },
       });
       return { attempt, created: true };
     });
+  }
+
+  private async reservePromotion(
+    tx: PrismaTransactionClient,
+    input: {
+      promotionCode?: string;
+      mode: BillingMode;
+      planCode: string;
+      billingInterval: string;
+      quotedPriceId: string;
+    },
+  ) {
+    const [reservation] = await tx.$queryRaw<
+      Array<{
+        promotionId: string;
+        providerPromotionId: string;
+        originalMinor: number;
+        checkoutExpiresAt: Date;
+      }>
+    >`SELECT * FROM public.app_reserve_billing_promotion(
+      ${input.promotionCode}, ${input.mode}, ${input.planCode}, ${input.billingInterval}, ${input.quotedPriceId})`;
+    if (!reservation)
+      throw new BillingCheckoutNotAllowedException(
+        'promotion is unavailable for this purchase',
+      );
+    return {
+      promotionId: reservation.promotionId,
+      providerPromotionId: reservation.providerPromotionId,
+      promotionOriginalMinor: reservation.originalMinor,
+      promotionCheckoutExpiresAt: reservation.checkoutExpiresAt,
+    };
   }
 
   async openCheckoutAttempt(input: {
@@ -303,12 +414,37 @@ export class BillingRepository {
     );
   }
 
+  async completedCheckoutTerms(
+    subscriptionId: string,
+    providerSubscriptionId: string,
+    priceId: string,
+  ) {
+    return this.rls.run(async (tx) => {
+      const attempt = await tx.billingCheckoutAttempt.findFirst({
+        where: {
+          subscriptionId,
+          providerSubscriptionId,
+          quotedPriceId: priceId,
+          status: 'COMPLETED',
+        },
+        select: { quotedCatalogVersion: true, quotedEntitlements: true },
+      });
+      return attempt?.quotedCatalogVersion && attempt.quotedEntitlements
+        ? {
+            version: attempt.quotedCatalogVersion,
+            snapshot: attempt.quotedEntitlements,
+          }
+        : undefined;
+    });
+  }
+
   async completeCheckoutAttempt(input: {
     id: string;
     providerSessionId: string;
     providerSubscriptionId: string;
+    promotionDiscountMinor?: number;
   }): Promise<void> {
-    await this.comoPlataforma(async (tx) => {
+    await this.rls.run(async (tx) => {
       const { count } = await tx.billingCheckoutAttempt.updateMany({
         where: {
           id: input.id,
@@ -323,6 +459,9 @@ export class BillingRepository {
           providerSessionId: input.providerSessionId,
           providerSubscriptionId: input.providerSubscriptionId,
           completedAt: new Date(),
+          ...(input.promotionDiscountMinor === undefined
+            ? {}
+            : { promotionDiscountMinor: input.promotionDiscountMinor }),
           failedAt: null,
           failureCode: null,
         },
@@ -334,7 +473,9 @@ export class BillingRepository {
         if (
           current?.status !== 'COMPLETED' ||
           current.providerSessionId !== input.providerSessionId ||
-          current.providerSubscriptionId !== input.providerSubscriptionId
+          current.providerSubscriptionId !== input.providerSubscriptionId ||
+          (input.promotionDiscountMinor !== undefined &&
+            current.promotionDiscountMinor !== input.promotionDiscountMinor)
         ) {
           throw new Error('Checkout correlation conflict');
         }
@@ -351,88 +492,157 @@ export class BillingRepository {
     providerEventId: string;
     invoice: ProviderInvoice;
   }): Promise<void> {
-    await this.rls.run(async (tx) => {
-      const current = await tx.billingInvoice.findFirst({
-        where: {
-          organizationId: input.organizationId,
-          provider: input.provider,
-          providerInvoiceId: input.invoice.providerInvoiceId,
-        },
-      });
-      const data = {
-        subscriptionId: input.subscriptionId,
-        mode: input.mode,
-        invoiceNumber: input.invoice.number,
-        status: input.invoice.status,
-        currency: input.invoice.currency,
-        subtotalMinor: input.invoice.subtotalMinor,
-        discountMinor: input.invoice.discountMinor,
-        taxMinor: input.invoice.taxMinor,
-        totalMinor: input.invoice.totalMinor,
-        amountDueMinor: input.invoice.amountDueMinor,
-        amountPaidMinor: input.invoice.amountPaidMinor,
-        amountRemainingMinor: input.invoice.amountRemainingMinor,
-        creditNotesMinor: input.invoice.creditNotesMinor,
-        attempted: input.invoice.attempted,
-        attemptCount: input.invoice.attemptCount,
-        billingReason: input.invoice.billingReason,
-        collectionMethod: input.invoice.collectionMethod,
-        hostedInvoiceUrl: input.invoice.hostedInvoiceUrl,
-        invoicePdfUrl: input.invoice.invoicePdfUrl,
-        periodStart: input.invoice.periodStart,
-        periodEnd: input.invoice.periodEnd,
-        dueAt: input.invoice.dueAt,
-        nextPaymentAttemptAt: input.invoice.nextPaymentAttemptAt,
-        finalizedAt: input.invoice.finalizedAt,
-        paidAt: input.invoice.paidAt,
-        voidedAt: input.invoice.voidedAt,
-        markedUncollectibleAt: input.invoice.markedUncollectibleAt,
-        providerCreatedAt: input.invoice.providerCreatedAt,
-        providerObservedAt: input.invoice.providerObservedAt,
-        lastProviderEventId: input.providerEventId,
-      };
-
-      const invoice = current
-        ? await tx.billingInvoice.update({
-            where: { id: current.id },
-            data: { ...data, version: { increment: 1 } },
-          })
-        : await tx.billingInvoice.create({
-            data: {
-              id: generateUuidV7(),
-              organizationId: input.organizationId,
-              provider: input.provider,
-              providerInvoiceId: input.invoice.providerInvoiceId,
-              ...data,
-            },
-          });
-
-      try {
-        await tx.billingInvoiceTransition.create({
-          data: {
-            id: generateUuidV7(),
+    await this.atomic(() =>
+      this.rls.run(async (tx) => {
+        // Serialize reads/inserts before uniqueness can abort PostgreSQL. All invoice
+        // writers, including adjustment recovery, use this same tenant lock.
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${input.organizationId}, 4))::text`;
+        const replay = await tx.billingInvoiceTransition.findFirst({
+          where: {
             organizationId: input.organizationId,
-            billingInvoiceId: invoice.id,
             provider: input.provider,
             providerEventId: input.providerEventId,
-            status: input.invoice.status,
-            totalMinor: input.invoice.totalMinor,
-            amountPaidMinor: input.invoice.amountPaidMinor,
-            amountRemainingMinor: input.invoice.amountRemainingMinor,
-            attemptCount: input.invoice.attemptCount,
-            observedAt: input.invoice.providerObservedAt,
           },
         });
-      } catch (error) {
+        if (replay) return;
+        const current = await tx.billingInvoice.findFirst({
+          where: {
+            organizationId: input.organizationId,
+            provider: input.provider,
+            providerInvoiceId: input.invoice.providerInvoiceId,
+          },
+        });
         if (
-          !(error instanceof Prisma.PrismaClientKnownRequestError) ||
-          error.code !== 'P2002'
-        ) {
-          throw error;
-        }
-        /** Replay do mesmo evento: projeção convergiu e o ledger já existe. */
-      }
+          current &&
+          (current.mode !== input.mode ||
+            current.subscriptionId !== input.subscriptionId)
+        )
+          throw new Error('BILLING_INVOICE_BINDING_MISMATCH');
+        // A delayed remote read cannot overwrite a newer observation.
+        if (
+          current &&
+          (input.invoice.observationVersion !== undefined
+            ? current.observationVersion >= input.invoice.observationVersion
+            : current.providerObservedAt > input.invoice.providerObservedAt)
+        )
+          return;
+        if (
+          !current ||
+          current.status !== input.invoice.status ||
+          current.amountPaidMinor !== input.invoice.amountPaidMinor ||
+          current.attemptCount !== input.invoice.attemptCount
+        )
+          this.noteDivergence();
+        const data = {
+          observationVersion:
+            input.invoice.observationVersion ??
+            current?.observationVersion ??
+            0n,
+          paymentEvidence: [
+            ...(input.invoice.paymentEvidence ?? []),
+          ] as Prisma.InputJsonValue,
+          subscriptionId: input.subscriptionId,
+          mode: input.mode,
+          invoiceNumber: input.invoice.number,
+          planCodeAtIssue:
+            current?.planCodeAtIssue ??
+            (await this.invoicePlanAtIssue(tx, input.invoice)),
+          status: input.invoice.status,
+          currency: input.invoice.currency,
+          subtotalMinor: input.invoice.subtotalMinor,
+          discountMinor: input.invoice.discountMinor,
+          taxMinor: input.invoice.taxMinor,
+          totalMinor: input.invoice.totalMinor,
+          amountDueMinor: input.invoice.amountDueMinor,
+          amountPaidMinor: input.invoice.amountPaidMinor,
+          amountRemainingMinor: input.invoice.amountRemainingMinor,
+          creditNotesMinor: input.invoice.creditNotesMinor,
+          attempted: input.invoice.attempted,
+          attemptCount: input.invoice.attemptCount,
+          billingReason: input.invoice.billingReason,
+          collectionMethod: input.invoice.collectionMethod,
+          hostedInvoiceUrl: input.invoice.hostedInvoiceUrl,
+          invoicePdfUrl: input.invoice.invoicePdfUrl,
+          periodStart: input.invoice.periodStart,
+          periodEnd: input.invoice.periodEnd,
+          dueAt: input.invoice.dueAt,
+          nextPaymentAttemptAt: input.invoice.nextPaymentAttemptAt,
+          finalizedAt: input.invoice.finalizedAt,
+          paidAt: input.invoice.paidAt,
+          voidedAt: input.invoice.voidedAt,
+          markedUncollectibleAt: input.invoice.markedUncollectibleAt,
+          providerCreatedAt: input.invoice.providerCreatedAt,
+          providerObservedAt: input.invoice.providerObservedAt,
+          lastProviderEventId: input.providerEventId,
+        };
+
+        const invoice = current
+          ? await tx.billingInvoice.update({
+              where: { id: current.id },
+              data: { ...data, version: { increment: 1 } },
+            })
+          : await tx.billingInvoice.create({
+              data: {
+                id: generateUuidV7(),
+                organizationId: input.organizationId,
+                provider: input.provider,
+                providerInvoiceId: input.invoice.providerInvoiceId,
+                ...data,
+              },
+            });
+
+        const transition = await tx.billingInvoiceTransition.createMany({
+          data: [
+            {
+              id: generateUuidV7(),
+              organizationId: input.organizationId,
+              billingInvoiceId: invoice.id,
+              provider: input.provider,
+              providerEventId: input.providerEventId,
+              status: input.invoice.status,
+              totalMinor: input.invoice.totalMinor,
+              amountPaidMinor: input.invoice.amountPaidMinor,
+              amountRemainingMinor: input.invoice.amountRemainingMinor,
+              attemptCount: input.invoice.attemptCount,
+              observedAt: input.invoice.providerObservedAt,
+              sourceEventType: this.claimed.getStore()?.eventType ?? null,
+              sourceOccurredAt: this.claimed
+                .getStore()
+                ?.eventType?.startsWith('orbit.')
+                ? null
+                : (this.claimed.getStore()?.providerCreatedAt ?? null),
+            },
+          ],
+          skipDuplicates: true,
+        });
+        if (transition.count !== 1)
+          throw new Error('BILLING_EVENT_CORRELATION_CONFLICT');
+      }),
+    );
+  }
+
+  private async invoicePlanAtIssue(
+    tx: PrismaTransactionClient,
+    invoice: ProviderInvoice,
+  ): Promise<string | null> {
+    if (!invoice.finalizedAt || !invoice.subscriptionLinesComplete) return null;
+    const prices = new Set(
+      invoice.subscriptionLines
+        ?.filter(
+          (line) => line.subscriptionId === invoice.providerSubscriptionId,
+        )
+        .map((line) => line.priceId),
+    );
+    if (!prices.size || prices.has(null)) return null;
+    const mappings = await tx.planStripePrice.findMany({
+      where: {
+        id: { in: [...prices].filter((id): id is string => id !== null) },
+      },
+      select: { planCode: true },
     });
+    if (mappings.length !== prices.size) return null;
+    const plans = new Set(mappings.map((mapping) => mapping.planCode));
+    return plans.size === 1 ? (mappings[0]?.planCode ?? null) : null;
   }
 
   async recordFinancialAdjustment(input: {
@@ -441,53 +651,96 @@ export class BillingRepository {
     providerEventId: string;
     adjustment: ProviderFinancialAdjustment;
   }): Promise<void> {
-    await this.rls.run(async (tx) => {
-      const invoice = await tx.billingInvoice.findFirst({
-        where: {
-          organizationId: input.organizationId,
-          provider: input.provider,
-          providerInvoiceId: input.adjustment.providerInvoiceId,
-        },
-        select: { id: true },
-      });
-      if (!invoice) throw new Error('BILLING_ADJUSTMENT_INVOICE_NOT_FOUND');
-
-      const current = await tx.billingFinancialAdjustment.findFirst({
-        where: {
-          organizationId: input.organizationId,
-          provider: input.provider,
-          type: input.adjustment.type,
-          providerObjectId: input.adjustment.providerObjectId,
-        },
-      });
-      const data = {
-        billingInvoiceId: invoice.id,
-        status: input.adjustment.status,
-        amountMinor: input.adjustment.amountMinor,
-        currency: input.adjustment.currency,
-        reason: input.adjustment.reason,
-        occurredAt: input.adjustment.occurredAt,
-        providerObservedAt: input.adjustment.providerObservedAt,
-        lastProviderEventId: input.providerEventId,
-      };
-      if (current) {
-        await tx.billingFinancialAdjustment.update({
-          where: { id: current.id },
-          data: { ...data, version: { increment: 1 } },
+    await this.atomic(() =>
+      this.rls.run(async (tx) => {
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${input.organizationId}, 4))::text`;
+        const invoice = await tx.billingInvoice.findFirst({
+          where: {
+            organizationId: input.organizationId,
+            provider: input.provider,
+            providerInvoiceId: input.adjustment.providerInvoiceId,
+          },
+          select: { id: true },
         });
-      } else {
-        await tx.billingFinancialAdjustment.create({
-          data: {
-            id: generateUuidV7(),
+        if (!invoice) throw new Error('BILLING_ADJUSTMENT_INVOICE_NOT_FOUND');
+        const observed = await tx.billingInvoiceTransition.findFirst({
+          where: {
+            organizationId: input.organizationId,
+            provider: input.provider,
+            providerEventId: input.providerEventId,
+          },
+        });
+        if (observed?.adjustmentFact) return;
+
+        const current = await tx.billingFinancialAdjustment.findFirst({
+          where: {
             organizationId: input.organizationId,
             provider: input.provider,
             type: input.adjustment.type,
             providerObjectId: input.adjustment.providerObjectId,
-            ...data,
           },
         });
-      }
-    });
+        if (
+          current &&
+          (current.lastProviderEventId === input.providerEventId ||
+            (input.adjustment.observationVersion !== undefined
+              ? current.observationVersion >=
+                input.adjustment.observationVersion
+              : current.providerObservedAt >
+                input.adjustment.providerObservedAt))
+        )
+          return;
+        const data = {
+          billingInvoiceId: invoice.id,
+          observationVersion:
+            input.adjustment.observationVersion ??
+            current?.observationVersion ??
+            0n,
+          status: input.adjustment.status,
+          amountMinor: input.adjustment.amountMinor,
+          currency: input.adjustment.currency,
+          reason: input.adjustment.reason,
+          occurredAt: input.adjustment.occurredAt,
+          providerObservedAt: input.adjustment.providerObservedAt,
+          lastProviderEventId: input.providerEventId,
+        };
+        if (current) {
+          await tx.billingFinancialAdjustment.update({
+            where: { id: current.id },
+            data: { ...data, version: { increment: 1 } },
+          });
+        } else {
+          await tx.billingFinancialAdjustment.create({
+            data: {
+              id: generateUuidV7(),
+              organizationId: input.organizationId,
+              provider: input.provider,
+              type: input.adjustment.type,
+              providerObjectId: input.adjustment.providerObjectId,
+              ...data,
+            },
+          });
+        }
+        await tx.billingInvoiceTransition.updateMany({
+          where: {
+            organizationId: input.organizationId,
+            provider: input.provider,
+            providerEventId: input.providerEventId,
+          },
+          data: {
+            adjustmentFact: {
+              type: input.adjustment.type,
+              providerObjectId: input.adjustment.providerObjectId,
+              status: input.adjustment.status,
+              amountMinor: input.adjustment.amountMinor,
+              currency: input.adjustment.currency,
+              createdAt: input.adjustment.occurredAt.toISOString(),
+              observedAt: input.adjustment.providerObservedAt.toISOString(),
+            },
+          },
+        });
+      }),
+    );
   }
 
   recentInvoices(
@@ -550,7 +803,7 @@ export class BillingRepository {
    * processador. O contexto vale enquanto esta transação existir, e o alcance
    * real é o do código abaixo — que só conhece uma tabela.
    */
-  private comoPlataforma<T>(
+  comoPlataforma<T>(
     work: (tx: PrismaTransactionClient) => Promise<T>,
   ): Promise<T> {
     return this.prisma.$transaction(async (tx) => {
@@ -569,6 +822,8 @@ export class BillingRepository {
    * produzem uma linha e um efeito.
    */
   async recordEvent(input: {
+    mode?: BillingMode;
+    source?: string;
     provider: BillingProviderName;
     providerEventId: string;
     eventType: string;
@@ -580,12 +835,12 @@ export class BillingRepository {
     return this.comoPlataforma(async (tx) => {
       const inseridas = await tx.$executeRaw`
         INSERT INTO "billing_webhook_events"
-          ("id", "provider", "provider_event_id", "event_type",
+          ("id", "mode", "source", "provider", "provider_event_id", "event_type",
            "provider_object_id", "provider_subscription_id", "api_version",
            "provider_created_at", "received_at", "processing_status",
            "attempts", "created_at", "updated_at")
         VALUES
-          (${generateUuidV7()}::uuid, ${input.provider}, ${input.providerEventId},
+          (${generateUuidV7()}::uuid, ${input.mode ?? null}, ${input.source ?? 'WEBHOOK'}, ${input.provider}, ${input.providerEventId},
            ${input.eventType}, ${input.providerObjectId},
            ${input.providerSubscriptionId}, ${input.apiVersion},
            ${input.providerCreatedAt}::timestamptz, now(), 'PENDING', 0,
@@ -605,6 +860,7 @@ export class BillingRepository {
   claimNextEvent(input: {
     leaseMs: number;
     maxAttempts: number;
+    mode?: BillingMode;
   }): Promise<ClaimedBillingEvent | null> {
     return this.comoPlataforma(async (tx) => {
       await tx.$executeRaw`
@@ -617,6 +873,7 @@ export class BillingRepository {
             "last_error_code" = COALESCE("last_error_code", 'RETRY_EXHAUSTED'),
             "updated_at" = now()
         WHERE "attempts" >= ${input.maxAttempts}
+          AND (${input.mode ?? null}::text IS NULL OR mode=${input.mode ?? null})
           AND (
             "processing_status" = 'PENDING'
             OR (
@@ -627,12 +884,12 @@ export class BillingRepository {
       `;
 
       const token = generateUuidV7();
-      const leaseExpiresAt = new Date(Date.now() + input.leaseMs);
       const rows = await tx.$queryRaw<ClaimedBillingEvent[]>`
         WITH candidate AS (
           SELECT "id"
           FROM "billing_webhook_events"
           WHERE "attempts" < ${input.maxAttempts}
+            AND (${input.mode ?? null}::text IS NULL OR mode=${input.mode ?? null})
             AND (
               (
                 "processing_status" = 'PENDING'
@@ -652,12 +909,12 @@ export class BillingRepository {
             "attempts" = event."attempts" + 1,
             "processing_token" = ${token}::uuid,
             "processing_started_at" = now(),
-            "lease_expires_at" = ${leaseExpiresAt}::timestamptz,
+            "lease_expires_at" = now()+(${input.leaseMs} * interval '1 millisecond'),
             "updated_at" = now()
         FROM candidate
         WHERE event."id" = candidate."id"
         RETURNING
-          event."id",
+          event."id", event."mode",
           event."provider",
           event."provider_event_id" AS "providerEventId",
           event."event_type" AS "eventType",
@@ -688,6 +945,9 @@ export class BillingRepository {
           processingToken: input.processingToken,
         },
         data: {
+          reconciliationOutcome: this.claimed.getStore()?.divergence
+            ? 'DIVERGENCE_RESOLVED'
+            : 'MATCHED',
           processingStatus: input.status,
           processedAt: new Date(),
           processingToken: null,
@@ -752,17 +1012,20 @@ export class BillingRepository {
   }
 
   /** Assinaturas vinculadas ao provedor, para a varredura periódica. */
-  linkedSubscriptions(take: number, after?: string) {
-    return this.comoPlataforma((tx) =>
-      tx.organizationSubscription.findMany({
-        where: {
-          endedAt: null,
-          providerSubscriptionId: { not: null },
-          ...(after ? { id: { gt: after } } : {}),
-        },
-        orderBy: { id: 'asc' },
-        take,
-      }),
+  linkedSubscriptions(
+    take: number,
+    after?: string,
+    mode: BillingMode = 'TEST',
+  ) {
+    return this.comoPlataforma(
+      (tx) => tx.$queryRaw<{ id: string; providerSubscriptionId: string }[]>`
+      SELECT s.id,s.provider_subscription_id AS "providerSubscriptionId"
+      FROM organization_subscriptions s
+      JOIN billing_customers c ON c.organization_id=s.organization_id AND c.provider=s.provider
+        AND c.provider_customer_id=s.provider_customer_id AND c.mode=${mode}
+      WHERE s.ended_at IS NULL AND s.provider='STRIPE' AND s.provider_subscription_id IS NOT NULL
+        AND (${after ?? null}::uuid IS NULL OR s.id>${after ?? null}::uuid)
+      ORDER BY s.id LIMIT ${Math.min(25, Math.max(1, take))}`,
     );
   }
 }

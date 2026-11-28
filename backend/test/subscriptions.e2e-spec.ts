@@ -1,3 +1,5 @@
+import type { Prisma } from '@prisma/client';
+import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
  * Assinatura, períodos e elegibilidade de avaliação — contra o banco de verdade.
@@ -109,27 +111,26 @@ describe('Subscription lifecycle, billing periods and trial (e2e)', () => {
     planKey: string = PlanCode.ESSENTIAL,
     documento = cnpj(),
     confirmPayment = true,
+    billingInterval = BillingInterval.MONTHLY,
   ): Promise<Inquilino> {
     const local = randomUUID().slice(0, 8);
     const email = `subscriptions.${rotulo}.${local}@orbit.local`;
-    const resposta = await http()
-      .post('/api/v1/identity/register')
-      .send({
-        ...REGISTRATION_LEGAL_ACCEPTANCE,
-        email,
-        firstName: 'Assinatura',
-        lastName: rotulo,
-        password: PASSWORD,
-        organizationName: `Assinatura ${rotulo} ${local}`,
-        legalName: `Assinatura ${rotulo} ${local} LTDA`,
-        documentType: 'CNPJ',
-        documentNumber: documento,
-        city: 'Recife',
-        street: 'Rua do Sol',
-        stateCode: 'PE',
-        planKey,
-      })
-      .expect(201);
+    const resposta = await registerVerifiedOwner(app, {
+      ...REGISTRATION_LEGAL_ACCEPTANCE,
+      email,
+      firstName: 'Assinatura',
+      lastName: rotulo,
+      password: PASSWORD,
+      organizationName: `Assinatura ${rotulo} ${local}`,
+      legalName: `Assinatura ${rotulo} ${local} LTDA`,
+      documentType: 'CNPJ',
+      documentNumber: documento,
+      city: 'Recife',
+      street: 'Rua do Sol',
+      stateCode: 'PE',
+      planKey,
+      billingInterval,
+    });
     const token = (resposta.body as Envelope<{ accessToken: string }>).data
       .accessToken;
     const dono = await prisma.user.findUniqueOrThrow({
@@ -272,19 +273,62 @@ describe('Subscription lifecycle, billing periods and trial (e2e)', () => {
       expect(dias).toBe(30);
     });
 
-    it('outra organização com o mesmo CNPJ não recebe segunda avaliação', async () => {
-      const orgB = await registrar(
-        'trial-b',
-        PlanCode.ESSENTIAL,
-        orgA.documento,
-        false,
-      );
-      const assinatura = await como(orgB.organizationId, () =>
-        subscriptions.requireCurrent(orgB.organizationId),
-      );
-      /** Cadastro segue em frente — o que não vem é o presente. */
-      expect(assinatura.status).toBe(SubscriptionStatus.PENDING_PAYMENT);
-      expect(assinatura.trialStartsAt).toBeNull();
+    it('usa a duração publicada no banco, inclusive quando passa de um mês', async () => {
+      const plan = await prisma.plan.findUniqueOrThrow({
+        where: { key: PlanCode.ESSENTIAL },
+      });
+      const original = plan.commercial as Prisma.InputJsonObject;
+      await prisma.plan.update({
+        where: { id: plan.id },
+        data: { commercial: { ...original, trialDays: 45 } },
+      });
+      try {
+        const organization = await registrar('trial-catalogo');
+        const start = await como(organization.organizationId, () =>
+          subscriptions.requireCurrent(organization.organizationId),
+        );
+        expect(
+          start.trialEndsAt!.getTime() - start.trialStartsAt!.getTime(),
+        ).toBe(45 * 86400000);
+        const duringTrial = new Date(
+          start.trialStartsAt!.getTime() + 38 * 86400000,
+        );
+        const during = await como(organization.organizationId, () =>
+          subscriptions.requireCurrent(
+            organization.organizationId,
+            duringTrial,
+          ),
+        );
+        expect(during.effectiveStatus).toBe(SubscriptionStatus.TRIALING);
+        expect(during.currentPeriodEnd).toEqual(start.trialEndsAt);
+      } finally {
+        await prisma.plan.update({
+          where: { id: plan.id },
+          data: { commercial: original },
+        });
+      }
+    });
+
+    it('recusa um novo cadastro com CNPJ já utilizado antes de conceder outra avaliação', async () => {
+      await http()
+        .post('/api/v1/identity/register')
+        .send({
+          ...REGISTRATION_LEGAL_ACCEPTANCE,
+          email: `subscriptions.duplicate.${randomUUID()}@orbit.local`,
+          firstName: 'Duplicado',
+          lastName: 'E2E',
+          password: PASSWORD,
+          organizationName: 'Organização duplicada',
+          legalName: 'Duplicada LTDA',
+          documentType: 'CNPJ',
+          documentNumber: orgA.documento,
+          city: 'Recife',
+          street: 'Rua do Sol',
+          stateCode: 'PE',
+          planKey: PlanCode.ESSENTIAL,
+        })
+        .expect(409);
+      expect(await trials.hasConsumedTrial(orgA.documento)).toBe(true);
     });
 
     it('usuário novo não gera avaliação nova', async () => {
@@ -311,7 +355,9 @@ describe('Subscription lifecycle, billing periods and trial (e2e)', () => {
       PlanCode.PROFESSIONAL_INTELLIGENCE,
       PlanCode.ENTERPRISE_UNLIMITED,
     ])('%s não oferece avaliação', async (plano) => {
-      expect(trials.offersTrial(plano)).toBe(false);
+      await expect(
+        trials.offersTrial(plano, 'unused-by-public-offers'),
+      ).resolves.toBe(false);
       const inquilino = await registrar('sem-trial', plano, cnpj(), false);
       const assinatura = await como(inquilino.organizationId, () =>
         subscriptions.requireCurrent(inquilino.organizationId),
@@ -442,17 +488,12 @@ describe('Subscription lifecycle, billing periods and trial (e2e)', () => {
     ])(
       'com cobrança %s, o acesso dura %s mês(es) e a cota continua mensal',
       async (intervalo, meses) => {
-        const inquilino = await registrar('periodo', PlanCode.PROFESSIONAL);
-        const assinatura = await como(inquilino.organizationId, () =>
-          subscriptions.requireCurrent(inquilino.organizationId),
-        );
-        await como(inquilino.organizationId, () =>
-          subscriptions.changePlan(
-            inquilino.organizationId,
-            assinatura.version,
-            PlanCode.ENTERPRISE_UNLIMITED,
-            intervalo,
-          ),
+        const inquilino = await registrar(
+          'periodo',
+          PlanCode.PROFESSIONAL,
+          cnpj(),
+          true,
+          intervalo,
         );
         const depois = await como(inquilino.organizationId, () =>
           subscriptions.requireCurrent(inquilino.organizationId),
@@ -508,7 +549,7 @@ describe('Subscription lifecycle, billing periods and trial (e2e)', () => {
   /* ---------------------------------------------------------------- */
 
   describe('troca de plano', () => {
-    it('subir vale na hora e a inteligência passa a existir', async () => {
+    it('subir é programado e não libera inteligência antes do vencimento', async () => {
       const inquilino = await registrar('upgrade', PlanCode.PROFESSIONAL);
       await expect(
         como(inquilino.organizationId, () =>
@@ -537,12 +578,13 @@ describe('Subscription lifecycle, billing periods and trial (e2e)', () => {
             PlanCapability.ORBIT_INTELLIGENCE,
           ),
         ),
-      ).resolves.toBe(true);
+      ).resolves.toBe(false);
       const depois = await como(inquilino.organizationId, () =>
         subscriptions.requireCurrent(inquilino.organizationId),
       );
-      expect(depois.planCode).toBe(PlanCode.PROFESSIONAL_INTELLIGENCE);
-      expect(depois.pendingPlanCode).toBeNull();
+      expect(depois.planCode).toBe(PlanCode.PROFESSIONAL);
+      expect(depois.pendingPlanCode).toBe(PlanCode.PROFESSIONAL_INTELLIGENCE);
+      expect(depois.pendingEffectiveAt).toEqual(atual.currentPeriodEnd);
     });
 
     it('descer é programado e não muda nada agora', async () => {
@@ -622,7 +664,7 @@ describe('Subscription lifecycle, billing periods and trial (e2e)', () => {
         http().post('/api/v1/organizations/current/subscription/cancel'),
         inquilino.token,
       )
-        .send({ expectedVersion: atual.version })
+        .send({ expectedVersion: atual.version, acknowledgeDataDeletion: true })
         .expect(201);
       const corpo = (
         cancelada.body as Envelope<{

@@ -1,3 +1,8 @@
+import { PmocDocumentExports } from './pmoc-document-exports';
+import {
+  MobileManagement,
+  MobileManagementShared,
+} from '../../common/mobile-management';
 /**
  * API do domínio PMOC — `/api/v1/pmoc`.
  *
@@ -62,6 +67,8 @@ import {
   StartPmocEquipmentExecutionDto,
   UpdatePmocPlanDto,
   UpdatePmocUnitDto,
+  UpdatePmocEquipmentScheduleDto,
+  CancelPmocEquipmentScheduleDto,
 } from './pmoc.dto';
 import { PmocService, type PmocActor } from './pmoc.service';
 
@@ -69,7 +76,10 @@ import { PmocService, type PmocActor } from './pmoc.service';
 @Controller('pmoc')
 @RequiresActivePlan()
 export class PmocController {
-  constructor(private readonly pmoc: PmocService) {}
+  constructor(
+    private readonly pmoc: PmocService,
+    private readonly documentExports: PmocDocumentExports,
+  ) {}
 
   /* ---------------------------------------------------------------- */
   /* Conformidade — antes de `:id`, senão a rota vira um identificador  */
@@ -102,6 +112,8 @@ export class PmocController {
   /* ---------------------------------------------------------------- */
 
   @Get('plans')
+  @MobileManagementShared()
+  @MobileManagement('pmoc')
   @Capabilities('pmoc.read')
   @Permissions('pmoc.read')
   @ApiOperation({ summary: 'PMOC plans, ordered by next due date' })
@@ -110,6 +122,7 @@ export class PmocController {
   }
 
   @Post('plans')
+  @MobileManagement('pmoc')
   @Capabilities('pmoc.manage')
   @Permissions('pmoc.manage')
   @ApiOperation({ summary: 'Create a plan; it starts as DRAFT' })
@@ -129,6 +142,7 @@ export class PmocController {
   /* ---------------------------------------------------------------- */
 
   @Get('units')
+  @MobileManagement('pmoc')
   @Capabilities('pmoc.read')
   @Permissions('pmoc.read')
   @ApiOperation({ summary: 'Unidades do sistema, com o roteiro de cada uma' })
@@ -223,6 +237,19 @@ export class PmocController {
    * a cobertura de antes da última alteração, e quem arquivasse esse papel
    * arquivaria uma declaração falsa.
    */
+  /** Exportação assíncrona (202); a rota síncrona abaixo continua valendo. */
+  @Post('plans/:id/document/exports')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @Capabilities('pmoc.read')
+  @Permissions('pmoc.read')
+  @ApiOperation({ summary: 'Request the PMOC plan document asynchronously' })
+  exportDocument(
+    @Param('id', ParseUUIDv7Pipe) id: string,
+    @Req() request: IdentityRequest,
+  ) {
+    return this.documentExports.request(id, this.actor(request));
+  }
+
   @Get('plans/:id/document')
   @Capabilities('pmoc.read')
   @Permissions('pmoc.read')
@@ -244,6 +271,8 @@ export class PmocController {
   }
 
   @Get('plans/:id')
+  @MobileManagementShared()
+  @MobileManagement('pmoc')
   @Capabilities('pmoc.read')
   @Permissions('pmoc.read')
   @ApiOperation({ summary: 'Plan with coverage, compliance and cycles' })
@@ -255,6 +284,7 @@ export class PmocController {
   }
 
   @Patch('plans/:id')
+  @MobileManagement('pmoc')
   @Capabilities('pmoc.manage')
   @Permissions('pmoc.manage')
   @ApiOperation({
@@ -302,6 +332,7 @@ export class PmocController {
   }
 
   @Post('plans/:id/activate')
+  @MobileManagement('pmoc')
   @Capabilities('pmoc.manage')
   @Permissions('pmoc.manage')
   @ApiOperation({
@@ -315,6 +346,7 @@ export class PmocController {
   }
 
   @Post('plans/:id/suspend')
+  @MobileManagement('pmoc')
   @Capabilities('pmoc.manage')
   @Permissions('pmoc.manage')
   @ApiOperation({ summary: 'Suspend: stops compliance evaluation' })
@@ -326,6 +358,7 @@ export class PmocController {
   }
 
   @Post('plans/:id/cancel')
+  @MobileManagement('pmoc')
   @Capabilities('pmoc.manage')
   @Permissions('pmoc.manage')
   @ApiOperation({
@@ -343,6 +376,7 @@ export class PmocController {
   /* ---------------------------------------------------------------- */
 
   @Get('plans/:id/equipment')
+  @MobileManagement('pmoc')
   @Capabilities('pmoc.read')
   @Permissions('pmoc.read')
   @ApiOperation({ summary: 'Equipment covered by the plan' })
@@ -380,6 +414,7 @@ export class PmocController {
   }
 
   @Post('plans/:id/equipment')
+  @MobileManagement('pmoc')
   @Capabilities('pmoc.manage')
   @Permissions('pmoc.manage')
   @ApiOperation({ summary: 'Cover an equipment; duplicates are refused' })
@@ -392,6 +427,7 @@ export class PmocController {
   }
 
   @Delete('plans/:id/equipment/:coverageId')
+  @MobileManagement('pmoc')
   @HttpCode(HttpStatus.NO_CONTENT)
   @Capabilities('pmoc.manage')
   @Permissions('pmoc.manage')
@@ -409,6 +445,7 @@ export class PmocController {
   /* ---------------------------------------------------------------- */
 
   @Get('plans/:id/executions')
+  @MobileManagement('pmoc')
   @Capabilities('pmoc.read')
   @Permissions('pmoc.read')
   @ApiOperation({ summary: 'Cycle history, newest first' })
@@ -420,6 +457,8 @@ export class PmocController {
   }
 
   @Get('plans/:id/cycles/:cycleId/equipment-executions')
+  @MobileManagementShared()
+  @MobileManagement('pmoc')
   @Capabilities('pmoc.read')
   @Permissions('pmoc.read')
   @ApiOperation({
@@ -430,7 +469,18 @@ export class PmocController {
     @Param('cycleId', ParseUUIDv7Pipe) cycleId: string,
     @Req() request: IdentityRequest,
   ) {
-    return this.pmoc.equipmentExecutions(id, cycleId, this.actor(request));
+    const actor = this.actor(request);
+    const delegated =
+      request.mobileManagementAllowed &&
+      request.mobileManagementAreas?.includes('pmoc') &&
+      request.identity?.organizationRoles?.includes('FIELD_TECHNICIAN');
+    return this.pmoc.equipmentExecutions(
+      id,
+      cycleId,
+      delegated
+        ? { ...actor, permissions: [...actor.permissions, 'pmoc.manage'] }
+        : actor,
+    );
   }
 
   @Get('plans/:id/cycles/:cycleId/equipment/:assetId/execution-preparation')
@@ -450,6 +500,46 @@ export class PmocController {
       cycleId,
       assetId,
       this.actor(request),
+    );
+  }
+
+  @Patch('plans/:id/cycles/:cycleId/equipment/:assetId/schedule')
+  @MobileManagement('pmoc')
+  @Capabilities('pmoc.manage')
+  @Permissions('pmoc.manage')
+  updateEquipmentSchedule(
+    @Param('id', ParseUUIDv7Pipe) id: string,
+    @Param('cycleId', ParseUUIDv7Pipe) cycleId: string,
+    @Param('assetId', ParseUUIDv7Pipe) assetId: string,
+    @Req() request: IdentityRequest,
+    @Body() input: UpdatePmocEquipmentScheduleDto,
+  ) {
+    return this.pmoc.manageEquipmentSchedule(
+      id,
+      cycleId,
+      assetId,
+      this.actor(request),
+      input,
+    );
+  }
+
+  @Post('plans/:id/cycles/:cycleId/equipment/:assetId/cancel')
+  @MobileManagement('pmoc')
+  @Capabilities('pmoc.manage')
+  @Permissions('pmoc.manage')
+  cancelEquipmentSchedule(
+    @Param('id', ParseUUIDv7Pipe) id: string,
+    @Param('cycleId', ParseUUIDv7Pipe) cycleId: string,
+    @Param('assetId', ParseUUIDv7Pipe) assetId: string,
+    @Req() request: IdentityRequest,
+    @Body() input: CancelPmocEquipmentScheduleDto,
+  ) {
+    return this.pmoc.manageEquipmentSchedule(
+      id,
+      cycleId,
+      assetId,
+      this.actor(request),
+      input,
     );
   }
 

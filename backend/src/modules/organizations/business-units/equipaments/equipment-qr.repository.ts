@@ -239,6 +239,15 @@ export class EquipmentQrRepository {
     });
   }
 
+  activeEquipment(equipmentId: string, organizationId: string) {
+    return this.rls.run((tx) =>
+      tx.asset.findFirst({
+        where: { id: equipmentId, organizationId, deletedAt: null },
+        select: { id: true, businessUnitId: true },
+      }),
+    );
+  }
+
   serviceHistory(input: {
     equipmentId: string;
     organizationId: string;
@@ -247,53 +256,19 @@ export class EquipmentQrRepository {
     limit: number;
   }) {
     return this.rls.run(async (tx) => {
-      const where: Prisma.OperationWhereInput = {
+      const where = {
         organizationId: input.organizationId,
         businessUnitId: input.businessUnitId,
-        deletedAt: null,
-        status: 'COMPLETED',
-        assets: { some: { assetId: input.equipmentId } },
+        assetId: input.equipmentId,
       };
-      const total = await tx.operation.count({ where });
-      const rows = await tx.operation.findMany({
+      const total = await tx.equipmentServiceHistory.count({ where });
+      const rows = await tx.equipmentServiceHistory.findMany({
         where,
-        orderBy: [{ completedAt: 'desc' }, { id: 'desc' }],
+        orderBy: [{ completedAt: 'desc' }, { operationId: 'desc' }],
         skip: (input.page - 1) * input.limit,
         take: input.limit,
-        select: {
-          id: true,
-          code: true,
-          title: true,
-          kind: true,
-          completedAt: true,
-          description: true,
-          responsibleFieldTechnician: { select: { displayName: true } },
-          pmocEquipmentExecution: { select: { notes: true } },
-          history: {
-            where: { action: 'FIELD_NOTE_ADDED' },
-            orderBy: { createdAt: 'asc' },
-            select: { details: true },
-          },
-        },
       });
-      const visits = rows.length
-        ? await tx.rvtExecution.findMany({
-            where: {
-              organizationId: input.organizationId,
-              businessUnitId: input.businessUnitId,
-              operationId: { in: rows.map((row) => row.id) },
-              status: 'COMPLETED',
-              equipment: { some: { assetId: input.equipmentId } },
-            },
-            select: {
-              operationId: true,
-              observations: true,
-              recommendations: true,
-              freeTextRecommendation: true,
-            },
-          })
-        : [];
-      return { rows, visits, total };
+      return { rows, total };
     });
   }
 }

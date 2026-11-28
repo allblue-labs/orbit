@@ -195,7 +195,7 @@ export const AUTOMATION_FIELD_LABELS: Readonly<Record<string, string>> = {
   executionId: "Execução",
   catalogItemId: "Item do catálogo",
   artifactType: "Tipo de documento",
-  templateKey: "Chave do template",
+  templateKey: "Chave do modelo",
   total: "Valor total",
   currency: "Moeda",
 };

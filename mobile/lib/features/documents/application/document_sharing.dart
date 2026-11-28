@@ -75,12 +75,20 @@ class DocumentSharing {
     required String fileName,
     String? subject,
     Rect? origin,
+  }) => shareDownloaded(
+    download: access == null
+        ? _downloader.fetch(artifactId: artifactId!, fileName: fileName)
+        : _downloader.fetchWith(access: access, fileName: fileName),
+    subject: subject,
+    origin: origin,
+  );
+
+  Stream<ShareState> shareDownloaded({
+    required Stream<DownloadState> download,
+    String? subject,
+    Rect? origin,
   }) async* {
     yield const ShareState(phase: SharePhase.preparing);
-
-    final download = access == null
-        ? _downloader.fetch(artifactId: artifactId!, fileName: fileName)
-        : _downloader.fetchWith(access: access, fileName: fileName);
 
     await for (final estado in download) {
       if (estado.phase == DownloadPhase.error) {

@@ -45,7 +45,7 @@ export function OrbitIntelligenceWidget({ widget, analytics }: WidgetProps) {
       title={widget.title}
       description={widget.description}
       actions={
-        healthScore === undefined ? null : (
+        healthScore == null ? null : (
           <Badge variant="secondary">Saúde {Math.round(healthScore)}</Badge>
         )
       }

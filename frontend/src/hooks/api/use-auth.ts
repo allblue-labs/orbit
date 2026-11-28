@@ -17,10 +17,12 @@ import { useCallback } from "react";
 import { queryKeys } from "@/api/query-keys";
 import { ROUTES, homeRouteFor } from "@/lib/routes";
 import { useSession } from "@/providers/session-provider";
-import { authService, type AuthResult } from "@/services/auth.service";
-import { billingService } from "@/services/billing.service";
+import {
+  authService,
+  type AuthResult,
+  type RegistrationResult,
+} from "@/services/auth.service";
 import { ROUTE_ASSINATURA } from "@/components/billing/subscription-access";
-import { rememberBillingTarget } from "@/components/billing/billing-redirect";
 import { requiresInitialPayment } from "@/components/billing/billing-session";
 import type {
   AcceptInvitationInput,
@@ -45,7 +47,7 @@ export interface AuthNavigationOptions {
  * `fetchQuery` popula o cache e devolve o estado na mesma chamada, evitando
  * decidir o redirecionamento com a sessão anterior (ainda anônima).
  */
-function useAuthenticatedRedirect(redirectTo?: string) {
+export function useAuthenticatedRedirect(redirectTo?: string) {
   const queryClient = useQueryClient();
   const router = useRouter();
 
@@ -55,12 +57,14 @@ function useAuthenticatedRedirect(redirectTo?: string) {
       queryFn: () => authService.session(),
       staleTime: 0,
     });
-    const destination = requiresInitialPayment(state)
-      ? ROUTE_ASSINATURA
-      : (redirectTo ??
-        homeRouteFor({
-          isPlatformAdmin: state.authenticated && state.isPlatformAdmin,
-        }));
+    const isPlatformAdmin = state.authenticated && state.isPlatformAdmin;
+    const platformMfaRequired =
+      state.authenticated && state.platformMfaRequired;
+    const destination = platformMfaRequired
+      ? ROUTES.platform
+      : !isPlatformAdmin && requiresInitialPayment(state)
+        ? ROUTE_ASSINATURA
+        : (redirectTo ?? homeRouteFor({ isPlatformAdmin }));
     router.replace(destination);
     router.refresh();
   }, [queryClient, redirectTo, router]);
@@ -75,56 +79,13 @@ export function useLogin(options: AuthNavigationOptions = {}) {
   );
 }
 
-export function useRegister(options: AuthNavigationOptions = {}) {
-  const redirect = useAuthenticatedRedirect(options.redirectTo);
-  const router = useRouter();
-  const queryClient = useQueryClient();
-
-  return useApiMutation<AuthResult, RegisterInput>(
+export function useRegister() {
+  const session = useSession();
+  return useApiMutation<RegistrationResult, RegisterInput>(
     (input) => authService.register(input),
     {
-      onSuccess: async (_result, input) => {
-        // O cadastro já foi gravado. Uma falha de cobrança deve permitir retomar
-        // o pagamento em Configurações, sem reenviar e duplicar o cadastro.
-        try {
-          await queryClient.fetchQuery({
-            queryKey: queryKeys.session(),
-            queryFn: () => authService.session(),
-            staleTime: 0,
-          });
-          const overview = await billingService.overview();
-          const subscription = overview.subscription;
-          if (subscription?.status === "PENDING_PAYMENT") {
-            const session = await billingService.createCheckout({
-              planCode: subscription.planCode,
-              billingInterval: subscription.billingInterval,
-            });
-            rememberBillingTarget({
-              subscriptionId: subscription.id,
-              planCode: subscription.planCode,
-              billingInterval: subscription.billingInterval,
-            });
-            window.location.assign(session.url);
-            return;
-          }
-          if (
-            input.planKey === "ESSENTIAL" &&
-            subscription?.planCode === "ESSENTIAL" &&
-            subscription.status === "TRIALING"
-          ) {
-            await redirect();
-            return;
-          }
-          router.replace(
-            `${ROUTE_ASSINATURA}&cadastro=concluido&pagamento=pendente`,
-          );
-          router.refresh();
-        } catch {
-          router.replace(
-            `${ROUTE_ASSINATURA}&cadastro=concluido&pagamento=pendente`,
-          );
-          router.refresh();
-        }
+      onSuccess: () => {
+        session.clear();
       },
     },
   );
@@ -161,7 +122,9 @@ export function useForgotPassword() {
 }
 
 /** Define a nova senha a partir do token recebido por e-mail. */
-export function useResetPassword(options: { redirectTo?: string } = {}) {
+export function useResetPassword(
+  options: { redirectTo?: string | false } = {},
+) {
   const router = useRouter();
   const redirectTo = options.redirectTo ?? ROUTES.login;
 
@@ -169,7 +132,7 @@ export function useResetPassword(options: { redirectTo?: string } = {}) {
     (input) => authService.resetPassword(input),
     {
       onSuccess: () => {
-        router.replace(redirectTo);
+        if (redirectTo !== false) router.replace(redirectTo);
       },
     },
   );

@@ -2,6 +2,7 @@ FLUTTER ?= flutter
 LOCAL_CONFIG ?= config/local.json
 STAGING_CONFIG ?= config/staging.json
 PRODUCTION_CONFIG ?= config/production.json
+ANDROID_SYMBOLS_DIR ?= build/symbols/android
 
 .PHONY: run-local run-android run-ios run-staging build-android-prod build-ios-prod
 
@@ -21,7 +22,7 @@ run-staging:
 
 build-android-prod:
 	@test -f "$(PRODUCTION_CONFIG)" || (echo "Crie $(PRODUCTION_CONFIG) a partir de config/production.example.json." && exit 1)
-	$(FLUTTER) build appbundle --release --dart-define-from-file="$(PRODUCTION_CONFIG)"
+	$(FLUTTER) build appbundle --release --obfuscate --split-debug-info="$(ANDROID_SYMBOLS_DIR)" --dart-define-from-file="$(PRODUCTION_CONFIG)"
 
 build-ios-prod:
 	@test -f "$(PRODUCTION_CONFIG)" || (echo "Crie $(PRODUCTION_CONFIG) a partir de config/production.example.json." && exit 1)

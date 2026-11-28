@@ -1,3 +1,4 @@
+import { MobileManagement } from '../../../common/mobile-management';
 import {
   Body,
   Controller,
@@ -36,6 +37,7 @@ export class TeamController {
   ) {}
 
   @Post('members')
+  @MobileManagement('team')
   @RequiresActivePlan()
   @Permissions('organization.members.update')
   @ApiOperation({
@@ -75,6 +77,7 @@ export class TeamController {
    * menor.
    */
   @Patch('members/:userId')
+  @MobileManagement('team')
   @RequiresActivePlan()
   @Permissions('organization.members.update')
   @ApiOperation({
@@ -104,18 +107,20 @@ export class TeamController {
     @Req() request: IdentityRequest,
     @Param('userId', ParseUUIDv7Pipe) userId: string,
   ) {
-    const { link, expiresAt, emailSent, member } =
+    const { link, expiresAt, emailSent, emailQueued, member } =
       await this.team.issuePasswordLink(this.actor(request), userId);
     return {
       link,
       expiresAt: expiresAt.toISOString(),
-      /** Diz ao owner se ainda precisa repassar o link por outro canal. */
+      /** Queue acceptance is not proof of email delivery. */
       emailSent,
+      emailQueued,
       member: this.readModels.member(member, ''),
     };
   }
 
   @Delete('members/:userId')
+  @MobileManagement('team')
   @RequiresActivePlan()
   @Permissions('organization.members.update')
   @HttpCode(HttpStatus.NO_CONTENT)

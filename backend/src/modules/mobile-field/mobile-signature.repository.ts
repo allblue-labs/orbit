@@ -303,7 +303,8 @@ export class MobileSignatureRepository {
         operation.completedByUserId === input.actorId;
       if (!assigned)
         throw new ForbiddenException(
-          'Somente o Técnico em Campo efetivo pode coletar o reconhecimento',
+          'Somente o técnico atribuído pode confirmar este atendimento com o cliente.',
+          'ATTENDANCE_NOT_ASSIGNED',
         );
       await tx.customerAcknowledgement.updateMany({
         where: {

@@ -169,7 +169,9 @@ test("o wizard monta a proposta e a deixa aguardando o cliente", async ({
 
   /* Passo 4 — desconto com motivo, e o extenso do total. */
   /* `exact`: "Motivo do desconto" também contém "Desconto". */
-  await dialog.getByLabel("Desconto", { exact: true }).fill("500");
+  await dialog
+    .getByLabel(/^Desconto(?:\s*\*?\s*\(obrigatório\))?$/)
+    .fill("500");
   await dialog
     .getByLabel("Motivo do desconto")
     .fill("contrato anual de manutenção");

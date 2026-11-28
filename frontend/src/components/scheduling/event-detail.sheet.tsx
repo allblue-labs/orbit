@@ -22,6 +22,7 @@
  * ocorrência alguma: a expansão é do `RecurrenceEngine`, e o que chega na
  * grade já vem expandido.
  */
+import { segmentLabel } from "@/lib/segment-label";
 import { useState } from "react";
 import Link from "next/link";
 import {
@@ -155,7 +156,7 @@ function EventDetailBody({
             </Badge>
           ) : null}
           {event.segment ? (
-            <Badge variant="outline">{event.segment}</Badge>
+            <Badge variant="outline">{segmentLabel(event.segment)}</Badge>
           ) : null}
         </div>
 

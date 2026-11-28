@@ -11,15 +11,16 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
+
+import '../../../core/contracts/mobile_field_contracts.dart';
 
 import '../../../app/providers.dart';
 import '../../../core/contracts/pmoc_contracts.dart';
 import '../../../core/design/orbit_primitives.dart';
-import '../../../core/routing/orbit_router.dart';
 import '../../../core/theme/orbit_theme.dart';
 import '../../../core/widgets/section_states.dart';
 import '../application/pmoc_providers.dart';
+import 'pmoc_entry.dart';
 import 'pmoc_labels.dart';
 
 class PmocPlanScreen extends ConsumerWidget {
@@ -259,13 +260,17 @@ class _EquipmentCard extends StatelessWidget {
 
           const SizedBox(height: OrbitSpacing.sm),
           FilledButton(
+            /* A mesma porta da fila: inicia e entra numa ação só. Concluído
+               só entra — não há o que iniciar, e o que se quer é o relatório. */
             onPressed: habilitado
-                ? () => context.push(
-                    OrbitRoutes.pmocAttendance(
+                ? () => enterPmocAttendance(
+                    context,
+                    PmocAddressContract(
                       planId: planId,
                       cycleId: cycleId,
                       assetId: item.assetId,
                     ),
+                    start: item.status != 'COMPLETED',
                   )
                 : null,
             style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
@@ -276,7 +281,7 @@ class _EquipmentCard extends StatelessWidget {
             child: Text(switch (item.status) {
               'IN_PROGRESS' => 'Continuar atendimento',
               'COMPLETED' => 'Ver atendimento e relatório',
-              _ => 'Atender',
+              _ => 'Iniciar atendimento',
             }),
           ),
         ],

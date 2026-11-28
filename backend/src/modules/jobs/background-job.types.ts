@@ -11,9 +11,8 @@
  *
  * Postgres com `FOR UPDATE SKIP LOCKED` entrega o que a PR exige — exclusão
  * mútua entre réplicas, idempotência, retry, backoff, dead-letter — sem um
- * serviço novo para operar, monitorar e proteger. A mesma transação que grava o
- * resultado do trabalho fecha o job: não existe janela em que um renderizou e o
- * outro acha que ainda não.
+ * serviço novo para operar, monitorar e proteger. O fechamento exige a posse do lease. Cada processador deve
+ * reconciliar seu resultado durável antes de repetir efeitos externos.
  *
  * O limite honesto: isto atende dezenas de jobs por segundo, não milhares. Se o
  * volume exigir, a troca por uma fila dedicada é substituir `BackgroundJobQueue`
@@ -79,6 +78,14 @@ export const JOB_QUEUES = {
    * paralelo. O ciclo seguinte agenda os próprios avisos quando nasce.
    */
   pmocDueCheck: 'pmoc.due-check',
+  /**
+   * Exportação assíncrona de documento (orçamento, orçamento aceito, plano
+   * PMOC, etiqueta de equipamento): gera, envia ao R2 e fecha o registro de
+   * `document_exports`. Grupo `pdf`, no container `documents`.
+   */
+  documentExport: 'document.export',
+  /** Remove o arquivo e o registro de uma exportação vencida. */
+  documentExportCleanup: 'document.export.cleanup',
   mobileSyncCleanup: 'mobile.sync.cleanup',
   mobileEvidenceCleanup: 'mobile.evidence.cleanup',
   mobilePushDelivery: 'mobile.push.delivery',
@@ -155,6 +162,7 @@ export interface BackgroundJobRecord {
   correlationId: string;
   actorUserId: string | null;
   lastError: string | null;
+  lockedBy?: string | null;
   availableAt: Date;
   createdAt: Date;
 }
@@ -197,7 +205,20 @@ export function scopeFor(
  */
 export interface JobProcessor {
   readonly queue: JobQueue;
-  process(job: BackgroundJobRecord): Promise<void>;
+  /**
+   * `signal` é abortado quando o job estoura o tempo limite do grupo (ou o
+   * worker está encerrando). Opcional: quem ignora o sinal continua correto —
+   * o lease já foi devolvido, e o `succeed` tardio é recusado.
+   */
+  process(job: BackgroundJobRecord, signal?: AbortSignal): Promise<void>;
+}
+
+/** O job estourou o tempo limite do grupo. Conta como tentativa. */
+export class JobTimeoutError extends Error {
+  constructor(readonly timeoutMs: number) {
+    super(`job excedeu ${timeoutMs} ms`);
+    this.name = 'JobTimeoutError';
+  }
 }
 
 /**

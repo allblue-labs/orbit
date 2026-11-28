@@ -1,5 +1,6 @@
 "use client";
 
+import { ASSET_CATEGORY_LABELS } from "@/entities";
 import { useState } from "react";
 import {
   Check,
@@ -371,6 +372,7 @@ export function RvtConfigurationForm({
                         <span className="text-xs text-muted-foreground">
                           {asset.identifier ??
                             asset.serialNumber ??
+                            ASSET_CATEGORY_LABELS[asset.category] ??
                             asset.category}
                         </span>
                       </span>

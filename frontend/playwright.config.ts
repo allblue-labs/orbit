@@ -19,6 +19,8 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./e2e",
+  // Synthetic-upstream checks have their own standalone configuration.
+  testIgnore: "**/dependencies.smoke.spec.ts",
   timeout: 60_000,
   expect: { timeout: 15_000 },
   /** Serial: a suíte compartilha uma organização real e um banco real. */
@@ -43,7 +45,10 @@ export default defineConfig({
   projects: [
     {
       name: "desktop",
-      use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } },
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1440, height: 900 },
+      },
     },
   ],
 });

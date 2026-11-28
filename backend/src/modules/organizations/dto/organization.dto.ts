@@ -135,7 +135,8 @@ export class UpdateBusinessUnitLogoDto {
   })
   @IsString()
   @MaxLength(1_400_000)
-  image!: string;
+  @IsOptional()
+  image?: string;
 }
 
 /**
@@ -152,7 +153,8 @@ export class UpdateOrganizationLogoDto {
   })
   @IsString()
   @MaxLength(1_400_000)
-  image!: string;
+  @IsOptional()
+  image?: string;
 }
 
 export class CreateOrganizationDto {

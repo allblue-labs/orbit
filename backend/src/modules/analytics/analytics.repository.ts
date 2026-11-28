@@ -1,28 +1,33 @@
 import { Injectable } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
 import { RlsTransaction } from '../../database';
 import { EntityNotFoundException } from '../../exceptions';
-import type { AnalyticsDomain } from './analytics.read-models';
-import type { AnalyticsRange, AnalyticsSnapshot } from './analytics.types';
+import { commitmentAnalytics, operationAnalytics } from './analytics.queries';
+import type { AnalyticsDomain, TrendPoint } from './analytics.read-models';
+import type {
+  AnalyticsRange,
+  AnalyticsSnapshot,
+  CommitmentCounts,
+  OperationCounts,
+  PeriodCounts,
+} from './analytics.types';
 
-const operationCoreSelect = {
-  id: true,
-  status: true,
-  scheduledEnd: true,
-  startedAt: true,
-  completedAt: true,
-  createdAt: true,
-} satisfies Prisma.OperationSelect;
+const emptyOperations: OperationCounts = {
+  cohort: 0,
+  scheduled: 0,
+  assigned: 0,
+  delivered: 0,
+  withDeadline: 0,
+  onTime: 0,
+};
+const emptyCommitments: CommitmentCounts = { total: 0, overdue: 0, onTime: 0 };
+type OperationSummary = AnalyticsSnapshot['operations'] & {
+  createdTrend: TrendPoint[];
+  completedTrend: TrendPoint[];
+};
+type CommitmentSummary = PeriodCounts<CommitmentCounts> & {
+  trend: TrendPoint[];
+};
 
-const operationSelect = {
-  ...operationCoreSelect,
-  users: { select: { user: { select: { id: true, displayName: true } } } },
-} satisfies Prisma.OperationSelect;
-
-/**
- * Read-only aggregation boundary. Every read executes in the tenant RLS
- * transaction; Analytics never owns or persists facts.
- */
 @Injectable()
 export class AnalyticsRepository {
   constructor(private readonly rls: RlsTransaction) {}
@@ -31,136 +36,86 @@ export class AnalyticsRepository {
     organizationId: string,
     range: AnalyticsRange,
     domains: ReadonlySet<AnalyticsDomain>,
+    includeTrends = true,
   ): Promise<AnalyticsSnapshot> {
     return this.rls.run(async (tx) => {
-      const scope = {
-        organizationId,
-        deletedAt: null,
-        businessUnitId: range.businessUnitId,
-      };
-      /**
-       * Seis consultas, uma de cada vez.
-       *
-       * Elas dividem o **mesmo cliente transacional**, e um cliente `pg`
-       * atende uma consulta por vez: disparar as seis juntas não as tornava
-       * paralelas — enfileirava-as no driver e ainda prendia a conexão por
-       * todo o intervalo, com o relógio da transação correndo. Ver
-       * `docs/transaction-concurrency.md`.
-       */
       const organization = await tx.organization.findFirst({
         where: { id: organizationId, deletedAt: null },
-        select: { id: true, primarySegment: true },
+        select: { id: true },
       });
-      const readsOperations =
-        domains.has('OPERATIONS') || domains.has('TECHNICIANS');
-      const readsTechnicians = domains.has('TECHNICIANS');
-      const operations = readsOperations
-        ? readsTechnicians
-          ? await tx.operation.findMany({
-              where: {
-                ...scope,
-                createdAt: { gte: range.from, lte: range.to },
-              },
-              select: operationSelect,
-              orderBy: { createdAt: 'asc' },
-            })
-          : (
-              await tx.operation.findMany({
-                where: {
-                  ...scope,
-                  createdAt: { gte: range.from, lte: range.to },
-                },
-                select: operationCoreSelect,
-                orderBy: { createdAt: 'asc' },
-              })
-            ).map((operation) => ({ ...operation, users: [] }))
-        : [];
-      const previousOperations = readsOperations
-        ? readsTechnicians
-          ? await tx.operation.findMany({
-              where: {
-                ...scope,
-                createdAt: {
-                  gte: range.previousFrom,
-                  lte: range.previousTo,
-                },
-              },
-              select: operationSelect,
-              orderBy: { createdAt: 'asc' },
-            })
-          : (
-              await tx.operation.findMany({
-                where: {
-                  ...scope,
-                  createdAt: {
-                    gte: range.previousFrom,
-                    lte: range.previousTo,
-                  },
-                },
-                select: operationCoreSelect,
-                orderBy: { createdAt: 'asc' },
-              })
-            ).map((operation) => ({ ...operation, users: [] }))
-        : [];
-      /**
-       * PMOC vem do **domínio de PMOC**, não do documento (PR-26).
-       *
-       * Até aqui, o indicador era derivado de `reports` cujo template tinha
-       * "PMOC" no nome — o que media quantos PDFs foram preenchidos, e não se
-       * a manutenção aconteceu. Agora mede o ciclo: previsto, cumprido, e
-       * quando. O formato devolvido é o mesmo, então os motores de KPI e de
-       * tendência não mudam.
-       */
-      const pmocs = domains.has('PMOC')
-        ? await tx.pmocExecution
-            .findMany({
-              where: {
-                organizationId,
-                plan: {
-                  businessUnitId: range.businessUnitId,
-                  deletedAt: null,
-                },
-                dueOn: { gte: range.from, lte: range.to },
-              },
-              select: { status: true, dueOn: true, performedAt: true },
-            })
-            .then((rows) =>
-              rows.map((row) => ({
-                status: row.status,
-                createdAt: row.dueOn,
-                finalizedAt: row.performedAt,
-              })),
-            )
-        : [];
-      const assets = domains.has('EQUIPMENT')
-        ? await tx.asset.findMany({
+      if (!organization)
+        throw new EntityNotFoundException('Organization', organizationId);
+
+      const technicians = domains.has('TECHNICIANS');
+      const operations =
+        domains.has('OPERATIONS') || technicians
+          ? (
+              await tx.$queryRaw<OperationSummary[]>(
+                operationAnalytics(
+                  organizationId,
+                  range,
+                  includeTrends && domains.has('OPERATIONS'),
+                  technicians,
+                ),
+              )
+            )[0]!
+          : {
+              current: emptyOperations,
+              previous: emptyOperations,
+              open: 0,
+              overdue: 0,
+              openWithDeadline: 0,
+              unassigned: 0,
+              unscheduled: 0,
+              completedCohort: 0,
+              activeTechnicians: 0,
+              createdTrend: [],
+              completedTrend: [],
+            };
+      const { createdTrend, completedTrend, ...operationCounts } = operations;
+
+      const commitment = async (
+        domain: 'PMOC' | 'RVT',
+      ): Promise<CommitmentSummary> =>
+        domains.has(domain)
+          ? (
+              await tx.$queryRaw<CommitmentSummary[]>(
+                commitmentAnalytics(
+                  domain,
+                  organizationId,
+                  range,
+                  includeTrends,
+                ),
+              )
+            )[0]!
+          : {
+              current: emptyCommitments,
+              previous: emptyCommitments,
+              trend: [],
+            };
+      const { trend: pmocTrend, ...pmoc } = await commitment('PMOC');
+      const { current, previous } = await commitment('RVT');
+      const equipmentRegistered = domains.has('EQUIPMENT')
+        ? await tx.asset.count({
             where: {
               organizationId,
               businessUnitId: range.businessUnitId,
               deletedAt: null,
             },
-            select: { status: true },
           })
-        : [];
-      const customers = domains.has('CONTRACTS')
-        ? await tx.customer.findMany({
-            where: { organizationId, deletedAt: null },
-            select: { status: true },
-          })
-        : [];
-      if (!organization)
-        throw new EntityNotFoundException('Organization', organizationId);
+        : 0;
+
       return {
-        organization: {
-          id: organization.id,
-          segment: organization.primarySegment,
-        },
         range,
-        operations,
-        previousOperations,
-        pmocs,
-        assets,
-        customers,
+        operations: operationCounts,
+        pmoc,
+        rvt: { current, previous },
+        equipmentRegistered,
+        trends: {
+          created: createdTrend,
+          completed: completedTrend,
+          pmoc: pmocTrend,
+        },
       };
     });
   }

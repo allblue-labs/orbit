@@ -44,14 +44,19 @@
  * explicação.
  */
 import { useState } from "react";
+import { useAction } from "@/actions";
 import {
   CalendarClock,
+  Download,
+  ReceiptText,
   MoreHorizontal,
   Pencil,
   Trash2,
   XCircle,
 } from "lucide-react";
 
+import { ReceiptWizardDialog } from "@/components/financial/receipts/receipt-wizard.dialog";
+import { OperationArtifactExecutionsSection } from "./workspace/artifact-executions.section";
 import { MutationError } from "@/components/artifact-studio/mutation-error";
 import { Button } from "@/components/ui/button";
 import {
@@ -98,7 +103,8 @@ import {
 } from "@/types/operations";
 import { operationPriorityLabel } from "./operation-badges";
 
-type ActionKind = "reschedule" | "priority" | "status" | "delete";
+type ActionKind =
+  "reschedule" | "priority" | "status" | "delete" | "receipt" | "documents";
 
 export function OperationActions({
   operation,
@@ -111,6 +117,7 @@ export function OperationActions({
   onEdit: () => void;
 }) {
   const session = useSession();
+  const download = useAction("artifact-execution.download-document");
   const [action, setAction] = useState<ActionKind | null>(null);
 
   /** O que este registro permite, segundo o servidor. */
@@ -130,7 +137,22 @@ export function OperationActions({
     authority.permits("CHANGE_STATUS");
   const canDelete = session.hasPermission("operations.delete");
 
-  if (!canUpdate && !canChangeStatus && !canDelete) return null;
+  const completed = operation.status === "COMPLETED";
+  const canIssueReceipt =
+    completed && session.hasPermission("financial.manage");
+  const canDownload =
+    completed &&
+    download.allowed &&
+    session.hasPermission("artifact_executions.read");
+
+  if (
+    !canUpdate &&
+    !canChangeStatus &&
+    !canDelete &&
+    !canIssueReceipt &&
+    !canDownload
+  )
+    return null;
 
   return (
     <>
@@ -174,6 +196,19 @@ export function OperationActions({
             </DropdownMenuItem>
           ) : null}
 
+          {canIssueReceipt ? (
+            <DropdownMenuItem onSelect={() => setAction("receipt")}>
+              <ReceiptText className="size-4" />
+              Gerar recibo
+            </DropdownMenuItem>
+          ) : null}
+          {canDownload ? (
+            <DropdownMenuItem onSelect={() => setAction("documents")}>
+              <Download className="size-4" />
+              Baixar documento
+            </DropdownMenuItem>
+          ) : null}
+
           {canDelete ? (
             <>
               <DropdownMenuSeparator />
@@ -189,13 +224,32 @@ export function OperationActions({
         </DropdownMenuContent>
       </DropdownMenu>
 
+      <ReceiptWizardDialog
+        open={action === "receipt"}
+        operationId={operation.id}
+        onOpenChange={(open) => {
+          if (!open) setAction(null);
+        }}
+      />
       <Dialog
-        open={action !== null}
+        open={action !== null && action !== "receipt"}
         onOpenChange={(open) => {
           if (!open) setAction(null);
         }}
       >
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          {action === "documents" ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>Baixar documento</DialogTitle>
+                <DialogDescription>{operation.title}</DialogDescription>
+              </DialogHeader>
+              <OperationArtifactExecutionsSection
+                operationId={operation.id}
+                completed
+              />
+            </>
+          ) : null}
           {action === "reschedule" ? (
             <RescheduleForm
               operation={operation}
@@ -239,13 +293,30 @@ function RescheduleForm({
     toLocalInput(operation.scheduledStart, timeZone),
   );
 
+  if (operation.status === "COMPLETED") {
+    return (
+      <>
+        <DialogHeader>
+          <DialogTitle>Operação concluída</DialogTitle>
+          <DialogDescription>
+            Uma operação concluída não pode ser reagendada. O proprietário pode
+            reabri-la pelo menu Alterar status. O atendimento anterior permanece
+            no histórico.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button onClick={onClose}>Entendi</Button>
+        </DialogFooter>
+      </>
+    );
+  }
+
   return (
     <>
       <DialogHeader>
         <DialogTitle>Reagendar {operation.code}</DialogTitle>
         <DialogDescription>
-          Quando o atendimento começa, no fuso {timeZone}. A operação não passa
-          pelo motor de agenda — nenhuma sobreposição é avaliada.
+          Informe o novo horário de início no fuso {timeZone}.
         </DialogDescription>
       </DialogHeader>
 
@@ -273,13 +344,29 @@ function RescheduleForm({
           Cancelar
         </Button>
         <Button
-          disabled={update.isPending}
-          onClick={() =>
+          disabled={!start || update.isPending}
+          onClick={() => {
+            const scheduledStart = toInstant(start, timeZone);
+            if (!scheduledStart) return;
+            const previousStart = operation.scheduledStart;
+            const previousEnd = operation.scheduledEnd;
+            const duration =
+              previousStart && previousEnd
+                ? Date.parse(previousEnd) - Date.parse(previousStart)
+                : 0;
             update.mutate(
-              { scheduledStart: toInstant(start, timeZone) },
+              {
+                scheduledStart,
+                scheduledEnd:
+                  duration > 0
+                    ? new Date(
+                        Date.parse(scheduledStart) + duration,
+                      ).toISOString()
+                    : undefined,
+              },
               { onSuccess: onClose },
-            )
-          }
+            );
+          }}
         >
           {update.isPending ? "Salvando…" : "Reagendar"}
         </Button>
@@ -307,7 +394,8 @@ function PriorityForm({
       <DialogHeader>
         <DialogTitle>Prioridade de {operation.code}</DialogTitle>
         <DialogDescription>
-          A prioridade não altera a ordem da listagem, que segue o agendamento e a data de criação.
+          A prioridade não altera a ordem da listagem, que segue o agendamento e
+          a data de criação.
         </DialogDescription>
       </DialogHeader>
 
@@ -383,7 +471,8 @@ function StatusForm({
       <DialogHeader>
         <DialogTitle>Status de {operation.code}</DialogTitle>
         <DialogDescription>
-          Apenas as mudanças possíveis a partir da situação atual são oferecidas.
+          Apenas as mudanças possíveis a partir da situação atual são
+          oferecidas.
         </DialogDescription>
       </DialogHeader>
 
@@ -482,8 +571,8 @@ function DeleteForm({
       <DialogHeader>
         <DialogTitle>Excluir {operation.code}?</DialogTitle>
         <DialogDescription>
-          A exclusão remove o registro das listagens e preserva o histórico. Cancelar a operação, mudando o status,
-          preserva o rastro na interface.
+          A exclusão remove o registro das listagens e preserva o histórico.
+          Cancelar a operação, mudando o status, preserva o rastro na interface.
         </DialogDescription>
       </DialogHeader>
 

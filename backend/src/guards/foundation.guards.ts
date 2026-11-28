@@ -8,10 +8,14 @@ import {
   SURFACES_KEY,
 } from '../decorators';
 import { ForbiddenException, UnauthorizedException } from '../exceptions';
+import { isMobileManagementRequest } from '../common/mobile-management';
 import { AuthorizationService } from '../common/authorization.service';
 
 interface GuardRequest {
   user?: IAuthenticatedUser;
+  sessionClient?: string;
+  mobileManagementAllowed?: boolean;
+  header?(name: string): string | undefined;
   requestContext?: IRequestContext;
 }
 
@@ -103,6 +107,14 @@ export class SurfaceGuard extends MetadataGuard implements CanActivate {
       context.getClass(),
     ]);
     if (isPublic) return true;
+
+    const request = getRequest(context);
+    const targets = [context.getHandler(), context.getClass()];
+    if (isMobileManagementRequest(this.reflector, targets, request)) {
+      if (!request.mobileManagementAllowed)
+        throw new ForbiddenException('Mobile management access is required');
+      return true;
+    }
 
     const declared = this.required(context, SURFACES_KEY);
     // Authenticated product APIs are Web/API by default. Mobile access is an

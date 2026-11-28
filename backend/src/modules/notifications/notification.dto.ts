@@ -20,6 +20,7 @@ import {
 } from 'class-validator';
 import { NotificationStatus, NotificationType } from '../../contracts';
 import { IsUUIDv7 } from '../../validators';
+// REALTIME is a compatibility alias for the persisted IN_APP inbox, never a socket.
 const supportedChannels = ['IN_APP', 'REALTIME', 'EMAIL', 'PUSH'] as const;
 
 export class NotificationQueryDto {

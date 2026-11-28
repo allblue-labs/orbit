@@ -23,6 +23,8 @@ import type {
   RvtPartyReadModel,
   RvtTimelineItemReadModel,
   RvtMaintenanceTypeReadModel,
+  RvtCursorPageReadModel,
+  RvtConfigurationUpdateReadModel,
 } from "./contracts/modules/rvt/rvt.read-models";
 
 export type RvtConfiguration = RvtConfigurationReadModel;
@@ -69,11 +71,7 @@ export interface RvtTimelineQuery {
 }
 
 /** Página por cursor, como o backend a devolve. */
-export interface RvtCursorPage<T> {
-  data: T[];
-  nextCursor: string | null;
-  hasNextPage: boolean;
-}
+export type RvtCursorPage<T> = RvtCursorPageReadModel<T>;
 
 /* ------------------------------------------------------------------ */
 /* Entradas                                                            */
@@ -128,16 +126,7 @@ export type UpdateRvtConfigurationInput = Partial<
  * permanecem. Estes três números vêm de lá — a tela não os deduz comparando
  * listas.
  */
-export interface RvtReconciliation {
-  created: number;
-  cancelled: number;
-  rescheduled: number;
-}
-
-export interface RvtUpdateResult {
-  configuration: RvtConfiguration;
-  reconciliation: RvtReconciliation;
-}
+export type RvtUpdateResult = RvtConfigurationUpdateReadModel;
 
 /* ------------------------------------------------------------------ */
 /* Leitura defensiva do JSON livre                                     */

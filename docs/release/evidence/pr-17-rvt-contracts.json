@@ -1,0 +1,33 @@
+{
+  "pr": "PR-17",
+  "date": "2026-11-18",
+  "baseCommit": "281b9bb6fe2fec4289dd0580aaebd177cb56199f",
+  "implementationCommit": "ee49cba916d9ac456efdcdae19cd9130fff3d7a3",
+  "database": {
+    "engine": "PostgreSQL 17.11",
+    "environment": "disposable",
+    "migrationsApplied": 127,
+    "runtimeRole": "orbit_app",
+    "superuser": false,
+    "bypassRls": false
+  },
+  "checks": {
+    "backendUnitTests": 35,
+    "backendHttpTests": 15,
+    "frontendUnitTests": 10,
+    "backendBuild": "PASS",
+    "typescript": "PASS",
+    "changedFilesEslint": "PASS",
+    "rvtContractsSync": "PASS"
+  },
+  "suites": [
+    "rvt-management.spec.ts",
+    "rvt.domain.spec.ts",
+    "rvt.e2e-spec.ts",
+    "recurring-authorization.e2e-spec.ts",
+    "frontend/src/registry/rvt.test.ts"
+  ],
+  "observations": [
+    "The integrated run emitted a pg deprecation warning about simultaneous queries. Its source was not traced."
+  ]
+}

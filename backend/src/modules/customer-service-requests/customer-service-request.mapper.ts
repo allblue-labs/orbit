@@ -9,7 +9,9 @@ import type {
 import { CustomerServiceRequestPolicy } from './customer-service-request.policy';
 import type {
   CustomerServiceRequestCategory,
+  CustomerServiceRequestEquipmentCondition,
   CustomerServiceRequestStatus,
+  CustomerServiceRequestUrgency,
 } from './customer-service-request.types';
 
 const statusLabels: Record<CustomerServiceRequestStatus, string> = {
@@ -21,6 +23,25 @@ const statusLabels: Record<CustomerServiceRequestStatus, string> = {
   REJECTED: 'Recusado',
   CANCELLED: 'Cancelado',
 };
+
+const urgencyLabels: Record<CustomerServiceRequestUrgency, string> = {
+  LOW: 'Baixa',
+  NORMAL: 'Normal',
+  HIGH: 'Alta',
+  URGENT: 'Urgente',
+};
+
+const conditionLabels: Record<
+  CustomerServiceRequestEquipmentCondition,
+  string
+> = {
+  STOPPED: 'Parado',
+  MALFUNCTIONING: 'Funcionando com problema',
+  WORKING: 'Funcionando normalmente',
+};
+
+const texto = (value: unknown): string | null =>
+  typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
 
 const categoryLabels: Record<CustomerServiceRequestCategory, string> = {
   MAINTENANCE: 'Manutenção',
@@ -38,6 +59,8 @@ interface RequestRecord {
   subject: string;
   description?: string;
   status: string;
+  urgency?: string;
+  details?: unknown;
   version: number;
   submittedAt: Date;
   updatedAt: Date;
@@ -46,6 +69,7 @@ interface RequestRecord {
   convertedOperationId?: string | null;
   asset: { id: string; name: string; identifier: string | null } | null;
   customer?: { id: string; legalName: string; tradeName: string | null };
+  createdByPortalIdentity?: { displayName: string } | null;
   businessUnit?: {
     id: string;
     legalName: string;
@@ -98,6 +122,8 @@ export class CustomerServiceRequestMapper {
     return {
       ...base,
       description: record.description ?? '',
+      details: this.detailsOf(record.details),
+      requester: record.createdByPortalIdentity?.displayName ?? null,
       customer: {
         id: record.customer?.id ?? '',
         name: record.customer?.tradeName ?? record.customer?.legalName ?? '',
@@ -109,7 +135,6 @@ export class CustomerServiceRequestMapper {
               record.businessUnit.tradeName ?? record.businessUnit.legalName,
           }
         : null,
-      assignedTo: record.assignedTo ?? null,
       convertedOperation: record.convertedOperation ?? null,
       timeline: (record.events ?? [])
         .filter(
@@ -127,13 +152,20 @@ export class CustomerServiceRequestMapper {
   ): CustomerServiceRequestListItemReadModel {
     const status = record.status as CustomerServiceRequestStatus;
     const category = record.category as CustomerServiceRequestCategory;
+    const urgency = (record.urgency ??
+      'NORMAL') as CustomerServiceRequestUrgency;
     return {
       id: record.id,
       code: record.code,
       category: { code: category, label: categoryLabels[category] },
       subject: record.subject,
       status: { code: status, label: statusLabels[status] },
+      urgency: { code: urgency, label: urgencyLabels[urgency] },
       asset: record.asset,
+      customerName: record.customer
+        ? (record.customer.tradeName ?? record.customer.legalName)
+        : null,
+      assignedTo: record.assignedTo ?? null,
       submittedAt: record.submittedAt.toISOString(),
       updatedAt: record.updatedAt.toISOString(),
       version: record.version,
@@ -147,6 +179,25 @@ export class CustomerServiceRequestMapper {
               status,
               Boolean(record.convertedOperationId),
             ),
+    };
+  }
+
+  private detailsOf(value: unknown) {
+    const map =
+      value && typeof value === 'object' && !Array.isArray(value)
+        ? (value as Record<string, unknown>)
+        : {};
+    const condicao = map.equipmentCondition as
+      CustomerServiceRequestEquipmentCondition | undefined;
+    return {
+      equipmentCondition:
+        condicao && condicao in conditionLabels
+          ? { code: condicao, label: conditionLabels[condicao] }
+          : null,
+      siteLocation: texto(map.siteLocation),
+      availability: texto(map.availability),
+      contactName: texto(map.contactName),
+      contactPhone: texto(map.contactPhone),
     };
   }
 

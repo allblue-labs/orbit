@@ -82,6 +82,9 @@ Future<bool> smokeApiIsUp() async {
     socket.destroy();
     return true;
   } on Object {
+    if (const bool.fromEnvironment('ORBIT_REQUIRE_API')) {
+      throw StateError('A API de testes obrigatória não está disponível.');
+    }
     return false;
   }
 }

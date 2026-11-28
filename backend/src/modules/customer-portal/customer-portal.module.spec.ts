@@ -1,4 +1,3 @@
-import { InfrastructureException } from '../../exceptions';
 import {
   CustomerPortalModule,
   customerPortalControllers,
@@ -9,17 +8,23 @@ describe('CustomerPortalModule release exposure', () => {
     expect(customerPortalControllers({ NODE_ENV: 'production' })).toEqual([]);
   });
 
-  it('fails closed if an operator tries to expose the unqualified portal', () => {
-    expect(() =>
+  it('só registra as rotas quando a instalação liga o portal', () => {
+    expect(
+      customerPortalControllers({
+        NODE_ENV: 'production',
+        CUSTOMER_PORTAL_ENABLED: 'false',
+      }),
+    ).toEqual([]);
+    expect(
       customerPortalControllers({
         NODE_ENV: 'production',
         CUSTOMER_PORTAL_ENABLED: 'true',
       }),
-    ).toThrow(InfrastructureException);
+    ).toHaveLength(7);
   });
 
   it('keeps the complete backend contract available to its isolated tests', () => {
-    expect(customerPortalControllers({ NODE_ENV: 'test' })).toHaveLength(4);
+    expect(customerPortalControllers({ NODE_ENV: 'test' })).toHaveLength(7);
     expect(CustomerPortalModule).toBeDefined();
   });
 });

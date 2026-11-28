@@ -31,7 +31,7 @@ Future<void> confirmLogout(BuildContext context, WidgetRef ref) async {
         needsRecovery
             ? 'Há registros locais que precisam de recuperação. Eles permanecerão preservados neste aparelho após sair da conta.'
             : hasWork
-            ? 'Há ações ou arquivos que ainda não chegaram ao servidor. Eles ficam guardados neste aparelho e só estarão disponíveis quando você entrar novamente com esta mesma conta.'
+            ? 'Há ações ou arquivos que ainda não foram enviados. Eles ficam guardados neste aparelho e só estarão disponíveis quando você entrar novamente com esta mesma conta.'
             : 'Você precisará entrar novamente para acessar seus atendimentos.',
       ),
       actions: [

@@ -41,7 +41,12 @@ class OrbitLogger {
   static String safePath(String value) {
     final withoutParameters = value.split(RegExp(r'[?#]')).first;
     final uri = Uri.tryParse(withoutParameters);
-    return uri?.path ?? '[caminho indisponível]';
+    return (uri?.path ?? '[caminho indisponível]').replaceAllMapped(
+      RegExp(
+        r'(/assets/qr/|/public/pmoc/contracts/|/public/quotes/proposals/)[^/]+',
+      ),
+      (match) => '${match[1]}***',
+    );
   }
 
   void debug(String message, {Map<String, Object?>? data}) {

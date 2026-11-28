@@ -1,3 +1,4 @@
+import { commercialPlansFixture } from '../../../../test/support/commercial-plans.fixture';
 import { TrialEligibilityService } from './trial-eligibility.service';
 
 describe('teste posterior ao cadastro', () => {
@@ -17,6 +18,7 @@ describe('teste posterior ao cadastro', () => {
       const service = new TrialEligibilityService(
         repository as never,
         { fingerprint: () => 'fingerprint-fixture' } as never,
+        commercialPlansFixture() as never,
       );
       await expect(service.canStartPendingTrial('org')).resolves.toBe(expected);
     },
@@ -35,8 +37,9 @@ describe('teste posterior ao cadastro', () => {
       const service = new TrialEligibilityService(
         repository as never,
         { fingerprint } as never,
+        commercialPlansFixture() as never,
       );
-      await service.startPendingTrial('org', 7, 'ANNUAL');
+      await service.startPendingTrial('org', 7, 'ANNUAL', 'ESSENTIAL');
       expect(fingerprint).toHaveBeenCalledWith('canonical-document');
       expect(repository.startPendingTrial).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -60,9 +63,10 @@ describe('teste posterior ao cadastro', () => {
     const service = new TrialEligibilityService(
       repository as never,
       {} as never,
+      commercialPlansFixture() as never,
     );
     await expect(
-      service.startPendingTrial('org', 7, 'MONTHLY'),
+      service.startPendingTrial('org', 7, 'MONTHLY', 'ESSENTIAL'),
     ).rejects.toMatchObject({ code: 'TRIAL_NOT_ELIGIBLE' });
     expect(repository.startPendingTrial).not.toHaveBeenCalled();
   });

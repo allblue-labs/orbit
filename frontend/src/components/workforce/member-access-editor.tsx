@@ -69,14 +69,18 @@ export function MemberAccessEditor({
 
   return (
     <div className="space-y-5">
+      <p className="rounded-lg border p-4 text-xs text-muted-foreground">
+        A visualização de orçamentos no aplicativo é liberada pelo proprietário
+        nas configurações de cada orçamento.
+      </p>
       <section className="space-y-3" aria-labelledby="member-units-title">
         <div>
           <p id="member-units-title" className="text-sm font-medium">
             Unidades de atuação
           </p>
           <p className="text-xs text-muted-foreground">
-            Selecione uma ou mais unidades. O servidor impede acesso fora do
-            seu próprio escopo.
+            Selecione as unidades em que esta pessoa poderá atuar. Você só pode
+            conceder acesso às unidades sob sua gestão.
           </p>
         </div>
         <div className="grid gap-2 sm:grid-cols-2">
@@ -152,11 +156,7 @@ export function MemberAccessEditor({
                       checked={allowedSurfaces.includes(surface.code)}
                       onCheckedChange={(value) =>
                         onAllowedSurfacesChange(
-                          toggle(
-                            allowedSurfaces,
-                            surface.code,
-                            value === true,
-                          ),
+                          toggle(allowedSurfaces, surface.code, value === true),
                         )
                       }
                     />
@@ -173,50 +173,52 @@ export function MemberAccessEditor({
                 concedendo.
               </p>
               <Accordion type="multiple" className="mt-2">
-                {(catalog?.permissionGroups ?? []).map((group) => {
-                  const count = group.permissions.filter((item) =>
-                    permissions.includes(item.code),
-                  ).length;
-                  return (
-                    <AccordionItem key={group.key} value={group.key}>
-                      <AccordionTrigger className="py-3 no-underline hover:no-underline">
-                        <span>
-                          {group.label}
-                          <span className="ml-2 text-xs text-muted-foreground">
-                            {count}/{group.permissions.length}
+                {(catalog?.permissionGroups ?? [])
+                  .filter((group) => group.key !== "mobile_documents")
+                  .map((group) => {
+                    const count = group.permissions.filter((item) =>
+                      permissions.includes(item.code),
+                    ).length;
+                    return (
+                      <AccordionItem key={group.key} value={group.key}>
+                        <AccordionTrigger className="py-3 no-underline hover:no-underline">
+                          <span>
+                            {group.label}
+                            <span className="ml-2 text-xs text-muted-foreground">
+                              {count}/{group.permissions.length}
+                            </span>
                           </span>
-                        </span>
-                      </AccordionTrigger>
-                      <AccordionContent>
-                        <div className="grid gap-2 sm:grid-cols-2">
-                          {group.permissions.map((item) => (
-                            <Label
-                              key={item.code}
-                              htmlFor={`member-permission-${item.code}`}
-                              className="flex cursor-pointer items-start gap-2 rounded-md p-2 font-normal hover:bg-muted/50"
-                            >
-                              <Checkbox
-                                id={`member-permission-${item.code}`}
-                                className="mt-0.5"
-                                checked={permissions.includes(item.code)}
-                                onCheckedChange={(value) =>
-                                  onPermissionsChange(
-                                    toggle(
-                                      permissions,
-                                      item.code,
-                                      value === true,
-                                    ),
-                                  )
-                                }
-                              />
-                              <span>{item.label}</span>
-                            </Label>
-                          ))}
-                        </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  );
-                })}
+                        </AccordionTrigger>
+                        <AccordionContent>
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            {group.permissions.map((item) => (
+                              <Label
+                                key={item.code}
+                                htmlFor={`member-permission-${item.code}`}
+                                className="flex cursor-pointer items-start gap-2 rounded-md p-2 font-normal hover:bg-muted/50"
+                              >
+                                <Checkbox
+                                  id={`member-permission-${item.code}`}
+                                  className="mt-0.5"
+                                  checked={permissions.includes(item.code)}
+                                  onCheckedChange={(value) =>
+                                    onPermissionsChange(
+                                      toggle(
+                                        permissions,
+                                        item.code,
+                                        value === true,
+                                      ),
+                                    )
+                                  }
+                                />
+                                <span>{item.label}</span>
+                              </Label>
+                            ))}
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    );
+                  })}
               </Accordion>
             </div>
           </div>

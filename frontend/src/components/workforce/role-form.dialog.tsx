@@ -95,7 +95,9 @@ function Body({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label required htmlFor="role-name">Nome</Label>
+          <Label required htmlFor="role-name">
+            Nome
+          </Label>
           <Input
             id="role-name"
             value={name}
@@ -142,8 +144,8 @@ function Body({
       <section>
         <p className="text-sm font-medium">Permissões</p>
         <p className="text-xs text-muted-foreground">
-          Selecione apenas o necessário. O servidor impede que um gestor conceda
-          acesso que ele próprio não possui.
+          Selecione apenas as permissões necessárias. Você pode conceder os
+          acessos que também possui.
         </p>
         <Accordion type="multiple" className="mt-2">
           {(catalog.data?.permissionGroups ?? []).map((group) => {

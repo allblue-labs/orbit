@@ -1,3 +1,6 @@
+import { paidSubscriptionFixture } from './support/paid-subscription-fixture';
+import { registerVerifiedOwner } from './support/verified-owner-fixture';
+import { replaceFixtureOwner } from './support/member-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
  * E2E do domínio PMOC.
@@ -170,23 +173,23 @@ describe('PMOC (e2e)', () => {
   async function register(label: string) {
     const suffix = randomUUID().slice(0, 8);
     const email = `pmoc.${label}.${suffix}@orbit.local`;
-    const registration = await http()
-      .post('/api/v1/identity/register')
-      .send({
-        ...REGISTRATION_LEGAL_ACCEPTANCE,
-        email,
-        firstName: 'Pmoc',
-        lastName: 'E2E',
-        password: PASSWORD,
-        organizationName: `Pmoc ${label} ${suffix}`,
-        legalName: `Pmoc ${label} ${suffix} LTDA`,
-        documentType: 'CNPJ',
-        documentNumber: cnpj(),
-        city: 'Recife',
-        street: 'Rua da Aurora',
-        stateCode: 'PE',
-      })
-      .expect(201);
+    const registration = await registerVerifiedOwner(app, {
+      ...REGISTRATION_LEGAL_ACCEPTANCE,
+      email,
+      firstName: 'Pmoc',
+      lastName: 'E2E',
+      password: PASSWORD,
+      organizationName: `Pmoc ${label} ${suffix}`,
+      legalName: `Pmoc ${label} ${suffix} LTDA`,
+      documentType: 'CNPJ',
+      documentNumber: cnpj(),
+      city: 'Recife',
+      street: 'Rua da Aurora',
+      stateCode: 'PE',
+      planKey: 'ENTERPRISE_UNLIMITED',
+    });
+    /* O cadastro exige plano, e as rotas de PMOC/RVT, assinatura ativa. */
+    await paidSubscriptionFixture(app, adminPrisma(), email);
     return {
       email,
       token: (registration.body as Envelope<{ accessToken: string }>).data
@@ -238,6 +241,7 @@ describe('PMOC (e2e)', () => {
         customerId,
         code: `PMOC-${digits(6)}`,
         name: 'Climatização — administrativo',
+        technicalResponsibleUserId: ownerUserId,
         startsOn: inDays(0),
         frequencyAmount: 6,
         frequencyUnit: 'MONTHS',
@@ -304,6 +308,17 @@ describe('PMOC (e2e)', () => {
       select: { id: true },
     });
     ownerUserId = me.id;
+    await auth(
+      http().patch(
+        `/api/v1/workforce/members/${ownerUserId}/professional-profile`,
+      ),
+    )
+      .send({
+        fieldTechnicianEnabled: true,
+        technicalResponsibleEnabled: true,
+        active: true,
+      })
+      .expect(200);
     const membership = await prisma.businessUnitMembership.findFirstOrThrow({
       where: { userId: me.id },
       select: { roleId: true },
@@ -401,6 +416,11 @@ describe('PMOC (e2e)', () => {
       where: { userId: restrictedUser.id },
       data: { roleId: limited.id },
     });
+    await replaceFixtureOwner(
+      prisma,
+      restrictedMembership.organizationId,
+      PASSWORD,
+    );
     restrictedToken = await login(restricted.email);
   }, 240000);
 
@@ -656,9 +676,11 @@ describe('PMOC (e2e)', () => {
         .send({})
         .expect(201);
     }
-    const contenders = await Promise.all(
-      Array.from({ length: 4 }, (_, index) => reserveEvidence(index + 5)),
-    );
+    // This scenario races finalization, not ingress admission (two uploads per
+    // tenant). Reserve/upload first, then keep the four finalizers concurrent.
+    const contenders: string[] = [];
+    for (let index = 0; index < 4; index++)
+      contenders.push(await reserveEvidence(index + 5));
     const finalized = await Promise.all(
       contenders.map((uploadId) =>
         auth(
@@ -714,6 +736,7 @@ describe('PMOC (e2e)', () => {
   it('4 · vigência invertida é recusada', async () => {
     await auth(http().post('/api/v1/pmoc/plans'))
       .send({
+        technicalResponsibleUserId: ownerUserId,
         businessUnitId: unitA,
         customerId,
         code: `PMOC-${digits(6)}`,
@@ -728,6 +751,7 @@ describe('PMOC (e2e)', () => {
     /** Periodicidade precisa ser positiva — o DTO e o banco concordam. */
     await auth(http().post('/api/v1/pmoc/plans'))
       .send({
+        technicalResponsibleUserId: ownerUserId,
         businessUnitId: unitA,
         customerId,
         code: `PMOC-${digits(6)}`,
@@ -1411,6 +1435,7 @@ describe('PMOC (e2e)', () => {
     );
     await auth(http().post('/api/v1/pmoc/plans'), restrictedToken)
       .send({
+        technicalResponsibleUserId: ownerUserId,
         businessUnitId: unitA,
         customerId,
         code: `PMOC-${digits(6)}`,
@@ -1725,6 +1750,10 @@ describe('PMOC (e2e)', () => {
       roles: { field: boolean; technical: boolean },
     ) => {
       const email = `pmoc.v2.${label}.${digits(6)}@orbit.local`;
+      const { id: fieldRoleId } = await prisma.role.findFirstOrThrow({
+        where: { organizationId, key: 'FIELD_TECHNICIAN' },
+        select: { id: true },
+      });
       const created = await prisma.user.create({
         data: {
           email,
@@ -1735,13 +1764,13 @@ describe('PMOC (e2e)', () => {
           status: 'ACTIVE',
           emailVerifiedAt: new Date(),
           organizationMemberships: {
-            create: { organizationId, roleId: ownerRoleId, status: 'ACTIVE' },
+            create: { organizationId, roleId: fieldRoleId, status: 'ACTIVE' },
           },
           businessUnitMemberships: {
             create: {
               organizationId,
               businessUnitId: unitA,
-              roleId: ownerRoleId,
+              roleId: fieldRoleId,
               status: 'ACTIVE',
             },
           },
@@ -3025,6 +3054,7 @@ describe('PMOC (e2e)', () => {
         .post('/api/v1/pmoc/plans')
         .set('Authorization', `Bearer ${token}`)
         .send({
+          technicalResponsibleUserId: ownerUserId,
           businessUnitId: unitA,
           customerId,
           name: 'Injeção cross-customer',
@@ -3042,6 +3072,7 @@ describe('PMOC (e2e)', () => {
         .post('/api/v1/pmoc/plans')
         .set('Authorization', `Bearer ${token}`)
         .send({
+          technicalResponsibleUserId: ownerUserId,
           businessUnitId: unitA,
           customerId,
           name: `Transacional ${randomUUID().slice(0, 8)}`,
@@ -3070,6 +3101,7 @@ describe('PMOC (e2e)', () => {
             .post('/api/v1/pmoc/plans')
             .set('Authorization', `Bearer ${token}`)
             .send({
+              technicalResponsibleUserId: ownerUserId,
               businessUnitId: unitA,
               customerId,
               name: `Concorrente ${indice} ${randomUUID().slice(0, 8)}`,
@@ -3096,6 +3128,7 @@ describe('PMOC (e2e)', () => {
     it('código customizado duplicado vira conflito público, não erro técnico', async () => {
       const code = `CONTRATO-${randomUUID().slice(0, 8).toUpperCase()}`;
       const corpo = (nome: string) => ({
+        technicalResponsibleUserId: ownerUserId,
         businessUnitId: unitA,
         customerId,
         code,
@@ -3130,6 +3163,7 @@ describe('PMOC (e2e)', () => {
         .post('/api/v1/pmoc/plans')
         .set('Authorization', `Bearer ${token}`)
         .send({
+          technicalResponsibleUserId: ownerUserId,
           businessUnitId: unitA,
           customerId,
           code: `LEGADO-${randomUUID().slice(0, 8).toUpperCase()}`,
@@ -3341,6 +3375,7 @@ describe('PMOC (e2e)', () => {
        */
       await auth(http().post('/api/v1/pmoc/plans'))
         .send({
+          technicalResponsibleUserId: ownerUserId,
           businessUnitId: unitA,
           customerId,
           name: 'Com unidade de fora',

@@ -79,4 +79,22 @@ describe("janelas de comparação mês a mês", () => {
     );
     expect(windows.thisMonth.from).toBe("2026-09-01T03:00:00.000Z");
   });
+  it("compares the same elapsed local time without counting the rest of today", () => {
+    const windows = buildMonthComparison(
+      new Date("2026-11-10T15:20:00Z"),
+      RECIFE,
+      true,
+    );
+    expect(windows.thisMonth.to).toBe("2026-11-10T15:20:00.000Z");
+    expect(windows.lastMonth.to).toBe("2026-10-10T15:20:00.000Z");
+  });
+  it("keeps a non-empty window in the first minute of the month", () => {
+    const windows = buildMonthComparison(
+      new Date("2026-11-01T03:00:00Z"),
+      RECIFE,
+      true,
+    );
+    expect(span(windows.thisMonth)).toBeGreaterThan(0);
+    expect(span(windows.lastMonth)).toBeGreaterThan(0);
+  });
 });

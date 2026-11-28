@@ -1,0 +1,32 @@
+{
+  "protocolVersion": "1.0.0",
+  "target": {
+    "productId": "orbit-v2",
+    "environment": "staging",
+    "instanceId": "orbit-staging-01",
+    "tenantId": "00000000-0000-7000-8000-000000000001"
+  },
+  "asOf": "2026-11-15T12:00:00Z",
+  "aggregateVersion": "7",
+  "watermark": "wm-demo",
+  "freshness": {
+    "observedAt": "2026-11-15T12:00:00Z",
+    "completeThrough": "2026-11-15T12:00:00Z",
+    "state": "FRESH",
+    "gapDetected": false
+  },
+  "data": {
+    "kind": "BILLING",
+    "invoiceId": "invoice-demo",
+    "subscriptionId": "subscription-demo",
+    "billing": {
+      "billingAccountRef": "orbit-staging-account",
+      "mode": "TEST"
+    },
+    "currency": "BRL",
+    "amountMinor": 19900,
+    "status": "PAID",
+    "settledAt": "2026-11-15T12:00:00Z",
+    "confirmedProviderPaymentMinor": 0
+  }
+}

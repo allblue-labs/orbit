@@ -20,6 +20,8 @@ export const ROUTES = {
   forgotPassword: "/recuperar-senha",
   resetPassword: "/redefinir-senha",
   invitation: "/convite",
+  /** Public with or without a session; the token proves mailbox ownership. */
+  emailVerification: "/confirmar-email",
   /**
    * O contrato do PMOC aberto por link temporário.
    *
@@ -85,6 +87,8 @@ export const ROUTES = {
   organization: "/organizacao",
   /** Customer Workspace — visão 360° do cliente. */
   customers: "/clientes",
+  /** Chamados abertos pelos clientes no portal — recebimento e gestão. */
+  serviceRequests: "/chamados",
   /** Notification Center. */
   notifications: "/notificacoes",
   /** Landing do Platform Administrator (painel será implementado adiante). */
@@ -113,6 +117,7 @@ export const PROTECTED_PREFIXES: readonly string[] = [
   ROUTES.profile,
   ROUTES.organization,
   ROUTES.customers,
+  ROUTES.serviceRequests,
   ROUTES.notifications,
   ROUTES.pmoc,
   ROUTES.rvt,
@@ -185,8 +190,13 @@ export function allowsAuthenticatedGuest(pathname: string): boolean {
 }
 
 /** Destino padrão após autenticar, conforme o tipo de conta. */
-export function homeRouteFor(options: { isPlatformAdmin: boolean }): string {
-  return options.isPlatformAdmin ? ROUTES.platform : ROUTES.dashboard;
+export function homeRouteFor(options: {
+  isPlatformAdmin: boolean;
+  platformMfaRequired?: boolean;
+}): string {
+  return options.isPlatformAdmin || options.platformMfaRequired
+    ? ROUTES.platform
+    : ROUTES.dashboard;
 }
 
 /** Motivo do redirecionamento para o login, exibido na tela. */

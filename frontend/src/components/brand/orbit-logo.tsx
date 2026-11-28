@@ -2,6 +2,10 @@
 
 import Image from "next/image";
 import { cn } from "@/lib/utils";
+import logo from "../../../public/orbit_logo.png";
+import logoReverse from "../../../public/orbit_logo_reverse.png";
+import mark from "../../../public/orbit_mark.png";
+import markReverse from "../../../public/orbit_mark_reverse.png";
 
 /**
  * Quatro arquivos: duas formas, duas tintas.
@@ -20,22 +24,8 @@ import { cn } from "@/lib/utils";
  * verdade — o que faltava era a tinta clara, não a chapa.
  */
 const ARTES = {
-  full: { claro: "/orbit_logo.png", escuro: "/orbit_logo_reverse.png" },
-  mark: { claro: "/orbit_mark.png", escuro: "/orbit_mark_reverse.png" },
-} as const;
-
-/**
- * As dimensões reais dos arquivos, já **aparados**.
- *
- * A arte vinha com margem transparente sobrando — o logotipo ocupava 66% da
- * largura e 32% da altura do próprio canvas. Com `object-contain`, o que cabia
- * na caixa era o canvas inteiro, então a marca aparecia minúscula dentro de um
- * retângulo de nada. Aparar o vazio é o que a fez voltar ao tamanho certo; a
- * arte não mudou.
- */
-const DIMENSOES = {
-  full: { width: 550, height: 202 },
-  mark: { width: 374, height: 374 },
+  full: { claro: logo, escuro: logoReverse },
+  mark: { claro: mark, escuro: markReverse },
 } as const;
 
 type OrbitLogoProps = {
@@ -54,7 +44,6 @@ type OrbitLogoProps = {
  */
 export function OrbitLogo({ variant = "full", className }: OrbitLogoProps) {
   const arte = ARTES[variant];
-  const { width, height } = DIMENSOES[variant];
   const alt = variant === "full" ? "Orbit Operations ERP" : "Orbit";
 
   /*
@@ -89,8 +78,7 @@ export function OrbitLogo({ variant = "full", className }: OrbitLogoProps) {
         src={arte.claro}
         alt=""
         aria-hidden
-        width={width}
-        height={height}
+        unoptimized
         priority
         className={cn("h-full object-contain dark:hidden", larguraDaArte)}
       />
@@ -98,8 +86,7 @@ export function OrbitLogo({ variant = "full", className }: OrbitLogoProps) {
         src={arte.escuro}
         alt=""
         aria-hidden
-        width={width}
-        height={height}
+        unoptimized
         priority
         className={cn("hidden h-full object-contain dark:block", larguraDaArte)}
       />

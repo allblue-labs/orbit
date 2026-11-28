@@ -12,7 +12,8 @@ import {
   RequiresActivePlan,
 } from '../subscription-plans/plan-access';
 import { DashboardService } from './dashboard.service';
-import { DashboardQueryDto } from './dto/dashboard.dto';
+import { DashboardFeedQueryDto, DashboardQueryDto } from './dto/dashboard.dto';
+import { DashboardFeedService } from './dashboard-feed.service';
 
 @ApiTags('Dashboard & Intelligence')
 @ApiBearerAuth()
@@ -21,7 +22,33 @@ import { DashboardQueryDto } from './dto/dashboard.dto';
 @Capabilities('dashboard.read')
 @Permissions('dashboard.read')
 export class DashboardController {
-  constructor(private readonly dashboard: DashboardService) {}
+  constructor(
+    private readonly dashboard: DashboardService,
+    private readonly feed: DashboardFeedService,
+  ) {}
+
+  /**
+   * O que aconteceu nos últimos 30 dias: atendimentos, chamados, orçamentos
+   * decididos e manutenções concluídas — cada fonte com a leitura do módulo.
+   */
+  @Get('activity')
+  @ApiOperation({ summary: 'Recent activity feed for the dashboard' })
+  activity(
+    @Req() request: IdentityRequest,
+    @Query() query: DashboardFeedQueryDto,
+  ) {
+    return this.feed.activity(request.identity!, query);
+  }
+
+  /** Atendimentos, visitas de RVT e vencimentos de PMOC dos próximos dias. */
+  @Get('upcoming')
+  @ApiOperation({ summary: 'Upcoming commitments for the dashboard' })
+  upcoming(
+    @Req() request: IdentityRequest,
+    @Query() query: DashboardFeedQueryDto,
+  ) {
+    return this.feed.upcoming(request.identity!, query);
+  }
 
   @Get()
   @ApiOperation({

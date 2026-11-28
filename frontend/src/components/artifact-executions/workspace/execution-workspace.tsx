@@ -19,6 +19,7 @@
  * orquestrar: uma leitura, um conjunto de escritas serializadas e a
  * distribuição do estado.
  */
+import { IssuedDocumentActions } from "@/documents/issued-document-actions";
 import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, FileStack, RefreshCw } from "lucide-react";
@@ -197,10 +198,21 @@ function WorkspaceBody({
           </p>
         </div>
 
-        <Button variant="ghost" size="sm" onClick={onRefresh}>
-          <RefreshCw className="size-4" />
-          Atualizar
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Emitido, o documento sai daqui mesmo — recibo, orçamento, OS,
+              RVT. Antes da emissão o componente não aparece: não há arquivo. */}
+          <IssuedDocumentActions
+            executionId={execution.id}
+            renderStatus={execution.renderStatus}
+            code={execution.code}
+            title={execution.title}
+            variant="full"
+          />
+          <Button variant="ghost" size="sm" onClick={onRefresh}>
+            <RefreshCw className="size-4" />
+            Atualizar
+          </Button>
+        </div>
       </header>
 
       {editability.reason ? (

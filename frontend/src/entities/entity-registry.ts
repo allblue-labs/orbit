@@ -26,6 +26,7 @@
  */
 import type { ComponentType } from "react";
 import {
+  LifeBuoy,
   Boxes,
   CalendarClock,
   ClipboardCheck,
@@ -92,6 +93,7 @@ export const ENTITY_IDS = [
   "quote",
   "pmoc-plan",
   "rvt-configuration",
+  "customer-service-request",
 ] as const;
 export type EntityId = (typeof ENTITY_IDS)[number];
 
@@ -698,6 +700,25 @@ const DEFINITIONS: readonly EntityDefinition[] = [
     },
     badges: {},
     href: (id) => `${ROUTES.customers}/${id}`,
+  },
+  {
+    id: "customer-service-request",
+    label: "Chamado",
+    labelPlural: "Chamados",
+    description: "Pedidos que os clientes abrem pelo portal: manutenção, problemas e dúvidas.",
+    icon: LifeBuoy,
+    color: "text-sky-400",
+    basePath: ROUTES.serviceRequests,
+    capability: {
+      read: "customer_service_requests.read",
+      manage: "customer_service_requests.manage",
+    },
+    permissions: {
+      read: "customer_service_requests.read",
+      update: "customer_service_requests.manage",
+    },
+    badges: {},
+    href: (id) => `${ROUTES.serviceRequests}?chamado=${id}`,
   },
 ];
 

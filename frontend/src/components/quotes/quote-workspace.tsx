@@ -18,6 +18,8 @@
  * proposta, e o DTO não os aceita.
  */
 import { useState } from "react";
+import { useSession } from "@/providers/session-provider";
+import { Switch } from "@/components/ui/switch";
 import { RefreshCw, Trash2 } from "lucide-react";
 
 import { MutationError } from "@/components/artifact-studio/mutation-error";
@@ -31,7 +33,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { ConfirmDialog } from "@/components/financial/confirm.dialog";
 import { useAction } from "@/actions";
 import { EntityBadge, EntityLink } from "@/entities";
-import { useQuote, useRemoveQuote, useUpdateQuote } from "@/hooks/quotes/use-quotes";
+import {
+  useQuote,
+  useRemoveQuote,
+  useUpdateQuote,
+  useQuoteMobileAccess,
+} from "@/hooks/quotes/use-quotes";
 import { ROUTES } from "@/lib/routes";
 import { QUOTE_STATUS_DESCRIPTIONS } from "@/types/quotes";
 import type { Quote } from "@/types/quotes";
@@ -65,13 +72,7 @@ export function QuoteWorkspace({ quoteId }: { quoteId: string }) {
   return <Body quote={query.data} onRefresh={() => void query.refetch()} />;
 }
 
-function Body({
-  quote,
-  onRefresh,
-}: {
-  quote: Quote;
-  onRefresh: () => void;
-}) {
+function Body({ quote, onRefresh }: { quote: Quote; onRefresh: () => void }) {
   return (
     <ContentContainer size="wide" className="space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-4 border-b border-border pb-6">
@@ -109,6 +110,7 @@ function Body({
         </div>
 
         <div className="min-w-0 space-y-6">
+          <MobileAccessPanel quote={quote} />
           <PanelFrame
             panelId="quote-actions"
             title="Ações"
@@ -131,6 +133,37 @@ function Body({
         </div>
       </div>
     </ContentContainer>
+  );
+}
+
+function MobileAccessPanel({ quote }: { quote: Quote }) {
+  const { isOwner } = useSession();
+  const access = useQuoteMobileAccess(quote.id);
+  if (!isOwner) return null;
+  return (
+    <PanelFrame
+      panelId="quote-mobile-access"
+      title="Acesso no aplicativo"
+      description="Permissão exclusiva deste orçamento"
+    >
+      <div className="flex items-center justify-between gap-4">
+        <Label htmlFor="quote-mobile-visible">
+          Liberar para outros usuários no app
+        </Label>
+        <Switch
+          id="quote-mobile-visible"
+          checked={quote.mobileVisible ?? false}
+          disabled={access.isPending}
+          onCheckedChange={(checked) => access.mutate(checked)}
+        />
+      </div>
+      <p className="mt-3 text-xs text-muted-foreground">
+        Outros usuários das unidades autorizadas poderão visualizar, baixar e
+        compartilhar este orçamento em Documentos, em qualquer status. Você
+        sempre tem acesso como proprietário.
+      </p>
+      <MutationError error={access.error} />
+    </PanelFrame>
   );
 }
 
@@ -161,10 +194,12 @@ function HeaderPanel({ quote }: { quote: Quote }) {
     );
   };
 
-  const touch = <T,>(setter: (value: T) => void) => (value: T) => {
-    setter(value);
-    setDirty(true);
-  };
+  const touch =
+    <T,>(setter: (value: T) => void) =>
+    (value: T) => {
+      setter(value);
+      setDirty(true);
+    };
 
   return (
     <PanelFrame
@@ -218,9 +253,7 @@ function HeaderPanel({ quote }: { quote: Quote }) {
                   id="quote-edit-valid"
                   type="date"
                   value={validUntil}
-                  onChange={(event) =>
-                    touch(setValidUntil)(event.target.value)
-                  }
+                  onChange={(event) => touch(setValidUntil)(event.target.value)}
                 />
               </div>
               <div className="space-y-2">

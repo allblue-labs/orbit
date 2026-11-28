@@ -38,9 +38,7 @@ class NotificationSettingsController extends StateNotifier<AsyncValue<void>> {
           .set(
             type: type,
             enabled: enabled,
-            channels: enabled
-                ? const ['IN_APP', 'REALTIME', 'PUSH']
-                : const <String>[],
+            channels: enabled ? const ['IN_APP', 'PUSH'] : const <String>[],
           );
       _ref.invalidate(notificationPreferencesProvider);
 

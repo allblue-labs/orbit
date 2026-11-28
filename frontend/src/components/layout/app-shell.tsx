@@ -10,6 +10,8 @@ import {
 import { SubscriptionExpiredNotice } from "@/components/billing/subscription-expired.notice";
 import { LimitAdjustmentNotice } from "@/components/billing/limit-adjustment-notice";
 import { WelcomeSetup } from "@/components/profile/welcome-setup";
+import { BiometricOffer } from "@/components/auth/biometric-offer";
+import { useSession } from "@/providers/session-provider";
 
 /**
  * Application shell: sidebar + topbar + command palette + main content slot.
@@ -53,6 +55,27 @@ export function AppShell({
       */}
       <SubscriptionExpiredNotice />
       <WelcomeSetup />
+      <TeamBiometricOffer />
     </div>
+  );
+}
+
+/**
+ * O convite da biometria espera a vez: depois da troca de senha obrigatória
+ * e da configuração guiada. Um diálogo por vez.
+ */
+function TeamBiometricOffer() {
+  const session = useSession();
+  if (
+    !session.isAuthenticated ||
+    session.requiresPasswordChange ||
+    (session.organization &&
+      !session.isPlatformAdmin &&
+      session.subscriptionActive &&
+      !session.user?.welcomeDismissedAt)
+  )
+    return null;
+  return (
+    <BiometricOffer audience="team" settingsHint="Minha conta → Segurança" />
   );
 }

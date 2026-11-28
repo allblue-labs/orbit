@@ -24,6 +24,7 @@ import '../../../core/presentation/orbit_format.dart';
 import '../../../core/routing/orbit_router.dart';
 import '../../../core/theme/orbit_theme.dart';
 import '../../field/application/field_providers.dart';
+import 'customer_access_sheet.dart';
 import 'new_quote_sheet.dart';
 
 /// Os tipos de documento que cada papel enxerga.
@@ -143,8 +144,7 @@ class _Folha extends ConsumerWidget {
                 label: const Text('Ver documentos'),
               ),
 
-              /// Orçamento é ação de gestão: só aparece com `quotes.manage`.
-              if (session?.hasPermission('quotes.manage') ?? false) ...[
+              if (session?.canCreateFieldQuote ?? false) ...[
                 const SizedBox(height: OrbitSpacing.lg),
                 Text(
                   'Comercial',
@@ -160,6 +160,27 @@ class _Folha extends ConsumerWidget {
                   },
                   icon: const Icon(Icons.request_quote_outlined, size: 18),
                   label: const Text('Abrir orçamento'),
+                ),
+              ],
+
+              /* O acesso do cliente ao app — só para quem pode alterar o
+                 cadastro do cliente, a mesma regra do servidor. */
+              if (session?.hasPermission('customers.update') ?? false) ...[
+                const SizedBox(height: OrbitSpacing.lg),
+                Text(
+                  'Acesso ao app',
+                  style: OrbitType.sectionTitle.copyWith(color: palette.ink),
+                ),
+                const SizedBox(height: OrbitSpacing.xs),
+                Text(
+                  'O cliente acompanha equipamentos, atendimentos e documentos pelo app.',
+                  style: OrbitType.caption.copyWith(color: palette.inkSubtle),
+                ),
+                const SizedBox(height: OrbitSpacing.ms),
+                OutlinedButton.icon(
+                  onPressed: () => showCustomerAccessSheet(context, cliente),
+                  icon: const Icon(Icons.key_outlined, size: 18),
+                  label: const Text('Acesso do cliente'),
                 ),
               ],
             ],

@@ -1,3 +1,5 @@
+import { BrandImageService } from '../storage/brand-image.service';
+import { pdfImage } from '../storage/pdf-image';
 /**
  * Regras do Commercial Engine.
  *
@@ -186,6 +188,7 @@ export class QuoteService {
     private readonly documents: QuoteDocumentService,
     @Inject(STORAGE_PROVIDER) private readonly storage: StorageProvider,
     private readonly operations: OperationService,
+    private readonly brands: BrandImageService,
   ) {}
 
   /* ---------------------------------------------------------------- */
@@ -197,6 +200,20 @@ export class QuoteService {
       throw new ValidationException('The period starts after it ends');
     }
     return this.repository.list(organizationId, query);
+  }
+
+  setMobileVisibility(
+    id: string,
+    organizationId: string,
+    ownerId: string,
+    visible: boolean,
+  ) {
+    return this.repository.setMobileVisibility(
+      id,
+      organizationId,
+      ownerId,
+      visible,
+    );
   }
 
   async get(id: string, organizationId: string): Promise<QuoteDetailRecord> {
@@ -252,7 +269,10 @@ export class QuoteService {
     const bytes = await this.documents.render({
       timezone: unidade?.timezone ?? 'America/Sao_Paulo',
       emitter: {
-        ...logoDoEmissor(unidade),
+        ...logoDoEmissor({
+          organization: null,
+          logoUrl: (await this.brands.read(issuerLogo(unidade)))?.dataUrl,
+        }),
         tradeName: unidade?.tradeName ?? undefined,
         legalName: unidade?.legalName ?? undefined,
         document: documentoFormatado(
@@ -279,8 +299,14 @@ export class QuoteService {
                 dateStyle: 'short',
                 timeStyle: 'short',
               }).format(acceptance.signedAt),
-              signatureImage: customerSignature,
-              signatureImageMimeType: acceptance.file.mimeType,
+              signatureImage: customerSignature
+                ? (await pdfImage(customerSignature, acceptance.file.mimeType))
+                    .bytes
+                : undefined,
+              signatureImageMimeType:
+                acceptance.file.mimeType === 'image/webp'
+                  ? 'image/png'
+                  : acceptance.file.mimeType,
             }
           : undefined,
         quote: {
@@ -389,8 +415,13 @@ export class QuoteService {
       });
       return {
         name: responsible.displayName,
-        signatureImage: bytes,
-        signatureImageMimeType: assinatura.storageObject.mimeType,
+        signatureImage: (
+          await pdfImage(bytes, assinatura.storageObject.mimeType)
+        ).bytes,
+        signatureImageMimeType:
+          assinatura.storageObject.mimeType === 'image/webp'
+            ? 'image/png'
+            : assinatura.storageObject.mimeType,
       };
     } catch {
       return { name: responsible.displayName };

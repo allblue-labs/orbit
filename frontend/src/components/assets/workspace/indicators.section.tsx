@@ -82,8 +82,8 @@ export function IndicatorsSection({ assetId }: { assetId: string }) {
       </div>
 
       <p className="mt-4 border-t border-border pt-3 text-xs text-muted-foreground">
-        Indicadores de engenharia de manutenção — MTBF, disponibilidade e
-        custo acumulado — ainda não estão disponíveis por equipamento.
+        Indicadores de engenharia de manutenção — MTBF, disponibilidade e custo
+        acumulado — ainda não estão disponíveis por equipamento.
       </p>
     </PanelFrame>
   );
@@ -104,26 +104,6 @@ export function HealthSection() {
       description="Índice de condição do equipamento"
     >
       <PanelWithoutSource reason="O índice de saúde disponível hoje é da organização ou da unidade. Não há índice por equipamento, e atribuir o da operação a este ativo seria enganoso." />
-    </PanelFrame>
-  );
-}
-
-/**
- * Histórico do ativo.
- *
- * O modelo `Asset` não tem tabela de eventos, e não há endpoint de auditoria.
- * Reconstruir a linha do tempo a partir das operações e execuções foi
- * explicitamente descartado: seria história montada no cliente, com risco de
- * divergir do que o servidor registra.
- */
-export function HistorySection() {
-  return (
-    <PanelFrame
-      panelId="asset-history"
-      title="Histórico"
-      description="Eventos do equipamento ao longo do tempo"
-    >
-      <PanelWithoutSource reason="A linha do tempo do equipamento ainda não está disponível. Os painéis de atendimentos, agenda e documentos mostram os registros vinculados a ele." />
     </PanelFrame>
   );
 }

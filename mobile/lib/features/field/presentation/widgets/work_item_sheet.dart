@@ -70,8 +70,6 @@ class _Folha extends StatelessWidget {
         .where((artefato) => artefato.downloadAvailable)
         .toList();
 
-    final concluido = documentos.isNotEmpty && item.allowedActions.length <= 1;
-
     return ListView(
       controller: scrollController,
       padding: const EdgeInsets.fromLTRB(
@@ -187,19 +185,20 @@ class _Folha extends StatelessWidget {
 
         const SizedBox(height: OrbitSpacing.lg),
 
-        /// Uma saída, conforme o estado. Quem terminou quer o documento; quem
-        /// não terminou quer continuar — oferecer os dois com o mesmo peso
-        /// obriga a pessoa a escolher onde não há escolha.
+        /// Leva ao detalhe — e diz isso.
+        ///
+        /// Era "Abrir atendimento", e não abria nada: só levava ao detalhe, onde
+        /// estava o "Iniciar o Atendimento". O técnico via dois verbos de começo
+        /// em sequência e um terceiro dentro do PMOC. "Abrir atendimento" é a ação
+        /// do atendimento avulso; aqui a pessoa está consultando, e o único
+        /// "Iniciar" é o do detalhe.
         FilledButton.icon(
           onPressed: () {
             Navigator.of(context).pop();
             context.push(OrbitRoutes.workItemDetail(item.id));
           },
-          icon: Icon(
-            concluido ? Icons.visibility_outlined : Icons.play_arrow_rounded,
-            size: 19,
-          ),
-          label: Text(concluido ? 'Ver atendimento' : 'Abrir atendimento'),
+          icon: const Icon(Icons.visibility_outlined, size: 19),
+          label: const Text('Ver atendimento'),
         ),
       ],
     );

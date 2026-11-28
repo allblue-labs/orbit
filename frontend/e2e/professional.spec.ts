@@ -39,7 +39,7 @@ test("o detalhe do membro separa ofício de acesso", async ({ page }) => {
    * A garantia que este teste protege é a mesma de antes: **ofício e acesso são
    * coisas diferentes**, e a tela nunca deduz um a partir do outro.
    */
-  await page.getByRole("button", { name: "Ana Campo" }).first().click();
+  await page.getByRole("link", { name: "Ana Campo" }).first().click();
 
   /**
    * Espera o **conteúdo**, não o título da seção.
@@ -48,16 +48,14 @@ test("o detalhe do membro separa ofício de acesso", async ({ page }) => {
    * esperá-lo e ler o texto em seguida media a tela ainda carregando — a
    * asserção reprovava por corrida, não por defeito.
    */
-  await expect(
-    page.getByText("Técnico em Campo").first(),
-  ).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText("Técnico Operacional").first()).toBeVisible({
+    timeout: 20_000,
+  });
 
   /// Acesso é a outra leitura, e aparece separada na mesma folha.
-  await expect(
-    page.getByText("Papel e permissões efetivas"),
-  ).toBeVisible();
+  await expect(page.getByText("Papel e permissões efetivas")).toBeVisible();
 
-  await page.keyboard.press("Escape");
+  await page.getByRole("link", { name: "Voltar para a equipe" }).click();
   await settled(page);
 
   /**
@@ -67,10 +65,10 @@ test("o detalhe do membro separa ofício de acesso", async ({ page }) => {
    * folha precisa dizer isso com todas as letras, senão a ausência parece
    * falha de carregamento.
    */
-  await page.getByRole("button", { name: "Diego Escritorio" }).first().click();
-  await expect(
-    page.getByText(/não possui perfil profissional/i),
-  ).toBeVisible({ timeout: 20_000 });
+  await page.getByRole("link", { name: "Diego Escritorio" }).first().click();
+  await expect(page.getByText(/não possui perfil profissional/i)).toBeVisible({
+    timeout: 20_000,
+  });
 
   /**
    * Gate parcial, pelo mesmo motivo de "plano inexistente é ausência neutra".
@@ -191,9 +189,14 @@ test("promover um auxiliar troca o responsável em um comando", async ({
   await settled(page);
 
   const team = page.getByRole("region", { name: "Equipe" });
-  await expect(team.getByRole("button", { name: /Promover/ }).first()).toBeVisible();
+  await expect(
+    team.getByRole("button", { name: /Promover/ }).first(),
+  ).toBeVisible();
 
-  await team.getByRole("button", { name: /Promover/ }).first().click();
+  await team
+    .getByRole("button", { name: /Promover/ })
+    .first()
+    .click();
 
   const dialog = page.getByRole("alertdialog").or(page.getByRole("dialog"));
   await expect(dialog).toBeVisible();
@@ -236,10 +239,10 @@ test("nenhum código de contrato aparece na tela", async ({ page }) => {
     await settled(page);
     if (route === "/equipe") {
       /// Onde o vocabulário do contrato teria a melhor chance de vazar.
-      await page.getByRole("button", { name: "Ana Campo" }).first().click();
-      await expect(
-        page.getByText("Técnico em Campo").first(),
-      ).toBeVisible({ timeout: 20_000 });
+      await page.getByRole("link", { name: "Ana Campo" }).first().click();
+      await expect(page.getByText("Técnico Operacional").first()).toBeVisible({
+        timeout: 20_000,
+      });
       await settled(page);
     }
     const body = await page.evaluate(() => document.body.innerText);

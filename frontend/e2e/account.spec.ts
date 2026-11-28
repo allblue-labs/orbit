@@ -27,8 +27,7 @@ const activeTab = (page: Page, lista: string = CONTA) =>
     .getByRole("tablist", { name: lista })
     .locator('[role="tab"][data-state="active"]');
 
-const path = (page: Page) =>
-  page.url().replace(/^https?:\/\/[^/]+/, "");
+const path = (page: Page) => page.url().replace(/^https?:\/\/[^/]+/, "");
 
 test.describe("navegação da conta", () => {
   test("a administração tem duas entradas, não três", async ({ page }) => {
@@ -37,7 +36,9 @@ test.describe("navegação da conta", () => {
     await page.goto("/dashboard");
 
     const nav = page.locator("nav").first();
-    await expect(nav.getByRole("link", { name: "Configurações" })).toBeVisible();
+    await expect(
+      nav.getByRole("link", { name: "Configurações" }),
+    ).toBeVisible();
     await expect(nav.getByRole("link", { name: "Minha conta" })).toBeVisible();
     /** "Organização" deixou de ser uma porta própria: virou seção. */
     await expect(nav.getByRole("link", { name: "Organização" })).toHaveCount(0);
@@ -67,7 +68,7 @@ test.describe("navegação da conta", () => {
     /** O laço atravessa as duas telas, e cada uma tem a sua lista de abas. */
     for (const [url, esperado, lista] of [
       ["/configuracoes?secao=seguranca", "Segurança", CONFIGURACOES],
-      ["/configuracoes?secao=integracoes", "Integrações", CONFIGURACOES],
+      ["/configuracoes?secao=integracoes", "Organização", CONFIGURACOES],
       ["/configuracoes?secao=notificacoes", "Notificações", CONFIGURACOES],
       ["/perfil?secao=preferencias", "Preferências", CONTA],
       ["/perfil?secao=contexto", "Contexto", CONTA],
@@ -135,7 +136,12 @@ test.describe("domínios continuam separados", () => {
     await expect(
       page.getByRole("heading", { name: "Minha conta", level: 1 }),
     ).toBeVisible();
-    for (const nome of ["Dados pessoais", "Segurança", "Preferências", "Contexto"]) {
+    for (const nome of [
+      "Dados pessoais",
+      "Segurança",
+      "Preferências",
+      "Contexto",
+    ]) {
       await expect(page.getByRole("tab", { name: nome })).toBeVisible();
     }
 
@@ -153,7 +159,8 @@ test.describe("domínios continuam separados", () => {
     page.on("request", (request) => {
       if (request.method() === "GET") return;
       const p = new URL(request.url()).pathname;
-      if (/identity|organization/.test(p)) escritas.push(`${request.method()} ${p}`);
+      if (/identity|organization/.test(p))
+        escritas.push(`${request.method()} ${p}`);
     });
 
     await page.goto("/configuracoes?secao=organizacao");
@@ -162,7 +169,9 @@ test.describe("domínios continuam separados", () => {
       page.locator('[data-panel="organization-general"]'),
     ).toBeVisible({ timeout: 20_000 });
     /** A Equipe veio da rota antiga; nada se perdeu na consolidação. */
-    await expect(page.locator('[data-panel="organization-users"]')).toBeVisible();
+    await expect(
+      page.locator('[data-panel="organization-users"]'),
+    ).toBeVisible();
 
     await page.waitForTimeout(1_500);
     expect(escritas, "abrir a seção não escreve nada").toEqual([]);

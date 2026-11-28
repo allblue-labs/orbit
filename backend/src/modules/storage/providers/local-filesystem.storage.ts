@@ -19,8 +19,15 @@
  * escaparia do diretório e é recusada.
  */
 import { Injectable } from '@nestjs/common';
-import { createHmac, timingSafeEqual } from 'node:crypto';
-import { mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
+import { createHmac, timingSafeEqual, randomUUID } from 'node:crypto';
+import {
+  mkdir,
+  readFile,
+  stat,
+  unlink,
+  writeFile,
+  link,
+} from 'node:fs/promises';
 import { dirname, resolve, sep } from 'node:path';
 import { InfrastructureException } from '../../../exceptions';
 import type {
@@ -55,11 +62,16 @@ export class LocalFilesystemStorageProvider implements StorageProvider {
 
   async put(input: PutObjectInput): Promise<ObjectStat> {
     const path = this.resolvePath(input);
+    const temporary = `${path}.${randomUUID()}.tmp`;
     try {
       await mkdir(dirname(path), { recursive: true });
-      await writeFile(path, input.body);
+      await writeFile(temporary, input.body, { flag: 'wx', mode: 0o600 });
+      // Hard-link publication is atomic and fails if the final key exists.
+      await link(temporary, path);
     } catch {
       throw new InfrastructureException('Unable to persist the storage object');
+    } finally {
+      await unlink(temporary).catch(() => undefined);
     }
     return {
       bucket: input.bucket,
@@ -85,8 +97,15 @@ export class LocalFilesystemStorageProvider implements StorageProvider {
         sizeBytes: info.size,
         mimeType: null,
       };
-    } catch {
-      return null;
+    } catch (error) {
+      if (
+        error &&
+        typeof error === 'object' &&
+        'code' in error &&
+        error.code === 'ENOENT'
+      )
+        return null;
+      throw new InfrastructureException('Unable to inspect the storage object');
     }
   }
 
@@ -107,6 +126,12 @@ export class LocalFilesystemStorageProvider implements StorageProvider {
   }
 
   sign(request: SignedUrlRequest): Promise<SignedUrl> {
+    if (request.operation === 'upload')
+      return Promise.reject(
+        new InfrastructureException(
+          'Uploads require a reserved gateway capability',
+        ),
+      );
     const expiresAt = new Date(Date.now() + request.expiresInSeconds * 1000);
     const expires = Math.floor(expiresAt.getTime() / 1000);
     const signature = this.signature(
@@ -127,18 +152,9 @@ export class LocalFilesystemStorageProvider implements StorageProvider {
     return Promise.resolve({
       url: url.toString(),
       expiresAt,
-      method: request.operation === 'upload' ? 'PUT' : 'GET',
-      requiredHeaders: this.uploadHeaders(request),
+      method: 'GET',
+      requiredHeaders: {},
     });
-  }
-
-  /** O `content-type` do PUT entra na assinatura; o cliente precisa repeti-lo. */
-  private uploadHeaders(
-    request: SignedUrlRequest,
-  ): Readonly<Record<string, string>> {
-    return request.operation === 'upload' && request.mimeType
-      ? { 'content-type': request.mimeType }
-      : {};
   }
 
   /** Confere uma assinatura emitida por `sign`. Usado pela rota local. */
@@ -173,7 +189,11 @@ export class LocalFilesystemStorageProvider implements StorageProvider {
   private resolvePath(ref: StorageObjectRef): string {
     const base = resolve(this.root, ref.bucket);
     const path = resolve(base, ref.objectKey);
-    if (path !== base && !path.startsWith(`${base}${sep}`)) {
+    if (
+      !base.startsWith(`${resolve(this.root)}${sep}`) ||
+      path === base ||
+      !path.startsWith(`${base}${sep}`)
+    ) {
       throw new InfrastructureException('Invalid storage object key');
     }
     return path;

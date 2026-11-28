@@ -1,0 +1,52 @@
+{
+  "pr": "PR-18",
+  "date": "2026-11-18",
+  "baseCommit": "6cc0856724618cd2681c575b56b14fcf435c9f03",
+  "implementationCommit": "389625a5db8598e477cceb933dde12f065288aa6",
+  "database": {
+    "engine": "PostgreSQL 17.11",
+    "environment": "disposable",
+    "migrationsApplied": 127,
+    "runtimeRole": "orbit_app",
+    "superuser": false,
+    "bypassRls": false
+  },
+  "checks": {
+    "backendUnitTests": 41,
+    "backendSignatureHttpTests": 7,
+    "frontendUnitTests": 42,
+    "chromiumTests": 71,
+    "dashboardTestsRepeatedOnFinalBuild": 4,
+    "flutterTests": 66,
+    "backendBuild": "PASS",
+    "standaloneNextBuild": "PASS",
+    "typescript": "PASS",
+    "changedFilesEslint": "PASS",
+    "changedFilesDartAnalyze": "PASS",
+    "webProductLanguage": "PASS",
+    "contractsSync": "PASS"
+  },
+  "civilWindowsChecked": {
+    "zones": ["Asia/Tokyo", "America/Los_Angeles"],
+    "summary": { "from": "2026-10-12", "to": "2026-11-10" },
+    "timeline": { "from": "2025-12-01", "to": "2026-11-10" }
+  },
+  "browserSuites": [
+    "artifact-navigation",
+    "billing-payment-flow",
+    "customer-document-acceptance",
+    "dashboard-indicators",
+    "documents-layout",
+    "email-verification",
+    "equipment-qr",
+    "landing",
+    "pmoc-attendance",
+    "signup-plan-handoff"
+  ],
+  "observations": [
+    "Checkout and email verification routes use controlled fixtures in browser tests.",
+    "Physical mobile devices and external providers are covered by release qualification.",
+    "The pg warning about simultaneous queries also appeared in PR-17.",
+    "The QR scanner comparison against local golden images was outside the functional widget run."
+  ]
+}

@@ -1,3 +1,5 @@
+import type { UUID } from '../../../../contracts';
+import { brandImageStub } from '../../../../../test/support/brand-image.stub';
 import type { ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { AuthorizationService } from '../../../../common/authorization.service';
@@ -89,34 +91,26 @@ describe('Leitura de equipamentos por QR no aplicativo de campo', () => {
         total: 1,
         rows: [
           {
-            id: 'service-1',
-            code: 'OS-1',
+            operationId: 'service-1',
+            code: 'OP-1',
+            serviceOrderNumber: 1,
             title: 'Limpeza preventiva',
             kind: 'SERVICE_ORDER',
             completedAt: new Date('2026-10-27T12:00:00Z'),
             description: 'Limpeza dos filtros.',
-            responsibleFieldTechnician: { displayName: 'Marina' },
-            pmocEquipmentExecution: { notes: 'Dreno desobstruído.' },
-            history: [
-              {
-                details: {
-                  note: 'Funcionamento conferido.',
-                  payloadHash: 'private-hash',
-                  idempotencyKey: 'private-key',
-                },
-              },
-            ],
+            technicianName: 'Marina',
+            observations: ['Dreno desobstruído.', 'Funcionamento conferido.'],
           },
         ],
-        visits: [],
       }),
     };
     const service = new EquipmentQrService(
       repository as never,
       {} as never,
       {} as never,
+      brandImageStub(),
     );
-    const controller = new AssetController({} as never, service);
+    const controller = new AssetController({} as never, service, {} as never);
     return { request, context, repository, controller };
   }
 
@@ -150,7 +144,7 @@ describe('Leitura de equipamentos por QR no aplicativo de campo', () => {
       outsideUnit.controller.resolveQr('a'.repeat(43), outsideUnit.request),
     ).rejects.toThrow();
     expect(outsideUnit.repository.fieldContext).not.toHaveBeenCalled();
-    own.request.identity!.organizationId = 'foreign-org';
+    own.request.identity!.organizationId = 'foreign-org' as UUID;
     await expect(
       own.controller.resolveQr('a'.repeat(43), own.request),
     ).rejects.toThrow();
@@ -205,7 +199,7 @@ describe('Leitura de equipamentos por QR no aplicativo de campo', () => {
       ),
     ).rejects.toThrow();
     expect(repository.serviceHistory).not.toHaveBeenCalled();
-    request.identity!.organizationId = 'foreign-org';
+    request.identity!.organizationId = 'foreign-org' as UUID;
     await expect(
       controller.serviceHistory(
         'a'.repeat(43),

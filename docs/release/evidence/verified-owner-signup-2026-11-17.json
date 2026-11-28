@@ -1,0 +1,121 @@
+{
+  "date": "2026-11-17",
+  "baseline": "9d01053",
+  "status": "STAGING_DEPLOYED_AND_VERIFIED",
+  "tests": {
+    "backendUnit": {
+      "suites": 275,
+      "tests": 2291,
+      "passed": true
+    },
+    "integration": {
+      "suites": 53,
+      "tests": 677,
+      "passed": true
+    },
+    "frontendUnit": {
+      "files": 73,
+      "tests": 697,
+      "passed": true
+    },
+    "browser": {
+      "tests": 14,
+      "passed": true
+    },
+    "typescript": [
+      "backend",
+      "frontend"
+    ],
+    "productionApiBuild": {
+      "nodeMajor": 22,
+      "platform": "linux/amd64",
+      "passed": true
+    },
+    "productionFrontendBuild": {
+      "nodeMajor": 22,
+      "platform": "linux/amd64",
+      "passed": true
+    }
+  },
+  "requiresNewMigration": false,
+  "security": {
+    "signupCreatesSession": false,
+    "signupExposesTokens": false,
+    "signupPersistsAuthCookies": false,
+    "loginBeforeEmailConfirmation": false,
+    "oldAccessAndRefreshChecked": true,
+    "graceRotationChecked": true,
+    "verificationUsesDurableSesOutbox": true,
+    "teamVirtualEmailAccessPreserved": true,
+    "environmentVerificationBypass": false
+  },
+  "address": {
+    "number": {
+      "optional": true,
+      "maxLength": 30
+    },
+    "complement": {
+      "optional": true,
+      "maxLength": 160
+    },
+    "persistedIn": "business_units"
+  },
+  "realEmailsSentByTests": 0,
+  "gitPush": false,
+  "implementationCommit": "9c23e630ebca3035c4ea343a865869c7ae422b42",
+  "staging": {
+    "verifiedAt": "2026-11-17T18:22:28Z",
+    "releaseTag": "staging-9c23e630ebca",
+    "imagesManifest": "verified-owner-signup-images-2026-11-17.json",
+    "services": {
+      "api": "healthy",
+      "frontend": "healthy",
+      "postgres": "healthy"
+    },
+    "apiReadiness": "ok",
+    "publicHttp": {
+      "orbitLogin": 200,
+      "orbitEmailConfirmation": 200,
+      "nexus": 200
+    },
+    "confirmationHeaders": {
+      "cacheControl": "no-store",
+      "referrerPolicy": "no-referrer",
+      "robots": "noindex, nofollow"
+    },
+    "database": {
+      "role": "orbit_app",
+      "superuser": false,
+      "bypassRls": false,
+      "migrationsFound": 125,
+      "pendingMigrations": 0
+    },
+    "runtimeOwnerPolicy": {
+      "readOnly": true,
+      "ownersChecked": 3,
+      "unconfirmedOwners": 3,
+      "unconfirmedOwnersBlocked": 3,
+      "policyConsistent": true
+    },
+    "ses": {
+      "status": "READY",
+      "region": "us-east-2",
+      "productionAccess": true,
+      "sendingEnabled": true,
+      "identityVerified": true,
+      "quotaAvailable": true
+    },
+    "accountEmailDeliveryEnabled": true,
+    "feedbackEnabled": true,
+    "retentionEnabled": false,
+    "backup": {
+      "path": "/home/ninja/orbit-releases/verified-owner-9c23e630ebca/before/postgres.dump",
+      "format": "custom",
+      "pgRestoreListPassed": true,
+      "mode": "600"
+    },
+    "environmentFileMode": "600",
+    "testAccountsCreated": 0,
+    "testEmailsSent": 0
+  }
+}

@@ -31,6 +31,7 @@ import {
   StreamableFile,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { Idempotent } from '../../common/hotpath/idempotent.decorator';
 import type { Response } from 'express';
 import { Permissions } from '../../decorators';
 import { ForbiddenException } from '../../exceptions';
@@ -50,10 +51,12 @@ import {
   RejectQuoteDto,
   UpdateQuoteDto,
   UpdateQuoteItemDto,
+  QuoteMobileAccessDto,
 } from './quote.dto';
 import { QuoteMapper } from './quote.mapper';
 import { QuoteEmissionService } from './quote-emission.service';
 import { QuoteService } from './quote.service';
+import { QuoteDocumentExports } from './quote-document-exports';
 
 @ApiTags('Quotes')
 @Controller('quotes')
@@ -63,7 +66,29 @@ export class QuoteController {
     private readonly quotes: QuoteService,
     private readonly mapper: QuoteMapper,
     private readonly emission: QuoteEmissionService,
+    private readonly documentExports: QuoteDocumentExports,
   ) {}
+
+  @Patch(':id/mobile-access')
+  @Capabilities('quotes.manage')
+  @Permissions('quotes.manage')
+  async mobileAccess(
+    @Param('id', ParseUUIDv7Pipe) id: string,
+    @Req() request: IdentityRequest,
+    @Body() input: QuoteMobileAccessDto,
+  ) {
+    if (!request.identity?.isOrganizationOwner)
+      throw new ForbiddenException(
+        'Somente o proprietário pode liberar orçamentos no aplicativo.',
+      );
+    await this.quotes.setMobileVisibility(
+      id,
+      this.org(request),
+      this.actor(request),
+      input.mobileVisible,
+    );
+    return this.mapper.detail(await this.quotes.get(id, this.org(request)));
+  }
 
   /* ---------------------------------------------------------------- */
   /* Leitura                                                           */
@@ -91,6 +116,22 @@ export class QuoteController {
    * mostraria valores que já não valem, e quem enviasse esse arquivo ao
    * cliente estaria propondo um preço que o sistema não pratica mais.
    */
+  /**
+   * Exportação assíncrona do PDF: 202 com o identificador; o arquivo vai ao
+   * armazenamento e a consulta (`GET /document-exports/:id`) devolve a URL
+   * assinada. A rota síncrona abaixo continua valendo.
+   */
+  @Post(':id/document/exports')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @Capabilities('quotes.read')
+  @Permissions('quotes.read')
+  exportDocument(
+    @Param('id', ParseUUIDv7Pipe) id: string,
+    @Req() request: IdentityRequest,
+  ) {
+    return this.documentExports.request(id, this.org(request));
+  }
+
   @Get(':id/document')
   @Capabilities('quotes.read')
   @Permissions('quotes.read')
@@ -104,7 +145,7 @@ export class QuoteController {
     response.set({
       'Content-Type': documento.mimeType,
       'Content-Disposition': `inline; filename="${documento.fileName}"`,
-      'Cache-Control': 'no-store',
+      'Cache-Control': 'private, no-store',
     });
 
     return new StreamableFile(documento.bytes);
@@ -146,6 +187,7 @@ export class QuoteController {
   /* ---------------------------------------------------------------- */
 
   @Post()
+  @Idempotent('quote.create', 'quote')
   @Capabilities('quotes.manage')
   @Permissions('quotes.manage')
   async create(@Req() request: IdentityRequest, @Body() input: CreateQuoteDto) {
@@ -296,6 +338,7 @@ export class QuoteController {
 
   /** Aprovar cria receita **prevista**, nunca realizada. */
   @Post(':id/approve')
+  @Idempotent('quote.approve', 'quote')
   @Capabilities('quotes.manage')
   @Permissions('quotes.manage')
   async approve(

@@ -89,7 +89,7 @@ describe('Centralização das assinaturas nos documentos', () => {
         label,
         signerName: label,
         roleLabel: label,
-        image: image(...shapes[index]!),
+        image: image(shapes[index]![0], shapes[index]![1]),
         imageMimeType: 'image/png',
       }));
       const { images, lines } = geometry(await render(signatures));

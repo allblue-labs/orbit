@@ -182,12 +182,16 @@ function Attendance({
   const [draft, setDraft] = useState<AttendanceDraft>(() => ({
     ...emptyDraft(
       execution?.responsibleFieldTechnician.id ??
+        preparation.schedule?.responsibleFieldTechnician?.id ??
+        preparation.plannedFieldTechnicianId ??
         preparation.fieldTechnicians[0]?.id ??
         null,
     ),
     auxiliaryTechnicianIds:
-      execution?.auxiliaryTechnicians.map((person) => person.id) ?? [],
-    notes: execution?.notes ?? "",
+      execution?.auxiliaryTechnicians.map((person) => person.id) ??
+      preparation.schedule?.auxiliaryTechnicianIds ??
+      [],
+    notes: execution?.notes ?? preparation.schedule?.notes ?? "",
   }));
   /*
    * O passo de entrada vem do servidor; daqui em diante o avanço é local dentro
@@ -641,9 +645,8 @@ function CompleteStep({
           onChange={(event) => onChange({ performedAt: event.target.value })}
         />
         <p className="text-xs text-muted-foreground">
-          Em branco, vale <strong>agora</strong>, pelo relógio do servidor — a
-          hora da manutenção é registro legal, e o relógio do navegador pode
-          estar errado.
+          Deixe em branco para registrar a data e a hora automaticamente ao
+          confirmar a execução.
         </p>
       </div>
 
@@ -679,8 +682,8 @@ function IssueStep({
   if (!execution) {
     return (
       <p className="rounded-lg border border-border px-3 py-4 text-sm text-muted-foreground">
-        Nada foi aberto para este equipamento neste ciclo, e o servidor não
-        liberou a abertura agora.
+        Ainda não há atendimento para este equipamento neste ciclo. Confira os
+        requisitos acima para iniciar.
       </p>
     );
   }

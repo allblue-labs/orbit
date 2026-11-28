@@ -1,3 +1,4 @@
+import { BrandImageService } from '../storage/brand-image.service';
 /**
  * O outro lado da fila: compõe, desenha e fecha o relatório.
  *
@@ -35,7 +36,6 @@ import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { ArtifactRendererRegistry } from '../artifact-rendering/renderers/renderer.registry';
 import { DocumentContextBuilder } from '../artifact-rendering/document-context.builder';
-import { readEmbeddedImage } from '../../common/embedded-image';
 import { issuerLogo } from '../../common/issuer-brand';
 import {
   JOB_QUEUES,
@@ -76,6 +76,7 @@ export class ReportGenerationProcessor implements JobProcessor, OnModuleInit {
     private readonly files: FileObjectService,
     private readonly registry: JobProcessorRegistry,
     private readonly documentContext: DocumentContextBuilder,
+    private readonly brands: BrandImageService,
   ) {}
 
   onModuleInit(): void {
@@ -264,7 +265,7 @@ export class ReportGenerationProcessor implements JobProcessor, OnModuleInit {
     );
     const { emitter } = this.documentContext.build({
       businessUnit: unidade ?? undefined,
-      logo: readEmbeddedImage(issuerLogo(unidade)) ?? undefined,
+      logo: (await this.brands.read(issuerLogo(unidade))) ?? undefined,
     });
 
     const output = await renderer.render(

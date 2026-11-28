@@ -20,6 +20,8 @@ import '../../../core/contracts/session_contracts.dart';
 import '../../../core/errors/orbit_exception.dart';
 import '../../../core/network/orbit_api_client.dart';
 import '../../../core/network/session_authenticator.dart';
+import '../../../core/security/device_proof.dart';
+import '../../../core/security/security_confirmation.dart';
 import '../../../core/storage/token_storage.dart';
 
 class AuthRepository {
@@ -32,6 +34,8 @@ class AuthRepository {
        _deviceInstanceId = deviceInstanceId;
 
   final OrbitApiClient _client;
+
+  SessionAuthenticator get authenticator => _client.authenticator;
   final TokenStorage _storage;
   final Future<String> Function()? _deviceInstanceId;
 
@@ -60,6 +64,53 @@ class AuthRepository {
     final tokens = TokenPair.fromJson(data);
     await _client.authenticator.storeTokens(tokens, generation: generation);
     return tokens;
+  }
+
+  Future<TokenPair?> loginWithDeviceCredential({
+    required String credentialId,
+    required SignDeviceChallenge sign,
+  }) async {
+    final data = await authenticateDeviceKey(
+      _client,
+      '/identity/biometrics/devices/authentication',
+      credentialId,
+      sign,
+    );
+    return data == null ? null : TokenPair.fromJson(data);
+  }
+
+  Future<String?> enrollDeviceCredential({
+    required String deviceId,
+    required String label,
+    required String publicKey,
+    required SignDeviceChallenge sign,
+    required SecurityCredentials credentials,
+  }) => registerDeviceKey(
+    _client,
+    '/identity/me/biometrics/devices',
+    '/identity/me/security-confirmation',
+    deviceId: deviceId,
+    label: label,
+    publicKey: publicKey,
+    sign: sign,
+    credentials: credentials,
+  );
+
+  /// Remove a credencial no servidor — desativar a biometria no aparelho.
+  Future<void> revokeDeviceCredential(
+    String credentialId, {
+    required SecurityCredentials credentials,
+  }) async {
+    final proof = await confirmSecurityChange(
+      _client,
+      '/identity/me/security-confirmation',
+      'BIOMETRIC_REVOKE',
+      credentials,
+    );
+    await _client.delete<dynamic>(
+      '/identity/me/biometrics/${Uri.encodeComponent(credentialId)}',
+      headers: {securityConfirmationHeader: proof},
+    );
   }
 
   /// Revoga a sessão no backend e limpa o armazenamento.

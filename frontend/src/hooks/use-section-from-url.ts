@@ -12,7 +12,7 @@
  * endereço que se pode copiar — e o preço é um passo de histórico por aba
  * visitada, que é justamente o que permite voltar.
  */
-import { useCallback } from "react";
+import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 
 import {
@@ -31,11 +31,28 @@ export interface SectionNavigation {
   readonly hrefFor: (section: SectionSlug) => string;
 }
 
+const SECTION_CHANGED = "orbit:section-changed";
+function subscribeLocation(changed: () => void) {
+  window.addEventListener("popstate", changed);
+  window.addEventListener(SECTION_CHANGED, changed);
+  return () => {
+    window.removeEventListener("popstate", changed);
+    window.removeEventListener(SECTION_CHANGED, changed);
+  };
+}
+const locationQuery = () => window.location.search;
+
 export function useSectionFromUrl(
   available: readonly SectionSlug[],
 ): SectionNavigation {
   const pathname = usePathname();
-  const params = useSearchParams();
+  const serverParams = useSearchParams();
+  const search = useSyncExternalStore(
+    subscribeLocation,
+    locationQuery,
+    () => `?${serverParams.toString()}`,
+  );
+  const params = useMemo(() => new URLSearchParams(search), [search]);
 
   const current = resolveSection(params.get(SECTION_PARAM), available);
 
@@ -61,6 +78,7 @@ export function useSectionFromUrl(
        * troca de aba não custa uma ida ao servidor para buscar a mesma árvore.
        */
       window.history.pushState(null, "", hrefFor(section));
+      window.dispatchEvent(new Event(SECTION_CHANGED));
     },
     [current, hrefFor],
   );

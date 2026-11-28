@@ -1,3 +1,4 @@
+import { OutboundHttp } from '../../network/outbound-http';
 import { Injectable } from '@nestjs/common';
 import type { JSONObject } from '../../contracts';
 import { ValidationException } from '../../exceptions';
@@ -28,14 +29,17 @@ export interface AiProviderAdapter {
 @Injectable()
 export class OpenAiCompatibleProvider implements AiProviderAdapter {
   readonly provider = 'OPENAI_COMPATIBLE';
+  constructor(private readonly http: OutboundHttp) {}
 
   async execute(request: AiProviderRequest): Promise<AiProviderResult> {
-    const baseUrl = this.baseUrl(
+    const baseUrl = this.http.url(
+      'AI',
       this.string(
         request.integrationConfiguration.baseUrl,
         'Integration baseUrl',
       ),
     );
+    baseUrl.pathname = `${baseUrl.pathname.replace(/\/$/, '')}/chat/completions`;
     const apiKey = this.string(request.secrets.apiKey, 'Integration apiKey');
     const timeoutMs = this.number(
       request.configuration.timeoutMs,
@@ -49,34 +53,35 @@ export class OpenAiCompatibleProvider implements AiProviderAdapter {
       0,
       2,
     );
-    const response = await fetch(`${baseUrl}/chat/completions`, {
-      method: 'POST',
+    const response = await this.http.request('AI', baseUrl.toString(), {
       headers: {
         authorization: `Bearer ${apiKey}`,
         'content-type': 'application/json',
       },
-      body: JSON.stringify({
-        model: request.model,
-        temperature,
-        messages: [
-          { role: 'system', content: request.systemPrompt },
-          {
-            role: 'user',
-            content: `${request.userPrompt}\n\nContexto autorizado:\n${JSON.stringify(request.context)}`,
-          },
-        ],
-        response_format:
-          request.configuration.jsonOutput === true
-            ? { type: 'json_object' }
-            : undefined,
-      }),
-      signal: AbortSignal.timeout(timeoutMs),
+      body: Buffer.from(
+        JSON.stringify({
+          model: request.model,
+          temperature,
+          messages: [
+            { role: 'system', content: request.systemPrompt },
+            {
+              role: 'user',
+              content: `${request.userPrompt}\n\nContexto autorizado:\n${JSON.stringify(request.context)}`,
+            },
+          ],
+          response_format:
+            request.configuration.jsonOutput === true
+              ? { type: 'json_object' }
+              : undefined,
+        }),
+      ),
+      timeoutMs,
     });
-    const raw: unknown = await response.json().catch(() => null);
-    if (!response.ok) {
-      throw new Error(
-        `AI provider returned ${response.status}: ${this.providerError(raw)}`,
-      );
+    let raw: unknown;
+    try {
+      raw = JSON.parse(response.body.toString('utf8'));
+    } catch {
+      throw new Error('AI provider returned an invalid response');
     }
     const parsed = this.response(raw);
     return {
@@ -129,42 +134,20 @@ export class OpenAiCompatibleProvider implements AiProviderAdapter {
     };
   }
 
-  private providerError(raw: unknown) {
-    if (!raw || typeof raw !== 'object') return 'unknown error';
-    const error = (raw as Record<string, unknown>).error;
-    if (error && typeof error === 'object') {
-      const message = (error as Record<string, unknown>).message;
-      if (typeof message === 'string') return message.slice(0, 1000);
-    }
-    return 'provider request failed';
-  }
-
   private string(value: unknown, label: string) {
     if (typeof value !== 'string' || !value)
       throw new ValidationException(`${label} is required`);
     return value;
   }
 
-  private baseUrl(value: string) {
-    let parsed: URL;
-    try {
-      parsed = new URL(value);
-    } catch {
-      throw new ValidationException('Integration baseUrl must be a valid URL');
-    }
-    const local =
-      parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
-    if (
-      parsed.protocol !== 'https:' &&
-      !(process.env.NODE_ENV !== 'production' && local)
-    )
-      throw new ValidationException('AI provider baseUrl must use HTTPS');
-    return parsed.toString().replace(/\/$/, '');
-  }
-
   private number(value: unknown, fallback: number, min: number, max: number) {
     if (value === undefined) return fallback;
-    if (typeof value !== 'number' || value < min || value > max)
+    if (
+      typeof value !== 'number' ||
+      !Number.isFinite(value) ||
+      value < min ||
+      value > max
+    )
       throw new ValidationException(
         `AI numeric configuration must be between ${min} and ${max}`,
       );

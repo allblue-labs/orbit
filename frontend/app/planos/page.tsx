@@ -4,7 +4,7 @@ import { ArrowRight, ShieldCheck } from "lucide-react";
 
 import { OrbitLogo } from "@/components/brand/orbit-logo";
 import { PricingPlans } from "@/components/pricing/pricing-plans";
-import { carregarCatalogoPublico } from "@/components/pricing/pricing-catalog";
+import { carregarCatalogoPublico } from "@/server/public-plan-catalog";
 import { Button } from "@/components/ui/button";
 import { ROUTES } from "@/lib/routes";
 
@@ -115,7 +115,10 @@ export default async function PlanosPage() {
 
         <section className="mt-16 rounded-2xl border border-border bg-muted/30 p-6">
           <div className="flex items-start gap-3">
-            <ShieldCheck className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden />
+            <ShieldCheck
+              className="mt-0.5 size-5 shrink-0 text-primary"
+              aria-hidden
+            />
             <div>
               <h2 className="text-sm font-semibold text-foreground">
                 Comece pelo cadastro
@@ -153,12 +156,12 @@ const PERGUNTAS: readonly { pergunta: string; resposta: string }[] = [
   {
     pergunta: "As cotas mensais valem para qualquer periodicidade?",
     resposta:
-      "Sim. Cota de uso é sempre mensal — assinar por ano dá desconto no preço, não doze meses de uso de uma vez.",
+      "Sim. Cota de uso é sempre mensal — a cota é renovada a cada mês, inclusive nas assinaturas anuais.",
   },
   {
     pergunta: "Quem tem direito à avaliação gratuita?",
     resposta:
-      "O plano Essencial oferece 30 dias na primeira contratação elegível. A verificação acontece no momento da contratação, com a empresa identificada.",
+      "Consulte a duração da avaliação nos planos acima. Na primeira contratação, verificamos a elegibilidade da empresa.",
   },
   {
     pergunta: "Dá para trocar de plano depois?",
@@ -168,6 +171,6 @@ const PERGUNTAS: readonly { pergunta: string; resposta: string }[] = [
   {
     pergunta: "O que é a camada de inteligência?",
     resposta:
-      "O Orbit Intelligence e os agentes auxiliares, disponíveis nos planos Profissional + Inteligência e Empresarial Ilimitado.",
+      "O Orbit Intelligence e os agentes auxiliares, identificados na comparação de recursos acima.",
   },
 ];

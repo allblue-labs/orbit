@@ -185,7 +185,7 @@ export function UsersSection() {
     >
       <div className="space-y-3">
         <p className="text-sm text-muted-foreground">
-          A equipe é administrada no Workspace próprio: quem faz parte, com que
+          A equipe é administrada na tela Equipe: quem faz parte, com que
           papel, em que unidade, convites pendentes e o que cada pessoa tem para
           fazer.
         </p>

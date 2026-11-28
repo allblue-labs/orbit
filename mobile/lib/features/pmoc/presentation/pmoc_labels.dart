@@ -12,23 +12,32 @@ library;
 
 import '../../../core/design/orbit_primitives.dart';
 
-/// O motivo do bloqueio, em frase.
-///
-/// Devolve o próprio código quando não conhece: um texto genérico esconderia a
-/// pista que faria alguém entender o que aconteceu.
 String pmocBlockedReasonLabel(String reason) => switch (reason) {
-  'PLAN_NOT_ACTIVE' => 'O plano não está ativo.',
+  'PLAN_NOT_ACTIVE' =>
+    'O plano está inativo. Peça a quem gerencia o PMOC para revisá-lo.',
   'CYCLE_NOT_PENDING' => 'Este ciclo já foi encerrado.',
+  'EXECUTION_CANCELLED' => 'O atendimento deste equipamento foi cancelado.',
   'EQUIPMENT_INACTIVE' => 'O equipamento está inativo no cadastro.',
   'TECHNICAL_RESPONSIBLE_MISSING' =>
-    'O plano não tem Responsável Técnico definido.',
+    'Peça a quem gerencia o plano para definir um Responsável Técnico.',
   'TECHNICAL_RESPONSIBLE_INELIGIBLE' =>
-    'O Responsável Técnico do plano não está elegível para assinar.',
+    'Peça a quem gerencia o plano para conferir o perfil e a assinatura do Responsável Técnico.',
+  'PROFESSIONAL_PROFILE_INACTIVE' =>
+    'O perfil do Responsável Técnico está inativo. Solicite a revisão em Equipe.',
+  'PROFESSIONAL_ROLE_MISSING' =>
+    'Peça a quem gerencia a equipe para habilitar o perfil de Responsável Técnico.',
+  'BUSINESS_UNIT_SCOPE_MISSING' =>
+    'O Responsável Técnico precisa atuar na unidade deste plano.',
+  'DOCUMENT_POLICY_DENIED' =>
+    'Peça a quem gerencia o PMOC para conferir quem pode assinar este documento.',
   'SIGNATURE_MISSING' =>
     'O Responsável Técnico ainda não cadastrou a assinatura.',
-  'CREDENTIAL_MISSING' => 'O Responsável Técnico está sem registro profissional.',
-  'CREDENTIAL_EXPIRED' => 'O registro profissional do Responsável Técnico venceu.',
-  _ => reason,
+  'CREDENTIAL_MISSING' =>
+    'O Responsável Técnico está sem registro profissional.',
+  'CREDENTIAL_EXPIRED' =>
+    'O registro profissional do Responsável Técnico venceu.',
+  _ =>
+    'Atualize o PMOC. Se continuar indisponível, peça a quem gerencia a manutenção para revisar o plano.',
 };
 
 /// A situação de um equipamento no ciclo.
@@ -38,7 +47,7 @@ String pmocBlockedReasonLabel(String reason) => switch (reason) {
       'IN_PROGRESS' => (label: 'Em andamento', tone: OrbitTone.info),
       'COMPLETED' => (label: 'Concluído', tone: OrbitTone.success),
       'CANCELLED' => (label: 'Cancelado', tone: OrbitTone.neutral),
-      _ => (label: status, tone: OrbitTone.neutral),
+      _ => (label: 'Situação indisponível', tone: OrbitTone.neutral),
     };
 
 /// A situação de um ciclo do plano.
@@ -49,7 +58,7 @@ String pmocBlockedReasonLabel(String reason) => switch (reason) {
       'COMPLETED' => (label: 'Concluído', tone: OrbitTone.success),
       'SKIPPED' => (label: 'Não realizado', tone: OrbitTone.warning),
       'CANCELLED' => (label: 'Cancelado', tone: OrbitTone.neutral),
-      _ => (label: status, tone: OrbitTone.neutral),
+      _ => (label: 'Situação indisponível', tone: OrbitTone.neutral),
     };
 
 /// `2026-10-14` → `14/10/2026`.

@@ -1,0 +1,435 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.allblue-labs.com/federation/1.0.0/receipt.schema.json",
+  "title": "PROPOSED / PENDING_NEXUS_DECISION — receipt.schema.json",
+  "type": "object",
+  "properties": {
+    "protocolVersion": {
+      "const": "1.0.0"
+    },
+    "commandId": {
+      "$ref": "common.schema.json#/$defs/uuid"
+    },
+    "receiptId": {
+      "$ref": "common.schema.json#/$defs/uuid"
+    },
+    "commandType": {
+      "enum": [
+        "tenant.provision.v1",
+        "tenant.update.v1",
+        "subscription.request_plan_change.v1",
+        "subscription.request_cancel.v1",
+        "subscription.request_keep.v1",
+        "tenant.request_suspend.v1",
+        "tenant.request_reactivate.v1"
+      ]
+    },
+    "target": {
+      "$ref": "common.schema.json#/$defs/optionalTenantTarget"
+    },
+    "processingStatus": {
+      "enum": [
+        "ACCEPTED",
+        "AWAITING_APPROVAL",
+        "EXECUTING",
+        "AWAITING_CUSTOMER_ACTION",
+        "SUCCEEDED",
+        "REJECTED",
+        "FAILED",
+        "EXPIRED"
+      ]
+    },
+    "receiptVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "acceptedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "correlationId": {
+      "$ref": "common.schema.json#/$defs/uuid"
+    },
+    "confirmedBy": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 40,
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "effect": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "NONE"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "PROVISIONED"
+            },
+            "tenantId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+            },
+            "subscriptionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+            },
+            "access": {
+              "enum": [
+                "PENDING_PAYMENT",
+                "TRIALING"
+              ]
+            },
+            "ownerSetup": {
+              "const": "QUEUED"
+            }
+          },
+          "required": [
+            "kind",
+            "tenantId",
+            "subscriptionId",
+            "access",
+            "ownerSetup"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "APPLIED"
+            },
+            "aggregate": {
+              "$ref": "common.schema.json#/$defs/aggregate"
+            }
+          },
+          "required": [
+            "kind",
+            "aggregate"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "UNCHANGED"
+            },
+            "aggregate": {
+              "$ref": "common.schema.json#/$defs/aggregate"
+            }
+          },
+          "required": [
+            "kind",
+            "aggregate"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "SCHEDULED"
+            },
+            "subscriptionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+            },
+            "subscriptionVersion": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "currentPlanCode": {
+              "$ref": "common.schema.json#/$defs/planCode"
+            },
+            "targetPlanCode": {
+              "$ref": "common.schema.json#/$defs/planCode"
+            },
+            "billingInterval": {
+              "$ref": "common.schema.json#/$defs/billingInterval"
+            },
+            "effectiveAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "Z$"
+            },
+            "targetPriceVersionRef": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "subscriptionId",
+            "subscriptionVersion",
+            "currentPlanCode",
+            "targetPlanCode",
+            "billingInterval",
+            "effectiveAt",
+            "targetPriceVersionRef"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "CANCELLATION_SCHEDULED"
+            },
+            "subscriptionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+            },
+            "subscriptionVersion": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "accessUntil": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "Z$"
+            }
+          },
+          "required": [
+            "kind",
+            "subscriptionId",
+            "subscriptionVersion",
+            "accessUntil"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "CUSTOMER_ACTION_REQUIRED"
+            },
+            "actionRef": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+            },
+            "expiresAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "Z$"
+            }
+          },
+          "required": [
+            "kind",
+            "actionRef",
+            "expiresAt"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "error": {
+      "$ref": "error.schema.json"
+    }
+  },
+  "required": [
+    "protocolVersion",
+    "commandId",
+    "receiptId",
+    "commandType",
+    "target",
+    "processingStatus",
+    "receiptVersion",
+    "acceptedAt",
+    "updatedAt",
+    "correlationId",
+    "confirmedBy",
+    "effect"
+  ],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "processingStatus": {
+            "const": "SUCCEEDED"
+          }
+        },
+        "required": [
+          "processingStatus"
+        ]
+      },
+      "then": {
+        "properties": {
+          "effect": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "PROVISIONED",
+                  "APPLIED",
+                  "UNCHANGED",
+                  "SCHEDULED",
+                  "CANCELLATION_SCHEDULED"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          }
+        },
+        "not": {
+          "required": [
+            "error"
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "processingStatus": {
+            "const": "AWAITING_CUSTOMER_ACTION"
+          }
+        },
+        "required": [
+          "processingStatus"
+        ]
+      },
+      "then": {
+        "properties": {
+          "effect": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "CUSTOMER_ACTION_REQUIRED"
+              },
+              "actionRef": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+              },
+              "expiresAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "Z$"
+              }
+            },
+            "required": [
+              "kind",
+              "actionRef",
+              "expiresAt"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "effect": {
+            "not": {
+              "properties": {
+                "kind": {
+                  "const": "CUSTOMER_ACTION_REQUIRED"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "processingStatus": {
+            "enum": [
+              "ACCEPTED",
+              "AWAITING_APPROVAL",
+              "EXECUTING",
+              "REJECTED",
+              "FAILED",
+              "EXPIRED"
+            ]
+          }
+        },
+        "required": [
+          "processingStatus"
+        ]
+      },
+      "then": {
+        "properties": {
+          "effect": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "NONE"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "processingStatus": {
+            "enum": [
+              "REJECTED",
+              "FAILED",
+              "EXPIRED"
+            ]
+          }
+        },
+        "required": [
+          "processingStatus"
+        ]
+      },
+      "then": {
+        "required": [
+          "error"
+        ]
+      }
+    }
+  ]
+}

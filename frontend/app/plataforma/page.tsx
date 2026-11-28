@@ -21,8 +21,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { RequirePlatformAdmin } from "@/guards";
+import { MfaSection } from "@/components/profile/mfa.section";
+import { RequireAuth, RequirePlatformAdmin } from "@/guards";
 import { useLogout } from "@/hooks/api";
+import { ROUTES } from "@/lib/routes";
 import { useSession } from "@/providers";
 
 const CAPABILITIES = [
@@ -46,6 +48,44 @@ const CAPABILITIES = [
 ];
 
 export default function PlatformPage() {
+  return (
+    <RequireAuth requireOrganization={false} anonymousRedirectTo={ROUTES.login}>
+      <PlatformAccess />
+    </RequireAuth>
+  );
+}
+
+function PlatformAccess() {
+  const { session, user } = useSession();
+  const logout = useLogout();
+  if (session.authenticated && session.platformMfaRequired) {
+    const enabled = user?.mfaEnabled === true;
+    return (
+      <main className="mx-auto flex min-h-dvh w-full max-w-xl flex-col gap-6 px-6 py-10">
+        <OrbitLogo />
+        <div className="space-y-2">
+          <h1 className="font-display text-2xl font-semibold">
+            Proteja o acesso administrativo
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            A administração da plataforma exige autenticação em dois fatores.
+            {enabled
+              ? " Entre novamente com sua senha e um código de segurança."
+              : " Configure seu aplicativo autenticador e depois entre novamente."}
+          </p>
+        </div>
+        <MfaSection enabled={enabled} allowDisable={false} />
+        <Button
+          variant="outline"
+          className="self-start"
+          disabled={logout.isPending}
+          onClick={() => logout.mutate()}
+        >
+          {enabled ? "Sair para entrar com o código" : "Sair"}
+        </Button>
+      </main>
+    );
+  }
   return (
     <RequirePlatformAdmin>
       <PlatformLanding />
@@ -103,6 +143,7 @@ function PlatformLanding() {
           </Card>
         ))}
       </div>
+      <MfaSection enabled={session.user?.mfaEnabled === true} />
       <div className="border-t border-border pt-6">
         <Button asChild variant="outline">
           <Link href="/design-system">Abrir Design System</Link>

@@ -193,7 +193,7 @@ void main() {
       ),
     );
     expect(find.byIcon(Icons.check_circle_rounded), findsNothing);
-    expect(find.textContaining('aguardando sincronização'), findsOneWidget);
+    expect(find.textContaining('aguardando envio'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 }

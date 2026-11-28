@@ -9,6 +9,7 @@
 /// O relato que originou este teste é que o aplicativo **entrou direto**. O
 /// teste reproduz o caminho inteiro pelo repositório real, sem duplo: criar o
 /// técnico, entrar com a senha provisória e conferir o que a sessão carrega.
+@Tags(['integration'])
 library;
 
 import 'dart:io';
@@ -54,6 +55,9 @@ Future<bool> _apiIsUp() async {
     socket.destroy();
     return true;
   } on Object {
+    if (const bool.fromEnvironment('ORBIT_REQUIRE_API')) {
+      throw StateError('A API de testes obrigatória não está disponível.');
+    }
     return false;
   }
 }

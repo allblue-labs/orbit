@@ -52,8 +52,11 @@ const UNIT_TYPES = [
   { value: "HEADQUARTERS", label: "Sede" },
   { value: "BRANCH", label: "Filial" },
   { value: "DEPARTMENT", label: "Departamento" },
-  { value: "SITE", label: "Site" },
+  { value: "SITE", label: "Local de atendimento" },
 ] as const;
+
+export const UNIT_TYPE_LABELS: Readonly<Record<string, string>> =
+  Object.fromEntries(UNIT_TYPES.map((tipo) => [tipo.value, tipo.label]));
 
 export function BusinessUnitFormDialog({
   unit,

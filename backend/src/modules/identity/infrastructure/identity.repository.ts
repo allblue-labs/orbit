@@ -1,17 +1,45 @@
+import { accountEmailOwner } from '../../email/account-email-policy';
+import { IdentityEmailOutbox } from './identity-email.outbox';
+import {
+  PASSWORD_RESET_TTL_MS,
+  PASSWORD_RESET_INVALID_MESSAGE,
+} from '../domain/password-reset.policy';
+import { VerifiedPlatformAuthority } from '../../../common/verified-platform-authority';
 import { Injectable } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../database';
+import {
+  resolveIdentityUser,
+  withIdentity,
+} from '../../../database/rls/identity-scope';
+import { generateUuidV7 } from '../../../utils';
 import type { PrismaTransactionClient } from '../../../database/prisma.types';
+import {
+  UnauthorizedException,
+  ValidationException,
+} from '../../../exceptions';
+
+export interface RefreshSession {
+  id: string;
+  userId: string;
+  client: string;
+  refreshTokenHash: string;
+  rotationResponse: string | null;
+  inGrace: boolean;
+}
 
 const identityInclude = {
   credential: true,
   mfaFactors: { where: { verifiedAt: { not: null }, deletedAt: null } },
   platformRoleAssignments: {
-    where: { revokedAt: null },
+    where: {
+      revokedAt: null,
+      role: { organizationId: null, deletedAt: null },
+    },
     include: { role: true },
   },
   organizationMemberships: {
-    where: { status: 'ACTIVE', deletedAt: null },
+    where: { status: 'ACTIVE', deletedAt: null, role: { deletedAt: null } },
     include: { role: true },
   },
   businessUnitMemberships: {
@@ -23,44 +51,27 @@ const identityInclude = {
 export type IdentityUser = Prisma.UserGetPayload<{
   include: typeof identityInclude;
 }> & {
+  readonly requiresEmailVerification?: boolean;
   readonly isOrganizationOwner: boolean;
   readonly effectiveBusinessUnitIds: readonly string[];
+  readonly platformAuthority?: VerifiedPlatformAuthority;
 };
 
 @Injectable()
 export class IdentityRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly emailOutbox: IdentityEmailOutbox,
+  ) {}
 
   async findByEmail(email: string): Promise<IdentityUser | null> {
     const normalizedEmail = email.trim().toLowerCase();
-    const user = await this.prisma.user.findUnique({
-      where: { normalizedEmail },
-      select: { id: true },
-    });
-    return user ? this.findIdentity(user.id) : null;
+    const id = await resolveIdentityUser(this.prisma, normalizedEmail);
+    return id ? this.findIdentity(id) : null;
   }
 
   findById(id: string): Promise<IdentityUser | null> {
     return this.findIdentity(id);
-  }
-
-  hasActivePlatformRole(userId: string, roleKey: string): Promise<boolean> {
-    return this.prisma.$transaction(async (transaction) => {
-      await this.setLocal(transaction, 'app.user_id', userId);
-      const assignment = await transaction.platformRoleAssignment.findFirst({
-        where: {
-          userId,
-          revokedAt: null,
-          role: {
-            key: roleKey,
-            organizationId: null,
-            deletedAt: null,
-          },
-        },
-        select: { id: true },
-      });
-      return Boolean(assignment);
-    });
   }
 
   private findIdentity(id: string): Promise<IdentityUser | null> {
@@ -68,9 +79,13 @@ export class IdentityRepository {
       await this.setLocal(transaction, 'app.user_id', id);
       await this.setLocal(transaction, 'app.is_platform_admin', 'false');
       const organization = await transaction.organizationMembership.findFirst({
-        where: { userId: id, status: 'ACTIVE', deletedAt: null },
+        where: {
+          userId: id,
+          status: 'ACTIVE',
+          deletedAt: null,
+        },
         select: { organizationId: true },
-        orderBy: { joinedAt: 'asc' },
+        orderBy: [{ joinedAt: 'asc' }, { id: 'asc' }],
       });
       await this.setLocal(
         transaction,
@@ -92,7 +107,11 @@ export class IdentityRepository {
               deletedAt: null,
             },
             select: { id: true },
-            orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+            orderBy: [
+              { isPrimary: 'desc' },
+              { createdAt: 'asc' },
+              { id: 'asc' },
+            ],
           })
         : await transaction.businessUnitMembership.findMany({
             where: {
@@ -102,6 +121,7 @@ export class IdentityRepository {
               deletedAt: null,
             },
             select: { businessUnitId: true },
+            orderBy: { id: 'asc' },
           });
       const unitIds = units.map((unit) =>
         'businessUnitId' in unit ? unit.businessUnitId : unit.id,
@@ -115,27 +135,66 @@ export class IdentityRepository {
         where: { id },
         include: identityInclude,
       });
+      // Role visibility requires the tenant context set above. Never join roles
+      // in the initial membership lookup, before RLS knows that tenant.
+      const hasMembership = user?.organizationMemberships.some(
+        (membership) =>
+          membership.organizationId === organization?.organizationId,
+      );
       return user
-        ? { ...user, isOrganizationOwner, effectiveBusinessUnitIds: unitIds }
+        ? {
+            ...user,
+            organizationMemberships: user.organizationMemberships.sort(
+              (a, b) =>
+                a.joinedAt.getTime() - b.joinedAt.getTime() ||
+                a.id.localeCompare(b.id),
+            ),
+            requiresEmailVerification:
+              !user.emailVerifiedAt &&
+              Boolean(
+                await transaction.accountEmailOwner.findUnique({
+                  where: { userId: id },
+                  select: { userId: true },
+                }),
+              ),
+            isOrganizationOwner: Boolean(hasMembership && isOrganizationOwner),
+            effectiveBusinessUnitIds: hasMembership ? unitIds : [],
+            platformAuthority:
+              VerifiedPlatformAuthority.fromPersistedAssignments(
+                user.id,
+                user.platformRoleAssignments,
+              ),
+          }
         : null;
     });
   }
 
-  updateFailedLogin(
+  async updateFailedLogin(
     credentialId: string,
-    failedAttempts: number,
-    lockedUntil: Date | null,
+    expectedPasswordHash: string,
+    userId: string,
   ): Promise<void> {
-    return this.prisma.credential
-      .update({
-        where: { id: credentialId },
-        data: { failedAttempts, lockedUntil },
-      })
-      .then(() => undefined);
+    // Increment the current row, never the snapshot read before password/MFA
+    // verification. A late attempt against an old password cannot re-lock it.
+    await withIdentity(
+      this.prisma,
+      userId,
+      (tx) => tx.$executeRaw`
+      UPDATE credentials SET
+        failed_attempts = CASE WHEN locked_until <= clock_timestamp() THEN 1 ELSE failed_attempts + 1 END,
+        locked_until = CASE
+          WHEN (CASE WHEN locked_until <= clock_timestamp() THEN 1 ELSE failed_attempts + 1 END) >= 5
+          THEN clock_timestamp() + interval '15 minutes' ELSE NULL END,
+        updated_at = clock_timestamp()
+      WHERE id = ${credentialId}::uuid AND password_hash = ${expectedPasswordHash}
+        AND (locked_until IS NULL OR locked_until <= clock_timestamp())`,
+    );
   }
 
   findCredential(userId: string) {
-    return this.prisma.credential.findUnique({ where: { userId } });
+    return withIdentity(this.prisma, userId, (tx) =>
+      tx.credential.findUnique({ where: { userId } }),
+    );
   }
 
   /**
@@ -153,6 +212,7 @@ export class IdentityRepository {
   ): Promise<void> {
     return this.prisma
       .$transaction(async (transaction) => {
+        await this.setLocal(transaction, 'app.user_id', userId);
         await transaction.credential.update({
           where: { userId },
           data: {
@@ -171,66 +231,150 @@ export class IdentityRepository {
           },
           data: { revokedAt: new Date() },
         });
+        await this.emailOutbox.enqueueNoticeIn(
+          transaction,
+          userId,
+          'PASSWORD_CHANGED',
+          `profile:${Date.now()}`,
+        );
       })
       .then(() => undefined);
   }
 
-  markAuthenticated(userId: string, credentialId: string): Promise<void> {
-    return this.prisma
-      .$transaction([
-        this.prisma.user.update({
-          where: { id: userId },
-          data: { lastAuthenticatedAt: new Date() },
-        }),
-        this.prisma.credential.update({
+  async completeLogin(
+    data: Prisma.SessionUncheckedCreateInput,
+    credentialId: string,
+    expectedPasswordHash: string,
+  ): Promise<void> {
+    await withIdentity(this.prisma, data.userId, async (tx) => {
+      const changed = await tx.$executeRaw`
+        UPDATE credentials SET failed_attempts = 0, locked_until = NULL, updated_at = clock_timestamp()
+        WHERE id = ${credentialId}::uuid AND user_id = ${data.userId}::uuid
+          AND password_hash = ${expectedPasswordHash}
+          AND (locked_until IS NULL OR locked_until <= clock_timestamp())`;
+      if (changed !== 1) {
+        const current = await tx.credential.findUnique({
           where: { id: credentialId },
-          data: { failedAttempts: 0, lockedUntil: null },
-        }),
-      ])
-      .then(() => undefined);
+        });
+        if (
+          current?.passwordHash === expectedPasswordHash &&
+          current.lockedUntil
+        )
+          throw new UnauthorizedException(
+            'Account temporarily locked',
+            'ACCOUNT_LOCKED',
+          );
+        throw new UnauthorizedException(
+          'Invalid credentials',
+          'INVALID_CREDENTIALS',
+        );
+      }
+      const user = await tx.user.updateMany({
+        where: { id: data.userId, status: 'ACTIVE', deletedAt: null },
+        data: { lastAuthenticatedAt: new Date() },
+      });
+      if (user.count !== 1)
+        throw new UnauthorizedException(
+          'Invalid credentials',
+          'INVALID_CREDENTIALS',
+        );
+      // Password resets lock this same credential before revoking sessions:
+      // either this login loses its comparison or the reset revokes its session.
+      await tx.session.create({ data });
+    });
+  }
+
+  /** Abre a sessão de um login sem senha e marca a última autenticação. */
+  async openSession(data: Prisma.SessionUncheckedCreateInput): Promise<void> {
+    await withIdentity(this.prisma, data.userId, async (tx) => {
+      const user = await tx.user.updateMany({
+        where: { id: data.userId, status: 'ACTIVE', deletedAt: null },
+        data: { lastAuthenticatedAt: new Date() },
+      });
+      if (user.count !== 1)
+        throw new UnauthorizedException(
+          'Invalid credentials',
+          'INVALID_CREDENTIALS',
+        );
+      await tx.session.create({ data });
+    });
   }
 
   createSession(data: Prisma.SessionUncheckedCreateInput) {
-    return this.prisma.session.create({ data });
+    return withIdentity(this.prisma, data.userId, (tx) =>
+      tx.session.create({ data }),
+    );
   }
 
-  findSessionByRefreshHash(refreshTokenHash: string) {
-    return this.prisma.session.findUnique({ where: { refreshTokenHash } });
+  findSessionByRefreshHash(hash: string) {
+    return this.findRefreshSession(hash);
   }
 
-  findSessionById(id: string) {
-    return this.prisma.session.findUnique({ where: { id } });
+  findSessionById(id: string, userId: string) {
+    return withIdentity(this.prisma, userId, (tx) =>
+      tx.session.findUnique({
+        where: { id, userId },
+        select: {
+          id: true,
+          userId: true,
+          client: true,
+          expiresAt: true,
+          revokedAt: true,
+          platformMfaFactorId: true,
+        },
+      }),
+    );
   }
 
-  rotateSession(
+  async findRefreshSession(hash: string): Promise<RefreshSession | null> {
+    const [row] = await this.prisma.$queryRaw<RefreshSession[]>`
+      SELECT * FROM public.app_identity_session_by_refresh(${hash})`;
+    return row ?? null;
+  }
+
+  async rotateSession(
     id: string,
+    expectedHash: string,
     refreshTokenHash: string,
     expiresAt: Date,
-  ): Promise<void> {
-    return this.prisma.session
-      .update({
-        where: { id },
-        data: { refreshTokenHash, expiresAt },
-      })
-      .then(() => undefined);
+    encryptedResponse: string,
+    userId: string,
+  ): Promise<boolean> {
+    // PostgreSQL rechecks this predicate after waiting for a competing update.
+    // Current and previous tokens return the same response throughout grace;
+    // a fast successor cannot invalidate a response still in flight.
+    const changed = await withIdentity(
+      this.prisma,
+      userId,
+      (tx) => tx.$executeRaw`
+      UPDATE sessions SET refresh_token_hash = ${refreshTokenHash},
+        previous_refresh_token_hash = ${expectedHash},
+        rotation_response = ${encryptedResponse},
+        rotation_grace_until = clock_timestamp() + interval '15 seconds',
+        expires_at = ${expiresAt}
+      WHERE id = ${id}::uuid AND refresh_token_hash = ${expectedHash}
+        AND revoked_at IS NULL AND expires_at > clock_timestamp()
+        AND (rotation_grace_until IS NULL OR rotation_grace_until <= clock_timestamp())`,
+    );
+    return changed === 1;
   }
 
-  revokeSession(id: string): Promise<void> {
-    return this.prisma.session
-      .updateMany({
-        where: { id, revokedAt: null },
+  async revokeSession(id: string, userId: string): Promise<void> {
+    await withIdentity(this.prisma, userId, (tx) =>
+      tx.session.updateMany({
+        where: { id, userId, revokedAt: null },
         data: { revokedAt: new Date() },
-      })
-      .then(() => undefined);
+      }),
+    );
   }
 
-  revokeUserSessions(userId: string): Promise<void> {
-    return this.prisma.session
-      .updateMany({
+  async revokeUserSessions(userId: string): Promise<void> {
+    await withIdentity(this.prisma, userId, (tx) =>
+      tx.session.updateMany({
         where: { userId, revokedAt: null },
         data: { revokedAt: new Date() },
-      })
-      .then(() => undefined);
+      }),
+    );
   }
 
   findDelegatedRole(
@@ -254,47 +398,179 @@ export class IdentityRepository {
   }
 
   listSessions(userId: string) {
-    return this.prisma.session.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
-      // The profile UI is a security overview, not an audit export. A bounded
-      // latest-first window prevents an account with years of rotated or
-      // revoked sessions from creating an unbounded response.
-      take: 100,
-      select: {
-        id: true,
-        client: true,
-        deviceId: true,
-        userAgent: true,
-        ipAddress: true,
-        organizationId: true,
-        businessUnitId: true,
-        expiresAt: true,
-        revokedAt: true,
-        createdAt: true,
-      },
-    });
+    return withIdentity(this.prisma, userId, (tx) =>
+      tx.session.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        // The profile UI is a security overview, not an audit export. A bounded
+        // latest-first window prevents an account with years of rotated or
+        // revoked sessions from creating an unbounded response.
+        take: 100,
+        select: {
+          id: true,
+          client: true,
+          deviceId: true,
+          userAgent: true,
+          ipAddress: true,
+          organizationId: true,
+          businessUnitId: true,
+          expiresAt: true,
+          revokedAt: true,
+          createdAt: true,
+        },
+      }),
+    );
   }
 
   updateProfile(userId: string, data: Prisma.UserUpdateInput) {
-    return this.prisma.user.update({
-      where: { id: userId },
-      data,
-      omit: { deletedAt: true },
+    return withIdentity(this.prisma, userId, (tx) =>
+      tx.user.update({
+        where: { id: userId },
+        data,
+        omit: { deletedAt: true },
+      }),
+    );
+  }
+
+  createEmailVerification(
+    userId: string,
+    tokenHash: string,
+    expiresAt: Date,
+    emailToken?: string,
+  ): Promise<string | null> {
+    return this.prisma.$transaction(async (tx) => {
+      await this.setLocal(tx, 'app.user_id', userId);
+      if (!(await accountEmailOwner(tx, userId))) return null;
+      await tx.$executeRaw`SELECT id FROM users WHERE id=${userId}::uuid FOR UPDATE`;
+      const user = await tx.user.findFirst({
+        where: {
+          id: userId,
+          status: 'ACTIVE',
+          deletedAt: null,
+          emailVerifiedAt: null,
+        },
+        select: { normalizedEmail: true, email: true },
+      });
+      if (!user) return null;
+      const previous = await tx.emailVerificationToken.findUnique({
+        where: { userId },
+        select: { createdAt: true },
+      });
+      if (previous && previous.createdAt.getTime() > Date.now() - 60_000)
+        return null;
+      if (
+        !(await this.emailOutbox.canQueueIdentityIn(
+          tx,
+          userId,
+          'EMAIL_VERIFICATION',
+        ))
+      )
+        return null;
+      const data = {
+        email: user.normalizedEmail,
+        tokenHash,
+        expiresAt,
+        usedAt: null,
+        createdAt: new Date(),
+      };
+      await tx.emailVerificationToken.upsert({
+        where: { userId },
+        create: { userId, ...data },
+        update: data,
+      });
+      if (emailToken)
+        await this.emailOutbox.enqueueIn(tx, {
+          purpose: 'EMAIL_VERIFICATION',
+          userId,
+          recipient: user.email,
+          token: emailToken,
+          expiresAt,
+        });
+      return user.email;
     });
   }
 
-  createPasswordReset(userId: string, tokenHash: string, expiresAt: Date) {
-    return this.prisma.$transaction(async (transaction) => {
+  async confirmEmail(tokenHash: string): Promise<boolean> {
+    const [result] = await this.prisma.$queryRaw<
+      { confirmed: boolean }[]
+    >`SELECT app_confirm_email(${tokenHash}) AS confirmed`;
+    return result?.confirmed === true;
+  }
+
+  createPasswordReset(
+    userId: string,
+    tokenHash: string,
+    expiresAt: Date,
+    emailToken?: string,
+    existingTransaction?: PrismaTransactionClient,
+  ) {
+    const work = async (transaction: PrismaTransactionClient) => {
+      await this.setLocal(transaction, 'app.user_id', userId);
+      await transaction.$executeRaw`SELECT id FROM users WHERE id=${userId}::uuid FOR UPDATE`;
+      let queueEmail = Boolean(emailToken);
+      if (emailToken && (await accountEmailOwner(transaction, userId))) {
+        const previous = await transaction.passwordResetToken.findFirst({
+          where: {
+            userId,
+            usedAt: null,
+            expiresAt: { gt: new Date() },
+            createdAt: { gt: new Date(Date.now() - PASSWORD_RESET_TTL_MS) },
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+        if (previous && previous.createdAt.getTime() > Date.now() - 60000)
+          return previous;
+        if (
+          !(await this.emailOutbox.canQueueIdentityIn(
+            transaction,
+            userId,
+            'PASSWORD_RESET',
+          ))
+        ) {
+          if (previous) return previous;
+          queueEmail = false;
+        }
+      }
       await transaction.passwordResetToken.deleteMany({ where: { userId } });
-      return transaction.passwordResetToken.create({
+      const reset = await transaction.passwordResetToken.create({
         data: { userId, tokenHash, expiresAt },
       });
-    });
+      if (emailToken && queueEmail) {
+        const user = await transaction.user.findUniqueOrThrow({
+          where: { id: userId },
+          select: { email: true },
+        });
+        await this.emailOutbox.enqueueIn(transaction, {
+          purpose: 'PASSWORD_RESET',
+          userId,
+          recipient: user.email,
+          token: emailToken,
+          expiresAt,
+        });
+      }
+      return reset;
+    };
+    return existingTransaction
+      ? work(existingTransaction)
+      : this.prisma.$transaction(work);
   }
 
-  findPasswordReset(tokenHash: string) {
-    return this.prisma.passwordResetToken.findUnique({ where: { tokenHash } });
+  async findPasswordReset(tokenHash: string) {
+    const [scope] = await this.prisma.$queryRaw<{ id: string | null }[]>`
+      SELECT public.app_identity_reset_user(${tokenHash}) AS id`;
+    if (!scope?.id) return null;
+    return withIdentity(this.prisma, scope.id, (tx) =>
+      tx.passwordResetToken.findUnique({
+        where: {
+          tokenHash,
+          user: {
+            status: 'ACTIVE',
+            deletedAt: null,
+            credential: { isNot: null },
+          },
+        },
+      }),
+    );
   }
 
   consumePasswordReset(
@@ -304,12 +580,22 @@ export class IdentityRepository {
   ): Promise<void> {
     return this.prisma
       .$transaction(async (transaction) => {
-        const consumed = await transaction.passwordResetToken.updateMany({
-          where: { id: tokenId, usedAt: null, expiresAt: { gt: new Date() } },
-          data: { usedAt: new Date() },
-        });
-        if (consumed.count !== 1) {
-          throw new Error('Password reset token was already consumed');
+        await this.setLocal(transaction, 'app.user_id', userId);
+        // CAS rechecks eligibility after a concurrent consumer's row lock.
+        // The database clock also enforces the 3h ceiling on older long-lived links.
+        const consumed = await transaction.$executeRaw`
+          UPDATE password_reset_tokens AS reset SET used_at = clock_timestamp()
+          WHERE reset.id = ${tokenId}::uuid AND reset.user_id = ${userId}::uuid
+            AND reset.used_at IS NULL AND reset.expires_at > clock_timestamp()
+            AND reset.created_at > clock_timestamp() - (${PASSWORD_RESET_TTL_MS} * interval '1 millisecond')
+            AND EXISTS (SELECT 1 FROM users u WHERE u.id = reset.user_id
+              AND u.status = 'ACTIVE' AND u.deleted_at IS NULL)`;
+        if (consumed !== 1) {
+          throw new ValidationException(
+            PASSWORD_RESET_INVALID_MESSAGE,
+            undefined,
+            'PASSWORD_RESET_INVALID',
+          );
         }
         await transaction.credential.update({
           where: { userId },
@@ -325,11 +611,26 @@ export class IdentityRepository {
           where: { userId, revokedAt: null },
           data: { revokedAt: new Date() },
         });
+        /* Recuperar a senha é o "perdi o controle da conta": a biometria
+           cadastrada cai junto com as sessões. */
+        await transaction.identityBiometricCredential.updateMany({
+          where: { userId, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+        await this.emailOutbox.enqueueNoticeIn(
+          transaction,
+          userId,
+          'PASSWORD_CHANGED',
+          `reset:${tokenId}`,
+        );
       })
       .then(() => undefined);
   }
 
-  createInvitation(data: Prisma.IdentityInvitationUncheckedCreateInput) {
+  createInvitation(
+    data: Prisma.IdentityInvitationUncheckedCreateInput,
+    emailToken?: string,
+  ) {
     return this.prisma.$transaction(async (transaction) => {
       await this.setLocal(
         transaction,
@@ -373,12 +674,27 @@ export class IdentityRepository {
         },
         data: { status: 'EXPIRED' },
       });
-      return transaction.identityInvitation.create({ data });
+      const invitation = await transaction.identityInvitation.create({ data });
+      if (emailToken)
+        await this.emailOutbox.enqueueIn(transaction, {
+          purpose: 'INVITATION',
+          organizationId: invitation.organizationId,
+          recipient: invitation.email,
+          token: emailToken,
+          expiresAt: invitation.expiresAt,
+        });
+      return invitation;
     });
   }
 
-  findInvitation(tokenHash: string) {
-    return this.prisma.identityInvitation.findUnique({ where: { tokenHash } });
+  async findInvitation(tokenHash: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const [scope] = await tx.$queryRaw<{ organizationId: string }[]>`
+        SELECT organization_id AS "organizationId" FROM public.app_identity_invitation_by_hash(${tokenHash})`;
+      if (!scope) return null;
+      await this.setLocal(tx, 'app.organization_id', scope.organizationId);
+      return tx.identityInvitation.findUnique({ where: { tokenHash } });
+    });
   }
 
   /**
@@ -444,13 +760,33 @@ export class IdentityRepository {
     id: string,
     organizationId: string,
     data: { tokenHash: string; expiresAt: Date },
+    emailToken?: string,
   ) {
     return this.prisma.$transaction(async (transaction) => {
       await this.setLocal(transaction, 'app.organization_id', organizationId);
-      return transaction.identityInvitation.update({
-        where: { id },
-        data: { ...data, status: 'PENDING' },
+      const changed = await transaction.identityInvitation.updateMany({
+        where: {
+          id,
+          organizationId,
+          status: 'PENDING',
+          expiresAt: { gt: new Date() },
+        },
+        data,
       });
+      if (changed.count !== 1)
+        throw new ValidationException('Invitation is no longer pending');
+      const invitation = await transaction.identityInvitation.findUniqueOrThrow(
+        { where: { id } },
+      );
+      if (emailToken)
+        await this.emailOutbox.enqueueIn(transaction, {
+          purpose: 'INVITATION',
+          organizationId,
+          recipient: invitation.email,
+          token: emailToken,
+          expiresAt: data.expiresAt,
+        });
+      return invitation;
     });
   }
 
@@ -505,26 +841,36 @@ export class IdentityRepository {
           'app.business_unit_ids',
           input.businessUnitId ?? '',
         );
-        let user = await transaction.user.findUnique({
-          where: { normalizedEmail: input.normalizedEmail },
-        });
-        user ??= await transaction.user.create({
-          data: {
-            email: input.email,
-            normalizedEmail: input.normalizedEmail,
-            firstName: input.firstName,
-            lastName: input.lastName,
-            displayName: `${input.firstName} ${input.lastName}`.trim(),
-            status: 'ACTIVE',
-            emailVerifiedAt: new Date(),
-            credential: {
-              create: { passwordHash: input.passwordHash },
+        const [invitation] = await transaction.$queryRaw<{ id: string }[]>`
+          SELECT id FROM public.identity_invitations
+          WHERE id=${invitationId}::uuid AND organization_id=${input.organizationId}::uuid
+            AND normalized_email=${input.normalizedEmail} AND status='PENDING'
+            AND expires_at>clock_timestamp() FOR UPDATE`;
+        if (!invitation) throw new ValidationException('Convite indisponível.');
+        const existingUserId = await resolveIdentityUser(
+          transaction,
+          input.normalizedEmail,
+        );
+        const userId = existingUserId ?? generateUuidV7();
+        await this.setLocal(transaction, 'app.user_id', userId);
+        if (!existingUserId) {
+          await transaction.user.create({
+            data: {
+              id: userId,
+              email: input.email,
+              normalizedEmail: input.normalizedEmail,
+              firstName: input.firstName,
+              lastName: input.lastName,
+              displayName: `${input.firstName} ${input.lastName}`.trim(),
+              status: 'ACTIVE',
+              emailVerifiedAt: new Date(),
+              credential: { create: { passwordHash: input.passwordHash } },
             },
-          },
-        });
+          });
+        }
         await transaction.credential.upsert({
-          where: { userId: user.id },
-          create: { userId: user.id, passwordHash: input.passwordHash },
+          where: { userId },
+          create: { userId, passwordHash: input.passwordHash },
           update: {},
         });
         /**
@@ -534,7 +880,7 @@ export class IdentityRepository {
         const jaAtivo = await transaction.organizationMembership.findFirst({
           where: {
             organizationId: input.organizationId,
-            userId: user.id,
+            userId: userId,
             status: 'ACTIVE',
             deletedAt: null,
           },
@@ -546,12 +892,12 @@ export class IdentityRepository {
           where: {
             organizationId_userId: {
               organizationId: input.organizationId,
-              userId: user.id,
+              userId: userId,
             },
           },
           create: {
             organizationId: input.organizationId,
-            userId: user.id,
+            userId: userId,
             roleId: input.roleId,
           },
           update: { roleId: input.roleId, status: 'ACTIVE', deletedAt: null },
@@ -561,13 +907,13 @@ export class IdentityRepository {
             where: {
               businessUnitId_userId: {
                 businessUnitId: input.businessUnitId,
-                userId: user.id,
+                userId: userId,
               },
             },
             create: {
               organizationId: input.organizationId,
               businessUnitId: input.businessUnitId,
-              userId: user.id,
+              userId: userId,
               roleId: input.roleId,
             },
             update: { roleId: input.roleId, status: 'ACTIVE', deletedAt: null },
@@ -594,51 +940,69 @@ export class IdentityRepository {
   }
 
   createMfaFactor(userId: string, encryptedSecret: string) {
-    return this.prisma.mfaFactor.create({
-      data: { userId, secret: encryptedSecret },
-      select: { id: true },
-    });
+    return withIdentity(this.prisma, userId, (tx) =>
+      tx.mfaFactor.create({
+        data: { userId, secret: encryptedSecret },
+        select: { id: true },
+      }),
+    );
   }
 
   findMfaFactor(id: string, userId: string) {
-    return this.prisma.mfaFactor.findFirst({
-      where: { id, userId, deletedAt: null },
-    });
+    return withIdentity(this.prisma, userId, (tx) =>
+      tx.mfaFactor.findFirst({
+        where: { id, userId, deletedAt: null },
+      }),
+    );
   }
 
-  enableMfaFactor(id: string, recoveryCodes: readonly string[]): Promise<void> {
-    return this.prisma.mfaFactor
-      .update({
-        where: { id },
-        data: { verifiedAt: new Date(), recoveryCodes: [...recoveryCodes] },
-      })
-      .then(() => undefined);
-  }
-
-  touchMfaFactor(id: string): Promise<void> {
-    return this.prisma.mfaFactor
-      .update({ where: { id }, data: { lastUsedAt: new Date() } })
-      .then(() => undefined);
-  }
-
-  consumeMfaRecoveryCode(
+  async enableMfaFactor(
     id: string,
     recoveryCodes: readonly string[],
-  ): Promise<void> {
-    return this.prisma.mfaFactor
-      .update({
-        where: { id },
-        data: { recoveryCodes: [...recoveryCodes], lastUsedAt: new Date() },
-      })
-      .then(() => undefined);
+    userId: string,
+  ): Promise<boolean> {
+    const result = await withIdentity(this.prisma, userId, (tx) =>
+      tx.mfaFactor.updateMany({
+        where: { id, userId, verifiedAt: null, deletedAt: null },
+        data: { verifiedAt: new Date(), recoveryCodes: [...recoveryCodes] },
+      }),
+    );
+    return result.count === 1;
   }
 
-  disableMfa(userId: string): Promise<void> {
-    return this.prisma.mfaFactor
-      .updateMany({
+  async touchMfaFactor(id: string, userId: string): Promise<boolean> {
+    const result = await withIdentity(this.prisma, userId, (tx) =>
+      tx.mfaFactor.updateMany({
+        where: { id, userId, verifiedAt: { not: null }, deletedAt: null },
+        data: { lastUsedAt: new Date() },
+      }),
+    );
+    return result.count === 1;
+  }
+
+  async consumeMfaRecoveryCode(
+    id: string,
+    matchedHash: string,
+    userId: string,
+  ): Promise<boolean> {
+    const changed = await withIdentity(
+      this.prisma,
+      userId,
+      (tx) => tx.$executeRaw`
+      UPDATE mfa_factors SET recovery_codes = array_remove(recovery_codes, ${matchedHash}),
+        last_used_at = clock_timestamp()
+      WHERE id = ${id}::uuid AND verified_at IS NOT NULL AND deleted_at IS NULL
+        AND ${matchedHash} = ANY(recovery_codes)`,
+    );
+    return changed === 1;
+  }
+
+  async disableMfa(userId: string): Promise<void> {
+    await withIdentity(this.prisma, userId, (tx) =>
+      tx.mfaFactor.updateMany({
         where: { userId, deletedAt: null },
         data: { deletedAt: new Date() },
-      })
-      .then(() => undefined);
+      }),
+    );
   }
 }

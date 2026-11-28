@@ -1,11 +1,9 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../database';
 import type { PrismaTransactionClient } from '../../../database/prisma.types';
-import { FileObjectService } from '../../storage/file-object.service';
-import {
-  STORAGE_PROVIDER,
-  type StorageProvider,
-} from '../../storage/storage.types';
+import { StorageCleanupService } from '../../storage/storage-cleanup.service';
+import { mediaInventory, hasPurgeBarrier } from './media-inventory';
+import { generateUuidV7 } from '../../../utils';
 import {
   BILLING_PROVIDER,
   type BillingProvider,
@@ -31,8 +29,7 @@ export class SubscriptionDataRetentionService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(BILLING_PROVIDER) private readonly provider: BillingProvider,
-    private readonly files: FileObjectService,
-    @Inject(STORAGE_PROVIDER) private readonly storage: StorageProvider,
+    private readonly cleanup: StorageCleanupService,
   ) {}
 
   private platform<T>(
@@ -75,6 +72,29 @@ export class SubscriptionDataRetentionService {
               continue;
             await this.purge(subscription.organizationId, subscription.id, at);
           } catch (error) {
+            await this.platform(async (tx) => {
+              await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${subscription.organizationId}, 0))::text`;
+              await tx.tenantDataPurge.updateMany({
+                where: {
+                  organizationId: subscription.organizationId,
+                  subscriptionId: subscription.id,
+                  status: 'PREPARING',
+                  claimedAt: at,
+                },
+                data: {
+                  status: 'BLOCKED',
+                  lastErrorCode: 'DATABASE_PURGE_FAILED',
+                },
+              });
+              await tx.organization.updateMany({
+                where: {
+                  id: subscription.organizationId,
+                  dataPurgeStartedAt: at,
+                  dataPurgedAt: null,
+                },
+                data: { dataPurgeStartedAt: null },
+              });
+            });
             this.logger.error(
               JSON.stringify({
                 stage: 'subscription-data-purge-failed',
@@ -89,7 +109,7 @@ export class SubscriptionDataRetentionService {
         cursor = due[due.length - 1]!.id;
       }
     }
-    await this.removeQueuedFiles(at);
+    await this.cleanup.drain();
   }
 
   private async readyForPurge(
@@ -173,6 +193,8 @@ export class SubscriptionDataRetentionService {
         { locked: boolean }[]
       >`SELECT pg_try_advisory_xact_lock(hashtextextended(${organizationId}, 0)) AS locked`;
       if (!lock?.locked) return false;
+      // Same short transport fence used by upload admission; never held during object I/O.
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'upload-budget:' + organizationId},0))::text`;
       const organization = await tx.organization.findUniqueOrThrow({
         where: { id: organizationId },
       });
@@ -187,6 +209,7 @@ export class SubscriptionDataRetentionService {
       });
       if (!source.dataRetentionEndsAt || source.dataRetentionEndsAt > at)
         return false;
+      if (await hasPurgeBarrier(tx, organizationId)) return false;
       const current = await tx.organizationSubscription.findFirst({
         where: { organizationId, endedAt: null },
       });
@@ -205,6 +228,34 @@ export class SubscriptionDataRetentionService {
         where: { organizationId, status: { in: ['CREATING', 'OPEN'] } },
       });
       if (checkout) return false;
+      const inventory = await mediaInventory(tx, organizationId);
+      const unknown = inventory.some(
+        (file) => !file.provider || !file.bucket || !file.objectKey,
+      );
+      await tx.tenantDataPurge.upsert({
+        where: {
+          organizationId_subscriptionId_retentionEndsAt: {
+            organizationId,
+            subscriptionId,
+            retentionEndsAt: source.dataRetentionEndsAt,
+          },
+        },
+        create: {
+          id: generateUuidV7(),
+          organizationId,
+          subscriptionId,
+          retentionEndsAt: source.dataRetentionEndsAt,
+          claimedAt: at,
+          status: unknown ? 'BLOCKED' : 'PREPARING',
+          lastErrorCode: unknown ? 'LEGACY_LOCATION_UNVERIFIED' : null,
+        },
+        update: {
+          status: unknown ? 'BLOCKED' : 'PREPARING',
+          claimedAt: at,
+          lastErrorCode: unknown ? 'LEGACY_LOCATION_UNVERIFIED' : null,
+        },
+      });
+      if (unknown) return false;
       await tx.organization.update({
         where: { id: organizationId },
         data: { dataPurgeStartedAt: at, dataPurgedAt: null },
@@ -218,39 +269,107 @@ export class SubscriptionDataRetentionService {
     subscriptionId: string,
     at: Date,
   ): Promise<void> {
-    await this.platform(async (tx) => {
+    const committed = await this.platform(async (tx) => {
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${organizationId}, 0))::text`;
+      // Same short transport fence used by upload admission; never held during object I/O.
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'upload-budget:' + organizationId},0))::text`;
       const organization = await tx.organization.findUniqueOrThrow({
         where: { id: organizationId },
       });
+      if (
+        !organization.dataPurgeStartedAt ||
+        organization.dataPurgedAt ||
+        organization.dataPurgeStartedAt.getTime() !== at.getTime()
+      )
+        return;
+      const checkout = await tx.billingCheckoutAttempt.findFirst({
+        where: {
+          organizationId,
+          status: { in: ['CREATING', 'OPEN'] },
+        },
+      });
+      const pendingWork = await hasPurgeBarrier(tx, organizationId);
       const current = await tx.organizationSubscription.findFirst({
         where: { organizationId, endedAt: null },
       });
       if (
-        current &&
-        (awaitingPaidActivation(current) ||
-          grantsProductAccess(
-            project(
-              { ...current, providerManaged: !!current.providerSubscriptionId },
-              at,
-            ).status,
-          ))
+        checkout ||
+        pendingWork ||
+        (current &&
+          (awaitingPaidActivation(current) ||
+            grantsProductAccess(
+              project(
+                {
+                  ...current,
+                  providerManaged: !!current.providerSubscriptionId,
+                },
+                at,
+              ).status,
+            )))
       ) {
         await tx.organization.update({
           where: { id: organizationId },
           data: { dataPurgeStartedAt: null },
         });
-        return;
+        await tx.tenantDataPurge.updateMany({
+          where: { organizationId, subscriptionId, status: 'PREPARING' },
+          data: {
+            status: 'ABORTED',
+            lastErrorCode: 'REACTIVATED_OR_WORK_PENDING',
+          },
+        });
+        return false;
       }
       const source = await tx.organizationSubscription.findUniqueOrThrow({
         where: { id: subscriptionId },
       });
-      if (!source.dataRetentionEndsAt || source.dataRetentionEndsAt > at)
-        return;
-      // Outbox e exclusão dos registros pertencem ao mesmo commit.
-      await tx.$executeRaw`INSERT INTO storage_deletion_jobs (id,organization_id,provider,bucket,object_key)
-        SELECT gen_random_uuid(),organization_id,provider,bucket,object_key FROM storage_files WHERE organization_id = ${organizationId}::uuid
-        ON CONFLICT (provider,bucket,object_key) DO NOTHING`;
+      if (!source.dataRetentionEndsAt || source.dataRetentionEndsAt > at) {
+        await tx.organization.update({
+          where: { id: organizationId },
+          data: { dataPurgeStartedAt: null },
+        });
+        await tx.tenantDataPurge.updateMany({
+          where: { organizationId, subscriptionId, status: 'PREPARING' },
+          data: {
+            status: 'ABORTED',
+            lastErrorCode: 'RETENTION_DEADLINE_CHANGED',
+          },
+        });
+        return false;
+      }
+      const purge = await tx.tenantDataPurge.findUniqueOrThrow({
+        where: {
+          organizationId_subscriptionId_retentionEndsAt: {
+            organizationId,
+            subscriptionId,
+            retentionEndsAt: source.dataRetentionEndsAt,
+          },
+        },
+      });
+      const inventory = await mediaInventory(tx, organizationId);
+      if (
+        inventory.some(
+          (file) => !file.provider || !file.bucket || !file.objectKey,
+        )
+      )
+        throw new Error('LEGACY_LOCATION_UNVERIFIED');
+      // The outbox and operational row deletion commit together. Never guess a legacy provider.
+      for (const file of inventory) {
+        const queued = await tx.$queryRaw<
+          { id: string }[]
+        >`INSERT INTO storage_deletion_jobs
+          (id,organization_id,provider,bucket,object_key,purge_id,reason,status)
+          VALUES (${generateUuidV7()}::uuid,${organizationId}::uuid,${file.provider},${file.bucket},
+            ${file.objectKey},${purge.id}::uuid,'RETENTION','PENDING')
+          ON CONFLICT (provider,bucket,object_key) DO UPDATE SET purge_id=EXCLUDED.purge_id,
+            reason='RETENTION',status='PENDING',completed_at=NULL,lease_token=NULL,lease_until=NULL,
+            next_attempt_at=clock_timestamp(),last_error_code=NULL
+          WHERE storage_deletion_jobs.organization_id=EXCLUDED.organization_id
+            AND (storage_deletion_jobs.lease_until IS NULL OR storage_deletion_jobs.lease_until <= clock_timestamp())
+          RETURNING id`;
+        if (!queued.length)
+          throw new Error('OBJECT_DELETION_OWNERSHIP_OR_LEASE_CONFLICT');
+      }
       const edges = await tx.$queryRaw<
         { child: string; parent: string }[]
       >`SELECT child.relname AS child, parent.relname AS parent
@@ -280,6 +399,8 @@ export class SubscriptionDataRetentionService {
         data: RVT_MAINTENANCE_TYPE_SEEDS.map((t) => ({ organizationId, ...t })),
         skipDuplicates: true,
       });
+      /* Expurgados os cadastros, a organização volta ao catálogo inicial. */
+      await tx.$executeRaw`SELECT app_seed_hvac_catalogs(${organizationId}::uuid)`;
       await tx.organizationSubscription.updateMany({
         where: { organizationId, dataRetentionEndsAt: { lte: at } },
         data: { dataRetentionEndsAt: null },
@@ -288,7 +409,21 @@ export class SubscriptionDataRetentionService {
         where: { id: organizationId },
         data: { dataPurgedAt: at, logoUrl: null, settings: {} },
       });
+      const objectCount = await tx.storageDeletionJob.count({
+        where: { purgeId: purge.id },
+      });
+      await tx.tenantDataPurge.update({
+        where: { id: purge.id },
+        data: {
+          status: 'FILES_PENDING',
+          databasePurgedAt: at,
+          objectCount,
+          lastErrorCode: null,
+        },
+      });
+      return true;
     });
+    if (!committed) return;
     this.logger.log(
       JSON.stringify({
         stage: 'subscription-operational-data-purged',
@@ -296,38 +431,5 @@ export class SubscriptionDataRetentionService {
         purgedAt: at.toISOString(),
       }),
     );
-  }
-
-  private async removeQueuedFiles(at: Date): Promise<void> {
-    const jobs = await this.platform((tx) =>
-      tx.storageDeletionJob.findMany({
-        where: { nextAttemptAt: { lte: at } },
-        orderBy: [{ nextAttemptAt: 'asc' }, { createdAt: 'asc' }],
-        take: 250,
-      }),
-    );
-    for (const job of jobs) {
-      try {
-        if (job.provider !== this.storage.name)
-          throw new Error('STORAGE_PROVIDER_MISMATCH');
-        await this.files.remove(job.bucket, job.objectKey);
-        await this.platform((tx) =>
-          tx.storageDeletionJob.deleteMany({ where: { id: job.id } }),
-        );
-      } catch {
-        await this.platform((tx) =>
-          tx.storageDeletionJob.updateMany({
-            where: { id: job.id },
-            data: {
-              attempts: { increment: 1 },
-              nextAttemptAt: new Date(
-                at.getTime() +
-                  Math.min(60, 2 ** Math.min(job.attempts, 6)) * 60_000,
-              ),
-            },
-          }),
-        );
-      }
-    }
   }
 }

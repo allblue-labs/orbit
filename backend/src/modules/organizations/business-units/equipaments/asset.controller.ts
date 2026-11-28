@@ -1,3 +1,5 @@
+import { EquipmentQrDocumentExports } from './equipment-qr-document-exports';
+import { MobileManagement } from '../../../../common/mobile-management';
 import {
   Body,
   Controller,
@@ -37,9 +39,11 @@ export class AssetController {
   constructor(
     private readonly assets: AssetService,
     private readonly equipmentQr: EquipmentQrService,
+    private readonly qrExports: EquipmentQrDocumentExports,
   ) {}
 
   @Get()
+  @MobileManagement('equipment')
   @Capabilities('assets.read')
   @Permissions('assets.read')
   list(@Req() request: IdentityRequest, @Query() query: AssetQueryDto) {
@@ -77,6 +81,18 @@ export class AssetController {
     @Query() query: EquipmentServiceHistoryQueryDto,
   ) {
     return this.equipmentQr.serviceHistory(token, this.actor(request), query);
+  }
+
+  @Get(':id/service-history')
+  @Surfaces('WEB', 'MOBILE', 'API')
+  @Capabilities('assets.read')
+  @Permissions('assets.read', 'operations.history.read')
+  equipmentServiceHistory(
+    @Param('id', ParseUUIDv7Pipe) id: string,
+    @Req() request: IdentityRequest,
+    @Query() query: EquipmentServiceHistoryQueryDto,
+  ) {
+    return this.equipmentQr.serviceHistoryById(id, this.actor(request), query);
   }
 
   @Get(':id/qr')
@@ -119,6 +135,22 @@ export class AssetController {
     return this.equipmentQr.revoke(id, this.actor(request));
   }
 
+  /**
+   * Exportação assíncrona da etiqueta (202), com os mesmos parâmetros da rota
+   * síncrona no corpo. A rota síncrona abaixo continua valendo.
+   */
+  @Post(':id/qr/exports')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @Capabilities('assets.read')
+  @Permissions('assets.read')
+  exportQr(
+    @Param('id', ParseUUIDv7Pipe) id: string,
+    @Req() request: IdentityRequest,
+    @Body() input: EquipmentQrRenderQueryDto,
+  ) {
+    return this.qrExports.request(id, this.actor(request), input);
+  }
+
   @Get(':id/qr/render')
   @Capabilities('assets.read')
   @Permissions('assets.read')
@@ -157,6 +189,7 @@ export class AssetController {
   }
 
   @Get(':id')
+  @MobileManagement('equipment')
   @Capabilities('assets.read')
   @Permissions('assets.read')
   get(
@@ -167,6 +200,7 @@ export class AssetController {
   }
 
   @Post()
+  @MobileManagement('equipment')
   @Capabilities('assets.manage')
   @Permissions('assets.create')
   create(@Req() request: IdentityRequest, @Body() input: CreateAssetDto) {
@@ -174,6 +208,7 @@ export class AssetController {
   }
 
   @Patch(':id')
+  @MobileManagement('equipment')
   @Capabilities('assets.manage')
   @Permissions('assets.update')
   update(
@@ -185,6 +220,7 @@ export class AssetController {
   }
 
   @Delete(':id')
+  @MobileManagement('equipment')
   @Capabilities('assets.manage')
   @Permissions('assets.delete')
   @HttpCode(HttpStatus.NO_CONTENT)

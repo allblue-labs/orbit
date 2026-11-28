@@ -107,13 +107,8 @@ export interface UpdateNotificationPreferenceInput {
   quietHours?: Record<string, unknown>;
 }
 
-/** Canais que o `NotificationPreferenceDto` aceita — `SMS` não entra. */
-export const PREFERENCE_CHANNELS = [
-  "IN_APP",
-  "REALTIME",
-  "EMAIL",
-  "PUSH",
-] as const;
+/** Canais atuais; REALTIME é aceito apenas como alias legado de IN_APP. */
+export const PREFERENCE_CHANNELS = ["IN_APP", "EMAIL", "PUSH"] as const;
 export type PreferenceChannel = (typeof PREFERENCE_CHANNELS)[number];
 
 /** Limites declarados pelo `class-validator`. */

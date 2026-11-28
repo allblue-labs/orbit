@@ -11,7 +11,10 @@
  * remendar o estado local.
  */
 import { apiClient } from "@/api/client";
-import { downloadAndSave, type DownloadResult } from "@/api/transfer";
+import {
+  exportAndSave,
+  type ExportedFile,
+} from "@/services/document-export.service";
 import { queryKeys, type QueryKey } from "@/api/query-keys";
 import type { PaginatedResult, QueryParams, RequestOptions } from "@/types/api";
 import type { ArtifactExecution } from "@/types/artifact-executions";
@@ -60,7 +63,7 @@ export const quotesService = {
     apiClient.get<Quote>(quote(id), options),
 
   create: (input: CreateQuoteInput): Promise<Quote> =>
-    apiClient.post<Quote>(PATH, input),
+    apiClient.postIdempotent<Quote>(PATH, input),
 
   /**
    * A proposta copiada de um atendimento concluído.
@@ -73,6 +76,9 @@ export const quotesService = {
 
   update: (id: string, input: UpdateQuoteInput): Promise<Quote> =>
     apiClient.patch<Quote>(quote(id), input),
+
+  mobileAccess: (id: string, mobileVisible: boolean): Promise<Quote> =>
+    apiClient.patch<Quote>(`${quote(id)}/mobile-access`, { mobileVisible }),
 
   /** Só rascunho. Proposta enviada é cancelada, não apagada. */
   remove: (id: string): Promise<void> => apiClient.delete<void>(quote(id)),
@@ -102,7 +108,7 @@ export const quotesService = {
 
   /** Aprovar gera receita **prevista** no Financeiro, nunca realizada. */
   approve: (id: string): Promise<Quote> =>
-    apiClient.post<Quote>(`${quote(id)}/approve`, {}),
+    apiClient.postIdempotent<Quote>(`${quote(id)}/approve`, {}),
 
   reject: (id: string, input: QuoteReasonInput): Promise<Quote> =>
     apiClient.post<Quote>(`${quote(id)}/reject`, input),
@@ -121,15 +127,16 @@ export const quotesService = {
   /**
    * Baixa a proposta impressa.
    *
-   * Desenhada na hora, do estado atual — não passa pela fila nem abre revisão,
-   * porque um orçamento é editado enquanto é rascunho e cada reimpressão viraria
-   * versão de um documento que ninguém executou.
-   *
-   * O nome do arquivo vem do `Content-Disposition`: é o servidor que decide como
-   * o arquivo se chama, e montar `ORC-000042.pdf` aqui duplicaria essa regra.
+   * Desenhada do estado atual, sem abrir revisão. A geração é assíncrona: o
+   * pedido volta na hora (202), o documento é gerado no servidor de
+   * documentos e baixado direto do armazenamento quando fica pronto. O nome
+   * do arquivo é o que o servidor escolheu.
    */
-  document: (id: string): Promise<DownloadResult> =>
-    downloadAndSave(`${quote(id)}/document`),
+  document: (id: string): Promise<ExportedFile> =>
+    exportAndSave({
+      requestPath: `${quote(id)}/document/exports`,
+      fallbackName: "orcamento.pdf",
+    }),
 
   /**
    * Emitir o documento oficial da proposta.

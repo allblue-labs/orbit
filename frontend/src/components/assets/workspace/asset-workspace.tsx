@@ -48,10 +48,10 @@ import type { Asset } from "@/types/assets";
 import { IdentifierSection } from "./identifier.section";
 import {
   HealthSection,
-  HistorySection,
   IndicatorsSection,
   IntelligenceSection,
 } from "./indicators.section";
+import { AssetServiceHistory } from "./service-history.section";
 import { OverviewSection } from "./overview.section";
 import {
   AssetExecutionsSection,
@@ -232,7 +232,9 @@ function WorkspaceBody({
           <AssetOperationsSection assetId={asset.id} />
           <AssetScheduleSection assetId={asset.id} />
           <AssetExecutionsSection assetId={asset.id} />
-          <HistorySection />
+          {session.hasPermission("operations.history.read") ? (
+            <AssetServiceHistory key={asset.id} assetId={asset.id} />
+          ) : null}
         </div>
 
         <div className="min-w-0 space-y-6">

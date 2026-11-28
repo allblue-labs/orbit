@@ -1,15 +1,54 @@
 name: orbit
 
 services:
+  redis-hotpath:
+    image: redis:8.4-alpine@sha256:ff72f74e4f471df79ed920aa8bbc35efe72ff8a1f8acdc50aad5dbb9b14a4034
+    profiles: [hotpath]
+    restart: unless-stopped
+    user: "999:999"
+    read_only: true
+    cap_drop: [ALL]
+    pids_limit: 64
+    mem_limit: 256m
+    cpus: 1
+    security_opt: [no-new-privileges:true]
+    environment:
+      REDIS_HOTPATH_PASSWORD: ${REDIS_HOTPATH_PASSWORD:-}
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        case "$$REDIS_HOTPATH_PASSWORD" in
+          *[!a-fA-F0-9]*) exit 1 ;;
+        esac
+        test "$${#REDIS_HOTPATH_PASSWORD}" -ge 32
+        test "$${#REDIS_HOTPATH_PASSWORD}" -le 128
+        printf '%s\n' 'protected-mode yes' 'save ""' 'appendonly no' 'maxmemory 128mb' 'maxmemory-policy allkeys-lru' "requirepass $$REDIS_HOTPATH_PASSWORD" | exec redis-server -
+    # Mask the image's default /data volume. Hotpath is disposable.
+    tmpfs:
+      - /data:rw,noexec,nosuid,size=16777216,uid=999,gid=999
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_HOTPATH_PASSWORD\" redis-cli -e ping"]
+      interval: 15s
+      timeout: 2s
+      retries: 3
+    networks: [orbit_hotpath]
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   postgres:
-    image: postgres:17-alpine
+    mem_limit: 2g
+    cpus: 2
+    pids_limit: 512
+    image: ${POSTGRES_IMAGE:-postgres:17.11-alpine3.24@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0}
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
-    ports:
-      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -19,38 +58,93 @@ services:
       retries: 10
       start_period: 10s
     networks:
-      - orbit_private
+      - orbit_database
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
     security_opt:
       - no-new-privileges:true
 
-  api:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      target: runner
-      args:
-        ORBIT_COMMIT_SHA: ${ORBIT_COMMIT_SHA:?ORBIT_COMMIT_SHA is required}
-        ORBIT_BUILD_TIME: ${ORBIT_BUILD_TIME:?ORBIT_BUILD_TIME is required}
-    image: orbit-api:${ORBIT_VERSION:?ORBIT_VERSION is required}
+  pgbouncer:
+    image: ${ORBIT_PGBOUNCER_IMAGE:-docker.io/allbluelabs/orbit-api:${ORBIT_VERSION:?ORBIT_VERSION is required}-pgbouncer}
+    user: "1001:1001"
+    read_only: true
+    cap_drop: [ALL]
+    pids_limit: 64
+    mem_limit: 128m
+    cpus: 1
+    init: true
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    ulimits:
+      nofile: {soft: 1024, hard: 1024}
+    tmpfs:
+      - /run/pgbouncer:rw,noexec,nosuid,size=1048576,uid=1001,gid=1001,mode=0700
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      APP_DATABASE_PASSWORD: ${APP_DATABASE_PASSWORD}
+      WORKER_DATABASE_PASSWORD: ${WORKER_DATABASE_PASSWORD:?WORKER_DATABASE_PASSWORD is required}
+      DOCUMENTS_DATABASE_PASSWORD: ${DOCUMENTS_DATABASE_PASSWORD:?DOCUMENTS_DATABASE_PASSWORD is required}
+      PGBOUNCER_STATS_PASSWORD: ${PGBOUNCER_STATS_PASSWORD:-}
+      PGBOUNCER_MAX_CLIENT_CONN: ${PGBOUNCER_MAX_CLIENT_CONN:-300}
+      PGBOUNCER_DEFAULT_POOL_SIZE: ${PGBOUNCER_DEFAULT_POOL_SIZE:-16}
+      PGBOUNCER_RESERVE_POOL_SIZE: ${PGBOUNCER_RESERVE_POOL_SIZE:-4}
+      PGBOUNCER_MAX_DB_CONNECTIONS: ${PGBOUNCER_MAX_DB_CONNECTIONS:-40}
+      PGBOUNCER_QUERY_WAIT_TIMEOUT: ${PGBOUNCER_QUERY_WAIT_TIMEOUT:-5}
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/orbit-pgbouncer", "healthcheck"]
+      interval: 10s
+      timeout: 4s
+      retries: 6
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks: [orbit_database, orbit_private]
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  api: &backend-runtime
+    user: "1001:1001"
+    cap_drop: [ALL]
+    pids_limit: 512
+    mem_limit: 3g
+    cpus: 4
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=536870912,uid=1001,gid=1001,mode=1777
+    image: ${ORBIT_API_IMAGE:-docker.io/allbluelabs/orbit-api:${ORBIT_VERSION:?ORBIT_VERSION is required}-api}
     restart: unless-stopped
     init: true
-    environment:
+    environment: &backend-environment
       NODE_ENV: production
+      ORBIT_DEPLOYMENT: production
+      ORBIT_PROCESS_ROLE: api
+      REDIS_HOTPATH_ENABLED: ${REDIS_HOTPATH_ENABLED:-false}
+      REDIS_HOTPATH_HOST: redis-hotpath
+      REDIS_HOTPATH_PASSWORD: ${REDIS_HOTPATH_PASSWORD:-}
+      REDIS_HOTPATH_TIMEOUT_MS: ${REDIS_HOTPATH_TIMEOUT_MS:-150}
+      REDIS_HOTPATH_TENANT_RATE_MAX: ${REDIS_HOTPATH_TENANT_RATE_MAX:-1800}
+      REDIS_HOTPATH_USER_RATE_MAX: ${REDIS_HOTPATH_USER_RATE_MAX:-240}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-}
+      SENTRY_TENANT_HASH_KEY: ${SENTRY_TENANT_HASH_KEY:-}
       PORT: 5001
-      HOST: ${API_HOST:-0.0.0.0}
-      # Credencial administrativa: continua disponível porque scripts de
-      # manutenção (seed do administrador global, templates) a usam. O runtime
-      # conecta pela APP_DATABASE_URL.
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      HOST: 0.0.0.0
+      # O processo HTTP não recebe credenciais administrativas do banco.
       # Papel restrito (PR-26.6): sem SUPERUSER e sem BYPASSRLS. É com ele que
       # as políticas de RLS passam a ser efetivamente avaliadas.
-      APP_DATABASE_URL: postgresql://${APP_DATABASE_USER:-orbit_app}:${APP_DATABASE_PASSWORD:?APP_DATABASE_PASSWORD is required}@postgres:5432/${POSTGRES_DB}?schema=public
+      DATABASE_URL: postgresql://orbit_app:${APP_DATABASE_PASSWORD:?APP_DATABASE_PASSWORD is required}@pgbouncer:6432/${POSTGRES_DB}?pgbouncer=true
       # Subir com um papel que contorna RLS passa a ser erro, não aviso.
       DATABASE_ENFORCE_RESTRICTED_ROLE: "true"
       # Transações e pool (PR-26.6.1). A janela conta tempo de parede desde o
       # BEGIN, e o processo renderiza PDF de forma síncrona — os 5 s padrão do
       # Prisma expiravam por trabalho alheio.
-      DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-20}
+      DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-12}
       DATABASE_TRANSACTION_TIMEOUT_MS: ${DATABASE_TRANSACTION_TIMEOUT_MS:-20000}
       DATABASE_TRANSACTION_MAX_WAIT_MS: ${DATABASE_TRANSACTION_MAX_WAIT_MS:-10000}
       LOG_CLIENT_ERRORS: ${LOG_CLIENT_ERRORS:-false}
@@ -62,74 +156,92 @@ services:
       JWT_AUDIENCE: ${JWT_AUDIENCE:-orbit}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
       ENCRYPTION_KEY_VERSION: ${ENCRYPTION_KEY_VERSION:-1}
-      OPERATION_UPLOAD_DIR: /app/storage/operations
-      DOCUMENT_STORAGE_DIR: /app/storage/documents
-      # Objetos do Storage Provider (PR-19). Sem volume, os documentos emitidos
-      # morrem no primeiro rebuild da imagem — o manifest continua apontando
-      # para um arquivo que não existe mais.
-      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-LOCAL}
-      STORAGE_BUCKET: ${STORAGE_BUCKET:-orbit-artifacts}
-      STORAGE_LOCAL_DIR: /app/storage/objects
-      # A URL pública do storage segue a porta publicada, não uma fixa: a API é
-      # exposta em ${API_PORT}, e era 5001 aqui enquanto o mapeamento acima
-      # dizia 6001. O endereço assinado que a API devolvia apontava para a porta
-      # interna do container e não era alcançável do host — o upload do smoke de
-      # RVT falhava com ECONNREFUSED.
-      STORAGE_LOCAL_PUBLIC_URL: ${STORAGE_LOCAL_PUBLIC_URL:-http://localhost:${API_PORT:-5001}/api/v1}
+      TRUSTED_PROXY_SECRET: ${TRUSTED_PROXY_SECRET:?TRUSTED_PROXY_SECRET is required}
+      AUTH_RATE_LIMIT_SECRET: ${AUTH_RATE_LIMIT_SECRET:?AUTH_RATE_LIMIT_SECRET is required}
+      AUTH_RATE_LIMIT_MAX: ${AUTH_RATE_LIMIT_MAX:-20}
+      AUTH_RATE_LIMIT_ORIGIN_MAX: ${AUTH_RATE_LIMIT_ORIGIN_MAX:-120}
+      AUTH_RATE_LIMIT_WINDOW_MS: ${AUTH_RATE_LIMIT_WINDOW_MS:-60000}
+      STORAGE_PROVIDER: R2
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_BUCKET_NAME: ${R2_BUCKET_NAME:-orbit-assets}
+      R2_PRIVATE_BUCKET_NAME: ${R2_PRIVATE_BUCKET_NAME:-orbit-assets-private}
+      R2_ENDPOINT: ${R2_ENDPOINT:-}
+      R2_LEGACY_PRIVATE_BUCKETS: ${R2_LEGACY_PRIVATE_BUCKETS:-orbit-artifacts,documents}
+      R2_PUBLIC_URL: ${R2_PUBLIC_URL:-https://cdn-orbit.allblue-labs.com}
+      CLOUDFLARE_CACHE_PURGE_ZONE_ID: ${CLOUDFLARE_CACHE_PURGE_ZONE_ID:-}
+      CLOUDFLARE_CACHE_PURGE_TOKEN: ${CLOUDFLARE_CACHE_PURGE_TOKEN:-}
+      STORAGE_PUBLIC_API_URL: ${STORAGE_PUBLIC_API_URL:-https://portal-orbit.com.br/api/v1}
       STORAGE_SIGNED_URL_TTL_SECONDS: ${STORAGE_SIGNED_URL_TTL_SECONDS:-300}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
       IDENTITY_PUBLIC_WEB_URL: ${IDENTITY_PUBLIC_WEB_URL:-}
-      CUSTOMER_PORTAL_ENABLED: "false"
+      # Área do cliente no app (login de cliente, leituras, foto e assinatura,
+      # e a gestão do acesso pelo owner). Convite e recuperação por e-mail
+      # continuam respondendo "indisponível" até existir entrega de e-mail.
+      CUSTOMER_PORTAL_ENABLED: ${CUSTOMER_PORTAL_ENABLED:-true}
       # Billing is an explicit optional subsystem. Disabled mode does not need
       # provider credentials; enabled mode validates every value at startup.
       STRIPE_ENABLED: ${STRIPE_ENABLED:-false}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
-      STRIPE_PRICE_ESSENTIAL_MONTHLY: ${STRIPE_PRICE_ESSENTIAL_MONTHLY:-}
-      STRIPE_PRICE_ESSENTIAL_SEMIANNUAL: ${STRIPE_PRICE_ESSENTIAL_SEMIANNUAL:-}
-      STRIPE_PRICE_ESSENTIAL_ANNUAL: ${STRIPE_PRICE_ESSENTIAL_ANNUAL:-}
-      STRIPE_PRICE_PROFESSIONAL_MONTHLY: ${STRIPE_PRICE_PROFESSIONAL_MONTHLY:-}
-      STRIPE_PRICE_PROFESSIONAL_SEMIANNUAL: ${STRIPE_PRICE_PROFESSIONAL_SEMIANNUAL:-}
-      STRIPE_PRICE_PROFESSIONAL_ANNUAL: ${STRIPE_PRICE_PROFESSIONAL_ANNUAL:-}
-      STRIPE_PRICE_PROFESSIONAL_INTELLIGENCE_MONTHLY: ${STRIPE_PRICE_PROFESSIONAL_INTELLIGENCE_MONTHLY:-}
-      STRIPE_PRICE_PROFESSIONAL_INTELLIGENCE_SEMIANNUAL: ${STRIPE_PRICE_PROFESSIONAL_INTELLIGENCE_SEMIANNUAL:-}
-      STRIPE_PRICE_PROFESSIONAL_INTELLIGENCE_ANNUAL: ${STRIPE_PRICE_PROFESSIONAL_INTELLIGENCE_ANNUAL:-}
-      STRIPE_PRICE_ENTERPRISE_UNLIMITED_MONTHLY: ${STRIPE_PRICE_ENTERPRISE_UNLIMITED_MONTHLY:-}
-      STRIPE_PRICE_ENTERPRISE_UNLIMITED_SEMIANNUAL: ${STRIPE_PRICE_ENTERPRISE_UNLIMITED_SEMIANNUAL:-}
-      STRIPE_PRICE_ENTERPRISE_UNLIMITED_ANNUAL: ${STRIPE_PRICE_ENTERPRISE_UNLIMITED_ANNUAL:-}
       BILLING_CHECKOUT_SUCCESS_URL: ${BILLING_CHECKOUT_SUCCESS_URL:-}
       BILLING_CHECKOUT_CANCEL_URL: ${BILLING_CHECKOUT_CANCEL_URL:-}
       BILLING_PORTAL_RETURN_URL: ${BILLING_PORTAL_RETURN_URL:-}
       BILLING_EVENTS_WORKER_ENABLED: ${BILLING_EVENTS_WORKER_ENABLED:-true}
       BILLING_EVENTS_POLL_INTERVAL_MS: ${BILLING_EVENTS_POLL_INTERVAL_MS:-2000}
-      SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_SECURE: ${SMTP_SECURE:-false}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      EMAIL_FROM: ${EMAIL_FROM:-Orbit <no-reply@orbit.local>}
-      # Native mobile push uses a server gateway (APNs on iOS / FCM on Android).
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_REGION: ${AWS_REGION:-}
+      AWS_SES_FROM_EMAIL: ${AWS_SES_FROM_EMAIL:-}
+      AWS_SES_FROM_TRANSACTIONAL_EMAIL: ${AWS_SES_FROM_TRANSACTIONAL_EMAIL:-}
+      AWS_SES_FROM_INFORMATIONAL_EMAIL: ${AWS_SES_FROM_INFORMATIONAL_EMAIL:-}
+      AWS_SES_FROM_SUPPORT_EMAIL: ${AWS_SES_FROM_SUPPORT_EMAIL:-}
+      AWS_SES_SUPPORT_REPLY_TO_EMAIL: ${AWS_SES_SUPPORT_REPLY_TO_EMAIL:-}
+      ORBIT_SUPPORT_TO_EMAIL: ${ORBIT_SUPPORT_TO_EMAIL:-contato@allblue-labs.com}
+      PUBLIC_CONTACT_ENABLED: ${PUBLIC_CONTACT_ENABLED:-true}
+      PUBLIC_CONTACT_DELIVERY_ENABLED: ${PUBLIC_CONTACT_DELIVERY_ENABLED:-true}
+      AWS_SES_FEEDBACK_SENDER_IDENTITIES: ${AWS_SES_FEEDBACK_SENDER_IDENTITIES:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+      AWS_SES_CONFIGURATION_SET: ${AWS_SES_CONFIGURATION_SET:-}
+      ACCOUNT_EMAIL_DELIVERY_ENABLED: ${ACCOUNT_EMAIL_DELIVERY_ENABLED:-true}
+      EMAIL_SUPPRESSION_HASH_KEY: ${EMAIL_SUPPRESSION_HASH_KEY:-}
+      AWS_SES_FEEDBACK_ENABLED: ${AWS_SES_FEEDBACK_ENABLED:-false}
+      AWS_SES_FEEDBACK_ACCOUNT_ID: ${AWS_SES_FEEDBACK_ACCOUNT_ID:-}
+      AWS_SES_FEEDBACK_TOPIC_ARN: ${AWS_SES_FEEDBACK_TOPIC_ARN:-}
+      AWS_SES_FEEDBACK_IDENTITY_ARN: ${AWS_SES_FEEDBACK_IDENTITY_ARN:-}
+      # Firebase Admin sends natively; credentials stay only in the API/worker.
       PUSH_PROVIDER: ${PUSH_PROVIDER:-disabled}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
+      FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL:-}
+      FIREBASE_PRIVATE_KEY: ${FIREBASE_PRIVATE_KEY:-}
       PUSH_GATEWAY_URL: ${PUSH_GATEWAY_URL:-}
       PUSH_GATEWAY_CREDENTIAL: ${PUSH_GATEWAY_CREDENTIAL:-}
       JOBS_WORKER_ENABLED: ${JOBS_WORKER_ENABLED:-true}
+      SUBSCRIPTION_DATA_RETENTION_ENABLED: ${SUBSCRIPTION_DATA_RETENTION_ENABLED:-false}
       JOBS_POLL_INTERVAL_MS: ${JOBS_POLL_INTERVAL_MS:-2000}
+      JOBS_PDF_CONCURRENCY: ${JOBS_PDF_CONCURRENCY:-2}
+      JOBS_PDF_PER_ORG: ${JOBS_PDF_PER_ORG:-2}
+      JOBS_COMMS_CONCURRENCY: ${JOBS_COMMS_CONCURRENCY:-8}
+      JOBS_COMMS_PER_ORG: ${JOBS_COMMS_PER_ORG:-4}
+      JOBS_CORE_CONCURRENCY: ${JOBS_CORE_CONCURRENCY:-2}
+      JOBS_CORE_PER_ORG: ${JOBS_CORE_PER_ORG:-1}
+      JOBS_FISCAL_CONCURRENCY: ${JOBS_FISCAL_CONCURRENCY:-1}
+      JOBS_AI_CONCURRENCY: ${JOBS_AI_CONCURRENCY:-2}
+      JOBS_AI_RATE_ORG: ${JOBS_AI_RATE_ORG:-10}
+      JOBS_AI_RATE_GLOBAL: ${JOBS_AI_RATE_GLOBAL:-60}
+      DOCUMENT_EXPORTS_PENDING_PER_ORG: ${DOCUMENT_EXPORTS_PENDING_PER_ORG:-20}
+      OUTBOUND_AI_ORIGINS: ${OUTBOUND_AI_ORIGINS-https://api.openai.com}
+      OUTBOUND_WEB_PUSH_ORIGINS: ${OUTBOUND_WEB_PUSH_ORIGINS-https://fcm.googleapis.com,https://updates.push.services.mozilla.com,https://web.push.apple.com}
+      OUTBOUND_AI_PRIVATE_ROUTES: ${OUTBOUND_AI_PRIVATE_ROUTES:-[]}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@orbit.local}
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
-      PLATFORM_ADMIN_EMAIL: ${PLATFORM_ADMIN_EMAIL:?PLATFORM_ADMIN_EMAIL is required}
-      PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD:?PLATFORM_ADMIN_PASSWORD is required}
-      PLATFORM_ADMIN_FIRST_NAME: ${PLATFORM_ADMIN_FIRST_NAME:?PLATFORM_ADMIN_FIRST_NAME is required}
-      PLATFORM_ADMIN_LAST_NAME: ${PLATFORM_ADMIN_LAST_NAME:?PLATFORM_ADMIN_LAST_NAME is required}
     ports:
-      - "0.0.0.0:${API_PORT:-5001}:5001"
-    volumes:
-      - operation_attachments:/app/storage/operations
-      - generated_documents:/app/storage/documents
-      - artifact_objects:/app/storage/objects
+      - "127.0.0.1:${API_PORT:-6001}:5001"
     depends_on:
-      migrate:
-        condition: service_completed_successfully
+      pgbouncer:
+        condition: service_healthy
     healthcheck:
       test:
         [
@@ -145,52 +257,167 @@ services:
     networks:
       - orbit_private
       - orbit_public
+      - orbit_hotpath
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
     security_opt:
       - no-new-privileges:true
 
+  worker:
+    <<: *backend-runtime
+    networks: [orbit_private, orbit_public]
+    environment:
+      <<: *backend-environment
+      ORBIT_PROCESS_ROLE: worker
+      DATABASE_URL: postgresql://orbit_worker:${WORKER_DATABASE_PASSWORD}@pgbouncer:6432/${POSTGRES_DB}?pgbouncer=true
+      REDIS_HOTPATH_ENABLED: "false"
+      REDIS_HOTPATH_PASSWORD: ""
+      DATABASE_POOL_MAX: ${WORKER_DATABASE_POOL_MAX:-6}
+    ports: []
+    mem_limit: 1g
+    cpus: 1
+    stop_grace_period: 90s
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck: &worker-health
+      # Written only after a successful queue snapshot; stale if the poll stalls.
+      test: ["CMD", "node", "dist/src/runtime/worker-health.js"]
+      interval: 30s
+      timeout: 5s
+      start_period: 90s
+      retries: 3
+
+  documents:
+    <<: *backend-runtime
+    networks: [orbit_private, orbit_public]
+    environment:
+      <<: *backend-environment
+      ORBIT_PROCESS_ROLE: documents
+      DATABASE_URL: postgresql://orbit_documents:${DOCUMENTS_DATABASE_PASSWORD}@pgbouncer:6432/${POSTGRES_DB}?pgbouncer=true
+      REDIS_HOTPATH_ENABLED: "false"
+      REDIS_HOTPATH_PASSWORD: ""
+      DATABASE_POOL_MAX: ${DOCUMENTS_DATABASE_POOL_MAX:-4}
+    ports: []
+    mem_limit: 2g
+    cpus: 1
+    # Um PDF pode levar até 120 s (grupo `pdf`); o encerramento espera terminar.
+    stop_grace_period: 150s
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck: *worker-health
+
   migrate:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      target: migrator
-      args:
-        ORBIT_COMMIT_SHA: ${ORBIT_COMMIT_SHA:?ORBIT_COMMIT_SHA is required}
-        ORBIT_BUILD_TIME: ${ORBIT_BUILD_TIME:?ORBIT_BUILD_TIME is required}
-    image: orbit-api-migrator:${ORBIT_VERSION:?ORBIT_VERSION is required}
+    user: "1000:1000"
+    cap_drop: [ALL]
+    read_only: true
+    init: true
+    cpus: 2
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=268435456,uid=1000,gid=1000,mode=1777
+    mem_limit: 2g
+    pids_limit: 512
+    image: ${ORBIT_MIGRATOR_IMAGE:-docker.io/allbluelabs/orbit-api:${ORBIT_VERSION:?ORBIT_VERSION is required}-migrator}
     restart: "no"
     environment:
       NODE_ENV: production
+      # Vínculo inicial dos Price IDs. A migration instala os valores do catálogo.
+      STRIPE_PRICE_ESSENTIAL_MONTHLY: ${STRIPE_PRICE_ESSENTIAL_MONTHLY:-}
+      STRIPE_PRICE_ESSENTIAL_SEMIANNUAL: ${STRIPE_PRICE_ESSENTIAL_SEMIANNUAL:-}
+      STRIPE_PRICE_ESSENTIAL_ANNUAL: ${STRIPE_PRICE_ESSENTIAL_ANNUAL:-}
+      STRIPE_PRICE_PROFESSIONAL_MONTHLY: ${STRIPE_PRICE_PROFESSIONAL_MONTHLY:-}
+      STRIPE_PRICE_PROFESSIONAL_SEMIANNUAL: ${STRIPE_PRICE_PROFESSIONAL_SEMIANNUAL:-}
+      STRIPE_PRICE_PROFESSIONAL_ANNUAL: ${STRIPE_PRICE_PROFESSIONAL_ANNUAL:-}
+      STRIPE_PRICE_PROFESSIONAL_INTELLIGENCE_MONTHLY: ${STRIPE_PRICE_PROFESSIONAL_INTELLIGENCE_MONTHLY:-}
+      STRIPE_PRICE_PROFESSIONAL_INTELLIGENCE_SEMIANNUAL: ${STRIPE_PRICE_PROFESSIONAL_INTELLIGENCE_SEMIANNUAL:-}
+      STRIPE_PRICE_PROFESSIONAL_INTELLIGENCE_ANNUAL: ${STRIPE_PRICE_PROFESSIONAL_INTELLIGENCE_ANNUAL:-}
+      STRIPE_PRICE_ENTERPRISE_UNLIMITED_MONTHLY: ${STRIPE_PRICE_ENTERPRISE_UNLIMITED_MONTHLY:-}
+      STRIPE_PRICE_ENTERPRISE_UNLIMITED_SEMIANNUAL: ${STRIPE_PRICE_ENTERPRISE_UNLIMITED_SEMIANNUAL:-}
+      STRIPE_PRICE_ENTERPRISE_UNLIMITED_ANNUAL: ${STRIPE_PRICE_ENTERPRISE_UNLIMITED_ANNUAL:-}
       # Migrations e provisionamento rodam com a credencial administrativa —
       # é a única que pode criar papel, conceder e alterar schema.
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
-      APP_DATABASE_USER: ${APP_DATABASE_USER:-orbit_app}
+      DIRECT_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      APP_DATABASE_USER: orbit_app
+      BACKUP_DATABASE_PASSWORD: ${BACKUP_DATABASE_PASSWORD:-}
       APP_DATABASE_PASSWORD: ${APP_DATABASE_PASSWORD:?APP_DATABASE_PASSWORD is required}
+      WORKER_DATABASE_PASSWORD: ${WORKER_DATABASE_PASSWORD}
+      DOCUMENTS_DATABASE_PASSWORD: ${DOCUMENTS_DATABASE_PASSWORD}
     depends_on:
       postgres:
         condition: service_healthy
     networks:
-      - orbit_private
+      - orbit_database
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
+
+  # Ação administrativa explícita. Nunca é executada por `compose up` normal.
+  bootstrap-admin:
+    user: "1000:1000"
+    cap_drop: [ALL]
+    read_only: true
+    init: true
+    cpus: 2
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=268435456,uid=1000,gid=1000,mode=1777
+    mem_limit: 1g
+    pids_limit: 256
+    profiles: [admin]
+    image: ${ORBIT_MIGRATOR_IMAGE:-docker.io/allbluelabs/orbit-api:${ORBIT_VERSION:?ORBIT_VERSION is required}-migrator}
+    restart: "no"
+    command: ["node", "dist/src/scripts/seed-platform-admin.js"]
+    environment:
+      NODE_ENV: production
+      DIRECT_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      PLATFORM_ADMIN_EMAIL: ${PLATFORM_ADMIN_EMAIL:-}
+      PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD:-}
+      PLATFORM_ADMIN_FIRST_NAME: ${PLATFORM_ADMIN_FIRST_NAME:-Platform}
+      PLATFORM_ADMIN_LAST_NAME: ${PLATFORM_ADMIN_LAST_NAME:-Administrator}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [orbit_database]
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
     security_opt:
       - no-new-privileges:true
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      target: runner
-      args:
-        ORBIT_COMMIT_SHA: ${ORBIT_COMMIT_SHA:?ORBIT_COMMIT_SHA is required}
-        ORBIT_BUILD_TIME: ${ORBIT_BUILD_TIME:?ORBIT_BUILD_TIME is required}
-    image: orbit-frontend:${ORBIT_VERSION:?ORBIT_VERSION is required}
+    user: "1001:1001"
+    cap_drop: [ALL]
+    pids_limit: 512
+    mem_limit: 1536m
+    cpus: 2
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=134217728,uid=1001,gid=1001,mode=1777
+      - /app/.next/cache:rw,noexec,nosuid,size=268435456,uid=1001,gid=1001,mode=0755
+    image: ${ORBIT_FRONTEND_IMAGE:-docker.io/allbluelabs/orbit-api:${ORBIT_VERSION:?ORBIT_VERSION is required}-frontend}
     restart: unless-stopped
     init: true
     environment:
+      SENTRY_DSN: ${SENTRY_WEB_DSN:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-}
       NODE_ENV: production
       PORT: 3000
       HOSTNAME: 0.0.0.0
       ORBIT_API_URL: http://api:5001/api/v1
+      TRUSTED_PROXY_SECRET: ${TRUSTED_PROXY_SECRET:?TRUSTED_PROXY_SECRET is required}
       # Links públicos do app mobile, configuráveis sem rebuild da imagem.
       ORBIT_MOBILE_PLAY_STORE_URL: ${ORBIT_MOBILE_PLAY_STORE_URL:-https://example.com/orbit/android}
+      ORBIT_ANDROID_APP_LINK_SHA256: ${ORBIT_ANDROID_APP_LINK_SHA256:-}
+      ORBIT_IOS_APP_LINK_IDENTIFIER: ${ORBIT_IOS_APP_LINK_IDENTIFIER:-}
       ORBIT_MOBILE_APP_STORE_URL: ${ORBIT_MOBILE_APP_STORE_URL:-https://example.com/orbit/ios}
       # Origem pública canônica usada pela proteção same-origin do BFF. Não é
       # inferida do host interno do container/reverse proxy.
@@ -200,7 +427,7 @@ services:
       # manter false, sempre com AUTH_COOKIE_SECURE=true.
       ALLOW_INSECURE_LOCAL_COOKIES: ${ALLOW_INSECURE_LOCAL_COOKIES:-false}
     ports:
-      - "${FRONTEND_PORT:-3000}:3000"
+      - "127.0.0.1:${FRONTEND_PORT:-7070}:3000"
     depends_on:
       api:
         condition: service_healthy
@@ -218,6 +445,11 @@ services:
       start_period: 20s
     networks:
       - orbit_public
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
     security_opt:
       - no-new-privileges:true
 
@@ -228,6 +460,10 @@ volumes:
   artifact_objects:
 
 networks:
+  orbit_database:
+    internal: true
+  orbit_hotpath:
+    internal: true
   orbit_private:
     internal: true
   orbit_public:

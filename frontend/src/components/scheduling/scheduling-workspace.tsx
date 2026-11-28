@@ -73,6 +73,7 @@ import type {
   SchedulingEventQuery,
 } from "@/types/scheduling";
 import { CalendarSetup } from "./calendar-setup";
+import { OperationAgendaSheet } from "./operation-agenda.sheet";
 import { EventDetailSheet } from "./event-detail.sheet";
 import { EventFormDialog } from "./event-form.dialog";
 import { AvailabilityPanel } from "./panels/availability.panel";
@@ -185,6 +186,15 @@ export function SchedulingWorkspace({
     () => groupByDay(occurrences.data ?? [], days, timeZone),
     [occurrences.data, days, timeZone],
   );
+
+  const selectedOccurrence = occurrences.data?.find(
+    (occurrence) => occurrence.eventId === selectedEventId,
+  );
+  const selectedOperation =
+    selectedOccurrence?.source.module === "operations" &&
+    selectedOccurrence.source.entityType === "OPERATION"
+      ? selectedOccurrence.source.entityId
+      : null;
 
   const conflictIndex = useMemo(
     () => conflictsByEvent(conflicts.data ?? []),
@@ -333,8 +343,20 @@ export function SchedulingWorkspace({
         ) : null}
       </div>
 
+      {selectedOperation && selectedOccurrence ? (
+        <OperationAgendaSheet
+          occurrence={selectedOccurrence}
+          operationId={selectedOperation}
+          timeZone={timeZone}
+          onClose={() => setSelectedEventId(null)}
+        />
+      ) : null}
       <EventDetailSheet
-        eventId={selectedEventId}
+        eventId={
+          selectedOperation || selectedEventId?.startsWith("operation:")
+            ? null
+            : selectedEventId
+        }
         timeZone={timeZone}
         canManage={canManage}
         onOpenChange={(open) => {

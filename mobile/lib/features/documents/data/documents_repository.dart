@@ -13,13 +13,14 @@ import '../../../core/contracts/mobile_field_contracts.dart';
 import '../../../core/network/orbit_api_client.dart';
 
 /// O recorte da lista. `todos` não manda filtro nenhum.
-enum DocumentFilter { todos, ordemServico, pmoc, rvt }
+enum DocumentFilter { todos, ordemServico, pmoc, rvt, orcamentos }
 
 const _filterCodes = <DocumentFilter, String?>{
   DocumentFilter.todos: null,
   DocumentFilter.ordemServico: 'SERVICE_ORDER',
   DocumentFilter.pmoc: 'PMOC',
   DocumentFilter.rvt: 'RVT',
+  DocumentFilter.orcamentos: 'QUOTE',
 };
 
 const documentFilterLabels = <DocumentFilter, String>{
@@ -27,6 +28,7 @@ const documentFilterLabels = <DocumentFilter, String>{
   DocumentFilter.ordemServico: 'OS',
   DocumentFilter.pmoc: 'PMOC',
   DocumentFilter.rvt: 'RVT',
+  DocumentFilter.orcamentos: 'Orçamentos',
 };
 
 /// Uma página de documentos, como o servidor a entregou.

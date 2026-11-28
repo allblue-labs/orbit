@@ -11,6 +11,7 @@
     "modules/customer-portal/customer-portal.read-models.ts",
     "modules/customer-service-requests/customer-service-request.read-models.ts",
     "modules/dashboards/dashboard.read-models.ts",
+    "modules/document-exports/document-export.read-models.ts",
     "modules/financial/financial.read-models.ts",
     "modules/identity/identity.read-models.ts",
     "modules/inventory/inventory.read-models.ts",

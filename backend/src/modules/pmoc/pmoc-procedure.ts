@@ -68,5 +68,5 @@ export function pmocProcedureAnswers(
     return {};
   return Object.fromEntries(
     Object.entries(answers).filter(([, value]) => typeof value === 'boolean'),
-  ) as Record<string, boolean>;
+  );
 }

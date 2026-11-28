@@ -1,3 +1,4 @@
+import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
  * E2E do Financeiro.
@@ -17,7 +18,7 @@ import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
  */
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -26,6 +27,12 @@ import type { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { configureApiVersioning } from './../src/configure-api';
 import { BackgroundJobWorker } from './../src/modules/jobs/background-job.worker';
+import {
+  STORAGE_PROVIDER,
+  type StorageProvider,
+} from '../src/modules/storage/storage.types';
+import { adminPrisma, disconnectAdminPrisma } from './support/admin-prisma';
+import { imageFixture } from './support/image-fixture';
 
 const CONTENT = Buffer.from('%PDF-1.7 recibo oficial do Orbit — E2E');
 
@@ -64,6 +71,7 @@ interface Tenant {
 
 describe('Financial (e2e)', () => {
   let app: INestApplication<App>;
+  const prisma = adminPrisma();
   let worker: BackgroundJobWorker;
   let http: () => request.Agent;
   let tenant: Tenant;
@@ -73,25 +81,27 @@ describe('Financial (e2e)', () => {
   const auth = (req: request.Test, token: string) =>
     req.set('Authorization', `Bearer ${token}`);
 
-  async function register(label: string): Promise<Tenant> {
+  async function register(
+    label: string,
+    client: 'WEB' | 'MOBILE' = 'WEB',
+  ): Promise<Tenant> {
     const suffix = randomUUID().slice(0, 8);
-    const registration = await http()
-      .post('/api/v1/identity/register')
-      .send({
-        ...REGISTRATION_LEGAL_ACCEPTANCE,
-        email: `financial.${label}.${suffix}@orbit.local`,
-        firstName: 'Financeiro',
-        lastName: 'E2E',
-        password: 'Orbit#Financial@2026',
-        organizationName: `Financeiro ${label} ${suffix}`,
-        legalName: `Financeiro ${label} ${suffix} LTDA`,
-        documentType: 'CNPJ',
-        documentNumber: cnpj(),
-        city: 'Recife',
-        street: 'Rua da Aurora',
-        stateCode: 'PE',
-      })
-      .expect(201);
+    const registration = await registerVerifiedOwner(app, {
+      ...REGISTRATION_LEGAL_ACCEPTANCE,
+      client,
+      email: `financial.${label}.${suffix}@orbit.local`,
+      firstName: 'Financeiro',
+      lastName: 'E2E',
+      password: 'Orbit#Financial@2026',
+      organizationName: `Financeiro ${label} ${suffix}`,
+      legalName: `Financeiro ${label} ${suffix} LTDA`,
+      documentType: 'CNPJ',
+      documentNumber: cnpj(),
+      city: 'Recife',
+      street: 'Rua da Aurora',
+      stateCode: 'PE',
+      planKey: 'ESSENTIAL',
+    });
 
     const token = (registration.body as Envelope<{ accessToken: string }>).data
       .accessToken;
@@ -295,7 +305,49 @@ describe('Financial (e2e)', () => {
 
   afterAll(async () => {
     await app?.close();
+    await disconnectAdminPrisma();
   });
+
+  async function attachIssuerSignature(businessUnitId: string) {
+    const org = await prisma.businessUnit.findUniqueOrThrow({
+      where: { id: businessUnitId },
+      select: { organization: { select: { id: true, ownerUserId: true } } },
+    });
+    const ownerId = org.organization.ownerUserId;
+    const png = imageFixture('receipt-issuer');
+    const objectKey = `${org.organization.id}/signatures/receipt-issuer.png`;
+    const signatureHash = createHash('sha256').update(png).digest('hex');
+    await app.get<StorageProvider>(STORAGE_PROVIDER).put({
+      bucket: 'orbit',
+      objectKey,
+      body: png,
+      mimeType: 'image/png',
+    });
+    const file = await prisma.storageFile.create({
+      data: {
+        organizationId: org.organization.id,
+        provider: 'LOCAL',
+        bucket: 'orbit',
+        objectKey,
+        fileName: 'signature.png',
+        mimeType: 'image/png',
+        sizeBytes: BigInt(png.length),
+        sha256: signatureHash,
+        status: 'AVAILABLE',
+        createdById: ownerId,
+      },
+    });
+    await prisma.userSignature.create({
+      data: {
+        organizationId: org.organization.id,
+        userId: ownerId,
+        storageObjectId: file.id,
+        sha256: signatureHash,
+      },
+    });
+
+    return ownerId;
+  }
 
   /** Esvazia a fila: um `tick` reivindica um job por fila por vez. */
   async function drain(rounds = 6): Promise<void> {
@@ -641,5 +693,201 @@ describe('Financial (e2e)', () => {
       ),
       tenant.token,
     ).expect(400);
+  });
+  it('creates a receipt, renders its PDF and limits download to the issuing tenant', async () => {
+    const created = await auth(
+      http().post('/api/v1/financial/receipts'),
+      neighbour.token,
+    )
+      .send({
+        businessUnitId: neighbour.businessUnitId,
+        payer: 'Cliente de teste',
+        amount: '120.50',
+        paidOn: '2026-09-02',
+        referring: 'Manutenção de equipamento',
+        paymentMethod: 'Pix',
+      })
+      .expect(201);
+    const id = (created.body as Envelope<{ id: string }>).data.id;
+    const path = `/api/v1/financial/receipts/${id}`;
+    await auth(http().post(`${path}/render`), tenant.token).expect(404);
+    await auth(http().get(`${path}/download`), neighbour.token).expect(404);
+    await auth(http().post(`${path}/render`), neighbour.token).expect(422);
+
+    const ownerId = await attachIssuerSignature(neighbour.businessUnitId);
+
+    await auth(http().post(`${path}/render`), neighbour.token).expect(202);
+    await drain();
+    const receipt = await prisma.artifactExecution.findUniqueOrThrow({
+      where: { id },
+      select: {
+        renderStatus: true,
+        signatures: { select: { signerRole: true, userId: true } },
+      },
+    });
+    expect(receipt).toEqual({
+      renderStatus: 'READY',
+      signatures: [{ signerRole: 'ISSUER', userId: ownerId }],
+    });
+    const receipts = await auth(
+      http().get('/api/v1/financial/receipts'),
+      neighbour.token,
+    ).expect(200);
+    expect((receipts.body as Envelope<{ data: unknown[] }>).data.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id, renderStatus: 'READY' }),
+      ]),
+    );
+    const download = await auth(
+      http().get(`${path}/download`),
+      neighbour.token,
+    ).expect(200);
+    expect((download.body as Envelope<{ url: string }>).data.url).toBeTruthy();
+    await auth(http().get(`${path}/download`), tenant.token).expect(404);
+  });
+  it('registra a venda pelo mobile com baixa única e recibo isolado por organização', async () => {
+    const seller = await register('vendas', 'MOBILE');
+    const unit = await prisma.businessUnit.findUniqueOrThrow({
+      where: { id: seller.businessUnitId },
+      select: { organizationId: true },
+    });
+    const sellerRequest = (req: request.Test) =>
+      auth(req, seller.token).set('x-orbit-mobile-management', '1');
+    const customer = await prisma.customer.create({
+      data: {
+        organizationId: unit.organizationId,
+        legalName: 'Cliente da venda',
+      },
+    });
+    const product = await prisma.product.create({
+      data: {
+        organizationId: unit.organizationId,
+        name: 'Peça de reposição',
+        kind: 'PART',
+        salePrice: '15.25',
+      },
+    });
+    const outOfStock = await prisma.product.create({
+      data: {
+        organizationId: unit.organizationId,
+        name: 'Peça sem estoque',
+        kind: 'PART',
+        salePrice: '5.00',
+      },
+    });
+    const balance = await prisma.inventoryBalance.create({
+      data: {
+        organizationId: unit.organizationId,
+        businessUnitId: seller.businessUnitId,
+        catalogItemId: product.id,
+        onHand: '4.000',
+      },
+    });
+    const onHand = async () =>
+      (
+        await prisma.inventoryBalance.findUniqueOrThrow({
+          where: { id: balance.id },
+        })
+      ).onHand.toFixed(3);
+    const input = {
+      requestId: randomUUID(),
+      customerId: customer.id,
+      paidOn: '2026-09-01',
+      discount: '1.50',
+      items: [{ productId: product.id, quantity: '2.000', unitPrice: '15.25' }],
+      payments: [
+        { method: 'PIX', amount: '20.00' },
+        { method: 'CASH', amount: '9.00' },
+      ],
+    };
+    const products = await sellerRequest(
+      http().get('/api/v1/sales/products?search=reposição'),
+    ).expect(200);
+    expect(
+      (products.body as Envelope<{ data: { id: string; available: string }[] }>)
+        .data.data,
+    ).toMatchObject([{ id: product.id, available: '4.000' }]);
+    const confirm = (payload: typeof input) =>
+      sellerRequest(http().post('/api/v1/sales')).send(payload);
+
+    await confirm(input).expect(422); // A assinatura é obrigatória no modelo oficial.
+    expect(await onHand()).toBe('4.000');
+    await attachIssuerSignature(seller.businessUnitId);
+
+    const stockConflict = await confirm({
+      ...input,
+      requestId: randomUUID(),
+      items: [
+        ...input.items,
+        { productId: outOfStock.id, quantity: '1', unitPrice: '0' },
+      ],
+    }).expect(409);
+    expect((stockConflict.body as { error: { code: string } }).error.code).toBe(
+      'SALE_STOCK_INSUFFICIENT',
+    );
+    expect(await onHand()).toBe('4.000');
+
+    const invalid = await confirm({
+      ...input,
+      requestId: randomUUID(),
+      payments: [{ method: 'PIX', amount: '20' }],
+    }).expect(400);
+    expect((invalid.body as { error: { code: string } }).error.code).toBe(
+      'SALE_PAYMENT_TOTAL_MISMATCH',
+    );
+    expect(await onHand()).toBe('4.000');
+
+    const [first, second] = await Promise.all([
+      confirm(input).expect(201),
+      confirm(input).expect(201),
+    ]);
+    type Sale = {
+      id: string;
+      subtotal: string;
+      discount: string;
+      total: string;
+      receipt: { renderStatus: string };
+    };
+    const sale = (first.body as Envelope<Sale>).data;
+    expect((second.body as Envelope<Sale>).data.id).toBe(sale.id);
+    expect(sale).toMatchObject({
+      subtotal: '30.50',
+      discount: '1.50',
+      total: '29.00',
+      receipt: { renderStatus: 'PENDING' },
+    });
+    expect(await onHand()).toBe('2.000');
+    expect(
+      await prisma.inventoryMovement.count({
+        where: {
+          sourceEntityId: sale.id,
+          type: 'SALE',
+          catalogItemId: product.id,
+        },
+      }),
+    ).toBe(1);
+
+    await drain();
+    const path = `/api/v1/sales/${sale.id}`;
+    const ready = await sellerRequest(http().get(path)).expect(200);
+    expect((ready.body as Envelope<Sale>).data.receipt.renderStatus).toBe(
+      'READY',
+    );
+    const download = await sellerRequest(
+      http().get(`${path}/receipt/download`),
+    ).expect(200);
+    expect((download.body as Envelope<{ url: string }>).data.url).toContain(
+      'operation=download',
+    );
+    await auth(http().get(`${path}/receipt/download`), tenant.token).expect(
+      404,
+    );
+    const manifest = await prisma.artifactManifest.findFirstOrThrow({
+      where: { execution: { productSale: { id: sale.id } }, status: 'ISSUED' },
+    });
+    const entries = await prisma.financialEntry.findMany({
+      where: { sourceEntityId: manifest.id, source: 'RECEIPT' },
+    });
+    expect(entries.map((entry) => entry.amount.toFixed(2))).toEqual(['29.00']);
   });
 });

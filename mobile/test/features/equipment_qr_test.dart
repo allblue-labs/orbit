@@ -5,6 +5,7 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:orbit_operator/features/equipment/application/equipment_qr_link.dart';
 import 'package:orbit_operator/features/equipment/data/equipment_qr_repository.dart';
 
 /// 43 caracteres base64url — o formato que o servidor aceita.
@@ -46,5 +47,32 @@ void main() {
   test('um token curto ou longo demais é recusado', () {
     expect(equipmentQrToken('a' * 42), isNull);
     expect(equipmentQrToken('https://app.orbit.local/q/${'a' * 44}'), isNull);
+  });
+
+  test('links do sistema aceitam a etiqueta HTTPS e o botão do navegador', () {
+    for (final link in [
+      'https://orbit.allblue-labs.com/q/$token',
+      'https://orbit.allblue-labs.com/q/$token?src=camera',
+      'http://orbit.allblue-labs.com/q/$token',
+      'orbit-operator://equipamento/q/$token',
+      '/q/$token',
+    ]) {
+      expect(equipmentLinkToken(Uri.parse(link)), token);
+    }
+  });
+
+  test('links do sistema recusam outros domínios e caminhos', () {
+    for (final link in [
+      'http://orbit.allblue-labs.com:1234/q/$token',
+      'https://outra-empresa.example/q/$token',
+      'https://orbit.allblue-labs.com:444/q/$token',
+      'https://user@orbit.allblue-labs.com/q/$token',
+      'https://orbit.allblue-labs.com/conta/$token',
+      'orbit-operator://outro/q/$token',
+      '/q/$token/outro',
+      '/q/curto',
+    ]) {
+      expect(equipmentLinkToken(Uri.parse(link)), isNull, reason: link);
+    }
   });
 }

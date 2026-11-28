@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
+import { FieldAssignmentOutbox } from '../notifications/field-assignment-outbox';
 import { RlsTransaction } from '../../database';
 import {
   ConflictException,
@@ -29,7 +30,10 @@ export interface RecurringAuthorizationItem {
 
 @Injectable()
 export class RecurringAuthorizationService {
-  constructor(private readonly rls: RlsTransaction) {}
+  constructor(
+    private readonly rls: RlsTransaction,
+    @Optional() private readonly assignmentPush?: FieldAssignmentOutbox,
+  ) {}
 
   list(actor: Actor, query: RecurringAuthorizationQueryDto) {
     return this.rls.run(async (tx) => {
@@ -42,11 +46,12 @@ export class RecurringAuthorizationService {
           meta: { page: query.page, limit: 50, total: 0, totalPages: 0 },
         };
       const search = query.search?.trim();
+      const authorization = query.state === 'authorized' ? { not: null } : null;
       const rvtWhere = {
         organizationId: actor.organizationId,
         businessUnitId: { in: unitIds },
         deletedAt: null,
-        authorizedAt: null,
+        authorizedAt: authorization,
         status: { in: ['SCHEDULED', 'IN_PROGRESS'] },
         responsibleFieldTechnicianId: query.assignedUserId ?? { not: null },
         configuration: {
@@ -63,14 +68,13 @@ export class RecurringAuthorizationService {
       };
       const pmocWhere = {
         organizationId: actor.organizationId,
-        authorizedAt: null,
+        authorizedAt: authorization,
         status: 'PENDING',
         plan: {
           businessUnitId: { in: unitIds },
           deletedAt: null,
           status: 'ACTIVE',
           schedulingPaused: false,
-          technicianUserId: query.assignedUserId ?? { not: null },
           ...(search
             ? {
                 OR: [
@@ -80,6 +84,27 @@ export class RecurringAuthorizationService {
               }
             : {}),
         },
+        OR: [
+          { plan: { technicianUserId: query.assignedUserId ?? { not: null } } },
+          {
+            equipmentSchedules: {
+              some: {
+                cancelledAt: null,
+                responsibleFieldTechnicianId: query.assignedUserId ?? {
+                  not: null,
+                },
+              },
+            },
+          },
+          {
+            equipmentExecutions: {
+              some: {
+                status: 'IN_PROGRESS',
+                responsibleFieldTechnicianId: query.assignedUserId,
+              },
+            },
+          },
+        ],
       };
       const take = query.page * 50;
       const visits = await tx.rvtOccurrence.findMany({
@@ -95,6 +120,14 @@ export class RecurringAuthorizationService {
         take,
         orderBy: [{ dueOn: 'asc' }, { id: 'asc' }],
         include: {
+          equipmentSchedules: {
+            where: { cancelledAt: null },
+            select: { responsibleFieldTechnicianId: true },
+          },
+          equipmentExecutions: {
+            where: { status: 'IN_PROGRESS' },
+            select: { responsibleFieldTechnicianId: true },
+          },
           plan: {
             select: {
               id: true,
@@ -110,7 +143,15 @@ export class RecurringAuthorizationService {
         (await tx.pmocExecution.count({ where: pmocWhere }));
       const ids = [
         ...visits.map((row) => row.responsibleFieldTechnicianId),
-        ...cycles.map((row) => row.plan.technicianUserId),
+        ...cycles.flatMap((row) => [
+          row.plan.technicianUserId,
+          ...(row.equipmentSchedules ?? []).map(
+            (item) => item.responsibleFieldTechnicianId,
+          ),
+          ...(row.equipmentExecutions ?? []).map(
+            (item) => item.responsibleFieldTechnicianId,
+          ),
+        ]),
       ].filter((id): id is string => !!id);
       const users = await tx.user.findMany({
         where: { id: { in: [...new Set(ids)] } },
@@ -138,7 +179,14 @@ export class RecurringAuthorizationService {
           scheduledStart: row.dueOn.toISOString().slice(0, 10),
           version: row.updatedAt.toISOString(),
           responsibleFieldTechnician:
-            people.get(row.plan.technicianUserId ?? '') ?? null,
+            people.get(
+              row.equipmentSchedules?.find(
+                (item) => item.responsibleFieldTechnicianId,
+              )?.responsibleFieldTechnicianId ??
+                row.equipmentExecutions?.[0]?.responsibleFieldTechnicianId ??
+                row.plan.technicianUserId ??
+                '',
+            ) ?? null,
         })),
       ];
       rows.sort(
@@ -159,7 +207,11 @@ export class RecurringAuthorizationService {
     });
   }
 
-  authorize(actor: Actor, items: readonly RecurringAuthorizationTargetDto[]) {
+  authorize(
+    actor: Actor,
+    items: readonly RecurringAuthorizationTargetDto[],
+    allow = true,
+  ) {
     return this.rls.run(async (tx) => {
       if (!(await assignmentAuthorizationRequired(tx, actor.organizationId)))
         throw new ValidationException(
@@ -168,7 +220,9 @@ export class RecurringAuthorizationService {
       const now = new Date();
       let authorized = 0;
       for (const item of items) {
-        const stamp = { authorizedAt: now, authorizedById: actor.id };
+        const stamp = allow
+          ? { authorizedAt: now, authorizedById: actor.id }
+          : { authorizedAt: null, authorizedById: null };
         if (item.kind === 'RVT') {
           await tx.$executeRaw`SELECT id FROM rvt_occurrences WHERE id=${item.id}::uuid AND organization_id=${actor.organizationId}::uuid FOR UPDATE`;
           const visit = await tx.rvtOccurrence.findFirst({
@@ -182,7 +236,7 @@ export class RecurringAuthorizationService {
             include: { execution: { select: { operationId: true } } },
           });
           if (!visit) throw new EntityNotFoundException('Visita RVT', item.id);
-          if (visit.authorizedAt) continue;
+          if (Boolean(visit.authorizedAt) === allow) continue;
           if (
             !visit.responsibleFieldTechnicianId ||
             !['SCHEDULED', 'IN_PROGRESS'].includes(visit.status)
@@ -200,7 +254,7 @@ export class RecurringAuthorizationService {
           });
           if (!changed.count)
             throw new ConflictException(
-              'A visita foi alterada. Atualize a fila antes de autorizar.',
+              'A visita foi alterada. Atualize a fila antes de continuar.',
             );
           if (visit.execution?.operationId)
             await tx.operation.updateMany({
@@ -226,11 +280,23 @@ export class RecurringAuthorizationService {
             include: {
               plan: { select: { technicianUserId: true } },
               equipmentExecutions: { select: { operationId: true } },
+              equipmentSchedules: {
+                where: {
+                  cancelledAt: null,
+                  responsibleFieldTechnicianId: { not: null },
+                },
+                select: { id: true },
+              },
             },
           });
           if (!cycle) throw new EntityNotFoundException('Ciclo PMOC', item.id);
-          if (cycle.authorizedAt) continue;
-          if (cycle.status !== 'PENDING' || !cycle.plan.technicianUserId)
+          if (Boolean(cycle.authorizedAt) === allow) continue;
+          if (
+            cycle.status !== 'PENDING' ||
+            (!cycle.plan.technicianUserId &&
+              !cycle.equipmentSchedules?.length &&
+              !cycle.equipmentExecutions.length)
+          )
             throw new ConflictException(
               'O ciclo precisa estar atribuído e pendente para autorização.',
             );
@@ -244,7 +310,7 @@ export class RecurringAuthorizationService {
           });
           if (!changed.count)
             throw new ConflictException(
-              'O ciclo foi alterado. Atualize a fila antes de autorizar.',
+              'O ciclo foi alterado. Atualize a fila antes de continuar.',
             );
           const operationIds = [
             cycle.operationId,
@@ -261,19 +327,25 @@ export class RecurringAuthorizationService {
               data: stamp,
             });
         }
+        if (allow) {
+          if (item.kind === 'RVT') await this.assignmentPush?.rvt(tx, item.id);
+          else await this.assignmentPush?.pmoc(tx, item.id);
+        }
         authorized++;
         await tx.auditLog.create({
           data: {
             organizationId: actor.organizationId,
             userId: actor.id,
-            action: 'ASSIGNMENT_AUTHORIZED',
+            action: allow
+              ? 'ASSIGNMENT_AUTHORIZED'
+              : 'ASSIGNMENT_AUTHORIZATION_REVOKED',
             entityType: item.kind === 'RVT' ? 'RvtOccurrence' : 'PmocExecution',
             entityId: item.id,
-            after: { authorizedAt: now.toISOString() },
+            after: { authorizedAt: allow ? now.toISOString() : null },
           },
         });
       }
-      return { authorized };
+      return allow ? { authorized } : { revoked: authorized };
     });
   }
 }

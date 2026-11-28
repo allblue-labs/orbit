@@ -48,12 +48,13 @@ const monthName = (instant: Date, timeZone: string): string =>
 /**
  * Constrói as duas janelas a partir de um instante de referência.
  *
- * `reference` é quantizado no dia: o gráfico não deve refazer a consulta a
- * cada render só porque os milissegundos mudaram.
+ * O chamador mantém a referência estável entre renders. `partialDay` compara
+ * somente o tempo já transcorrido, sem antecipar o restante de hoje.
  */
 export function buildMonthComparison(
   reference: Date,
   timeZone: string,
+  partialDay = false,
 ): MonthComparison {
   const parts = zonedParts(reference, timeZone);
 
@@ -63,9 +64,9 @@ export function buildMonthComparison(
       year: parts.year,
       month: parts.month,
       day: parts.day,
-      hour: 23,
-      minute: 59,
-      second: 59,
+      hour: partialDay ? parts.hour : 23,
+      minute: partialDay ? parts.minute : 59,
+      second: partialDay ? parts.second : 59,
     },
     timeZone,
   );
@@ -102,22 +103,27 @@ export function buildMonthComparison(
       year: previousYear,
       month: normalizedMonth,
       day: Math.min(parts.day, lastDay),
-      hour: 23,
-      minute: 59,
-      second: 59,
+      hour: partialDay ? parts.hour : 23,
+      minute: partialDay ? parts.minute : 59,
+      second: partialDay ? parts.second : 59,
     },
     timeZone,
   );
 
+  // Na virada exata do mês, preserva um intervalo mínimo de 1 ms.
   return {
     thisMonth: {
       from: currentStart.toISOString(),
-      to: endOfToday.toISOString(),
+      to: new Date(
+        Math.max(endOfToday.getTime(), currentStart.getTime() + 1),
+      ).toISOString(),
       label: `1–${parts.day} de ${monthName(currentStart, timeZone)}`,
     },
     lastMonth: {
       from: previousStart.toISOString(),
-      to: previousEnd.toISOString(),
+      to: new Date(
+        Math.max(previousEnd.getTime(), previousStart.getTime() + 1),
+      ).toISOString(),
       label: `1–${zonedParts(previousEnd, timeZone).day} de ${monthName(previousStart, timeZone)}`,
     },
   };

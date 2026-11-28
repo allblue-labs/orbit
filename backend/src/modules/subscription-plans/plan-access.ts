@@ -1,3 +1,4 @@
+import { requestClientIp } from '../../common/trusted-client-origin';
 import {
   type CanActivate,
   type ExecutionContext,
@@ -16,7 +17,7 @@ import { PATH_METADATA } from '@nestjs/common/constants';
 import type { UUID } from '../../contracts';
 import { PUBLIC_KEY } from '../../decorators';
 import { ForbiddenException } from '../../exceptions';
-import { classifyInternalError, internalErrorStack } from '../../errors';
+import { classifyInternalError } from '../../errors';
 import type { IdentityRequest } from '../identity/infrastructure/jwt-authentication.guard';
 import type { AuthenticatedIdentity } from '../identity/domain/identity.types';
 import type { OrganizationEntitlements } from './subscription-plan.service';
@@ -79,13 +80,17 @@ abstract class PlanMetadataGuard {
       .getRequest<RequestWithEntitlements>();
     const identity = this.identity(context);
 
-    request[ENTITLEMENTS] ??= this.plans.getEntitlements(
-      identity.organizationId,
-      {
-        userId: identity.id,
-        businessUnitIds: identity.businessUnitIds ?? [],
-      },
-    );
+    const access = {
+      userId: identity.id,
+      businessUnitIds: identity.businessUnitIds ?? [],
+    };
+    const version = request.accessFence?.billingVersion;
+    request[ENTITLEMENTS] ??= version
+      ? this.plans.getEntitlements(identity.organizationId, access, {
+          sessionId: identity.sessionId,
+          billingVersion: version,
+        })
+      : this.plans.getEntitlements(identity.organizationId, access);
 
     return request[ENTITLEMENTS];
   }
@@ -115,11 +120,7 @@ abstract class PlanMetadataGuard {
         exceptionClass: classified.exceptionClass,
         errorCode: classified.code,
       });
-      if (process.env.NODE_ENV === 'production') {
-        this.logger.error(record);
-      } else {
-        this.logger.error(record, internalErrorStack(error));
-      }
+      this.logger.error(record);
       throw error;
     }
   }
@@ -281,7 +282,7 @@ export class ActivePlanGuard extends PlanMetadataGuard implements CanActivate {
         roles: identity.roles ?? [],
         permissions: identity.permissions ?? [],
         isOrganizationOwner: identity.isOrganizationOwner,
-        ip: request.ip ?? null,
+        ip: requestClientIp(request),
         userAgent: null,
         locale: 'pt-BR',
       }),

@@ -1,3 +1,4 @@
+import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
@@ -136,23 +137,20 @@ describe('Mobile Field read projection (e2e)', () => {
 
   async function register(label: string): Promise<string> {
     const suffix = randomUUID().slice(0, 8);
-    const response = await api()
-      .post('/api/v1/identity/register')
-      .send({
-        ...REGISTRATION_LEGAL_ACCEPTANCE,
-        email: `mobile.field.${label}.${suffix}@orbit.local`,
-        firstName: 'Mobile',
-        lastName: label,
-        password: PASSWORD,
-        organizationName: `Mobile ${label} ${suffix}`,
-        legalName: `Mobile ${label} ${suffix} LTDA`,
-        documentType: 'CNPJ',
-        documentNumber: cnpj(),
-        city: 'Recife',
-        street: 'Rua Mobile',
-        stateCode: 'PE',
-      })
-      .expect(201);
+    const response = await registerVerifiedOwner(app, {
+      ...REGISTRATION_LEGAL_ACCEPTANCE,
+      email: `mobile.field.${label}.${suffix}@orbit.local`,
+      firstName: 'Mobile',
+      lastName: label,
+      password: PASSWORD,
+      organizationName: `Mobile ${label} ${suffix}`,
+      legalName: `Mobile ${label} ${suffix} LTDA`,
+      documentType: 'CNPJ',
+      documentNumber: cnpj(),
+      city: 'Recife',
+      street: 'Rua Mobile',
+      stateCode: 'PE',
+    });
     return (response.body as Envelope<{ accessToken: string }>).data
       .accessToken;
   }

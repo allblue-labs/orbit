@@ -12,7 +12,7 @@ import {
   Req,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { Permissions } from '../../decorators';
+import { Permissions, Surfaces } from '../../decorators';
 import { ForbiddenException } from '../../exceptions';
 import { ParseUUIDv7Pipe } from '../../pipes';
 import type { IdentityRequest } from '../identity/infrastructure/jwt-authentication.guard';
@@ -35,6 +35,7 @@ export class NotificationController {
   constructor(private readonly notifications: NotificationService) {}
 
   @Get()
+  @Surfaces('WEB', 'MOBILE', 'API')
   @Capabilities('notifications.read')
   @Permissions('notifications.read')
   list(@Req() req: IdentityRequest, @Query() query: NotificationQueryDto) {
@@ -89,6 +90,7 @@ export class NotificationController {
   }
 
   @Patch('read-all')
+  @Surfaces('WEB', 'MOBILE', 'API')
   @Capabilities('notifications.read')
   @Permissions('notifications.read')
   markAllRead(@Req() req: IdentityRequest) {
@@ -96,6 +98,7 @@ export class NotificationController {
   }
 
   @Get(':id')
+  @Surfaces('WEB', 'MOBILE', 'API')
   @Capabilities('notifications.read')
   @Permissions('notifications.read')
   get(@Param('id', ParseUUIDv7Pipe) id: string, @Req() req: IdentityRequest) {
@@ -103,6 +106,7 @@ export class NotificationController {
   }
 
   @Patch(':id/read')
+  @Surfaces('WEB', 'MOBILE', 'API')
   @Capabilities('notifications.read')
   @Permissions('notifications.read')
   markRead(

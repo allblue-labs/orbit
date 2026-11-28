@@ -1,3 +1,4 @@
+import { renderPdfInThread, shouldOffloadPdf } from '../../runtime/pdf-thread';
 /**
  * Emissão do documento do plano de PMOC.
  *
@@ -38,6 +39,7 @@ export interface PmocPlanDocumentRequest {
 @Injectable()
 export class PmocPlanDocumentService {
   render(request: PmocPlanDocumentRequest): Promise<Buffer> {
+    if (shouldOffloadPdf()) return renderPdfInThread('pmoc', request);
     return new Promise((resolve, reject) => {
       const theme = buildTheme(request.primaryColor);
       const generatedAt = request.generatedAt ?? new Date();

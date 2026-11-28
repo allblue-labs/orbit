@@ -1,0 +1,29 @@
+{
+  "protocolVersion": "1.0.0",
+  "commandId": "00000000-0000-7000-8000-000000000002",
+  "type": "subscription.request_plan_change.v1",
+  "issuer": "https://idp.example.invalid",
+  "connectorClientId": "nexus-orbit-staging",
+  "target": {
+    "productId": "orbit-v2",
+    "environment": "staging",
+    "instanceId": "orbit-staging-01",
+    "tenantId": "00000000-0000-7000-8000-000000000001"
+  },
+  "linkId": "link-demo",
+  "grantId": "grant-demo",
+  "delegationRef": "delegation-demo",
+  "approvalRef": "approval-demo",
+  "correlationId": "00000000-0000-7000-8000-000000000002",
+  "issuedAt": "2026-11-15T12:00:00Z",
+  "expiresAt": "2026-11-15T12:05:00Z",
+  "reasonCode": "CUSTOMER_REQUEST",
+  "precondition": {
+    "aggregate": "SUBSCRIPTION",
+    "version": "7"
+  },
+  "parameters": {
+    "planCode": "PROFESSIONAL",
+    "billingInterval": "MONTHLY"
+  }
+}

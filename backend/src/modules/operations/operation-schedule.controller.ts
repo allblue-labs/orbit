@@ -1,3 +1,4 @@
+import { MobileManagement } from '../../common/mobile-management';
 import { Body, Controller, Post, Req } from '@nestjs/common';
 import { Permissions } from '../../decorators';
 import { ForbiddenException } from '../../exceptions';
@@ -13,6 +14,7 @@ import { OperationScheduleService } from './operation-schedule.service';
 export class OperationScheduleController {
   constructor(private readonly schedule: OperationScheduleService) {}
   @Post('schedule-check')
+  @MobileManagement('operations')
   @Capabilities('operations.read')
   @Permissions('operations.read')
   check(

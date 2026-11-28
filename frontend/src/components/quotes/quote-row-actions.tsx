@@ -28,6 +28,8 @@
  * cancelada continua sendo um documento que alguém precisa arquivar.
  */
 import { useState } from "react";
+import { errorCopy } from "@/lib/error-copy";
+import { notifyError } from "@/lib/notify";
 import { Check, FileDown, Loader2, Ban } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -65,9 +67,16 @@ export function QuoteRowActions({ quote }: { quote: QuoteSummary }) {
       onClick={(event) => event.stopPropagation()}
     >
       <IconButton
-        label="Baixar o orçamento em PDF"
+        label={
+          download.isPending ? "Gerando documento…" : "Baixar o orçamento em PDF"
+        }
         busy={download.isPending}
-        onClick={() => download.mutate(undefined)}
+        onClick={() =>
+          download.mutate(undefined, {
+            /* Na linha não há espaço para o alerta: o aviso diz o que houve. */
+            onError: (error) => notifyError(errorCopy(error)),
+          })
+        }
       >
         <FileDown className="size-4" />
       </IconButton>

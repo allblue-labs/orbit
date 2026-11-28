@@ -545,3 +545,11 @@ aproximada, e a leitura acaba quando a tela sai.
 **Sem análise de mídia no app.** Nada de OCR, detecção ou classificação da
 evidência: seria regra de negócio nascendo no cliente. O app captura, envia e
 mostra o que o backend devolve.
+
+## Push nas builds de distribuição
+
+Android e iOS utilizam FCM. Antes de gerar uma build Release, configurar os
+arquivos públicos de cliente, `ORBIT_FLAVOR` e `ORBIT_FIREBASE_PROJECT_ID`,
+conforme o [guia Firebase/Apple e aceite físico](docs/firebase-push-release.md).
+O build recusa configuração incompleta; instalação local com Personal Team
+possui opt-out explícito e não comprova entrega de push.

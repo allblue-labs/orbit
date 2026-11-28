@@ -35,7 +35,9 @@ export function ExecutiveKpisWidget({ widget, analytics }: WidgetProps) {
       >
         {(data) => (
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {sortByPriority(data.metrics).map((metric) => (
+            {sortByPriority(
+              data.metrics.filter((metric) => metric.executive !== false),
+            ).map((metric) => (
               <KpiTile key={metric.id} metric={presentMetric(metric)} />
             ))}
           </div>
@@ -75,17 +77,19 @@ function KpiTile({ metric }: { metric: PresentedMetric }) {
               ? "down"
               : "neutral"
         }
-        hint={metric.target ? `meta ${metric.target}` : undefined}
+        hint={metric.description}
         icon={<Icon className={cn("size-4", metric.iconColor)} />}
       />
       <div className="flex flex-wrap items-center gap-1.5 px-1">
         <span
           className={cn(
             "rounded-md px-1.5 py-0.5 text-[11px] font-medium",
-            STATUS_CLASSES[metric.status],
+            metric.statusLabel
+              ? "bg-muted text-muted-foreground"
+              : STATUS_CLASSES[metric.status],
           )}
         >
-          {STATUS_LABELS[metric.status]}
+          {metric.statusLabel ?? STATUS_LABELS[metric.status]}
         </span>
         <MetricProvenanceMark
           quality={metric.provenance.quality}

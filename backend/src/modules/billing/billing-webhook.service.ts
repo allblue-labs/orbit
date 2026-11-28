@@ -48,6 +48,7 @@ export class BillingWebhookService {
     const evento = this.provider.verifyWebhook(rawBody, signature);
 
     const novo = await this.repository.recordEvent({
+      mode: this.provider.mode,
       provider: this.provider.name,
       providerEventId: evento.providerEventId,
       eventType: evento.type,

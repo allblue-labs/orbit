@@ -1,3 +1,4 @@
+import { registerVerifiedOwner } from './support/verified-owner-fixture';
 import { REGISTRATION_LEGAL_ACCEPTANCE } from './helpers/legal-acceptance';
 /**
  * Autorização da atribuição.
@@ -113,23 +114,20 @@ describe('Operation assignment authorization (e2e)', () => {
     await app.init();
 
     const sufixo = digits(8);
-    const registro = await http()
-      .post('/api/v1/identity/register')
-      .send({
-        ...REGISTRATION_LEGAL_ACCEPTANCE,
-        email: `auto.${sufixo}@orbit.local`,
-        firstName: 'Dona',
-        lastName: 'Operacao',
-        password: 'Orbit#Auto@2026',
-        organizationName: `Auto ${sufixo}`,
-        legalName: `Auto ${sufixo} LTDA`,
-        documentType: 'CNPJ',
-        documentNumber: cnpj(),
-        city: 'Recife',
-        street: 'Rua da Aurora',
-        stateCode: 'PE',
-      })
-      .expect(201);
+    const registro = await registerVerifiedOwner(app, {
+      ...REGISTRATION_LEGAL_ACCEPTANCE,
+      email: `auto.${sufixo}@orbit.local`,
+      firstName: 'Dona',
+      lastName: 'Operacao',
+      password: 'Orbit#Auto@2026',
+      organizationName: `Auto ${sufixo}`,
+      legalName: `Auto ${sufixo} LTDA`,
+      documentType: 'CNPJ',
+      documentNumber: cnpj(),
+      city: 'Recife',
+      street: 'Rua da Aurora',
+      stateCode: 'PE',
+    });
     ownerToken = (registro.body as Envelope<{ accessToken: string }>).data
       .accessToken;
 

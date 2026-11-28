@@ -11,6 +11,7 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:crypto/crypto.dart';
 
+import '../storage/offline_data.dart';
 import 'upload_task.dart';
 import 'upload_queue.dart';
 
@@ -30,14 +31,10 @@ class FileUploadQueueStore implements UploadQueueStore {
     final digest = sha256.convert(utf8.encode(raw));
     final archive = File('${file.path}.recovery.$digest');
     if (await archive.exists()) return;
-    final staging = await file.parent.createTemp('.queue-recovery-');
-    try {
-      final temporary = File('${staging.path}/original');
-      await temporary.writeAsString(raw, flush: true);
-      await temporary.rename(archive.path);
-    } finally {
-      await staging.delete(recursive: true);
-    }
+    await OfflineDataFile(
+      archive,
+      scope: 'upload-recovery',
+    ).write(utf8.encode(raw));
   }
 
   Future<File> _file() async {
@@ -51,8 +48,9 @@ class FileUploadQueueStore implements UploadQueueStore {
   @override
   Future<List<UploadTask>> load() async {
     final file = await _file();
-    if (!await file.exists()) return const [];
-    final raw = await file.readAsString();
+    final bytes = await OfflineDataFile(file, scope: 'upload-queue').read();
+    if (bytes == null) return const [];
+    final raw = utf8.decode(bytes);
     Object? decoded;
     try {
       decoded = jsonDecode(raw);
@@ -83,12 +81,9 @@ class FileUploadQueueStore implements UploadQueueStore {
       // Mesmo um save anterior ao restore deve preservar o arquivo ilegível.
       await load();
       final file = await _file();
-      final temporary = File('${file.path}.tmp');
-      await temporary.writeAsString(
-        jsonEncode(tasks.map((task) => task.toJson()).toList()),
-        flush: true,
+      await OfflineDataFile(file, scope: 'upload-queue').write(
+        utf8.encode(jsonEncode(tasks.map((task) => task.toJson()).toList())),
       );
-      await temporary.rename(file.path);
     });
     _writing = next.then((_) {}, onError: (Object _) {});
     return next;

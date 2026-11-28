@@ -1,0 +1,109 @@
+{
+  "pr": "PR-06",
+  "baseCommit": "bc2026c",
+  "date": "2026-11-14",
+  "findings": [
+    "F09"
+  ],
+  "qualification": "Code implemented; local gates passed. Mandatory physical Android/iPhone and Firebase/APNs configuration acceptance pending. Not qualified for production push.",
+  "migration": null,
+  "checks": {
+    "backendUnit": {
+      "suites": 255,
+      "passed": 2030,
+      "initialConcurrentRun": "Two rendering timeouts; full rerun passed with original deadlines."
+    },
+    "pushAndRecurringAuthorizationIntegration": {
+      "suites": 2,
+      "passed": 15,
+      "database": "Disposable PostgreSQL, orbit_app with RLS",
+      "firebaseBoundary": "Inspectable fake provider; all persistence/jobs/worker are real."
+    },
+    "domainIntegration": {
+      "pmoc": "passed",
+      "rvt": "passed",
+      "pmocSchedule": "passed",
+      "initialBroadRun": "Two push cases failed (generic upgrade message and drain deadline under report backlog); fixed code and reran push/authorization in isolated database."
+    },
+    "pmocActivationFinal": {
+      "passed": 3,
+      "otherTestsIntentionallySkippedByNameFilter": 39
+    },
+    "mobileFull": {
+      "passed": 1278,
+      "skipped": 1,
+      "excludeTags": [
+        "integration"
+      ]
+    },
+    "mobileFocused": {
+      "passed": 38
+    },
+    "webUnit": {
+      "files": 70,
+      "passed": 678
+    },
+    "webTypecheck": "passed",
+    "preflightUnit": {
+      "passed": 12,
+      "fixtures": "Public synthetic files in temporary directories only"
+    },
+    "androidNativePreflight": "Gradle validateOrbitPush refused missing Firebase selection as intended",
+    "nativeBuilds": [
+      "Android Debug APK",
+      "iOS Debug simulator Runner with Firebase SDK, CODE_SIGNING_ALLOWED=NO"
+    ],
+    "backendLint": "passed",
+    "backendTypecheck": "passed",
+    "flutterAnalyzer": "no issues",
+    "contracts": "passed",
+    "publicErrorContract": "passed",
+    "pushPublicErrorFinalRegression": {
+      "suites": 15,
+      "passed": 92
+    },
+    "mobileChannelFinalRegression": {
+      "passed": 2
+    }
+  },
+  "nativeSdk": {
+    "ios": {
+      "product": "FirebaseMessaging",
+      "version": "13.1.1",
+      "manager": "Swift Package Manager",
+      "minimumXcode": "26.2"
+    },
+    "android": "Existing Firebase BoM 35.1.0 / Firebase Messaging"
+  },
+  "clientConfiguration": {
+    "androidId": "com.allbluelabs.orbit",
+    "iosId": "com.allbluelabs.orbitOperator",
+    "expectedProjectDefine": "ORBIT_FIREBASE_PROJECT_ID",
+    "environmentDefine": "ORBIT_FLAVOR",
+    "filesPresentInCheckout": false,
+    "serviceAccountEmbedded": false
+  },
+  "security": {
+    "fcmOnBothPlatforms": true,
+    "rawApnsSentToAdmin": false,
+    "recipientAndTenantCheckedOnTap": true,
+    "detailsFetchedFromAuthenticatedApi": true,
+    "tokenCleanupCompareAndSetPreserved": true,
+    "releaseGate": true,
+    "personalTeamLocalOptOut": true,
+    "archiveOptOut": false,
+    "assignmentQueries": "Explicit projections without operation/customer document payloads; equipment assignment resolution uses indexed maps."
+  },
+  "limits": {
+    "cloudDeliveryVerified": false,
+    "physicalDeviceTests": false,
+    "productionProvisioningInspected": false,
+    "firebaseConsoleChanged": false,
+    "deployment": false,
+    "push": false,
+    "storePublication": false,
+    "loadQualification": false,
+    "providerAcceptanceDoesNotProveDisplay": true
+  },
+  "externalAcceptanceGuide": "mobile/docs/firebase-push-release.md"
+}

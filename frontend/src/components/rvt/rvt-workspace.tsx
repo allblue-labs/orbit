@@ -14,6 +14,7 @@
  * Não há "Gerar documento" nesta tela: **configuração não é documento**. O RVT
  * emitido nasce da execução, e é de lá que se chega até ele.
  */
+import { ASSET_CATEGORY_LABELS } from "@/entities";
 import { Pencil } from "lucide-react";
 import { useState } from "react";
 
@@ -270,7 +271,10 @@ function ConfigurationOverview({
               >
                 <p className="truncate text-sm font-medium">{item.name}</p>
                 <p className="truncate text-xs text-muted-foreground">
-                  {item.identifier ?? item.serialNumber ?? item.category}
+                  {item.identifier ??
+                    item.serialNumber ??
+                    ASSET_CATEGORY_LABELS[item.category] ??
+                    item.category}
                 </p>
               </li>
             ))}

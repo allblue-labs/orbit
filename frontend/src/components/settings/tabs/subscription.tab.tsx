@@ -55,7 +55,7 @@ import {
 import { useDateFormatters } from "@/hooks/use-date-formatters";
 import { notifySuccess } from "@/lib/notify";
 import { diasAte } from "@/components/billing/billing-format";
-import { BILLING_INTERVAL_LABELS } from "@/types/billing";
+import { BILLING_INTERVAL_LABELS, type BillingOverview } from "@/types/billing";
 
 /** Quantas vezes reconsultar depois de voltar do provedor, e de quanto em quanto. */
 const TENTATIVAS_APOS_CHECKOUT = 6;
@@ -63,7 +63,28 @@ const INTERVALO_DE_RECONSULTA_MS = 4000;
 
 type Confirmacao =
   | { tipo: "CANCELAR" }
-  | { tipo: "TROCAR"; planCode: string; intervalo: string };
+  | {
+      tipo: "TROCAR";
+      planCode: string;
+      intervalo: string;
+      catalogVersion?: number;
+    };
+
+function paidPlanChange(
+  overview: BillingOverview,
+  target: Extract<Confirmacao, { tipo: "TROCAR" }>,
+) {
+  const current = overview.subscription;
+  if (current?.status !== "ACTIVE") return null;
+  if (
+    current.billingInterval !== "MONTHLY" ||
+    target.intervalo !== "MONTHLY" ||
+    overview.contractedAmountMinor == null
+  ) return "SUPPORT";
+  const price = overview.catalog.plans.find((plan) => plan.code === target.planCode)?.prices.MONTHLY;
+  if (!price) return "SUPPORT";
+  return price.amountMinor > overview.contractedAmountMinor ? "UPGRADE" : "SCHEDULED";
+}
 
 export function SubscriptionSettingsTab() {
   const { formatDate } = useDateFormatters();
@@ -111,7 +132,7 @@ export function SubscriptionSettingsTab() {
    */
   const voltouDoCheckout = params.get("assinatura") === "sucesso";
   const [reconsultas, setReconsultas] = useState(0);
-  const [destinoEsperado] = useState(readBillingTarget);
+  const [destinoEsperado, setDestinoEsperado] = useState(readBillingTarget);
   const assinaturaRecebida = overview.data?.subscription;
   const confirmou =
     assinaturaRecebida?.status === "ACTIVE" &&
@@ -121,7 +142,7 @@ export function SubscriptionSettingsTab() {
         assinaturaRecebida.billingInterval ===
           destinoEsperado.billingInterval));
   const aguardandoConfirmacao =
-    voltouDoCheckout && reconsultas < TENTATIVAS_APOS_CHECKOUT && !confirmou;
+    (voltouDoCheckout || !!destinoEsperado) && reconsultas < TENTATIVAS_APOS_CHECKOUT && !confirmou;
 
   useEffect(() => {
     if (!aguardandoConfirmacao) return;
@@ -133,11 +154,11 @@ export function SubscriptionSettingsTab() {
   }, [aguardandoConfirmacao, reconsultas, overview, refreshSession]);
 
   useEffect(() => {
-    if (voltouDoCheckout && confirmou) {
+    if ((voltouDoCheckout || destinoEsperado) && confirmou) {
       clearBillingTarget();
       void refreshSession();
     }
-  }, [voltouDoCheckout, confirmou, refreshSession]);
+  }, [voltouDoCheckout, destinoEsperado, confirmou, refreshSession]);
 
   if (overview.isPending) return <PanelLoading rows={6} />;
   if (overview.error) {
@@ -162,6 +183,9 @@ export function SubscriptionSettingsTab() {
     void proteger(async () => {
       const sessao = await checkout.mutateAsync({
         planCode,
+        expectedCatalogVersion: dados.catalog.plans.find(
+          (plan) => plan.code === planCode,
+        )?.version,
         billingInterval: intervalo,
       });
       if (assinatura)
@@ -185,26 +209,50 @@ export function SubscriptionSettingsTab() {
       if (!confirmacao || !assinatura)
         throw new Error("Atualize a página e selecione o plano novamente.");
       if (confirmacao.tipo === "CANCELAR") {
-        await cancelar.mutateAsync({
+        const { cancellation } = await cancelar.mutateAsync({
           expectedVersion: assinatura.version,
           acknowledgeDataDeletion: true,
         });
+        if (cancellation.kind === "REFUND_REQUESTED")
+          setActionMessage("Recebemos sua solicitação de cancelamento com estorno integral. O prazo para o valor aparecer depende do seu meio de pagamento.");
+        if (cancellation.kind === "SUPPORT_TICKET")
+          setActionMessage(`Chamado ${cancellation.ticketId} aberto para análise da equipe de suporte.`);
       } else {
         const sessao = await trocar.mutateAsync({
           expectedVersion: assinatura.version,
           planCode: confirmacao.planCode,
+          expectedCatalogVersion: confirmacao.catalogVersion,
           billingInterval: confirmacao.intervalo,
           acknowledgeTrialEnd: assinatura.status === "TRIALING",
+          acknowledgeImmediateCharge: paidPlanChange(dados, confirmacao) === "UPGRADE",
         });
         if ("kind" in sessao) {
+          if (sessao.kind === "SUPPORT_TICKET") {
+            setActionMessage(`Chamado ${sessao.ticketId} aberto para a equipe analisar a troca de plano.`);
+            setConfirmacao(null);
+            return;
+          }
+          if (sessao.kind === "UPGRADE_PROCESSING") {
+            const target = {
+              subscriptionId: assinatura.id,
+              planCode: confirmacao.planCode,
+              billingInterval: confirmacao.intervalo,
+            };
+            rememberBillingTarget(target);
+            setDestinoEsperado(target);
+            setReconsultas(0);
+            setActionMessage(null);
+            setConfirmacao(null);
+            return;
+          }
           setActionMessage(
             sessao.kind === "TRIAL_STARTED"
-              ? `Seu teste gratuito no Essencial começou e vai até ${formatDate(sessao.endsAt)}. Nenhuma cobrança foi realizada.`
+              ? `Seu teste gratuito começou e vai até ${formatDate(sessao.endsAt)}. Nenhuma cobrança foi realizada.`
               : `Troca agendada para ${formatDate(sessao.effectiveAt)}. Seu plano e seus créditos atuais continuam até essa data.`,
           );
           if (sessao.kind === "TRIAL_STARTED")
             notifySuccess(
-              "Seu teste gratuito no Essencial começou",
+              "Seu teste gratuito começou",
               `Você tem acesso gratuito até ${formatDate(sessao.endsAt)}. Nenhuma cobrança foi realizada.`,
             );
           clearBillingTarget();
@@ -226,6 +274,16 @@ export function SubscriptionSettingsTab() {
   return (
     <div className="space-y-6">
       {!confirmacao ? <MutationError error={actionError} /> : null}
+      {dados.refundRequestStatus === "OPEN" && !actionMessage ? (
+        <p role="status" className="rounded-lg border border-border bg-muted/30 p-3 text-sm">
+          Seu cancelamento com estorno está sendo processado.
+        </p>
+      ) : null}
+      {dados.refundRequestStatus === "REVIEW" && !actionMessage ? (
+        <p role="status" className="rounded-lg border border-border bg-muted/30 p-3 text-sm">
+          A equipe de suporte está acompanhando sua solicitação de estorno.
+        </p>
+      ) : null}
       {actionMessage ? (
         <p
           role="status"
@@ -266,7 +324,7 @@ export function SubscriptionSettingsTab() {
           Estamos confirmando sua assinatura. Isso pode levar alguns instantes.
         </p>
       ) : null}
-      {voltouDoCheckout && !confirmou && !aguardandoConfirmacao ? (
+      {(voltouDoCheckout || destinoEsperado) && !confirmou && !aguardandoConfirmacao ? (
         <p
           role="status"
           className="rounded-md border border-border p-3 text-sm"
@@ -326,7 +384,14 @@ export function SubscriptionSettingsTab() {
         onSubscribe={iniciarCheckout}
         onChangePlan={(planCode, intervalo) => {
           setActionError(null);
-          setConfirmacao({ tipo: "TROCAR", planCode, intervalo });
+          setConfirmacao({
+            tipo: "TROCAR",
+            planCode,
+            intervalo,
+            catalogVersion: dados.catalog.plans.find(
+              (plan) => plan.code === planCode,
+            )?.version,
+          });
         }}
         pending={checkout.isPending || comandoPendente}
       />
@@ -461,21 +526,21 @@ function ConfirmacaoDialog({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Cancelar a renovação?</AlertDialogTitle>
+            <AlertDialogTitle>Cancelar sua assinatura?</AlertDialogTitle>
             <AlertDialogDescription>
-              Sua assinatura continuará ativa até{" "}
-              {formatDate(assinatura.billingPeriod.end)}. Depois dessa data, ela
-              não será renovada. Você pode voltar atrás enquanto o período
-              corre. Os dados operacionais serão mantidos por 30 dias após o fim
-              do acesso. Sem recontratação, serão excluídos automaticamente ao
-              final desse prazo.
+              Em até 7 dias da contratação, o cancelamento é imediato e
+              você pode receber o valor pago integralmente. Após esse prazo, a
+              equipe recebe um chamado para análise e o acesso pago permanece
+              até {formatDate(assinatura.billingPeriod.end)}. Seus dados
+              operacionais são mantidos por 30 dias a partir do fim do acesso.
+              Depois, são excluídos se você não contratar novamente.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <MutationError error={error} />
           <AlertDialogFooter>
             <AlertDialogCancel disabled={pending}>Voltar</AlertDialogCancel>
             <Button type="button" onClick={onConfirm} disabled={pending}>
-              Cancelar renovação
+              Confirmar cancelamento
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -487,11 +552,12 @@ function ConfirmacaoDialog({
     (item) => item.code === confirmacao.planCode,
   );
   const encerraTeste = assinatura.status === "TRIALING";
+  const diasDeTeste = destino?.trialDays ?? 0;
   const iniciaTeste =
     assinatura.status === "PENDING_PAYMENT" &&
-    confirmacao.planCode === "ESSENTIAL" &&
-    overview.billing.canStartEssentialTrial === true;
-  const agendada = assinatura.status === "ACTIVE";
+    diasDeTeste > 0 &&
+    overview.billing.canStartTrial === true;
+  const paidChange = paidPlanChange(overview, confirmacao);
   const diasRestantes = diasAte(
     assinatura.trial?.endsAt ?? assinatura.billingPeriod.end,
   );
@@ -509,11 +575,24 @@ function ConfirmacaoDialog({
           <AlertDialogDescription>
             {iniciaTeste ? (
               <>
-                Você tem direito a 30 dias gratuitos no Essencial. O teste
-                começa agora, sem pagamento e sem perder dias. Ao final, será
-                necessário contratar para continuar.
+                Você tem direito a {diasDeTeste} dias gratuitos em{" "}
+                {destino?.label}. O teste começa agora, sem pagamento e sem
+                perder dias. Ao final, será necessário contratar para continuar.
               </>
-            ) : agendada ? (
+            ) : paidChange === "SUPPORT" ? (
+              <>
+                A equipe de suporte vai analisar a mudança. Você receberá um
+                número para acompanhar a solicitação. Seu contrato atual segue vigente.
+              </>
+            ) : paidChange === "UPGRADE" ? (
+              <>
+                Você autoriza a cobrança de um novo ciclo de{" "}
+                {destino?.prices.MONTHLY?.formatted}, com desconto proporcional
+                pelo tempo já pago que restar no plano atual. A cobrança usa
+                o meio de pagamento cadastrado e pode exigir confirmação no Stripe.
+                Os novos recursos ficam disponíveis após a confirmação.
+              </>
+            ) : paidChange === "SCHEDULED" ? (
               <>
                 Seu plano, créditos e limites atuais continuam até{" "}
                 {formatDate(assinatura.billingPeriod.end)}. O novo valor será
@@ -524,7 +603,6 @@ function ConfirmacaoDialog({
               </>
             ) : encerraTeste ? (
               <>
-                O teste gratuito de 30 dias está disponível apenas no Essencial.
                 Ao concluir o pagamento de {destino?.label ?? "outro plano"},
                 seu teste termina e você perde os {diasRestantes} dias gratuitos
                 restantes, sem transferência para o novo plano. A cobrança
@@ -537,7 +615,7 @@ function ConfirmacaoDialog({
                 liberado após a confirmação do pagamento.
               </>
             )}
-            {confirmacao.intervalo !== assinatura.billingInterval ? (
+            {paidChange !== "SUPPORT" && confirmacao.intervalo !== assinatura.billingInterval ? (
               <>
                 {" "}
                 A periodicidade passará a ser{" "}
@@ -562,10 +640,14 @@ function ConfirmacaoDialog({
             {pending
               ? "Processando…"
               : iniciaTeste
-                ? "Começar 30 dias grátis"
-                : agendada
-                  ? "Agendar mudança na renovação"
-                  : "Continuar para o pagamento"}
+                ? `Começar ${diasDeTeste} dias grátis`
+                : paidChange === "SUPPORT"
+                  ? "Abrir chamado"
+                  : paidChange === "UPGRADE"
+                    ? "Autorizar cobrança"
+                    : paidChange === "SCHEDULED"
+                      ? "Agendar mudança na renovação"
+                      : "Continuar para o pagamento"}
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>

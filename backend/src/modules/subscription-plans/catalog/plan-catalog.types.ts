@@ -22,7 +22,7 @@ export const PlanCode = literal({
   PROFESSIONAL_INTELLIGENCE: 'PROFESSIONAL_INTELLIGENCE',
   ENTERPRISE_UNLIMITED: 'ENTERPRISE_UNLIMITED',
 });
-export type PlanCode = (typeof PlanCode)[keyof typeof PlanCode];
+export type PlanCode = string;
 
 /**
  * A versão do catálogo congelado.

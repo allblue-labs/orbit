@@ -175,7 +175,7 @@ void main() {
       expect(find.textContaining('tentei'), findsNothing);
     });
 
-    testWidgets('sem conexão fala de internet, não de servidor', (
+    testWidgets('falha ao alcançar o Orbit orienta sem culpar a internet', (
       tester,
     ) async {
       await tester.pumpWidget(
@@ -183,7 +183,13 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('conexão com a internet'), findsOneWidget);
+      expect(
+        find.text(
+          'Não foi possível conectar ao Orbit agora. Tente novamente em instantes.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('conexão com a internet'), findsNothing);
     });
 
     testWidgets('certificado inválido não vira "confira o wi-fi"', (

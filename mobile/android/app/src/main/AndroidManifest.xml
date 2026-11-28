@@ -2,6 +2,7 @@
     <!-- Notificações e captura de evidências nas operações. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <!-- O seletor do sistema concede acesso somente aos arquivos escolhidos.
          Remove também declarações que possam vir de dependências. -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" tools:node="remove" />
@@ -47,6 +48,26 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+            <meta-data android:name="flutter_deeplinking_enabled" android:value="true"/>
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="http"/>
+                <data
+                    android:scheme="https"
+                    android:host="orbit.allblue-labs.com"
+                    android:pathPrefix="/q/"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data
+                    android:scheme="orbit-operator"
+                    android:host="equipamento"
+                    android:pathPrefix="/q/"/>
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

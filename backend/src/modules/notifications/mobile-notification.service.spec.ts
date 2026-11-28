@@ -3,6 +3,7 @@ import {
   MobileNotificationPolicy,
   type MobileNotificationIntent,
 } from './mobile-notification.policy';
+import type { EnqueueJobInput } from '../jobs/background-job.types';
 import { ValidationException } from '../../exceptions';
 
 describe('MobileNotificationService recipient isolation', () => {
@@ -17,7 +18,9 @@ describe('MobileNotificationService recipient isolation', () => {
   };
   function fixture(userId = 'owner') {
     const materialize = jest.fn().mockResolvedValue({ notification: {} });
-    const enqueue = jest.fn().mockResolvedValue({ id: 'job' });
+    const enqueue = jest
+      .fn<Promise<{ id: string }>, [EnqueueJobInput]>()
+      .mockResolvedValue({ id: 'job' });
     const service = new MobileNotificationService(
       new MobileNotificationPolicy(),
       { materialize } as never,
@@ -57,6 +60,20 @@ describe('MobileNotificationService recipient isolation', () => {
     await service.materialize(intent);
     expect(enqueue).not.toHaveBeenCalled();
     expect(materialize).toHaveBeenCalledTimes(1);
+  });
+  it('preserva o conteúdo customizado ao enfileirar para o contexto privado do destinatário', async () => {
+    const { service, enqueue } = fixture();
+    const message = {
+      title: 'Aviso',
+      body: 'Abra o Orbit.',
+      data: { tipo: 'promocao', url: 'https://loja.example.com' },
+    };
+    await service.materialize({ ...intent, type: 'TRANSACTIONAL', message });
+    expect(enqueue.mock.calls[0]?.[0]).toMatchObject({
+      actorUserId: 'technician',
+      organizationId: 'org',
+      payload: { message },
+    });
   });
   it.each([{ organizationId: 'foreign' }, { businessUnitId: 'foreign' }])(
     'recusa intenção fora do escopo corrente: %j',

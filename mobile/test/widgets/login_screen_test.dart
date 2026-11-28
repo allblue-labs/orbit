@@ -16,10 +16,15 @@ import 'package:orbit_operator/core/storage/token_storage.dart';
 import 'package:orbit_operator/core/theme/orbit_theme.dart';
 import 'package:orbit_operator/features/authentication/data/auth_repository.dart';
 import 'package:orbit_operator/features/authentication/presentation/login_screen.dart';
+import 'package:orbit_operator/features/customer_portal/application/portal_session.dart';
+import 'package:orbit_operator/features/customer_portal/data/portal_contracts.dart';
+import 'package:orbit_operator/features/customer_portal/data/portal_repository.dart';
 
 import '../support/fakes.dart';
 
 class _MockAuthRepository extends Mock implements AuthRepository {}
+
+class _MockPortalRepository extends Mock implements PortalRepository {}
 
 Widget wrap(Widget child, {required AuthRepository repository}) {
   return ProviderScope(
@@ -194,6 +199,28 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('login.mfa')), findsOneWidget);
+    final factor = tester.widget<TextField>(
+      find.descendant(
+        of: find.byKey(const Key('login.mfa')),
+        matching: find.byType(TextField),
+      ),
+    );
+    expect(factor.maxLength, 16);
+    expect(factor.keyboardType, TextInputType.visiblePassword);
+    await tester.enterText(
+      find.byKey(const Key('login.mfa')),
+      'a1b2c3d4e5f60789',
+    );
+    await tester.ensureVisible(find.byKey(const Key('login.submit')));
+    await tester.tap(find.byKey(const Key('login.submit')));
+    await tester.pumpAndSettle();
+    verify(
+      () => repository.login(
+        email: 'tecnico@acme.com',
+        password: 'senha-longa',
+        mfaCode: 'a1b2c3d4e5f60789',
+      ),
+    ).called(1);
   });
 
   testWidgets('autentica com credenciais válidas', (tester) async {
@@ -231,4 +258,72 @@ void main() {
       ),
     ).called(1);
   });
+
+  testWidgets(
+    '"Sou cliente" entra pelo login do cliente, nunca pelo da equipe',
+    (tester) async {
+      final portal = _MockPortalRepository();
+      when(
+        () => portal.authenticator,
+      ).thenReturn(InMemorySessionAuthenticator.create());
+      when(
+        () => portal.login(
+          email: any(named: 'email'),
+          password: any(named: 'password'),
+        ),
+      ).thenAnswer(
+        (_) async => PortalSession(
+          tokens: const TokenPair(
+            accessToken: 'a',
+            refreshToken: 'r',
+            expiresIn: 900,
+          ),
+          me: PortalMe.fromJson(const {
+            'identity': {'id': 'i-1', 'displayName': 'Clínica Sol'},
+            'organization': {'displayName': 'Clima Norte'},
+            'customer': {'id': 'c-1', 'displayName': 'Clínica Sol'},
+          }),
+        ),
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(repository),
+            portalRepositoryProvider.overrideWithValue(portal),
+          ],
+          child: MaterialApp(
+            theme: OrbitTheme.light(),
+            home: const LoginScreen(),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Sou cliente'));
+      await tester.pump();
+      await tester.enterText(
+        find.byKey(const Key('login.email')),
+        'clinica.sol@clima-norte.com',
+      );
+      await tester.enterText(
+        find.byKey(const Key('login.password')),
+        'ABCD-EFGH-JKLM',
+      );
+      await tester.tap(find.byKey(const Key('login.submit')));
+      await tester.pump();
+
+      verify(
+        () => portal.login(
+          email: 'clinica.sol@clima-norte.com',
+          password: 'ABCD-EFGH-JKLM',
+        ),
+      ).called(1);
+      verifyNever(
+        () => repository.login(
+          email: any(named: 'email'),
+          password: any(named: 'password'),
+          mfaCode: any(named: 'mfaCode'),
+        ),
+      );
+    },
+  );
 }

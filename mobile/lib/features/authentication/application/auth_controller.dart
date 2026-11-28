@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/contracts/session_contracts.dart';
 import '../../../core/errors/orbit_exception.dart';
 import '../../../core/network/session_authenticator.dart';
+import '../../../core/security/device_proof.dart';
 import '../data/auth_repository.dart';
 import '../domain/session.dart';
 
@@ -140,6 +141,36 @@ class AuthController extends StateNotifier<AuthState> {
     }
     final session = await _composeSession(claims);
     if (_current(operation)) state = AuthAuthenticated(session);
+  }
+
+  Future<bool> loginWithDeviceCredential({
+    required String credentialId,
+    required SignDeviceChallenge sign,
+  }) async {
+    if (_parent case final parent?) {
+      return parent.loginWithDeviceCredential(
+        credentialId: credentialId,
+        sign: sign,
+      );
+    }
+    final operation = ++_operation;
+    final tokens = await _repository.loginWithDeviceCredential(
+      credentialId: credentialId,
+      sign: sign,
+    );
+    if (tokens == null || !_current(operation)) return false;
+    final claims = AuthRepository.decodeClaims(tokens.accessToken);
+    if (claims == null) {
+      throw const OrbitException(
+        kind: OrbitErrorKind.parse,
+        publicMessage: 'Não foi possível concluir a entrada. Tente novamente.',
+        code: 'PARSE',
+      );
+    }
+    final session = await _composeSession(claims);
+    if (!_current(operation)) return false;
+    state = AuthAuthenticated(session);
+    return true;
   }
 
   Future<void> logout() async {

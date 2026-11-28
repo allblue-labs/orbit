@@ -3,12 +3,9 @@
 /**
  * O centro de PMOC: a lista e a criação de configurações.
  *
- * A criação é um diálogo, não um assistente. Os campos obrigatórios do
- * contrato cabem numa tela — cliente, unidade, código, nome, vigência e
- * periodicidade —; cobertura e Responsável Técnico entram depois, no detalhe,
- * porque exigem escolher entre listas que o plano ainda não tem contexto para
- * filtrar. Um assistente de quatro passos para isso adiaria a criação sem
- * reduzir o trabalho.
+ * O wizard reúne cliente, equipamentos, programação e Responsável Técnico
+ * antes de criar e ativar o plano. Configurações existentes são corrigidas
+ * no diálogo de edição disponível na listagem e no detalhe.
  */
 import { useState } from "react";
 

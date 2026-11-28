@@ -1,7 +1,9 @@
 import type { IRequestContext } from '../contracts';
+import type { VerifiedPlatformAuthority } from '../common/verified-platform-authority';
 
 export class RequestContext implements IRequestContext {
   readonly requestId: IRequestContext['requestId'];
+  readonly platformAuthority?: VerifiedPlatformAuthority;
   readonly actorType: IRequestContext['actorType'];
   readonly userId: IRequestContext['userId'];
   readonly portalIdentityId: IRequestContext['portalIdentityId'];
@@ -35,9 +37,10 @@ export class RequestContext implements IRequestContext {
           | 'allowedSurfaces'
           | 'isOrganizationOwner'
         >
-      >,
+      > & { platformAuthority?: VerifiedPlatformAuthority },
   ) {
     this.requestId = values.requestId;
+    this.platformAuthority = values.platformAuthority;
     this.actorType =
       values.actorType ?? (values.userId ? 'INTERNAL_USER' : 'ANONYMOUS');
     this.userId = values.userId;

@@ -1,5 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
-import nodemailer, { type Transporter } from 'nodemailer';
+import { OutboundHttp } from '../../network/outbound-http';
+import { OutboundPolicy } from '../../network/outbound-policy';
+import { Injectable } from '@nestjs/common';
 import webpush from 'web-push';
 
 export type DeliveryResult = {
@@ -10,48 +11,19 @@ export type DeliveryResult = {
 
 @Injectable()
 export class EmailNotificationProvider {
-  private readonly logger = new Logger(EmailNotificationProvider.name);
-  private readonly transporter?: Transporter;
+  constructor() {}
 
-  constructor() {
-    if (process.env.SMTP_HOST) {
-      this.transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
-        port: Number(process.env.SMTP_PORT ?? 587),
-        secure: process.env.SMTP_SECURE === 'true',
-        auth: process.env.SMTP_USER
-          ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD }
-          : undefined,
-      });
-    }
-  }
-
-  async send(input: {
+  send(input: {
     to: string;
     subject: string;
     text: string;
   }): Promise<DeliveryResult> {
-    if (!this.transporter) {
-      this.logger.warn('SMTP is not configured; email delivery skipped');
-      return { status: 'SKIPPED', provider: 'smtp-unconfigured' };
-    }
-    const result: unknown = await this.transporter.sendMail({
-      from: process.env.EMAIL_FROM ?? 'Orbit <no-reply@orbit.local>',
-      to: input.to,
-      subject: input.subject,
-      text: input.text,
+    // Operational notifications remain in the inbox/push. Only the owner template outbox sends mail.
+    void input;
+    return Promise.resolve({
+      status: 'SKIPPED',
+      provider: 'email-template-required',
     });
-    return {
-      status: 'SENT',
-      provider: 'smtp',
-      providerMessageId:
-        typeof result === 'object' &&
-        result !== null &&
-        'messageId' in result &&
-        typeof result.messageId === 'string'
-          ? result.messageId
-          : undefined,
-    };
   }
 }
 
@@ -59,7 +31,10 @@ export class EmailNotificationProvider {
 export class PushNotificationProvider {
   private readonly configured: boolean;
 
-  constructor() {
+  constructor(
+    private readonly http: OutboundHttp,
+    private readonly outbound: OutboundPolicy,
+  ) {
     const publicKey = process.env.VAPID_PUBLIC_KEY;
     const privateKey = process.env.VAPID_PRIVATE_KEY;
     this.configured = Boolean(publicKey && privateKey);
@@ -72,6 +47,10 @@ export class PushNotificationProvider {
     }
   }
 
+  async validateEndpoint(endpoint: string) {
+    await this.outbound.authorize('WEB_PUSH', endpoint);
+  }
+
   async send(
     subscription: {
       endpoint: string;
@@ -82,7 +61,8 @@ export class PushNotificationProvider {
   ): Promise<DeliveryResult> {
     if (!this.configured)
       return { status: 'SKIPPED', provider: 'web-push-unconfigured' };
-    const result = await webpush.sendNotification(
+    this.http.url('WEB_PUSH', subscription.endpoint);
+    const details = webpush.generateRequestDetails(
       {
         endpoint: subscription.endpoint,
         keys: { p256dh: subscription.p256dh, auth: subscription.auth },
@@ -90,10 +70,13 @@ export class PushNotificationProvider {
       JSON.stringify(payload),
       { TTL: 60 * 60, urgency: 'normal' },
     );
+    await this.http.request('WEB_PUSH', details.endpoint, {
+      headers: details.headers,
+      body: details.body ?? Buffer.alloc(0),
+    });
     return {
       status: 'SENT',
       provider: 'web-push',
-      providerMessageId: result.headers.location,
     };
   }
 }

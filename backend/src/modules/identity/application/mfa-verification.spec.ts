@@ -23,8 +23,8 @@ const SEGREDO = 'JBSWY3DPEHPK3PXP';
 
 function montar(recoveryCodes: string[] = []) {
   const repository = {
-    touchMfaFactor: jest.fn().mockResolvedValue(undefined),
-    consumeMfaRecoveryCode: jest.fn().mockResolvedValue(undefined),
+    touchMfaFactor: jest.fn().mockResolvedValue(true),
+    consumeMfaRecoveryCode: jest.fn().mockResolvedValue(true),
   };
   const crypto = {
     encrypt: (valor: string) => `cifrado:${valor}`,
@@ -45,6 +45,7 @@ function montar(recoveryCodes: string[] = []) {
     repository,
     factor: {
       id: 'factor-1',
+      userId: 'user-1',
       secret: `cifrado:${SEGREDO}`,
       recoveryCodes,
     },
@@ -88,7 +89,10 @@ describe('verifyFactor', () => {
     await expect(
       service.verifyFactor(factor, generateTotpToken(SEGREDO)),
     ).resolves.toBeUndefined();
-    expect(repository.touchMfaFactor).toHaveBeenCalledWith('factor-1');
+    expect(repository.touchMfaFactor).toHaveBeenCalledWith(
+      'factor-1',
+      'user-1',
+    );
   });
 
   it('aceita código de recuperação e consome só o usado', async () => {
@@ -99,8 +103,26 @@ describe('verifyFactor', () => {
 
     await service.verifyFactor(factor, 'BBB-222');
 
-    expect(repository.consumeMfaRecoveryCode).toHaveBeenCalledWith('factor-1', [
-      'hash:AAA-111',
-    ]);
+    expect(repository.consumeMfaRecoveryCode).toHaveBeenCalledWith(
+      'factor-1',
+      'hash:BBB-222',
+      'user-1',
+    );
+  });
+
+  it('recusa snapshot antigo se o recovery code já foi consumido', async () => {
+    const { service, repository, factor } = montar(['hash:AAA-111']);
+    repository.consumeMfaRecoveryCode.mockResolvedValue(false);
+    await expect(
+      codigoDaRecusa(service.verifyFactor(factor, 'AAA-111')),
+    ).resolves.toBe('MFA_INVALID');
+  });
+
+  it('não aceita TOTP de um fator desativado durante a verificação', async () => {
+    const { service, repository, factor } = montar();
+    repository.touchMfaFactor.mockResolvedValue(false);
+    await expect(
+      codigoDaRecusa(service.verifyFactor(factor, generateTotpToken(SEGREDO))),
+    ).resolves.toBe('MFA_INVALID');
   });
 });

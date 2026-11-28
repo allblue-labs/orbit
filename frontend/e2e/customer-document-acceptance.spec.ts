@@ -29,10 +29,50 @@ const proposal = {
     },
   ],
 };
+const EXPORT_ID = "01a20400-cd6f-772e-b3be-1d02b20ee35e";
 async function setup(page: Page, state = "AVAILABLE") {
   const writes: Record<string, unknown>[] = [];
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
+    /* Orçamento pelo link: exportação assíncrona — pedido (202), consulta já
+       concluída e o arquivo na URL assinada. */
+    if (path.endsWith("/document/exports")) {
+      return route.fulfill({
+        status: 202,
+        json: {
+          success: true,
+          data: { exportId: EXPORT_ID, jobId: EXPORT_ID, status: "PENDING" },
+        },
+      });
+    }
+    if (path.endsWith(`/document/exports/${EXPORT_ID}`)) {
+      return route.fulfill({
+        json: {
+          success: true,
+          data: {
+            exportId: EXPORT_ID,
+            kind: "QUOTE_ACCEPTED",
+            status: "COMPLETED",
+            fileName: "proposta.pdf",
+            contentType: "application/pdf",
+            errorCode: null,
+            createdAt: "2026-10-28T12:00:00Z",
+            completedAt: "2026-10-28T12:00:02Z",
+            expiresAt: "2026-10-29T12:00:00Z",
+            download: {
+              url: "/api/orbit/export-download/proposta.pdf",
+              expiresAt: "2026-10-28T12:05:00Z",
+            },
+          },
+        },
+      });
+    }
+    if (path.endsWith("/export-download/proposta.pdf")) {
+      return route.fulfill({
+        contentType: "application/pdf",
+        body: "%PDF-1.7\n%%EOF",
+      });
+    }
     if (path.endsWith("/document")) {
       return route.fulfill({
         contentType: "application/pdf",

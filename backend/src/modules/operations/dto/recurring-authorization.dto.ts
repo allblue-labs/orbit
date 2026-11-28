@@ -21,6 +21,8 @@ export class RecurringAuthorizationQueryDto {
   @IsOptional() @IsUUIDv7() assignedUserId?: string;
   @IsOptional() @IsString() @MaxLength(180) search?: string;
   @Type(() => Number) @IsInt() @Min(1) @Max(100) page = 1;
+  @IsOptional() @IsIn(['pending', 'authorized']) state?:
+    'pending' | 'authorized';
 }
 export class RecurringAuthorizationTargetDto {
   @IsIn(['RVT', 'PMOC']) kind!: 'RVT' | 'PMOC';

@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
+import { FieldAssignmentOutbox } from '../notifications/field-assignment-outbox';
 import type { Prisma } from '@prisma/client';
 import { RlsTransaction } from '../../database';
 import { DomainEventEmitter } from '../automations/domain-event.emitter';
@@ -97,6 +98,26 @@ const operationInclude = {
     },
     orderBy: { createdAt: 'desc' },
   },
+  /**
+   * O documento emitido mais recente da operação — a OS, o RVT, o PMOC.
+   *
+   * Só o emitido (`READY`): é o que se baixa. Vem na listagem para que cada
+   * linha ofereça "baixar" e "compartilhar" sem uma consulta por operação — a
+   * página da operação busca os documentos por `?operationId=`, e repetir isso
+   * em cada linha de uma lista de vinte faria vinte requisições.
+   */
+  artifactExecutions: {
+    where: { deletedAt: null, renderStatus: 'READY' },
+    orderBy: { updatedAt: 'desc' },
+    take: 1,
+    select: {
+      id: true,
+      code: true,
+      title: true,
+      renderStatus: true,
+      snapshot: { select: { artifactType: true } },
+    },
+  },
 } satisfies Prisma.OperationInclude;
 
 @Injectable()
@@ -104,6 +125,7 @@ export class OperationRepository {
   constructor(
     private readonly rls: RlsTransaction,
     private readonly events: DomainEventEmitter,
+    @Optional() private readonly assignmentPush?: FieldAssignmentOutbox,
   ) {}
 
   list(organizationId: string, query: OperationQueryDto) {
@@ -484,6 +506,8 @@ export class OperationRepository {
         data: { authorizedAt, authorizedById: autorizar ? actorId : null },
         include: operationInclude,
       });
+      if (registrarTrilha && autorizar && !anterior.authorizedAt)
+        await this.assignmentPush?.operation(tx, operation.id);
       const details = {
         authorizedAt: authorizedAt?.toISOString() ?? null,
         previousAuthorizedAt: anterior.authorizedAt?.toISOString() ?? null,
@@ -611,6 +635,7 @@ export class OperationRepository {
       /* O evento é o que faz o atendimento aparecer para quem vai executar; um por
          atendimento, como na autorização individual. */
       for (const alvo of alvos) {
+        await this.assignmentPush?.operation(tx, alvo.id);
         await this.events.emit(tx, {
           type: 'operation.assignment.authorized',
           organizationId,
@@ -775,10 +800,15 @@ export class OperationRepository {
     data: Prisma.OperationUpdateInput,
     userId: string,
     details: Prisma.InputJsonValue,
+    changesSchedule = false,
   ) {
     return this.rls.run(async (transaction) => {
       const operation = await transaction.operation.update({
-        where: { id },
+        where: {
+          id,
+          deletedAt: null,
+          status: changesSchedule ? { not: 'COMPLETED' } : undefined,
+        },
         data,
         include: operationInclude,
       });
@@ -960,7 +990,12 @@ export class OperationRepository {
     return this.rls.run(async (transaction) => {
       const attachment = await transaction.operationAttachment.create({
         data,
-        omit: { storageKey: true, deletedAt: true },
+        omit: {
+          storageKey: true,
+          storageProvider: true,
+          storageBucket: true,
+          deletedAt: true,
+        },
       });
       await transaction.operationHistory.create({
         data: {

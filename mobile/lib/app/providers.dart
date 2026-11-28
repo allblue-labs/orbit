@@ -14,6 +14,7 @@ import '../core/location/location_service.dart';
 import '../core/network/connectivity_monitor.dart';
 import '../core/network/orbit_api_client.dart';
 import '../core/observability/orbit_logger.dart';
+import '../core/storage/offline_data.dart';
 import '../core/storage/read_cache.dart';
 import '../core/storage/device_identity.dart';
 import '../core/storage/token_storage.dart';
@@ -48,8 +49,15 @@ final sharedPreferencesProvider = Provider<SharedPreferences>(
       throw UnimplementedError('sharedPreferencesProvider não inicializado'),
 );
 
+final offlineDataCipherProvider = Provider<OfflineDataCipher>(
+  (ref) => OfflineDataCipher.device,
+);
+
 final readCacheProvider = Provider<ReadCache>(
-  (ref) => PreferencesReadCache(ref.watch(sharedPreferencesProvider)),
+  (ref) => PreferencesReadCache(
+    ref.watch(sharedPreferencesProvider),
+    cipher: ref.watch(offlineDataCipherProvider),
+  ),
 );
 
 final connectivityProvider = Provider<ConnectivityMonitor>(

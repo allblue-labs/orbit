@@ -48,6 +48,7 @@ export interface SubscriptionRow {
   providerStatus: string | null;
   providerLastEventId: string | null;
   providerUpdatedAt: Date | null;
+  providerObservationVersion?: bigint;
 }
 
 @Injectable()
@@ -158,6 +159,8 @@ export class SubscriptionRepository {
     transaction?: PrismaTransactionClient,
   ): Promise<SubscriptionRow | null> {
     const trabalho = async (tx: PrismaTransactionClient) => {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(organization_id::text, 0))::text
+        FROM organization_subscriptions WHERE id=${id}::uuid`;
       const { count } = await tx.organizationSubscription.updateMany({
         where: { id, version: expectedVersion },
         data: {
@@ -308,8 +311,17 @@ export class SubscriptionRepository {
       riskSignals?: Prisma.InputJsonValue;
     },
     transaction?: PrismaTransactionClient,
+    conflictSafe = false,
   ): Promise<{ id: string } | null> {
     const trabalho = async (tx: PrismaTransactionClient) => {
+      if (conflictSafe) {
+        const id = generateUuidV7();
+        const inserted = await tx.subscriptionTrialGrant.createMany({
+          data: { id, status: 'GRANTED', ...data },
+          skipDuplicates: true,
+        });
+        return inserted.count === 1 ? { id } : null;
+      }
       try {
         return await tx.subscriptionTrialGrant.create({
           data: { id: generateUuidV7(), status: 'GRANTED', ...data },
@@ -381,23 +393,29 @@ export class SubscriptionRepository {
     });
   }
 
-  async startPendingTrial(input: {
-    organizationId: string;
-    expectedVersion: number;
-    fingerprint: string;
-    billingInterval: string;
-    startsAt: Date;
-    endsAt: Date;
-    snapshot: Prisma.InputJsonValue;
-    catalogVersion: number;
-  }) {
-    return this.runAsOrganization(input.organizationId, async (tx) => {
+  async startPendingTrial(
+    input: {
+      organizationId: string;
+      expectedVersion: number;
+      fingerprint: string;
+      billingInterval: string;
+      planCode: string;
+      startsAt: Date;
+      endsAt: Date;
+      snapshot: Prisma.InputJsonValue;
+      catalogVersion: number;
+    },
+    local?: { tx: PrismaTransactionClient; subscriptionId: string },
+  ) {
+    const work = async (tx: PrismaTransactionClient) => {
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${input.organizationId}, 0))::text`;
       const current = await this.findCurrent(input.organizationId, tx);
       if (
         !current ||
         current.version !== input.expectedVersion ||
         current.status !== 'PENDING_PAYMENT' ||
+        (local &&
+          (current.id !== local.subscriptionId || current.cancelAtPeriodEnd)) ||
         current.providerSubscriptionId
       ) {
         throw new Error('TRIAL_SUBSCRIPTION_CHANGED');
@@ -433,7 +451,7 @@ export class SubscriptionRepository {
           {
             id: generateUuidV7(),
             organizationId: input.organizationId,
-            planCode: 'ESSENTIAL',
+            planCode: input.planCode,
             legalDocumentFingerprint: input.fingerprint,
             startsAt: input.startsAt,
             endsAt: input.endsAt,
@@ -450,7 +468,7 @@ export class SubscriptionRepository {
         input.expectedVersion,
         {
           status: 'TRIALING',
-          planCode: 'ESSENTIAL',
+          planCode: input.planCode,
           billingInterval: input.billingInterval,
           catalogVersion: input.catalogVersion,
           entitlementsSnapshot: input.snapshot,
@@ -473,7 +491,10 @@ export class SubscriptionRepository {
       );
       if (!updated) throw new Error('TRIAL_SUBSCRIPTION_CHANGED');
       return updated;
-    });
+    };
+    return local
+      ? work(local.tx)
+      : this.runAsOrganization(input.organizationId, work);
   }
 
   findTrialGrant(organizationId: string) {

@@ -1,0 +1,27 @@
+{
+  "commit": "e133b24a2f8fd4412f65d85def1e6875a360a66f",
+  "created": "2026-11-17T21:33:03Z",
+  "tag": "staging-e133b24a2f8f",
+  "images": {
+    "api": {
+      "tag": "docker.io/allbluelabs/orbit-api:staging-e133b24a2f8f-api",
+      "digest": "docker.io/allbluelabs/orbit-api@sha256:f63152ebf2c05a450973a8cfd8e47df6339b8d09a65de06988c4bffd08536ec7"
+    },
+    "migrate": {
+      "tag": "docker.io/allbluelabs/orbit-api:staging-e133b24a2f8f-migrator",
+      "digest": "docker.io/allbluelabs/orbit-api@sha256:9a5468ca6bdaae44afacf1e9f6ae2c0193c5cbe6d769202bf5b3dfc7c6d53955"
+    },
+    "bootstrap-admin": {
+      "tag": "docker.io/allbluelabs/orbit-api:staging-e133b24a2f8f-migrator",
+      "digest": "docker.io/allbluelabs/orbit-api@sha256:9a5468ca6bdaae44afacf1e9f6ae2c0193c5cbe6d769202bf5b3dfc7c6d53955"
+    },
+    "storage-migration": {
+      "tag": "docker.io/allbluelabs/orbit-api:staging-e133b24a2f8f-migrator",
+      "digest": "docker.io/allbluelabs/orbit-api@sha256:9a5468ca6bdaae44afacf1e9f6ae2c0193c5cbe6d769202bf5b3dfc7c6d53955"
+    },
+    "frontend": {
+      "tag": "docker.io/allbluelabs/orbit-api:staging-e133b24a2f8f-frontend",
+      "digest": "docker.io/allbluelabs/orbit-api@sha256:d7c6bd088a8a59cfbaddf3d5a31cb6cd896274cafddd89e75941243a9e68146d"
+    }
+  }
+}

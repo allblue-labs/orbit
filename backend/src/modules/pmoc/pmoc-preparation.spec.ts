@@ -1,3 +1,4 @@
+import { brandImageStub } from '../../../test/support/brand-image.stub';
 import { Reflector } from '@nestjs/core';
 import { PERMISSIONS_KEY } from '../../decorators';
 import { PmocService, type PmocActor } from './pmoc.service';
@@ -10,6 +11,7 @@ const actor: PmocActor = {
   organizationId: 'org',
   businessUnitIds: ['unit'],
   permissions: ['pmoc.read'],
+  isOrganizationOwner: false,
 };
 function setup(
   existing: unknown = null,
@@ -78,6 +80,7 @@ function setup(
     {} as never,
     {} as never,
     mobileNotifications as never,
+    brandImageStub(),
   );
   return { service, data, repository, workforce };
 }

@@ -41,10 +41,24 @@ Future<void> carregarFontes() async {
   }
 
   /// Os ícones do Material vêm do artefato do SDK, não do bundle de teste.
-  const iconesDoSdk =
-      '/usr/local/share/flutter/bin/cache/artifacts/material_fonts/'
-      'MaterialIcons-Regular.otf';
-  final arquivoDeIcones = File(iconesDoSdk);
+  File? icons;
+  var directory = File(Platform.resolvedExecutable).parent;
+  while (true) {
+    final candidate = File(
+      '${directory.path}/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf',
+    );
+    if (candidate.existsSync()) {
+      icons = candidate;
+      break;
+    }
+    if (directory.parent.path == directory.path) break;
+    directory = directory.parent;
+  }
+  final arquivoDeIcones =
+      icons ??
+      File(
+        '${Platform.environment['FLUTTER_ROOT'] ?? ''}/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf',
+      );
   if (arquivoDeIcones.existsSync()) {
     final icones = FontLoader('MaterialIcons')
       ..addFont(

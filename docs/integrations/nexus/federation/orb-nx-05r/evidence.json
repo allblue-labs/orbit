@@ -1,0 +1,209 @@
+{
+  "task": "ORB-NX-05.R",
+  "date": "2026-11-26",
+  "conclusion": "PARTIAL_BLOCKED",
+  "approved": false,
+  "ratified": false,
+  "runtimeEnabled": false,
+  "toolchain": {
+    "node": "v25.1.0",
+    "nexusAjv": "8.20.0",
+    "orbitAjv": "8.20.0",
+    "formats": "3.0.1"
+  },
+  "orbitContractCommit": "0dcc7ea81245e64796364039c12d485610cb3833",
+  "scopeSha256": "92a56dae0cfccee595de2079ce0f6ff75a2f70c266dc42c22ed3c452b58ed51b",
+  "nexusDocuments": {
+    "docs/architecture/nexus-04/alignment/report.md": "92da591cd8f7201239812835ca412c4d40f222adf7a2fcda901941aa9209d490",
+    "docs/architecture/nexus-04/alignment/findings.md": "7e0f3c0cfb516e042e3a2057dfe9007e5bfd858b2d92efc9ee5b753ef1bf60f7",
+    "docs/architecture/nexus-04/alignment/orbit-changes.md": "7432c550f5a10d6b4330aa2bed8aaeec3ebb2ce8ba25f2d99c36e7f81b556400",
+    "docs/architecture/nexus-04/alignment/approval-sheet.md": "e8538cce470111a4c59a309739a8846777c52819042b040d2c3daccd5d94eb49",
+    "docs/architecture/nexus-04/alignment/evidence/alignment.json": "00cf32a52fc4e171265f0d1334e65c97cf255ba8fa783dafdd3aeb505f225aad",
+    "docs/architecture/nexus-04/alignment/evidence/backend-matrix.md": "39a4dd094a3156d09f9699cdd7194147b6f6ac979eccd7a83c6866e892a4d74a",
+    "docs/architecture/nexus-04/alignment/evidence/compatibility-manifest.json": "cab1f1470ffd7610e49e49b9cb191a93170c05a14c6fa1b8b4666f0ce85d7179",
+    "docs/architecture/nexus-04/reconciliation/report.md": "4f97f422707f956a06a7148c3cf725401b4817dbe2e30c576f5ff2a02ffcebb4",
+    "docs/architecture/nexus-04/reconciliation/ratification-sheet.md": "719ca07e2c5588c36c46fce75be6d58f32ad5f45cd612511f90e40942d3ea2b2",
+    "docs/architecture/nexus-04/report.md": "b57be45e47820e3ab636d52b89f7c74cf341897e005cd2f423102d6625952002",
+    "docs/architecture/nexus-01/roadmap.md": "8745aa4518f0f37cec0bfec5579cb53663eea315fe8b38d6f1b9c0594a415b42",
+    "docs/architecture/nexus-01/report.md": "06fb7d0e840fa3663e10e68886b3ad3e8c31486f44ba819e575294593e24ceeb",
+    "docs/architecture/nexus-01/reconciliation/report.md": "20fc031ed53e5ee3261b06f1028951d8a5c1eed9e7a8ac6680a31e651fb62327",
+    "docs/architecture/nexus-01/reconciliation/bilateral-contract-readiness.md": "322d1aac7309dab4dfab743242d0d538499db5e6a05c8a47ee8c70f50645e7b3"
+  },
+  "orbitBackendStaticSources": {
+    "backend/prisma/schema.prisma": "531f30cbe8fe7bbe8836a5cd1ab1384e8fe3895b400ee09995898b098ed6e6cf",
+    "backend/src/modules/identity/application/registration.service.ts": "88bb4963493d8f3945361e814297c2a6329587ca473dc3697ce507e87f331d9a",
+    "backend/src/modules/identity/infrastructure/registration.repository.ts": "dce08920c9c19a40d842d96fc127a118e80ab3b6df6fbc59557953602254f58f",
+    "backend/src/modules/organizations/organization.service.ts": "b1e25cf2f3d6894a5db3a1778282a79ae53b1bf68de500044a047e2492c38cf3",
+    "backend/src/modules/organizations/organization.repository.ts": "d0561128d73dc795c217308a765a761a71a435fe0145a3c62383ec4f95367475",
+    "backend/src/modules/platform-administration/platform-administration.service.ts": "529a4c124d78b991d2ff1ea587e1e0da5e5227ae7f14e104dae24baaedc57f43",
+    "backend/src/modules/platform-administration/platform-administration.repository.ts": "21c5d22ebe662c1dd39dc65909189543d16ea3bcf33c68158d1aca9c5d12a1f1",
+    "backend/src/modules/tenant-operations/tenant-operation-admin.service.ts": "4c094b56ac99e2ffa25637d8d496cdb3f22d4c3635cfeeb4ce197880f3889432",
+    "backend/src/modules/tenant-operations/tenant-operation.policy.ts": "e05c92860a330102e25399beb8f4c649c4dac9c12871f7a9bc6ba1d693082ef8",
+    "backend/src/modules/subscription-plans/subscriptions/subscription.repository.ts": "d8d006200ac4ef1fed2800f9d72297f3b34c692283adf27b9169297e9e468753",
+    "backend/src/modules/billing/retention/subscription-data-retention.service.ts": "cb339f91dfd4285946e42448f7d3660e4af269820627e19c2e5b51957d42e1a3",
+    "backend/src/common/verified-platform-authority.ts": "20870f1e7f89666978cb5786f72ef1f50c36c729c0a43c2d10e7f3a64134b971",
+    "backend/src/observability/correlation.ts": "ee13dc231ed6bcfe3ed1ed6001ff68e1d67c591f2e57b3b28fb9f884c9298d4c"
+  },
+  "alignment": {
+    "historicalSha256": "00cf32a52fc4e171265f0d1334e65c97cf255ba8fa783dafdd3aeb505f225aad",
+    "rerunSha256": "00cf32a52fc4e171265f0d1334e65c97cf255ba8fa783dafdd3aeb505f225aad",
+    "byteIdentical": true,
+    "summary": {
+      "cases": 92,
+      "direct": 0,
+      "adapted": 53,
+      "blocked": 39,
+      "failures": 0,
+      "backendFiles": 58,
+      "matrixRows": 17,
+      "sourceRoutes": 40
+    },
+    "invalidCorrectlyBlocked": 16,
+    "validWithoutSafeTransformation": 23,
+    "backendMatrixEvidence": "Static source/AST assertions, no server or operational tests"
+  },
+  "executions": [
+    {
+      "scope": "Temporary Nexus package",
+      "command": "tsc -p tsconfig.compatibility.json",
+      "result": "PASS"
+    },
+    {
+      "scope": "Temporary Nexus package",
+      "command": "tsc -p tsconfig.compatibility-check.json --noEmit",
+      "result": "PASS"
+    },
+    {
+      "scope": "Temporary Nexus package",
+      "command": "node dist-compatibility/tools/alignment/cli.js --orbit-root <Orbit> --output <temporary-dir>",
+      "result": "PASS"
+    },
+    {
+      "scope": "Temporary Nexus package",
+      "command": "vitest run --config vitest.compatibility.config.mts",
+      "result": "PASS",
+      "passed": 62
+    },
+    {
+      "scope": "Temporary Nexus package",
+      "command": "vitest run --config vitest.alignment.config.mts",
+      "result": "PASS",
+      "passed": 115
+    },
+    {
+      "scope": "Temporary Nexus package",
+      "command": "vitest run --config vitest.config.mts",
+      "result": "PASS",
+      "passed": 212
+    },
+    {
+      "scope": "Orbit backend offline helper only",
+      "command": "node --test scripts/nexus-contracts.test.cjs",
+      "result": "PASS",
+      "passed": 220
+    },
+    {
+      "scope": "Orbit targeted offline",
+      "command": "node --test docs/integrations/nexus/federation/orb-nx-05r/conformance.test.cjs",
+      "result": "PASS",
+      "passed": 15
+    },
+    {
+      "scope": "Orbit targeted offline",
+      "command": "node --check and ESLint no-undef/no-unused-vars/no-unreachable on conformance.test.cjs",
+      "result": "PASS"
+    }
+  ],
+  "preservation": {
+    "initial": {
+      "orbit": {
+        "branch": "feat/features-and-backlogs",
+        "head": "07818e6287ae350c6cae4ea6a30c8f492b314f99",
+        "indexSha256": "f39ed0fcbd64e853de42788f7db32301f1e2e4f932254b18deaf1077bf8597eb",
+        "indexEntriesSha256": "ee251f5fac3a2dd92aea6744795d52f61db08ba18f50a143da00acbd1bee1059",
+        "stagedSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "status": [
+          " M mobile/android/build/reports/problems/problems-report.html"
+        ],
+        "trackedWorktreeDiffSha256": "affdd6f7a4b40da7e2d3e7968da0373787d554f86eab3df0dd5cfe9fb4ae46e6",
+        "worktreeFiles": {
+          "mobile/android/build/reports/problems/problems-report.html": "b14ae3bef96ea87e1d82ca25f9277b9a27ac42c76c188bba16fa12060a58f4c8"
+        }
+      },
+      "nexus": {
+        "branch": "fix/ajustes-melhorias",
+        "head": "5b34e99a37612563cf35ea5c50ec84351cf08f43",
+        "indexSha256": "49b6cc9a43e5c99fe675e7b02f0a8a143e9f05eb48037487e5b842fc53c1a215",
+        "indexEntriesSha256": "0bf19ddfbdb662761835f38cb2eb7b1c386bccf242fa2d046d583daa6427d0c5",
+        "stagedSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "status": [],
+        "trackedWorktreeDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "worktreeFiles": {}
+      }
+    },
+    "final": {
+      "orbit": {
+        "branch": "feat/features-and-backlogs",
+        "head": "07818e6287ae350c6cae4ea6a30c8f492b314f99",
+        "indexSha256": "f39ed0fcbd64e853de42788f7db32301f1e2e4f932254b18deaf1077bf8597eb",
+        "indexEntriesSha256": "ee251f5fac3a2dd92aea6744795d52f61db08ba18f50a143da00acbd1bee1059",
+        "stagedSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "status": [
+          " M mobile/android/build/reports/problems/problems-report.html",
+          "?? docs/integrations/nexus/federation/orb-nx-05r/conformance.test.cjs",
+          "?? docs/integrations/nexus/federation/orb-nx-05r/evidence.json",
+          "?? docs/integrations/nexus/federation/orb-nx-05r/producer-readiness.md",
+          "?? docs/integrations/nexus/federation/orb-nx-05r/ratification.md",
+          "?? docs/integrations/nexus/federation/orb-nx-05r/report.md",
+          "?? docs/integrations/nexus/federation/orb-nx-05r/scope.json"
+        ],
+        "trackedWorktreeDiffSha256": "affdd6f7a4b40da7e2d3e7968da0373787d554f86eab3df0dd5cfe9fb4ae46e6",
+        "worktreeFiles": {
+          "mobile/android/build/reports/problems/problems-report.html": "b14ae3bef96ea87e1d82ca25f9277b9a27ac42c76c188bba16fa12060a58f4c8",
+          "docs/integrations/nexus/federation/orb-nx-05r/conformance.test.cjs": "97564a0414fc0e48a5dfcb29ebf6a63dd7e5c3654ac9fceaf543516e82464384",
+          "docs/integrations/nexus/federation/orb-nx-05r/producer-readiness.md": "1572ff2ea537389cf1db2f558730d62dc021de954652347aab3a8f0b75305b62",
+          "docs/integrations/nexus/federation/orb-nx-05r/ratification.md": "d1cd2e17aab5bccb3ba7130929be4c9fb452778e39509aabe30e9028d151cd2f",
+          "docs/integrations/nexus/federation/orb-nx-05r/report.md": "804e0343c9db725a19b246cf251a24f81d8e0e21ff2de5325f4dff17335101bd",
+          "docs/integrations/nexus/federation/orb-nx-05r/scope.json": "92a56dae0cfccee595de2079ce0f6ff75a2f70c266dc42c22ed3c452b58ed51b"
+        }
+      },
+      "nexus": {
+        "branch": "fix/ajustes-melhorias",
+        "head": "5b34e99a37612563cf35ea5c50ec84351cf08f43",
+        "indexSha256": "49b6cc9a43e5c99fe675e7b02f0a8a143e9f05eb48037487e5b842fc53c1a215",
+        "indexEntriesSha256": "0bf19ddfbdb662761835f38cb2eb7b1c386bccf242fa2d046d583daa6427d0c5",
+        "stagedSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "status": [],
+        "trackedWorktreeDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "worktreeFiles": {}
+      }
+    },
+    "allowedNewPaths": [
+      "docs/integrations/nexus/federation/orb-nx-05r/conformance.test.cjs",
+      "docs/integrations/nexus/federation/orb-nx-05r/evidence.json",
+      "docs/integrations/nexus/federation/orb-nx-05r/producer-readiness.md",
+      "docs/integrations/nexus/federation/orb-nx-05r/ratification.md",
+      "docs/integrations/nexus/federation/orb-nx-05r/report.md",
+      "docs/integrations/nexus/federation/orb-nx-05r/scope.json"
+    ],
+    "orbitProtectedRuntimeAndConfigUnchanged": true,
+    "nexusAllObservedGitAndWorktreeStateUnchanged": true,
+    "evidenceFileRule": "Git status includes evidence.json. The file omits its own content hash to avoid a recursive digest.",
+    "firstNexusObservation": {
+      "branch": "fix/ajustes-melhorias",
+      "head": "7c5039d8e2d206f24f6b1916cf2d350ecc7727aa",
+      "indexSha256": "60d4ca6466967553bc7926837cf073be4d67e3e70cd26837bd9b92da1706855f",
+      "unstagedDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "observedScope": "NEXUS-04.C staged, external consolidation before baseline capture and copying",
+      "baselineHeadAfterExternalConsolidation": "5b34e99a37612563cf35ea5c50ec84351cf08f43",
+      "filesInExternalCommit": 34
+    }
+  },
+  "stillPending": [
+    "Bilateral wire, use of causal links and namespace acceptance",
+    "Authoritative projection revision/sequence and durable producer",
+    "M2M trust and authenticated installation",
+    "Durable consumer ACK and reconciliation",
+    "Capacity and retention approval"
+  ]
+}

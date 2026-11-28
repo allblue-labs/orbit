@@ -1,3 +1,5 @@
+import { formatServiceOrderNumber } from '../../../operations/service-order-number';
+import { BrandImageService } from '../../../storage/brand-image.service';
 import { Injectable, Logger } from '@nestjs/common';
 import {
   EntityNotFoundException,
@@ -34,6 +36,7 @@ export class EquipmentQrService {
     private readonly repository: EquipmentQrRepository,
     private readonly renderer: EquipmentQrRenderer,
     private readonly pmoc: PmocService,
+    private readonly brands: BrandImageService,
   ) {}
 
   async summary(
@@ -245,46 +248,59 @@ export class EquipmentQrService {
       this.repository.hash(this.normalizeToken(token)),
       actor.organizationId,
     );
-    if (!identity || !actor.businessUnitIds.includes(identity.businessUnitId))
+    if (!identity || identity.equipment.deletedAt)
+      throw new EntityNotFoundException('Equipment');
+    return this.historyForEquipment(identity.equipment, actor, query);
+  }
+
+  async serviceHistoryById(
+    id: string,
+    actor: EquipmentQrActor,
+    query: EquipmentServiceHistoryQueryDto,
+  ): Promise<EquipmentServiceHistoryPageReadModel> {
+    const equipment = await this.repository.activeEquipment(
+      id,
+      actor.organizationId,
+    );
+    if (!equipment) throw new EntityNotFoundException('Equipment');
+    return this.historyForEquipment(equipment, actor, query);
+  }
+
+  private async historyForEquipment(
+    equipment: { id: string; businessUnitId: string },
+    actor: EquipmentQrActor,
+    query: EquipmentServiceHistoryQueryDto,
+  ): Promise<EquipmentServiceHistoryPageReadModel> {
+    if (!actor.businessUnitIds.includes(equipment.businessUnitId))
       throw new EntityNotFoundException('Equipment');
     const result = await this.repository.serviceHistory({
-      equipmentId: identity.equipment.id,
+      equipmentId: equipment.id,
       organizationId: actor.organizationId,
-      businessUnitId: identity.businessUnitId,
+      businessUnitId: equipment.businessUnitId,
       page: query.page,
       limit: query.limit,
     });
     return {
       data: result.rows.map((row) => {
-        const visit = result.visits.find((item) => item.operationId === row.id);
-        const observations = [
-          row.pmocEquipmentExecution?.notes,
-          ...row.history.map((entry) => {
-            const details = this.record(entry.details);
-            return typeof details.note === 'string' ? details.note : null;
-          }),
-          ...(visit
-            ? [
-                documentValue(visit.observations),
-                documentValue(visit.recommendations),
-                visit.freeTextRecommendation,
-              ]
-            : []),
-        ].filter(
-          (value): value is string =>
-            typeof value === 'string' &&
-            value.trim().length > 0 &&
-            value !== '—',
-        );
+        const observations = Array.isArray(row.observations)
+          ? row.observations
+          : [];
         return {
-          id: row.id,
+          id: row.operationId,
           code: row.code,
+          serviceOrderCode: formatServiceOrderNumber(row.serviceOrderNumber),
           title: row.title,
-          type: row.pmocEquipmentExecution ? 'PMOC' : visit ? 'RVT' : row.kind,
+          type: row.kind,
           completedAt: row.completedAt,
-          technicianName: row.responsibleFieldTechnician?.displayName ?? null,
+          technicianName: row.technicianName,
           description: row.description,
-          observations: [...new Set(observations.map((text) => text.trim()))],
+          observations: [
+            ...new Set(
+              observations
+                .map((value) => documentValue(value).trim())
+                .filter((value) => value && value !== '—'),
+            ),
+          ],
         };
       }),
       meta: {
@@ -377,7 +393,7 @@ export class EquipmentQrService {
         name: equipment.name,
         preset: query.preset,
         brandingName,
-        logoUrl,
+        logoUrl: (await this.brands.read(logoUrl))?.dataUrl ?? null,
       },
       query.format,
     );

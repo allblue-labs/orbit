@@ -6,9 +6,9 @@ import {
   Logger,
   type ExceptionFilter,
 } from '@nestjs/common';
-import { redactSensitivePath } from './redact-sensitive-path';
+import { captureOrbitError } from '../observability/sentry';
 import type { Request, Response } from 'express';
-import { classifyInternalError, internalErrorStack } from '../errors';
+import { classifyInternalError } from '../errors';
 import { exposedClientStatus, PublicErrorMapper } from './public-errors';
 
 interface RequestWithId extends Request {
@@ -58,11 +58,15 @@ export class FoundationExceptionFilter implements ExceptionFilter {
     }
     if (status >= 500) {
       const classified = classifyInternalError(exception);
-      const record = JSON.stringify({
+      captureOrbitError(exception, {
+        requestId: request.id ?? '',
+        organizationId: request.identity?.organizationId ?? null,
+      });
+      this.logger.error({
         stage: 'internal-error',
         status,
         method: request.method,
-        path: redactSensitivePath(request.originalUrl ?? request.path),
+        route: (request.route as { path?: string } | undefined)?.path,
         requestId: request.id ?? null,
         actorId: request.identity?.id ?? null,
         organizationId: request.identity?.organizationId ?? null,
@@ -70,14 +74,6 @@ export class FoundationExceptionFilter implements ExceptionFilter {
         exceptionClass: classified.exceptionClass,
         errorCode: classified.code,
       });
-      if (process.env.NODE_ENV === 'production') {
-        this.logger.error(record);
-      } else {
-        this.logger.error(
-          record,
-          internalErrorStack(exception) ?? String(exception),
-        );
-      }
     } else if (status >= 400 && this.logsClientErrors) {
       /**
        * Recusa de cliente, registrada sob demanda.
@@ -92,9 +88,8 @@ export class FoundationExceptionFilter implements ExceptionFilter {
           stage: 'client-error',
           status,
           method: request.method,
-          path: redactSensitivePath(request.path),
+          route: (request.route as { path?: string } | undefined)?.path,
           code: 'code' in payload ? payload.code : null,
-          message: 'message' in payload ? payload.message : null,
           requestId: request.id ?? null,
         }),
       );

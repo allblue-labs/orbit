@@ -53,7 +53,7 @@ export class MobileFieldArtifactService {
       this.repository.existing(actor, sourceType, sourceId),
     ]);
     if (!source) throw new EntityNotFoundException('Field source', sourceId);
-    const result = this.prepare(source, existing);
+    const result = this.prepare(source, this.forCurrentVisit(source, existing));
     this.metric('mobile_artifact_prepare_total', started, {
       sourceType,
       eligible: result.eligibility.eligible,
@@ -90,7 +90,8 @@ export class MobileFieldArtifactService {
         'Auxiliares acompanham o atendimento e não emitem documentos.',
       );
 
-    if (current) return this.map(current);
+    const currentVisit = this.forCurrentVisit(source, current);
+    if (currentVisit) return this.map(currentVisit);
     const preparation = this.prepare(source, null);
     if (!preparation.eligibility.eligible)
       throw new ConflictException(
@@ -116,6 +117,16 @@ export class MobileFieldArtifactService {
       }),
     );
     return this.map(artifact);
+  }
+
+  private forCurrentVisit(source: Source, existing: Existing | null) {
+    if (!existing || source.kind !== 'OPERATION') return existing;
+    const completedAt = source.source.completedAt;
+    if (source.source.status !== 'COMPLETED') return null;
+    return existing.artifactExecution.completedAt?.getTime() ===
+      completedAt?.getTime()
+      ? existing
+      : null;
   }
 
   /**

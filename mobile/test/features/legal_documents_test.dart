@@ -117,6 +117,7 @@ void main() {
         final container = ProviderContainer(
           overrides: [
             authControllerProvider.overrideWith((_) => auth),
+            ...customerPortalAbsent(),
             legalRepositoryProvider.overrideWithValue(LegalRepository(client)),
           ],
         );

@@ -53,9 +53,57 @@ describe('CustomerServiceRequestService', () => {
         category: 'QUESTION',
         subject: 'Uma dúvida',
         description: 'Descrição suficiente',
+        details: {},
       },
       'portal-key-0001',
       expect.stringMatching(/^[a-f0-9]{64}$/),
     );
+  });
+
+  it('detalhes vazios não viram campos em branco, e entram no hash', async () => {
+    repository.createPortal.mockReset();
+    repository.createPortal.mockRejectedValue(new ConflictException('x'));
+    await expect(
+      service.portalCreate(actor, 'portal-key-0002', {
+        category: 'EQUIPMENT_PROBLEM',
+        subject: 'Ar parou',
+        description: 'Desligou sozinho e não liga mais',
+        urgency: 'URGENT',
+        details: {
+          equipmentCondition: 'STOPPED',
+          siteLocation: '  ',
+          contactName: 'Ana',
+        },
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    const [, enviado, , hashA] = repository.createPortal.mock.calls[0] as [
+      unknown,
+      { details: Record<string, string> },
+      string,
+      string,
+    ];
+    expect(enviado.details).toEqual({
+      equipmentCondition: 'STOPPED',
+      contactName: 'Ana',
+    });
+
+    repository.createPortal.mockClear();
+    await expect(
+      service.portalCreate(actor, 'portal-key-0002', {
+        category: 'EQUIPMENT_PROBLEM',
+        subject: 'Ar parou',
+        description: 'Desligou sozinho e não liga mais',
+        urgency: 'LOW',
+        details: { equipmentCondition: 'STOPPED', contactName: 'Ana' },
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    const [, , , hashB] = repository.createPortal.mock.calls[0] as [
+      unknown,
+      unknown,
+      string,
+      string,
+    ];
+    /* A mesma chave com outra urgência é outro pedido: o hash muda. */
+    expect(hashB).not.toBe(hashA);
   });
 });

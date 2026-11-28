@@ -86,7 +86,7 @@ export function PmocWorkspace({ planId }: { planId: string }) {
 
         <TabsContent value="execucoes">
           <TabBoundary id="pmoc-cycles" label="as execuções">
-            <PmocCyclesPanel planId={planId} />
+            <PmocCyclesPanel plan={plan.data} />
           </TabBoundary>
         </TabsContent>
 

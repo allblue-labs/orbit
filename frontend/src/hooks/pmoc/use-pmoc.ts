@@ -24,6 +24,7 @@ import type {
   CreatePmocUnitInput,
   StartPmocExecutionInput,
   UpdatePmocUnitInput,
+  UpdatePmocEquipmentScheduleInput,
 } from "@/types/pmoc";
 import { useMemo } from "react";
 
@@ -154,7 +155,16 @@ export function useCreatePmocPlan() {
 export function useUpdatePmocPlan(id: string) {
   return useApiMutation(
     (input: UpdatePmocPlanInput) => pmocService.update(id, input),
-    { scope: { id: `pmoc:${id}` }, invalidate: planKeys(id) },
+    {
+      scope: { id: `pmoc:${id}` },
+      invalidate: [
+        ...planKeys(id),
+        queryKeys.query("pmoc", "equipment-executions", { planId: id }),
+        queryKeys.query("pmoc", "execution-preparation", { planId: id }),
+        pmocService.keys.timeline(id),
+      ],
+      notify: "PMOC atualizado.",
+    },
   );
 }
 
@@ -248,7 +258,39 @@ function executionKeys(planId: string, cycleId: string, assetId?: string) {
     pmocService.keys.cycles(planId),
     ...planKeys(planId),
     queryKeys.query("pmoc", "timeline", { id: planId }),
+    queryKeys.module("operations"),
+    queryKeys.module("scheduling"),
   ];
+}
+
+export function useUpdatePmocEquipmentSchedule(
+  planId: string,
+  cycleId: string,
+  assetId: string,
+) {
+  return useApiMutation(
+    (input: UpdatePmocEquipmentScheduleInput) =>
+      pmocService.updateEquipmentSchedule(planId, cycleId, assetId, input),
+    {
+      scope: { id: `pmoc-schedule-${cycleId}-${assetId}` },
+      invalidate: executionKeys(planId, cycleId, assetId),
+    },
+  );
+}
+
+export function useCancelPmocEquipmentSchedule(
+  planId: string,
+  cycleId: string,
+  assetId: string,
+) {
+  return useApiMutation(
+    (input: { expectedVersion: string; reason: string }) =>
+      pmocService.cancelEquipmentSchedule(planId, cycleId, assetId, input),
+    {
+      scope: { id: `pmoc-schedule-${cycleId}-${assetId}` },
+      invalidate: executionKeys(planId, cycleId, assetId),
+    },
+  );
 }
 
 /**

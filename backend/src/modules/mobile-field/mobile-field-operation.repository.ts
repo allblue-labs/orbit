@@ -16,6 +16,8 @@ export interface FieldTransitionInput {
   operationId: string;
   organizationId: string;
   actorId: string;
+  /** O dono atende sem atribuição; ver `assertFieldActor`. */
+  actorIsOwner?: boolean;
   expectedVersion: string;
   idempotencyKey: string;
   payloadHash: string;
@@ -184,6 +186,7 @@ export class MobileFieldOperationRepository {
         operation.businessUnitId,
         input.actorId,
         operation,
+        input.actorIsOwner === true,
       );
       const action =
         input.target === 'IN_PROGRESS'
@@ -313,6 +316,7 @@ export class MobileFieldOperationRepository {
     operationId: string;
     organizationId: string;
     actorId: string;
+    actorIsOwner?: boolean;
     expectedVersion: string;
     idempotencyKey: string;
     payloadHash: string;
@@ -344,6 +348,7 @@ export class MobileFieldOperationRepository {
         operation.businessUnitId,
         input.actorId,
         operation,
+        input.actorIsOwner === true,
       );
       const receipt = await this.receipt(
         tx,
@@ -402,6 +407,7 @@ export class MobileFieldOperationRepository {
     checklistId: string;
     organizationId: string;
     actorId: string;
+    actorIsOwner?: boolean;
     expectedVersion: string;
     idempotencyKey: string;
     payloadHash: string;
@@ -440,6 +446,7 @@ export class MobileFieldOperationRepository {
         execution.businessUnitId,
         input.actorId,
         execution.operation,
+        input.actorIsOwner === true,
       );
       const receipt = await this.receipt(
         tx,
@@ -608,8 +615,32 @@ export class MobileFieldOperationRepository {
     quantity: number;
     notes: string | null;
   }) {
-    return this.rls.run((tx) =>
-      tx.operationMaterial.create({
+    return this.rls.run(async (tx) => {
+      // The unique partial index is the last barrier; serialize before INSERT
+      // so concurrent retransmissions return the canonical row instead of P2002.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`field-material:${input.organizationId}:${input.commandId}`}))`;
+      const existing = await tx.operationMaterial.findFirst({
+        where: {
+          organizationId: input.organizationId,
+          commandId: input.commandId,
+        },
+      });
+      if (existing) {
+        if (
+          existing.operationId !== input.operationId ||
+          existing.createdById !== input.actorId ||
+          existing.catalogItemId !== input.catalogItemId ||
+          Number(existing.quantity.toString()) !== input.quantity ||
+          existing.description !== input.description ||
+          existing.unit !== input.unit ||
+          existing.notes !== input.notes
+        )
+          throw new ConflictException(
+            'Idempotency key reused with a different material payload',
+          );
+        return existing;
+      }
+      return tx.operationMaterial.create({
         data: {
           id: generateUuidV7(),
           organizationId: input.organizationId,
@@ -635,8 +666,8 @@ export class MobileFieldOperationRepository {
           quantity: true,
           notes: true,
         },
-      }),
-    );
+      });
+    });
   }
 
   materialByCommand(organizationId: string, commandId: string) {
@@ -697,13 +728,32 @@ export class MobileFieldOperationRepository {
     return null;
   }
 
+  /**
+   * Quem pode registrar algo neste atendimento.
+   *
+   * O técnico atribuído — responsável ou auxiliar —, ou o **dono** da
+   * organização.
+   *
+   * ## Por que o dono passa
+   *
+   * É a regra que o resto do produto já aplica: o PMOC deixa o dono abrir e
+   * concluir sem atribuição, porque é ele quem atende quando o técnico escalado
+   * faltou. Aqui não havia exceção — e o dono abria o atendimento, percorria o
+   * roteiro, e era recusado ao registrar a observação: cada porta apoiada na
+   * operação negava o que a anterior havia aceitado.
+   *
+   * O perfil de campo também não é exigido dele, pela mesma razão de
+   * `requireVisible`: o dono responde pela organização inteira.
+   */
   private async assertFieldActor(
     tx: any,
     organizationId: string,
     businessUnitId: string,
     actorId: string,
     operation: any,
+    actorIsOwner = false,
   ): Promise<void> {
+    if (actorIsOwner) return;
     const assigned =
       operation.responsibleFieldTechnicianId === actorId ||
       operation.auxiliaryTechnicians.some(

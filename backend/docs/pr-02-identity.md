@@ -32,9 +32,10 @@ Invitation creation requires `identity.invitations.create`.
 
 ## Token delivery integration
 
-The default `NoopIdentityTokenDelivery` never logs or exposes invitation/reset
-tokens. Replace the `IDENTITY_TOKEN_DELIVERY` provider with the transactional
-email/notification adapter when that integration is available.
+`TransactionalIdentityTokenDelivery` uses the shared Amazon SES `EmailService`
+for welcome/verification, invitation and password reset messages. Tokens and
+recipients never enter logs. Only `NODE_ENV=test` disables delivery automatically.
+See `amazon-ses.md` for environment and deployment instructions.
 
 ## Database
 
@@ -45,3 +46,10 @@ compared byte-for-byte with a fresh Prisma schema diff.
 Local deployment was not executed because port 5432 was already occupied by a
 PostgreSQL instance that could not be safely identified. Run `prisma migrate
 deploy` only after confirming the target database.
+
+## Atualização PR-07 — entrega assíncrona
+
+O transporte central SES continua único. Os fluxos de identidade agora gravam
+uma intenção cifrada na mesma transação do token/usuário/convite e o worker envia
+após o commit. Consultar [amazon-ses.md](amazon-ses.md) para migração, estados,
+limites das garantias e preflight. A resposta de recuperação permanece neutra.

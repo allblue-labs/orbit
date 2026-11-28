@@ -1,3 +1,4 @@
+import { EquipmentQrDocumentExports } from './business-units/equipaments/equipment-qr-document-exports';
 import { Module } from '@nestjs/common';
 import { SubscriptionPlansModule } from '../subscription-plans/subscription-plans.module';
 import { IdentityModule } from '../identity/identity.module';
@@ -23,11 +24,14 @@ import { TeamController } from './team/team.controller';
 import { TeamRepository } from './team/team.repository';
 import { TeamService } from './team/team.service';
 
+import { MobileManagementController } from './team/mobile-management.controller';
+
 @Module({
   imports: [SubscriptionPlansModule, PmocModule, IdentityModule],
   controllers: [
     OrganizationController,
     TeamController,
+    MobileManagementController,
     BusinessUnitController,
     AssetController,
     CustomerController,
@@ -45,6 +49,7 @@ import { TeamService } from './team/team.service';
     EquipmentQrRepository,
     EquipmentQrRenderer,
     EquipmentQrService,
+    EquipmentQrDocumentExports,
     CustomerRepository,
     CustomerService,
     CustomerReadModelMapper,

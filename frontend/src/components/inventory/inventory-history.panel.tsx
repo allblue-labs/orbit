@@ -57,6 +57,7 @@ const TYPE_OPTIONS = optionsFrom(
   [
     "ENTRY",
     "CONSUMPTION",
+    "SALE",
     "RETURN",
     "ADJUSTMENT_IN",
     "ADJUSTMENT_OUT",

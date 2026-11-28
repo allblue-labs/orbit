@@ -1,3 +1,4 @@
+import { MobileManagement } from '../../common/mobile-management';
 import {
   Body,
   Controller,
@@ -57,6 +58,7 @@ export class WorkforceController {
   ) {}
 
   @Get('field-technicians')
+  @MobileManagement('operations', 'pmoc', 'rvt')
   @Capabilities('workforce.read')
   @Permissions('organization.read')
   fieldTechnicians(
@@ -79,6 +81,7 @@ export class WorkforceController {
    * mesmo com auxiliares cadastrados.
    */
   @Get('field-assistants')
+  @MobileManagement('operations', 'pmoc', 'rvt')
   @Capabilities('workforce.read')
   @Permissions('organization.read')
   fieldAssistants(
@@ -92,6 +95,7 @@ export class WorkforceController {
   }
 
   @Get('eligible-technical-responsibles')
+  @MobileManagement('pmoc', 'rvt')
   @Capabilities('workforce.read')
   @Permissions('organization.read')
   technicalResponsibles(

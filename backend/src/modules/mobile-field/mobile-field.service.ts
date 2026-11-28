@@ -34,6 +34,14 @@ import type {
 
 /** Quantos itens cada recorte curto da tela inicial traz. */
 const RECENTES = 5;
+const QUOTE_DOCUMENT_STATUS_LABELS: Record<string, string> = {
+  DRAFT: 'Rascunho',
+  SENT: 'Enviado',
+  APPROVED: 'Aprovado',
+  REJECTED: 'Recusado',
+  EXPIRED: 'Expirado',
+  CANCELLED: 'Cancelado',
+};
 
 /** Os rótulos públicos dos documentos de campo. A tela não traduz enum. */
 const DOCUMENT_LABELS: Readonly<Record<string, string>> = {
@@ -144,6 +152,13 @@ export class MobileFieldService {
           operacao.customer?.tradeName ?? operacao.customer?.legalName ?? null,
         equipmentName: operacao.assets[0]?.asset.name ?? null,
         completedAt: operacao.completedAt!.toISOString(),
+        pmoc: operacao.pmocEquipmentExecution
+          ? {
+              planId: operacao.pmocEquipmentExecution.planId,
+              cycleId: operacao.pmocEquipmentExecution.cycleId,
+              assetId: operacao.pmocEquipmentExecution.assetId,
+            }
+          : null,
       })),
       recentDocuments: documentos.map((documento) =>
         this.toDocument(documento),
@@ -165,50 +180,126 @@ export class MobileFieldService {
   /**
    * A tela de Documentos, paginada.
    *
-   * Mesma projeção da tela inicial, sem o teto de cinco. Nenhuma regra nova: o
-   * isolamento por organização e unidade é o mesmo, e o filtro por tipo é
-   * recorte de leitura.
+   * Mantém o isolamento por organização e unidade dos documentos de campo.
+   * Orçamentos são uma fonte separada: o proprietário vê todos; os demais
+   * usuários veem somente as propostas liberadas individualmente pelo owner.
    */
   async documents(
     actor: MobileFieldActor,
     query: MobileDocumentsQueryDto,
   ): Promise<MobileDocumentsPageReadModel> {
     const started = performance.now();
+    const page = await this.documentsWithQuotes(actor, query);
+    this.metric('documents', started, page.data.length);
+    return page;
+  }
+
+  /** Merge two independent keyset streams, advancing only the rows actually consumed. */
+  private async documentsWithQuotes(
+    actor: MobileFieldActor,
+    query: MobileDocumentsQueryDto,
+  ): Promise<MobileDocumentsPageReadModel> {
     const limit = query.limit ?? 20;
-    const cursor = query.cursor ? this.decodeCursor(query.cursor) : null;
-
-    /**
-     * Pede um a mais do que cabe na página. É como se sabe que existe próxima
-     * sem contar a tabela inteira — e sem prometer uma página seguinte vazia.
-     */
-    const linhas = await this.repository.documentsPage(
-      actor.organizationId,
-      actor.businessUnitIds,
-      {
-        ...(query.type ? { type: query.type } : {}),
-        ...(query.search ? { search: query.search } : {}),
-        ...(query.customerId ? { customerId: query.customerId } : {}),
-        ...(query.from
-          ? { from: new Date(`${query.from}T00:00:00.000Z`) }
-          : {}),
-        ...(query.to ? { to: new Date(`${query.to}T23:59:59.999Z`) } : {}),
-        take: limit + 1,
-        ...(cursor ? { cursorId: cursor.id } : {}),
-      },
-      actor,
+    let positions: { fieldId?: string; quoteId?: string } = {};
+    const validId = (id: unknown): id is string =>
+      typeof id === 'string' &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        id,
+      );
+    if (query.cursor) {
+      try {
+        const parsed = JSON.parse(
+          Buffer.from(query.cursor, 'base64url').toString('utf8'),
+        ) as {
+          v?: unknown;
+          fieldId?: unknown;
+          quoteId?: unknown;
+          id?: unknown;
+        };
+        if (parsed.v === 1 && validId(parsed.id)) positions.fieldId = parsed.id;
+        else {
+          if (
+            parsed.v !== 2 ||
+            [parsed.fieldId, parsed.quoteId].some(
+              (id) => id !== undefined && !validId(id),
+            )
+          )
+            throw new Error();
+          positions = {
+            fieldId: parsed.fieldId as string | undefined,
+            quoteId: parsed.quoteId as string | undefined,
+          };
+        }
+      } catch {
+        throw new ForbiddenException('Cursor de documentos inválido.');
+      }
+    }
+    const options = {
+      take: limit + 1,
+      search: query.search,
+      customerId: query.customerId,
+      ...(query.from ? { from: new Date(`${query.from}T00:00:00.000Z`) } : {}),
+      ...(query.to ? { to: new Date(`${query.to}T23:59:59.999Z`) } : {}),
+    };
+    const [fields, quotes] = await Promise.all([
+      query.type === 'QUOTE'
+        ? Promise.resolve([])
+        : this.repository.documentsPage(
+            actor.organizationId,
+            actor.businessUnitIds,
+            { ...options, type: query.type, cursorId: positions.fieldId },
+            actor,
+          ),
+      query.type && query.type !== 'QUOTE'
+        ? Promise.resolve([])
+        : this.repository.quoteDocumentsPage(
+            actor.organizationId,
+            actor.businessUnitIds,
+            { ...options, cursorId: positions.quoteId },
+            actor,
+          ),
+    ]);
+    const rows = [
+      ...fields.map((field) => ({
+        kind: 'field' as const,
+        document: this.toDocument(field),
+      })),
+      ...quotes.map((quote) => ({
+        kind: 'quote' as const,
+        document: {
+          artifactId: quote.id,
+          documentType: 'QUOTE',
+          label: `Orçamento ${quote.code}`,
+          customerName: quote.customer.tradeName ?? quote.customer.legalName,
+          createdAt: quote.createdAt.toISOString(),
+          state: 'AVAILABLE' as const,
+          status: quote.status,
+          statusLabel:
+            QUOTE_DOCUMENT_STATUS_LABELS[quote.status] ?? 'Orçamento',
+        },
+      })),
+    ].sort(
+      (a, b) =>
+        b.document.createdAt.localeCompare(a.document.createdAt) ||
+        b.document.artifactId.localeCompare(a.document.artifactId) ||
+        b.kind.localeCompare(a.kind),
     );
-
-    const hasNextPage = linhas.length > limit;
-    const data = linhas.slice(0, limit).map((linha) => this.toDocument(linha));
-    const last = data.at(-1);
-    this.metric('documents', started, data.length);
+    const selected = rows.slice(0, limit);
+    for (const row of selected) {
+      if (row.kind === 'quote') positions.quoteId = row.document.artifactId;
+      else positions.fieldId = row.document.artifactId;
+    }
+    const hasNextPage = rows.length > limit;
     return {
-      data,
+      data: selected.map((row) => row.document),
       meta: {
         limit,
         hasNextPage,
-        nextCursor:
-          hasNextPage && last ? this.encodeCursor(last.artifactId) : null,
+        nextCursor: hasNextPage
+          ? Buffer.from(JSON.stringify({ v: 2, ...positions })).toString(
+              'base64url',
+            )
+          : null,
       },
     };
   }
@@ -433,6 +524,13 @@ export class MobileFieldService {
       customerId: query.customerId,
       from: query.from ? new Date(`${query.from}T00:00:00.000Z`) : undefined,
       to: query.to ? new Date(`${query.to}T23:59:59.999Z`) : undefined,
+      /*
+       * "Tudo" passa a incluir o que foi concluído — no fim da lista — e
+       * "Concluídos" é só isso. Os outros recortes não pedem: um atrasado
+       * nunca é concluído, e trazer concluídos para descartá-los seria custo
+       * sem resposta.
+       */
+      includeCompleted: view === 'ALL' || view === 'COMPLETED',
     };
 
     /**
@@ -633,6 +731,7 @@ export class MobileFieldService {
           unit.timezone,
         ),
         operationalStatus: operation.status,
+        completedAt: operation.completedAt?.toISOString() ?? null,
         priority: operation.priority,
         responsibleFieldTechnician: operation.responsibleFieldTechnician
           ? this.party(operation.responsibleFieldTechnician)
@@ -669,7 +768,21 @@ export class MobileFieldService {
         const execution = cycle.equipmentExecutions.find(
           (value: any) => value.coverageId === coverage.id,
         );
-        if (!execution && cycle.plan.technician?.id !== actor.id) continue;
+        const schedule = cycle.equipmentSchedules?.find(
+          (value: any) => value.coverageId === coverage.id,
+        );
+        if (schedule?.cancelledAt || execution?.status === 'CANCELLED')
+          continue;
+        const plannedTechnician = schedule
+          ? schedule.responsibleFieldTechnician
+          : cycle.plan.technician;
+        const scheduledFor: Date = schedule?.scheduledFor ?? cycle.dueOn;
+        if (
+          (filters?.from && scheduledFor < filters.from) ||
+          (filters?.to && scheduledFor > filters.to)
+        )
+          continue;
+        if (!execution && plannedTechnician?.id !== actor.id) continue;
         if (
           execution &&
           execution.responsibleFieldTechnician.id !== actor.id &&
@@ -678,14 +791,27 @@ export class MobileFieldService {
           )
         )
           continue;
-        const actions = this.pmocActions(cycle, execution, actor);
+        const actions = this.pmocActions(
+          cycle,
+          execution,
+          actor,
+          plannedTechnician?.id,
+        );
         result.push({
           id: `PMOC:${cycle.id}:${coverage.asset.id}`,
           kind: 'PMOC',
           sourceId: cycle.id,
           schedulingId: cycle.schedulingEventId,
           title: `${cycle.plan.name} — ${coverage.asset.name}`,
-          description: `Ciclo PMOC ${cycle.plan.code}`,
+          /*
+           * O período do ciclo, por extenso.
+           *
+           * O título é plano e equipamento — o mesmo em todo ciclo. Quando um
+           * ciclo fecha, o seguinte abre para o mesmo aparelho, e o técnico via
+           * dois itens com o mesmo nome, um concluído e outro "próximo", sem
+           * nada dizendo qual era de qual mês.
+           */
+          description: `Manutenção de ${periodoDoCiclo(cycle.dueOn)} · ${cycle.plan.code}`,
           businessUnit: this.party(unit),
           customer: this.customer(customers.get(cycle.plan.customerId)),
           location:
@@ -700,29 +826,34 @@ export class MobileFieldService {
           /* O pedido é da operação. Um ciclo de PMOC sem operação aberta não tem
              o que cancelar — e, com ela aberta, o pedido aparece pelo item dela. */
           pendingCancellation: null,
-          scheduledFor: cycle.dueOn.toISOString(),
+          scheduledFor: scheduledFor.toISOString(),
           scheduledEnd: null,
           timezone: unit.timezone,
           dueState: this.dueState(
             execution?.status ?? cycle.status,
-            cycle.dueOn,
+            scheduledFor,
             unit.timezone,
             true,
           ),
           operationalStatus: execution?.status ?? cycle.status,
+          completedAt: execution?.completedAt?.toISOString() ?? null,
           priority: null,
           responsibleFieldTechnician: execution?.responsibleFieldTechnician
             ? this.party(execution.responsibleFieldTechnician)
-            : cycle.plan.technician
-              ? this.party(cycle.plan.technician)
+            : plannedTechnician
+              ? this.party(plannedTechnician)
               : null,
           auxiliaryTechnicians: (
             execution?.operation?.auxiliaryTechnicians ?? []
           ).map((value: any) => this.party(value.user)),
           equipmentSummary: [this.equipment(coverage.asset)],
-          artifacts: cycle.artifactExecution
-            ? [this.artifact(cycle.artifactExecution)]
-            : [],
+          /* O documento do **equipamento**: o PMOC é emitido por aparelho, e
+             o do ciclo quase nunca existe. */
+          artifacts: execution?.artifactExecution
+            ? [this.artifact(execution.artifactExecution)]
+            : cycle.artifactExecution
+              ? [this.artifact(cycle.artifactExecution)]
+              : [],
           allowedActions: actions,
           primaryAction: this.primary(actions),
           navigationContext: {
@@ -785,6 +916,7 @@ export class MobileFieldService {
           configuration.timezone || unit.timezone,
         ),
         operationalStatus: occurrence.execution?.status ?? occurrence.status,
+        completedAt: occurrence.execution?.completedAt?.toISOString() ?? null,
         priority: null,
         responsibleFieldTechnician: occurrence.responsibleFieldTechnicianId
           ? {
@@ -871,19 +1003,23 @@ export class MobileFieldService {
     cycle: any,
     execution: any,
     actor: MobileFieldActor,
+    plannedTechnicianId?: string,
   ): MobileFieldAction[] {
     const actions: MobileFieldAction[] = [];
     const assigned =
       actor.isOrganizationOwner === true ||
       (execution
         ? execution.responsibleFieldTechnician.id === actor.id
-        : cycle.plan.technician?.id === actor.id);
+        : (plannedTechnicianId ?? cycle.plan.technician?.id) === actor.id);
     if (assigned || this.has(actor, 'pmoc.read')) actions.push('VIEW');
     if (execution?.status === 'IN_PROGRESS' && assigned)
       actions.push('RESUME', 'ADD_EVIDENCE', 'COMPLETE');
     if (!execution && cycle.plan.technicalResponsibleUserId && assigned)
       actions.push('EXECUTE_PMOC');
-    if (cycle.artifactExecution && this.has(actor, 'artifact_executions.read'))
+    if (
+      (execution?.artifactExecution || cycle.artifactExecution) &&
+      this.has(actor, 'artifact_executions.read')
+    )
       actions.push('VIEW_DOCUMENT', 'DOWNLOAD_DOCUMENT');
     if (this.has(actor, 'assets.read')) actions.push('SCAN_EQUIPMENT');
     return actions;
@@ -923,6 +1059,15 @@ export class MobileFieldService {
     timezone: string,
     dateOnly = false,
   ): MobileDueState {
+    /*
+     * Concluído é concluído, qualquer que seja a data.
+     *
+     * Esta linha não existia: o cálculo seguia para a data, e um PMOC já
+     * atendido saía como "atrasado" (data passada), "hoje" ou "próximo" (data
+     * futura). Era a confusão que o técnico via — o mesmo atendimento mudando
+     * de lista sem ter mudado de estado.
+     */
+    if (status === 'COMPLETED') return 'COMPLETED';
     if (['IN_PROGRESS', 'STARTED', 'PAUSED'].includes(status))
       return 'IN_PROGRESS';
     if (!at) return 'UNSCHEDULED';
@@ -950,20 +1095,30 @@ export class MobileFieldService {
       (view === 'TODAY' && state === 'DUE_TODAY') ||
       (view === 'OVERDUE' && state === 'OVERDUE') ||
       (view === 'IN_PROGRESS' && state === 'IN_PROGRESS') ||
-      (view === 'UPCOMING' && state === 'UPCOMING')
+      (view === 'UPCOMING' && state === 'UPCOMING') ||
+      (view === 'COMPLETED' && state === 'COMPLETED')
     );
   }
   private compare(
     a: MobileWorkItemReadModel,
     b: MobileWorkItemReadModel,
   ): number {
-    const rank = {
+    const rank: Record<MobileDueState, number> = {
       IN_PROGRESS: 0,
       OVERDUE: 1,
       DUE_TODAY: 2,
       UPCOMING: 3,
       UNSCHEDULED: 4,
+      /* Por último: o que falta pesa mais do que o que já foi feito. */
+      COMPLETED: 5,
     };
+    /* Entre concluídos, o mais recente primeiro — é como se procura o que se
+       acabou de fazer. A agenda ordena o que falta, não o que passou. */
+    if (a.dueState === 'COMPLETED' && b.dueState === 'COMPLETED')
+      return (
+        (b.completedAt ?? '').localeCompare(a.completedAt ?? '') ||
+        a.id.localeCompare(b.id)
+      );
     return (
       rank[a.dueState] - rank[b.dueState] ||
       (a.scheduledFor ?? '9999').localeCompare(b.scheduledFor ?? '9999') ||
@@ -1117,4 +1272,31 @@ export class MobileFieldService {
       }),
     );
   }
+}
+
+const MESES = [
+  'janeiro',
+  'fevereiro',
+  'março',
+  'abril',
+  'maio',
+  'junho',
+  'julho',
+  'agosto',
+  'setembro',
+  'outubro',
+  'novembro',
+  'dezembro',
+];
+
+/**
+ * `2026-11-30` → `novembro de 2026`.
+ *
+ * Lê a data **civil** (`dueOn` é `@db.Date`): converter para o fuso de quem lê
+ * levaria o dia 1º para o mês anterior em qualquer fuso a oeste de Greenwich.
+ */
+export function periodoDoCiclo(dueOn: Date): string {
+  const iso = dueOn.toISOString().slice(0, 10);
+  const [ano, mes] = iso.split('-').map(Number);
+  return `${MESES[(mes ?? 1) - 1]} de ${ano}`;
 }

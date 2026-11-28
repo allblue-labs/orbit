@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+import { adminPrisma, disconnectAdminPrisma } from './support/admin-prisma';
 import { Logger, ValidationPipe, type INestApplication } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import request from 'supertest';
@@ -12,7 +14,77 @@ import { ForbiddenException } from './../src/exceptions';
 
 jest.setTimeout(180_000);
 
+// Deliberate identity stubs for guard-order and fault-injection tests only.
+const identityFixture = (
+  id: string,
+  organizationId: string,
+  unitId: string,
+  permissions: string[],
+) => ({
+  id,
+  status: 'ACTIVE',
+  deletedAt: null,
+  isOrganizationOwner: false,
+  effectiveBusinessUnitIds: [unitId],
+  platformRoleAssignments: [],
+  businessUnitMemberships: [],
+  organizationMemberships: [
+    {
+      organizationId,
+      usesCustomAccess: false,
+      role: {
+        key: 'FIXTURE',
+        permissions,
+        allowedSurfaces: ['WEB', 'MOBILE', 'API'],
+      },
+    },
+  ],
+});
+
+const admin = adminPrisma();
+async function activeScopeFixture() {
+  const email = `fixture.guard-order.${randomUUID()}@orbit.local`;
+  const user = await admin.user.create({
+    data: {
+      email,
+      normalizedEmail: email,
+      firstName: 'Fixture',
+      lastName: 'Guards',
+      displayName: 'Guards fixture',
+      status: 'ACTIVE',
+    },
+  });
+  const plan = await admin.plan.findFirstOrThrow({ where: { isActive: true } });
+  const organization = await admin.organization.create({
+    data: {
+      ownerUserId: user.id,
+      planId: plan.id,
+      slug: `guards-${randomUUID()}`,
+      displayName: 'Active guard fixture',
+      primarySegment: 'HVAC',
+      status: 'ACTIVE',
+      subscriptionStatus: 'ACTIVE',
+    },
+  });
+  const unit = await admin.businessUnit.create({
+    data: {
+      organizationId: organization.id,
+      slug: 'matriz',
+      type: 'HEADQUARTERS',
+      isPrimary: true,
+      legalName: 'Fixture LTDA',
+      documentType: 'CNPJ',
+      documentNumber: randomUUID().replace(/-/g, '').slice(0, 14),
+      city: 'Recife',
+      street: 'Rua Teste',
+      status: 'ACTIVE',
+    },
+  });
+  return { user: user.id, organization: organization.id, unit: unit.id };
+}
+
 describe('AppController (e2e)', () => {
+  afterAll(async () => disconnectAdminPrisma());
   let app: INestApplication<App>;
 
   beforeEach(async () => {
@@ -71,30 +143,35 @@ describe('AppController (e2e)', () => {
   });
 
   it('publishes artifact executions on v1 and keeps the guarded legacy alias', async () => {
+    const legacyId = randomUUID();
+    const versionedId = randomUUID();
     const legacy = await request(app.getHttpServer())
       .get('/artifact-executions')
-      .set('x-request-id', 'artifact-executions-legacy');
+      .set('x-request-id', legacyId);
     const versioned = await request(app.getHttpServer())
       .get('/api/v1/artifact-executions')
-      .set('x-request-id', 'artifact-executions-v1');
+      .set('x-request-id', versionedId);
     expect({
       status: legacy.status,
       body: legacy.body as unknown,
     }).toMatchObject({
       status: 401,
-      body: { requestId: 'artifact-executions-legacy' },
+      body: { requestId: legacyId },
     });
     expect({
       status: versioned.status,
       body: versioned.body as unknown,
     }).toMatchObject({
       status: 401,
-      body: { requestId: 'artifact-executions-v1' },
+      body: { requestId: versionedId },
     });
   });
 
   it('runs authentication and authorization guards before payload validation', async () => {
-    let lastUserId = 'user-id';
+    const scope = await activeScopeFixture();
+    const withoutCapabilityUser = randomUUID();
+    const sessionId = randomUUID();
+    const restrictedSessionId = randomUUID();
     const verifyAccessToken = jest.fn((token: string) => {
       if (token === 'invalid') {
         throw Object.assign(new Error('invalid signature'), {
@@ -102,14 +179,13 @@ describe('AppController (e2e)', () => {
         });
       }
       const withoutCapability = token === 'valid-without-capability';
-      lastUserId = withoutCapability ? 'user-without-capability' : 'user-id';
       return Promise.resolve({
-        sub: lastUserId,
-        sid: 'session-id',
-        organizationId: 'organization-id',
+        sub: withoutCapability ? withoutCapabilityUser : scope.user,
+        sid: withoutCapability ? restrictedSessionId : sessionId,
+        organizationId: scope.organization,
         roles: [],
         permissions: ['artifact_executions.create'],
-        businessUnitIds: ['unit-id'],
+        businessUnitIds: [scope.unit],
       });
     });
     const pipelineModule = await Test.createTestingModule({
@@ -119,10 +195,20 @@ describe('AppController (e2e)', () => {
       .useValue({ verifyAccessToken })
       .overrideProvider(IdentityRepository)
       .useValue({
-        findSessionById: jest.fn().mockImplementation(() =>
+        findById: jest
+          .fn()
+          .mockImplementation((userId: string) =>
+            Promise.resolve(
+              identityFixture(userId, scope.organization, scope.unit, [
+                'artifact_executions.create',
+              ]),
+            ),
+          ),
+        findSessionById: jest.fn().mockImplementation((id: string) =>
           Promise.resolve({
-            id: 'session-id',
-            userId: lastUserId,
+            id,
+            userId:
+              id === restrictedSessionId ? withoutCapabilityUser : scope.user,
             revokedAt: null,
             expiresAt: new Date(Date.now() + 60_000),
           }),
@@ -134,7 +220,7 @@ describe('AppController (e2e)', () => {
           (_organizationId: string, access: { userId: string }) =>
             Promise.resolve({
               capabilities:
-                access.userId === 'user-without-capability'
+                access.userId === withoutCapabilityUser
                   ? []
                   : ['artifact_executions.manage'],
             }),
@@ -247,24 +333,25 @@ describe('AppController (e2e)', () => {
     await faultApp.listen(0, '127.0.0.1');
 
     try {
+      const correlationId = randomUUID();
       const response = await request(faultApp.getHttpServer())
         .get('/api/v1/artifact-executions')
         .set('authorization', 'Bearer syntactically-valid-for-injection')
-        .set('x-request-id', 'fault-auth-connection')
+        .set('x-request-id', correlationId)
         .expect(500)
-        .expect('x-request-id', 'fault-auth-connection');
+        .expect('x-request-id', correlationId);
       const body = response.body as {
         error: { message: string; stack?: unknown };
         requestId: string;
       };
-      expect(body.requestId).toBe('fault-auth-connection');
+      expect(body.requestId).toBe(correlationId);
       expect(body.error.message).toBe(
         'Não foi possível concluir a solicitação.',
       );
       expect(JSON.stringify(body)).not.toContain('connection reset');
       expect(body.error.stack).toBeUndefined();
       expect(JSON.stringify(log.mock.calls)).toContain('CONNECTION_FAILURE');
-      expect(JSON.stringify(log.mock.calls)).toContain(
+      expect(JSON.stringify(log.mock.calls)).not.toContain(
         'simulated connection reset',
       );
     } finally {
@@ -274,6 +361,7 @@ describe('AppController (e2e)', () => {
   });
 
   it('does not mask an entitlement lookup failure as 403 or 404', async () => {
+    const scope = await activeScopeFixture();
     const failure = Object.assign(
       new Error('simulated pool acquisition timeout'),
       {
@@ -285,19 +373,26 @@ describe('AppController (e2e)', () => {
       .overrideProvider(IdentityTokenService)
       .useValue({
         verifyAccessToken: jest.fn().mockResolvedValue({
-          sub: '01900000-0000-7000-8000-000000000001',
+          sub: scope.user,
           sid: '01900000-0000-7000-8000-000000000002',
-          organizationId: '01900000-0000-7000-8000-000000000003',
+          organizationId: scope.organization,
           roles: [],
           permissions: ['artifact_executions.read'],
-          businessUnitIds: ['01900000-0000-7000-8000-000000000004'],
+          businessUnitIds: [scope.unit],
         }),
       })
       .overrideProvider(IdentityRepository)
       .useValue({
+        findById: jest
+          .fn()
+          .mockResolvedValue(
+            identityFixture(scope.user, scope.organization, scope.unit, [
+              'artifact_executions.read',
+            ]),
+          ),
         findSessionById: jest.fn().mockResolvedValue({
           id: '01900000-0000-7000-8000-000000000002',
-          userId: '01900000-0000-7000-8000-000000000001',
+          userId: scope.user,
           revokedAt: null,
           expiresAt: new Date(Date.now() + 60_000),
         }),
@@ -312,22 +407,23 @@ describe('AppController (e2e)', () => {
     await faultApp.listen(0, '127.0.0.1');
 
     try {
+      const correlationId = randomUUID();
       const response = await request(faultApp.getHttpServer())
         .get('/api/v1/artifact-executions')
         .set('authorization', 'Bearer injected')
-        .set('x-request-id', 'fault-entitlements-timeout')
+        .set('x-request-id', correlationId)
         .expect(500);
       const body = response.body as {
         error: { message: string };
         requestId: string;
       };
-      expect(body.requestId).toBe('fault-entitlements-timeout');
+      expect(body.requestId).toBe(correlationId);
       expect(body.error.message).toBe(
         'Não foi possível concluir a solicitação.',
       );
       expect(JSON.stringify(body)).not.toContain('pool acquisition');
       expect(JSON.stringify(log.mock.calls)).toContain('DATABASE_TIMEOUT');
-      expect(JSON.stringify(log.mock.calls)).toContain(
+      expect(JSON.stringify(log.mock.calls)).not.toContain(
         'simulated pool acquisition timeout',
       );
     } finally {

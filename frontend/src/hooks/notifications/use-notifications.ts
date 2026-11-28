@@ -3,29 +3,10 @@
 /**
  * Query Layer do Notification Center.
  *
- * ## Realtime: existe no backend, não alcança este cliente
- *
- * Há um `NotificationGateway` (Socket.IO, namespace `/notifications`) que
- * autentica pelo **access token no handshake** e emite para
- * `user:{id}`/`organization:{id}`.
- *
- * O frontend web não pode usá-lo. Desde a PR-02 os tokens vivem **apenas em
- * cookies `HttpOnly`**: o JavaScript da página não os acessa, por decisão de
- * segurança, e é o BFF que injeta o `Authorization` a cada requisição. Um
- * Socket.IO no browser precisaria do token no handshake — ou seja, exigiria
- * expor o token à página e desfazer justamente a propriedade que o BFF existe
- * para garantir.
- *
- * Alternativas avaliadas e por que não:
- *
- * - **proxy WebSocket pelo BFF** — Route Handlers do App Router não fazem
- *   upgrade de conexão;
- * - **endpoint que devolva um token efêmero para o socket** — não existe, e
- *   criá-lo reintroduziria o token no browser.
- *
- * Então: **polling**, com intervalo configurável, e a lacuna documentada. Não
- * há simulação de realtime. O aplicativo móvel, que guarda o token em
- * armazenamento seguro, **pode** usar o gateway — a lacuna é do web.
+ * A caixa de avisos usa HTTP autenticado com polling. O gateway Socket.IO
+ * legado foi retirado na PR-10 de produção: cada consulta resolve a sessão,
+ * vínculo, papel e tenant atuais no servidor. Os tokens continuam no BFF,
+ * em cookies HttpOnly. O app mobile usa a mesma caixa e FCM para avisos nativos.
  *
  * ## Concorrência entre polling e mutações
  *

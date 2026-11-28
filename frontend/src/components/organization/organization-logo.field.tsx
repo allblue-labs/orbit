@@ -59,8 +59,9 @@ export function OrganizationLogoField({ canManage }: { canManage: boolean }) {
       return;
     }
 
-    setPrevia(preparada.dataUrl);
+    setPrevia(arquivo.type === "image/heic" ? null : preparada.dataUrl);
     enviar.mutate(preparada.dataUrl, {
+      onSuccess: (result) => setPrevia(result.logoUrl),
       onError: () => setPrevia(null),
     });
   };
@@ -104,7 +105,7 @@ export function OrganizationLogoField({ canManage }: { canManage: boolean }) {
             <input
               ref={entrada}
               type="file"
-              accept="image/png,image/jpeg,image/webp"
+              accept="image/png,image/jpeg,image/webp,image/heic"
               className="hidden"
               onChange={(evento) => {
                 void escolher(evento.target.files?.[0]);

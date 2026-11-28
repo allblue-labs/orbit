@@ -41,7 +41,7 @@ describe('customer search', () => {
     'searches formatted or unformatted CPF/CNPJ: %s',
     async (search, document) => {
       await repository.list('org-a', { search, page: 1, limit: 20 });
-      const where = findMany.mock.calls[0][0].where;
+      const where = findMany.mock.calls[0]?.[0].where;
       expect(where?.organizationId).toBe('org-a');
       expect(where?.deletedAt).toBeNull();
       expect(where?.OR).toContainEqual({

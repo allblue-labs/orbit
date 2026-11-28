@@ -58,8 +58,9 @@ nunca os valores.
 1. crie os quatro produtos (um por plano do catálogo);
 2. crie os **doze** preços — quatro planos × três periodicidades — em `BRL`,
    recorrentes, com os valores da tabela abaixo;
-3. registre os **Price IDs** (`price_...`), nunca Product IDs (`prod_...`), nas
-   variáveis `STRIPE_PRICE_<PLANO>_<PERIODICIDADE>`;
+3. publique os **Price IDs** (`price_...`) do mesmo ambiente no catálogo comercial
+   do Orbit para cada periodicidade. Use a administração da plataforma
+   descrita em [Catálogo comercial](commercial-plan-catalog.md);
 4. configure o **Customer Portal**: métodos de pagamento, faturas, dados de
    cobrança e cancelamento. Habilite **trocas de plano**, publique os 12 preços,
    configure os ajustes para cobrança imediata (`always_invoice`), alterações
@@ -96,7 +97,8 @@ publicáveis e rejeita preços repetidos entre planos/periodicidades. Chaves
 restritas precisam das permissões usadas por este adaptador: leitura de preços,
 assinaturas, faturas, pagamentos de faturas, reembolsos, disputas e configurações
 do Billing Portal; e escrita de
-customers, Checkout Sessions, sessões do Billing Portal, assinaturas e schedules.
+customers, Checkout Sessions, sessões do Billing Portal, assinaturas, schedules e
+reembolsos. A chave de recuperação continua restrita a leitura.
 
 O texto de um Price ID não indica seu modo. A conferência usa o campo
 `price.livemode` da API e a existência do preço no ambiente da chave.
@@ -178,14 +180,17 @@ Referências: [API keys](https://docs.stripe.com/keys),
 
 ## Eventos consumidos
 
-Exatamente estes dezenove, agrupados pela responsabilidade:
+Eventos do Stripe por responsabilidade.
 
 | Evento                                     | Significado normalizado        | Comando no Orbit                             |
 | ------------------------------------------ | ------------------------------ | -------------------------------------------- |
 | `checkout.session.completed`               | contratação concluída          | reconciliar assinatura                       |
 | `checkout.session.async_payment_succeeded` | pagamento assíncrono concluído | concluir contratação e reconciliar           |
+| `checkout.session.expired`                 | checkout expirado              | liberar a reserva promocional confirmada como expirada pelo Stripe |
 | `customer.subscription.created`            | assinatura criada              | reconciliar assinatura                       |
 | `customer.subscription.updated`            | assinatura mudou               | reconciliar assinatura                       |
+| `customer.subscription.pending_update_applied` | upgrade aplicado            | verificar fatura e promover os recursos      |
+| `customer.subscription.pending_update_expired` | upgrade expirado            | encerrar a solicitação de upgrade            |
 | `customer.subscription.deleted`            | assinatura encerrada           | reconciliar assinatura                       |
 | `invoice.created`                          | fatura criada                  | materializar projeção canônica               |
 | `invoice.finalized`                        | fatura finalizada              | atualizar projeção e razão                   |
@@ -341,20 +346,34 @@ reconciliação.
   autenticada, o frontend abre o Checkout com o plano e a periodicidade que o
   servidor publicou. Se a abertura falhar, o cadastro fica preservado e a tela
   de assinatura oferece **Continuar para o pagamento**.
-- `POST /organizations/current/subscription/change-plan` aceita versão, plano,
-  periodicidade e `acknowledgeTrialEnd`. Responde `{kind: "TRIAL_STARTED", endsAt}`
-  para teste, `{kind: "SCHEDULED", effectiveAt}` para troca na renovação, ou
-  `{url}` para contratação com confirmação de pagamento. O frontend atualiza
-  assinatura/sessão nos dois primeiros casos e navega somente no terceiro.
+- `POST /organizations/current/subscription/change-plan` recebe a versão da assinatura,
+  plano, periodicidade e confirmação aplicável. Retorna `TRIAL_STARTED`, `SCHEDULED`,
+  `UPGRADE_PROCESSING`, `SUPPORT_TICKET` com o protocolo, ou `url` para confirmação
+  hospedada pelo Stripe.
 - Em `PENDING_PAYMENT`, sem pagamento anterior e sem teste utilizado, escolher
   Essencial inicia 30 dias gratuitos. Usa o documento canônico da unidade
   principal, o histórico da organização e HMAC global. Concessão e mudança de
   assinatura são atômicas. Expira checkout anterior no Stripe primeiro;
   checkout concluído aguarda reconciliação e não é tratado como abandono.
-- Planos pagos `ACTIVE`, tanto upgrade quanto downgrade ou periodicidade,
-  usam Subscription Schedule sem prorrateio: preserva o preço/período atual
-  e muda somente na renovação. Nenhuma cobrança ou alteração de direitos é
-  antecipada. O agendamento pode ser desfeito.
+- No upgrade mensal, `acknowledgeImmediateCharge` autoriza a cobrança. O Stripe
+  calcula o crédito pelo restante do período pago. A API confere uma prévia com
+  o preço integral do novo mês e o crédito proporcional, e altera a assinatura
+  com `billing_cycle_anchor=now`, `proration_behavior=always_invoice` e
+  `payment_behavior=pending_if_incomplete`. O saldo é cobrado no cartão cadastrado.
+  Quando houver autenticação adicional, o Orbit fornece o link da fatura do Stripe.
+  O provedor carimba a âncora quando cria a cobrança, então uma autenticação no
+  dia seguinte pode manter o aniversário no dia da solicitação. Os direitos só
+  são liberados quando o Orbit verificar o pagamento da fatura do upgrade.
+- No downgrade mensal, o Subscription Schedule preserva o preço e as cotas
+  atuais até a renovação. A manutenção envia avisos no Orbit nas janelas de
+  7, 3 e 1 dia, com intervalo mínimo de 24 horas e deduplicação. Mudanças feitas
+  com menor antecedência recebem os avisos que ainda couberem no prazo.
+- Mudanças entre contratos pagos envolvendo periodicidade semestral ou anual
+  geram chamado sem alteração no Stripe. Chamados são listados em
+  `GET /api/v1/platform-admin/billing/tickets` e resolvidos em
+  `PATCH /api/v1/platform-admin/billing/tickets/:id/resolve`, com a autoridade
+  global `platform.admin`. A manutenção avisa `suporte-orbit@allblue-labs.com`
+  por SES na categoria `SUPPORT`.
 - A reconciliação exige preço conhecido, customer/subscription correspondentes
   e fatura `PAID` sem saldo, com linha do preço/período da renovação. Fatura
   antiga, `active`, redirects e HTTP 200 não comprovam o novo pagamento.
@@ -363,6 +382,28 @@ reconciliação.
   faturas e métodos de pagamento, sem troca de plano ou cancelamento. Esses
   comandos passam pelo Orbit. A configuração padrão de confirmação hospedada
   continua necessária apenas para saída antecipada de teste com vínculo Stripe.
+
+### Cancelamento com estorno
+
+O prazo contratual de sete dias começa com o pagamento confirmado da
+contratação ou da mudança para um novo plano. A renovação do mesmo plano
+não reinicia o prazo. Quando a fatura e o pagamento puderem ser vinculados de
+forma inequívoca, o worker pede ao Stripe o estorno de todo o valor cobrado
+e encerra a assinatura sem gerar cobrança de encerramento. Casos ambíguos
+e falhas definitivas entram na fila de suporte. Depois dos sete dias, o
+Orbit cancela a renovação, mantém o acesso até o vencimento e abre um chamado.
+
+Aplique a migration `20261119120000_billing_plan_policies` antes de publicar a API.
+Mantenha um processo `combined` ou `worker` com `JOBS_WORKER_ENABLED=true`, além
+do worker de eventos do Stripe e do envio SES da categoria `SUPPORT`.
+
+No Stripe, teste primeiro com a chave e Price IDs do modo de teste. O upgrade
+usa assinaturas com cobrança automática por cartão, além de Link quando
+disponível. Mantenha as opções de troca e cancelamento desativadas na
+configuração do portal geral. Em **Workbench → Webhooks**, habilite os eventos
+da tabela, incluindo os dois de atualizações pendentes e os de fatura e
+reembolso. Para chaves restritas, conceda **Write** em **Refunds**. A API
+configura o crédito proporcional e os agendamentos no momento de cada alteração.
 
 ### Adequação de limites em 48 horas
 

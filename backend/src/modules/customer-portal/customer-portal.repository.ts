@@ -4,6 +4,8 @@ import { PrismaService, RlsTransaction } from '../../database';
 import { ConflictException, EntityNotFoundException } from '../../exceptions';
 import type {
   PortalIdentityRecord,
+  PortalMediaKind,
+  PortalProfileState,
   PortalSessionRecord,
 } from './customer-portal.types';
 
@@ -41,6 +43,148 @@ export class CustomerPortalRepository {
     const rows = await this.prisma.$queryRaw<PortalIdentityRecord[]>`
       SELECT * FROM app_customer_portal_find_login(
         ${organizationSlug}, ${normalizedEmail}
+      )`;
+    return rows[0] ?? null;
+  }
+
+  /**
+   * Login sem slug: a função só devolve linha quando o e-mail é único na
+   * instalação — e devolve exatamente a mesma linha do login com slug.
+   */
+  async findLoginIdentityByEmail(
+    normalizedEmail: string,
+  ): Promise<PortalIdentityRecord | null> {
+    const rows = await this.prisma.$queryRaw<PortalIdentityRecord[]>`
+      SELECT * FROM app_customer_portal_find_login_by_email(${normalizedEmail})`;
+    return rows[0] ?? null;
+  }
+
+  /** A linha de login de uma identidade, para a biometria. */
+  async findLoginIdentityById(
+    identityId: string,
+  ): Promise<PortalIdentityRecord | null> {
+    const rows = await this.prisma.$queryRaw<PortalIdentityRecord[]>`
+      SELECT * FROM app_customer_portal_login_by_identity(${identityId}::uuid)`;
+    return rows[0] ?? null;
+  }
+
+  async registerBiometric(input: {
+    identityId: string;
+    sessionId: string;
+    id: string;
+    kind: 'DEVICE' | 'WEBAUTHN';
+    label: string;
+    deviceId?: string;
+    webauthnId?: string;
+    publicKey?: Uint8Array;
+    signCount?: number;
+    transports?: string[];
+  }): Promise<boolean> {
+    const rows = await this.prisma.$queryRaw<{ ok: boolean }[]>`
+      SELECT app_customer_portal_biometric_register(
+        ${input.identityId}::uuid, ${input.sessionId}::uuid, ${input.id}::uuid,
+        ${input.kind}, ${input.label}, ${input.deviceId ?? null},
+        NULL::text, ${input.webauthnId ?? null},
+        ${input.publicKey ? Buffer.from(input.publicKey) : null}::bytea,
+        ${BigInt(input.signCount ?? 0)}::bigint,
+        ${input.transports ?? []}::text[]
+      ) AS ok`;
+    return rows[0]?.ok === true;
+  }
+
+  listBiometrics(identityId: string, sessionId: string) {
+    return this.prisma.$queryRaw<
+      {
+        id: string;
+        kind: string;
+        label: string;
+        createdAt: Date;
+        lastUsedAt: Date | null;
+      }[]
+    >`SELECT * FROM app_customer_portal_biometric_list(${identityId}::uuid, ${sessionId}::uuid)`;
+  }
+
+  async revokeBiometric(
+    identityId: string,
+    sessionId: string,
+    credentialId: string,
+  ): Promise<boolean> {
+    const rows = await this.prisma.$queryRaw<{ ok: boolean }[]>`
+      SELECT app_customer_portal_biometric_revoke(
+        ${identityId}::uuid, ${sessionId}::uuid, ${credentialId}::uuid) AS ok`;
+    return rows[0]?.ok === true;
+  }
+
+  async findBiometric(where: {
+    credentialId?: string;
+    webauthnId?: string;
+  }): Promise<{
+    id: string;
+    identityId: string;
+    kind: string;
+    publicKey: Uint8Array | null;
+    signCount: bigint;
+    transports: string[];
+    webauthnId: string | null;
+  } | null> {
+    const rows = await this.prisma.$queryRaw<
+      {
+        id: string;
+        identityId: string;
+        kind: string;
+        publicKey: Uint8Array | null;
+        signCount: bigint;
+        transports: string[];
+        webauthnId: string | null;
+      }[]
+    >`SELECT * FROM app_customer_portal_biometric_lookup(
+        ${where.credentialId ?? null}::uuid, ${where.webauthnId ?? null})`;
+    return rows[0] ?? null;
+  }
+
+  async useBiometric(
+    credentialId: string,
+    change: { signCount?: number },
+  ): Promise<boolean> {
+    const rows = await this.prisma.$queryRaw<{ ok: boolean }[]>`
+      SELECT app_customer_portal_biometric_use(
+        ${credentialId}::uuid, NULL::text, NULL::text,
+        ${change.signCount === undefined ? null : BigInt(change.signCount)}::bigint
+      ) AS ok`;
+    return rows[0]?.ok === true;
+  }
+
+  /** Estado do perfil, só para sessão válida da própria identidade. */
+  async profileState(
+    identityId: string,
+    sessionId: string,
+  ): Promise<PortalProfileState | null> {
+    const rows = await this.prisma.$queryRaw<PortalProfileState[]>`
+      SELECT * FROM app_customer_portal_profile_state(
+        ${identityId}::uuid, ${sessionId}::uuid
+      )`;
+    return rows[0] ?? null;
+  }
+
+  /**
+   * Troca a foto ou a assinatura. Devolve o objeto anterior para limpeza, ou
+   * `null` quando a sessão não vale mais — nada foi gravado.
+   */
+  async setMedia(
+    identityId: string,
+    sessionId: string,
+    kind: PortalMediaKind,
+    object: { bucket: string; objectKey: string } | null,
+  ): Promise<{
+    previousBucket: string | null;
+    previousObjectKey: string | null;
+  } | null> {
+    const rows = await this.prisma.$queryRaw<
+      { previousBucket: string | null; previousObjectKey: string | null }[]
+    >`
+      SELECT * FROM app_customer_portal_set_media(
+        ${identityId}::uuid, ${sessionId}::uuid, ${kind},
+        ${object?.bucket ?? null}, ${object?.objectKey ?? null}
       )`;
     return rows[0] ?? null;
   }
@@ -217,6 +361,21 @@ export class CustomerPortalRepository {
           'Email is already linked to another customer in this organization',
         );
       }
+      const outro = await tx.customerPortalIdentity.findFirst({
+        where: {
+          organizationId: data.organizationId,
+          customerId: data.customerId,
+          status: { not: 'DISABLED' },
+          normalizedEmail: { not: data.normalizedEmail },
+        },
+        select: { id: true },
+      });
+      if (outro) {
+        throw new ConflictException(
+          'Customer already has a portal access',
+          'PORTAL_ACCESS_EXISTS',
+        );
+      }
 
       const identity = existing
         ? await tx.customerPortalIdentity.update({
@@ -340,6 +499,205 @@ export class CustomerPortalRepository {
         }),
       ),
     );
+  }
+
+  /** O que a tela de acesso precisa: slug, nome do cliente e o acesso atual. */
+  accessContext(organizationId: string, customerId: string) {
+    return this.rls.run(async (tx) => {
+      const organization = await tx.organization.findFirst({
+        where: { id: organizationId },
+        select: { slug: true },
+      });
+      const customer = await tx.customer.findFirst({
+        where: { id: customerId, organizationId, deletedAt: null },
+        select: { legalName: true, tradeName: true, status: true },
+      });
+      if (!organization || !customer) return null;
+      const identity = await tx.customerPortalIdentity.findFirst({
+        where: { organizationId, customerId },
+        orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+      });
+      /* O ativo vence o desativado mais recente: é ele que a pessoa usa. */
+      const current =
+        (await tx.customerPortalIdentity.findFirst({
+          where: { organizationId, customerId, status: { not: 'DISABLED' } },
+        })) ?? identity;
+      return {
+        slug: organization.slug,
+        customerName: customer.tradeName ?? customer.legalName,
+        customerActive: customer.status === 'ACTIVE',
+        identity: current,
+      };
+    });
+  }
+
+  /**
+   * Cria o acesso do cliente já ativo, com senha temporária.
+   *
+   * Um por cliente: o índice parcial garante, e a checagem aqui dá a resposta
+   * certa antes dele. Um acesso desativado do mesmo cliente com o mesmo
+   * endereço é reaberto — é a mesma pessoa voltando, e o histórico de
+   * auditoria continua na mesma identidade.
+   */
+  createAccess(data: {
+    organizationId: string;
+    customerId: string;
+    actorId: string;
+    identityId: string;
+    email: string;
+    normalizedEmail: string;
+    displayName: string;
+    passwordHash: string;
+  }) {
+    return this.rls.run(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`portal-access:${data.organizationId}:${data.customerId}`}))`;
+      const customer = await tx.customer.findFirst({
+        where: {
+          id: data.customerId,
+          organizationId: data.organizationId,
+          status: 'ACTIVE',
+          deletedAt: null,
+        },
+        select: { id: true },
+      });
+      if (!customer) throw new EntityNotFoundException('Customer');
+
+      const current = await tx.customerPortalIdentity.findFirst({
+        where: {
+          organizationId: data.organizationId,
+          customerId: data.customerId,
+          status: { not: 'DISABLED' },
+        },
+        select: { id: true },
+      });
+      if (current) {
+        throw new ConflictException(
+          'Este cliente já tem um acesso. Gere uma nova senha ou desative o atual.',
+          'PORTAL_ACCESS_EXISTS',
+        );
+      }
+
+      /* O mesmo endereço não serve a um cliente e a alguém da equipe: o login
+         é o mesmo campo, e a pessoa não saberia em qual mundo está entrando. */
+      const membro = await tx.user.findFirst({
+        where: { normalizedEmail: data.normalizedEmail },
+        select: { id: true },
+      });
+      if (membro) {
+        throw new ConflictException(
+          'Este endereço já é o login de alguém da equipe. Escolha outro nome.',
+          'PORTAL_EMAIL_TAKEN',
+        );
+      }
+
+      const existing = await tx.customerPortalIdentity.findUnique({
+        where: {
+          organizationId_normalizedEmail: {
+            organizationId: data.organizationId,
+            normalizedEmail: data.normalizedEmail,
+          },
+        },
+      });
+      if (existing && existing.customerId !== data.customerId) {
+        throw new ConflictException(
+          'Este endereço já é o acesso de outro cliente. Escolha outro nome.',
+          'PORTAL_EMAIL_TAKEN',
+        );
+      }
+
+      const now = new Date();
+      const credentials = {
+        passwordHash: data.passwordHash,
+        status: 'ACTIVE',
+        mustChangePassword: true,
+        emailVerifiedAt: now,
+        passwordUpdatedAt: now,
+        failedAttempts: 0,
+        lockedUntil: null,
+        disabledAt: null,
+        displayName: data.displayName,
+      };
+      const identity = existing
+        ? await tx.customerPortalIdentity.update({
+            where: { id: existing.id },
+            data: credentials,
+          })
+        : await tx.customerPortalIdentity.create({
+            data: {
+              id: data.identityId,
+              organizationId: data.organizationId,
+              customerId: data.customerId,
+              email: data.email,
+              normalizedEmail: data.normalizedEmail,
+              ...credentials,
+            },
+          });
+      /* Convites pendentes de outro fluxo não abrem mais nada. */
+      await tx.customerPortalInvitation.updateMany({
+        where: {
+          portalIdentityId: identity.id,
+          acceptedAt: null,
+          revokedAt: null,
+        },
+        data: { revokedAt: now },
+      });
+      await this.audit(tx, {
+        organizationId: data.organizationId,
+        userId: data.actorId,
+        action: existing
+          ? 'customer.portal.access.reopened'
+          : 'customer.portal.access.created',
+        entityId: identity.id,
+        metadata: { customerId: data.customerId },
+      });
+      return identity;
+    });
+  }
+
+  /**
+   * Nova senha temporária: troca obrigatória de novo, sessões derrubadas e
+   * bloqueio por tentativas desfeito — é o "esqueci a senha" do cliente.
+   */
+  resetAccessPassword(data: {
+    organizationId: string;
+    customerId: string;
+    identityId: string;
+    actorId: string;
+    passwordHash: string;
+  }) {
+    return this.rls.run(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`portal-identity:${data.identityId}`}))`;
+      const changed = await tx.customerPortalIdentity.updateMany({
+        where: {
+          id: data.identityId,
+          organizationId: data.organizationId,
+          customerId: data.customerId,
+          status: 'ACTIVE',
+        },
+        data: {
+          passwordHash: data.passwordHash,
+          mustChangePassword: true,
+          passwordUpdatedAt: new Date(),
+          failedAttempts: 0,
+          lockedUntil: null,
+        },
+      });
+      if (changed.count === 0) return null;
+      await tx.customerPortalSession.updateMany({
+        where: { portalIdentityId: data.identityId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      await this.audit(tx, {
+        organizationId: data.organizationId,
+        userId: data.actorId,
+        action: 'customer.portal.access.password_reset',
+        entityId: data.identityId,
+        metadata: { customerId: data.customerId },
+      });
+      return tx.customerPortalIdentity.findUniqueOrThrow({
+        where: { id: data.identityId },
+      });
+    });
   }
 
   private audit(

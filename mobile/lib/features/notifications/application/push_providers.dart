@@ -13,7 +13,7 @@ import 'push_registrar.dart';
 /// A fonte do token.
 ///
 /// Sobreposta nos testes por [SilentPushTokenSource]; em produção é o canal
-/// nativo, que devolve vazio onde a parte nativa não existe.
+/// nativo Firebase nas duas plataformas. Builds de distribuição validam a configuração.
 final pushTokenSourceProvider = Provider<PushTokenSource>(
   (ref) => PushChannel(),
 );

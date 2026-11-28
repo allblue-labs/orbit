@@ -56,7 +56,7 @@ export function createKpiDomainWidget(options: KpiDomainWidgetOptions) {
         <PanelState
           query={analytics.dashboard}
           loadingRows={2}
-          emptyMessage="O Analytics não publica indicadores para este domínio no período."
+          emptyMessage="Ainda não há indicadores desta área no período."
           isEmpty={(data) => select(data.metrics).length === 0}
         >
           {(data) => (
@@ -93,10 +93,12 @@ function IndicatorRow({ metric }: { metric: PresentedMetric }) {
         <span
           className={cn(
             "rounded-md px-1.5 py-0.5 text-[11px] font-medium",
-            STATUS_CLASSES[metric.status],
+            metric.statusLabel
+              ? "bg-muted text-muted-foreground"
+              : STATUS_CLASSES[metric.status],
           )}
         >
-          {STATUS_LABELS[metric.status]}
+          {metric.statusLabel ?? STATUS_LABELS[metric.status]}
         </span>
         {metric.change ? (
           <span className="text-[11px] text-muted-foreground">
