@@ -1,6 +1,10 @@
 import PDFDocument from 'pdfkit';
+import { ConflictException } from '../../exceptions';
 import { LegalController } from './legal.controller';
-import { LEGAL_DOCUMENT_VERSION } from '../../contracts/modules/legal/legal.read-models';
+import {
+  LEGAL_DOCUMENT_EFFECTIVE_AT,
+  LEGAL_DOCUMENT_VERSION,
+} from '../../contracts/modules/legal/legal.read-models';
 import { LegalAcceptanceController } from './legal-acceptance.controller';
 describe('documentos públicos e aceite do Orbit', () => {
   const controller = new LegalController();
@@ -9,7 +13,7 @@ describe('documentos públicos e aceite do Orbit', () => {
     (slug) => {
       const document = controller.document(slug);
       expect(document.version).toBe(LEGAL_DOCUMENT_VERSION);
-      expect(document.effectiveAt).toBe('2026-11-27');
+      expect(document.effectiveAt).toBe(LEGAL_DOCUMENT_EFFECTIVE_AT);
       expect(document.provider).toEqual({
         name: 'Allblue Labs Inova Simples',
         document: '67.312.115/0001-92',
@@ -26,13 +30,31 @@ describe('documentos públicos e aceite do Orbit', () => {
   it.each(['termos', 'privacidade'])(
     'gera PDF válido para %s',
     async (slug) => {
-      const result = await controller.download(slug);
+      const result = await controller.download(slug, LEGAL_DOCUMENT_VERSION);
       const stream = result.getStream();
       const chunks: Buffer[] = [];
       for await (const chunk of stream)
         chunks.push(Buffer.from(chunk as Uint8Array));
       expect(Buffer.concat(chunks).subarray(0, 5).toString()).toBe('%PDF-');
-      expect(result.getHeaders().disposition).toContain('attachment');
+      expect(result.getHeaders().disposition).toBe(
+        `attachment; filename="orbit-${slug}-${LEGAL_DOCUMENT_VERSION}.pdf"`,
+      );
+    },
+  );
+  it.each(['termos', 'privacidade'])(
+    'recusa substituir uma edição anterior de %s no leitor ou no PDF',
+    async (slug) => {
+      expect(controller.document(slug, LEGAL_DOCUMENT_VERSION).version).toBe(
+        LEGAL_DOCUMENT_VERSION,
+      );
+      expect(() => controller.document(slug, '2026-11-27.2')).toThrow(
+        ConflictException,
+      );
+      await expect(
+        controller.download(slug, '2026-11-27.2'),
+      ).rejects.toMatchObject({
+        code: 'LEGAL_DOCUMENT_VERSION_MISMATCH',
+      });
     },
   );
   it('usa a vigência canônica do documento no PDF', async () => {

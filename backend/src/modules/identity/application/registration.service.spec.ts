@@ -22,7 +22,7 @@ describe('registration preserves the commercial selection', () => {
     },
     {
       acceptTerms: true,
-      termsVersion: '2026-11-27.1',
+      termsVersion: '2026-11-27.2',
       privacyVersion: LEGAL_DOCUMENT_VERSION,
     },
     {
@@ -33,7 +33,7 @@ describe('registration preserves the commercial selection', () => {
     {
       acceptTerms: true,
       termsVersion: LEGAL_DOCUMENT_VERSION,
-      privacyVersion: '2026-11-27.1',
+      privacyVersion: '2026-11-27.2',
     },
   ])(
     'rejects absent or stale acceptance before writing an account: %j',

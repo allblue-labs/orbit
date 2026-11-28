@@ -1,6 +1,13 @@
 import { expect, test, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
-import { LEGAL_DOCUMENT_VERSION } from "../src/types/contracts/modules/legal/legal.read-models";
+import {
+  LEGAL_DOCUMENT_EFFECTIVE_AT,
+  LEGAL_DOCUMENT_VERSION,
+} from "../src/types/contracts/modules/legal/legal.read-models";
+
+const effectiveDate = LEGAL_DOCUMENT_EFFECTIVE_AT.split("-")
+  .reverse()
+  .join("/");
 
 async function addressStep(page: Page) {
   await page.route("**/api/auth/session", (route) =>
@@ -65,16 +72,31 @@ test("reading both full documents preserves the signup form and does not accept 
   await page
     .getByLabel(/^Cidade(?:\s*\*?\s*\(obrigatório\))?$/)
     .fill("Salvador");
-  for (const [label, title] of [
-    ["Termos de Uso", "Termos de Uso do Orbit"],
-    ["Política de Privacidade", "Política de Privacidade do Orbit"],
+  for (const [slug, label, title] of [
+    ["termos", "Termos de Uso", "Termos de Uso do Orbit"],
+    [
+      "privacidade",
+      "Política de Privacidade",
+      "Política de Privacidade do Orbit",
+    ],
   ]) {
     await page
       .getByRole("button", { name: `Ler ${label}`, exact: true })
       .click();
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
-    const frame = page.frameLocator(`iframe[title="${label}"]`);
+    const iframe = dialog.locator(`iframe[title="${label}"]`);
+    await expect(iframe).toHaveAttribute(
+      "src",
+      `/legal/${slug}/${LEGAL_DOCUMENT_VERSION}`,
+    );
+    await expect(
+      dialog.getByRole("link", { name: "Baixar PDF" }),
+    ).toHaveAttribute(
+      "href",
+      `/api/legal/${slug}/download/${LEGAL_DOCUMENT_VERSION}`,
+    );
+    const frame = iframe.contentFrame();
     await expect(
       frame.getByRole("heading", { name: title, exact: true }),
     ).toBeVisible();
@@ -105,19 +127,48 @@ for (const slug of ["termos", "privacidade"]) {
     await page.goto(`/legal/${slug}`);
     await expect(
       page.getByText(
-        `Versão ${LEGAL_DOCUMENT_VERSION} · Vigência: 27/11/2026`,
+        `Versão ${LEGAL_DOCUMENT_VERSION} · Vigência: ${effectiveDate}`,
         { exact: true },
       ),
     ).toBeVisible();
     const downloadPromise = page.waitForEvent("download");
     await page.getByRole("link", { name: "Baixar PDF", exact: true }).click();
     const download = await downloadPromise;
-    expect(download.suggestedFilename()).toBe(`orbit-${slug}-2026-11-27.2.pdf`);
+    expect(download.suggestedFilename()).toBe(
+      `orbit-${slug}-${LEGAL_DOCUMENT_VERSION}.pdf`,
+    );
     const content = await readFile((await download.path())!);
     expect(content.subarray(0, 5).toString()).toBe("%PDF-");
     expect(content.length).toBeGreaterThan(6000);
   });
 }
+
+test("a versioned URL cannot silently display or download a different edition", async ({
+  page,
+  request,
+}) => {
+  const oldVersion = "2026-11-27.2";
+  await page.goto(`/legal/termos/${oldVersion}`);
+  await expect(
+    page
+      .getByRole("alert")
+      .filter({ hasText: "Esta versão do documento está indisponível" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Termos de Uso do Orbit" }),
+  ).toHaveCount(0);
+
+  const response = await request.get(
+    `/api/legal/termos/download/${oldVersion}`,
+  );
+  expect(response.status()).toBe(409);
+  expect(response.headers()["content-type"]).not.toContain("application/pdf");
+  const cacheDirectives = response
+    .headers()
+    ["cache-control"]?.split(",")
+    .map((directive) => directive.trim());
+  expect(cacheDirectives).toContain("no-store");
+});
 
 test("legal reading fits a mobile screen", async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
@@ -170,7 +221,9 @@ test("documents updated during signup require a new reading and acceptance", asy
     termsVersion: LEGAL_DOCUMENT_VERSION,
     privacyVersion: LEGAL_DOCUMENT_VERSION,
   });
-  await expect(page.getByRole("alert")).toContainText(message);
+  await expect(
+    page.getByRole("alert").filter({ hasText: message }),
+  ).toBeVisible();
   await expect(page.locator("#terms")).not.toBeChecked();
 });
 

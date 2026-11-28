@@ -26,7 +26,6 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { PostalCodeField } from "@/components/address/postal-code-field";
 import { LegalDocumentsPanel } from "@/components/legal/legal-documents-panel";
-import { LEGAL_DOCUMENT_VERSION } from "@/types/contracts/modules/legal/legal.read-models";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -282,9 +281,11 @@ function PlanCard({
 
 export function SignupContent({
   catalog,
+  legalVersion,
   initialSelection = { planKey: "", billingInterval: "MONTHLY" },
 }: {
   catalog: PlanCatalog;
+  legalVersion: string;
   initialSelection?: { planKey: string; billingInterval: BillingIntervalCode };
 }) {
   const createAccount = useRegister();
@@ -353,8 +354,8 @@ export function SignupContent({
       const pending = await createAccount.mutateAsync({
         ...payload,
         acceptTerms: values.terms,
-        termsVersion: LEGAL_DOCUMENT_VERSION,
-        privacyVersion: LEGAL_DOCUMENT_VERSION,
+        termsVersion: legalVersion,
+        privacyVersion: legalVersion,
         stateCode: payload.stateCode.toUpperCase(),
         documentNumber: normalizeBrazilianDocument(payload.documentNumber),
         documentType: detectBrazilianDocumentType(payload.documentNumber)!,
@@ -367,10 +368,7 @@ export function SignupContent({
       const message = errorCopy(error);
       const code = error instanceof ApiError ? error.code : "";
       if (code === "LEGAL_DOCUMENT_VERSION_MISMATCH") {
-        setValue("terms", false, {
-          shouldDirty: true,
-          shouldValidate: true,
-        });
+        setValue("terms", false, { shouldDirty: true });
       }
       setRegistrationError({
         message,
@@ -874,7 +872,7 @@ export function SignupContent({
                       </div>
                     </div>
                     <div className="sm:col-span-2">
-                      <LegalDocumentsPanel compact />
+                      <LegalDocumentsPanel compact version={legalVersion} />
                     </div>
                     <div className="rounded-xl border border-border bg-muted/40 p-4 sm:col-span-2">
                       <div className="flex items-start gap-3">
@@ -905,7 +903,7 @@ export function SignupContent({
                           className="text-sm font-normal leading-relaxed"
                         >
                           Aceito os Termos de Uso e declaro que li a Política de
-                          Privacidade do Orbit, versão {LEGAL_DOCUMENT_VERSION}.
+                          Privacidade do Orbit, versão {legalVersion}.
                         </Label>
                       </div>
                       {errors.terms ? (

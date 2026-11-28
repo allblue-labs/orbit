@@ -95,6 +95,15 @@ createServer(async (req, res) => {
         plan("PROFESSIONAL", "Profissional", 14990),
       ],
     });
+  if (path === "/legal/documents/termos")
+    return reply(200, {
+      slug: "termos",
+      title: "Termos de Uso do Orbit",
+      version: "2099-01-01.1",
+      effectiveAt: "2099-01-01",
+      provider: { name: "Fornecedor de teste", document: "", location: "" },
+      sections: [],
+    });
   if (path === "/identity/login" && req.method === "POST")
     return reply(200, tokens);
   if (path === "/identity/refresh" && req.method === "POST") {

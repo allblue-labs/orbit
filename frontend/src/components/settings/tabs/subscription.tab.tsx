@@ -459,10 +459,11 @@ function RetentionBanner({
           : "O acesso operacional terminou. Você pode recontratar e continuar com a mesma organização."}
       </p>
       <p>
-        Os dados operacionais serão mantidos por 30 dias após o fim do acesso,
-        até <strong>{formatDateTime(deadline)}</strong>. Sem pagamento de uma
-        nova contratação até esse prazo, serão excluídos automaticamente. Apenas
-        abrir o pagamento não preserva os dados.
+        Os dados operacionais ficam preservados por 30 dias após o fim do acesso
+        pago. Sem recontratação, a exclusão pode ocorrer a partir de{" "}
+        <strong>{formatDateTime(deadline)}</strong>, quando a rotina de exclusão
+        estiver ativa. A nova contratação precisa ter o pagamento confirmado
+        antes de a exclusão começar.
       </p>
     </div>
   );
@@ -533,7 +534,8 @@ function ConfirmacaoDialog({
               equipe recebe um chamado para análise e o acesso pago permanece
               até {formatDate(assinatura.billingPeriod.end)}. Seus dados
               operacionais são mantidos por 30 dias a partir do fim do acesso.
-              Depois, são excluídos se você não contratar novamente.
+              Depois desse período, os dados podem ser excluídos quando a rotina
+              de exclusão estiver ativa, se não houver recontratação.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <MutationError error={error} />

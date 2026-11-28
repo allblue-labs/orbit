@@ -3,6 +3,8 @@ import type { Metadata } from "next";
 import { SignupContent } from "@/components/auth/signup-content";
 import { carregarCatalogoPublico } from "@/server/public-plan-catalog";
 import { signupPlanSelection } from "@/lib/signup-plan-selection";
+import { backendJson } from "@/server/backend-client";
+import type { LegalDocumentReadModel } from "@/types/contracts/modules/legal/legal.read-models";
 
 export const metadata: Metadata = {
   title: "Criar organização — Orbit",
@@ -20,8 +22,11 @@ export default async function CadastroPage({
     periodicidade?: string | string[];
   }>;
 }) {
-  const catalog = await carregarCatalogoPublico();
-  const query = await searchParams;
+  const [catalog, query, terms] = await Promise.all([
+    carregarCatalogoPublico(),
+    searchParams,
+    backendJson<LegalDocumentReadModel>({ path: "/legal/documents/termos" }),
+  ]);
   const selection = signupPlanSelection(
     catalog,
     query.plano,
@@ -29,8 +34,9 @@ export default async function CadastroPage({
   );
   return (
     <SignupContent
-      key={`${selection.planKey}:${selection.billingInterval}`}
+      key={`${selection.planKey}:${selection.billingInterval}:${terms.version}`}
       catalog={catalog}
+      legalVersion={terms.version}
       initialSelection={selection}
     />
   );

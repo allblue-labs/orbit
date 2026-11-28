@@ -1,22 +1,33 @@
-import { Controller, Get, Param, StreamableFile } from '@nestjs/common';
+import { Controller, Get, Param, Query, StreamableFile } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
 import { Public } from '../../decorators';
-import { EntityNotFoundException } from '../../exceptions';
+import { ConflictException, EntityNotFoundException } from '../../exceptions';
 import { legalDocument } from './legal-documents';
 
 @Controller('legal/documents')
 export class LegalController {
   @Public()
   @Get(':slug')
-  document(@Param('slug') slug: string) {
+  document(@Param('slug') slug: string, @Query('version') version?: string) {
     if (slug !== 'termos' && slug !== 'privacidade')
       throw new EntityNotFoundException('Document');
-    return legalDocument(slug);
+
+    const document = legalDocument(slug);
+    if (version !== undefined && version !== document.version) {
+      throw new ConflictException(
+        'Requested legal document version is no longer available',
+        'LEGAL_DOCUMENT_VERSION_MISMATCH',
+      );
+    }
+    return document;
   }
   @Public()
   @Get(':slug/download')
-  async download(@Param('slug') slug: string) {
-    const document = this.document(slug);
+  async download(
+    @Param('slug') slug: string,
+    @Query('version') version?: string,
+  ) {
+    const document = this.document(slug, version);
     const pdf = new PDFDocument({
       size: 'A4',
       margin: 50,
