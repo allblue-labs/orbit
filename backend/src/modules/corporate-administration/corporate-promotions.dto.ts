@@ -1,3 +1,4 @@
+import { billingModes } from './corporate-completion.dto';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -185,4 +186,9 @@ export class RedemptionListDto extends PromotionPageDto {
   @ValidateIf(optional)
   @IsIn(redemptionStatuses)
   status?: (typeof redemptionStatuses)[number];
+}
+
+export class PromotionSummaryDto {
+  @IsIn(billingModes)
+  mode!: (typeof billingModes)[number];
 }

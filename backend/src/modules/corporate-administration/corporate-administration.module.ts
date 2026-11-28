@@ -1,3 +1,5 @@
+import { CorporateCompletionController } from './corporate-completion.controller';
+import { CorporateCompletionService } from './corporate-completion.service';
 import { Module } from '@nestjs/common';
 import { CorporateAnalyticsController } from './corporate-analytics.controller';
 import { CorporateAnalyticsService } from './corporate-analytics.service';
@@ -27,6 +29,7 @@ import { TechnicalCredentialService } from './technical-credential.service';
   imports: [PlatformAdministrationModule, BillingModule, EmailModule],
   controllers: [
     CorporateAdministrationController,
+    CorporateCompletionController,
     CorporateOrganizationsController,
     CorporateTenantLifecycleController,
     CorporateCommercialController,
@@ -37,6 +40,7 @@ import { TechnicalCredentialService } from './technical-credential.service';
   ],
   providers: [
     TechnicalCredentialService,
+    CorporateCompletionService,
     CorporateCommercialService,
     CorporatePromotionsService,
     CorporateFinanceService,

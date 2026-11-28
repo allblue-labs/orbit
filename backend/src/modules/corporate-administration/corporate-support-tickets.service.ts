@@ -16,8 +16,20 @@ import type {
   SupportTicketsQuery,
   TicketInteractionsQuery,
   TicketStatus,
+  TicketSort,
   UpdateSupportTicketDto,
 } from './corporate-support.dto';
+
+import { RECEIPTS_READ } from './technical-credential.service';
+
+const ticketOrder: Record<TicketSort, Prisma.Sql> = {
+  CREATED_DESC: Prisma.sql`"createdAt" DESC, id DESC`,
+  CREATED_ASC: Prisma.sql`"createdAt", id`,
+  UPDATED_DESC: Prisma.sql`"updatedAt" DESC, id DESC`,
+  UPDATED_ASC: Prisma.sql`"updatedAt", id`,
+  PRIORITY_DESC: Prisma.sql`CASE priority WHEN 'URGENT' THEN 4 WHEN 'HIGH' THEN 3 WHEN 'NORMAL' THEN 2 ELSE 1 END DESC,
+    "createdAt" DESC, id DESC`,
+};
 
 type Ticket = {
   id: string;
@@ -82,17 +94,23 @@ export class CorporateSupportTicketsService {
       async (tx) => {
         const search = query.search?.trim();
         const { page, pageSize } = query;
+        const order = ticketOrder[query.sort ?? 'CREATED_DESC'];
         const [result] = await tx.$queryRaw<
-          Array<{ items: Ticket[]; total: number }>
+          [
+            {
+              items: Ticket[];
+              total: number;
+              statusTotals?: Record<TicketStatus, number>;
+            },
+          ]
         >`
-        WITH matching AS MATERIALIZED (
+        WITH applicable AS MATERIALIZED (
           SELECT t.* FROM (${tickets}) t WHERE TRUE
           ${query.organizationId ? Prisma.sql`AND t."organizationId" = ${query.organizationId}::uuid` : Prisma.empty}
           ${query.assigneeId ? Prisma.sql`AND t."assigneeId" = ${query.assigneeId}::uuid` : Prisma.empty}
           ${query.origin ? Prisma.sql`AND t.origin = ${query.origin}` : Prisma.empty}
           ${query.category ? Prisma.sql`AND t.category = ${query.category}` : Prisma.empty}
           ${query.priority ? Prisma.sql`AND t.priority = ${query.priority}` : Prisma.empty}
-          ${query.status ? Prisma.sql`AND t.status = ${query.status}` : Prisma.empty}
           ${
             search
               ? Prisma.sql`AND (strpos(lower(t.title), lower(${search})) > 0
@@ -100,13 +118,33 @@ export class CorporateSupportTicketsService {
             OR t.id::text = lower(${search}))`
               : Prisma.empty
           }
+        ), matching AS MATERIALIZED (
+          SELECT * FROM applicable ${query.status ? Prisma.sql`WHERE status = ${query.status}` : Prisma.empty}
+        ), page AS (
+          SELECT * FROM matching
+          ORDER BY ${order} OFFSET ${(page - 1) * pageSize} LIMIT ${pageSize}
         )
         SELECT (SELECT count(*)::int FROM matching) AS total,
-          coalesce((SELECT jsonb_agg(to_jsonb(p) ORDER BY p."createdAt" DESC, p.id DESC) FROM (
-            SELECT * FROM matching ORDER BY "createdAt" DESC, id DESC OFFSET ${(page - 1) * pageSize} LIMIT ${pageSize}
-          ) p), '[]'::jsonb) AS items
+          coalesce((SELECT jsonb_agg(to_jsonb(p) ORDER BY ${order}) FROM page p), '[]'::jsonb) AS items
+          ${
+            query.includeDetails
+              ? Prisma.sql`, (SELECT jsonb_build_object(
+            'OPEN', count(*) FILTER (WHERE status = 'OPEN'),
+            'RESOLVED', count(*) FILTER (WHERE status = 'RESOLVED')) FROM applicable) AS "statusTotals"`
+              : Prisma.empty
+          }
       `;
-        return { ...result, page, pageSize };
+        return {
+          ...result,
+          page,
+          pageSize,
+          items: await this.withOrigins(
+            tx,
+            call,
+            result.items,
+            !!query.includeDetails,
+          ),
+        };
       },
     );
   }
@@ -133,8 +171,14 @@ export class CorporateSupportTicketsService {
         ORDER BY id DESC LIMIT 51
       `;
       const interactions = rows.slice(0, 50);
+      const [item] = await this.withOrigins(
+        tx,
+        call,
+        [ticket],
+        !!query.includeDetails,
+      );
       return {
-        ticket,
+        ticket: item,
         interactions,
         nextBefore: rows.length > 50 ? interactions.at(-1)!.id : null,
       };
@@ -294,6 +338,36 @@ export class CorporateSupportTicketsService {
         return { id, version, status: ticket.status, interactionId };
       },
     );
+  }
+
+  private async withOrigins(
+    tx: PrismaTransactionClient,
+    call: CorporateCall,
+    tickets: Ticket[],
+    includeDetails: boolean,
+  ) {
+    if (!includeDetails) return tickets;
+    const ids = tickets
+      .filter((ticket) => ticket.origin === 'BILLING')
+      .map((ticket) => ticket.id);
+    const rows =
+      ids.length && call.principal.capabilities.includes(RECEIPTS_READ)
+        ? await tx.$queryRaw<{ id: string; ticketId: string }[]>`
+          SELECT c.id, t.id AS "ticketId" FROM public.corporate_commercial_commands c
+          JOIN public.billing_support_tickets t ON t.id = c.origin_ticket_id
+            AND t.organization_id = c.organization_id AND t.subscription_id::text = c.result->>'subscriptionId'
+          WHERE c.technical_principal_id = ${call.principal.id}::uuid
+            AND t.id IN (${Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`))})
+        `
+        : [];
+    const origins = new Map(rows.map((row) => [row.ticketId, row.id]));
+    return tickets.map((ticket) => ({
+      ...ticket,
+      commercial: ticket.commercial && {
+        ...ticket.commercial,
+        originReceiptId: origins.get(ticket.id) ?? null,
+      },
+    }));
   }
 
   private async find(tx: PrismaTransactionClient, id: string) {

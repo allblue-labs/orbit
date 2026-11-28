@@ -37,7 +37,9 @@ export const DIAGNOSTICS_ORGANIZATIONS_READ = 'diagnostics:organizations:read';
 export const DIAGNOSTICS_INTEGRATIONS_READ = 'diagnostics:integrations:read';
 export const DIAGNOSTICS_OPERATIONS_READ = 'diagnostics:operations:read';
 export const RECOVERY_PROVISIONING_RESUME = 'recovery:provisioning:resume';
-const CAPABILITIES = [
+export const RECEIPTS_READ = 'receipts:read';
+export const CAPABILITIES = [
+  RECEIPTS_READ,
   SUPPORT_TICKETS_READ,
   SUPPORT_TICKETS_CREATE,
   SUPPORT_TICKETS_UPDATE,

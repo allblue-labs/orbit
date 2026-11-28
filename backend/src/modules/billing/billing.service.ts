@@ -594,7 +594,9 @@ export class BillingService {
       );
     }
     const sendToSupport = () =>
-      this.planChangeTicket(input, assinatura.id, targetInterval);
+      this.policies.ticket(
+        this.planChangeTicketInput(input, assinatura.id, targetInterval),
+      );
     if (this.requiresPlanChangeReview(assinatura, targetInterval))
       return sendToSupport();
 
@@ -816,7 +818,9 @@ export class BillingService {
         'Use the customer or provider-authorized plan change flow',
       );
     return this.policies.locked(assinatura.id, input.expectedVersion, () =>
-      this.planChangeTicket(input, assinatura.id, targetInterval),
+      this.policies.ticketWithOrigin(
+        this.planChangeTicketInput(input, assinatura.id, targetInterval),
+      ),
     );
   }
 
@@ -868,20 +872,20 @@ export class BillingService {
     );
   }
 
-  private planChangeTicket(
+  private planChangeTicketInput(
     input: PlanChangeRequest,
     subscriptionId: string,
     interval: BillingIntervalType,
   ) {
-    return this.policies.ticket({
+    return {
       organizationId: input.organizationId,
       subscriptionId,
       requestedBy: input.requestedBy,
-      kind: 'PLAN_CHANGE',
+      kind: 'PLAN_CHANGE' as const,
       targetPlanCode: input.planCode,
       targetInterval: interval,
       reference: `${input.planCode}:${interval}`,
-    });
+    };
   }
 
   private async preparePlanChange(

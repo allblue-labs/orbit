@@ -538,6 +538,37 @@ describe('ADM-06.A corporate SaaS finance with PostgreSQL RLS', () => {
       expect(data(detail)).toMatchObject({ payment: item });
       expect(detail.text).not.toMatch(/inpay_|pi_shared|obj_|evt_/);
     }
+    const filtered = await get('/finance/payments', 'finance', {
+      ...query,
+      invoiceId,
+      includeOrganizationName: 'true',
+    }).expect(200);
+    const linked = data<{
+      total: number;
+      items: (Item & { invoiceId: string; organizationName: string })[];
+    }>(filtered);
+    expect(linked.total).toBeGreaterThan(0);
+    expect(
+      linked.items.every(
+        (item) =>
+          item.invoiceId === invoiceId &&
+          item.organizationName === first.org.displayName,
+      ),
+    ).toBe(true);
+    const otherMode = await get('/finance/payments', 'finance', {
+      ...query,
+      mode: 'LIVE',
+      invoiceId,
+    }).expect(200);
+    expect(data(otherMode)).toMatchObject({ total: 0, items: [] });
+    const named = await get('/finance/invoices/' + invoiceId, 'finance', {
+      mode: 'TEST',
+      includeOrganizationName: 'true',
+    }).expect(200);
+    expect(data(named)).toMatchObject({
+      invoice: { organizationName: first.org.displayName },
+    });
+    expect(list.text).not.toContain('organizationName');
     const refunds = await get('/finance/payments', 'finance', {
       ...query,
       kind: 'REFUND',

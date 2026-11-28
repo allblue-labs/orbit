@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { isUUID } from 'class-validator';
 import { ConflictException } from '../../exceptions';
+import type { PrismaTransactionClient } from '../../database/prisma.types';
 import {
   BILLING_PROVIDER,
   type BillingProvider,
@@ -362,18 +363,33 @@ export class CorporateDiagnosticsService {
         const sql = diagnosticRows(query);
         if (!sql) return { page, pageSize, total: 0, items: [] };
         const [result] = await tx.$queryRaw<
-          { total: number; items: DiagnosticOperation[] }[]
+          [{ total: number; items: DiagnosticOperation[] }]
         >`${sql}
         SELECT (SELECT count(*)::int FROM filtered) AS total,
           coalesce((SELECT jsonb_agg(to_jsonb(p) ORDER BY p."updatedAt" DESC, p.type, p.id) FROM (
            SELECT * FROM filtered ORDER BY "updatedAt" DESC, type, id OFFSET ${(page - 1) * pageSize} LIMIT ${pageSize}
           ) p), '[]'::jsonb) AS items`;
-        return { ...result, page, pageSize };
+        return {
+          ...result,
+          page,
+          pageSize,
+          items: await this.operationDetails(
+            tx,
+            call,
+            result.items,
+            !!query.includeDetails,
+          ),
+        };
       },
     );
   }
 
-  operation(call: CorporateCall, reference: unknown, id: string) {
+  operation(
+    call: CorporateCall,
+    reference: unknown,
+    id: string,
+    includeDetails = false,
+  ) {
     if (!isUUID(id) && !/^STRIPE:(TEST|LIVE):(EVENTS|SUBSCRIPTIONS)$/.test(id))
       throw new BadRequestException('Identificador de operação inválido.');
     return this.access.read(
@@ -386,9 +402,101 @@ export class CorporateDiagnosticsService {
           DiagnosticOperation[]
         >`${diagnosticRows({}, id)}
         SELECT * FROM filtered ORDER BY type LIMIT 1`;
-        return result ?? null;
+        if (!result) return null;
+        const [operation] = await this.operationDetails(
+          tx,
+          call,
+          [result],
+          includeDetails,
+        );
+        if (!includeDetails) return operation;
+        return {
+          ...operation,
+          history: await this.provisioningHistory(tx, result),
+        };
       },
     );
+  }
+
+  private async operationDetails(
+    tx: PrismaTransactionClient,
+    call: CorporateCall,
+    operations: DiagnosticOperation[],
+    includeDetails: boolean,
+  ) {
+    if (!includeDetails || !operations.length) return operations;
+    await tx.$queryRaw`SELECT set_config('app.corporate_operation_labels', 'true', true)`;
+    const ids = [
+      ...new Set(
+        operations.flatMap((item) =>
+          item.organizationId ? [item.organizationId] : [],
+        ),
+      ),
+    ];
+    const names = ids.length
+      ? await tx.organization.findMany({
+          where: { id: { in: ids }, deletedAt: null },
+          select: { id: true, displayName: true },
+        })
+      : [];
+    const labels = new Map(names.map((item) => [item.id, item.displayName]));
+    const granted = call.principal.capabilities.includes(
+      RECOVERY_PROVISIONING_RESUME,
+    );
+    return operations.map((item) => {
+      const reason =
+        item.type !== 'TENANT_PROVISIONING'
+          ? 'UNSUPPORTED_TYPE'
+          : item.stage === 'COMPLETED'
+            ? 'ALREADY_COMPLETED'
+            : item.stage === 'RECEIVED'
+              ? 'ORIGINAL_REQUEST_REQUIRED'
+              : item.recovery !== 'RESUME_PROVISIONING'
+                ? 'NOT_ELIGIBLE_FOR_PRINCIPAL'
+                : !granted
+                  ? 'CAPABILITY_NOT_GRANTED'
+                  : null;
+      return {
+        ...item,
+        organizationName: labels.get(item.organizationId ?? '') ?? null,
+        recoveryEligibility: { granted, eligible: reason === null, reason },
+      };
+    });
+  }
+
+  private async provisioningHistory(
+    tx: PrismaTransactionClient,
+    row: DiagnosticOperation,
+  ) {
+    if (row.type !== 'TENANT_PROVISIONING')
+      return { coverage: 'UNAVAILABLE' as const, truncated: false, items: [] };
+    await tx.$queryRaw`SELECT set_config('app.corporate_provisioning_history_id', ${row.id}, true)`;
+    const logs = await tx.$queryRaw<
+      {
+        occurredAt: Date;
+        stage: string;
+        outcome: string;
+        errorCode: string | null;
+      }[]
+    >`
+      SELECT created_at AS "occurredAt", coalesce("after"->>'stage', metadata->>'stage') AS stage,
+        metadata->>'result' AS outcome, metadata->>'reason' AS "errorCode"
+      FROM public.audit_logs WHERE entity_id = ${row.id}::uuid
+        AND action = 'PLATFORM_TENANT_PROVISIONING' AND entity_type = 'PLATFORM_ADMINISTRATION'
+        AND metadata->>'result' IN ('TENANT_CREATED','SUBSCRIPTION_READY','CONFIRMED','PENDING')
+        AND coalesce("after"->>'stage', metadata->>'stage') IN ('RECEIVED','TENANT_CREATED','SUBSCRIPTION_READY','COMPLETED')
+      ORDER BY created_at DESC, id DESC LIMIT 51
+    `;
+    return {
+      coverage: logs.length
+        ? ('RECORDED_EVENTS' as const)
+        : ('UNAVAILABLE' as const),
+      truncated: logs.length > 50,
+      items: logs.slice(0, 50).map((log) => ({
+        ...log,
+        errorCode: safeProvisioningError(log.errorCode),
+      })),
+    };
   }
 
   resume(

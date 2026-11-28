@@ -1,3 +1,4 @@
+import { ExpandAdministrativeDetailDto } from './corporate-completion.dto';
 import {
   Body,
   Controller,
@@ -143,8 +144,14 @@ export class CorporateSupportController {
     @CorporateCaller() call: CorporateCall,
     @Headers('x-nexus-administrator-id') reference: unknown,
     @Param('id') id: string,
+    @Query(corporateValidation) query: ExpandAdministrativeDetailDto,
   ) {
-    return this.diagnostics.operation(call, reference, id);
+    return this.diagnostics.operation(
+      call,
+      reference,
+      id,
+      query.includeDetails === 'true',
+    );
   }
 
   @Post('diagnostics/provisionings/:id/resume')

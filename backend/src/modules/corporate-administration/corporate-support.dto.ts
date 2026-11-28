@@ -66,7 +66,24 @@ export class SupportPageDto {
   pageSize = 25;
 }
 
+export const ticketSorts = [
+  'CREATED_DESC',
+  'CREATED_ASC',
+  'UPDATED_DESC',
+  'UPDATED_ASC',
+  'PRIORITY_DESC',
+] as const;
+export type TicketSort = (typeof ticketSorts)[number];
+
 export class SupportTicketsQuery extends SupportPageDto {
+  @IsOptional()
+  @IsIn(ticketSorts)
+  sort?: TicketSort;
+
+  @IsOptional()
+  @IsIn(['true'])
+  includeDetails?: 'true';
+
   @IsOptional()
   @IsUUID()
   organizationId?: string;
@@ -99,6 +116,10 @@ export class SupportTicketsQuery extends SupportPageDto {
 }
 
 export class TicketInteractionsQuery {
+  @IsOptional()
+  @IsIn(['true'])
+  includeDetails?: 'true';
+
   @IsOptional()
   @IsUUID()
   before?: string;
@@ -165,6 +186,10 @@ export class SupportNoteDto {
 }
 
 export class DiagnosticOperationsQuery extends SupportPageDto {
+  @IsOptional()
+  @IsIn(['true'])
+  includeDetails?: 'true';
+
   @IsOptional()
   @IsIn(operationTypes)
   type?: (typeof operationTypes)[number];

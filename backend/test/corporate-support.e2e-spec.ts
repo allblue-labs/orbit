@@ -82,6 +82,7 @@ function command(planKey = 'ESSENTIAL') {
 
 const full = credential('support-full', [
   'support:tickets:read',
+  'receipts:read',
   'support:tickets:create',
   'support:tickets:update',
   'diagnostics:organizations:read',
@@ -95,9 +96,16 @@ const provisioning = credential('support-provision', [
 ]);
 const other = credential(
   'support-other',
-  ['recovery:provisioning:resume'],
+  [
+    'recovery:provisioning:resume',
+    'receipts:read',
+    'diagnostics:operations:read',
+  ],
   randomUUID(),
 );
+const diagnosticReader = credential('operations-reader', [
+  'diagnostics:operations:read',
+]);
 const legacy = credential('support-legacy', [
   'connection:read',
   'analytics:revenue:read',
@@ -153,9 +161,15 @@ describe('ADM-08.A corporate support and diagnostics with PostgreSQL', () => {
     delete process.env.ORBIT_DEPLOYMENT;
     process.env.ORBIT_CORPORATE_ADMIN_ENABLED = 'true';
     process.env.ORBIT_CORPORATE_ADMIN_CREDENTIALS = JSON.stringify(
-      [full, reader, provisioning, other, legacy, organizationReader].map(
-        ({ record }) => record,
-      ),
+      [
+        full,
+        reader,
+        provisioning,
+        other,
+        legacy,
+        organizationReader,
+        diagnosticReader,
+      ].map(({ record }) => record),
     );
     try {
       const module = await Test.createTestingModule({ imports: [AppModule] })
@@ -348,6 +362,33 @@ describe('ADM-08.A corporate support and diagnostics with PostgreSQL', () => {
       { ...draft, title: 'Outro título' },
       key,
     ).expect(409);
+    const receipt = await get('/administrative-receipts/lookup')
+      .query({ type: 'SUPPORT' })
+      .set('Idempotency-Key', key)
+      .expect(200);
+    expect(data(receipt)).toMatchObject({
+      id: created.interactionId,
+      organizationId,
+      operation: 'CREATED',
+      outcome: { targetId: created.id, status: 'OPEN' },
+    });
+    expect(receipt.text).not.toContain(hidden);
+    await get('/administrative-receipts/lookup', other)
+      .query({ type: 'SUPPORT', operationId: created.interactionId })
+      .expect(404);
+    const queue = await get('/support/tickets')
+      .query({
+        search: '% literal',
+        status: 'RESOLVED',
+        sort: 'PRIORITY_DESC',
+        includeDetails: 'true',
+      })
+      .expect(200);
+    expect(data(queue)).toMatchObject({
+      total: 0,
+      statusTotals: { OPEN: 1, RESOLVED: 0 },
+      items: [],
+    });
     const assigned = data<Receipt>(
       await write('patch', '/support/tickets/' + created.id, {
         expectedVersion: 1,
@@ -356,6 +397,25 @@ describe('ADM-08.A corporate support and diagnostics with PostgreSQL', () => {
       }).expect(200),
     );
     expect(assigned.version).toBe(2);
+    const low = data<Receipt>(
+      await write('post', '/support/tickets', {
+        ...draft,
+        title: 'Outro % literal',
+        priority: 'LOW',
+      }).expect(201),
+    );
+    const ordered = await get('/support/tickets')
+      .query({
+        organizationId,
+        origin: 'ADMINISTRATIVE',
+        search: '% literal',
+        sort: 'PRIORITY_DESC',
+      })
+      .expect(200);
+    expect(data(ordered)).toMatchObject({
+      items: [{ id: created.id }, { id: low.id }],
+    });
+
     const addNote = (body: string) =>
       write('post', '/support/tickets/' + created.id + '/notes', {
         expectedVersion: 2,
@@ -563,6 +623,58 @@ describe('ADM-08.A corporate support and diagnostics with PostgreSQL', () => {
         stage: 'TENANT_CREATED',
         recovery: 'RESUME_PROVISIONING',
       });
+      const detail = '/diagnostics/operations/' + partial.id;
+      const own = await get(detail)
+        .query({ includeDetails: 'true' })
+        .expect(200);
+      expect(data(own)).toMatchObject({
+        organizationName: expect.any(String) as unknown,
+        recoveryEligibility: { granted: true, eligible: true, reason: null },
+        history: {
+          coverage: 'RECORDED_EVENTS',
+          items: expect.arrayContaining([
+            expect.objectContaining({
+              outcome: 'PENDING',
+              stage: 'TENANT_CREATED',
+            }),
+          ]) as unknown,
+        },
+      });
+      expect(
+        data(
+          await get(detail, other)
+            .query({ includeDetails: 'true' })
+            .expect(200),
+        ),
+      ).toMatchObject({
+        recoveryEligibility: {
+          granted: true,
+          eligible: false,
+          reason: 'NOT_ELIGIBLE_FOR_PRINCIPAL',
+        },
+        history: { coverage: 'UNAVAILABLE', items: [] },
+      });
+      expect(
+        data(
+          await get(detail, diagnosticReader)
+            .query({ includeDetails: 'true' })
+            .expect(200),
+        ),
+      ).toMatchObject({
+        recoveryEligibility: {
+          granted: false,
+          eligible: false,
+          reason: 'CAPABILITY_NOT_GRANTED',
+        },
+      });
+      const external = await get('/diagnostics/operations/' + webhookId)
+        .query({ includeDetails: 'true' })
+        .expect(200);
+      expect(data(external)).toMatchObject({
+        organizationName: null,
+        recoveryEligibility: { eligible: false, reason: 'UNSUPPORTED_TYPE' },
+        history: { coverage: 'UNAVAILABLE', items: [] },
+      });
       const input = {
         expectedVersion: partial.version,
         reason: 'DEPENDENCY_RESTORED',
@@ -586,6 +698,16 @@ describe('ADM-08.A corporate support and diagnostics with PostgreSQL', () => {
         id: partial.id,
         complete: true,
         replayed: true,
+      });
+      const recoveryReceipt = await get('/administrative-receipts/lookup')
+        .query({ type: 'SUPPORT', organizationId: partial.organization.id })
+        .set('Idempotency-Key', key)
+        .expect(200);
+      expect(data(recoveryReceipt)).toMatchObject({
+        id: null,
+        operation: 'PROVISIONING_RECOVERY',
+        organizationId: partial.organization.id,
+        outcome: { targetId: partial.id, complete: true },
       });
       expect(spy).toHaveBeenCalledTimes(2);
       const id = partial.organization.id;

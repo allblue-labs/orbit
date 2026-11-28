@@ -1123,5 +1123,45 @@ contractTest(
         assert.equal(validate({ ...example, force: true }), false);
       }
     }
+    const completionGrants = {
+      '/tenant-provisionings': 'organizations:provisioning:read',
+      '/subscriptions': 'subscriptions:read',
+      '/organizations/{id}/administrative-receipts': 'receipts:read',
+      '/administrative-receipts/lookup': 'receipts:read',
+      '/promotions/{id}/redemption-summary': 'promotions:read',
+      '/capabilities/effective': 'connection:read',
+    };
+    for (const [path, grant] of Object.entries(completionGrants)) {
+      const operations = api.paths[finance + path];
+      assert.deepEqual(Object.keys(operations), ['get']);
+      const operation = operations.get;
+      assert.equal(operation['x-required-capability'], grant);
+      const response = operation.responses['200'];
+      assert.equal(
+        response.headers['Cache-Control'].schema.const,
+        'private, no-store',
+      );
+      const { schema, example } = response.content['application/json'];
+      const validate = ajv.getSchema(base + schemaPointer(schema.$ref));
+      assert.ok(validate(example), JSON.stringify(validate.errors));
+      const unsafe = structuredClone(example);
+      (unsafe.data.outcome ?? unsafe.data.items?.[0] ?? unsafe.data).keyHash =
+        'synthetic';
+      assert.equal(validate(unsafe), false);
+    }
+    const capabilitySpec =
+      api.components.schemas.CorporateEffectiveCapabilities.properties
+        .contractCapabilities.items.enum;
+    const runtime = fs.readFileSync(
+      path.resolve(
+        __dirname,
+        '../src/modules/corporate-administration/technical-credential.service.ts',
+      ),
+      'utf8',
+    );
+    const names = [
+      ...runtime.matchAll(/export const [A-Z_]+\s*=\s*'([a-z][a-z:-]+)';/g),
+    ].map((match) => match[1]);
+    assert.deepEqual(capabilitySpec.toSorted(), names.toSorted());
   },
 );

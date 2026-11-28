@@ -40,10 +40,12 @@ const reader = credential('commercial-reader', [
   'plans:read',
   'subscriptions:read',
   'trials:read',
+  'receipts:read',
+  'support:tickets:read',
 ]);
 const other = credential(
   'commercial-other',
-  ['subscriptions:read'],
+  ['subscriptions:read', 'receipts:read', 'support:tickets:read'],
   randomUUID(),
 );
 const review = credential('commercial-review', ['subscriptions:change-plan']);
@@ -374,6 +376,35 @@ describe('ADM-04.A corporate commercial administration', () => {
       ...command,
       ...version(duplicate),
     }).expect(409);
+    const trialDetails = await get(path(duplicate.organization.id) + '/trial')
+      .query({ includeDetails: 'true' })
+      .expect(200);
+    expect(data(trialDetails)).toMatchObject({
+      canStart: false,
+      blockedReason: 'TRIAL_ALREADY_USED',
+    });
+    expect(trialDetails.text).not.toContain(documents[1]);
+    const subscriptions = await get('/subscriptions')
+      .query({ organizationId: id, persistedStatus: 'TRIALING', pageSize: 1 })
+      .expect(200);
+    expect(data(subscriptions)).toMatchObject({
+      total: 1,
+      items: [
+        {
+          organizationId: id,
+          organizationName: pending.organization.displayName,
+          persistedStatus: 'TRIALING',
+          effectiveStatus: 'TRIALING',
+        },
+      ],
+    });
+    expect(
+      data(
+        await get('/subscriptions')
+          .query({ organizationId: id, page: 2, pageSize: 1 })
+          .expect(200),
+      ),
+    ).toMatchObject({ total: 1, items: [] });
     const history = await get(path(id) + '/trial').expect(200);
     expect(data(history)).toMatchObject({
       canStart: false,
@@ -437,6 +468,34 @@ describe('ADM-04.A corporate commercial administration', () => {
         ),
       ),
     ).toMatchObject({ reviewStatus: 'OPEN' });
+    const next = data(await write(route, review, command).expect(202));
+    expect(next).toMatchObject({ ticketId: first.ticketId });
+    expect(next.id).not.toBe(first.id);
+    const receiptQuery = {
+      type: 'COMMERCIAL',
+      organizationId: id,
+      operation: 'CHANGE_PLAN',
+    };
+    const lookup = await get('/administrative-receipts/lookup')
+      .query(receiptQuery)
+      .set('Idempotency-Key', key)
+      .expect(200);
+    expect(data(lookup)).toMatchObject({
+      id: first.id,
+      outcome: { result: 'AWAITING_REVIEW', ticketId: first.ticketId },
+    });
+    await get('/administrative-receipts/lookup', other)
+      .query({ ...receiptQuery, operationId: first.id })
+      .expect(404);
+    const details = '/support/tickets/' + first.ticketId;
+    expect(
+      data(await get(details).query({ includeDetails: 'true' }).expect(200)),
+    ).toMatchObject({ ticket: { commercial: { originReceiptId: first.id } } });
+    expect(
+      data(
+        await get(details, other).query({ includeDetails: 'true' }).expect(200),
+      ),
+    ).toMatchObject({ ticket: { commercial: { originReceiptId: null } } });
     const before = await adminPrisma().organizationSubscription.findUnique({
       where: { id: keeper.subscription.id },
     });

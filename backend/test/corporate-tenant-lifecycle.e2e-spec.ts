@@ -39,13 +39,20 @@ function credential(
 }
 
 const provision = credential('provision-only', ['organizations:provision']);
-const read = credential('workflow-reader', ['organizations:provisioning:read']);
+const read = credential('workflow-reader', [
+  'organizations:provisioning:read',
+  'receipts:read',
+]);
 const suspend = credential('suspend-only', ['organizations:suspend']);
 const reactivate = credential('reactivate-only', ['organizations:reactivate']);
 const oldConnection = credential('legacy', ['connection:read']);
 const other = credential(
   'other-workflow',
-  ['organizations:provisioning:read', 'organizations:provision'],
+  [
+    'organizations:provisioning:read',
+    'organizations:provision',
+    'receipts:read',
+  ],
   randomUUID(),
 );
 
@@ -222,6 +229,71 @@ describe('ADM-03.A corporate tenant lifecycle', () => {
       ownerSetup: 'QUEUED',
       subscription: { status: 'TRIALING', accessGranted: true },
     });
+    const list = (token: string) =>
+      auth(http().get(prefix + '/tenant-provisionings'), token);
+    const query = {
+      organizationId: result.organization!.id,
+      status: 'COMPLETED',
+      createdFrom: '2020-01-01T00:00:00Z',
+      createdBefore: '2099-01-01T00:00:00Z',
+      pageSize: 1,
+    };
+    expect(body(await list(read.token).query(query).expect(200))).toMatchObject(
+      {
+        total: 1,
+        items: [{ id: result.id, organizationName: input.organizationName }],
+      },
+    );
+    expect(
+      body(
+        await list(read.token)
+          .query({ ...query, page: 2 })
+          .expect(200),
+      ),
+    ).toMatchObject({ total: 1, items: [] });
+    expect(
+      body(await list(other.token).query(query).expect(200)),
+    ).toMatchObject({ total: 0, items: [] });
+    await list(read.token)
+      .query({ ...query, createdFrom: '2026-02-30T00:00:00Z' })
+      .expect(400);
+    const lookup = (token: string) =>
+      auth(http().get(prefix + '/administrative-receipts/lookup'), token);
+    expect(
+      body(
+        await lookup(read.token)
+          .query({ type: 'PROVISIONING' })
+          .set('Idempotency-Key', key)
+          .expect(200),
+      ),
+    ).toMatchObject({
+      id: result.id,
+      outcome: { status: 'COMPLETED' },
+    });
+    await lookup(other.token)
+      .query({ type: 'PROVISIONING', operationId: result.id })
+      .expect(404);
+    await lookup(oldConnection.token)
+      .query({ type: 'PROVISIONING', operationId: result.id })
+      .expect(403);
+    const grants = await auth(
+      http().get(prefix + '/capabilities/effective'),
+      oldConnection.token,
+    ).expect(200);
+    expect(body(grants)).toMatchObject({
+      contractCapabilities: expect.arrayContaining([
+        'receipts:read',
+      ]) as unknown,
+      grantedCapabilities: ['connection:read'],
+    });
+    expect(
+      body(
+        await auth(
+          http().get(prefix + '/capabilities'),
+          oldConnection.token,
+        ).expect(200),
+      ),
+    ).toEqual({ capabilities: ['connection:read'] });
     expect(first.text).not.toContain(input.owner.email);
     expect(
       await database.organization.count({
@@ -457,6 +529,35 @@ describe('ADM-03.A corporate tenant lifecycle', () => {
       current: { status: 'ACTIVE' },
       decision: { operationalOnly: true },
     });
+    const lookup = (operationId?: string) =>
+      auth(
+        http().get(prefix + '/administrative-receipts/lookup'),
+        read.token,
+      ).query({
+        type: 'OPERATIONAL',
+        organizationId: id,
+        ...(operationId ? { operationId } : {}),
+      });
+    expect(
+      body(await lookup().set('Idempotency-Key', key).expect(200)),
+    ).toMatchObject({
+      id: decision.decisionId,
+      outcome: { result: 'APPLIED', status: 'SUSPENDED' },
+    });
+    await lookup(randomUUID()).expect(404);
+    const timeline = await auth(
+      http().get(prefix + '/organizations/' + id + '/administrative-receipts'),
+      read.token,
+    )
+      .query({ type: 'OPERATIONAL', pageSize: 1 })
+      .expect(200);
+    expect(body(timeline)).toMatchObject({
+      total: 2,
+      items: [{ outcome: { status: 'ACTIVE' } }],
+    });
+    expect(timeline.text).not.toMatch(
+      /idempotencyKeyHash|requestFingerprint|technicalPrincipalId/,
+    );
     expect(
       await database.organizationSubscription.findMany({
         where: { organizationId: id },

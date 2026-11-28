@@ -3,6 +3,7 @@ import {
   IsIn,
   IsOptional,
   IsString,
+  IsUUID,
   Matches,
   MaxLength,
   MinLength,
@@ -12,6 +13,11 @@ import { ProviderInvoiceStatus } from '../billing/billing.types';
 export class FinanceModeDto {
   @IsIn(['TEST', 'LIVE'])
   mode!: 'TEST' | 'LIVE';
+}
+export class FinanceDetailDto extends FinanceModeDto {
+  @IsOptional()
+  @IsIn(['true'])
+  includeOrganizationName?: 'true';
 }
 
 export class FinancePeriodDto extends FinanceModeDto {
@@ -32,6 +38,10 @@ export class FinancePeriodDto extends FinanceModeDto {
 }
 
 class FinancePageDto extends FinancePeriodDto {
+  @IsOptional()
+  @IsIn(['true'])
+  includeOrganizationName?: 'true';
+
   @IsOptional()
   @Matches(/^(?:[1-9]\d{0,3}|10000)$/)
   page?: string;
@@ -58,6 +68,10 @@ export class FinanceInvoiceListDto extends FinancePageDto {
 }
 
 export class FinancePaymentListDto extends FinancePageDto {
+  @IsOptional()
+  @IsUUID()
+  invoiceId?: string;
+
   @IsOptional()
   @IsIn(['RECEIPT', 'ATTEMPT', 'REFUND', 'DISPUTE'])
   kind?: 'RECEIPT' | 'ATTEMPT' | 'REFUND' | 'DISPUTE';
