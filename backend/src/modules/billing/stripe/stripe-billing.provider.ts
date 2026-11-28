@@ -67,6 +67,8 @@ import { toProviderBillingState } from './stripe-status.mapper';
 const TIMEOUT_MS = 12_000;
 const MAX_RETRIES = 2;
 
+/** Prices published in the default portal are only returned when expanded. */
+const PORTAL_PRODUCTS_EXPANSION = 'data.features.subscription_update.products';
 @Injectable()
 export class StripeBillingProvider implements BillingProvider {
   readonly name = BillingProviderName.STRIPE;
@@ -373,6 +375,8 @@ export class StripeBillingProvider implements BillingProvider {
         stripe.billingPortal.configurations.list({
           is_default: true,
           limit: 1,
+          // `subscription_update.products` is includable in the pinned API version.
+          expand: [PORTAL_PRODUCTS_EXPANSION],
         }),
     );
     const configuration = configurations.data[0];
@@ -1216,6 +1220,7 @@ export class StripeBillingProvider implements BillingProvider {
         this.require().billingPortal.configurations.list({
           is_default: true,
           limit: 1,
+          expand: [PORTAL_PRODUCTS_EXPANSION],
         }),
     );
     const configuration = configurations.data[0];

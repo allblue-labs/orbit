@@ -398,6 +398,24 @@ describe('StripeBillingProvider subscription commands', () => {
       }),
     );
     expect(subscriptions.update).not.toHaveBeenCalled();
+    expect(billingPortal.configurations.list).toHaveBeenCalledWith(
+      expect.objectContaining({
+        is_default: true,
+        expand: ['data.features.subscription_update.products'],
+      }),
+    );
+  });
+
+  it('confere o portal padrão expandindo os preços publicados', async () => {
+    const { provider, billingPortal } = setup();
+    // The catalog read that follows is not stubbed here; only the portal request matters.
+    await provider.verifyPlanChangePortal().catch(() => undefined);
+    expect(billingPortal.configurations.list).toHaveBeenCalledWith(
+      expect.objectContaining({
+        is_default: true,
+        expand: ['data.features.subscription_update.products'],
+      }),
+    );
   });
 
   it('recusa configuração que manteria dias grátis em plano não elegível', async () => {
