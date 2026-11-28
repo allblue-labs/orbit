@@ -1,3 +1,4 @@
+import { ExpandAdministrativeDetailDto } from './corporate-completion.dto';
 import {
   Body,
   Controller,
@@ -90,8 +91,14 @@ export class CorporateCommercialController {
     @CorporateCaller() call: CorporateCall,
     @Param('id', ParseUUIDPipe) id: string,
     @Headers('x-nexus-administrator-id') reference: unknown,
+    @Query(corporateValidation) query: ExpandAdministrativeDetailDto,
   ) {
-    return this.commercial.trial(call, reference, id.toLowerCase());
+    return this.commercial.trial(
+      call,
+      reference,
+      id.toLowerCase(),
+      query.includeDetails === 'true',
+    );
   }
 
   @Get('organizations/:id/subscription/operations/:operationId')

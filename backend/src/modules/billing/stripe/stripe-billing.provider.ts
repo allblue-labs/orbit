@@ -18,6 +18,7 @@
  * `SubscriptionItem`, e não da `Subscription` — verificado nos tipos do SDK
  * instalado, não presumido.
  */
+import { stripeRecurringTerms } from './stripe-recurring-terms';
 import { Injectable, Logger } from '@nestjs/common';
 import { BillingWorkBudget } from '../billing-work-budget';
 import Stripe from 'stripe';
@@ -424,9 +425,25 @@ export class StripeBillingProvider implements BillingProvider {
   ): Promise<ProviderSubscription> {
     const stripe = this.require();
     return this.normalizar(
-      await this.chamar('retrieveSubscription', () =>
-        stripe.subscriptions.retrieve(providerSubscriptionId),
-      ),
+      await this.chamar('retrieveSubscription', async () => {
+        try {
+          return await stripe.subscriptions.retrieve(providerSubscriptionId, {
+            expand: ['customer', 'discounts.source.coupon.applies_to'],
+          });
+        } catch (error) {
+          // Optional analytics expansions cannot block billing reconciliation.
+          const expansionRejected =
+            error instanceof Stripe.errors.StripeInvalidRequestError &&
+            (error.param?.startsWith('expand') ||
+              error.code === 'property_not_expandable');
+          if (
+            !expansionRejected &&
+            !(error instanceof Stripe.errors.StripePermissionError)
+          )
+            throw error;
+          return stripe.subscriptions.retrieve(providerSubscriptionId);
+        }
+      }),
     );
   }
 
@@ -1306,6 +1323,7 @@ export class StripeBillingProvider implements BillingProvider {
     const item = assinatura.items.data[0];
     return {
       mode: this.mode,
+      recurringTerms: stripeRecurringTerms(assinatura),
       latestInvoiceId: this.idDoObjeto(assinatura.latest_invoice),
       upgradeRequestId: assinatura.metadata?.['orbitMonthlyUpgradeId'] ?? null,
       hasPendingUpdate: !!assinatura.pending_update,

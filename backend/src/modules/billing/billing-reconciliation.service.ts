@@ -22,6 +22,7 @@
  * tentado de novo. Tratar tempo esgotado como cobrança falhada suspenderia
  * clientes em dia num dia ruim do fornecedor.
  */
+import { recurringObservation } from './recurring-observation';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { RequestContext, RequestContextStorage } from '../../context';
@@ -417,7 +418,11 @@ export class BillingReconciliationService {
         )
           this.repository.noteDivergence();
         await this.aplicar(atual, provedor, providerEventId, proof);
-        await this.repository.completeObservation(atual.id, observationVersion);
+        await this.repository.completeObservation(
+          atual.id,
+          observationVersion,
+          recurringObservation(provedor, proof, this.provider.mode),
+        );
       }),
     );
   }

@@ -32,17 +32,31 @@ export class BillingPolicyService {
   }
 
   async insertTicket(tx: PrismaTransactionClient, input: TicketInput) {
+    const { kind, ticketId } = await this.recordTicket(tx, input);
+    return { kind, ticketId };
+  }
+
+  ticketWithOrigin(input: TicketInput) {
+    return this.rls.run((tx) => this.recordTicket(tx, input));
+  }
+
+  private async recordTicket(tx: PrismaTransactionClient, input: TicketInput) {
+    const candidateId = generateUuidV7();
     const reference = input.reference ?? '';
     const [ticket] = await tx.$queryRaw<{ id: string }[]>`
       INSERT INTO billing_support_tickets
         (id, organization_id, subscription_id, requested_by, kind, target_plan_code, target_interval, reference)
       VALUES
-        (${generateUuidV7()}::uuid, ${input.organizationId}::uuid, ${input.subscriptionId}::uuid,
+        (${candidateId}::uuid, ${input.organizationId}::uuid, ${input.subscriptionId}::uuid,
          ${input.requestedBy ?? null}::uuid, ${input.kind}, ${input.targetPlanCode ?? null}, ${input.targetInterval ?? null}, ${reference})
       ON CONFLICT (subscription_id, kind, reference) WHERE status = 'OPEN'
       DO UPDATE SET reference = EXCLUDED.reference
       RETURNING id`;
-    return { kind: 'SUPPORT_TICKET' as const, ticketId: ticket!.id };
+    return {
+      kind: 'SUPPORT_TICKET' as const,
+      ticketId: ticket!.id,
+      created: ticket!.id === candidateId,
+    };
   }
 
   pendingUpgrade(subscriptionId: string) {
@@ -267,6 +281,24 @@ export class BillingPolicyService {
         where: { status, ...(after ? { id: { lt: after } } : {}) },
         orderBy: { id: 'desc' },
         take: 51,
+        select: {
+          id: true,
+          organizationId: true,
+          subscriptionId: true,
+          requestedBy: true,
+          kind: true,
+          targetPlanCode: true,
+          targetInterval: true,
+          reference: true,
+          status: true,
+          resolvedBy: true,
+          resolvedAt: true,
+          resolution: true,
+          emailSentAt: true,
+          emailAttempts: true,
+          nextEmailAt: true,
+          createdAt: true,
+        },
       });
       const tickets = rows.slice(0, 50);
       return {

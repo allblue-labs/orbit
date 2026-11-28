@@ -9,6 +9,7 @@ import type { PrismaTransactionClient } from '../../database/prisma.types';
 import { SubscriptionService } from '../subscription-plans/subscriptions/subscription.service';
 import type { CorporateCall } from './corporate-access.guard';
 import type {
+  FinanceDetailDto,
   FinanceInvoiceListDto,
   FinanceModeDto,
   FinancePaymentListDto,
@@ -234,10 +235,12 @@ export class CorporateFinanceService {
             query.sort,
           ),
         );
+        const result = pageResult(rows);
         return {
           ...this.observation(query, asOf, period),
           ...pagination,
-          ...pageResult(rows),
+          ...result,
+          items: await this.organizationNames(tx, query, result.items),
         };
       },
     );
@@ -246,7 +249,7 @@ export class CorporateFinanceService {
   invoice(
     call: CorporateCall,
     reference: unknown,
-    query: FinanceModeDto,
+    query: FinanceDetailDto,
     id: string,
   ) {
     return this.read(
@@ -261,7 +264,9 @@ export class CorporateFinanceService {
         const [invoice] = await tx.$queryRaw<Record<string, unknown>[]>(
           this.invoiceRows(invoiceScope(query.mode, undefined, id), asOf),
         );
-        return invoice ? { ...this.observation(query, asOf), invoice } : null;
+        if (!invoice) return null;
+        const [item] = await this.organizationNames(tx, query, [invoice]);
+        return { ...this.observation(query, asOf), invoice: item };
       },
     );
   }
@@ -290,6 +295,7 @@ export class CorporateFinanceService {
           SELECT ${paymentView} FROM payment_facts
           WHERE "occurredAt" >= ${period.start} AND "occurredAt" < ${period.end}
           ${query.status ? Prisma.sql`AND status = ${query.status}` : Prisma.empty}
+          ${query.invoiceId ? Prisma.sql`AND "invoiceId" = ${query.invoiceId}::uuid` : Prisma.empty}
         `,
             'payment',
             pagination.page,
@@ -297,10 +303,12 @@ export class CorporateFinanceService {
             query.sort,
           ),
         );
+        const result = pageResult(rows);
         return {
           ...this.observation(query, asOf, period),
           ...pagination,
-          ...pageResult(rows),
+          ...result,
+          items: await this.organizationNames(tx, query, result.items),
         };
       },
     );
@@ -309,7 +317,7 @@ export class CorporateFinanceService {
   payment(
     call: CorporateCall,
     reference: unknown,
-    query: FinanceModeDto,
+    query: FinanceDetailDto,
     id: string,
   ) {
     const match = paymentIdFormat.exec(id);
@@ -337,9 +345,30 @@ export class CorporateFinanceService {
           WITH ${paymentRecords(scope, undefined, kind, kind === 'RECEIPT' ? undefined : uuid)}
           SELECT ${paymentView} FROM payment_facts WHERE id = ${id}
         `);
-        return payment ? { ...this.observation(query, asOf), payment } : null;
+        if (!payment) return null;
+        const [item] = await this.organizationNames(tx, query, [payment]);
+        return { ...this.observation(query, asOf), payment: item };
       },
     );
+  }
+
+  private async organizationNames(
+    tx: PrismaTransactionClient,
+    query: Pick<FinanceDetailDto, 'includeOrganizationName'>,
+    items: Record<string, unknown>[],
+  ) {
+    if (!query.includeOrganizationName || !items.length) return items;
+    const ids = [...new Set(items.map((item) => String(item.organizationId)))];
+    await tx.$queryRaw`SELECT set_config('app.corporate_finance_labels', 'true', true)`;
+    const rows = await tx.organization.findMany({
+      where: { id: { in: ids }, deletedAt: null },
+      select: { id: true, displayName: true },
+    });
+    const names = new Map(rows.map((row) => [row.id, row.displayName]));
+    return items.map((item) => ({
+      ...item,
+      organizationName: names.get(String(item.organizationId)) ?? null,
+    }));
   }
 
   private invoiceRows(scope: Prisma.Sql, asOf: Date) {

@@ -1,11 +1,13 @@
 import { Controller, Get, UseGuards } from '@nestjs/common';
 import { Public } from '../../decorators';
 import {
+  CorporateCaller,
   CorporateCapabilityGuard,
+  type CorporateCall,
   RequiresCorporateCapability,
   TechnicalAuthenticationGuard,
 } from './corporate-access.guard';
-import { CONNECTION_READ } from './technical-credential.service';
+import { CAPABILITIES, CONNECTION_READ } from './technical-credential.service';
 
 // Public bypasses the human JWT boundary. These routes always run both machine guards.
 @Public()
@@ -28,5 +30,13 @@ export class CorporateAdministrationController {
   @RequiresCorporateCapability(CONNECTION_READ)
   capabilities() {
     return { capabilities: [CONNECTION_READ] };
+  }
+  @Get('capabilities/effective')
+  @RequiresCorporateCapability(CONNECTION_READ)
+  effectiveCapabilities(@CorporateCaller() call: CorporateCall) {
+    return {
+      contractCapabilities: [...CAPABILITIES].sort(),
+      grantedCapabilities: [...call.principal.capabilities].sort(),
+    };
   }
 }

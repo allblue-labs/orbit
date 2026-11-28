@@ -17,7 +17,7 @@ import {
 } from './corporate-access.guard';
 import {
   FinanceInvoiceListDto,
-  FinanceModeDto,
+  FinanceDetailDto,
   FinancePaymentListDto,
   FinancePeriodDto,
 } from './corporate-finance.dto';
@@ -62,7 +62,7 @@ export class CorporateFinanceController {
     @CorporateCaller() call: CorporateCall,
     @Headers('x-nexus-administrator-id') reference: unknown,
     @Param('id', ParseUUIDPipe) id: string,
-    @Query(corporateValidation) query: FinanceModeDto,
+    @Query(corporateValidation) query: FinanceDetailDto,
   ) {
     return this.finance.invoice(call, reference, query, id);
   }
@@ -83,7 +83,7 @@ export class CorporateFinanceController {
     @CorporateCaller() call: CorporateCall,
     @Headers('x-nexus-administrator-id') reference: unknown,
     @Param('id') id: string,
-    @Query(corporateValidation) query: FinanceModeDto,
+    @Query(corporateValidation) query: FinanceDetailDto,
   ) {
     return this.finance.payment(call, reference, query, id);
   }

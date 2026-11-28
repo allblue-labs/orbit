@@ -1028,5 +1028,140 @@ contractTest(
       ).providerInvoiceId = 'in_synthetic';
       assert.equal(validate(unsafe), false);
     }
+
+    const analyticsGrants = {
+      'recurring-revenue': 'revenue',
+      'customer-lifecycle': 'lifecycle',
+      'trial-conversion': 'trials',
+      delinquency: 'delinquency',
+    };
+    for (const [path, grant] of Object.entries(analyticsGrants)) {
+      const operations = api.paths[finance + '/analytics/' + path];
+      assert.deepEqual(Object.keys(operations), ['get']);
+      const operation = operations.get;
+      assert.equal(
+        operation['x-required-capability'],
+        'analytics:' + grant + ':read',
+      );
+      const query = operation.parameters.map((item) =>
+        item.$ref ? resolve(item.$ref) : item,
+      );
+      assert.deepEqual(
+        query
+          .filter((item) => item.in === 'query' && item.required)
+          .map((item) => item.name),
+        grant === 'revenue'
+          ? ['mode', 'currency']
+          : ['mode', 'currency', 'from', 'to'],
+      );
+      assert.equal(
+        operation.responses['200'].headers['Cache-Control'].schema.const,
+        'private, no-store',
+      );
+      const { schema, example } =
+        operation.responses['200'].content['application/json'];
+      const validate = ajv.getSchema(base + schemaPointer(schema.$ref));
+      assert.ok(validate(example), JSON.stringify(validate.errors));
+      const mismatched = structuredClone(example);
+      mismatched.data.organizationId = 'org_synthetic';
+      assert.equal(validate(mismatched), false);
+    }
+    const supportGrants = {
+      '/support/tickets': {
+        get: 'support:tickets:read',
+        post: 'support:tickets:create',
+      },
+      '/support/tickets/{id}': {
+        get: 'support:tickets:read',
+        patch: 'support:tickets:update',
+      },
+      '/support/tickets/{id}/notes': { post: 'support:tickets:update' },
+      '/organizations/{id}/diagnostics': {
+        get: 'diagnostics:organizations:read',
+      },
+      '/diagnostics/integrations': { get: 'diagnostics:integrations:read' },
+      '/diagnostics/operations': { get: 'diagnostics:operations:read' },
+      '/diagnostics/operations/{id}': { get: 'diagnostics:operations:read' },
+      '/diagnostics/provisionings/{id}/resume': {
+        post: 'recovery:provisioning:resume',
+      },
+    };
+    for (const [path, grants] of Object.entries(supportGrants)) {
+      const operations = api.paths[finance + path];
+      assert.deepEqual(Object.keys(operations), Object.keys(grants));
+      for (const [method, grant] of Object.entries(grants)) {
+        const operation = operations[method];
+        assert.equal(operation['x-required-capability'], grant);
+        for (const status of ['200', '201', '202']) {
+          const response = operation.responses[status];
+          if (!response) continue;
+          assert.equal(
+            response.headers['Cache-Control'].schema.const,
+            'private, no-store',
+          );
+          const { schema, example } = response.content['application/json'];
+          const validate = ajv.getSchema(base + schemaPointer(schema.$ref));
+          assert.ok(validate(example), JSON.stringify(validate.errors));
+          const unsafe = structuredClone(example);
+          unsafe.data.providerToken = 'synthetic';
+          assert.equal(validate(unsafe), false);
+        }
+        if (method === 'get') continue;
+        const parameters = operation.parameters.map((item) =>
+          item.$ref ? resolve(item.$ref) : item,
+        );
+        for (const name of ['Idempotency-Key', 'X-Nexus-Administrator-Id']) {
+          assert.equal(
+            parameters.find((parameter) => parameter.name === name)?.required,
+            true,
+          );
+        }
+        const { schema, example } =
+          operation.requestBody.content['application/json'];
+        const validate = ajv.getSchema(base + schemaPointer(schema.$ref));
+        assert.ok(validate(example), JSON.stringify(validate.errors));
+        assert.equal(validate({ ...example, force: true }), false);
+      }
+    }
+    const completionGrants = {
+      '/tenant-provisionings': 'organizations:provisioning:read',
+      '/subscriptions': 'subscriptions:read',
+      '/organizations/{id}/administrative-receipts': 'receipts:read',
+      '/administrative-receipts/lookup': 'receipts:read',
+      '/promotions/{id}/redemption-summary': 'promotions:read',
+      '/capabilities/effective': 'connection:read',
+    };
+    for (const [path, grant] of Object.entries(completionGrants)) {
+      const operations = api.paths[finance + path];
+      assert.deepEqual(Object.keys(operations), ['get']);
+      const operation = operations.get;
+      assert.equal(operation['x-required-capability'], grant);
+      const response = operation.responses['200'];
+      assert.equal(
+        response.headers['Cache-Control'].schema.const,
+        'private, no-store',
+      );
+      const { schema, example } = response.content['application/json'];
+      const validate = ajv.getSchema(base + schemaPointer(schema.$ref));
+      assert.ok(validate(example), JSON.stringify(validate.errors));
+      const unsafe = structuredClone(example);
+      (unsafe.data.outcome ?? unsafe.data.items?.[0] ?? unsafe.data).keyHash =
+        'synthetic';
+      assert.equal(validate(unsafe), false);
+    }
+    const capabilitySpec =
+      api.components.schemas.CorporateEffectiveCapabilities.properties
+        .contractCapabilities.items.enum;
+    const runtime = fs.readFileSync(
+      path.resolve(
+        __dirname,
+        '../src/modules/corporate-administration/technical-credential.service.ts',
+      ),
+      'utf8',
+    );
+    const names = [
+      ...runtime.matchAll(/export const [A-Z_]+\s*=\s*'([a-z][a-z:-]+)';/g),
+    ].map((match) => match[1]);
+    assert.deepEqual(capabilitySpec.toSorted(), names.toSorted());
   },
 );

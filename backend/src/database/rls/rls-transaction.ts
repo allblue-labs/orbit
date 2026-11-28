@@ -71,6 +71,7 @@ export class RlsTransaction implements ITransactionManager<PrismaTransactionClie
 
   run<T>(
     work: (transaction: PrismaTransactionClient) => Promise<T>,
+    options?: { timeout?: number; maxWait?: number },
   ): Promise<T> {
     const context = this.contextProvider.get();
     const ambient = this.current(context);
@@ -78,7 +79,7 @@ export class RlsTransaction implements ITransactionManager<PrismaTransactionClie
     return this.prisma.$transaction(async (transaction) => {
       await this.applyContext(transaction, context);
       return work(transaction);
-    });
+    }, options);
   }
 
   /**

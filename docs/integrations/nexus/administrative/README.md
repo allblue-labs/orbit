@@ -232,3 +232,115 @@ A listagem de pagamentos mostra `RECEIPT/CONFIRMED` quando há evidência e `ATT
 A migration `20261127120000_corporate_finance` acrescenta políticas RLS de leitura, uma política para gravar a auditoria e um índice de período. A aplicação registra `plan_code_at_issue` apenas após observar uma fatura finalizada com linhas de assinatura completas e preços históricos que apontem inequivocamente para o mesmo plano. Faturas legadas ou ambíguas preservam o valor nulo até existir evidência inequívoca. A migration dispensa backfill. Acompanhe o DDL pelo gate normal do banco, pois a criação do índice requer lock na tabela.
 
 As consultas usam somente faturas, evidências, ajustes e transições da cobrança do SaaS. Elas não solicitam dados ao Stripe nem alteram cobranças, assinaturas ou pagamentos. A auditoria grava apenas metadados de acesso. IDs do provedor, URLs privadas, dados de cartão e payloads de reconciliação ficam fora das respostas. Os descontos históricos da ADM-05.A entram pela fatura reconciliada. O valor reservado no checkout é informação gerencial daquele fluxo e fica fora desta soma. [OpenAPI](openapi.json)
+
+## ADM-07.R.A — Indicadores comerciais
+
+As quatro consultas GET usam `/api/v1/corporate-admin/analytics`. Cada rota requer a capability correspondente na credencial técnica. A API corporativa exige ativação explícita e as credenciais anteriores preservam seus grants. A resposta é privada e usa `no-store`. A auditoria registra o principal técnico, a referência administrativa quando informada, a correlação, a operação, o modo e o resultado. [OpenAPI](openapi.json)
+
+| Rota | Capability | Fonte |
+| --- | --- | --- |
+| `/recurring-revenue` | `analytics:revenue:read` | Observação do contrato Stripe registrada na reconciliação |
+| `/customer-lifecycle` | `analytics:lifecycle:read` | Alocações confirmadas de pagamento e encerramentos registrados nas assinaturas |
+| `/trial-conversion` | `analytics:trials:read` | Concessões de trial do Orbit e alocações confirmadas de pagamento |
+| `/delinquency` | `analytics:delinquency:read` | Faturas reconciliadas com os critérios da ADM-06.A |
+
+Todas as rotas exigem `mode=TEST` ou `mode=LIVE` e `currency` de três letras maiúsculas. Três rotas também exigem `from` e `to`, com janela de 1 a 366 dias entre o início inclusivo e o fim exclusivo, à meia-noite UTC. A receita recorrente é um retrato no `asOf` da transação e retorna `period: null`. O filtro opcional `planCode` identifica o plano corrente em receita, o plano da primeira concessão em trials e o plano documentado na emissão em inadimplência. Ciclo de clientes agrega movimentos da organização através de seus vários contratos.
+
+### MRR, ARR e ARPA
+
+A população parte de assinaturas Stripe ativas no período corrente e vinculadas ao customer do modo consultado. A organização pode estar operacionalmente suspensa. A observação deve corresponder ao preço contratado e ao período registrados na assinatura. O pagamento é comprovado por alocações positivas únicas via PaymentIntent na fatura do mesmo customer, assinatura, moeda, preço e período. A soma das alocações válidas deve cobrir integralmente o valor pago registrado, com saldo e créditos zerados. No MRR, o recebimento serve apenas para comprovar elegibilidade. O valor é o preço recorrente contratado que a reconciliação observou no provedor.
+
+Os agregados incluem preço bruto, desconto recorrente e preço líquido, no total e agrupados por plano e periodicidade. Para períodos de 1, 6 ou 12 meses, o valor mensal retornado é `(preço em unidades mínimas × 10.000 − desconto recorrente em unidades mínimas × 10.000) × (12 ÷ meses)`. Os valores são strings inteiras exatas. Divida por `scale = 120000` para obter unidades mínimas mensais. Adie o arredondamento até a apresentação. ARR é MRR × 12. ARPA mensal usa MRR dividido por `coverage.pricedOrganizations` do mesmo recorte e fica indisponível se esse número for zero.
+
+A projeção cobre preço fixo para um item e quantidade unitária, sem imposto inclusivo. Cobre cupom recorrente único vinculado à assinatura, compatível com o produto e a moeda, com percentual de até duas casas ou valor fixo limitado ao preço. Um desconto pontual fica fora do MRR. Desconto com fim conhecido deixa de valer ao alcançar a data efetiva. Descontos acumulados, herdados, por item ou ambíguos ficam sem precificação por esta projeção. [Descontos da Stripe](https://docs.stripe.com/api/discounts/object)
+
+`AVAILABLE` indica cobertura integral da população candidata, incluindo o recorte comprovadamente vazio, com valor `"0"`. `PARTIAL` informa valores exatos do subconjunto precificado. `UNAVAILABLE` indica lacunas sem contratos precificados no recorte, com valores `null`. `eligibleOrganizations` fica `null` se o total pagante não puder ser comprovado. `confirmedEligibleOrganizations` conta o subconjunto confirmado, inclusive casos com desconto desconhecido. `coverage` expõe candidatos, termos desconhecidos, pagamento sem comprovação, contratos elegíveis sem preço líquido, contratos precificados e o intervalo das observações usadas. Contratos que ainda não passaram pela reconciliação com a nova projeção aparecem como lacuna quando pertencem à população candidata.
+
+### Crescimento e retenção
+
+O primeiro recebimento observado conta uma organização uma vez. O primeiro recebimento em qualquer contrato no período também conta organizações distintas, inclusive as que retornaram. Cancelamento comprovado exige assinatura com estado `CANCELED` e `endedAt` posterior à primeira alocação confirmada no mesmo contrato. Uma reativação comprovada exige o primeiro recebimento de outro contrato após esse encerramento. Agendamentos de cancelamento e suspensões operacionais ficam fora das contagens de encerramento.
+
+O endpoint retorna `null` para bases pagantes de abertura e fechamento, perdas, retenção e variações de MRR. Os dados atuais conservam alguns fatos e a última observação do contrato. Para calcular esses indicadores históricos, a reconciliação precisaria preservar as transições efetivas do estado pago e os termos recorrentes vigentes em cada transição, com data efetiva e modo, moeda e preço antes e depois. A menor extensão futura é registrar essas observações nas estruturas de histórico existentes a partir do momento em que forem comprovadas.
+
+### Conversão de trials
+
+A coorte usa a primeira concessão de cada organização, pelo início registrado. Em andamento e encerrado usam a data prevista de término. A janela de conversão começa no início e termina 30 dias de 24 horas após o fim previsto, com o limite superior exclusivo. A primeira alocação positiva confirmada da organização, na moeda e no modo pedidos, deve cair nessa janela. Checkout iniciado, encerramento do trial e liquidação sem alocação ficam fora dos convertidos. A população elegível corresponde a trials cuja janela já fechou. `confirmedEligibleConversions` conta quem converteu dentro desse subconjunto.
+
+A concessão é local e a evidência positiva é específica do modo e da moeda. O percentual sai `null`. Para provar a taxa, as concessões futuras precisam carregar o escopo comercial aplicável à coorte e ter cobertura comprovável de pagamentos durante a janela inteira.
+
+### Inadimplência
+
+Numerador e denominador compartilham as organizações distintas com fatura positiva emitida em `OPEN`, `PAID` ou `UNCOLLECTIBLE` no período e nos filtros informados. O numerador exige fatura `OPEN` com saldo positivo e vencimento anterior a `asOf`. O saldo marcado como incobrável permanece separado pela semântica da ADM-06.A. A data de emissão é `finalizedAt`, com fallback para `createdAt` do provedor. `observedRatePercent` é `100 × inadimplentes ÷ elegíveis`, arredondado a duas casas, ou `null` sem denominador. Faturas abertas sem vencimento permanecem no denominador e sinalizam cobertura parcial. Com filtro por plano, faturas sem atribuição ficam fora da população e aparecem na contagem de lacunas.
+
+### Banco e rollout
+
+A migration `20261127130000_corporate_commercial_analytics` cria uma projeção JSONB opcional em assinaturas, índices para datas de coorte e encerramento, políticas RLS de leitura com escopo por operação e modo, e a permissão restrita de auditoria. Use o gate de migrations habitual. A coluna começa vazia. A reconciliação já existente passa a gravar a observação dos termos em sua transação e versão atuais. As consultas agregam no PostgreSQL e usam somente dados locais. Os indicadores têm um limite de execução por instrução SQL de cinco segundos.
+
+## ADM-08.A — Suporte e diagnóstico corporativo
+
+As rotas estão sob `/api/v1/corporate-admin`. As credenciais técnicas precisam dos grants correspondentes. A API corporativa continua desabilitada por padrão. As consultas usam o PostgreSQL local e respondem com cache privado. [OpenAPI](openapi.json)
+
+| Método e rota | Capability |
+| --- | --- |
+| `GET /support/tickets`, `GET /support/tickets/{id}` | `support:tickets:read` |
+| `POST /support/tickets` | `support:tickets:create` |
+| `PATCH /support/tickets/{id}`, `POST /support/tickets/{id}/notes` | `support:tickets:update` |
+| `GET /organizations/{id}/diagnostics` | `diagnostics:organizations:read` |
+| `GET /diagnostics/integrations` | `diagnostics:integrations:read` |
+| `GET /diagnostics/operations`, `GET /diagnostics/operations/{id}` | `diagnostics:operations:read` |
+| `POST /diagnostics/provisionings/{id}/resume` | `recovery:provisioning:resume` |
+
+### Chamados e escritas
+
+A fila reúne chamados administrativos das categorias `ACCOUNT_ACCESS`, `TECHNICAL` e `GENERAL`, e solicitações comerciais existentes de alteração de plano, cancelamento e análise de reembolso. Os filtros incluem organização, origem, categoria, prioridade, estado e responsável. `search` busca trecho literal de título ou nome da organização e também aceita o ID exato. A ordenação é por criação decrescente e ID, com paginação de 1 a 100 itens e 25 por padrão. A listagem conserva a referência local de assinatura e o plano solicitado quando disponíveis.
+
+As escritas exigem `X-Nexus-Administrator-Id` e uma chave `Idempotency-Key` de 16 a 128 caracteres ASCII alfanuméricos ou `_.:-`. O recorte de idempotência é o principal técnico. Repetir a chave com o mesmo comando e administrador devolve o recibo com `replayed: true`. Reutilizá-la para outro conteúdo retorna `409 IDEMPOTENCY_MISMATCH`. Para atualizar um chamado ou registrar uma nota, envie `expectedVersion` da última leitura. Uma versão divergente retorna `409 STALE_VERSION`, inclusive após uma resolução pelo fluxo de cobrança legado.
+
+Prioridades são `LOW`, `NORMAL`, `HIGH` e `URGENT`. Atribuição aceita uma referência UUID declarada do Nexus e `null` para removê-la. O Nexus resolve a identidade e a elegibilidade desse responsável. Um chamado nasce `OPEN` e pode passar para `RESOLVED` mediante resolução interna. Notas podem complementar chamados já encerrados. Encerrar uma solicitação comercial atualiza somente o chamado canônico. O efeito financeiro ou comercial exige o respectivo fluxo já existente.
+
+O detalhe inclui até 50 interações internas, da mais recente para a mais antiga. Passe `nextBefore` em `before` para ler mais. Títulos e notas são texto simples. As notas, a resolução corporativa e as atribuições ficam no fluxo administrativo. As solicitações comerciais anteriores conservam as datas conhecidas de criação e resolução. A auditoria guarda ação, decisão, identificadores e correlação. O conteúdo dos chamados e das notas fica fora dos logs de auditoria.
+
+### Diagnóstico
+
+- **Organização.** O estado operacional é separado do estado efetivo da assinatura e da restrição de cobrança. `PAYMENT_ATTENTION` sinaliza atraso ou carência com acesso preservado pela política vigente. A projeção inclui os direitos efetivos, indicadores de confirmação de e-mail e troca de senha do responsável, estágio de provisionamento, operações comerciais abertas e a última observação disponível de assinatura e fatura. Inconsistências usam códigos estáveis e um campo nulo representa evidência indisponível.
+- **Integrações.** Stripe e SES retornam configuração e evidência local em campos próprios. `UNOBSERVED` significa fila ou checkpoint sem registros disponíveis na consulta. Os totais são agrupados por fonte, estado e modo. Uma aceitação pelo SES registra aceite do provedor. O endpoint não testa os provedores durante a consulta.
+- **Operações.** A visão reúne os fluxos de provisionamento, a inbox e os checkpoints Stripe, e as filas de e-mail de identidade e contato. Filtros por organização se aplicam somente a registros com vínculo local explícito. O filtro de modo recorta somente fontes Stripe. A rota de detalhe aceita UUID local ou chave de checkpoint no formato `STRIPE:TEST:EVENTS`. Erros fora da lista segura saem como `UNCLASSIFIED_FAILURE`. A correlação é retornada quando a fonte a registra em formato válido. As datas representam registros locais. O diagnóstico não publica IDs da Stripe, cursores internos, hashes de token, destinatários, links, payloads ou stack traces.
+
+### Retomar provisionamento
+
+Localize o workflow e sua versão em `GET /diagnostics/operations?type=TENANT_PROVISIONING` ou no detalhe da operação. A retomada exige o mesmo principal técnico que criou o workflow, a versão corrente e um motivo explícito entre `DEPENDENCY_RESTORED`, `WORKFLOW_INTERRUPTED` e `RETRY_AFTER_REVIEW`. Os estágios `TENANT_CREATED` e `SUBSCRIPTION_READY` reutilizam as transações e os locks da ADM-03.A. O estágio `RECEIVED` exige o envio original pelo fluxo de provisionamento. A resposta usa `200` quando concluído e `202` quando ainda há etapa pendente. Depois de verificar a causa de um `202`, leia a versão atual antes de abrir uma nova tentativa com outra chave.
+
+Em caso de falha de comunicação, repita a mesma chave. Se o processo cair depois de persistir um estágio e antes de registrar o recibo, leia a versão atual. Os locks e o estado persistido da ADM-03.A protegem a criação da assinatura e a fila de ativação contra duplicação. As filas de Stripe e SES têm diagnóstico nesta versão. A retomada exposta por esta API é a do workflow administrativo. O reenvio de e-mails com rejeição comprovada continua sujeito às verificações e à autoridade humana do painel interno de jobs. O formulário público aparece no diagnóstico como processamento de contato.
+
+A migration `20261127140000_corporate_support` cria a fila, o histórico interno e os recibos, estende os chamados comerciais com prioridade e versão compartilhada e instala políticas RLS específicas. A versão dos chamados legados começa em 1 e a migração preserva os chamados existentes sem reconstituir interações antigas.
+
+## ADM-08.R.A · Complementação para as interfaces do Nexus
+
+As consultas usam a autenticação técnica existente e permanecem habilitadas somente mediante configuração explícita do módulo. Campos opcionais de contratos existentes exigem `includeDetails=true` ou `includeOrganizationName=true`. Clientes já integrados continuam recebendo o formato anterior.
+
+| Origem | Rota relativa a `/api/v1/corporate-admin` | Capabilities | Cobertura |
+| --- | --- | --- | --- |
+| ADM-UI-02 | `GET /tenant-provisionings` | `organizations:provisioning:read` | Workflows do principal autenticado, com paginação e filtros por `organizationId`, `status`, `createdFrom` inclusivo e `createdBefore` exclusivo. Datas em UTC. |
+| ADM-UI-02/03/05 | `GET /organizations/{id}/administrative-receipts`, `GET /administrative-receipts/lookup` | `receipts:read` | Histórico por organização e tipo, e consulta por ID ou chave original. Requer concessão explícita na credencial. |
+| ADM-UI-03 | `GET /subscriptions` | `subscriptions:read` | Assinatura corrente ou última de cada organização, com estados persistido e efetivo no instante `asOf`. Filtros de plano, periodicidade e estado usam os valores persistidos. Organizações sem assinatura canônica ficam fora. |
+| ADM-UI-03 | `GET /organizations/{id}/trial?includeDetails=true` | `trials:read` | `blockedReason` explica o primeiro bloqueio comprovado. A resposta preserva `canStart` e omite o documento e sua impressão. |
+| ADM-UI-03 | `GET /promotions/{id}/redemption-summary?mode=TEST` | `promotions:read` | Reservas, confirmações e liberações em todos os checkouts locais da campanha. O modo deve corresponder ao registrado na campanha. |
+| ADM-UI-04 | Coleções e detalhes de faturas e pagamentos em `/finance` | Grants financeiros existentes | `includeOrganizationName=true` inclui o nome corrente autorizado. Nas coleções de pagamentos, `invoiceId` filtra pelo UUID local da fatura, inclusive na coleção por organização. |
+| ADM-UI-05 | `GET /support/tickets`, `GET /support/tickets/{id}` | `support:tickets:read`, com `receipts:read` para a origem | Ordenação por criação, atualização ou prioridade. `includeDetails=true` habilita as contagens da fila e o vínculo com recibo comercial comprovado. |
+| ADM-UI-05 | `GET /diagnostics/operations`, `GET /diagnostics/operations/{id}` | `diagnostics:operations:read` | `includeDetails=true` retorna nome quando há vínculo local e motivo de recuperação. O detalhe também informa a cobertura de eventos registrados. |
+| ADM-UI-05 | `GET /capabilities/effective` | `connection:read` | `contractCapabilities` enumera o contrato. `grantedCapabilities` mostra somente as concessões da credencial atual. A elegibilidade do recurso continua na respectiva consulta, como `corporateActions`, `canStart` ou `recoveryEligibility`. |
+
+### Leitura de recibos e cobertura histórica
+
+Envie exatamente `operationId` ou o cabeçalho `Idempotency-Key` original na consulta de recibos. Para `OPERATIONAL` e `COMMERCIAL`, envie `organizationId`. Uma consulta por chave comercial ou promocional também exige `operation`. Os identificadores são o UUID do workflow, da decisão operacional, do comando comercial/promocional ou da interação de suporte. Para recibos de retomada pelo suporte, use a chave original. Nesses recibos, `id` é nulo e `outcome.targetId` identifica o workflow. Campanhas são globais e ficam fora do histórico por organização.
+
+O resultado de um workflow vem do seu registro atual; decisões, comandos e interações usam o recibo persistido. Um comando promocional com `pending=true` tem registro local sem confirmação final. `404` representa ausência de evidência acessível, inclusive quando o registro pertence a outro principal. Um recibo comprova somente o resultado inscrito nele. Por exemplo, `AWAITING_REVIEW` confirma uma solicitação de revisão, e `version` por si só não comprova execução de um comando. Permissão de leitura de recibos não concede execução ou retomada.
+
+### Agregações, suporte e diagnóstico
+
+- Campanhas usam `ORBIT_CHECKOUT_ATTEMPTS` como cobertura. `confirmedDiscountMinor` é uma string decimal em centavos de BRL. `confirmedWithoutDiscount` informa eventuais confirmações sem valor registrado. Os totais não incluem reservas no valor de desconto, nem usos externos ao Orbit ou recorrências sem evidência de checkout local. A quantidade usa os estados armazenados. Uma campanha sem modo registrado retorna `404` no resumo.
+- O filtro de pagamentos por fatura é aplicado aos registros canônicos após a deduplicação. Modo, moeda e janela ficam ativos. O nome é uma referência atual da organização e não representa o nome histórico de faturamento. Faturas e ajustes financeiros mantêm os fatos reconciliados e a precisão original.
+- As contagens de suporte usam todos os filtros da fila, exceto `status`, para mostrar as duas situações disponíveis. A ordenação aceita `CREATED_DESC`, `CREATED_ASC`, `UPDATED_DESC`, `UPDATED_ASC` e `PRIORITY_DESC`, com desempate por ID. `originReceiptId` é preenchido quando o comando do principal efetivamente criou o chamado. Vínculos antigos sem comprovação de criação ficam nulos, assim como tickets reaproveitados sem um comando de origem acessível. Notas internas não fazem parte dos recibos.
+- O diagnóstico fornece até 50 eventos duráveis mais recentes de provisionamentos do próprio principal, com indicador de truncamento. Esses eventos registram avanço de etapa ou falha persistida. Para integrações e workflows sem evidência própria, a cobertura é `UNAVAILABLE`. Não há reconstrução de tentativas de Stripe ou SES a partir de contadores. Os nomes só aparecem quando a fonte contém um vínculo local autorizado.
+
+A migration `20261127150000_corporate_administrative_reads` acrescenta políticas de leitura por escopo, índices e uma referência opcional de origem nos recibos comerciais. A referência só é registrada quando a inserção do chamado foi comprovada. A migration preserva as políticas anteriores e não preenche vínculos retroativamente. A rota legada `GET /capabilities` mantém o resultado original. [OpenAPI 3.1](openapi.json)

@@ -21,11 +21,11 @@ export const paymentView = Prisma.sql`
   id, "invoiceId", "organizationId", "subscriptionId", "planCode", mode, currency,
   kind, status, "amountMinor"::int AS "amountMinor", "occurredAt", "observedAt"
 `;
-const openBalance = Prisma.sql`i.status = 'OPEN' AND i.amount_remaining_minor > 0`;
+export const openBalance = Prisma.sql`i.status = 'OPEN' AND i.amount_remaining_minor > 0`;
 const writeOff = Prisma.sql`i.status = 'UNCOLLECTIBLE' AND i.amount_remaining_minor > 0`;
-const issued = Prisma.sql`i.status IN ('OPEN','PAID','UNCOLLECTIBLE')`;
+export const issued = Prisma.sql`i.status IN ('OPEN','PAID','UNCOLLECTIBLE')`;
 
-function overdue(asOf: Date) {
+export function overdue(asOf: Date) {
   return Prisma.sql`${openBalance} AND i.due_at < ${asOf}`;
 }
 

@@ -535,6 +535,8 @@ model Organization {
 
   @@index([ownerUserId, status])
   @@index([planId, subscriptionStatus])
+  corporateSupportTickets CorporateSupportTicket[]
+
   @@map("organizations")
 }
 
@@ -921,6 +923,7 @@ model OrganizationSubscription {
   providerLastEventId        String?   @map("provider_last_event_id") @db.VarChar(255)
   providerUpdatedAt          DateTime? @map("provider_updated_at") @db.Timestamptz(3)
   providerObservationVersion BigInt    @default(0) @map("provider_observation_version")
+  recurringObservation       Json?     @map("recurring_observation") @db.JsonB
 
   /// Controle otimista: dois comandos concorrentes não produzem estado torto.
   version   Int      @default(1)
@@ -985,6 +988,7 @@ model SubscriptionTrialGrant {
 
   @@index([organizationId])
   @@index([status, endsAt])
+  @@index([startsAt, organizationId], map: "subscription_trial_grants_analytics_start")
   @@map("subscription_trial_grants")
 }
 
@@ -5348,6 +5352,7 @@ model CorporateCommercialCommand {
   operation           String   @db.VarChar(32)
   keyHash             String   @map("key_hash") @db.Char(64)
   requestHash         String   @map("request_hash") @db.Char(64)
+  originTicketId      String?  @map("origin_ticket_id") @db.Uuid
   result              Json     @db.JsonB
   createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
@@ -5428,11 +5433,71 @@ model BillingSupportTicket {
   nextEmailAt    DateTime  @default(now()) @map("next_email_at") @db.Timestamptz(3)
   createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
 
+  supportPriority   String    @default("NORMAL") @map("support_priority") @db.VarChar(12)
+  supportAssigneeId String?   @map("support_assignee_id") @db.Uuid
+  supportVersion    Int       @default(1) @map("support_version")
+  supportUpdatedAt  DateTime? @map("support_updated_at") @db.Timestamptz(3)
+
   subscription OrganizationSubscription @relation(fields: [subscriptionId, organizationId], references: [id, organizationId], onDelete: Cascade)
 
+  corporateSupportInteractions CorporateSupportInteraction[]
+
+  @@unique([id, organizationId], map: "billing_support_ticket_tenant_key")
   @@index([organizationId], map: "billing_support_tickets_org")
   @@index([status, id(sort: Desc)], map: "billing_support_tickets_queue")
   @@map("billing_support_tickets")
+}
+
+model CorporateSupportTicket {
+  id             String    @id @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  title          String    @db.VarChar(160)
+  category       String    @db.VarChar(30)
+  priority       String    @db.VarChar(12)
+  status         String    @default("OPEN") @db.VarChar(20)
+  assigneeId     String?   @map("assignee_id") @db.Uuid
+  version        Int       @default(1)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime  @default(now()) @map("updated_at") @db.Timestamptz(3)
+  resolvedAt     DateTime? @map("resolved_at") @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  interactions CorporateSupportInteraction[]
+
+  @@unique([id, organizationId])
+  @@index([organizationId, status, id(sort: Desc)], map: "corporate_support_tickets_org_queue")
+  @@index([status, id(sort: Desc)], map: "corporate_support_tickets_queue")
+  @@map("corporate_support_tickets")
+}
+
+model CorporateSupportInteraction {
+  id                     String   @id @db.Uuid
+  organizationId         String   @map("organization_id") @db.Uuid
+  administrativeTicketId String?  @map("administrative_ticket_id") @db.Uuid
+  billingTicketId        String?  @map("billing_ticket_id") @db.Uuid
+  kind                   String   @db.VarChar(20)
+  body                   String?  @db.VarChar(2000)
+  changes                Json?    @db.JsonB
+  nexusAdministratorId    String   @map("nexus_administrator_id") @db.Uuid
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  administrativeTicket CorporateSupportTicket? @relation(fields: [administrativeTicketId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  billingTicket        BillingSupportTicket?    @relation(fields: [billingTicketId, organizationId], references: [id, organizationId], onDelete: Cascade)
+
+  @@index([administrativeTicketId, id(sort: Desc)], map: "corporate_support_interactions_admin")
+  @@index([billingTicketId, id(sort: Desc)], map: "corporate_support_interactions_billing")
+  @@map("corporate_support_interactions")
+}
+
+model CorporateSupportRequest {
+  technicalPrincipalId String   @map("technical_principal_id") @db.Uuid
+  keyHash              String   @map("key_hash") @db.Char(64)
+  requestHash          String   @map("request_hash") @db.Char(64)
+  receipt              Json     @db.JsonB
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@id([technicalPrincipalId, keyHash])
+  @@map("corporate_support_requests")
 }
 
 model BillingRefundRequest {

@@ -47,8 +47,16 @@ export type ProviderBillingState =
   (typeof ProviderBillingState)[keyof typeof ProviderBillingState];
 
 /** O retrato normalizado de uma assinatura no provedor. */
+export interface ProviderRecurringTerms {
+  currency: string;
+  intervalMonths: 1 | 6 | 12;
+  grossPeriodMinor: number;
+  discount: { scaledMinor: number; endsAt: string | null } | null;
+}
+
 export interface ProviderSubscription {
   readonly mode?: BillingMode;
+  readonly recurringTerms?: ProviderRecurringTerms | null;
   readonly latestInvoiceId?: string | null;
   readonly upgradeRequestId?: string | null;
   readonly hasPendingUpdate?: boolean;

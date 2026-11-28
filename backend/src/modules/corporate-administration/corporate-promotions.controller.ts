@@ -24,6 +24,7 @@ import { corporateValidation } from './corporate-request';
 import {
   CreatePromotionDto,
   PromotionListDto,
+  PromotionSummaryDto,
   PromotionVersionDto,
   RedemptionListDto,
   UpdatePromotionDto,
@@ -79,6 +80,22 @@ export class CorporatePromotionsController {
       reference,
       id.toLowerCase(),
       query,
+    );
+  }
+
+  @Get(':id/redemption-summary')
+  @RequiresCorporateCapability(PROMOTIONS_READ)
+  redemptionSummary(
+    @CorporateCaller() call: CorporateCall,
+    @Headers('x-nexus-administrator-id') reference: unknown,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query(corporateValidation) query: PromotionSummaryDto,
+  ) {
+    return this.promotions.redemptionSummary(
+      call,
+      reference,
+      id.toLowerCase(),
+      query.mode,
     );
   }
 

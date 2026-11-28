@@ -56,7 +56,9 @@ type Receipt = {
   ticketId: string | null;
   trialEndsAt: string | null;
 };
-type Decision = Pick<Receipt, 'result' | 'ticketId' | 'trialEndsAt'>;
+type Decision = Pick<Receipt, 'result' | 'ticketId' | 'trialEndsAt'> & {
+  originTicketId?: string;
+};
 
 const digest = (value: string) =>
   createHash('sha256').update(value).digest('hex');
@@ -247,7 +249,12 @@ export class CorporateCommercialService {
     );
   }
 
-  trial(call: CorporateCall, reference: unknown, organizationId: string) {
+  trial(
+    call: CorporateCall,
+    reference: unknown,
+    organizationId: string,
+    includeDetails = false,
+  ) {
     const audit = authorizedCorporateReference(
       call,
       reference,
@@ -261,16 +268,21 @@ export class CorporateCommercialService {
         const active = await this.subscriptions.currentOrNull(organizationId);
         const last =
           active ?? (await this.subscriptions.currentOrLast(organizationId));
-        const eligible =
-          !!active &&
-          !organization?.dataPurgeStartedAt &&
-          !organization?.dataPurgedAt &&
-          active.effectiveStatus === 'PENDING_PAYMENT' &&
-          !active.providerSubscriptionId &&
-          !active.cancelAtPeriodEnd &&
-          this.billing.isEnabled() &&
-          !(await this.checkoutStatus(tx, organizationId)) &&
-          (await this.trials.canStartPendingTrial(organizationId));
+        let blockedReason = !active
+          ? 'NO_CURRENT_SUBSCRIPTION'
+          : organization?.dataPurgeStartedAt || organization?.dataPurgedAt
+            ? 'DATA_RETENTION'
+            : active.effectiveStatus !== 'PENDING_PAYMENT'
+              ? 'NOT_AWAITING_PAYMENT'
+              : active.providerSubscriptionId
+                ? 'PROVIDER_MANAGED'
+                : active.cancelAtPeriodEnd
+                  ? 'CANCELLATION_SCHEDULED'
+                  : !this.billing.isEnabled()
+                    ? 'BILLING_UNAVAILABLE'
+                    : (await this.checkoutStatus(tx, organizationId))
+                      ? 'CHECKOUT_OPEN'
+                      : await this.trials.pendingTrialBlock(organizationId);
         const offers = (await this.catalog.list(organizationId)).filter(
           (offer) => offer.isActive && offer.trialDays > 0,
         );
@@ -286,6 +298,8 @@ export class CorporateCommercialService {
           orderBy: [{ grantedAt: 'desc' }, { id: 'desc' }],
           take: 25,
         });
+        if (!blockedReason && !offers.length)
+          blockedReason = 'NO_ACTIVE_TRIAL_OFFER';
         return {
           organizationId,
           subscriptionId: active?.id ?? null,
@@ -299,7 +313,8 @@ export class CorporateCommercialService {
             catalogVersion: offer.version,
             trialDays: offer.trialDays,
           })),
-          canStart: eligible && offers.length > 0,
+          canStart: blockedReason === null,
+          ...(includeDetails ? { blockedReason } : {}),
           history,
         };
       },
@@ -442,7 +457,7 @@ export class CorporateCommercialService {
           };
         }
         await this.lockContract(tx, organizationId, input);
-        const decision = await this.apply(
+        const { originTicketId, ...decision } = await this.apply(
           tx,
           organizationId,
           operation,
@@ -467,6 +482,7 @@ export class CorporateCommercialService {
             technicalPrincipalId: principal,
             keyHash,
             requestHash,
+            originTicketId,
             result: receipt,
           },
           select: { createdAt: true },
@@ -579,6 +595,7 @@ export class CorporateCommercialService {
         return {
           result: 'AWAITING_REVIEW',
           ticketId: review.ticketId,
+          originTicketId: review.created ? review.ticketId : undefined,
           trialEndsAt: null,
         };
       }

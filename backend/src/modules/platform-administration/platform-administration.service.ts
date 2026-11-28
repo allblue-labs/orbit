@@ -33,6 +33,7 @@ import type { CorporateCall } from '../corporate-administration/corporate-access
 import {
   ORGANIZATIONS_PROVISION,
   ORGANIZATIONS_PROVISIONING_READ,
+  RECOVERY_PROVISIONING_RESUME,
 } from '../corporate-administration/technical-credential.service';
 import type { CorporateAuditReference } from './corporate-organization.read-model';
 import { platformSubscription } from './platform-subscription.projection';
@@ -492,12 +493,15 @@ export class PlatformAdministrationService {
     call: CorporateCall,
     reference: unknown,
     id: string,
+    capability:
+      | typeof ORGANIZATIONS_PROVISION
+      | typeof RECOVERY_PROVISIONING_RESUME = ORGANIZATIONS_PROVISION,
   ) {
     const actor = {
       corporate: authorizedCorporateReference(
         call,
         reference,
-        ORGANIZATIONS_PROVISION,
+        capability,
         true,
       ),
     };

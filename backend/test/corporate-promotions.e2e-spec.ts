@@ -203,7 +203,7 @@ describe('ADM-05.A promotions with restricted database role and simulated Stripe
         'promotions:activate',
         'promotions:deactivate',
       ]),
-      credential('reader', readSecret, ['promotions:read']),
+      credential('reader', readSecret, ['promotions:read', 'receipts:read']),
     ]);
     const plan = await db.plan.findUniqueOrThrow({
       where: { key: 'PROFESSIONAL' },
@@ -353,6 +353,30 @@ describe('ADM-05.A promotions with restricted database role and simulated Stripe
       pending: true,
       promotion: { status: 'ACTIVATING' },
     });
+    const lookup = () =>
+      auth(
+        http().get(
+          root.replace(/\/promotions$/, '/administrative-receipts/lookup'),
+        ),
+        true,
+      );
+    const sends = activate.mock.calls.length;
+    const observed = await lookup()
+      .query({ type: 'PROMOTION', operation: 'ACTIVATE' })
+      .set('Idempotency-Key', key)
+      .expect(200);
+    expect(observed.body).toMatchObject({
+      data: {
+        id: pending.operationId,
+        outcome: {
+          pending: true,
+          promotionId: promotion.id,
+          status: null,
+          version: null,
+        },
+      },
+    });
+    expect(activate.mock.calls).toHaveLength(sends);
     const done = data(
       await send('/' + promotion.id + '/activate', command, key).expect(200),
     );
@@ -362,6 +386,15 @@ describe('ADM-05.A promotions with restricted database role and simulated Stripe
       replayed: true,
       promotion: { status: 'ACTIVE', providerMode: 'TEST' },
     });
+    const recorded = await lookup()
+      .query({ type: 'PROMOTION', operationId: done.operationId })
+      .expect(200);
+    expect(recorded.body).toMatchObject({
+      data: { outcome: { pending: false, status: 'ACTIVE', mode: 'TEST' } },
+    });
+    expect(recorded.text).not.toMatch(
+      /providerPromotionId|requestHash|keyHash/,
+    );
     return done.promotion;
   }
 
@@ -596,9 +629,42 @@ describe('ADM-05.A promotions with restricted database role and simulated Stripe
     await expect(checkout(returning, fixed.code)).rejects.toThrow(
       'promotion is unavailable',
     );
-    await expect(
-      checkout(await tenant('another-returning', true), fixed.code),
-    ).resolves.toHaveProperty('providerSessionId');
+    const another = await checkout(
+      await tenant('another-returning', true),
+      fixed.code,
+    );
+    checkoutSessions.set(another.providerSessionId, {
+      ...checkoutSessions.get(another.providerSessionId)!,
+      state: ProviderCheckoutState.COMPLETE,
+      rawStatus: 'complete',
+      paymentStatus: 'paid',
+      providerSubscriptionId: 'sub_adm05fixed_second',
+      promotionEvidence: {
+        providerId: providerPromotions.get(fixed.id)!.id,
+        originalMinor: minor,
+        discountMinor: 2500,
+        totalMinor: minor - 2500,
+        currency: 'brl',
+      },
+    });
+    await fulfillment.fulfill(another.providerSessionId);
+    const page = await get(
+      '/' + fixed.id + '/redemptions?status=CONFIRMED&pageSize=1',
+    ).expect(200);
+    expect(data(page)).toMatchObject({ total: 2, pageSize: 1 });
+    const summary = '/' + fixed.id + '/redemption-summary';
+    expect(data(await get(summary + '?mode=TEST').expect(200))).toEqual({
+      promotionId: fixed.id,
+      mode: 'TEST',
+      currency: 'BRL',
+      coverage: 'ORBIT_CHECKOUT_ATTEMPTS',
+      reserved: 0,
+      confirmed: 2,
+      released: 0,
+      confirmedWithoutDiscount: 0,
+      confirmedDiscountMinor: '5000',
+    });
+    await get(summary + '?mode=LIVE').expect(404);
     expect(activate.mock.calls.at(-1)?.[0]).toMatchObject({
       percentOff: null,
       amountOffMinor: 2500,

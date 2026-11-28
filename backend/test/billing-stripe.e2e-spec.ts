@@ -602,6 +602,7 @@ describe('Stripe billing integration and webhook reconciliation (e2e)', () => {
       const invoice = provedor.faturas.get(invoiceId)!;
       provedor.faturas.set(invoiceId, {
         ...invoice,
+        mode: 'TEST',
         billingReason: 'subscription_create',
         periodStart: subscription.billingAnchorAt,
         periodEnd: subscription.currentPeriodEnd,
@@ -619,6 +620,34 @@ describe('Stripe billing integration and webhook reconciliation (e2e)', () => {
         invoiceId,
         event.providerEventId,
       );
+      const remote = provedor.assinaturas.get(providerSubscriptionId)!;
+      provedor.assinaturas.set(providerSubscriptionId, {
+        ...remote,
+        mode: 'TEST',
+        providerUpdatedAt: new Date(),
+        recurringTerms: {
+          currency: 'brl',
+          intervalMonths: 1,
+          grossPeriodMinor: invoice.subtotalMinor,
+          discount: { scaledMinor: 0, endsAt: null },
+        },
+      });
+      await reconciliation.reconcileProviderSubscription(
+        providerSubscriptionId,
+        event.providerEventId,
+      );
+      const observed = await prisma.organizationSubscription.findUniqueOrThrow({
+        where: { id: subscription.id },
+        select: { status: true, recurringObservation: true },
+      });
+      expect(observed).toMatchObject({
+        status: 'ACTIVE',
+        recurringObservation: {
+          paid: true,
+          mode: 'TEST',
+          grossPeriodMinor: invoice.subtotalMinor,
+        },
+      });
 
       const ticket = await como(organizationId, () =>
         app.get(BillingPolicyService).ticket({

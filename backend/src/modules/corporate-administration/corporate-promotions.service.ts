@@ -220,6 +220,47 @@ export class CorporatePromotionsService {
     });
   }
 
+  redemptionSummary(
+    call: CorporateCall,
+    reference: unknown,
+    id: string,
+    mode: 'TEST' | 'LIVE',
+  ) {
+    return this.read(
+      call,
+      reference,
+      'REDEMPTION_SUMMARY',
+      id,
+      async (tx) => {
+        const [row] = await tx.$queryRaw<
+          {
+            reserved: number;
+            confirmed: number;
+            released: number;
+            confirmedWithoutDiscount: number;
+            confirmedDiscountMinor: string;
+          }[]
+        >`
+        SELECT count(*) FILTER (WHERE status IN (${Prisma.join(redemptionFilters.RESERVED)}))::int AS reserved,
+          count(*) FILTER (WHERE status = 'COMPLETED')::int AS confirmed,
+          count(*) FILTER (WHERE status IN (${Prisma.join(redemptionFilters.RELEASED)}))::int AS released,
+          count(*) FILTER (WHERE status = 'COMPLETED' AND promotion_discount_minor IS NULL)::int AS "confirmedWithoutDiscount",
+          coalesce(sum(promotion_discount_minor) FILTER (WHERE status = 'COMPLETED'), 0)::text AS "confirmedDiscountMinor"
+        FROM public.billing_checkout_attempts
+        WHERE promotion_id = ${id}::uuid AND mode = ${mode} AND provider = 'STRIPE'
+      `;
+        return {
+          promotionId: id,
+          mode,
+          currency: 'BRL',
+          coverage: 'ORBIT_CHECKOUT_ATTEMPTS' as const,
+          ...row,
+        };
+      },
+      mode,
+    );
+  }
+
   async write(
     call: CorporateCall,
     reference: unknown,
@@ -655,6 +696,7 @@ export class CorporatePromotionsService {
       tx: PrismaTransactionClient,
       row: BillingPromotion | null,
     ) => T | Promise<T>,
+    requiredMode?: 'TEST' | 'LIVE',
   ) {
     const audit = authorizedCorporateReference(
       call,
@@ -666,15 +708,18 @@ export class CorporatePromotionsService {
       const row = id
         ? await tx.billingPromotion.findUnique({ where: { id } })
         : null;
+      const missing =
+        !!id &&
+        (!row || (requiredMode !== undefined && row.mode !== requiredMode));
       await this.audit(
         tx,
         audit,
         id,
         'READ',
         operation,
-        id && !row ? 'NOT_FOUND' : 'CONFIRMED',
+        missing ? 'NOT_FOUND' : 'CONFIRMED',
       );
-      return id && !row ? null : await work(tx, row);
+      return missing ? null : await work(tx, row);
     });
     if (result === null) throw new NotFoundException();
     return result;

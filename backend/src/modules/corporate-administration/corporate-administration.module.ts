@@ -1,4 +1,13 @@
+import { CorporateCompletionController } from './corporate-completion.controller';
+import { CorporateCompletionService } from './corporate-completion.service';
 import { Module } from '@nestjs/common';
+import { CorporateAnalyticsController } from './corporate-analytics.controller';
+import { CorporateAnalyticsService } from './corporate-analytics.service';
+import { CorporateSupportController } from './corporate-support.controller';
+import { CorporateSupportAccess } from './corporate-support-access.service';
+import { CorporateSupportTicketsService } from './corporate-support-tickets.service';
+import { CorporateDiagnosticsService } from './corporate-diagnostics.service';
+import { EmailModule } from '../email/email.module';
 import { BillingModule } from '../billing/billing.module';
 import { CorporateFinanceController } from './corporate-finance.controller';
 import { CorporateFinanceService } from './corporate-finance.service';
@@ -17,20 +26,28 @@ import {
 import { TechnicalCredentialService } from './technical-credential.service';
 
 @Module({
-  imports: [PlatformAdministrationModule, BillingModule],
+  imports: [PlatformAdministrationModule, BillingModule, EmailModule],
   controllers: [
     CorporateAdministrationController,
+    CorporateCompletionController,
     CorporateOrganizationsController,
     CorporateTenantLifecycleController,
     CorporateCommercialController,
     CorporatePromotionsController,
     CorporateFinanceController,
+    CorporateAnalyticsController,
+    CorporateSupportController,
   ],
   providers: [
     TechnicalCredentialService,
+    CorporateCompletionService,
     CorporateCommercialService,
     CorporatePromotionsService,
     CorporateFinanceService,
+    CorporateAnalyticsService,
+    CorporateSupportAccess,
+    CorporateSupportTicketsService,
+    CorporateDiagnosticsService,
     TechnicalAuthenticationGuard,
     CorporateCapabilityGuard,
   ],

@@ -107,12 +107,16 @@ export class TrialEligibilityService {
   }
 
   async canStartPendingTrial(organizationId: string): Promise<boolean> {
+    return (await this.pendingTrialBlock(organizationId)) === null;
+  }
+
+  async pendingTrialBlock(organizationId: string) {
     const candidate = await this.repository.trialCandidate(organizationId);
-    return (
-      candidate.eligible &&
-      !!candidate.document &&
-      !(await this.hasConsumedTrial(candidate.document))
-    );
+    if (!candidate.eligible) return 'CANDIDATE_NOT_ELIGIBLE' as const;
+    if (!candidate.document) return 'DOCUMENT_UNAVAILABLE' as const;
+    return (await this.hasConsumedTrial(candidate.document))
+      ? ('TRIAL_ALREADY_USED' as const)
+      : null;
   }
 
   async startPendingTrial(

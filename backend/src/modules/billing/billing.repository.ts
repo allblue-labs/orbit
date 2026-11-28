@@ -136,9 +136,13 @@ export class BillingRepository {
   async completeObservation(
     subscriptionId: string,
     version: bigint,
+    recurringObservation: Prisma.InputJsonObject | null,
   ): Promise<void> {
     await this.rls.run(async (tx) => {
-      await tx.$executeRaw`UPDATE organization_subscriptions SET provider_observation_version=${version} WHERE id=${subscriptionId}::uuid`;
+      await tx.$executeRaw`
+        UPDATE organization_subscriptions
+        SET provider_observation_version = ${version}, recurring_observation = ${recurringObservation === null ? null : JSON.stringify(recurringObservation)}::jsonb
+        WHERE id = ${subscriptionId}::uuid`;
     });
   }
   noteDivergence(): void {
